@@ -15,6 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FAST_PYSF_SOURCE_PACKAGE = REPO_ROOT / "fast-pysf" / "pysocialforce"
 EXPECTED_SYMBOL = "social_force_gil_releasing_context"
 REPAIR_COMMAND = "uv sync --all-extras --reinstall-package robot-sf"
+WORKTREE_RECOVERY_COMMAND = (
+    "scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- <command>"
+)
 
 
 def _package_files(package_path: Path) -> tuple[Path, ...]:
@@ -110,7 +113,15 @@ def main() -> int:
         file=sys.stderr,
     )
     print(
-        f"Refresh the environment with `{REPAIR_COMMAND}`, then rerun readiness.", file=sys.stderr
+        "From a linked worktree, rerun the command with "
+        f"`{WORKTREE_RECOVERY_COMMAND}`; it refreshes only a worktree-local environment "
+        "under the capacity and recovery-lock gates.",
+        file=sys.stderr,
+    )
+    print(
+        f"To repair an explicitly owned environment, run `{REPAIR_COMMAND}` in that checkout, "
+        "then rerun readiness.",
+        file=sys.stderr,
     )
     return 1
 

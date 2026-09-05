@@ -117,7 +117,12 @@ If a worktree-local environment is intentional, create and sync it with
 accidental partial `.venv`, stop using that environment and follow the bootstrap/wrapper path after
 confirming it contains no worktree-local state that needs preserving.
 
-Never edit `.venv`; manage dependencies through `pyproject.toml` and `uv sync`. Never use a bare
+If the shared wrapper reports stale `fast-pysf`, use its explicit linked-worktree recovery option:
+`scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- <command>`. It creates or
+refreshes only the current worktree's `.venv`, applies the capacity and repository recovery-lock
+gates, and never repairs the main checkout implicitly. See the [local CI recovery contract](local_ci.md#recover-stale-fast-pysf-explicitly).
+
+Never edit `.venv` by hand; manage dependencies through `pyproject.toml` and `uv sync`. Never use a bare
 `git stash pop` in a linked worktree because all worktrees share one stash namespace. Prefer a
 temporary commit or `scripts/dev/safe_stash_pop.sh`.
 

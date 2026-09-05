@@ -21,6 +21,10 @@ installed vendored `pysocialforce` package against this checkout and fails close
 check, PYTHONPATH=$PWD:$PWD/fast-pysf makes the checkout source authoritative for the command. Use
 --standalone for commands that do not import project code, or --no-freshness-check only after
 confirming the environment matches.
+When that check reports stale fast-pysf in a linked worktree, rerun the same command with
+--recover-stale-fast-pysf. This explicit mode creates or refreshes only the current worktree's
+.venv, checks capacity, serializes recovery, and verifies freshness before the command starts; it
+never repairs the owning checkout implicitly.
 Pinned tool binaries are a separate boundary (issue #8250): `uv run` executes the requested tool
 from the selected venv, so a stale venv would silently run a drifted binary. Before proceeding,
 the freshness preflight compares the resolved `<venv>/bin/<tool>` version against the exact `==`
@@ -37,6 +41,10 @@ Options:
   --profile NAME         Dependency import profile checked before the command. Defaults to core;
                          use all-extras (or a named pyproject extra) when the command needs it.
   --scratch-dir PATH     Use PATH for temporary files and default uv/XDG caches for this run.
+  --recover-stale-fast-pysf
+                         Explicitly create or refresh a worktree-local .venv after stale fast-pysf
+                         detection. Requires a linked worktree; cannot be combined with --venv,
+                         --standalone, or a freshness bypass.
   --standalone           Run a command that is verified not to import project packages. This skips
                          the dependency-profile and project-source checks, but still applies the
                          pinned-tool freshness gate; it does not prepend the worktree root to
@@ -59,6 +67,8 @@ Environment:
 
 Examples:
   scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
+  scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- \
+    uv run python scripts/dev/issue_audit_core.py plan --mode autonomous
   scripts/dev/run_worktree_shared_venv.sh --venv ../robot_sf_ll7/.venv -- ruff check scripts/dev
   scripts/dev/run_worktree_shared_venv.sh --standalone -- \
     python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
@@ -140,6 +150,7 @@ configure_scratch_dir() {
 venv_override=""
 dependency_profile="core"
 skip_freshness=""
+recover_stale_fast_pysf=""
 standalone=""
 scratch_dir="${ROBOT_SF_CI_SCRATCH_DIR:-}"
 cmd=()
@@ -168,6 +179,10 @@ while [[ $# -gt 0 ]]; do
       fi
       scratch_dir="$2"
       shift 2
+      ;;
+    --recover-stale-fast-pysf)
+      recover_stale_fast_pysf=1
+      shift
       ;;
     --standalone)
       standalone=1
@@ -217,12 +232,43 @@ if [[ -n "$scratch_dir" ]]; then
 fi
 check_scratch_capacity "${TMPDIR:-/tmp}"
 
-if [[ -n "$venv_override" ]]; then
-  venv_path="$venv_override"
-elif [[ -x "$repo_root/.venv/bin/python" ]]; then
+if [[ -n "$recover_stale_fast_pysf" ]]; then
+  if [[ -n "$venv_override" ]]; then
+    echo "ERROR: --recover-stale-fast-pysf cannot be combined with --venv." >&2
+    echo "Recovery is limited to the current linked worktree's .venv." >&2
+    exit 2
+  fi
+  if [[ -n "$standalone" ]]; then
+    echo "ERROR: --recover-stale-fast-pysf cannot be combined with --standalone." >&2
+    echo "Recovery must verify the project fast-pysf package before the command starts." >&2
+    exit 2
+  fi
+  if [[ -n "$skip_freshness" || "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" == "skip" ]]; then
+    echo "ERROR: --recover-stale-fast-pysf cannot be combined with a freshness bypass." >&2
+    echo "Recovery always verifies the refreshed package before running the command." >&2
+    exit 2
+  fi
+
+  recovery_script="$repo_root/scripts/dev/recover_fast_pysf_worktree.sh"
+  if [[ ! -x "$recovery_script" ]]; then
+    echo "ERROR: worktree fast-pysf recovery helper is missing or not executable: $recovery_script" >&2
+    exit 2
+  fi
+  if "$recovery_script"; then
+    :
+  else
+    recovery_rc=$?
+    exit "$recovery_rc"
+  fi
   venv_path="$repo_root/.venv"
 else
-  venv_path="$main_repo_root/.venv"
+  if [[ -n "$venv_override" ]]; then
+    venv_path="$venv_override"
+  elif [[ -x "$repo_root/.venv/bin/python" ]]; then
+    venv_path="$repo_root/.venv"
+  else
+    venv_path="$main_repo_root/.venv"
+  fi
 fi
 if [[ "$venv_path" != /* ]]; then
   venv_path="$repo_root/$venv_path"
@@ -273,6 +319,7 @@ check_project_package_freshness() {
   if ! report="$(env -u PYTHONPATH "$venv_path/bin/python" "$checker" 2>&1)"; then
     echo "ERROR: shared-venv project package freshness preflight failed in $venv_path." >&2
     printf '%s\n' "$report" >&2
+    echo "Remedy (linked worktree): rerun the command with --recover-stale-fast-pysf -- to build a worktree-local environment." >&2
     echo "Remedy: run 'uv sync --all-extras --reinstall-package robot-sf' in the owning checkout, then retry." >&2
     return 2
   fi

@@ -389,6 +389,7 @@ def test_recover_restores_successor_lineage_for_inherited_file_cleanup(tmp_path:
         _Response(remote),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited),
         _Response(after_delete),
         _Response(after_delete),
     ]
@@ -1079,6 +1080,7 @@ def test_upload_reconciles_inherited_successor_files(tmp_path: Path) -> None:
         _Response(remote),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited),
         _Response(after_delete),
         _Response(after_delete),
     ]
@@ -1092,8 +1094,11 @@ def test_upload_reconciles_inherited_successor_files(tmp_path: Path) -> None:
     assert all("/deposit/depositions/7/" not in url for url in delete_urls)
     assert session.urls.count("https://zenodo.org/api/deposit/depositions/8") == 5
     assert not any(url.endswith("/deposit/depositions/8/files") for url in session.urls)
+    fresh_file_url = "https://zenodo.org/api/deposit/depositions/8/files/inherited-file"
+    fresh_file_index = session.urls.index(fresh_file_url)
+    assert session.urls[fresh_file_index + 1] == delete_urls[0]
     assert session.urls.index("https://zenodo.org/api/files/bucket/successor.tar.gz") < (
-        session.urls.index(delete_urls[0])
+        fresh_file_index
     )
     assert updated["files"] == [
         {
@@ -1193,6 +1198,7 @@ def test_upload_conditionally_accepts_classified_delete_with_stable_absence(
         _Response(initial),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited),
         _Response(after_delete),
         _Response(after_delete),
     ]
@@ -1224,6 +1230,7 @@ def test_upload_conditionally_accepts_network_delete_after_stable_absence(tmp_pa
         _Response(initial),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited),
         _Response(after_delete),
         _Response(after_delete),
     ]
@@ -1261,6 +1268,7 @@ def test_upload_requires_bounded_stable_remote_readback(tmp_path: Path) -> None:
         _Response(initial),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited),
         *[_Response(readback) for readback in readbacks],
     ]
     session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
@@ -1270,7 +1278,7 @@ def test_upload_requires_bounded_stable_remote_readback(tmp_path: Path) -> None:
         publisher.upload(session, _successor_state(), [bundle])
 
     assert len(session.gets) == 0
-    assert len(session.urls) == 8
+    assert len(session.urls) == 9
 
 
 def test_upload_rejects_lifecycle_drift_during_pre_delete_readback(tmp_path: Path) -> None:
@@ -1326,6 +1334,7 @@ def test_upload_fails_closed_when_delete_readback_cannot_confirm_absence(
         _Response(initial),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited),
         _Response(still_present),
         _Response(still_present),
         _Response(still_present),
@@ -1339,7 +1348,7 @@ def test_upload_fails_closed_when_delete_readback_cannot_confirm_absence(
         publisher.upload(session, state, [bundle])
 
     assert state["files"] == []
-    assert len(session.urls) == 8
+    assert len(session.urls) == 9
 
 
 def test_upload_fails_closed_when_network_delete_readback_cannot_confirm_absence(
@@ -1361,6 +1370,7 @@ def test_upload_fails_closed_when_network_delete_readback_cannot_confirm_absence
         _Response(initial),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited),
         _Response(still_present),
         _Response(still_present),
         _Response(still_present),
@@ -1381,7 +1391,7 @@ def test_upload_fails_closed_when_network_delete_readback_cannot_confirm_absence
         publisher.upload(session, state, [bundle])
 
     assert state["files"] == []
-    assert len(session.urls) == 7
+    assert len(session.urls) == 8
 
 
 def test_upload_rejects_unbound_draft_with_unexpected_files_before_put(tmp_path: Path) -> None:
@@ -1490,6 +1500,7 @@ def test_upload_requires_204_when_deleting_inherited_file(tmp_path: Path) -> Non
         _Response(remote),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited),
         _Response(still_present),
         _Response(still_present),
         _Response(still_present),
@@ -1525,9 +1536,11 @@ def test_upload_partial_delete_is_retryable(tmp_path: Path) -> None:
         _Response(remote),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited_a),
         _Response(after_first_delete),
         _Response(after_first_delete),
         _Response(still_present),
+        _Response(inherited_b),
         _Response(still_present),
         _Response(still_present),
         _Response(still_present),
@@ -1550,6 +1563,7 @@ def test_upload_partial_delete_is_retryable(tmp_path: Path) -> None:
         _Response(retry_remote),
         _Response(retry_post_upload),
         _Response(retry_post_upload),
+        _Response(inherited_b),
         _Response(retry_after_delete),
         _Response(retry_after_delete),
     ]
@@ -1582,6 +1596,32 @@ def test_upload_rejects_inherited_identity_drift_before_delete(tmp_path: Path) -
     assert session.deletes == []
 
 
+def test_upload_rejects_fresh_successor_file_identity_drift_before_delete(tmp_path: Path) -> None:
+    """A fresh file read with a changed ID is never deleted by stale identity."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-old")
+    changed = _draft_file("predecessor.tar.gz", file_id="inherited-new")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    remote = _successor_draft()
+    remote["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    session = _Session()
+    session.gets = [
+        _Response(remote),
+        _Response(post_upload),
+        _Response(post_upload),
+        _Response(changed),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="identity changed"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.deletes == []
+
+
 def test_upload_requires_exact_inventory_after_cleanup(tmp_path: Path) -> None:
     """A stale or newly added extra after deletion prevents state acceptance."""
     bundle = tmp_path / "successor.tar.gz"
@@ -1599,6 +1639,7 @@ def test_upload_requires_exact_inventory_after_cleanup(tmp_path: Path) -> None:
         _Response(remote),
         _Response(post_upload),
         _Response(post_upload),
+        _Response(inherited),
         _Response(still_present),
         _Response(still_present),
         _Response(still_present),

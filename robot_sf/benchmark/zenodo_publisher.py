@@ -1438,9 +1438,25 @@ def _delete_draft_extra(
     Returns:
         ``success``, ``not_found``, ``forbidden``, ``server_error``,
         ``network``, or ``unexpected``. Every non-success result is resolved
-        only by a later exact-deposition readback.
+        only by a later exact-deposition readback. The DELETE URL is admitted
+        only after a fresh successor-file response confirms the same name and
+        file ID.
     """
     url = _draft_file_url(api_base, deposition_id, file_id)
+    fresh_file = _get_json_object(
+        session,
+        url,
+        f"fresh successor file {name}",
+    )
+    fresh_inventory = _draft_file_inventory(
+        [fresh_file],
+        deposition_id=deposition_id,
+        api_base=api_base,
+    )
+    if fresh_inventory != {name: file_id}:
+        raise ZenodoPublisherError(
+            f"Zenodo successor file {name} identity changed; refusing deletion"
+        )
     try:
         response = session.delete(url, timeout=60, allow_redirects=False)
     except (OSError, RuntimeError, TypeError, ValueError):

@@ -529,7 +529,10 @@ def test_flat_projection_rejects_unavailable_candidate_set() -> None:
 
 
 @pytest.mark.parametrize("binding", ["set", "candidate", "provenance"])
-def test_flat_projection_rejects_extended_privileged_candidate_provenance(binding: str) -> None:
+@pytest.mark.parametrize("privileged_provenance", ["oracle:goal", "route truth"])
+def test_flat_projection_rejects_extended_privileged_candidate_provenance(
+    binding: str, privileged_provenance: str
+) -> None:
     """Route/truth labels and provenance references cannot enter actor-side projection."""
     if binding == "set":
         candidate_set = GoalCandidateSet(
@@ -549,7 +552,7 @@ def test_flat_projection_rejects_extended_privileged_candidate_provenance(bindin
     else:
         candidate_set = GoalCandidateSet(
             candidates=tuple(
-                replace(candidate, provenance_refs=("oracle:goal",))
+                replace(candidate, provenance_refs=(privileged_provenance,))
                 if candidate.id == "destination-a"
                 else candidate
                 for candidate in POSTERIOR_CANDIDATE_SET.candidates

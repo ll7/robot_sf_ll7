@@ -769,6 +769,33 @@ def test_shared_venv_recovery_portable_lock_succeeds_without_flock_cli(
         _remove_linked_recovery_fixture(repo, worktree)
 
 
+def test_shared_venv_recovery_rejects_non_regular_lock_without_flock_cli(
+    tmp_path: Path,
+) -> None:
+    """The portable path must refuse a directory lock before invoking Python locking."""
+    repo, worktree, fake_bin, capture, _, env = _linked_recovery_fixture(tmp_path)
+    lock_path = repo / ".git" / "robot-sf-fast-pysf-recovery.lock"
+    lock_path.mkdir()
+    stub_bin = tmp_path / "stub-bin"
+    fallback_env = {**env, "PATH": _flockless_path(stub_bin, fake_bin)}
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=fallback_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "repository recovery lock is not a regular file" in result.stderr
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
 def test_shared_venv_recovery_refuses_main_checkout_without_editing_it(tmp_path: Path) -> None:
     """Recovery cannot turn a dirty main checkout into an implicit package owner."""
     repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)

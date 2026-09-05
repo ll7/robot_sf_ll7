@@ -11,6 +11,7 @@ instead of waiting, mirroring ``flock -n`` callers.
 
 from __future__ import annotations
 
+import errno
 import subprocess
 import sys
 
@@ -47,6 +48,10 @@ def run(argv: list[str]) -> int:
                 fcntl.flock(lock_file.fileno(), flags)
             except BlockingIOError:
                 return 75
+            except OSError as exc:
+                if non_blocking and exc.errno in (errno.EACCES, errno.EAGAIN):
+                    return 75
+                raise
             try:
                 completed = subprocess.run(command, check=False)
             finally:

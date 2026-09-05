@@ -35,11 +35,16 @@ The additive issue #8050 diagnostic seam also provides
 entity-ID-keyed `tracks` mapping, including entries absent from the visible legacy rows, and
 reports distinct `no_belief`, `empty_belief`, `projection_target_not_supported`, `invalid_belief`,
 and `projected` statuses. Its diagnostics expose both retained and projected track counts.
-Serialization is versioned and deterministic; legacy observations and
-the existing stream-gap path are unchanged.
+Serialization is versioned and deterministic. Track records retain source-owned frame, unit,
+sensor-ID, calibration, and optional tracking-ID metadata rather than collapsing provenance to
+the adapter name; mismatched position/velocity frames fail closed. The typed input owns an
+immutable, dict-compatible copy of the canonical legacy observation so existing nested planner
+readers remain usable, while unsupported or malformed uncertainty projections leave the canonical
+observation unchanged.
 
 `track_id` is the entity identifier supplied by one `ScenarioBelief` snapshot, not a
-visible-observation row number. The current representation does not expose retirement generations,
+visible-observation row number. An optional source `tracking_id` is retained as metadata only and
+is not promoted to a lifecycle token. The current representation does not expose retirement generations,
 so the diagnostic reports `identity_generation_available: false`,
 `identity_reuse_safe: false`, `retired_track_count: null`, and
 `stateful_identity_admitted: false`. Stateful consumers must reset at an externally supplied

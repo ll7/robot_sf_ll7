@@ -26,7 +26,12 @@ from robot_sf.planner.scenario_belief_adapter import (
     project_scenario_belief_for_belief_aware_planner,
     project_scenario_belief_for_planner,
 )
-from robot_sf.representation import VisibilityState, scenario_belief_from_simulator_oracle
+from robot_sf.planner.stream_gap import StreamGapPlannerAdapter, StreamGapPlannerConfig
+from robot_sf.representation import (
+    TrackedAgentMetadata,
+    VisibilityState,
+    scenario_belief_from_simulator_oracle,
+)
 
 
 def _belief_fixture():
@@ -55,6 +60,7 @@ def _belief_fixture():
         belief.agents[1],
         visibility_state=VisibilityState.OCCLUDED,
         last_observed_age_s=0.25,
+        tracking=TrackedAgentMetadata(track_id="track_ped_001", missed_detections=1),
     )
     return replace(belief, sim_time_s=0.5, agents=(belief.agents[0], occluded))
 
@@ -97,6 +103,13 @@ def test_projection_retains_visible_and_occluded_tracks_by_snapshot_entity_id() 
     assert projected.tracks["ped_000"].visibility is True
     assert projected.tracks["ped_001"].visibility is False
     assert projected.tracks["ped_001"].age_steps == 3
+    assert projected.tracks["ped_001"].tracking_id == "track_ped_001"
+    assert projected.tracks["ped_001"].track_id == "ped_001"
+    assert projected.tracks["ped_001"].frame_id == "map"
+    assert projected.tracks["ped_001"].position_units == "m"
+    assert projected.tracks["ped_001"].velocity_units == "m/s"
+    assert projected.tracks["ped_001"].source_sensor_ids == ("simulator",)
+    assert projected.tracks["ped_001"].calibration_status == "synthetic"
     assert projected.legacy_observation["pedestrians"]["count"][0] == pytest.approx(1.0)
 
 
@@ -263,6 +276,26 @@ def test_typed_records_own_arrays_and_export_deterministically() -> None:
     assert "identity_lifecycle_token" not in payload["tracks"]["2"]
 
 
+def test_legacy_observation_is_immutable_and_canonical_reader_compatible() -> None:
+    """Snapshot ownership must not break dict-based canonical planner readers."""
+    projected = project_belief_aware_planner_input(
+        _belief_fixture(),
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+    observation = projected.legacy_observation
+
+    assert isinstance(observation, dict)
+    assert isinstance(observation["pedestrians"], dict)
+    assert observation["pedestrians"]["positions"].flags.writeable is False
+    with pytest.raises(TypeError, match="immutable"):
+        observation["pedestrians"]["count"] = np.asarray([99.0])
+    with pytest.raises(ValueError, match="read-only"):
+        observation["pedestrians"]["positions"][0, 0] = 99.0
+
+    planner = StreamGapPlannerAdapter(StreamGapPlannerConfig())
+    planner.plan(observation)
+
+
 def test_typed_record_rejects_non_psd_covariance_and_key_mismatch() -> None:
     """Standalone construction rejects unsafe covariance and mapping identity drift."""
     with pytest.raises(ValueError, match="positive semidefinite"):
@@ -358,6 +391,35 @@ def test_legacy_projection_fails_closed_for_malformed_inputs() -> None:
     assert result.compatibility["reason"] == "malformed_uncertainty_report"
     assert adapter._pedestrian_count({"pedestrians": []}) is None
     assert adapter._pedestrian_count({"pedestrians": {"count": []}}) is None
+    assert adapter._pedestrian_count({"pedestrians": {"count": [1.5]}}) is None
+    assert adapter._pedestrian_count({"pedestrians": {"count": [-1.0]}}) is None
+
+
+def test_legacy_projection_preserves_canonical_observation_on_fail_closed_paths() -> None:
+    """Compatibility diagnostics must not alter unsupported or malformed legacy inputs."""
+    belief = _belief_fixture()
+    baseline = belief.to_socnav_struct()
+    unsupported = project_scenario_belief_for_planner(belief, planner_key="orca")
+
+    assert unsupported.compatibility["reason"] == "unsupported_uncertainty_planner"
+    assert set(unsupported.observation["pedestrians"]) == set(baseline["pedestrians"])
+    for key, value in baseline["pedestrians"].items():
+        if isinstance(value, np.ndarray):
+            np.testing.assert_array_equal(unsupported.observation["pedestrians"][key], value)
+        else:
+            assert unsupported.observation["pedestrians"][key] == value
+
+    malformed_rows = SimpleNamespace(
+        to_socnav_struct=lambda: {"pedestrians": {"count": np.asarray([1.0])}},
+        to_uncertainty_report=lambda: {"agents": [object()]},
+    )
+    rejected = project_scenario_belief_for_planner(
+        malformed_rows,
+        planner_key="stream_gap",
+    )
+    assert rejected.compatibility["reason"] == "malformed_uncertainty_report"
+    assert "uncertainty" not in rejected.observation["pedestrians"]
+    assert "uncertainty_compatibility" not in rejected.observation["pedestrians"]
 
 
 def test_projection_invalid_belief_fallbacks_and_alias(monkeypatch) -> None:
@@ -500,6 +562,8 @@ def test_validation_helpers_reject_malformed_values() -> None:
         adapter._validate_nonnegative_int("steps", -1)
     with pytest.raises(ValueError, match="non-negative integer"):
         adapter._validate_nonnegative_int("steps", 1.5)
+    with pytest.raises(ValueError, match="non-negative integer"):
+        adapter._validate_nonnegative_int("steps", True)
     with pytest.raises(ValueError, match="track_id"):
         adapter._validate_track_id(True)
     with pytest.raises(ValueError, match="track_id"):
@@ -684,3 +748,12 @@ def test_entity_projection_rejects_malformed_public_fields() -> None:
         project(replace(agent, radius="bad"))
     with pytest.raises(ValueError, match="source adapter"):
         project(replace(agent, source=replace(agent.source, adapter="")))
+    with pytest.raises(ValueError, match="frame_id"):
+        project(
+            replace(
+                agent,
+                velocity=replace(agent.velocity, frame_id="ego"),
+            )
+        )
+    with pytest.raises(ValueError, match="source_sensor_ids"):
+        project(replace(agent, source=replace(agent.source, sensor_ids=("",))))

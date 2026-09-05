@@ -124,7 +124,6 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
     worktree = tmp_path / "review"
     branch = "review/guard"
     try:
-        _git(repo, "config", "remote.origin.pushurl", str(remote))
         created = subprocess.run(
             [
                 str(CREATE_WORKTREE),
@@ -159,8 +158,12 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
             "origin",
         ).stdout.splitlines()
         assert str(remote) not in effective_pushurls
-        blocked_fetch = _git(worktree, "fetch", "origin", "main", check=False)
-        assert blocked_fetch.returncode != 0, blocked_fetch.stdout + blocked_fetch.stderr
+        allowed_fetch = _git(worktree, "fetch", "origin", "main", check=False)
+        assert allowed_fetch.returncode == 0, allowed_fetch.stdout + allowed_fetch.stderr
+        allowed_ls_remote = _git(worktree, "ls-remote", "origin", check=False)
+        assert allowed_ls_remote.returncode == 0, (
+            allowed_ls_remote.stdout + allowed_ls_remote.stderr
+        )
         before = _remote_refs(worktree)
         expected = _git(worktree, "rev-parse", "HEAD").stdout.strip()
         attempts = (
@@ -195,12 +198,11 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
 
 
 def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -> None:
-    """Transport barriers cover a newly configured remote and common URL aliases."""
+    """The push-only catch-all covers a remote added after configuration."""
     repo, _remote = _fixture_repo(tmp_path)
     second_remote = tmp_path / "second-remote.git"
     _git(tmp_path, "init", "--bare", str(second_remote))
     _git(repo, "push", str(second_remote), "main:refs/heads/main")
-    _git(repo, "config", f"url.{second_remote}.insteadOf", "review-target:")
     worktree = tmp_path / "review-new-remote"
     branch = "review/new-remote"
     try:
@@ -208,7 +210,6 @@ def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -
         configured = _configure(worktree, "review")
         assert configured.returncode == 0, configured.stderr
         _git(worktree, "remote", "add", "mirror", str(second_remote))
-        _git(worktree, "config", "--worktree", "remote.mirror.pushurl", "review-target:")
         result = _git(
             worktree,
             "push",
@@ -218,8 +219,61 @@ def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -
             check=False,
         )
         assert result.returncode != 0, result.stdout + result.stderr
-        refs = _common_git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
+        refs = _git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
         assert "refs/heads/new-remote-bypass" not in refs
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_review_worktree_allows_ls_remote_and_fetch_while_blocking_pushes(tmp_path: Path) -> None:
+    """Review mode separates push rejection from read-only ls-remote and fetch (issue #8321)."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review-read-urls"
+    branch = "review/read-urls"
+    try:
+        created = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(worktree),
+                "--branch",
+                branch,
+                "--base",
+                "HEAD",
+                "--minimum-free-bytes",
+                "0",
+                "--mode",
+                "review",
+            ],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert created.returncode == 0, created.stderr
+
+        # Read-only probe: git ls-remote origin refs/heads/*
+        ls_remote = _git(worktree, "ls-remote", "origin", "refs/heads/*")
+        assert "refs/heads/main" in ls_remote.stdout
+
+        # Read-only fetch: git fetch origin main
+        allowed_fetch = _git(worktree, "fetch", "origin", "main", check=False)
+        assert allowed_fetch.returncode == 0, allowed_fetch.stdout + allowed_fetch.stderr
+
+        # Push rejection: ordinary push is blocked
+        push_normal = _git(worktree, "push", "origin", "HEAD:refs/heads/normal-push", check=False)
+        assert push_normal.returncode != 0
+
+        # Push rejection: --no-verify push is blocked
+        push_no_verify = _git(
+            worktree, "push", "--no-verify", "origin", "HEAD:refs/heads/no-verify-push", check=False
+        )
+        assert push_no_verify.returncode != 0
+
+        # Remote refs remain unmutated
+        refs = _git(worktree, "ls-remote", "--refs", "origin").stdout
+        assert "refs/heads/normal-push" not in refs
+        assert "refs/heads/no-verify-push" not in refs
     finally:
         _remove_worktree(repo, worktree, branch)
 

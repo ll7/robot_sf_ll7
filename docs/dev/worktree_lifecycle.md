@@ -50,14 +50,11 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/review_work
 
 The creator writes the worktree-local `robot-sf.worktree-mode=review` marker and installs the
 tracked pre-push guard. Configured remote names also receive inert worktree-local push destinations
-and a nonexistent worktree-local receive-pack command. An all-URL worktree-local rewrite (plus
-exact push-URL rules) routes remote URLs to an inert path, covering inherited `pushurl` values,
-equivalent local-path spellings, explicit destination refspecs, and `--no-verify`. Review mode also
-denies Git's known and unknown transport protocols in the worktree-local config, so a longer
-common-config URL alias cannot win URL-rewrite precedence and a remote added after activation stays
-blocked. It therefore intentionally blocks direct fetch and `ls-remote` commands too; refresh refs
-before entering the mode or use the integration helper, which reads its comparison through the
-common Git config. No configured remote can be mutated from the protected worktree through ordinary
+and a nonexistent worktree-local receive-pack command. Push-specific URL rewrites (plus exact
+configured-URL rules) route push URLs to an inert path, covering direct pushes, equivalent local-path
+spellings, explicit destination refspecs, and `--no-verify`. Push rejection is separated from read-only
+URL resolution: direct `git fetch` and `git ls-remote` commands remain operational for inspection and
+ref verification. No configured remote can be mutated from the protected worktree through ordinary
 Git invocation paths. This is a Git-level workflow guard, not an operating-system sandbox; a
 deliberate per-command Git configuration override can bypass it.
 

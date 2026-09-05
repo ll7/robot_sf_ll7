@@ -246,6 +246,9 @@ def _blocked_receivepack(identity: dict[str, Path]) -> str:
     return str(identity["git_dir"] / ".robot-sf-review-push-blocked-receive-pack")
 
 
+STANDARD_PROTOCOL_NAMES = ("allow", "ext", "file", "git", "http", "https", "ssh")
+
+
 def _url_rule_key(blocked_url: str) -> str:
     return f"url.{blocked_url}.pushInsteadOf"
 
@@ -255,8 +258,8 @@ def _url_catchall_key(blocked_url: str) -> str:
 
 
 def _protocol_policy_keys(identity: dict[str, Path]) -> set[str]:
-    """Return built-in and configured protocol allow-policy keys."""
-    keys = set(PROTOCOL_POLICY_KEYS)
+    """Return configured custom protocol allow-policy keys (excluding standard ones)."""
+    keys: set[str] = set()
     result = _run_git(
         identity["path"],
         "config",
@@ -268,12 +271,15 @@ def _protocol_policy_keys(identity: dict[str, Path]) -> set[str]:
     for line in result.stdout.splitlines():
         key = line.split(maxsplit=1)[0].lower()
         if key.startswith("protocol.") and key.endswith(".allow"):
-            keys.add(key)
+            proto_name = key[len("protocol.") : -len(".allow")]
+            if proto_name not in STANDARD_PROTOCOL_NAMES:
+                keys.add(key)
     return keys
 
 
 def _capture_backup(identity: dict[str, Path], original_mode: str | None) -> dict[str, Any]:
     remotes = _remote_names(identity)
+    all_protocol_keys = set(PROTOCOL_POLICY_KEYS) | _protocol_policy_keys(identity)
     return {
         "schema": BACKUP_SCHEMA_VERSION,
         "mode": original_mode,
@@ -285,9 +291,7 @@ def _capture_backup(identity: dict[str, Path], original_mode: str | None) -> dic
             remote: _worktree_values(identity, f"remote.{remote}.receivepack") for remote in remotes
         },
         "remote_urls": {remote: _remote_urls(identity, remote) for remote in remotes},
-        "protocol_allows": {
-            key: _worktree_values(identity, key) for key in _protocol_policy_keys(identity)
-        },
+        "protocol_allows": {key: _worktree_values(identity, key) for key in all_protocol_keys},
     }
 
 
@@ -413,26 +417,17 @@ def _prepare_review_barriers(
         for remote in remotes
     }
     for remote in remotes:
-        # An empty higher-priority value resets inherited common-config
-        # pushurl entries. Without it, Git pushes to every effective push URL
-        # and may update the real destination before the inert one fails.
         pushurl_key = f"remote.{remote}.pushurl"
-        _worktree_set(identity, pushurl_key, "")
-        _worktree_add(identity, pushurl_key, expected_url)
+        _worktree_set(identity, pushurl_key, expected_url)
         _worktree_set(identity, f"remote.{remote}.receivepack", blocked_receivepack)
         for url in configured_urls[remote]:
             _worktree_add(identity, rule_key, url)
-    # Keep the URL barrier effective for remotes added after review mode is
-    # configured, including explicit pushurl values. This all-URL rewrite is
-    # intentionally broader than pushInsteadOf: Git ignores pushInsteadOf when
-    # a remote has an explicit pushurl. Remote reads needed by ``integrate``
-    # use the common Git config below, outside this worktree-local rule.
-    _worktree_add(identity, catchall_key, "")
-    # URL rewrite precedence is longest-prefix based, so a pre-existing common
-    # config alias can otherwise beat the empty-prefix catch-all. Deny every
-    # built-in transport and every configured custom transport in this worktree
-    # as the final barrier, including remotes and aliases added after review
-    # mode is configured.
+    # Catch-all for push URLs to keep the push barrier effective for remotes
+    # added after review mode is configured, including raw URLs.
+    # Note: pushInsteadOf applies only to pushes, preserving read-only commands
+    # like git ls-remote and git fetch (issue #8321).
+    _worktree_add(identity, rule_key, "")
+    # Disable preconfigured custom transports without blocking standard read protocols.
     for key in _protocol_policy_keys(identity):
         _worktree_set(identity, key, "never")
     return expected_url

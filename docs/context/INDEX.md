@@ -228,21 +228,24 @@ fit anchors, cross-family same-planner evaluation, exact per-arm outcome
 admission, and the pending human-review boundary:
 [issue_3275_same_planner_contract.md](issue_3275_same_planner_contract.md).
 
-Issue #6105 step-3 #3275 same-planner held-out decision (inconclusive): the
-frozen decision is inconclusive. No code in this repository emits
-`adversarial_independent_outcomes.v2` rows from native `social_force` execution
-(the step-3 runner only consumes such a packet), and the campaign's immutable
-allowed paths permit no committed execution orchestrator, so native outcomes
-were not produced and the frozen fail-closed rule yields inconclusive. This is
-independently guaranteed by the frozen predeclared underpowering (k=12 per arm,
-Fisher-exact boundary minimum detectable yield difference ~0.417 above the 0.20
-minimally important effect), so the design can never reach continue or stop on
-this budget. The packet records full candidate-to-manifest lineage for all 24
-selected candidates, the verified frozen-input hashes, the live decision
-predicates, and the authoritative runner decision-function output; it is
-diagnostic only and not benchmark, calibrated-failure-probability,
-cross-planner, or paper evidence:
+Issue #6105 step-3 #3275 same-planner held-out decision (historical,
+pre-producer): the packet records the earlier inconclusive decision caused by
+the absence of an outcome producer. It remains diagnostic-only historical
+lineage; the current producer contract and execution instructions are in
+[evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md](evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md).
+The historical packet is explicitly marked as superseded and must not be read
+as evidence that the current producer has executed a campaign:
 [evidence/issue_3275_same_planner_held_out/step3_decision_packet.json](evidence/issue_3275_same_planner_held_out/step3_decision_packet.json).
+
+Issue #7066 outcome producer readiness: a resumable, fail-closed bridge from
+explicit canonical `SocialForcePlannerAdapter` execution envelopes to
+`adversarial_independent_outcomes.v2` rows. Native, fallback, degraded, mixed,
+and unavailable or identity-mismatched rows are rejected before admission; the
+producer preserves the historical planner/reference commit separately from its
+producing commit and requires replay, confirmation, configuration, scenario,
+adapter-identity, timeout, and episode-record lineage. This is a producer and
+validation path, not a campaign submission or empirical result:
+[evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md](evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md).
 
 
 Issue #5303 step 2 frozen TPE-versus-random diagnostic preregistration (proposal/preflight only): the side-effect-free three-seed contract, hash manifest, and check command for `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`. The parent issue's 2026-07-28 domain ruling supersedes this design for promotion with a new six-seed preregistration; this historical packet remains an inconclusive-only diagnostic handoff and cannot authorize the #6145 campaign:

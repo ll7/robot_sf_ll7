@@ -583,6 +583,11 @@ _FAST_FILES = {
     # Full Classic phase-boundary tests are deterministic scheduler/context/finalizer
     # contracts; keep extracted orchestration coverage in exact-head fast shards.
     "test_orchestration_boundaries.py",
+    # Native issue-6105 outcome and termination contracts use deterministic
+    # fixtures; keep their changed-producer coverage in pull-request fast shards.
+    "test_held_out_preflight.py",
+    "test_independent_outcome_producer.py",
+    "test_independent_outcomes.py",
     # These smoke/fixture scenario tests run short deterministic simulation
     # episodes through the map-runner trace recorder; they are the only
     # fast-lane coverage for changed trace paths in the exact-head

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import subprocess
@@ -10,8 +11,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
+from scripts.dev import single_account_merge_receipt as receipt_module
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.stacked_prs import (
+    _closing_discipline_reasons,
     _get_paginated_list,
     _parse_expected_heads,
     _retarget_plan,
@@ -80,6 +83,7 @@ def _ready_entry(number: int, *, head_ref: str, head_sha: str, base_ref: str) ->
         "state": "open",
         "head_ref": head_ref,
         "head_sha": head_sha,
+        "body_sha256": hashlib.sha256(b"body").hexdigest(),
         "base_ref": base_ref,
         "base_sha": "b" * 40,
         "metadata_digest": metadata,
@@ -162,6 +166,24 @@ def test_retarget_plan_maps_root_to_main_and_children_to_parent_branch() -> None
 
     assert [item["desired_base_ref"] for item in plan] == ["main", "stack-root", "stack-child"]
     assert [item["change_required"] for item in plan] == [False, True, False]
+
+
+def test_stack_closing_readiness_binds_head_body_and_sources() -> None:
+    """A passing close result detached from its live stack snapshot is not ready."""
+    entry = _ready_entry(1, head_ref="root", head_sha="a" * 40, base_ref="main")
+    assert _closing_discipline_reasons(entry) == []
+
+    detached_head = copy.deepcopy(entry)
+    detached_head["closing_discipline"]["head_sha"] = "f" * 40
+    assert "closing_discipline_head_mismatch" in _closing_discipline_reasons(detached_head)
+
+    detached_body = copy.deepcopy(entry)
+    detached_body["body_sha256"] = "0" * 64
+    assert "closing_discipline_body_mismatch" in _closing_discipline_reasons(detached_body)
+
+    detached_source = copy.deepcopy(entry)
+    detached_source["closing_discipline"]["sources"]["issues"] = "stale_issue_metadata"
+    assert "closing_discipline_sources_missing" in _closing_discipline_reasons(detached_source)
 
 
 def test_check_summary_drops_older_cancelled_run() -> None:
@@ -770,6 +792,75 @@ def test_merge_cascade_squashes_root_then_explicitly_retargets_next(monkeypatch)
     assert result["base_advance"] == {"mode": "explicit", "base_ref": "main"}
     assert captured_receipt["closing_discipline"]["status"] == "passed"
     assert not any(call[0] == "PUT" and "/merge" in call[1] for call in calls)
+
+
+def test_merge_cascade_live_close_change_blocks_canonical_put(monkeypatch) -> None:
+    """A final live closing change blocks the owner before it can issue a PUT."""
+    root_sha = "a" * 40
+    entry = _ready_entry(1, head_ref="root", head_sha=root_sha, base_ref="main")
+    snapshot = {
+        "schema": "stacked_prs.v1",
+        "status": "ok",
+        "main": {"sha": "1" * 40},
+        "entries": [entry],
+        "all_merge_ready": True,
+    }
+    monkeypatch.setattr(
+        "scripts.dev.stacked_prs.build_stack_status", lambda *args, **kwargs: snapshot
+    )
+    receipt = receipt_module.build_receipt_from_stack_entry(
+        "owner/repo",
+        entry,
+        current_base_sha="1" * 40,
+        observed_at="2026-09-05T12:00:00Z",
+    )
+    live = {
+        key: copy.deepcopy(receipt[key])
+        for key in (
+            "head_sha",
+            "base_sha",
+            "current_base_sha",
+            "metadata_digest",
+            "pr_state",
+            "pr_merged_at",
+            "required_checks",
+            "implementation_review",
+            "thread_resolution",
+            "requested_reviewers",
+            "requested_teams",
+            "holds",
+            "ordinary_cas",
+            "gate_audit",
+            "closing_discipline",
+        )
+    }
+    live["closing_discipline"] = {
+        **live["closing_discipline"],
+        "status": "blocked",
+        "blockers": ["live issue metadata changed"],
+    }
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (live, None),
+    )
+    calls: list[tuple[str, str]] = []
+
+    def fake_api(method: str, path: str, body: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append((method, path))
+        return {"merged": True, "sha": "d" * 40}, None
+
+    result = merge_cascade(
+        "owner/repo",
+        [1],
+        expected_heads={1: root_sha},
+        apply=True,
+        api=fake_api,
+    )
+
+    assert result["status"] == "error"
+    assert "live_closing_discipline_changed" in result["error"]
+    assert not any(method == "PUT" and "/merge" in path for method, path in calls)
 
 
 def test_cli_json_status_error_is_machine_readable(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]

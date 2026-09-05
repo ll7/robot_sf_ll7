@@ -85,17 +85,18 @@ def test_graphql_fallback_and_fail_closed_markers_are_disjoint() -> None:
 
 
 def test_helper_specific_fallback_policy_is_centralized() -> None:
-    """The merge wrapper declares both transport-only fallback signatures."""
+    """The merge wrapper declares receipt-owner delegation and no fallback writer."""
     contract = get_transport_contract("gh_pr_merge.sh")
     decision = classify_error("gh_pr_merge.sh", "fatal: already used by worktree")
     quota = classify_error("gh_pr_merge.sh", "GraphQL: API rate limit exceeded")
     denied = classify_error("gh_pr_merge.sh", "fatal: permission denied")
 
-    assert contract.fallback_markers == ("already used by worktree", "graphql:")
-    assert decision["decision"] == "fallback"
-    assert decision["matched_fallback_markers"] == ["already used by worktree"]
-    assert quota["decision"] == "fallback"
-    assert quota["matched_fallback_markers"] == ["graphql:"]
+    assert contract.allowed_transports == ("receipt_owner",)
+    assert contract.fallback_markers == ()
+    assert decision["decision"] == "fail_closed"
+    assert decision["matched_fallback_markers"] == []
+    assert quota["decision"] == "fail_closed"
+    assert quota["matched_fallback_markers"] == []
     assert denied["decision"] == "fail_closed"
     assert denied["matched_fail_closed_markers"] == ["permission denied"]
 

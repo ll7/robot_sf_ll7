@@ -63,6 +63,7 @@ from scripts.dev.pr_loop_policy import (  # noqa: E402
 )
 from scripts.dev.pr_metadata import metadata_digest  # noqa: E402
 from scripts.dev.single_account_merge_receipt import (  # noqa: E402
+    CLOSING_DISCIPLINE_SOURCES,
     apply_guarded_merge,
     build_closing_discipline_evidence,
     build_receipt_from_stack_entry,
@@ -572,7 +573,7 @@ def _merge_queue_gate_reasons(entry: dict[str, Any]) -> list[str]:
 
 
 def _closing_discipline_reasons(entry: dict[str, Any]) -> list[str]:
-    """Require an explicit semantic-closing result before a stack is merge-ready."""
+    """Require head-, body-, and source-bound closing evidence before readiness."""
     value = entry.get("closing_discipline")
     if not isinstance(value, Mapping):
         return ["closing_discipline_not_verified"]
@@ -585,9 +586,30 @@ def _closing_discipline_reasons(entry: dict[str, Any]) -> list[str]:
                 "unavailable": "closing_discipline_unavailable",
             }.get(str(status), "closing_discipline_not_verified")
         ]
-    if not isinstance(blockers, list) or blockers:
-        return ["closing_discipline_not_verified"]
-    return []
+    reasons: list[str] = []
+    if not isinstance(blockers, list) or not all(
+        isinstance(item, str) and item for item in blockers
+    ):
+        reasons.append("closing_discipline_not_verified")
+    elif blockers:
+        reasons.append("closing_discipline_not_verified")
+
+    expected_head = str(entry.get("head_sha") or "")
+    observed_head = str(value.get("head_sha") or "")
+    if not _SHA_RE.fullmatch(expected_head) or observed_head.lower() != expected_head.lower():
+        reasons.append("closing_discipline_head_mismatch")
+
+    expected_body = str(entry.get("body_sha256") or "")
+    observed_body = str(value.get("body_sha256") or "")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", expected_body) or (
+        observed_body.lower() != expected_body.lower()
+    ):
+        reasons.append("closing_discipline_body_mismatch")
+
+    sources = value.get("sources")
+    if not isinstance(sources, Mapping) or dict(sources) != CLOSING_DISCIPLINE_SOURCES:
+        reasons.append("closing_discipline_sources_missing")
+    return sorted(set(reasons))
 
 
 def _review_reasons(entry: dict[str, Any]) -> list[str]:
@@ -710,6 +732,7 @@ def build_stack_status(
             "mergeable_state": pr["mergeable_state"],
             "head_ref": pr["head_ref"],
             "head_sha": pr["head_sha"],
+            "body_sha256": hashlib.sha256(pr["body"].encode("utf-8")).hexdigest(),
             "base_ref": pr["base_ref"],
             "base_sha": pr["base_sha"],
             "expected_base_ref": expected_ref,

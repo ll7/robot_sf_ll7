@@ -14,11 +14,52 @@
       "entrypoint": "guarded merge workflow",
       "mode": "documented_apply",
       "requires_receipt": true
+    },
+    {
+      "path": "scripts/dev/gh_pr_merge.sh",
+      "entrypoint": "compatibility wrapper",
+      "mode": "delegated_apply",
+      "requires_receipt": true
     }
   ],
   "forbidden_direct_merge_patterns": [
     "pulls/<pr>/merge",
-    "gh pr merge"
+    "gh pr merge",
+    "split REST mutation targeting pulls/<pr>/merge"
+  ],
+  "scan_surfaces": [
+    {
+      "path": "scripts/dev",
+      "suffixes": [
+        ".py",
+        ".sh"
+      ]
+    },
+    {
+      "path": ".github/workflows",
+      "suffixes": [
+        ".yml",
+        ".yaml"
+      ]
+    },
+    {
+      "path": "docs",
+      "suffixes": [
+        ".md"
+      ]
+    },
+    {
+      "path": ".agents/skills",
+      "suffixes": [
+        ".md"
+      ]
+    },
+    {
+      "path": ".opencode/skills",
+      "suffixes": [
+        ".md"
+      ]
+    }
   ],
   "claim_boundary": "merge-governance integrity only"
 }

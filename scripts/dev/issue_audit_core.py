@@ -26,6 +26,7 @@ import math
 import re
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -36,6 +37,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from scripts.dev.github_quota import (
+    DEFAULT_CORE_SAFETY_THRESHOLD,
+    RateLimitSnapshot,
+    core_quota_reset_handoff,
+    fetch_rate_limit_snapshot,
+)
 from scripts.dev.issue_completion_receipt import admit_completion_receipt
 from scripts.dev.issue_state_taxonomy import (
     EXECUTION_STATE_LABELS,
@@ -535,6 +542,12 @@ def _parse_json(result: subprocess.CompletedProcess[str], *, what: str) -> tuple
         return None, f"{what} returned invalid JSON: {exc}"
 
 
+def _is_rate_limit_error(error: str) -> bool:
+    """Detect whether a command failure is a GitHub REST rate-limit error (issue #8304)."""
+    lower = error.lower()
+    return "rate limit" in lower or "http 403" in lower or "secondary rate limit" in lower
+
+
 def _runner_or_default(runner: Runner | None) -> Runner:
     return runner or _run_gh
 
@@ -747,12 +760,16 @@ def paginate_rest(
     errors: list[str] = []
     pages_read = 0
     truncated = False
+    rate_limited = False
     for page in range(1, max_pages + 1):
         separator = "&" if "?" in path else "?"
         endpoint = f"{path}{separator}per_page={per_page}&page={page}"
         payload, error = _parse_json(run(["api", endpoint], None), what=endpoint)
         if error:
             errors.append(error)
+            if _is_rate_limit_error(error):
+                rate_limited = True
+                truncated = True
             break
         if not isinstance(payload, list):
             errors.append(f"{endpoint} returned a non-list payload")
@@ -763,7 +780,7 @@ def paginate_rest(
             break
     else:
         truncated = True
-    return rows, {
+    meta = {
         "pages_read": pages_read,
         "per_page": per_page,
         "page_budget": max_pages,
@@ -771,6 +788,10 @@ def paginate_rest(
         "truncated": truncated,
         "errors": errors,
     }
+    if rate_limited:
+        meta["rate_limited"] = True
+        meta["quota_exhausted"] = True
+    return rows, meta
 
 
 def discover_open_issues(
@@ -874,6 +895,7 @@ def discover_issue_timeline_merged_prs(
     issue_numbers: Iterable[int],
     *,
     max_pages: int = DEFAULT_MAX_TIMELINE_PAGES,
+    max_requests: int | None = None,
     runner: Runner | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Recover merged PRs linked to issues from bounded timeline events.
@@ -891,8 +913,12 @@ def discover_issue_timeline_merged_prs(
     pages_read = 0
     event_count = 0
     truncated = False
+    rate_limited = False
 
     for issue_number in numbers:
+        if max_requests is not None and pages_read >= max_requests:
+            truncated = True
+            break
         events, meta = paginate_rest(
             f"repos/{repo}/issues/{issue_number}/timeline",
             max_pages=max_pages,
@@ -902,6 +928,12 @@ def discover_issue_timeline_merged_prs(
         event_count += len(events)
         truncated = bool(truncated or meta.get("truncated"))
         errors.extend(f"issue {issue_number}: {error}" for error in meta.get("errors", []))
+        if meta.get("rate_limited") or any(
+            _is_rate_limit_error(error) for error in meta.get("errors", [])
+        ):
+            rate_limited = True
+            truncated = True
+            break
         for event in events:
             if str(event.get("event") or "") != "cross-referenced":
                 continue
@@ -942,6 +974,9 @@ def discover_issue_timeline_merged_prs(
         "truncated": truncated,
         "errors": errors,
     }
+    if rate_limited:
+        metadata["rate_limited"] = True
+        metadata["quota_exhausted"] = True
     return sorted(by_number.values(), key=lambda item: item["number"]), metadata
 
 
@@ -1062,6 +1097,84 @@ def discover_jobs(
     return jobs, {"available": True, "count": len(jobs), "errors": []}
 
 
+def discover_core_quota(
+    repo: str = DEFAULT_REPO,
+    *,
+    runner: Runner | None = None,
+    min_core_remaining: int = DEFAULT_CORE_SAFETY_THRESHOLD,
+    now: float | None = None,
+    retry_command: str | None = None,
+) -> tuple[RateLimitSnapshot, dict[str, Any]]:
+    """Check GitHub core REST capacity before high-volume enrichment."""
+    snapshot = fetch_rate_limit_snapshot(runner=runner)
+    cmd = retry_command or f"uv run python scripts/dev/issue_audit_core.py plan --repo {repo}"
+    if snapshot.status != "ok":
+        handoff = core_quota_reset_handoff(
+            retry_command=cmd,
+            now=now,
+            reset_at=snapshot.core_reset_at,
+            runner=runner,
+        )
+        meta = {
+            "available": False,
+            "status": snapshot.status,
+            "core_remaining": snapshot.core_remaining,
+            "core_reset_at": snapshot.core_reset_at,
+            "reset_in_seconds": handoff.get("reset_in_seconds"),
+            "retry_after_utc": handoff.get("retry_after_utc"),
+            "retry_command": cmd,
+            "next_action": "wait_for_reset_and_retry",
+            "handoff": handoff.get("handoff", ""),
+            "reason": f"rate_limit_{snapshot.status}: {snapshot.error or 'core quota check failed'}",
+            "errors": [snapshot.error or f"rate_limit_{snapshot.status}"],
+            "quota_exhausted": True,
+        }
+        return snapshot, meta
+
+    assert snapshot.core_remaining is not None
+    available_budget = max(0, snapshot.core_remaining - min_core_remaining)
+    if available_budget <= 0:
+        handoff = core_quota_reset_handoff(
+            retry_command=cmd,
+            now=now,
+            reset_at=snapshot.core_reset_at,
+            runner=runner,
+        )
+        meta = {
+            "available": False,
+            "status": "exhausted",
+            "core_remaining": snapshot.core_remaining,
+            "core_reset_at": snapshot.core_reset_at,
+            "reset_in_seconds": handoff.get("reset_in_seconds"),
+            "retry_after_utc": handoff.get("retry_after_utc"),
+            "retry_command": cmd,
+            "next_action": "wait_for_reset_and_retry",
+            "handoff": handoff.get("handoff", ""),
+            "reason": (
+                f"GitHub core REST quota exhausted "
+                f"({snapshot.core_remaining} remaining <= safety margin {min_core_remaining})"
+            ),
+            "errors": [f"GitHub core REST quota exhausted ({snapshot.core_remaining} remaining)"],
+            "quota_exhausted": True,
+        }
+        return snapshot, meta
+
+    meta = {
+        "available": True,
+        "status": "ok",
+        "core_remaining": snapshot.core_remaining,
+        "core_reset_at": snapshot.core_reset_at,
+        "available_budget": available_budget,
+        "min_core_remaining": min_core_remaining,
+        "retry_command": cmd,
+        "next_action": "none",
+        "reason": "sufficient core quota available",
+        "errors": [],
+        "quota_exhausted": False,
+    }
+    return snapshot, meta
+
+
 def discover_inventory(
     repo: str = DEFAULT_REPO,
     *,
@@ -1093,9 +1206,42 @@ def discover_inventory(
     open_prs, open_pr_meta = discover_pull_requests(
         repo, state="open", max_pages=max_pages, runner=rest_runner
     )
-    closed_prs, closed_pr_meta = discover_pull_requests(
-        repo, state="closed", max_pages=max_closed_pr_pages, runner=rest_runner
-    )
+
+    _quota_snapshot, quota_meta = discover_core_quota(repo, runner=rest_runner)
+    available_budget = quota_meta.get("available_budget", 0) if quota_meta.get("available") else 0
+
+    closed_prs: list[dict[str, Any]] = []
+    closed_pr_meta: dict[str, Any]
+    if not quota_meta.get("available") or available_budget <= 0:
+        closed_pr_meta = {
+            "pages_read": 0,
+            "per_page": PER_PAGE,
+            "page_budget": max_closed_pr_pages,
+            "row_count": 0,
+            "truncated": True,
+            "errors": [quota_meta.get("reason", "core quota exhausted before closed-PR discovery")],
+            "quota_exhausted": True,
+        }
+    else:
+        budgeted_closed_pr_pages = min(max_closed_pr_pages, available_budget)
+        closed_prs, closed_pr_meta = discover_pull_requests(
+            repo, state="closed", max_pages=budgeted_closed_pr_pages, runner=rest_runner
+        )
+        if (
+            budgeted_closed_pr_pages < max_closed_pr_pages
+            and closed_pr_meta.get("pages_read", 0) >= budgeted_closed_pr_pages
+        ):
+            closed_pr_meta["truncated"] = True
+            closed_pr_meta["bounded_by_quota"] = True
+        available_budget = max(0, available_budget - int(closed_pr_meta.get("pages_read", 0)))
+        if closed_pr_meta.get("quota_exhausted") or any(
+            _is_rate_limit_error(err) for err in closed_pr_meta.get("errors", [])
+        ):
+            quota_meta["status"] = "exhausted"
+            quota_meta["available"] = False
+            quota_meta["quota_exhausted"] = True
+            available_budget = 0
+
     merged_prs = [pr for pr in closed_prs if pr.get("merged_at")]
     timeline_prs: list[dict[str, Any]] = []
     timeline_meta: dict[str, Any] = {
@@ -1109,27 +1255,72 @@ def discover_inventory(
         "truncated": False,
         "errors": [],
     }
-    global_closed_prs_complete = not closed_pr_meta.get("truncated") and not closed_pr_meta.get(
-        "errors"
+    global_closed_prs_complete = (
+        not closed_pr_meta.get("truncated")
+        and not closed_pr_meta.get("errors")
+        and not closed_pr_meta.get("quota_exhausted")
     )
     if not global_closed_prs_complete:
-        timeline_prs, timeline_meta = discover_issue_timeline_merged_prs(
-            repo,
-            [int(issue["number"]) for issue in issues],
-            max_pages=min(max_pages, DEFAULT_MAX_TIMELINE_PAGES),
-            runner=rest_runner,
-        )
-        timeline_meta["reason"] = "global closed-PR inventory partial"
-        merged_prs = _merge_merged_pr_rows(merged_prs, timeline_prs)
+        if not quota_meta.get("available") or available_budget <= 0:
+            timeline_meta = {
+                "available": False,
+                "reason": (
+                    f"timeline enrichment skipped: core quota exhausted or insufficient "
+                    f"({quota_meta.get('core_remaining', 0)} remaining)"
+                ),
+                "issue_count": len(issues),
+                "pages_read": 0,
+                "page_budget": min(max_pages, DEFAULT_MAX_TIMELINE_PAGES),
+                "event_count": 0,
+                "row_count": 0,
+                "truncated": True,
+                "errors": [
+                    f"timeline enrichment skipped: core quota exhausted or insufficient "
+                    f"({quota_meta.get('core_remaining', 0)} remaining)"
+                ],
+                "quota_exhausted": True,
+            }
+        else:
+            timeline_prs, timeline_meta = discover_issue_timeline_merged_prs(
+                repo,
+                [int(issue["number"]) for issue in issues],
+                max_pages=min(max_pages, DEFAULT_MAX_TIMELINE_PAGES),
+                max_requests=available_budget,
+                runner=rest_runner,
+            )
+            timeline_meta["reason"] = "global closed-PR inventory partial"
+            merged_prs = _merge_merged_pr_rows(merged_prs, timeline_prs)
+            available_budget = max(0, available_budget - int(timeline_meta.get("pages_read", 0)))
+            if timeline_meta.get("quota_exhausted") or any(
+                _is_rate_limit_error(err) for err in timeline_meta.get("errors", [])
+            ):
+                quota_meta["status"] = "exhausted"
+                quota_meta["available"] = False
+                quota_meta["quota_exhausted"] = True
+                available_budget = 0
+
+    coverage_complete = bool(
+        (global_closed_prs_complete or timeline_meta.get("available"))
+        and not quota_meta.get("quota_exhausted")
+        and quota_meta.get("status") == "ok"
+    )
     closure_coverage = {
-        "complete_for_open_issues": bool(
-            global_closed_prs_complete or timeline_meta.get("available")
+        "complete_for_open_issues": coverage_complete,
+        "mode": (
+            "global_closed_prs"
+            if global_closed_prs_complete
+            else "issue_timeline_fallback"
+            if timeline_meta.get("available") and not quota_meta.get("quota_exhausted")
+            else "incomplete_quota_exhausted"
+            if quota_meta.get("quota_exhausted")
+            or quota_meta.get("status") in {"exhausted", "insufficient"}
+            else "incomplete"
         ),
-        "mode": ("global_closed_prs" if global_closed_prs_complete else "issue_timeline_fallback"),
         "global_closed_prs_complete": global_closed_prs_complete,
         "global_closed_prs_truncated": bool(closed_pr_meta.get("truncated")),
         "global_closed_prs_errors": list(closed_pr_meta.get("errors", [])),
         "timeline": timeline_meta,
+        "quota": quota_meta,
     }
     labels, label_meta = discover_repository_labels(repo, max_pages=max_pages, runner=rest_runner)
     claims, claim_meta = discover_claims(remote, command_runner=local_runner)
@@ -1145,6 +1336,7 @@ def discover_inventory(
         "claims": claims,
         "worktrees": worktrees,
         "jobs": jobs,
+        "quota": quota_meta,
         "inventory": {
             "issues": issue_meta,
             "comments": comment_meta,
@@ -1152,6 +1344,7 @@ def discover_inventory(
             "closed_prs": closed_pr_meta,
             "issue_timeline_merged_prs": timeline_meta,
             "closure_coverage": closure_coverage,
+            "quota": quota_meta,
             "labels": label_meta,
             "claims": claim_meta,
             "worktrees": worktree_meta,
@@ -2283,18 +2476,32 @@ def build_audit_plan(
             "issue-audit wall-time budget exhausted while finalizing the audit plan"
         )
     inventory_meta = inventory.get("inventory") or {}
+    quota_meta: dict[str, Any] = {}
+    if isinstance(inventory.get("quota"), Mapping):
+        quota_meta.update(inventory["quota"])
+    if isinstance(inventory_meta.get("quota"), Mapping):
+        quota_meta.update(inventory_meta["quota"])
+    quota_exhausted = bool(
+        quota_meta.get("quota_exhausted")
+        or quota_meta.get("status") in {"exhausted", "insufficient", "quota_blocked"}
+        or (isinstance(quota_meta.get("available"), bool) and not quota_meta["available"])
+    )
     truncated = [
         name
         for name, meta in inventory_meta.items()
         if isinstance(meta, Mapping)
         and (meta.get("truncated") or meta.get("errors"))
         and not (name == "jobs" and meta.get("available") is False)
+        and not (name == "quota" and not quota_exhausted)
     ]
     inventory_uncertainties = [
         name
         for name, meta in inventory_meta.items()
         if isinstance(meta, Mapping) and name == "jobs" and meta.get("available") is False
     ]
+    if quota_exhausted:
+        inventory_uncertainties.append("core_quota")
+        truncated.append("core_quota")
     remaining_issue_numbers = [
         int(issue.get("number", 0)) for issue in ordered_issues[len(classifications) :]
     ]
@@ -2308,7 +2515,7 @@ def build_audit_plan(
         "resume_from_issue": remaining_issue_numbers[0] if remaining_issue_numbers else None,
         "resume_supported": False,
         "resume_requires_fresh_full_inventory": True,
-        "mutations_suppressed": classification_timed_out,
+        "mutations_suppressed": classification_timed_out or quota_exhausted,
     }
     if classification_timed_out:
         # Partial classifications are useful for diagnosis, but no mutation
@@ -2316,6 +2523,9 @@ def build_audit_plan(
         mutations = []
         _suppress_mutation_fields(classifications)
         truncated.append("classification")
+    elif quota_exhausted:
+        mutations = []
+        _suppress_mutation_fields(classifications)
     if len(mutations) > max_mutations:
         mutations = mutations[:max_mutations]
         truncated.append("mutation_budget")
@@ -2338,6 +2548,7 @@ def build_audit_plan(
             else {}
         ),
         "inventory_uncertainties": sorted(set(inventory_uncertainties)),
+        "quota": dict(quota_meta),
         "issues": classifications,
         "mutations": mutations,
         "blocked_label_report": blocked_label_report,
@@ -2351,7 +2562,7 @@ def build_audit_plan(
             "truncated_or_error_sources": len(set(truncated)),
         },
     }
-    if classification_timed_out:
+    if classification_timed_out or quota_exhausted:
         _suppress_mutation_fields(plan)
     elif _deadline_expired(effective_deadline):
         _mark_plan_timed_out(
@@ -3212,6 +3423,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.output.write_text(rendered, encoding="utf-8")
         else:
             print(rendered, end="")
+        quota = plan.get("quota")
+        if isinstance(quota, Mapping) and (
+            quota.get("quota_exhausted")
+            or quota.get("status") in {"exhausted", "insufficient", "quota_blocked"}
+        ):
+            retry_after = quota.get("retry_after_utc") or "unknown"
+            reset_in = quota.get("reset_in_seconds")
+            in_seconds_str = f" in ~{reset_in}s" if reset_in is not None else ""
+            reason = quota.get("reason") or "GitHub core REST quota exhausted"
+            cmd = quota.get("retry_command") or "retry later"
+            sys.stderr.write(
+                f"issue-audit: GitHub core REST quota exhausted ({reason}). "
+                f"Reset at {retry_after}{in_seconds_str}. Next action: {cmd}\n"
+            )
         return 2 if plan["truncation_or_errors"] else 0
     if args.command == "envelope":
         try:

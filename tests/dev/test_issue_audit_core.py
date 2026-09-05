@@ -2751,3 +2751,374 @@ def test_pending_queue_can_record_readback_confirmed_safe_mutations() -> None:
     )
 
     assert queue[0]["safe_mutations_applied"][0]["value"] == "state:blocked"
+
+
+def test_inventory_quota_exhausted_skips_closed_and_timeline_enrichment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Core quota exhaustion preflight skips closed-PR and timeline pagination."""
+    observed_calls: list[str] = []
+
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_open_issues",
+        lambda *args, **kwargs: ([_issue(101)], {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_pull_requests",
+        lambda _repo, *, state, max_pages, runner: (
+            observed_calls.append(f"prs_{state}") or ([], {"truncated": False, "errors": []})
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_issue_timeline_merged_prs",
+        lambda *args, **kwargs: (
+            observed_calls.append("timeline") or ([], {"available": True, "errors": []})
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_core_quota",
+        lambda *args, **kwargs: (
+            issue_audit_core.RateLimitSnapshot(
+                status="ok",
+                graphql_remaining=500,
+                graphql_reset_at=1_800_000_000,
+                core_remaining=0,
+                core_reset_at=1_800_000_100,
+            ),
+            {
+                "available": False,
+                "status": "exhausted",
+                "core_remaining": 0,
+                "core_reset_at": 1_800_000_100,
+                "reset_in_seconds": 100,
+                "retry_after_utc": "2027-01-15T08:01:40Z",
+                "retry_command": "uv run python scripts/dev/issue_audit_core.py plan --repo ll7/robot_sf_ll7",
+                "next_action": "wait_for_reset_and_retry",
+                "handoff": "GitHub core REST quota exhausted...",
+                "reason": "GitHub core REST quota exhausted (0 remaining <= safety margin 10)",
+                "errors": ["GitHub core REST quota exhausted (0 remaining)"],
+                "quota_exhausted": True,
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_repository_labels",
+        lambda *args, **kwargs: (set(), {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_claims",
+        lambda *args, **kwargs: ({}, {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_worktrees",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_jobs",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+
+    inventory = issue_audit_core.discover_inventory("ll7/robot_sf_ll7")
+
+    # Only open PRs are fetched; closed PRs and timeline requests are skipped
+    assert observed_calls == ["prs_open"]
+    assert inventory["inventory"]["closed_prs"]["quota_exhausted"] is True
+    assert inventory["inventory"]["closure_coverage"]["complete_for_open_issues"] is False
+    assert inventory["inventory"]["closure_coverage"]["mode"] == "incomplete_quota_exhausted"
+
+    # Now verify build_audit_plan fail-closed mutation and uncertainty behavior
+    plan = build_audit_plan(inventory)
+    assert "core_quota" in plan["inventory_uncertainties"]
+    assert "core_quota" in plan["truncation_or_errors"]
+    assert plan["mutations"] == []
+    assert plan["quota"]["status"] == "exhausted"
+    assert plan["quota"]["next_action"] == "wait_for_reset_and_retry"
+    # Ensure no readiness or blocked label write is planned on any issue
+    for issue_entry in plan["issues"]:
+        assert issue_entry["mutations"] == []
+
+
+def test_inventory_bounds_requests_when_core_quota_is_low(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Low core budget bounds closed-PR pagination and skips timeline when budget runs out."""
+    observed_closed_pages: list[int] = []
+    timeline_called = False
+
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_open_issues",
+        lambda *args, **kwargs: ([_issue(101)], {"truncated": False, "errors": []}),
+    )
+
+    def mock_prs(_repo: str, *, state: str, max_pages: int, runner: object) -> tuple:
+        if state == "closed":
+            observed_closed_pages.append(max_pages)
+            # Simulates reading all budgeted pages, returning truncated
+            return [], {"truncated": True, "pages_read": max_pages, "errors": []}
+        return [], {"truncated": False, "pages_read": 1, "errors": []}
+
+    monkeypatch.setattr(issue_audit_core, "discover_pull_requests", mock_prs)
+
+    def mock_timeline(*args, **kwargs) -> tuple:
+        nonlocal timeline_called
+        timeline_called = True
+        return [], {"available": True, "errors": []}
+
+    monkeypatch.setattr(issue_audit_core, "discover_issue_timeline_merged_prs", mock_timeline)
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_core_quota",
+        lambda *args, **kwargs: (
+            issue_audit_core.RateLimitSnapshot(
+                status="ok",
+                graphql_remaining=500,
+                graphql_reset_at=1_800_000_000,
+                core_remaining=13,
+                core_reset_at=1_800_000_100,
+            ),
+            {
+                "available": True,
+                "status": "ok",
+                "core_remaining": 13,
+                "core_reset_at": 1_800_000_100,
+                "available_budget": 3,  # 13 - 10 = 3
+                "min_core_remaining": 10,
+                "retry_command": "cmd",
+                "next_action": "none",
+                "reason": "sufficient core quota available",
+                "errors": [],
+                "quota_exhausted": False,
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_repository_labels",
+        lambda *args, **kwargs: (set(), {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_claims",
+        lambda *args, **kwargs: ({}, {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_worktrees",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_jobs",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+
+    inventory = issue_audit_core.discover_inventory("ll7/robot_sf_ll7", max_closed_pr_pages=50)
+
+    # Closed PRs budget was capped at available_budget (3), not 50
+    assert observed_closed_pages == [3]
+    # Because 3 pages were consumed, remaining budget is 0, so timeline was skipped
+    assert timeline_called is False
+    assert inventory["inventory"]["issue_timeline_merged_prs"]["quota_exhausted"] is True
+    assert inventory["inventory"]["closure_coverage"]["complete_for_open_issues"] is False
+
+
+def test_timeline_pagination_breaks_early_on_403_rate_limit() -> None:
+    """Timeline discovery bails out immediately on rate-limit error without querying all issues."""
+    queried_issues: list[int] = []
+
+    def runner(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+        for part in args:
+            if "issues/" in part:
+                num = int(part.split("issues/")[1].split("/")[0])
+                queried_issues.append(num)
+                if num == 2:
+                    return subprocess.CompletedProcess(
+                        args,
+                        1,
+                        "",
+                        "gh: HTTP 403: API rate limit exceeded for user (rate limit exceeded)",
+                    )
+                return subprocess.CompletedProcess(args, 0, "[]")
+        return subprocess.CompletedProcess(args, 0, "[]")
+
+    _prs, meta = discover_issue_timeline_merged_prs(
+        "ll7/robot_sf_ll7",
+        [1, 2, 3, 4, 5],
+        runner=runner,
+    )
+
+    # Stops immediately after issue 2 hits rate limit; 3, 4, 5 are never queried
+    assert queried_issues == [1, 2]
+    assert meta["truncated"] is True
+    assert meta["available"] is False
+    assert meta["quota_exhausted"] is True
+    assert meta["rate_limited"] is True
+
+
+def test_recovered_core_quota_enables_complete_audit_without_leaked_uncertainty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A subsequent audit with recovered quota permits normal completion and zero residual uncertainty."""
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_open_issues",
+        lambda *args, **kwargs: (
+            [_issue(101, body="Completion condition: merged PR #999")],
+            {"truncated": False, "errors": []},
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_pull_requests",
+        lambda _repo, *, state, max_pages, runner: (
+            ([], {"truncated": False, "errors": []})
+            if state == "open"
+            else (
+                [
+                    {
+                        "number": 999,
+                        "title": "Fix #101",
+                        "body": "Closes #101",
+                        "state": "closed",
+                        "html_url": "https://github.com/ll7/robot_sf_ll7/pull/999",
+                        "merged_at": "2026-08-20T10:00:00Z",
+                        "head_ref": "",
+                    }
+                ],
+                {"truncated": False, "errors": [], "pages_read": 1},
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_core_quota",
+        lambda *args, **kwargs: (
+            issue_audit_core.RateLimitSnapshot(
+                status="ok",
+                graphql_remaining=500,
+                graphql_reset_at=1_800_000_000,
+                core_remaining=500,
+                core_reset_at=1_800_000_100,
+            ),
+            {
+                "available": True,
+                "status": "ok",
+                "core_remaining": 500,
+                "core_reset_at": 1_800_000_100,
+                "available_budget": 490,
+                "min_core_remaining": 10,
+                "retry_command": "cmd",
+                "next_action": "none",
+                "reason": "sufficient core quota available",
+                "errors": [],
+                "quota_exhausted": False,
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_repository_labels",
+        lambda *args, **kwargs: (set(), {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_claims",
+        lambda *args, **kwargs: ({}, {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_worktrees",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_jobs",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+
+    inventory = issue_audit_core.discover_inventory("ll7/robot_sf_ll7")
+    assert inventory["inventory"]["closure_coverage"]["complete_for_open_issues"] is True
+    assert inventory["inventory"]["closure_coverage"]["mode"] == "global_closed_prs"
+
+    plan = build_audit_plan(inventory)
+    # Recovered quota leaves no stale uncertainty or truncation
+    assert "core_quota" not in plan["inventory_uncertainties"]
+    assert "core_quota" not in plan["truncation_or_errors"]
+    assert plan["truncation_or_errors"] == []
+    assert plan["quota"]["status"] == "ok"
+    assert plan["quota"]["next_action"] == "none"
+
+
+def test_main_plan_cli_reports_concise_quota_warning_and_exits_2(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """The plan CLI prints a concise quota warning to stderr and exits 2 when quota is exhausted."""
+    plan_file = tmp_path / "plan.json"
+    exhausted_inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [_issue(101)],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "quota": {
+            "status": "exhausted",
+            "quota_exhausted": True,
+            "core_remaining": 0,
+            "reset_in_seconds": 120,
+            "retry_after_utc": "2026-09-02T16:00:00Z",
+            "retry_command": "uv run python scripts/dev/issue_audit_core.py plan --mode autonomous",
+            "reason": "GitHub core REST quota exhausted (0 remaining <= safety margin 10)",
+        },
+        "inventory": {
+            "quota": {
+                "status": "exhausted",
+                "quota_exhausted": True,
+                "core_remaining": 0,
+                "errors": ["quota exhausted"],
+            },
+            "closure_coverage": {"complete_for_open_issues": False},
+        },
+    }
+    monkeypatch.setattr(
+        issue_audit_core, "discover_inventory", lambda *args, **kwargs: exhausted_inventory
+    )
+
+    code = main(
+        [
+            "plan",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--output",
+            str(plan_file),
+        ]
+    )
+
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "issue-audit: GitHub core REST quota exhausted" in captured.err
+    assert "Reset at 2026-09-02T16:00:00Z in ~120s" in captured.err
+    assert (
+        "Next action: uv run python scripts/dev/issue_audit_core.py plan --mode autonomous"
+        in captured.err
+    )
+
+    # File was written with structured quota information and zero mutations
+    saved_plan = json.loads(plan_file.read_text(encoding="utf-8"))
+    assert saved_plan["quota"]["status"] == "exhausted"
+    assert saved_plan["mutations"] == []
+    assert "core_quota" in saved_plan["inventory_uncertainties"]
+    assert "core_quota" in saved_plan["truncation_or_errors"]

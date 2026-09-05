@@ -10,7 +10,11 @@ import pytest
 
 from scripts.dev.github_quota import (
     RateLimitSnapshot,
+    core_budget_decision,
+    core_quota_reset_handoff,
+    fetch_core_reset_at,
     fetch_graphql_reset_at,
+    fetch_rate_limit_snapshot,
     graphql_budget_decision,
     parse_rate_limit_payload,
     quota_reset_handoff,
@@ -172,3 +176,87 @@ def test_quota_reset_handoff_malformed_or_overflow_epoch_stays_unknown(
     assert handoff["retry_command"] == "retry-cmd"
     assert "reset time is unavailable" in handoff["handoff"]
     assert "Never admit" in handoff["handoff"]
+
+
+def test_fetch_rate_limit_snapshot_with_custom_runner() -> None:
+    """A custom runner is invoked with `api rate_limit` and parsed correctly."""
+    recorded_args: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+        recorded_args.append(args)
+        return _rate_limit_completed(stdout=json.dumps(_payload(graphql=123, core=456)))
+
+    snapshot = fetch_rate_limit_snapshot(runner=runner)
+    assert snapshot.status == "ok"
+    assert snapshot.graphql_remaining == 123
+    assert snapshot.core_remaining == 456
+    assert recorded_args == [["api", "rate_limit"]]
+
+
+def test_fetch_core_reset_at_returns_reset_epoch() -> None:
+    """The reset diagnostic reads the REST core reset epoch without errors."""
+    with patch(
+        "scripts.dev.github_quota.subprocess.run",
+        return_value=_rate_limit_completed(stdout=json.dumps(_payload())),
+    ):
+        assert fetch_core_reset_at() == 1_800_000_001
+
+
+def test_core_budget_decision_blocks_when_exhausted_or_below_safety_margin() -> None:
+    """A low core quota blocks execution before safety margin is crossed."""
+    decision = core_budget_decision(
+        RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=500,
+            graphql_reset_at=1_800_000_000,
+            core_remaining=15,
+            core_reset_at=1_800_000_001,
+        ),
+        expected_core_requests=10,
+        min_core_remaining=10,
+    )
+    assert decision["status"] == "quota_blocked"
+    assert decision["reason"] == "core_budget_below_safety_threshold"
+    assert decision["resume_after"] == 1_800_000_001
+
+
+def test_core_budget_decision_allows_bounded_budget() -> None:
+    """A healthy core quota allows spending within budget."""
+    decision = core_budget_decision(
+        parse_rate_limit_payload(_payload(graphql=500, core=100)),
+        expected_core_requests=20,
+        min_core_remaining=10,
+    )
+    assert decision["status"] == "ok"
+    assert decision["core_remaining_after_budget"] == 80
+
+
+def test_core_budget_decision_rejects_negative_estimates() -> None:
+    """Negative request counts are rejected fail-closed."""
+    with pytest.raises(ValueError, match="non-negative"):
+        core_budget_decision(
+            parse_rate_limit_payload(_payload()),
+            expected_core_requests=-1,
+        )
+
+
+def test_core_quota_reset_handoff_names_reset_and_retry_command() -> None:
+    """Core quota reset handoff includes reset time, seconds, and retry command."""
+    handoff = core_quota_reset_handoff(
+        retry_command="uv run python scripts/dev/issue_audit_core.py plan --mode autonomous",
+        now=1_800_000_000.0,
+        reset_at=1_800_000_120,
+    )
+    assert handoff["quota_reset_at"] == 1_800_000_120
+    assert handoff["reset_in_seconds"] == 120
+    assert "GitHub core REST quota exhausted" in handoff["handoff"]
+    assert "issue_audit_core.py plan" in handoff["retry_command"]
+
+
+def test_core_quota_reset_handoff_unknown_stays_fail_closed() -> None:
+    """Unknown reset epoch leaves quota_reset_at as None and retains fail-closed message."""
+    with patch("scripts.dev.github_quota.fetch_core_reset_at", return_value=None):
+        handoff = core_quota_reset_handoff(retry_command="retry-cmd")
+    assert handoff["quota_reset_at"] is None
+    assert handoff["reset_in_seconds"] is None
+    assert "reset time is unavailable" in handoff["handoff"]

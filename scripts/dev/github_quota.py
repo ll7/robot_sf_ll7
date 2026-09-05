@@ -7,7 +7,10 @@ import math
 import subprocess
 import time
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 DEFAULT_CORE_SAFETY_THRESHOLD = 10
 DEFAULT_GRAPHQL_SAFETY_THRESHOLD = 100
@@ -78,7 +81,43 @@ def parse_rate_limit_payload(payload: Any) -> RateLimitSnapshot:
     )
 
 
-def fetch_graphql_reset_at(*, timeout: int = 30) -> int | None:
+def fetch_rate_limit_snapshot(
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    *,
+    timeout: int = 30,
+) -> RateLimitSnapshot:
+    """Fetch and parse GitHub rate limits via gh api rate_limit."""
+    try:
+        if runner is not None:
+            try:
+                completed = runner(["api", "rate_limit"], None)
+            except TypeError:
+                completed = runner(["api", "rate_limit"])
+        else:
+            completed = subprocess.run(
+                ["gh", "api", "rate_limit"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return RateLimitSnapshot(status="unavailable", error=str(exc))
+    if completed.returncode != 0:
+        err = (completed.stderr or completed.stdout or "").strip()
+        return RateLimitSnapshot(status="failed", error=err or f"exit code {completed.returncode}")
+    try:
+        payload = json.loads(completed.stdout)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return RateLimitSnapshot(status="malformed", error=f"invalid JSON: {exc}")
+    return parse_rate_limit_payload(payload)
+
+
+def fetch_graphql_reset_at(
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    *,
+    timeout: int = 30,
+) -> int | None:
     """Return the GraphQL quota reset epoch via REST, or None when unavailable.
 
     REST ``rate_limit`` stays reachable while GraphQL is exhausted, so this is the
@@ -86,26 +125,22 @@ def fetch_graphql_reset_at(*, timeout: int = 30) -> int | None:
     threads (issue #8282). Any transport or payload failure returns None; callers
     stay fail-closed and report the reset as unknown.
     """
-    try:
-        completed = subprocess.run(
-            ["gh", "api", "rate_limit"],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if completed.returncode != 0:
-        return None
-    try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError:
-        return None
-    snapshot = parse_rate_limit_payload(payload)
+    snapshot = fetch_rate_limit_snapshot(runner=runner, timeout=timeout)
     if snapshot.status != "ok":
         return None
     return snapshot.graphql_reset_at
+
+
+def fetch_core_reset_at(
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    *,
+    timeout: int = 30,
+) -> int | None:
+    """Return the core REST quota reset epoch, or None when unavailable (issue #8304)."""
+    snapshot = fetch_rate_limit_snapshot(runner=runner, timeout=timeout)
+    if snapshot.status != "ok":
+        return None
+    return snapshot.core_reset_at
 
 
 def _unknown_quota_reset_handoff(*, retry_command: str) -> dict[str, Any]:
@@ -238,4 +273,114 @@ def graphql_budget_decision(
             ),
             resume_after=snapshot.core_reset_at,
         )
+    return decision
+
+
+def core_quota_reset_handoff(
+    *,
+    retry_command: str,
+    now: float | None = None,
+    reset_at: int | None = None,
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+) -> dict[str, Any]:
+    """Build a bounded retry handoff for GitHub core REST quota exhaustion (issue #8304).
+
+    The handoff names the core quota reset time when the REST ``rate_limit`` read
+    succeeds and always names the exact command to re-run after reset. It never
+    authorizes treating unknown issue or PR state as complete.
+    """
+    if reset_at is None:
+        reset_at = fetch_core_reset_at(runner=runner)
+    observed_at = time.time() if now is None else now
+    if reset_at is None or type(reset_at) is not int or reset_at < 0:
+        return {
+            "quota_reset_at": None,
+            "reset_in_seconds": None,
+            "retry_after_utc": None,
+            "retry_command": retry_command,
+            "handoff": (
+                "GitHub core REST quota exhausted; the quota reset time is unavailable "
+                "(reset epoch was malformed or the rate-limit read failed). Retry later with: "
+                + retry_command
+                + ". Never admit issue state changes from incomplete inventory."
+            ),
+        }
+    try:
+        reset_in_seconds = max(0, math.ceil(reset_at - observed_at))
+        retry_after_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(reset_at))
+    except (OverflowError, OSError, TypeError, ValueError):
+        return {
+            "quota_reset_at": None,
+            "reset_in_seconds": None,
+            "retry_after_utc": None,
+            "retry_command": retry_command,
+            "handoff": (
+                "GitHub core REST quota exhausted; the quota reset time is unavailable "
+                "(reset epoch was malformed or the rate-limit read failed). Retry later with: "
+                + retry_command
+                + ". Never admit issue state changes from incomplete inventory."
+            ),
+        }
+    return {
+        "quota_reset_at": reset_at,
+        "reset_in_seconds": reset_in_seconds,
+        "retry_after_utc": retry_after_utc,
+        "retry_command": retry_command,
+        "handoff": (
+            "GitHub core REST quota exhausted; quota resets at "
+            + retry_after_utc
+            + f" (in ~{reset_in_seconds}s). Retry after reset with: "
+            + retry_command
+            + ". Never admit issue state changes from incomplete inventory."
+        ),
+    }
+
+
+def core_budget_decision(
+    snapshot: RateLimitSnapshot,
+    *,
+    expected_core_requests: int,
+    min_core_remaining: int = DEFAULT_CORE_SAFETY_THRESHOLD,
+    retry_command: str = "",
+) -> dict[str, Any]:
+    """Decide whether a bounded operation may spend its estimated core REST API budget."""
+    if expected_core_requests < 0:
+        raise ValueError("expected request counts must be non-negative")
+    if min_core_remaining < 0:
+        raise ValueError("quota thresholds must be non-negative")
+
+    decision: dict[str, Any] = {
+        "status": "ok",
+        "resource": "core",
+        "core_remaining": snapshot.core_remaining,
+        "core_reset_at": snapshot.core_reset_at,
+        "expected_core_requests": expected_core_requests,
+        "min_core_remaining": min_core_remaining,
+        "resume_after": None,
+        "reason": "budget_available",
+        "message": "estimated REST API budget fits below the configured safety margin",
+    }
+    if snapshot.status != "ok":
+        decision.update(
+            status="quota_blocked",
+            reason=f"rate_limit_{snapshot.status}",
+            message=snapshot.error or "rate_limit response unavailable",
+            resume_after=snapshot.core_reset_at,
+        )
+        return decision
+
+    assert snapshot.core_remaining is not None
+    core_after = snapshot.core_remaining - expected_core_requests
+    decision["core_remaining_after_budget"] = core_after
+    if core_after < min_core_remaining:
+        decision.update(
+            status="quota_blocked",
+            reason="core_budget_below_safety_threshold",
+            message=(
+                "estimated REST requests would cross the configured safety threshold; "
+                "resume after the core quota reset"
+            ),
+            resume_after=snapshot.core_reset_at,
+        )
+        return decision
     return decision

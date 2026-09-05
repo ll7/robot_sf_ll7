@@ -121,6 +121,7 @@ def _common_git(worktree: Path, *args: str) -> subprocess.CompletedProcess[str]:
 def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) -> None:
     """The explicit-refspec incident reproduction fails before remote mutation."""
     repo, remote = _fixture_repo(tmp_path)
+    _git(repo, "config", "remote.origin.pushurl", str(remote))
     worktree = tmp_path / "review"
     branch = "review/guard"
     try:
@@ -157,7 +158,13 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
             "--push",
             "origin",
         ).stdout.splitlines()
-        assert str(remote) not in effective_pushurls
+        blocked_url = _git(
+            worktree,
+            "config",
+            "--get",
+            "robot-sf.review-push-blocked-url",
+        ).stdout.strip()
+        assert blocked_url in effective_pushurls
         allowed_fetch = _git(worktree, "fetch", "origin", "main", check=False)
         assert allowed_fetch.returncode == 0, allowed_fetch.stdout + allowed_fetch.stderr
         allowed_ls_remote = _git(worktree, "ls-remote", "origin", check=False)
@@ -221,6 +228,22 @@ def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -
         assert result.returncode != 0, result.stdout + result.stderr
         refs = _git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
         assert "refs/heads/new-remote-bypass" not in refs
+
+        # An explicit pushurl bypasses pushInsteadOf, but the normal push path
+        # still reaches the review hook; direct read resolution remains usable.
+        _git(worktree, "config", "--worktree", "remote.mirror.pushurl", str(second_remote))
+        mirror_read = _git(worktree, "ls-remote", "--refs", "mirror")
+        assert "refs/heads/main" in mirror_read.stdout
+        ordinary_push = _git(
+            worktree,
+            "push",
+            "mirror",
+            "HEAD:refs/heads/explicit-pushurl",
+            check=False,
+        )
+        assert ordinary_push.returncode != 0, ordinary_push.stdout + ordinary_push.stderr
+        refs = _git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
+        assert "refs/heads/explicit-pushurl" not in refs
     finally:
         _remove_worktree(repo, worktree, branch)
 

@@ -52,11 +52,14 @@ The creator writes the worktree-local `robot-sf.worktree-mode=review` marker and
 tracked pre-push guard. Configured remote names also receive inert worktree-local push destinations
 and a nonexistent worktree-local receive-pack command. Push-specific URL rewrites (plus exact
 configured-URL rules) route push URLs to an inert path, covering direct pushes, equivalent local-path
-spellings, explicit destination refspecs, and `--no-verify`. Push rejection is separated from read-only
-URL resolution: direct `git fetch` and `git ls-remote` commands remain operational for inspection and
-ref verification. No configured remote can be mutated from the protected worktree through ordinary
-Git invocation paths. This is a Git-level workflow guard, not an operating-system sandbox; a
-deliberate per-command Git configuration override can bypass it.
+spellings, explicit destination refspecs, and `--no-verify` for configured remotes. Push rejection is
+separated from read-only URL resolution: direct `git fetch` and `git ls-remote` commands remain
+operational for inspection and ref verification. A remote added after activation with an explicit
+`remote.<name>.pushurl` is still protected on the ordinary hook path, but Git does not apply
+`pushInsteadOf` to that explicit value when `--no-verify` bypasses the hook. That deliberate
+configuration/command-line override belongs to the stronger process boundary tracked in #8343. This
+is a Git-level workflow guard, not an operating-system sandbox; a deliberate per-command Git
+configuration override can bypass it.
 
 If the selected base predates the guard files, `create_worktree.sh --mode review` keeps the target
 clean and temporarily points its worktree-local hooks path at the invoking checkout's tracked

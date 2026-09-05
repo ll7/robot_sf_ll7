@@ -168,7 +168,9 @@ rejection from read operations, keeping direct `git fetch` and `git ls-remote` c
 If the selected base predates the guard files, the creator temporarily uses the invoking checkout's
 tracked hook and guard; keep that checkout available for the review worktree's lifetime. The barriers
 cover ordinary Git invocation paths, but are not an operating-system sandbox: a deliberate per-command
-Git configuration override can bypass them.
+Git configuration override can bypass them. In particular, a remote added after activation with an
+explicit `remote.<name>.pushurl` remains protected by the ordinary hook path, while a deliberate
+`--no-verify` bypass is owned by stronger process isolation in #8343.
 Implementation worktrees keep the default pushable behavior. See
 [`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md) for the complete invocation and
 restoration procedure.

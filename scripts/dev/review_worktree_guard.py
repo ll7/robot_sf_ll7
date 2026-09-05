@@ -417,15 +417,22 @@ def _prepare_review_barriers(
         for remote in remotes
     }
     for remote in remotes:
+        # An empty higher-priority value resets inherited common-config
+        # pushurl entries. Without it, Git pushes to every effective push URL
+        # and may update the real destination before the inert one fails.
         pushurl_key = f"remote.{remote}.pushurl"
-        _worktree_set(identity, pushurl_key, expected_url)
+        _worktree_set(identity, pushurl_key, "")
+        _worktree_add(identity, pushurl_key, expected_url)
         _worktree_set(identity, f"remote.{remote}.receivepack", blocked_receivepack)
         for url in configured_urls[remote]:
             _worktree_add(identity, rule_key, url)
     # Catch-all for push URLs to keep the push barrier effective for remotes
     # added after review mode is configured, including raw URLs.
     # Note: pushInsteadOf applies only to pushes, preserving read-only commands
-    # like git ls-remote and git fetch (issue #8321).
+    # like git ls-remote and git fetch (issue #8321). Git deliberately does not
+    # apply pushInsteadOf to an explicit remote.<name>.pushurl added later; the
+    # ordinary pre-push hook still protects that path, while --no-verify and
+    # command-line config overrides belong to the stronger #8343 boundary.
     _worktree_add(identity, rule_key, "")
     # Disable preconfigured custom transports without blocking standard read protocols.
     for key in _protocol_policy_keys(identity):

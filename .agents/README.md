@@ -13,10 +13,14 @@ Tool-specific directories should point here when their formats allow it.
 | `.agents/agents/github/` | `.github/agents/` | GitHub agent definitions. |
 | `.agents/commands/gemini/` | `.gemini/commands/` | Gemini command definitions. |
 
-`AGENTS.md` remains the top-level instruction source for repository rules, and
-`docs/maintainer_values.md` is the compact source for current values and hard contracts.
-Use `docs/ai/agent_workflow_entrypoints.md` for correct `uv run` command entrypoints,
-model registry lookup, shared routing handoff format, and targeted large-file navigation.
+`AGENTS.md` remains the top-level instruction source for repository rules and task-scoped context
+entrypoints, and `docs/maintainer_values.md` is the compact source for current values and hard
+contracts. Use `docs/ai/agent_workflow_entrypoints.md` for task route selection (read-only observation,
+documentation edit, runtime change, scientific interpretation, or environment repair), correct `uv run`
+command entrypoints, model registry lookup, shared routing handoff format, and targeted large-file
+navigation. Branch synchronization is mode-specific: implementation branches merge `origin/main` early,
+while read-only review worktrees never merge or push to implementation branches (enforced by
+`scripts/dev/review_worktree_guard.py` / issue #8321).
 Tool-specific instruction files, such as `.github/copilot-instructions.md`, `.claude/CLAUDE.md`,
 and `.cursorrules`, are thin pointers to those sources plus only the tool-specific details that
 cannot live there; `scripts/tools/sync_ai_config.py` enforces their line and section budgets.

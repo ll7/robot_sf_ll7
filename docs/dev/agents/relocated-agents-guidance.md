@@ -127,10 +127,13 @@ When working in a linked Git worktree, detect bootstrap state before running exp
   the host-side Python client with `uv sync --all-extras --group carla`, then prove the local
   runtime with `scripts/dev/check_carla_runtime.sh` or `scripts/dev/check_carla_runtime.sh --smoke`
   when it is acceptable to start the simulator container.
-- If the current branch is not `main`, fetch the latest `origin/main` and merge it into the current
-  branch early in the work cycle so the branch benefits from repository-wide fixes and workflow
-  improvements before local changes diverge. Typical command sequence:
-  `git fetch origin main && git merge origin/main`.
+- If the current branch is not `main`, branch synchronization is mode-specific: for implementation
+  worktrees, fetch the latest `origin/main` and merge it into the current branch early in the work
+  cycle (`git fetch origin main && git merge origin/main`) so the branch benefits from repository-wide
+  fixes before local changes diverge. For read-only review worktrees/passes, record target/base/head
+  SHAs and inspect or fetch as needed; never merge `origin/main` into the implementation branch or
+  push to it during review (relying on the machine-enforced read-only guard in
+  `scripts/dev/review_worktree_guard.py` / issue #8321).
 - Do not create divergent per-worktree machine context files unless the worktree really needs
   machine-specific behavior that should not be inherited from the main checkout.
 

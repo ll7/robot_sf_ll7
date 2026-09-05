@@ -1519,6 +1519,42 @@ def test_upload_requires_bounded_stable_remote_readback(tmp_path: Path) -> None:
     assert len(session.urls) == 9
 
 
+def test_upload_rejects_metadata_drift_during_fallback_readback(tmp_path: Path) -> None:
+    """A metadata-only race cannot pass the fallback stability proof."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    stable = _successor_draft()
+    stable["files"] = [uploaded]
+    drifted = _successor_draft()
+    drifted["files"] = [uploaded]
+    drifted["metadata"]["title"] = "concurrent metadata mutation"
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(post_upload),
+        _Response(inherited),
+        _Response(stable),
+        _Response(drifted),
+        _Response(stable),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+    session.deletes = [_Response({}, 204)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="stable readback"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.delete_urls == [
+        "https://zenodo.org/api/deposit/depositions/8/files/inherited-file"
+    ]
+
+
 def test_upload_rejects_lifecycle_drift_during_pre_delete_readback(tmp_path: Path) -> None:
     """A lifecycle change in the exact pre-delete response blocks DELETE."""
     bundle = tmp_path / "successor.tar.gz"

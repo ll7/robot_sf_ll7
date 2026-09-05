@@ -2124,8 +2124,10 @@ def _remote_revision_binding(
     """Bind a final remote read to its server revision or exact snapshot.
 
     Legacy Zenodo responses do not always expose a revision field. In that
-    case an exact identity/lifecycle/file snapshot is used as a conservative
-    local revision so the receipt is still tied to the final response.
+    case an exact identity/lifecycle/metadata/file snapshot is used as a
+    conservative local revision so the receipt is still tied to the final
+    response. Metadata is included only inside the digest and is never copied
+    into the credential-free receipt.
 
     Returns:
         A field name and SHA-256 digest for the final remote read.
@@ -2133,6 +2135,9 @@ def _remote_revision_binding(
     optimistic = _remote_optimistic_binding(payload)
     if optimistic is not None:
         return optimistic
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise ZenodoPublisherError("Zenodo remote metadata is malformed")
     snapshot = {
         "deposition_id": payload.get("id"),
         "record_id": payload.get("record_id"),
@@ -2140,6 +2145,7 @@ def _remote_revision_binding(
         "doi": payload.get("doi"),
         "state": payload.get("state"),
         "submitted": payload.get("submitted"),
+        "metadata": _metadata_contract(metadata),
         "files": [
             {"name": name, "id": file_id}
             for name, file_id in sorted(

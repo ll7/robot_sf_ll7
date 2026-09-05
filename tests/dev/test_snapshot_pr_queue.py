@@ -51,6 +51,184 @@ def _base_freshness_pr(*, number: int = 7021) -> dict[str, object]:
     }
 
 
+def _route_cancellation_pr(
+    *,
+    head_sha: str = "route-head",
+    workflow_name: str = "Route external review bots",
+    include_success: bool = True,
+) -> dict[str, object]:
+    """Return a compact PR fixture with the documented routing cancellation."""
+    rollup: list[dict[str, object]] = [
+        {
+            "__typename": "CheckRun",
+            "name": "ci",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-09-05T18:00:00Z",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "route-coderabbit",
+            "workflowName": workflow_name,
+            "status": "completed",
+            "conclusion": "cancelled",
+            "startedAt": "2026-09-05T18:39:49Z",
+            "completedAt": "2026-09-05T18:39:49Z",
+            "detailsUrl": ("https://github.test/actions/runs/33984757657/job/101356131316"),
+        },
+    ]
+    if include_success:
+        rollup.insert(
+            1,
+            {
+                "__typename": "CheckRun",
+                "name": "route-coderabbit",
+                "workflowName": workflow_name,
+                "status": "completed",
+                "conclusion": "success",
+                "startedAt": "2026-09-05T18:36:48Z",
+                "completedAt": "2026-09-05T18:36:52Z",
+                "detailsUrl": ("https://github.test/actions/runs/33984605002/job/101355720321"),
+            },
+        )
+    return {
+        "number": 8517,
+        "title": "route cancellation fixture",
+        "state": "OPEN",
+        "isDraft": True,
+        "labels": [{"name": "state:blocked"}],
+        "headRefName": "feature",
+        "headRefOid": head_sha,
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": rollup,
+        "reviews": [],
+        "comments": [],
+    }
+
+
+def _route_cancellation_rest_payloads(
+    *,
+    head_sha: str = "route-head",
+    annotation_message: str = (
+        "Canceling since a higher priority waiting request for review-bot-routing-8471 exists"
+    ),
+    cancelled_head_sha: str | None = None,
+) -> dict[str, object]:
+    """Return exact-head REST identity and annotation fixtures for route supersession."""
+    cancelled_head_sha = cancelled_head_sha or head_sha
+    return {
+        "actions/runs/33984757657": {
+            "id": 33984757657,
+            "name": "Route external review bots",
+            "head_sha": cancelled_head_sha,
+            "conclusion": "cancelled",
+            "run_started_at": "2026-09-05T18:39:48Z",
+            "updated_at": "2026-09-05T18:39:50Z",
+        },
+        "check-runs/101356131316": {
+            "id": 101356131316,
+            "name": "route-coderabbit",
+            "head_sha": cancelled_head_sha,
+            "status": "completed",
+            "conclusion": "cancelled",
+            "started_at": "2026-09-05T18:39:49Z",
+            "completed_at": "2026-09-05T18:39:49Z",
+            "details_url": ("https://github.test/actions/runs/33984757657/job/101356131316"),
+        },
+        "check-runs/101356131316/annotations": [{"message": annotation_message}],
+        "actions/runs/33984605002": {
+            "id": 33984605002,
+            "name": "Route external review bots",
+            "head_sha": head_sha,
+            "conclusion": "success",
+            "run_started_at": "2026-09-05T18:36:48Z",
+            "updated_at": "2026-09-05T18:36:52Z",
+        },
+        "check-runs/101355720321": {
+            "id": 101355720321,
+            "name": "route-coderabbit",
+            "head_sha": head_sha,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-09-05T18:36:48Z",
+            "completed_at": "2026-09-05T18:36:52Z",
+            "details_url": "https://github.test/actions/runs/33984605002/job/101355720321",
+        },
+    }
+
+
+def test_snapshot_prs_classifies_proven_superseded_route_cancellation() -> None:
+    """A known higher-priority route cancellation must not override same-head success."""
+    pr_payload = _route_cancellation_pr()
+    rest_payloads = _route_cancellation_rest_payloads()
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del timeout
+        assert repo == "ll7/robot_sf_ll7"
+        if path not in rest_payloads:
+            raise AssertionError(f"unexpected REST path: {path}")
+        return rest_payloads[path]
+
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get),
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([8517], repo="ll7/robot_sf_ll7", expected_head_sha="route-head")
+
+    checks = payload["prs"][0]["checks"]
+    assert checks["overall"] == "success"
+    assert checks["failed"] == []
+    assert checks["superseded"] == 1
+    assert checks["superseded_cancellations"][0]["run_id"] == 33984757657
+    assert checks["superseded_cancellations"][0]["replacement"]["run_id"] == 33984605002
+
+
+def test_snapshot_prs_keeps_route_cancellation_without_exact_marker() -> None:
+    """A cancellation with an unknown annotation remains a failure."""
+    pr_payload = _route_cancellation_pr()
+    rest_payloads = _route_cancellation_rest_payloads(annotation_message="manual cancellation")
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del timeout
+        assert repo == "ll7/robot_sf_ll7"
+        return rest_payloads[path]
+
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get),
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([8517], repo="ll7/robot_sf_ll7", expected_head_sha="route-head")
+
+    checks = payload["prs"][0]["checks"]
+    assert checks["overall"] == "failure"
+    assert checks["failed"][0]["conclusion"] == "cancelled"
+    assert "superseded_cancellations" not in checks
+
+
+def test_snapshot_prs_keeps_route_cancellation_on_head_mismatch() -> None:
+    """A matching annotation cannot suppress a cancellation from another head."""
+    pr_payload = _route_cancellation_pr()
+    rest_payloads = _route_cancellation_rest_payloads(cancelled_head_sha="other-head")
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del timeout
+        assert repo == "ll7/robot_sf_ll7"
+        return rest_payloads[path]
+
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get),
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([8517], repo="ll7/robot_sf_ll7", expected_head_sha="route-head")
+
+    checks = payload["prs"][0]["checks"]
+    assert checks["overall"] == "failure"
+    assert "superseded_cancellations" not in checks
+
+
 def test_base_freshness_fresh_preserves_merge_ready_action() -> None:
     """A fresh PR base should expose provenance without changing merge-ready routing."""
     pr = _pr_payload_from_dict(

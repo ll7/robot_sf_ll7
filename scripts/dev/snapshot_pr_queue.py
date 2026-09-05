@@ -42,6 +42,12 @@ REVIEW_THREAD_LIMIT = 12
 REVIEW_THREAD_COMMENT_LIMIT = 2
 ROUTE_HEALTH_STATUSES = ("healthy", "stale", "blocked", "unknown")
 SCHEMA_VERSION = "pr_queue_snapshot.v2"
+ROUTE_CODERABBIT_CHECK = "route-coderabbit"
+ROUTE_CODERABBIT_WORKFLOW = "Route external review bots"
+ROUTE_SUPERSESSION_MARKER_RE = re.compile(
+    r"^Canceling since a higher priority waiting request for review-bot-routing-[0-9]+ exists$"
+)
+ROUTE_SUPERSESSION_MAX_CANDIDATES = 4
 BLOCKING_LABELS = frozenset(
     {
         "blocked",
@@ -54,6 +60,9 @@ BLOCKING_LABELS = frozenset(
 )
 BLOCKED_NEXT_ACTION = "await_blocker_owner_or_approval"
 _ACTIONS_RUN_JOB_URL_RE = re.compile(r"/actions/runs/(?P<run_id>[0-9]+)/job(?:/|$)")
+_ACTIONS_RUN_JOB_IDS_RE = re.compile(
+    r"/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)(?:/|$)"
+)
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -425,6 +434,165 @@ def _rest_check_run_workflow_identity(
     return cache[run_id]
 
 
+def _actions_run_job_ids(details_url: str) -> tuple[int, int] | None:
+    """Extract the Actions workflow-run and job IDs from a check details URL."""
+    match = _ACTIONS_RUN_JOB_IDS_RE.search(details_url)
+    if match is None:
+        return None
+    return int(match.group("run_id")), int(match.group("job_id"))
+
+
+def _check_details_url(check: dict[str, Any]) -> str:
+    """Return the URL identifying a check run or legacy status."""
+    return str(
+        check.get("detailsUrl")
+        or check.get("details_url")
+        or check.get("targetUrl")
+        or check.get("target_url")
+        or ""
+    )
+
+
+def _rest_route_check_evidence(
+    check: dict[str, Any],
+    *,
+    repo: str,
+    expected_head_sha: str,
+    expected_conclusion: str,
+) -> dict[str, Any] | None:
+    """Validate one route-coderabbit check against its REST run and check-run records."""
+    details_url = _check_details_url(check)
+    run_job_ids = _actions_run_job_ids(details_url)
+    if run_job_ids is None:
+        return None
+    run_id, job_id = run_job_ids
+    run = _rest_api_get(f"actions/runs/{run_id}", repo=repo)
+    check_run = _rest_api_get(f"check-runs/{job_id}", repo=repo)
+    if not isinstance(run, dict) or not isinstance(check_run, dict):
+        return None
+    if (
+        str(run.get("head_sha", "") or "") != expected_head_sha
+        or str(check_run.get("head_sha", "") or "") != expected_head_sha
+        or str(run.get("name", "") or "") != ROUTE_CODERABBIT_WORKFLOW
+        or str(check_run.get("name", "") or "") != ROUTE_CODERABBIT_CHECK
+        or str(run.get("conclusion", "") or "").lower() != expected_conclusion
+        or str(check_run.get("conclusion", "") or "").lower() != expected_conclusion
+    ):
+        return None
+    check_details_url = str(check_run.get("details_url", "") or "")
+    check_run_ids = _actions_run_job_ids(check_details_url)
+    if check_run_ids != run_job_ids:
+        return None
+    return {
+        "name": ROUTE_CODERABBIT_CHECK,
+        "workflow": ROUTE_CODERABBIT_WORKFLOW,
+        "head_sha": expected_head_sha,
+        "run_id": run_id,
+        "job_id": job_id,
+        "status": str(check_run.get("status", "") or ""),
+        "conclusion": expected_conclusion,
+        "started_at": str(
+            check.get("startedAt") or check_run.get("started_at") or run.get("run_started_at") or ""
+        ),
+        "completed_at": str(check_run.get("completed_at", "") or run.get("updated_at", "") or ""),
+        "details_url": details_url,
+    }
+
+
+def _route_supersession_evidence(  # noqa: C901 - fail-closed identity and annotation branches.
+    pr: dict[str, Any],
+    raw_rollup: list[dict[str, Any]],
+    *,
+    repo: str,
+) -> list[dict[str, Any]]:
+    """Return exact-head evidence for known superseded review-bot cancellations.
+
+    Only the narrowly documented higher-priority routing annotation can suppress a cancellation.
+    Unknown annotations, missing REST identity, and missing same-workflow success remain ordinary
+    failures. No REST calls are made when the rollup contains no candidate cancellation.
+    """
+    if not repo:
+        return []
+    expected_head_sha = str(pr.get("headRefOid") or pr.get("head_sha") or "")
+    if not expected_head_sha:
+        return []
+    candidates = [
+        check
+        for check in raw_rollup
+        if _rollup_name(check) == ROUTE_CODERABBIT_CHECK
+        and str(check.get("workflowName") or check.get("workflow_name") or "")
+        == ROUTE_CODERABBIT_WORKFLOW
+        and _rollup_conclusion(check) == "cancelled"
+    ]
+    if not candidates or len(candidates) > ROUTE_SUPERSESSION_MAX_CANDIDATES:
+        return []
+
+    superseded: list[dict[str, Any]] = []
+    for cancelled in candidates:
+        cancelled_evidence = _rest_route_check_evidence(
+            cancelled,
+            repo=repo,
+            expected_head_sha=expected_head_sha,
+            expected_conclusion="cancelled",
+        )
+        if cancelled_evidence is None:
+            continue
+        annotations = _rest_api_get(
+            f"check-runs/{cancelled_evidence['job_id']}/annotations",
+            repo=repo,
+        )
+        if not isinstance(annotations, list):
+            continue
+        marker = next(
+            (
+                str(annotation.get("message", "") or "").strip()
+                for annotation in annotations
+                if isinstance(annotation, dict)
+                and ROUTE_SUPERSESSION_MARKER_RE.fullmatch(
+                    str(annotation.get("message", "") or "").strip()
+                )
+            ),
+            None,
+        )
+        if marker is None:
+            continue
+
+        success_candidates = sorted(
+            (
+                check
+                for check in raw_rollup
+                if _rollup_name(check) == ROUTE_CODERABBIT_CHECK
+                and str(check.get("workflowName") or check.get("workflow_name") or "")
+                == ROUTE_CODERABBIT_WORKFLOW
+                and _rollup_conclusion(check) == "success"
+                and str(check.get("startedAt") or "") < cancelled_evidence["started_at"]
+            ),
+            key=lambda check: str(check.get("startedAt") or ""),
+            reverse=True,
+        )
+        replacement: dict[str, Any] | None = None
+        for success in success_candidates[:ROUTE_SUPERSESSION_MAX_CANDIDATES]:
+            replacement = _rest_route_check_evidence(
+                success,
+                repo=repo,
+                expected_head_sha=expected_head_sha,
+                expected_conclusion="success",
+            )
+            if replacement is not None:
+                break
+        if replacement is None:
+            continue
+        superseded.append(
+            {
+                **cancelled_evidence,
+                "annotation": marker,
+                "reason": "higher_priority_review_bot_routing_request",
+                "replacement": replacement,
+            }
+        )
+    return superseded
+
+
 def _fetch_current_main_sha(*, repo: str) -> str:
     """Return the current remote ``main`` commit SHA when REST exposes it."""
     payload = _rest_api_get("branches/main", repo=repo)
@@ -713,6 +881,7 @@ def _fetch_pr_rest(
     }
     payload = _pr_payload_from_dict(
         pr_dict,
+        repo=repo,
         base_sha=base_sha,
         current_main_sha=current_main_sha or _fetch_current_main_sha(repo=repo),
         default_number=number,
@@ -977,7 +1146,7 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
     }
 
 
-def _checks(pr: dict[str, Any]) -> dict[str, Any]:
+def _checks(pr: dict[str, Any], *, repo: str = "") -> dict[str, Any]:  # noqa: C901 - compact summary keeps fail-closed branches together.
     """Return a compact CI check summary from statusCheckRollup.
 
     Superseded GitHub Actions runs (an older run replaced by a newer one on the
@@ -988,7 +1157,20 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
     raw_rollup = [
         check for check in (pr.get("statusCheckRollup", []) or []) if isinstance(check, dict)
     ]
+    superseded_cancellations = _route_supersession_evidence(pr, raw_rollup, repo=repo)
+    superseded_cancellation_urls = {
+        str(item.get("details_url", ""))
+        for item in superseded_cancellations
+        if item.get("details_url")
+    }
+    if superseded_cancellation_urls:
+        raw_rollup = [
+            check
+            for check in raw_rollup
+            if _check_details_url(check) not in superseded_cancellation_urls
+        ]
     rollup, superseded_count = _latest_check_runs(raw_rollup)
+    superseded_count += len(superseded_cancellations)
     conclusions: dict[str, int] = {}
     statuses: dict[str, int] = {}
     names: set[str] = set()
@@ -1025,7 +1207,7 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
         overall = "pending"
     else:
         overall = "success"
-    return {
+    result = {
         "overall": overall,
         "total": len(rollup),
         "superseded": superseded_count,
@@ -1035,6 +1217,9 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
         "failed": failed,
         "pending": pending,
     }
+    if superseded_cancellations:
+        result["superseded_cancellations"] = superseded_cancellations
+    return result
 
 
 def _preflight(
@@ -1273,6 +1458,7 @@ def _extract_metadata_verdicts(pr: dict[str, Any]) -> list[str]:  # noqa: C901
 def _pr_payload_from_dict(
     pr: dict[str, Any],
     *,
+    repo: str = "",
     base_sha: str,
     current_main_sha: str,
     default_number: int,
@@ -1281,7 +1467,7 @@ def _pr_payload_from_dict(
     """Build a compact PR snapshot from already-loaded fields."""
     is_draft = bool(pr.get("isDraft"))
     labels = _labels(pr)
-    checks = _checks(pr)
+    checks = _checks(pr, repo=repo)
     head_sha = str(pr.get("headRefOid", "") or pr.get("head_sha", ""))
     mergeable = str(pr.get("mergeable", "unknown"))
     blocked_state = _blocked_state(labels)
@@ -1423,6 +1609,7 @@ def fetch_pr(
     )
     return _pr_payload_from_dict(
         pr,
+        repo=repo,
         base_sha=base_sha,
         current_main_sha=current_main_sha,
         default_number=number,
@@ -1664,6 +1851,7 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
     prs = [
         _pr_payload_from_dict(
             pr,
+            repo=repo,
             base_sha=str(pr.get("base_sha", "") or "")
             or _fetch_pr_base_sha(int(pr.get("number", -1)), repo=repo),
             current_main_sha=current_main_sha or str(pr.get("current_main_sha", "") or ""),

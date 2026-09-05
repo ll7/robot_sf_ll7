@@ -142,26 +142,30 @@ if [[ -n "$receipt_path" ]]; then
   receipt_path="$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$receipt_path")"
 fi
 
-if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
-  echo "refusing to overwrite existing worktree target: $worktree_path" >&2
-  exit 2
-fi
-
-target_parent="$(dirname -- "$worktree_path")"
-if [[ ! -d "$target_parent" || ! -w "$target_parent" ]]; then
-  echo "worktree target parent must already exist and be writable: $target_parent" >&2
-  echo "Create or choose the parent directory, then rerun this command." >&2
-  exit 2
-fi
-
-capacity_args=(--path "$worktree_path")
-if [[ -n "$minimum_free_bytes" ]]; then
-  capacity_args+=(--minimum-free-bytes "$minimum_free_bytes")
-fi
-python3 "$SCRIPT_DIR/check_worktree_capacity.py" "${capacity_args[@]}"
-
 git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
 worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
+
+validate_target_preflight() {
+  # Validate the target and capacity immediately before a creation mutation.
+  if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
+    echo "refusing to overwrite existing worktree target: $worktree_path" >&2
+    exit 2
+  fi
+
+  target_parent="$(dirname -- "$worktree_path")"
+  if [[ ! -d "$target_parent" || ! -w "$target_parent" ]]; then
+    echo "worktree target parent must already exist and be writable: $target_parent" >&2
+    echo "Create or choose the parent directory, then rerun this command." >&2
+    exit 2
+  fi
+
+  capacity_args=(--path "$worktree_path")
+  if [[ -n "$minimum_free_bytes" ]]; then
+    capacity_args+=(--minimum-free-bytes "$minimum_free_bytes")
+  fi
+  python3 "$SCRIPT_DIR/check_worktree_capacity.py" "${capacity_args[@]}"
+}
+
 if [[ "$locked_transaction" -eq 1 ]]; then
   lock_fd="${ROBOT_SF_WORKTREE_LOCK_FD:-}"
   if ! [[ "$lock_fd" =~ ^[0-9]+$ ]]; then
@@ -176,6 +180,7 @@ if [[ "$locked_transaction" -eq 1 ]]; then
 fi
 
 if [[ "$dry_run" -eq 1 ]]; then
+  validate_target_preflight
   echo "create_worktree: dry-run passed; git worktree add was not invoked."
   exit 0
 fi
@@ -184,8 +189,8 @@ fi
 # basename. Independent callers with distinct full paths but the same basename
 # can therefore race while Git allocates (or prunes) entries under the shared
 # common directory. Serialize the complete orphan-recovery/prune/add
-# transaction per repository; capacity inspection above remains parallel and
-# read-only.
+# transaction per repository; target and capacity validation run inside that
+# transaction so the admission decision matches the mutation it protects.
 report_and_exec() {
   echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
   echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
@@ -203,6 +208,11 @@ report_and_exec() {
 }
 
 run_locked_transaction() {
+  # Capacity and parent checks must share the same lock as branch cleanup and
+  # worktree registration. This applies to both the flock CLI and portable
+  # Python backends.
+  validate_target_preflight
+
   # A concurrent creator may have populated this exact target while this process
   # waited for the repository lock. Recheck under the lock before any mutation.
   if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then

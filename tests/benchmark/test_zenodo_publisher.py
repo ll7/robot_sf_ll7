@@ -229,21 +229,16 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"bundle")
+    uploaded = {
+        "id": "uploaded-file",
+        "filename": bundle.name,
+        "links": {"self": "https://zenodo.org/api/deposit/depositions/123/files/uploaded-file"},
+    }
+    uploaded_deposition = _draft_payload()
+    uploaded_deposition["files"] = [uploaded]
     session.gets = [
         _Response(_draft_payload()),
-        _Response(
-            [
-                {
-                    "id": "uploaded-file",
-                    "filename": bundle.name,
-                    "links": {
-                        "self": (
-                            "https://zenodo.org/api/deposit/depositions/123/files/uploaded-file"
-                        )
-                    },
-                }
-            ]
-        ),
+        _Response(uploaded_deposition),
     ]
     session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
     state = upload(session, state, [bundle])

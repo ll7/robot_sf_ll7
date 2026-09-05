@@ -301,12 +301,33 @@ and source-tag lineage so inherited-file cleanup remains available. `upload` mus
 the byte-identical bundle used for GitHub. Zenodo new-version drafts inherit the
 predecessor files. When the sealed state proves exact new-version provenance,
 `upload` validates the complete local and remote inventories, uploads the
-intended files, re-reads the draft, deletes only stable inherited filenames from
-the unpublished successor, and requires an exact final filename inventory. It
-never addresses the published predecessor. Unexpected files in an ordinary
-fresh reservation, malformed or changed remote identities, non-204 deletion
-responses, and inventory races remain blocking; rerun the same upload after a
-partial network interruption. `verify` is read-only and must check
+intended files, and re-reads the exact successor deposition response after the
+upload, immediately before each deletion, and after cleanup. Immediately
+before each `DELETE`, it also fetches the deposition-scoped successor file and
+requires the returned filename and file ID to match the admitted target. It does not use a
+separate `/files` collection response for lifecycle or deletion admission. Local
+symlinks, control/query/fragment/encoded-collision filenames, duplicate aliases,
+and local changes detected immediately before a PUT are rejected. The
+server-supplied upload bucket must use the canonical `/api/files/<opaque-bucket-id>`
+shape, with no duplicate path separators or query/fragment delimiters; deposition,
+record, and collection paths are not accepted as PUT targets. Credential-shaped
+remote filenames, including parameterized `Authorization: <scheme> <value>` forms,
+are rejected before they can enter state or a receipt. It deletes only stable
+inherited filenames from the unpublished successor and requires an exact final
+filename inventory. It never addresses the
+published predecessor.
+DELETE 204, 404, 403, 5xx, network, and other unexpected results are classified;
+non-204 results are treated as conditionally idempotent only when a bounded pair
+of consecutive exact readbacks proves the target absent with unchanged
+identity, unpublished lifecycle, inventory, and the server revision when one
+is available. When Zenodo exposes no revision field, the receipt records an
+exact final-response snapshot digest instead; that fallback is not a
+server-side concurrency token. Any failed or unstable readback remains
+blocking, so rerun the same upload after a partial network interruption. A
+successful upload stores a credential-free `robot-sf-zenodo-reconciliation.v1`
+receipt binding the intended-inventory SHA-256, deleted filename list, and
+final remote revision or exact snapshot digest/state. `verify` is read-only
+and must check
 the title, dataset type, GPL-3.0-only license, creator union, exact source tag,
 and concept/version DOI distinction. `publish` is irreversible; never run it
 for a draft with missing files, unaccepted rows, or an unresolved DOI.

@@ -95,7 +95,12 @@ def _binding_and_metadata() -> tuple[dict[str, Any], dict[str, Any]]:
     return binding, metadata
 
 
-def _deposition_payload(binding: dict[str, Any], *, submitted: bool = False) -> dict[str, Any]:
+def _deposition_payload(
+    binding: dict[str, Any],
+    *,
+    submitted: bool = False,
+    files: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Build a reserved or published deposition response."""
     version_record_id = int(binding["version_doi"].rsplit(".", 1)[-1])
     concept_record_id = binding["concept_doi"].rsplit(".", 1)[-1]
@@ -108,7 +113,7 @@ def _deposition_payload(binding: dict[str, Any], *, submitted: bool = False) -> 
         "submitted": submitted,
         "metadata": {"prereserve_doi": {"doi": binding["version_doi"]}},
         "links": {"bucket": "https://zenodo.org/api/files/bucket"},
-        "files": [],
+        "files": list(files or []),
     }
 
 
@@ -212,9 +217,10 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"manifest-bound bundle")
+    uploaded = _draft_file(binding, bundle.name)
     session.gets = [
         _Response(_deposition_payload(binding)),
-        _Response([_draft_file(binding, bundle.name)]),
+        _Response(_deposition_payload(binding, files=[uploaded])),
     ]
     session.puts = [_Response({"checksum": "md5:fixture"})]
     state = upload(session, state, [bundle], release_binding=binding)
@@ -279,9 +285,10 @@ def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: P
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"recovered draft bundle")
+    uploaded = _draft_file(binding, bundle.name)
     session.gets = [
         _Response(draft),
-        _Response([_draft_file(binding, bundle.name)]),
+        _Response(_deposition_payload(binding, files=[uploaded])),
     ]
     session.puts = [_Response({"checksum": "md5:fixture"})]
     state = upload(session, state, [bundle], release_binding=binding)

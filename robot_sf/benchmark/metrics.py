@@ -2854,6 +2854,14 @@ def time_to_collision_min(data: EpisodeData) -> float:
     return float(min_ttc) if np.isfinite(min_ttc) else float("nan")
 
 
+def _is_valid_nonnegative_finite(value: Any) -> bool:
+    """Return whether a runtime numeric value is finite and non-negative."""
+    try:
+        return bool(math.isfinite(value) and value >= 0.0)
+    except (TypeError, ValueError):
+        return False
+
+
 def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None = None) -> float:
     """Time taken for subset of cooperative agents to meet their goals.
 
@@ -2903,7 +2911,7 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
     if cooperative_agents is None:
         return time_to_goal(data)
     steps = data.cooperative_goal_steps
-    if not math.isfinite(data.dt) or data.dt < 0.0 or not isinstance(steps, dict) or not steps:
+    if not _is_valid_nonnegative_finite(data.dt) or not isinstance(steps, dict) or not steps:
         return float("nan")
     seen: set[int] = set()
     max_step: int | None = None

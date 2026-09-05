@@ -142,6 +142,11 @@ def test_invalid_timestep_and_agent_index_fail_closed() -> None:
     nonfinite_dt.cooperative_goal_steps = {0: 10}
     assert np.isnan(aggregated_time(nonfinite_dt, cooperative_agents=[0]))
 
+    nonnumeric_dt = _make_episode()
+    nonnumeric_dt.dt = "0.1"  # type: ignore[assignment]
+    nonnumeric_dt.cooperative_goal_steps = {0: 10}
+    assert np.isnan(aggregated_time(nonnumeric_dt, cooperative_agents=[0]))
+
     negative_index = _make_episode()
     negative_index.cooperative_goal_steps = {-1: 10}
     assert np.isnan(aggregated_time(negative_index, cooperative_agents=[-1]))

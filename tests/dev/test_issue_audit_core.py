@@ -666,10 +666,42 @@ def test_non_blocking_blocked_by_phrase_does_not_route_to_triage(phrase: str) ->
     assert not any(mutation["value"] == "needs-triage" for mutation in classification.mutations)
 
 
-@pytest.mark.parametrize("prefix", ["Provenance is", "Dataset is", "Compute remains"])
-def test_non_blocking_declaration_does_not_trigger_domain_gate(prefix: str) -> None:
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "Provenance is blocked by: none",
+        "Provenance is blocked-by: none",
+        "Dataset is blocked by: no blockers",
+        "Compute remains blocked by: N/A",
+    ],
+)
+def test_non_blocking_declaration_does_not_trigger_domain_gate(declaration: str) -> None:
     """Domain-specific gate detection also ignores explicit no-blocker text."""
-    assert issue_audit_core._gate_evidence(f"{prefix} blocked by: none") == []
+    assert issue_audit_core._gate_evidence(declaration) == []
+
+
+def test_multiline_non_blocking_declaration_does_not_route_to_triage() -> None:
+    """A Markdown Blocked-by section with an explicit empty value is non-blocking."""
+    classification = classify_issue(
+        _issue(
+            125,
+            body="## Blocked by\n\nNone\n\n## Acceptance Criteria\n- [ ] implement the change",
+        ),
+        available_labels={"state:ready", "state:blocked", "needs-triage"},
+    )
+
+    assert classification.blocker_evidence == ()
+    assert not any(mutation["value"] == "needs-triage" for mutation in classification.mutations)
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    ["Blocked by: none or #902", "Blocked-by: none, pending a decision"],
+)
+def test_ambiguous_non_blocking_value_remains_fail_closed(declaration: str) -> None:
+    """A value that has extra content is not silently treated as clear."""
+    evidence = issue_audit_core._gate_evidence(declaration)
+    assert any(item["kind"] == "blocked" for item in evidence)
 
 
 def test_non_blocking_declaration_does_not_hide_a_later_gate() -> None:

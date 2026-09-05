@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -663,6 +664,65 @@ def test_create_worktree_python_fallback_refuses_low_space(tmp_path: Path) -> No
     assert not target.exists()
 
 
+def test_create_worktree_rejects_direct_locked_transaction(tmp_path: Path) -> None:
+    """The internal re-entry flag cannot bypass the repository lock."""
+    branch = _unique_branch(tmp_path, "direct-locked-transaction")
+    target = _worktree_target(tmp_path, branch)
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+                "--__locked-transaction",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "internal" in result.stderr
+        assert "repository lock" in result.stderr
+        assert not target.exists()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_locked_transaction_keeps_capacity_gate(tmp_path: Path) -> None:
+    """The internal re-entry flag cannot skip the capacity safety gate."""
+    branch = _unique_branch(tmp_path, "direct-locked-capacity")
+    target = _worktree_target(tmp_path, branch)
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                str(2**63),
+                "--__locked-transaction",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "available space is below" in result.stdout
+        assert not target.exists()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
 def test_create_worktree_without_flock_cli_uses_python_fallback(tmp_path: Path) -> None:
     """A PATH without flock (e.g. macOS) must fall back instead of exiting 2."""
     stub_bin = tmp_path / "stub-bin"
@@ -732,6 +792,68 @@ def test_create_worktree_python_fallback_runs_exec_exactly_once(tmp_path: Path) 
         _cleanup_owned_worktree(target, branch)
 
 
+def test_create_worktree_python_fallback_exec_runs_after_lock_release(tmp_path: Path) -> None:
+    """Portable creation releases the lock before --exec while keeping receipt checks."""
+    pytest.importorskip("fcntl")
+    branch = _unique_branch(tmp_path, "py-fallback-exec-unlocked")
+    target = _worktree_target(tmp_path, branch)
+    marker = tmp_path / "exec-lock-marker.txt"
+    receipt_path = tmp_path / "exec.receipt.json"
+    common_dir = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    lock_path = common_dir / "robot-sf-create-worktree.lock"
+    probe_code = (
+        "import fcntl\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "with open(sys.argv[1], 'a+') as lock_file:\n"
+        "    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+        "Path(sys.argv[2]).write_text('unlocked\\n', encoding='utf-8')\n"
+        "assert Path(sys.argv[3]).is_file()\n"
+    )
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+                "--receipt",
+                str(receipt_path),
+                "--task-id",
+                "issue-8498",
+                "--exec",
+                sys.executable,
+                "-c",
+                probe_code,
+                str(lock_path),
+                str(marker),
+                str(receipt_path),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert marker.read_text(encoding="utf-8") == "unlocked\n"
+        assert receipt_path.is_file()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
 def test_worktree_creation_lock_helper_contract(tmp_path: Path) -> None:
     """The portable lock helper validates usage and propagates child status."""
     assert os.access(WORKTREE_CREATION_LOCK, os.X_OK)
@@ -772,6 +894,209 @@ def test_worktree_creation_lock_helper_contract(tmp_path: Path) -> None:
     )
     assert propagated.returncode == 7
     assert lock_path.exists()
+
+    signaled = subprocess.run(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "import os, signal; os.kill(os.getpid(), signal.SIGTERM)",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert signaled.returncode == 128 + signal.SIGTERM
+
+
+def test_worktree_creation_lock_forwards_signal_and_keeps_lock_until_child_exit(
+    tmp_path: Path,
+) -> None:
+    """A terminating helper must not release the lock while its mutation child lives."""
+    lock_path = tmp_path / "test-signal.lock"
+    started = tmp_path / "child.started"
+    signal_marker = tmp_path / "child.signal"
+    release = tmp_path / "child.release"
+    contender_marker = tmp_path / "contender.acquired"
+    child_code = (
+        "import os, signal, sys, time\n"
+        "from pathlib import Path\n"
+        "started, signal_marker, release = map(Path, sys.argv[1:])\n"
+        "def record_signal(signum, _frame):\n"
+        "    signal_marker.write_text(str(signum), encoding='utf-8')\n"
+        "signal.signal(signal.SIGTERM, record_signal)\n"
+        "started.write_text(str(os.getpid()), encoding='utf-8')\n"
+        "while not release.exists():\n"
+        "    time.sleep(0.02)\n"
+    )
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            child_code,
+            str(started),
+            str(signal_marker),
+            str(release),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    contender: subprocess.Popen[str] | None = None
+    child_pid: int | None = None
+    try:
+        deadline = time.monotonic() + 10
+        while not started.exists() and time.monotonic() < deadline:
+            assert holder.poll() is None, "lock helper exited before its child started"
+            time.sleep(0.02)
+        assert started.is_file(), "lock helper child did not start"
+        child_pid = int(started.read_text(encoding="utf-8"))
+
+        holder.send_signal(signal.SIGTERM)
+        time.sleep(0.2)
+        assert holder.poll() is None, "helper released the lock before its child exited"
+        deadline = time.monotonic() + 5
+        while not signal_marker.exists() and time.monotonic() < deadline:
+            assert holder.poll() is None, "helper exited before forwarding SIGTERM"
+            time.sleep(0.02)
+        assert signal_marker.read_text(encoding="utf-8") == str(signal.SIGTERM)
+
+        contender = subprocess.Popen(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "from pathlib import Path; import sys; Path(sys.argv[1]).write_text('ok')",
+                str(contender_marker),
+            ],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        time.sleep(0.2)
+        assert contender.poll() is None, "child mutation was still alive but the lock was released"
+
+        release.touch()
+        assert holder.wait(timeout=10) == 128 + signal.SIGTERM
+        assert contender.wait(timeout=10) == 0
+        assert contender_marker.read_text(encoding="utf-8") == "ok"
+    finally:
+        release.touch()
+        if holder.poll() is None:
+            holder.terminate()
+            try:
+                holder.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                holder.kill()
+                holder.wait(timeout=5)
+        if contender is not None and contender.poll() is None:
+            contender.kill()
+            contender.wait(timeout=5)
+        if child_pid is not None:
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+def test_worktree_creation_lock_child_descriptor_survives_helper_sigkill(
+    tmp_path: Path,
+) -> None:
+    """An uncatchable helper exit must not release a live child's inherited lock."""
+    lock_path = tmp_path / "test-sigkill.lock"
+    started = tmp_path / "child.started"
+    release = tmp_path / "child.release"
+    finished = tmp_path / "child.finished"
+    contender_marker = tmp_path / "contender.acquired"
+    child_code = (
+        "import os, sys, time\n"
+        "from pathlib import Path\n"
+        "started, release, finished = map(Path, sys.argv[1:])\n"
+        "started.write_text(str(os.getpid()), encoding='utf-8')\n"
+        "while not release.exists():\n"
+        "    time.sleep(0.02)\n"
+        "finished.touch()\n"
+    )
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            child_code,
+            str(started),
+            str(release),
+            str(finished),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    contender: subprocess.Popen[bytes] | None = None
+    child_pid: int | None = None
+    try:
+        deadline = time.monotonic() + 10
+        while not started.exists() and time.monotonic() < deadline:
+            assert holder.poll() is None, "lock helper exited before its child started"
+            time.sleep(0.02)
+        assert started.is_file(), "lock helper child did not start"
+        child_pid = int(started.read_text(encoding="utf-8"))
+
+        holder.kill()
+        assert holder.wait(timeout=5) == -signal.SIGKILL
+        contender = subprocess.Popen(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "from pathlib import Path; import sys; Path(sys.argv[1]).write_text('ok')",
+                str(contender_marker),
+            ],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        time.sleep(0.2)
+        assert contender.poll() is None, "helper SIGKILL released a live child's lock"
+
+        release.touch()
+        deadline = time.monotonic() + 5
+        while not finished.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert finished.is_file(), "child did not finish after the release marker"
+        assert contender.wait(timeout=10) == 0
+        assert contender_marker.read_text(encoding="utf-8") == "ok"
+    finally:
+        release.touch()
+        if holder.poll() is None:
+            holder.kill()
+            holder.wait(timeout=5)
+        if contender is not None and contender.poll() is None:
+            contender.kill()
+            contender.wait(timeout=5)
+        if child_pid is not None:
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 @pytest.mark.parametrize(

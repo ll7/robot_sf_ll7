@@ -239,16 +239,21 @@ def test_ready_receipts_match_the_versioned_json_schema() -> None:
     )
 
 
-def test_legacy_receipt_without_ordinary_cas_matches_versioned_json_schema() -> None:
-    """The v1 schema must accept receipts written before ordinary-CAS evidence existed."""
+def test_pre_followup_v1_receipt_is_readable_but_not_merge_authorized() -> None:
+    """Old v1 receipts remain readable while missing lifecycle evidence blocks apply."""
     schema = json.loads(
         Path("scripts/dev/single_account_merge_receipt.v1.schema.json").read_text(encoding="utf-8")
     )
     legacy = _receipt()
     legacy.pop("ordinary_cas")
+    legacy.pop("closing_discipline")
     legacy["receipt_digest"] = receipt_digest(legacy)
 
     Draft202012Validator(schema).validate(legacy)
+    assert validate_receipt(legacy)["passed"] is True
+    verification = verify_receipt(legacy)
+    assert verification["passed"] is False
+    assert "closing_discipline_not_verified" in verification["reasons"]
 
 
 def test_each_hold_dimension_blocks_independently() -> None:
@@ -1074,7 +1079,7 @@ def test_guarded_apply_rejects_success_gate_without_closing_discipline() -> None
     merged, error = apply_guarded_merge(receipt, repository="owner/repo", api=fake_api)
 
     assert merged is None
-    assert "receipt_field_missing:closing_discipline" in (error or "")
+    assert "closing_discipline_not_verified" in (error or "")
     assert calls == []
 
 
@@ -1167,9 +1172,84 @@ def test_validate_mode_is_read_only(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     )
 
 
+def test_expected_head_binding_rejects_mismatched_receipt_before_live_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A delegating caller cannot validate or apply a receipt for another head."""
+    receipt = _receipt()
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: pytest.fail("head mismatch must stop before live reread"),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "validate",
+            "--expected-head",
+            "f" * 40,
+            "--receipt-file",
+            str(receipt_file),
+        ]
+    )
+
+    assert exit_code == 2
+    assert "does not match expected head" in capsys.readouterr().out
+
+
 def test_merge_authority_fixture_is_current() -> None:
     result = validate_merge_authority_fixture()
     assert result["passed"] is True, result
+    assert "scripts/dev/gh_pr_merge.sh" in result["merge_callers"]
+
+
+def test_merge_authority_fixture_scans_shell_writers(tmp_path: Path) -> None:
+    """A new shell merge writer must be rejected by the authority self-check."""
+    scripts_dir = tmp_path / "scripts" / "dev"
+    scripts_dir.mkdir(parents=True)
+    owner_rel = "scripts/dev/single_account_merge_receipt.py"
+    (scripts_dir / "single_account_merge_receipt.py").write_text(
+        'def apply_guarded_merge():\n    return "single_account_merge_receipt.v1"\n',
+        encoding="utf-8",
+    )
+    (scripts_dir / "gh_pr_merge.sh").write_text(
+        f"#!/usr/bin/env bash\npython3 {owner_rel}\ngh pr merge 42\n",
+        encoding="utf-8",
+    )
+    (scripts_dir / "single_account_merge_authority_fixture.v1.json").write_text(
+        json.dumps(
+            {
+                "schema": "single_account_merge_authority_fixture.v1",
+                "receipt_owner": owner_rel,
+                "receipt_schema": "single_account_merge_receipt.v1",
+                "merge_callers": [
+                    {
+                        "path": "scripts/dev/gh_pr_merge.sh",
+                        "entrypoint": "compatibility wrapper",
+                        "mode": "delegated_apply",
+                        "requires_receipt": True,
+                    }
+                ],
+                "forbidden_direct_merge_patterns": ["pulls/<pr>/merge", "gh pr merge"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = validate_merge_authority_fixture(repo_root=tmp_path)
+
+    assert result["passed"] is False
+    assert any(
+        reason.startswith("direct_merge_bypass:scripts/dev/gh_pr_merge.sh:")
+        for reason in result["reasons"]
+    )
 
 
 def test_report_only_mode_writes_to_nested_output_path(

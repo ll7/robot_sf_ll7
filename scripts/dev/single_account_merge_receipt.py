@@ -35,6 +35,11 @@ PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
 PROVENANCE_DATA_SOURCES = frozenset({"graphql", "rest_fallback_graphql_quota"})
 PROVENANCE_THREAD_STATUSES = frozenset({"separate_query", "resolved", "unresolved", "unavailable"})
 CLOSING_DISCIPLINE_STATUSES = frozenset({"passed", "blocked", "unavailable"})
+CLOSING_DISCIPLINE_SOURCES = {
+    "pull_request": "live_pr_snapshot",
+    "commits": "paginated_pr_commits",
+    "issues": "current_issue_metadata",
+}
 
 SUCCESS_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
 PENDING_STATUSES = frozenset(
@@ -171,11 +176,7 @@ def build_closing_discipline_evidence(
         "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest()
         if isinstance(body, str)
         else "",
-        "sources": {
-            "pull_request": "live_pr_snapshot",
-            "commits": "paginated_pr_commits",
-            "issues": "current_issue_metadata",
-        },
+        "sources": copy.deepcopy(CLOSING_DISCIPLINE_SOURCES),
     }
     if not _full_sha(head_sha) or not isinstance(body, str):
         evidence["blockers"] = ["live PR head or body is missing or malformed"]
@@ -1313,15 +1314,7 @@ def _premerge_reasons(  # noqa: C901, PLR0912, PLR0915 - every waiver/hold dimen
             if not _digest(_string(closing_discipline.get("body_sha256"))):
                 reasons.append("closing_discipline_body_digest_missing")
             sources = closing_discipline.get("sources")
-            if not isinstance(sources, Mapping) or {
-                sources.get("pull_request"),
-                sources.get("commits"),
-                sources.get("issues"),
-            } != {
-                "live_pr_snapshot",
-                "paginated_pr_commits",
-                "current_issue_metadata",
-            }:
+            if not isinstance(sources, Mapping) or dict(sources) != CLOSING_DISCIPLINE_SOURCES:
                 reasons.append("closing_discipline_sources_missing")
 
     checks = (
@@ -1448,7 +1441,6 @@ def validate_receipt(receipt: Any) -> dict[str, Any]:
         "holds",
         "waiver",
         "expected_head_cas",
-        "closing_discipline",
         "observed_at",
         "merge_result",
         "receipt_digest",
@@ -2157,7 +2149,7 @@ def validate_merge_authority_fixture(  # noqa: C901, PLR0912 - explicit policy c
     for scan_root in scan_roots:
         if not scan_root.is_dir():
             continue
-        suffixes = {".py"} if scan_root.name == "dev" else {".md"}
+        suffixes = {".py", ".sh"} if scan_root.name == "dev" else {".md"}
         for candidate in sorted(scan_root.rglob("*")):
             if not candidate.is_file() or candidate.suffix not in suffixes:
                 continue
@@ -2215,6 +2207,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--pr", type=int, required=True, help="pull-request number")
     parser.add_argument("--repo", default="ll7/robot_sf_ll7", help="owner/repo")
     parser.add_argument(
+        "--expected-head",
+        help="full PR head SHA supplied by a delegating caller; mismatches fail closed",
+    )
+    parser.add_argument(
         "--mode", choices=("report-only", "validate", "apply"), default="report-only"
     )
     parser.add_argument("--receipt-file", type=Path, help="receipt JSON file for validate/apply")
@@ -2231,6 +2227,9 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are explicit and fail closed.
     """Run a read-only receipt report, validation, or guarded apply."""
     args = _parser().parse_args(argv)
+    if args.expected_head is not None and not _full_sha(args.expected_head):
+        print("--expected-head must be a full 40-character SHA", file=sys.stderr)
+        return 2
     if args.mode in {"validate", "apply"} and args.receipt_file is None:
         print("--receipt-file is required for validate/apply", file=sys.stderr)
         return 2
@@ -2243,6 +2242,22 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
                 )
             )
             return 1
+        if (
+            args.expected_head is not None
+            and _string(evidence.get("head_sha")).lower() != args.expected_head.lower()
+        ):
+            print(
+                json.dumps(
+                    {
+                        "status": "blocked",
+                        "error": "live PR head does not match expected head",
+                        "expected_head_sha": args.expected_head,
+                        "live_head_sha": evidence.get("head_sha"),
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 2
         receipt = build_receipt(
             **evidence,
             waiver={
@@ -2265,6 +2280,22 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
             json.dumps({"status": "error", "error": error or "receipt unavailable"}, sort_keys=True)
         )
         return 1
+    if (
+        args.expected_head is not None
+        and _string(receipt.get("head_sha")).lower() != args.expected_head.lower()
+    ):
+        print(
+            json.dumps(
+                {
+                    "status": "blocked",
+                    "error": "receipt head does not match expected head",
+                    "expected_head_sha": args.expected_head,
+                    "receipt_head_sha": receipt.get("head_sha"),
+                },
+                sort_keys=True,
+            )
+        )
+        return 2
     evidence, error = build_live_evidence(args.pr, repository=args.repo)
     if error or evidence is None:
         print(

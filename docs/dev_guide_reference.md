@@ -774,11 +774,19 @@ base predates current `main`. That proof binds the complete normalized changed-f
 base/head/current-main content refs for changed Python test marker candidates (including both paths
 of renamed candidates), a verified current-main commit ref, the full trusted exact-head policy
 carrier, and immediate current-main/head CAS; a 3,000-file-capped inventory fails closed, and the
-proof can qualify only a lone `stale_merge_base` gate reason. The receipt carries a required
+proof can qualify only a lone `stale_merge_base` gate reason. New receipts carry a required
 `closing_discipline` audit field. A passing result is bound to the live PR head and body digest and
 records that paginated PR commit metadata and current issue metadata were checked; blocked or
 unavailable results remain fail-closed. The receipt digest covers the pre-merge observation and is
 preserved when GitHub returns the merge commit SHA.
+
+The compatibility helper `scripts/dev/gh_pr_merge.sh` is a delegating caller, not a second merge
+authority. It validates the full expected head and repository identity, asks the receipt owner to
+write a report, and then asks that same owner to apply it. Native CLI or direct REST merge writers
+are not available from the shell path, so transport failures fail closed. Receipts produced by
+the pre-follow-up v1 implementation remain structurally readable when `closing_discipline` is
+absent, but validation and apply still block with missing closing evidence; callers must generate
+a current receipt before merging.
 
 When the GraphQL-backed PR snapshot is rate-limited, `--mode report-only` and `--mode validate`
 reuse the bounded REST snapshot path for ordinary PR, label, comment, review, requested-reviewer,

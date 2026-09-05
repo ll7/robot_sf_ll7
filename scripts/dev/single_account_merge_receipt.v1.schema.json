@@ -19,7 +19,6 @@
     "holds",
     "waiver",
     "expected_head_cas",
-    "closing_discipline",
     "observed_at",
     "merge_result",
     "receipt_digest",
@@ -199,6 +198,7 @@
     },
     "gate_audit": {"type": ["object", "null"]},
     "closing_discipline": {
+      "description": "Optional for structurally readable pre-follow-up v1 receipts; active validation still requires a passing bound result.",
       "type": "object",
       "required": ["status", "blockers"],
       "properties": {

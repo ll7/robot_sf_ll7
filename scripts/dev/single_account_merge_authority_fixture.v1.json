@@ -14,6 +14,12 @@
       "entrypoint": "guarded merge workflow",
       "mode": "documented_apply",
       "requires_receipt": true
+    },
+    {
+      "path": "scripts/dev/gh_pr_merge.sh",
+      "entrypoint": "compatibility wrapper",
+      "mode": "delegated_apply",
+      "requires_receipt": true
     }
   ],
   "forbidden_direct_merge_patterns": [

@@ -176,6 +176,9 @@ def _linked_recovery_fixture(
     (source_package / "forces.py").write_text(
         "def social_force_gil_releasing_context():\n    return None\n", encoding="utf-8"
     )
+    rvo2_source = repo / "third_party" / "python-rvo2"
+    rvo2_source.mkdir(parents=True)
+    (rvo2_source / "UPSTREAM.md").write_text("fixture\n", encoding="utf-8")
     (repo / "pyproject.toml").write_text(
         '[project]\nname = "recovery-fixture"\nversion = "0.0.0"\n', encoding="utf-8"
     )
@@ -206,6 +209,7 @@ def _linked_recovery_fixture(
         fake_bin / "uv",
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
+        'if [[ -n "${UV_ENV_CAPTURE:-}" ]]; then printf "UV_PROJECT=%s\\n" "${UV_PROJECT-<unset>}" >> "$UV_ENV_CAPTURE"; fi\n'
         'printf \'%s\\n\' "$*" >> "$UV_CAPTURE"\n'
         'case "${1:-}" in\n'
         "  venv)\n"
@@ -336,6 +340,110 @@ def test_shared_venv_recovery_reuses_fresh_local_environment(tmp_path: Path) -> 
         assert calls == ["run python -V"]
         assert "sync skipped" in result.stderr
         assert not (repo / ".venv").exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_rejects_nested_main_venv_symlink(tmp_path: Path) -> None:
+    """A nested bin symlink must not redirect recovery into the owning checkout."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    main_python = repo / ".venv" / "bin" / "python"
+    main_python.parent.mkdir(parents=True)
+    _write_executable(main_python, "#!/usr/bin/env bash\nexit 0\n")
+    (worktree / ".venv").mkdir()
+    (worktree / ".venv" / "bin").symlink_to(main_python.parent, target_is_directory=True)
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "environment component outside the worktree" in result.stderr
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_refuses_symlinked_repository_lock(tmp_path: Path) -> None:
+    """The lock guard must not truncate or follow an arbitrary symlink target."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    sentinel = tmp_path / "lock-sentinel.txt"
+    sentinel.write_text("preserve me\n", encoding="utf-8")
+    lock_path = repo / ".git" / "robot-sf-fast-pysf-recovery.lock"
+    lock_path.symlink_to(sentinel)
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "refusing a symlinked repository recovery lock" in result.stderr
+        assert sentinel.read_text(encoding="utf-8") == "preserve me\n"
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_rejects_dirty_rvo2_dependency_input(tmp_path: Path) -> None:
+    """Frozen recovery must stop when the local path dependency is dirty."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    rvo2_readme = worktree / "third_party" / "python-rvo2" / "UPSTREAM.md"
+    rvo2_readme.write_text("dirty\n", encoding="utf-8")
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "dirty dependency inputs" in result.stderr
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_clears_ambient_uv_project(tmp_path: Path) -> None:
+    """Recovery and the wrapped command must resolve the current worktree project."""
+    repo, worktree, _, _, _, env = _linked_recovery_fixture(tmp_path)
+    env_capture = tmp_path / "uv-env.txt"
+    env = {**env, "UV_PROJECT": str(repo), "UV_ENV_CAPTURE": str(env_capture)}
+    try:
+        result = subprocess.run(
+            [
+                str(worktree / "scripts" / "dev" / RUN_SHARED_VENV.name),
+                "--recover-stale-fast-pysf",
+                "--",
+                "python",
+                "-V",
+            ],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert env_capture.read_text(encoding="utf-8").splitlines()
+        assert set(env_capture.read_text(encoding="utf-8").splitlines()) == {"UV_PROJECT=<unset>"}
     finally:
         _remove_linked_recovery_fixture(repo, worktree)
 

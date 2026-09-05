@@ -88,6 +88,7 @@ dependency_inputs=(
   uv.lock
   fast-pysf/pyproject.toml
   fast-pysf/uv.lock
+  third_party/python-rvo2
 )
 dirty_inputs="$(git status --porcelain=v1 -- "${dependency_inputs[@]}")" || {
   echo "recover_fast_pysf_worktree: could not inspect dependency inputs" >&2
@@ -110,11 +111,89 @@ if [[ -e "$local_venv" && ! -d "$local_venv" ]]; then
   exit 2
 fi
 
+check_local_venv_layout() {
+  if [[ ! -e "$local_venv" && ! -L "$local_venv" ]]; then
+    return 0
+  fi
+
+  local resolved_root
+  if ! resolved_root="$(python3 - "$local_venv" <<'PY'
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).resolve(strict=False))
+PY
+  )"; then
+    echo "recover_fast_pysf_worktree: could not resolve worktree environment ownership: $local_venv" >&2
+    return 1
+  fi
+  if [[ "$resolved_root" != "$local_venv" ]]; then
+    echo "recover_fast_pysf_worktree: refusing an environment path that resolves outside the worktree: $local_venv" >&2
+    return 1
+  fi
+
+  local component resolved_component
+  for component in bin lib lib64; do
+    if [[ ! -e "$local_venv/$component" && ! -L "$local_venv/$component" ]]; then
+      continue
+    fi
+    if ! resolved_component="$(python3 - "$local_venv/$component" <<'PY'
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).resolve(strict=False))
+PY
+    )"; then
+      echo "recover_fast_pysf_worktree: could not resolve environment component: $local_venv/$component" >&2
+      return 1
+    fi
+    case "$resolved_component" in
+      "$local_venv"/*) ;;
+      *)
+        echo "recover_fast_pysf_worktree: refusing environment component outside the worktree: $local_venv/$component" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -e "$local_venv/bin/python" || -L "$local_venv/bin/python" ]]; then
+    local resolved_python
+    if ! resolved_python="$(python3 - "$local_venv/bin/python" <<'PY'
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).resolve(strict=False))
+PY
+    )"; then
+      echo "recover_fast_pysf_worktree: could not resolve the worktree Python interpreter" >&2
+      return 1
+    fi
+    case "$resolved_python" in
+      "$main_repo_root/.venv"/*)
+        echo "recover_fast_pysf_worktree: refusing a Python interpreter linked to the owning checkout: $local_venv/bin/python" >&2
+        return 1
+        ;;
+    esac
+  fi
+}
+
+if ! check_local_venv_layout; then
+  exit 2
+fi
+
 if ! command -v flock >/dev/null 2>&1; then
   echo "recover_fast_pysf_worktree: flock is required for concurrency-safe recovery" >&2
   exit 2
 fi
 lock_path="$git_common_dir/robot-sf-fast-pysf-recovery.lock"
+if [[ -L "$lock_path" ]]; then
+  echo "recover_fast_pysf_worktree: refusing a symlinked repository recovery lock: $lock_path" >&2
+  exit 2
+fi
+if [[ -e "$lock_path" && ! -f "$lock_path" ]]; then
+  echo "recover_fast_pysf_worktree: repository recovery lock is not a regular file: $lock_path" >&2
+  exit 2
+fi
 lock_fd=""
 if ! exec {lock_fd}>"$lock_path"; then
   echo "recover_fast_pysf_worktree: could not open repository recovery lock: $lock_path" >&2
@@ -163,7 +242,8 @@ fi
 if [[ "$sync_needed" -eq 1 ]]; then
   if [[ ! -x "$local_venv/bin/python" ]]; then
     echo "recover_fast_pysf_worktree: creating worktree-local environment: $local_venv" >&2
-    if ! env -u UV_NO_SYNC -u VIRTUAL_ENV UV_PROJECT_ENVIRONMENT="$local_venv" uv venv "$local_venv"; then
+    if ! env -u UV_NO_SYNC -u VIRTUAL_ENV -u UV_PROJECT \
+      UV_PROJECT_ENVIRONMENT="$local_venv" uv venv "$local_venv"; then
       echo "recover_fast_pysf_worktree: uv venv failed; wrapped command was not started" >&2
       exit 2
     fi
@@ -171,11 +251,16 @@ if [[ "$sync_needed" -eq 1 ]]; then
 
   echo "recover_fast_pysf_worktree: refreshing only $local_venv" >&2
   echo "recover_fast_pysf_worktree: uv sync --all-extras --reinstall-package robot-sf --frozen" >&2
-  if ! env -u UV_NO_SYNC -u VIRTUAL_ENV UV_PROJECT_ENVIRONMENT="$local_venv" \
-    uv sync --all-extras --reinstall-package robot-sf --frozen; then
+  if ! env -u UV_NO_SYNC -u VIRTUAL_ENV -u UV_PROJECT \
+    UV_PROJECT_ENVIRONMENT="$local_venv" uv sync --all-extras --reinstall-package robot-sf --frozen; then
     echo "recover_fast_pysf_worktree: uv sync failed; wrapped command was not started" >&2
     exit 2
   fi
+fi
+
+if ! check_local_venv_layout; then
+  echo "recover_fast_pysf_worktree: post-sync environment ownership check failed; wrapped command was not started" >&2
+  exit 2
 fi
 
 final_report=""

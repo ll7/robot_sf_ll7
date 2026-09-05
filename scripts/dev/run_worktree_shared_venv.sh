@@ -220,6 +220,9 @@ fi
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
+# Do not let an ambient UV_PROJECT redirect dependency resolution to another
+# checkout. The effective project is always the current worktree.
+unset UV_PROJECT
 
 git_common_dir="$(git rev-parse --git-common-dir)"
 if [[ "$git_common_dir" != /* ]]; then

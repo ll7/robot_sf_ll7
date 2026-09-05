@@ -749,3 +749,231 @@ def test_unique_branch_names_are_clean_git_refs(tmp_path: Path) -> None:
         subprocess.run(
             ["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True, check=False
         )
+
+
+def test_create_worktree_python_lock_waits_for_repository_lock(tmp_path: Path) -> None:
+    """The creator waits on the shared lock when using the Python lock backend."""
+    fcntl = pytest.importorskip("fcntl")
+    branch = _unique_branch(tmp_path, "py-lock")
+    target = _worktree_target(tmp_path, branch)
+    common_dir = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    lock_path = common_dir / "robot-sf-create-worktree.lock"
+    process: subprocess.Popen[str] | None = None
+    try:
+        _create_orphan_branch(branch)
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            env = dict(os.environ, ROBOT_SF_WORKTREE_LOCK_BACKEND="python")
+            process = subprocess.Popen(
+                [
+                    str(CREATE_WORKTREE),
+                    "--path",
+                    str(target),
+                    "--branch",
+                    branch,
+                    "--minimum-free-bytes",
+                    "0",
+                ],
+                cwd=REPO_ROOT,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            time.sleep(0.5)
+            assert process.poll() is None, "creator did not wait for the repository lock"
+            assert not target.exists()
+            assert (
+                subprocess.run(
+                    ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+                    cwd=REPO_ROOT,
+                    check=False,
+                ).returncode
+                == 0
+            )
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        stdout, stderr = process.communicate(timeout=60)
+        assert process.returncode == 0, f"stdout={stdout!r} stderr={stderr!r}"
+        assert target.is_dir()
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.communicate()
+        _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_competing_creations_serialize_under_python_lock(tmp_path: Path) -> None:
+    """Competing creations under the Python lock backend serialize safely."""
+    pytest.importorskip("fcntl")
+    branch1 = _unique_branch(tmp_path, "py-comp-1")
+    target1 = _worktree_target(tmp_path, branch1)
+    branch2 = _unique_branch(tmp_path, "py-comp-2")
+    target2 = _worktree_target(tmp_path, branch2)
+
+    env = dict(os.environ, ROBOT_SF_WORKTREE_LOCK_BACKEND="python")
+    cmd1 = [
+        str(CREATE_WORKTREE),
+        "--path",
+        str(target1),
+        "--branch",
+        branch1,
+        "--minimum-free-bytes",
+        "0",
+    ]
+    cmd2 = [
+        str(CREATE_WORKTREE),
+        "--path",
+        str(target2),
+        "--branch",
+        branch2,
+        "--minimum-free-bytes",
+        "0",
+    ]
+
+    p1: subprocess.Popen[str] | None = None
+    p2: subprocess.Popen[str] | None = None
+    try:
+        p1 = subprocess.Popen(
+            cmd1, cwd=REPO_ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        p2 = subprocess.Popen(
+            cmd2, cwd=REPO_ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+
+        out1, err1 = p1.communicate(timeout=60)
+        out2, err2 = p2.communicate(timeout=60)
+
+        assert p1.returncode == 0, f"p1 failed: stdout={out1!r} stderr={err1!r}"
+        assert p2.returncode == 0, f"p2 failed: stdout={out2!r} stderr={err2!r}"
+        assert target1.is_dir()
+        assert target2.is_dir()
+    finally:
+        for p in (p1, p2):
+            if p is not None and p.poll() is None:
+                p.kill()
+                p.communicate()
+        _cleanup_owned_worktree(target1, branch1)
+        _cleanup_owned_worktree(target2, branch2)
+
+
+def test_create_worktree_auto_backend_without_flock_cli(tmp_path: Path) -> None:
+    """Auto backend falls back to Python locking when flock CLI is missing from PATH."""
+    pytest.importorskip("fcntl")
+    bin_dir = tmp_path / "custom-bin"
+    bin_dir.mkdir()
+    for directory in os.environ["PATH"].split(os.pathsep):
+        if not os.path.isdir(directory):
+            continue
+        for entry in os.listdir(directory):
+            if entry == "flock":
+                continue
+            src = os.path.join(directory, entry)
+            dst = bin_dir / entry
+            if not dst.exists() and os.path.exists(src):
+                try:
+                    dst.symlink_to(src)
+                except OSError:
+                    pass
+
+    branch = _unique_branch(tmp_path, "auto-noflock")
+    target = _worktree_target(tmp_path, branch)
+    env = dict(os.environ, PATH=str(bin_dir), ROBOT_SF_WORKTREE_LOCK_BACKEND="auto")
+
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(target),
+            "--branch",
+            branch,
+            "--minimum-free-bytes",
+            "0",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    try:
+        assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        assert target.is_dir()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_rejects_missing_flock_backend(tmp_path: Path) -> None:
+    """Explicit flock backend fails closed when flock is missing from PATH."""
+    bin_dir = tmp_path / "custom-bin-noflock"
+    bin_dir.mkdir()
+    for directory in os.environ["PATH"].split(os.pathsep):
+        if not os.path.isdir(directory):
+            continue
+        for entry in os.listdir(directory):
+            if entry == "flock":
+                continue
+            src = os.path.join(directory, entry)
+            dst = bin_dir / entry
+            if not dst.exists() and os.path.exists(src):
+                try:
+                    dst.symlink_to(src)
+                except OSError:
+                    pass
+
+    branch = _unique_branch(tmp_path, "flock-req")
+    target = _worktree_target(tmp_path, branch)
+    env = dict(os.environ, PATH=str(bin_dir), ROBOT_SF_WORKTREE_LOCK_BACKEND="flock")
+
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(target),
+            "--branch",
+            branch,
+            "--minimum-free-bytes",
+            "0",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "flock is required" in result.stderr
+
+
+def test_create_worktree_rejects_invalid_lock_backend(tmp_path: Path) -> None:
+    """An unknown lock backend is rejected with exit code 2."""
+    branch = _unique_branch(tmp_path, "invalid-backend")
+    target = _worktree_target(tmp_path, branch)
+    env = dict(os.environ, ROBOT_SF_WORKTREE_LOCK_BACKEND="invalid_backend")
+
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(target),
+            "--branch",
+            branch,
+            "--minimum-free-bytes",
+            "0",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "unknown lock backend" in result.stderr

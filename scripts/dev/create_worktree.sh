@@ -162,15 +162,112 @@ fi
 # common directory. Serialize the complete orphan-recovery/prune/add
 # transaction per repository; capacity inspection above remains parallel and
 # read-only.
-if ! command -v flock >/dev/null 2>&1; then
+lock_backend="${ROBOT_SF_WORKTREE_LOCK_BACKEND:-auto}"
+
+acquire_worktree_lock() {
+  local fd="$1"
+  local backend="$lock_backend"
+  if [[ "$backend" == "auto" ]]; then
+    if command -v flock >/dev/null 2>&1; then
+      backend="flock"
+    elif python3 -c 'import fcntl' >/dev/null 2>&1; then
+      backend="python"
+    else
+      echo "create_worktree: flock or Python fcntl is required for concurrency-safe worktree creation" >&2
+      return 2
+    fi
+  fi
+
+  if [[ "$backend" == "flock" ]]; then
+    if ! command -v flock >/dev/null 2>&1; then
+      echo "create_worktree: flock is required for concurrency-safe worktree creation" >&2
+      return 2
+    fi
+    if ! flock "$fd"; then
+      echo "create_worktree: failed to acquire repository worktree-creation lock" >&2
+      return 1
+    fi
+  elif [[ "$backend" == "python" ]]; then
+    if ! python3 -c 'import fcntl' >/dev/null 2>&1; then
+      echo "create_worktree: Python fcntl is required for concurrency-safe worktree creation" >&2
+      return 2
+    fi
+    if ! python3 - "$fd" <<'PY'
+import fcntl
+import sys
+
+try:
+    fcntl.flock(int(sys.argv[1]), fcntl.LOCK_EX)
+except Exception as exc:
+    print(
+        f"create_worktree: failed to acquire repository worktree-creation lock: {exc}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+PY
+    then
+      return 1
+    fi
+  else
+    echo "create_worktree: unknown lock backend '$backend'; must be auto, flock, or python" >&2
+    return 2
+  fi
+  return 0
+}
+
+release_worktree_lock() {
+  local fd="$1"
+  local backend="$lock_backend"
+  if [[ "$backend" == "auto" ]]; then
+    if command -v flock >/dev/null 2>&1; then
+      backend="flock"
+    elif python3 -c 'import fcntl' >/dev/null 2>&1; then
+      backend="python"
+    fi
+  fi
+
+  if [[ "$backend" == "flock" ]]; then
+    flock -u "$fd" 2>/dev/null || true
+  elif [[ "$backend" == "python" ]]; then
+    python3 - "$fd" <<'PY' 2>/dev/null || true
+import fcntl
+import sys
+
+try:
+    fcntl.flock(int(sys.argv[1]), fcntl.LOCK_UN)
+except Exception:
+    pass
+PY
+  fi
+}
+
+if [[ "$lock_backend" == "flock" ]] && ! command -v flock >/dev/null 2>&1; then
   echo "create_worktree: flock is required for concurrency-safe worktree creation" >&2
   exit 2
 fi
+if [[ "$lock_backend" == "python" ]] && ! python3 -c 'import fcntl' >/dev/null 2>&1; then
+  echo "create_worktree: Python fcntl is required for concurrency-safe worktree creation" >&2
+  exit 2
+fi
+if [[ "$lock_backend" == "auto" ]] && ! command -v flock >/dev/null 2>&1 && ! python3 -c 'import fcntl' >/dev/null 2>&1; then
+  echo "create_worktree: flock or Python fcntl is required for concurrency-safe worktree creation" >&2
+  exit 2
+fi
+
 git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
 worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
 exec {worktree_lock_fd}>"$worktree_lock_path"
-if ! flock "$worktree_lock_fd"; then
-  echo "create_worktree: failed to acquire repository worktree-creation lock" >&2
+cleanup_worktree_lock() {
+  if [[ -n "${worktree_lock_fd:-}" ]]; then
+    local fd="$worktree_lock_fd"
+    worktree_lock_fd=""
+    release_worktree_lock "$fd"
+    exec {fd}>&- 2>/dev/null || true
+  fi
+}
+trap cleanup_worktree_lock EXIT
+
+if ! acquire_worktree_lock "$worktree_lock_fd"; then
   exit 2
 fi
 
@@ -221,8 +318,8 @@ if [[ -n "$receipt_path" ]]; then
   python3 "$SCRIPT_DIR/worktree_receipt.py" create \
     --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"
 fi
-flock -u "$worktree_lock_fd"
-exec {worktree_lock_fd}>&-
+cleanup_worktree_lock
+trap - EXIT
 echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
 echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
 

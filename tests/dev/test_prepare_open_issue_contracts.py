@@ -57,6 +57,8 @@ def _audit_fixture(*, mutation_authorized: bool = False) -> dict:
         "repository": "ll7/robot_sf_ll7",
         "base_sha": "a" * 40,
         "complete": True,
+        "applicable": True,
+        "errors": [],
         "mutation_authorized": mutation_authorized,
         "pagination": {
             "excluded_pull_requests": 0,
@@ -205,6 +207,59 @@ def test_plan_rejects_unknown_schema(tmp_path: Path) -> None:
     path.write_text(json.dumps({"schema": "other.v1", "items": []}), encoding="utf-8")
     with pytest.raises(ValueError):
         prep._load_audit(str(path))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("complete", False),
+        ("applicable", False),
+        ("errors", ["pagination failed"]),
+    ],
+)
+def test_plan_rejects_incomplete_non_applicable_or_errorful_audit(
+    field: str, value: object
+) -> None:
+    """Planning must fail closed for every audit state outside the planning contract."""
+    audit = {**_audit_fixture(), field: value}
+
+    with pytest.raises(ValueError):
+        prep.build_plan(audit, batch_id="b1")
+
+
+@pytest.mark.parametrize("field", ["complete", "applicable", "errors"])
+def test_plan_rejects_malformed_audit_contract_fields(field: str) -> None:
+    """Planning must reject malformed contract fields instead of coercing them."""
+    audit = {**_audit_fixture(), field: {}}
+
+    with pytest.raises(ValueError):
+        prep.build_plan(audit, batch_id="b1")
+
+
+@pytest.mark.parametrize(
+    "field_value",
+    [
+        {"complete": False},
+        {"applicable": False},
+        {"errors": ["pagination failed"]},
+    ],
+)
+def test_plan_cli_rejects_audit_before_emitting_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture, field_value: dict[str, object]
+) -> None:
+    """CLI planning errors do not leave a plan artifact behind."""
+    audit_path = tmp_path / "invalid-audit.json"
+    audit_path.write_text(
+        json.dumps({**_audit_fixture(), **field_value}),
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "plan.json"
+
+    rc = prep.main(["--audit-json", str(audit_path), "--plan-json", str(out_path)])
+
+    assert rc == 2
+    assert not out_path.exists()
+    assert "audit" in capsys.readouterr().err
 
 
 # --- Rendering ---------------------------------------------------------------

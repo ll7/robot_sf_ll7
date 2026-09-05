@@ -36,6 +36,7 @@ _REMOTE_FILENAME_ALIASES = ("filename", "key")
 _REMOTE_FILE_ID_ALIASES = ("id", "file_id", "fileid")
 _CREDENTIAL_SHAPED_FILENAME_RE = re.compile(
     r"(?i)^(?:bearer|basic)\s+\S+$|"
+    r"^authorization\s*[:=]\s*(?:bearer|basic)\s+\S+$|"
     r"^(?:authorization|access[_ -]?token|api[_ -]?key|password|secret|token)\s*[:=]\s*\S+$"
 )
 _DELETE_READBACK_ATTEMPTS = 3

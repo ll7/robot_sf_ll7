@@ -1172,7 +1172,13 @@ def test_reconciliation_receipt_rejects_tampered_inventory_binding(tmp_path: Pat
         publisher._validate_state_for_operation(tampered_state)
 
 
-def test_reconciliation_receipt_rejects_credential_shaped_deleted_filename() -> None:
+@pytest.mark.parametrize(
+    "credential_shaped_name",
+    ["Bearer secret-reflection", "Authorization: Bearer secret-reflection"],
+)
+def test_reconciliation_receipt_rejects_credential_shaped_deleted_filename(
+    credential_shaped_name: str,
+) -> None:
     """A remote filename that looks like a credential cannot enter a receipt."""
     files = [{"name": "successor.tar.gz", "size": 1, "sha256": "0" * 64}]
 
@@ -1181,7 +1187,7 @@ def test_reconciliation_receipt_rejects_credential_shaped_deleted_filename() -> 
             _successor_draft(),
             {"successor.tar.gz": "successor-file"},
             files,
-            ["Bearer secret-reflection"],
+            [credential_shaped_name],
         )
 
     assert "secret-reflection" not in str(exc_info.value)

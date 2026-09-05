@@ -52,7 +52,8 @@ dry_run=0
 command_args=()
 # Internal re-entry flag: the portable-lock fallback re-executes this script
 # under worktree_creation_lock.py so the critical section runs while a Python
-# fcntl holder owns the shared lock file. Never pass this flag directly.
+# fcntl holder owns the shared lock file. The inherited lock descriptor is
+# validated below; never pass this flag directly.
 locked_transaction=0
 
 while [[ $# -gt 0 ]]; do
@@ -141,37 +142,57 @@ if [[ -n "$receipt_path" ]]; then
   receipt_path="$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$receipt_path")"
 fi
 
-if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
-  echo "refusing to overwrite existing worktree target: $worktree_path" >&2
-  exit 2
-fi
+validate_target_preflight() {
+  # Validate the target and capacity immediately before a creation mutation.
+  if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
+    echo "refusing to overwrite existing worktree target: $worktree_path" >&2
+    exit 2
+  fi
 
-target_parent="$(dirname -- "$worktree_path")"
-if [[ ! -d "$target_parent" || ! -w "$target_parent" ]]; then
-  echo "worktree target parent must already exist and be writable: $target_parent" >&2
-  echo "Create or choose the parent directory, then rerun this command." >&2
-  exit 2
-fi
+  target_parent="$(dirname -- "$worktree_path")"
+  if [[ ! -d "$target_parent" || ! -w "$target_parent" ]]; then
+    echo "worktree target parent must already exist and be writable: $target_parent" >&2
+    echo "Create or choose the parent directory, then rerun this command." >&2
+    exit 2
+  fi
 
-capacity_args=(--path "$worktree_path")
-if [[ -n "$minimum_free_bytes" ]]; then
-  capacity_args+=(--minimum-free-bytes "$minimum_free_bytes")
-fi
-if [[ "$locked_transaction" -eq 0 ]]; then
+  capacity_args=(--path "$worktree_path")
+  if [[ -n "$minimum_free_bytes" ]]; then
+    capacity_args+=(--minimum-free-bytes "$minimum_free_bytes")
+  fi
   python3 "$SCRIPT_DIR/check_worktree_capacity.py" "${capacity_args[@]}"
+}
+
+if [[ "$locked_transaction" -eq 1 ]]; then
+  git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+  worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
+  lock_fd="${ROBOT_SF_WORKTREE_LOCK_FD:-}"
+  if ! [[ "$lock_fd" =~ ^[0-9]+$ ]]; then
+    echo "create_worktree: --__locked-transaction is an internal mode" >&2
+    echo "create_worktree: it requires the portable helper's inherited repository lock" >&2
+    exit 2
+  fi
+  if ! python3 "$SCRIPT_DIR/worktree_creation_lock.py" --verify-fd "$worktree_lock_path" "$lock_fd"; then
+    echo "create_worktree: --__locked-transaction requires ownership of the repository lock" >&2
+    exit 2
+  fi
 fi
 
 if [[ "$dry_run" -eq 1 ]]; then
+  validate_target_preflight
   echo "create_worktree: dry-run passed; git worktree add was not invoked."
   exit 0
 fi
+
+git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
 
 # Git derives linked-worktree administrative directory names from the target
 # basename. Independent callers with distinct full paths but the same basename
 # can therefore race while Git allocates (or prunes) entries under the shared
 # common directory. Serialize the complete orphan-recovery/prune/add
-# transaction per repository; capacity inspection above remains parallel and
-# read-only.
+# transaction per repository; target and capacity validation run inside that
+# transaction so the admission decision matches the mutation it protects.
 report_and_exec() {
   echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
   echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
@@ -189,6 +210,11 @@ report_and_exec() {
 }
 
 run_locked_transaction() {
+  # Capacity and parent checks must share the same lock as branch cleanup and
+  # worktree registration. This applies to both the flock CLI and portable
+  # Python backends.
+  validate_target_preflight
+
   # A concurrent creator may have populated this exact target while this process
   # waited for the repository lock. Recheck under the lock before any mutation.
   if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
@@ -240,13 +266,12 @@ run_locked_transaction() {
 
 if [[ "$locked_transaction" -eq 1 ]]; then
   # Re-entered under worktree_creation_lock.py holding the shared lock file.
+  # The outer invocation reports and runs --exec only after this process exits,
+  # so arbitrary commands never run while the repository lock is held.
   run_locked_transaction
-  report_and_exec
   exit 0
 fi
 
-git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
-worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
 use_python_lock=0
 if [[ -n "${ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK:-}" ]]; then
   use_python_lock=1
@@ -269,11 +294,11 @@ else
   echo "create_worktree: flock CLI not used; holding portable lock on $worktree_lock_path" >&2
   locked_args=(--__locked-transaction --path "$worktree_path" --branch "$branch_name"
     --base "$base_ref" --mode "$worktree_mode")
+  if [[ -n "$minimum_free_bytes" ]]; then
+    locked_args+=(--minimum-free-bytes "$minimum_free_bytes")
+  fi
   if [[ -n "$receipt_path" ]]; then
     locked_args+=(--receipt "$receipt_path" --task-id "$task_id")
-  fi
-  if [[ "${#command_args[@]}" -gt 0 ]]; then
-    locked_args+=(--exec "${command_args[@]}")
   fi
   python_lock_rc=0
   python3 "$SCRIPT_DIR/worktree_creation_lock.py" "$worktree_lock_path" -- \
@@ -281,11 +306,5 @@ else
   if [[ "$python_lock_rc" -ne 0 ]]; then
     exit "$python_lock_rc"
   fi
-  # The re-entered child already ran report_and_exec (including --exec)
-  # under the lock; the parent must not report or re-run it.
-  fallback_reported=1
-  command_args=()
 fi
-if [[ "${fallback_reported:-0}" -eq 0 ]]; then
-  report_and_exec
-fi
+report_and_exec

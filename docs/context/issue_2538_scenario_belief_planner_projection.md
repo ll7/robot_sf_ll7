@@ -75,5 +75,5 @@ The next useful step is a runtime observation-builder path that produces a Scena
 environment step and routes this projection into a planner selection or smoke command. A
 track-generation/retirement owner is required before a stateful planner can claim reuse-safe
 identity semantics. Until those gates exist, this remains a unit-level planner interface smoke;
-#8050 stays open with `implementation_admitted: false`, and no downstream planner work is part of
+Issue #8050 stays open with `implementation_admitted: false`, and no downstream planner work is part of
 this slice.

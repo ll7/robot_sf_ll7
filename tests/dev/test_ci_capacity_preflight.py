@@ -398,6 +398,36 @@ def test_shared_venv_recovery_rejects_nested_external_site_packages_symlink(
         _remove_linked_recovery_fixture(repo, worktree)
 
 
+def test_shared_venv_recovery_rejects_unreadable_nested_environment(
+    tmp_path: Path,
+) -> None:
+    """An unreadable environment subtree must not bypass recursive ownership checks."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    outside = tmp_path / "outside-site-packages"
+    outside.mkdir()
+    unreadable = worktree / ".venv" / "lib" / "python3.13"
+    unreadable.mkdir(parents=True)
+    (unreadable / "site-packages").symlink_to(outside, target_is_directory=True)
+    unreadable.chmod(0o111)
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "could not inspect worktree environment symlinks" in result.stderr
+        assert not capture.exists()
+    finally:
+        unreadable.chmod(0o755)
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
 def test_shared_venv_recovery_allows_external_standard_python_symlink(tmp_path: Path) -> None:
     """A standard interpreter link may target an existing host Python."""
     repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)

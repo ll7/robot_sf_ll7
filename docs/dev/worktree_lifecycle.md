@@ -121,8 +121,9 @@ If the shared wrapper reports stale `fast-pysf`, use its explicit linked-worktre
 `scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- <command>`. It creates or
 refreshes only the current worktree's `.venv`, applies the capacity and repository recovery-lock
 gates, rejects nested environment links that could redirect package writes outside the worktree, and
-rejects broken or owning-checkout `bin/python*` aliases. It never repairs the main checkout
-implicitly. See the [local CI recovery contract](local_ci.md#recover-stale-fast-pysf-explicitly).
+rejects broken or owning-checkout `bin/python*` aliases, and fails closed if a nested environment
+subtree cannot be inspected. It never repairs the main checkout implicitly. See the [local CI
+recovery contract](local_ci.md#recover-stale-fast-pysf-explicitly).
 
 Never edit `.venv` by hand; manage dependencies through `pyproject.toml` and `uv sync`. Never use a bare
 `git stash pop` in a linked worktree because all worktrees share one stash namespace. Prefer a

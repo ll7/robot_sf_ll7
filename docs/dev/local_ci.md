@@ -37,8 +37,9 @@ lock, and verifies `fast-pysf` before starting the command. It runs the frozen, 
 `uv sync --all-extras --reinstall-package robot-sf --frozen`; an existing coherent local environment
 skips the sync. Environment ownership checks reject nested links that would redirect package writes
 outside the worktree, while allowing valid standard `bin/python*` links to the host interpreter and
-rejecting broken aliases or links into the owning checkout. Capacity or lock contention fails closed
-without starting the wrapped command.
+rejecting broken aliases or links into the owning checkout. The recursive scan also fails closed if
+any environment subtree cannot be inspected. Capacity or lock contention fails closed without
+starting the wrapped command.
 
 Do not combine recovery with `--venv`, `--standalone`, or a freshness bypass. Repair an explicitly
 owned environment manually with `uv sync --all-extras --reinstall-package robot-sf` in that

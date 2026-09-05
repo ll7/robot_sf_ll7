@@ -174,8 +174,16 @@ def is_standard_python_link(path: Path) -> bool:
     return path.name == "python" or path.name == "python3" or path.name.startswith("python3.")
 
 
+def fail_on_walk_error(error: OSError) -> None:
+    raise error
+
+
 try:
-    for root, directories, files in os.walk(local_venv, followlinks=False):
+    for root, directories, files in os.walk(
+        local_venv,
+        followlinks=False,
+        onerror=fail_on_walk_error,
+    ):
         for name in (*directories, *files):
             candidate = Path(root) / name
             if not candidate.is_symlink():

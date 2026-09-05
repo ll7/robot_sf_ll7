@@ -18,6 +18,7 @@ from scripts.validation.run_policy_search_step_diagnostics import (
     _occlusion_mask_by_distance,
     _pedestrian_state_from_sim,
     _planner_fallback_degraded_status,
+    _policy_observation_payload,
     _trace_observation_payload,
     _trace_planner_execution_mode,
     _trace_progress_summary,
@@ -476,6 +477,29 @@ def test_policy_obs_keeps_false_positive_and_delayed_rows_id_aligned() -> None:
     )
 
 
+def test_policy_observation_emits_ids_in_sorted_row_order() -> None:
+    """Trace-facing policy rows must keep optional IDs paired with sorted inputs."""
+    obs = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+    }
+    observed = {
+        "positions": [[4.0, 0.0], [0.5, 0.0], [2.0, 0.0]],
+        "velocities": [[40.0, 0.0], [5.0, 0.0], [20.0, 0.0]],
+        "ids": ["ped_far", "false_positive_0", "ped_middle"],
+    }
+
+    policy_observation = _policy_observation_payload(obs, observed)
+
+    assert policy_observation["ids"] == ["false_positive_0", "ped_middle", "ped_far"]
+    np.testing.assert_allclose(
+        policy_observation["positions"], [[0.5, 0.0], [2.0, 0.0], [4.0, 0.0]]
+    )
+    np.testing.assert_allclose(
+        policy_observation["velocities"], [[5.0, 0.0], [20.0, 0.0], [40.0, 0.0]]
+    )
+    assert policy_observation["ordering"] == "nearest_first_world_distance"
+
+
 def test_policy_obs_rejects_misaligned_observed_rows() -> None:
     """Observed position, velocity, and ID rows must fail closed when counts diverge."""
     original = {
@@ -550,6 +574,14 @@ def test_policy_obs_rejects_observation_overflow() -> None:
 
 def test_trace_observation_payload_separates_ground_truth_and_observed() -> None:
     """Trace rows should keep ideal and perception-limited evidence separate."""
+    policy_observation = {
+        "positions": [[1.0, 0.0]],
+        "velocities": [[0.1, 0.0]],
+        "ids": ["ped_0"],
+        "position_frame": "world",
+        "velocity_frame": "robot_ego",
+        "ordering": "nearest_first_world_distance",
+    }
     payload = _trace_observation_payload(
         {
             "ground_truth": {
@@ -569,7 +601,8 @@ def test_trace_observation_payload_separates_ground_truth_and_observed() -> None
                 "actor_count": 2,
                 "observed_actor_count": 1,
             },
-        }
+        },
+        policy_observation=policy_observation,
     )
 
     assert payload["ground_truth_observation"]["ids"] == ["ped_0", "ped_1"]
@@ -577,3 +610,5 @@ def test_trace_observation_payload_separates_ground_truth_and_observed() -> None
     assert payload["observed_observation"]["ids"] == ["ped_0"]
     assert payload["observed_observation"]["missing_ids"] == ["ped_1"]
     assert payload["observed_observation"]["evidence_class"] == "perception_limited"
+    assert payload["policy_observation"]["ids"] == ["ped_0"]
+    assert payload["policy_observation"]["velocity_frame"] == "robot_ego"

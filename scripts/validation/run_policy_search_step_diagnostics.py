@@ -632,7 +632,7 @@ def _observation_perturbation_spec(
 def _observed_pedestrian_arrays_for_policy(
     obs: Mapping[str, Any],
     observed: Mapping[str, Any],
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, list[Any]]:
     """Normalize observed pedestrian rows to the Robot SF policy contract.
 
     Perturbation output is world-frame and row-aligned by pedestrian ID. Sort
@@ -689,7 +689,24 @@ def _observed_pedestrian_arrays_for_policy(
     ego_velocities[:, 1] = (
         -sin_heading * world_velocities[:, 0] + cos_heading * world_velocities[:, 1]
     )
-    return ordered_positions, ego_velocities
+    ordered_ids = [row[2] for row in rows]
+    return ordered_positions, ego_velocities, ordered_ids
+
+
+def _policy_observation_payload(
+    obs: Mapping[str, Any],
+    observed: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the sorted, frame-normalized pedestrian rows sent to the policy."""
+    positions, velocities, ids = _observed_pedestrian_arrays_for_policy(obs, observed)
+    return {
+        "positions": positions,
+        "velocities": velocities,
+        "ids": ids,
+        "position_frame": "world",
+        "velocity_frame": "robot_ego",
+        "ordering": "nearest_first_world_distance",
+    }
 
 
 def _fit_observed_actor_array(
@@ -723,6 +740,8 @@ def _fit_observed_actor_array(
 def _apply_observed_pedestrians_to_policy_obs(
     obs: Any,
     perturbation: dict[str, Any],
+    *,
+    policy_observation: Mapping[str, Any] | None = None,
 ) -> Any:
     """Return an observation copy whose pedestrian payload uses perturbed state."""
     if not isinstance(obs, dict):
@@ -730,7 +749,9 @@ def _apply_observed_pedestrians_to_policy_obs(
     policy_obs = dict(obs)
     pedestrians = dict(policy_obs.get("pedestrians", {}))
     observed = perturbation["observed"]
-    raw_positions, raw_velocities = _observed_pedestrian_arrays_for_policy(obs, observed)
+    normalized = policy_observation or _policy_observation_payload(obs, observed)
+    raw_positions = np.asarray(normalized["positions"], dtype=np.float32)
+    raw_velocities = np.asarray(normalized["velocities"], dtype=np.float32)
     position_template = pedestrians.get("positions", policy_obs.get("pedestrians_positions"))
     velocity_template = pedestrians.get("velocities", policy_obs.get("pedestrians_velocities"))
     observed_positions = _fit_observed_actor_array(
@@ -757,12 +778,16 @@ def _apply_observed_pedestrians_to_policy_obs(
     return policy_obs
 
 
-def _trace_observation_payload(perturbation: dict[str, Any]) -> dict[str, Any]:
+def _trace_observation_payload(
+    perturbation: dict[str, Any],
+    *,
+    policy_observation: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return the compact trace payload for ground-truth and observed pedestrians."""
     metadata = perturbation["metadata"]
     ground_truth = perturbation["ground_truth"]
     observed = perturbation["observed"]
-    return {
+    payload = {
         "ground_truth_observation": {
             "positions": _json_ready(ground_truth["positions"]),
             "velocities": _json_ready(ground_truth["velocities"]),
@@ -779,6 +804,9 @@ def _trace_observation_payload(perturbation: dict[str, Any]) -> dict[str, Any]:
         },
         "observation_perturbation": _json_ready(metadata),
     }
+    if policy_observation is not None:
+        payload["policy_observation"] = _json_ready(dict(policy_observation))
+    return payload
 
 
 def main() -> int:  # noqa: C901, PLR0912, PLR0915
@@ -896,7 +924,12 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 step=step_idx,
                 state=observation_state,
             )
-            policy_obs = _apply_observed_pedestrians_to_policy_obs(obs, perturbation)
+            policy_observation = _policy_observation_payload(obs, perturbation["observed"])
+            policy_obs = _apply_observed_pedestrians_to_policy_obs(
+                obs,
+                perturbation,
+                policy_observation=policy_observation,
+            )
             policy_command = policy_fn(policy_obs)
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
             if step_is_native:
@@ -945,7 +978,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     "is_pedestrian_collision": bool(meta.get("is_pedestrian_collision", False)),
                     "is_obstacle_collision": bool(meta.get("is_obstacle_collision", False)),
                     "is_robot_collision": bool(meta.get("is_robot_collision", False)),
-                    **_trace_observation_payload(perturbation),
+                    **_trace_observation_payload(
+                        perturbation,
+                        policy_observation=policy_observation,
+                    ),
                 }
             )
             if terminated or truncated or is_success:

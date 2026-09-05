@@ -25,6 +25,17 @@
   ],
   "properties": {
     "schema_version": {"const": "ch7-evidence-package.v2"},
+    "package_revision": {"const": "v2.1"},
+    "custody": {
+      "type": "object", "additionalProperties": false,
+      "required": ["package_key", "source_registry_key", "source_registry_path", "source_registry_sha256"],
+      "properties": {
+        "package_key": {"const": "issue-7322/ch7-evidence-package-v2.1"},
+        "source_registry_key": {"const": "issue-6792/source-registry-v1"},
+        "source_registry_path": {"const": "docs/context/issue_6792_ch7_admission_receipt.v1.json"},
+        "source_registry_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
     "issue": {"const": 7087},
     "status": {"enum": ["blocked_pending_domain_approval", "admitted"]},
     "admission_status": {"enum": ["not_admitted", "admitted"]},
@@ -120,6 +131,16 @@
     "deterministic_serialization": {"const": "strict-json-sort-keys-utf8-newline.v1"}
   },
   "allOf": [
+    {
+      "if": {"required": ["package_revision"], "properties": {"package_revision": {"const": "v2.1"}}},
+      "then": {
+        "required": ["package_revision", "custody"],
+        "properties": {
+          "claim_boundary": {"const": "Release-cell descriptive projections only. Collision-related metrics and SNQI remain explicitly excluded by the frozen #7042 ruling. No trace-level, causal, universal-ranking, or admission claim is produced by this builder."},
+          "custody": {"properties": {"source_registry_sha256": {"const": "9f19cae4ccdea9a2336eb1432f418e7df7af97f65eb6d95378023d802e4e64ac"}}}
+        }
+      }
+    },
     {
       "if": {"properties": {"status": {"const": "blocked_pending_domain_approval"}}},
       "then": {

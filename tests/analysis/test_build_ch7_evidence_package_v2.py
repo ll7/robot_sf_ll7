@@ -186,6 +186,9 @@ def test_v2_1_freezes_collision_exclusion_without_mutating_legacy_contract(
     )
 
     assert "frozen #7042 ruling" in manifest["claim_boundary"]
+    assert manifest["package_revision"] == "v2.1"
+    assert manifest["custody"]["package_key"] == builder.V21_PACKAGE_KEY
+    assert manifest["custody"]["source_registry_key"] == builder.V21_SOURCE_REGISTRY_KEY
     assert "pending #7042" not in manifest["claim_boundary"]
     assert all("frozen #7042 ruling" in item["reason"] for item in manifest["metrics"]["excluded"])
     assert builder._excluded_metric_records() != manifest["metrics"]["excluded"]

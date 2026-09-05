@@ -5,6 +5,11 @@ collision_exclusion_ruling:
   issue: 7042
   status: frozen
   decision: exclude_collision_and_snqi
+custody:
+  package_key: issue-7322/ch7-evidence-package-v2.1
+  source_registry_key: issue-6792/source-registry-v1
+  source_registry_path: docs/context/issue_6792_ch7_admission_receipt.v1.json
+  source_registry_sha256: 9f19cae4ccdea9a2336eb1432f418e7df7af97f65eb6d95378023d802e4e64ac
 source:
   package: docs/context/evidence/issue_6792_ch7_evidence_package_v1
   sha256sums_sha256: 6807fdc9275133365812c8f51f51e057da6054f8dcaf77cb5fa8a32b08c4a87f

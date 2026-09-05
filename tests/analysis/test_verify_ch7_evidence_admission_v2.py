@@ -148,6 +148,26 @@ def test_check_only_rejects_csv_cell_identity_drift_with_updated_checksum(
         verifier.diagnose_v2_package(package)
 
 
+@pytest.mark.parametrize("field", ["claim_boundary", "exclusion_reason"])
+def test_post_ruling_check_only_rejects_forged_claim_or_exclusion(
+    tmp_path: Path, field: str
+) -> None:
+    package = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(
+        source_package=SOURCE_PACKAGE, output=package, config_path=FROZEN_CONFIG_PATH
+    )
+    manifest_path = package / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if field == "claim_boundary":
+        manifest["claim_boundary"] = "forged boundary"
+    else:
+        manifest["metrics"]["excluded"][0]["reason"] = "forged exclusion"
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n")
+    builder._write_checksums(package)
+    with pytest.raises(verifier.Ch7EvidenceAdmissionV2Error, match="expected|excluded"):
+        verifier.diagnose_v2_package(package)
+
+
 def test_blocked_builder_output_cannot_cross_the_v2_admission_boundary(tmp_path: Path) -> None:
     output = tmp_path / "package"
     builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)

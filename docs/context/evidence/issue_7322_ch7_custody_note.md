@@ -15,8 +15,10 @@ as the exclusion boundary. The old package remains an immutable historical basel
 hashes are not rewritten.
 
 - Current refresh: [`issue_7322_ch7_evidence_package_v2_1/`](issue_7322_ch7_evidence_package_v2_1/)
-- v2.1 manifest SHA-256: `4f4fe0b4cba264ee2d895f3aca3ae8eda826c38a61cd08068fd35b80e62c648f`
-- v2.1 `SHA256SUMS` SHA-256: `48479402bf02ced88b0db14abe281ff2a43dd2707d58c6f95306947391b05c90`
+- v2.1 package key: `issue-7322/ch7-evidence-package-v2.1`
+- v2.1 manifest SHA-256: `3472b0065661e5ad2fd058de0a55b55d9b1ba73c967a8acd0376f7ffa037df70`
+- v2.1 `SHA256SUMS` SHA-256: `cdbc85234c4b802cbd5a102da0599a3e5bf36550404916571a7439875020edfe`
+- Source-registry key: `issue-6792/source-registry-v1`; SHA-256: `9f19cae4ccdea9a2336eb1432f418e7df7af97f65eb6d95378023d802e4e64ac`
 - Status: `blocked_pending_domain_approval` / `not_admitted`; the external admission receipt
   remains required.
 - Exclusion boundary: collision-related metrics and SNQI remain explicitly excluded by the frozen

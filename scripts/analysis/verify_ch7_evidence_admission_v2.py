@@ -18,6 +18,7 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator, ValidationError
 
+from scripts.analysis import build_ch7_evidence_package_v2 as builder
 from scripts.analysis import verify_ch7_evidence_admission as admission
 
 PACKAGE_SCHEMA = (
@@ -44,6 +45,12 @@ V2_SAFE_METRICS = (
 V2_PORTFOLIO_REPO_PATH = "configs/analysis/ch7_worked_example_portfolio.v2.yaml"
 V2_PORTFOLIO_PATH = Path(__file__).parents[2] / V2_PORTFOLIO_REPO_PATH
 V2_PORTFOLIO_SHA256 = "ebf2e943b6cea7e647f71171c08e904edf19b818cd2e1853ee5409a80d74f010"
+V21_CUSTODY = {
+    "package_key": builder.V21_PACKAGE_KEY,
+    "source_registry_key": builder.V21_SOURCE_REGISTRY_KEY,
+    "source_registry_path": builder.V21_SOURCE_REGISTRY_PATH,
+    "source_registry_sha256": builder.V21_SOURCE_REGISTRY_SHA256,
+}
 
 
 class Ch7EvidenceAdmissionV2Error(ValueError):
@@ -93,7 +100,9 @@ def _verify_package_members_for_diagnostic(package: Path) -> tuple[str, list[str
         raise Ch7EvidenceAdmissionV2Error(f"package member verification failed: {exc}") from exc
 
 
-def _load_portfolio_selection() -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _load_portfolio_selection(
+    *, package_revision: str | None = None
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Load the repository-controlled v2 portfolio and its exact metric boundary."""
 
     if _sha256_file(V2_PORTFOLIO_PATH) != V2_PORTFOLIO_SHA256:
@@ -115,12 +124,14 @@ def _load_portfolio_selection() -> tuple[dict[str, Any], list[dict[str, Any]]]:
     excluded = metrics.get("excluded")
     if not isinstance(excluded, list) or len(excluded) != 10 or len(set(excluded)) != 10:
         raise Ch7EvidenceAdmissionV2Error("v2 portfolio excluded metric contract is invalid")
+    if package_revision == "v2.1":
+        return dict(selection), builder._excluded_metric_records({"package_revision": "v2.1"})
     return dict(selection), [
         {
             "metric": metric,
             "issue": 7042,
             "status": "excluded",
-            "reason": "collision-related metric naming remains blocked; v2 does not quote this field",
+            "reason": builder.LEGACY_EXCLUSION_REASON,
         }
         for metric in excluded
     ]
@@ -167,6 +178,13 @@ def _verify_manifest_projection(
         raise Ch7EvidenceAdmissionV2Error("v2 manifest portfolio binding is not approved")
     if manifest.get("projection") != expected_projection:
         raise Ch7EvidenceAdmissionV2Error("v2 manifest projection differs from the portfolio")
+    expected_boundary = (
+        builder.FROZEN_RULING_CLAIM_BOUNDARY
+        if manifest.get("package_revision") == "v2.1"
+        else builder.CLAIM_BOUNDARY
+    )
+    if manifest.get("claim_boundary") != expected_boundary:
+        raise Ch7EvidenceAdmissionV2Error("v2 manifest claim boundary is not approved")
     metrics = manifest.get("metrics")
     if not isinstance(metrics, Mapping) or metrics.get("included") != list(V2_SAFE_METRICS):
         raise Ch7EvidenceAdmissionV2Error("v2 manifest safe metric boundary changed")
@@ -295,6 +313,9 @@ def _verify_projection_binding(
         raise Ch7EvidenceAdmissionV2Error("v2 projection binding safe metrics changed")
     if binding.get("excluded_metrics") != excluded:
         raise Ch7EvidenceAdmissionV2Error("v2 projection binding exclusions differ from manifest")
+    if manifest.get("package_revision") == "v2.1":
+        if binding.get("package_revision") != "v2.1" or binding.get("custody") != V21_CUSTODY:
+            raise Ch7EvidenceAdmissionV2Error("v2.1 projection custody identity is not approved")
     source = manifest.get("source")
     source_binding = binding.get("source_package")
     if not isinstance(source, Mapping) or not isinstance(source_binding, Mapping):
@@ -317,7 +338,19 @@ def _verify_projection_binding(
 def _verify_projection_contract(package: Path, manifest: Mapping[str, Any]) -> None:
     """Independently verify the v2 projection, portfolio identity, and exclusion boundary."""
 
-    selection, expected_excluded = _load_portfolio_selection()
+    revision = manifest.get("package_revision")
+    if revision == "v2.1":
+        if manifest.get("custody") != V21_CUSTODY:
+            raise Ch7EvidenceAdmissionV2Error("v2.1 custody identity is not approved")
+        registry_path = Path(__file__).parents[2] / V21_CUSTODY["source_registry_path"]
+        if (
+            not registry_path.is_file()
+            or _sha256_file(registry_path) != V21_CUSTODY["source_registry_sha256"]
+        ):
+            raise Ch7EvidenceAdmissionV2Error("v2.1 source registry identity is stale")
+    elif revision is not None:
+        raise Ch7EvidenceAdmissionV2Error("unsupported v2 package revision")
+    selection, expected_excluded = _load_portfolio_selection(package_revision=revision)
     expected_projection = _expected_projection(selection)
     excluded = _verify_manifest_projection(manifest, expected_projection, expected_excluded)
     _verify_atlas_projection(package, expected_projection, excluded)
@@ -348,7 +381,7 @@ def _receipt_template(
             "v1_audit_member_sha256": source["v1_audit_member_sha256"],
             "v1_reduced_atlas_member_sha256": source["v1_reduced_atlas_member_sha256"],
             "portfolio_config_sha256": portfolio["sha256"],
-            "source_registry_sha256": None,
+            "source_registry_sha256": manifest.get("custody", {}).get("source_registry_sha256"),
         },
         "approval": {
             "approval_id": None,
@@ -363,9 +396,15 @@ def _receipt_template(
             "available": {role: {"grain": details["grain"]} for role, details in roles.items()}
         },
         "retrieval": {
-            "source_package_key": None,
-            "audit_member_key": None,
-            "source_registry_key": None,
+            "source_package_key": (
+                "issue-6792/source-package-v1" if manifest.get("package_revision") else None
+            ),
+            "audit_member_key": (
+                "issue-6792/source-package-v1/audit-campaign-atlas"
+                if manifest.get("package_revision")
+                else None
+            ),
+            "source_registry_key": manifest.get("custody", {}).get("source_registry_key"),
         },
     }
 

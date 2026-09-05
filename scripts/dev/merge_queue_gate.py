@@ -1590,7 +1590,12 @@ def _validate_rest_check_run(check: dict[str, Any], *, head_sha: str, index: int
 def _rest_commit_statuses(
     *, owner: str, name: str, head_sha: str
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Fetch and validate legacy commit-status contexts for the exact head."""
+    """Fetch and validate the newest legacy status for each exact-head context.
+
+    The REST ``statuses`` endpoint returns the status history, while the GraphQL
+    rollup exposes the current context. Keeping historical entries would allow
+    an older pending or failed status to block a newer successful one.
+    """
     statuses, err = _rest_json_list(
         owner=owner,
         name=name,
@@ -1599,7 +1604,7 @@ def _rest_commit_statuses(
     )
     if err:
         return [], err
-    normalized: list[dict[str, Any]] = []
+    latest_by_context: dict[str, tuple[tuple[str, int], dict[str, Any]]] = {}
     for index, status in enumerate(statuses):
         context = status.get("context")
         state = status.get("state")
@@ -1611,21 +1616,28 @@ def _rest_commit_statuses(
         ):
             return [], f"REST commit-status response contains a malformed entry at index {index}"
         state_upper = state.upper()
-        normalized.append(
-            {
-                "__typename": "StatusContext",
-                "name": context,
-                "context": context,
-                "status": "COMPLETED" if state.lower() != "pending" else "PENDING",
-                "state": state_upper,
-                "conclusion": state_upper,
-                "targetUrl": status.get("target_url"),
-                "createdAt": status.get("created_at"),
-                "updatedAt": status.get("updated_at"),
-                "head_sha": head_sha,
-            }
-        )
-    return normalized, None
+        normalized = {
+            "__typename": "StatusContext",
+            "name": context,
+            "context": context,
+            "status": "COMPLETED" if state.lower() != "pending" else "PENDING",
+            "state": state_upper,
+            "conclusion": state_upper,
+            "targetUrl": status.get("target_url"),
+            "createdAt": status.get("created_at"),
+            "updatedAt": status.get("updated_at"),
+            "head_sha": head_sha,
+        }
+        timestamp = status.get("updated_at") or status.get("created_at") or ""
+        if not isinstance(timestamp, str):
+            timestamp = ""
+        # GitHub returns status history newest-first. The negative index keeps
+        # that deterministic preference when timestamps are absent or tied.
+        candidate = (timestamp, -index), normalized
+        previous = latest_by_context.get(context)
+        if previous is None or candidate[0] > previous[0]:
+            latest_by_context[context] = candidate
+    return [entry for _key, entry in latest_by_context.values()], None
 
 
 def _rest_check_rollup(

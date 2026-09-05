@@ -374,6 +374,48 @@ def test_rest_check_rollup_paginates_and_includes_legacy_statuses() -> None:
     assert mock_gh.call_args_list[2].args[0][-1].endswith("/statuses?per_page=100&page=1")
 
 
+def test_rest_check_rollup_keeps_only_newest_legacy_status_per_context() -> None:
+    """Historical REST statuses must not leave an obsolete pending state in the rollup."""
+    check = {
+        "id": 7001,
+        "name": "CI",
+        "head_sha": FULL_SHA,
+        "status": "completed",
+        "conclusion": "success",
+    }
+    statuses = [
+        {
+            "context": "CodeRabbit",
+            "state": "success",
+            "description": "Review skipped",
+            "updated_at": "2026-09-05T06:08:53Z",
+        },
+        {
+            "context": "CodeRabbit",
+            "state": "pending",
+            "description": "Review queued",
+            "updated_at": "2026-09-05T06:08:49Z",
+        },
+        {
+            "context": "external-gate",
+            "state": "success",
+            "updated_at": "2026-09-05T06:08:50Z",
+        },
+    ]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps({"total_count": 1, "check_runs": [check]})),
+            _gh_response(stdout=json.dumps(statuses)),
+        ]
+        rollup, error = _rest_check_rollup(owner="owner", name="repo", head_sha=FULL_SHA)
+
+    assert error is None
+    contexts = [item for item in rollup if item["__typename"] == "StatusContext"]
+    assert [item["name"] for item in contexts] == ["CodeRabbit", "external-gate"]
+    assert contexts[0]["state"] == "SUCCESS"
+    assert contexts[0]["status"] == "COMPLETED"
+
+
 def test_rest_check_rollup_enriches_workflow_identity_for_superseded_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

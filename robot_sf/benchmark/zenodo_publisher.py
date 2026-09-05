@@ -1869,28 +1869,29 @@ def _reconcile_inherited_draft_files(  # noqa: PLR0913
         Deleted filenames, the final exact deposition response, and its
         validated file inventory.
     """
-    post_upload_payload, _, post_upload_inventory = _read_successor_deposition(
+    previous_payload, _, previous_inventory = _read_successor_deposition(
         session,
         state,
         api_base=api_base,
         operation="post-upload successor deposition",
         require_lineage=bool(extra_names),
     )
-    if set(post_upload_inventory) != expected_names | extra_names:
+    if set(previous_inventory) != expected_names | extra_names:
         raise ZenodoPublisherError(
             "Zenodo draft file inventory changed unexpectedly after upload; refusing deletion"
         )
     if any(
-        post_upload_inventory[name] != initial_inventory[name]
+        previous_inventory[name] != initial_inventory[name]
         for name in sorted(extra_names, key=_filename_sort_key)
     ):
         raise ZenodoPublisherError(
             "Zenodo inherited draft file identity changed after upload; refusing deletion"
         )
     if not extra_names:
-        return list(previously_deleted), post_upload_payload, post_upload_inventory
+        return list(previously_deleted), previous_payload, previous_inventory
 
-    expected_inventory = dict(post_upload_inventory)
+    expected_inventory = dict(previous_inventory)
+    previous_binding = _remote_revision_binding(previous_payload, previous_inventory)
     deleted_names = list(previously_deleted)
     for name in sorted(extra_names, key=_filename_sort_key):
         pre_delete_payload, _, pre_delete_inventory = _read_successor_deposition(
@@ -1905,6 +1906,10 @@ def _reconcile_inherited_draft_files(  # noqa: PLR0913
                 "Zenodo draft file inventory changed unexpectedly before deletion"
             )
         pre_delete_binding = _remote_revision_binding(pre_delete_payload, pre_delete_inventory)
+        if pre_delete_binding != previous_binding:
+            raise ZenodoPublisherError(
+                "Zenodo remote binding changed between post-upload and pre-delete readbacks"
+            )
         expected_after_delete = dict(pre_delete_inventory)
         file_id = expected_after_delete.pop(name)
         outcome = _delete_draft_extra(
@@ -1927,6 +1932,7 @@ def _reconcile_inherited_draft_files(  # noqa: PLR0913
             ),
         )
         expected_inventory = final_inventory
+        previous_binding = _remote_revision_binding(final_payload, final_inventory)
         deleted_names.append(name)
         if on_deleted is not None:
             on_deleted(name)

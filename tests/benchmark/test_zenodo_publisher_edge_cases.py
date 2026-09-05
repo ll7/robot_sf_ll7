@@ -1588,6 +1588,41 @@ def test_upload_rejects_optimistic_metadata_drift_before_stable_readback(
         publisher.upload(session, _successor_state(), [bundle])
 
 
+@pytest.mark.parametrize("mutation", ["metadata", "modified", "version", "revision"])
+def test_upload_rejects_binding_drift_between_post_upload_and_pre_delete(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    """A binding change before DELETE cannot become the new cleanup baseline."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    pre_delete = _successor_draft()
+    pre_delete["files"] = [inherited, uploaded]
+    if mutation == "metadata":
+        pre_delete["metadata"]["title"] = "changed before pre-delete read"
+    else:
+        post_upload[mutation] = "post-upload-revision"
+        pre_delete[mutation] = "pre-delete-revision"
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(pre_delete),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="post-upload and pre-delete"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.delete_urls == []
+
+
 @pytest.mark.parametrize("field", ["modified", "version", "revision"])
 def test_remote_revision_binding_retains_optimistic_metadata_digest(field: str) -> None:
     """Optimistic revision receipts retain the credential-free metadata binding."""

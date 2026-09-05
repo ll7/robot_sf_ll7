@@ -168,6 +168,7 @@ def test_gate_admits_bound_body_and_review() -> None:
             side_effect=[
                 _proc(stdout=_pr_payload(title=title, body=body)),
                 _proc(stdout=_comments_payload(_review_comment())),
+                _proc(stdout=_reviews_payload()),
             ],
         ),
     ):
@@ -215,6 +216,7 @@ def test_gate_admits_implementation_review_compatibility_comment() -> None:
         side_effect=[
             _proc(stdout=_pr_payload(title=title, body=body)),
             _proc(stdout=_comments_payload(implementation_review)),
+            _proc(stdout=_reviews_payload()),
         ],
     ):
         result = check_merge_ready_carriers(
@@ -261,6 +263,7 @@ def test_gate_allows_current_carrier_after_exact_head_review_claim_release() -> 
         side_effect=[
             _proc(stdout=_pr_payload(title=title, body=body)),
             _proc(stdout=_comments_payload(_review_comment(), claim, release)),
+            _proc(stdout=_reviews_payload()),
         ],
     ):
         result = check_merge_ready_carriers(
@@ -282,6 +285,29 @@ def test_gate_withholds_merge_ready_for_active_review_endpoint_claim() -> None:
         side_effect=[
             _proc(stdout=_pr_payload(title=title, body=body)),
             _proc(stdout=_comments_payload()),
+            _proc(stdout=_reviews_payload(claim)),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "error"
+    assert "active exact-head review claim" in result["error"]
+
+
+def test_gate_withholds_mixed_carriers_for_active_review_endpoint_claim() -> None:
+    """A compatibility carrier cannot hide an active claim in the review endpoint."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    claim = f"review-claim: lane-a @ {HEAD_SHA} until 2099-01-01T00:00:00Z"
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload(_review_comment())),
             _proc(stdout=_reviews_payload(claim)),
         ],
     ):

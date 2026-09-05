@@ -28,7 +28,8 @@ This module closes that class of drift:
 
 All reads go through the shared REST helpers and fail closed on transport or
 payload uncertainty. A valid top-level carrier remains a compatibility path
-when the review endpoint is unavailable.
+when the review endpoint has no carrier; the endpoint itself must still be
+readable so a review-only claim cannot bypass the hold.
 """
 
 from __future__ import annotations
@@ -216,26 +217,40 @@ def _active_review_claim_error(entries: Sequence[dict[str, Any]], *, live_head: 
     )
 
 
+def _read_reviews(
+    number: int,
+    *,
+    repo: str,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Read and structurally validate the review endpoint payload."""
+    reviews_result = _gh_api_get(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
+    reviews, reviews_error = _parse_json(reviews_result, what=f"PR {number} review carriers read")
+    if reviews_error:
+        return [], reviews_error
+    if not isinstance(reviews, list):
+        return [], "PR review carriers payload was not a list"
+    return reviews, None
+
+
 def _reviews_verdict(
     number: int,
     *,
     repo: str,
     live_head: str,
     live_base: str,
+    reviews: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Read PR reviews and validate a canonical review-endpoint carrier.
 
     A review must be a live-head ``COMMENTED`` review with its commit id bound to
-    the live head. The caller checks the top-level issue-comment compatibility
-    carrier first, so older GitHub CLI/API setups do not need this endpoint when
-    that legacy carrier is already present.
+    the live head. The caller may use a top-level issue-comment carrier when
+    this endpoint has no carrier, but it still reads the endpoint to check for
+    review-only active claims.
     """
-    reviews_result = _gh_api_get(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
-    reviews, reviews_error = _parse_json(reviews_result, what=f"PR {number} review carriers read")
-    if reviews_error:
-        return {"status": "error", "error": reviews_error}
-    if not isinstance(reviews, list):
-        return {"status": "error", "error": "PR review carriers payload was not a list"}
+    if reviews is None:
+        reviews, reviews_error = _read_reviews(number, repo=repo)
+        if reviews_error:
+            return {"status": "error", "error": reviews_error}
 
     claim_error = _active_review_claim_error(reviews, live_head=live_head)
     if claim_error:
@@ -307,6 +322,18 @@ def _comments_verdict(
 
     review_error = _review_carrier_error(comments, live_head=live_head, live_base=live_base)
     if review_error is None:
+        # Inspect both carrier sources before accepting the compatibility
+        # comment; otherwise a review-only active claim can be hidden by a
+        # valid issue comment.
+        reviews, reviews_error = _read_reviews(number, repo=repo)
+        if reviews_error:
+            return {"status": "error", "error": reviews_error}
+        claim_error = _active_review_claim_error(reviews, live_head=live_head)
+        if claim_error:
+            return {"status": "error", "error": claim_error}
+        narrative_error = _stale_narrative_error(reviews, body="")
+        if narrative_error:
+            return {"status": "error", "error": narrative_error}
         return {"status": "ok", "carrier_source": "issue_comment"}
     reviews_verdict = _reviews_verdict(
         number,

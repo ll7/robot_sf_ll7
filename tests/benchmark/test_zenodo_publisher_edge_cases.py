@@ -1183,6 +1183,9 @@ def test_reconciliation_receipt_rejects_tampered_inventory_binding(tmp_path: Pat
         "Authorization: Token secret-reflection",
         "Authorization=Digest secret-reflection",
         'Authorization: Digest username="secret-reflection", realm="example", nonce="opaque"',
+        "Authorization: Scheme+value secret-reflection",
+        "Authorization: Scheme.value secret-reflection",
+        "Authorization: 1scheme secret-reflection",
     ],
 )
 def test_reconciliation_receipt_rejects_credential_shaped_deleted_filename(

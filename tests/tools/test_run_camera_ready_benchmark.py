@@ -147,6 +147,200 @@ def test_main_preflight_mode_emits_preflight_payload(
     }
 
 
+def test_main_research_answerability_gate_blocks_before_preflight(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """A non-answerable research manifest blocks the production launcher early."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    research_manifest = tmp_path / "research.yaml"
+    research_manifest.write_text("campaign: test\n", encoding="utf-8")
+    called = {"load": False, "preflight": False}
+
+    def _fake_load_campaign_config(path: Path):
+        called["load"] = True
+        return {"path": str(path)}
+
+    def _fake_prepare_campaign_preflight(*args, **kwargs):
+        del args, kwargs
+        called["preflight"] = True
+        raise AssertionError("camera-ready preflight should not run after admission failure")
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        lambda path, execute_validation, expected_campaign_config: {
+            "source_manifest": str(path),
+            "answerability": {
+                "state": "diagnostic_only",
+                "decision_capable": False,
+                "reasons": ["diagnostic manifest"],
+                "warnings": [],
+            },
+            "answerability_proof": {"executed": execute_validation, "surfaces": {}},
+        },
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark, "load_campaign_config", _fake_load_campaign_config
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        _fake_prepare_campaign_preflight,
+    )
+
+    exit_code = run_camera_ready_benchmark.main(
+        [
+            "--config",
+            str(config_path),
+            "--mode",
+            "preflight",
+            "--research-manifest",
+            str(research_manifest),
+            "--require-answerable",
+            "--campaign-id",
+            "fixed-campaign",
+        ]
+    )
+
+    assert exit_code == 2
+    assert called == {"load": True, "preflight": False}
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "research_answerability_blocked"
+    assert payload["answerability"]["state"] == "diagnostic_only"
+
+
+def test_main_research_answerability_requires_explicit_campaign_id(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Strict research admission must not guess the runner's timestamped campaign id."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    research_manifest = tmp_path / "research.yaml"
+    research_manifest.write_text("campaign: test\n", encoding="utf-8")
+    called = {"evaluate": False, "preflight": False}
+
+    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+
+    def _unexpected_evaluate(*args, **kwargs):
+        del args, kwargs
+        called["evaluate"] = True
+        raise AssertionError("strict admission must fail before evaluating an unbound campaign")
+
+    def _unexpected_preflight(*args, **kwargs):
+        del args, kwargs
+        called["preflight"] = True
+        raise AssertionError("camera-ready preflight must not run after admission failure")
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        _unexpected_evaluate,
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        _unexpected_preflight,
+    )
+
+    exit_code = run_camera_ready_benchmark.main(
+        [
+            "--config",
+            str(config_path),
+            "--mode",
+            "preflight",
+            "--research-manifest",
+            str(research_manifest),
+            "--require-answerable",
+        ]
+    )
+
+    assert exit_code == 2
+    assert called == {"evaluate": False, "preflight": False}
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "research_answerability_blocked"
+    assert payload["answerability"]["state"] == "not_declared"
+    assert "--campaign-id" in payload["status_reason"]
+
+
+def test_main_persists_exact_answerability_admission_receipt(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """A passing gate is retained in the camera-ready result for downstream audit."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    research_manifest = tmp_path / "research.yaml"
+    research_manifest.write_text("campaign: test\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        lambda path, execute_validation, expected_campaign_config: {
+            "source_manifest": str(path),
+            "answerability": {
+                "state": "answerable",
+                "decision_capable": True,
+                "reasons": [],
+                "warnings": [],
+            },
+            "answerability_proof": {
+                "executed": execute_validation,
+                "binding": {"proof_digest": "a" * 64},
+                "surfaces": {},
+            },
+        },
+    )
+    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        lambda *args, **kwargs: {
+            "campaign_id": "cid",
+            "campaign_root": tmp_path / "out" / "cid",
+            "validate_config_path": tmp_path / "validate.json",
+            "preview_scenarios_path": tmp_path / "preview.json",
+            "matrix_summary_json_path": tmp_path / "matrix.json",
+            "matrix_summary_csv_path": tmp_path / "matrix.csv",
+            "amv_coverage_json_path": tmp_path / "amv.json",
+            "amv_coverage_md_path": tmp_path / "amv.md",
+            "comparability_json_path": None,
+            "comparability_md_path": None,
+        },
+    )
+
+    exit_code = run_camera_ready_benchmark.main(
+        [
+            "--config",
+            str(config_path),
+            "--mode",
+            "preflight",
+            "--research-manifest",
+            str(research_manifest),
+            "--require-answerable",
+            "--campaign-id",
+            "fixed-campaign",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["research_answerability_admission"]["status"] == (
+        "research_answerability_admitted"
+    )
+    assert (
+        payload["research_answerability_admission"]["answerability_proof"]["binding"][
+            "proof_digest"
+        ]
+        == "a" * 64
+    )
+    receipt = payload["research_answerability_admission_receipt"]
+    sidecar_path = tmp_path / "out" / "cid" / receipt["sidecar"]
+    assert sidecar_path.is_file()
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["admission"] == payload["research_answerability_admission"]
+    assert receipt["admission_sha256"] == sidecar["admission_sha256"]
+
+
 def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) -> None:
     """CLI run mode should call run_campaign and forward its payload."""
     config_path = tmp_path / "config.yaml"
@@ -794,3 +988,67 @@ class TestLauncherToFinalizerHandoff:
         assert report["classification"] == "failed"
         assert report["exit_code_lanes"]["campaign"]["exit_code"] == launcher_exit
         assert report["exit_code_lanes"]["job_exit_code"] == launcher_exit
+
+
+def test_main_persists_admission_sidecar_and_summary_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A successful admission is reloadable from the canonical campaign summary."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    manifest_path = tmp_path / "research.yaml"
+    manifest_path.write_text("campaign: test\n", encoding="utf-8")
+    campaign_root = tmp_path / "campaign"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary_path.parent.mkdir(parents=True)
+    summary_path.write_text(json.dumps({"artifacts": {}}), encoding="utf-8")
+    admission = {
+        "status": "research_answerability_admitted",
+        "answerability": {"state": "answerable", "decision_capable": True},
+        "answerability_proof": {"binding": {"proof_digest": "a" * 64}},
+    }
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        lambda **_: {
+            "source_manifest": str(manifest_path),
+            "answerability": {"state": "answerable", "decision_capable": True},
+            "answerability_proof": {"binding": {"proof_digest": "a" * 64}},
+        },
+    )
+    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "summary_json": str(summary_path),
+            "campaign_id": "campaign",
+        },
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "_research_answerability_block",
+        lambda **_: admission,
+    )
+
+    assert (
+        run_camera_ready_benchmark.main(
+            [
+                "--config",
+                str(config_path),
+                "--research-manifest",
+                str(manifest_path),
+                "--require-answerable",
+            ]
+        )
+        == 2
+    )
+    persisted = json.loads(summary_path.read_text(encoding="utf-8"))
+    sidecar_path = campaign_root / persisted["research_answerability_admission"]["sidecar"]
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["admission"] == admission
+    assert (
+        persisted["research_answerability_admission"]["admission_sha256"]
+        == sidecar["admission_sha256"]
+    )

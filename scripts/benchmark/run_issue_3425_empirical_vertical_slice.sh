@@ -17,7 +17,7 @@ cd "$REPO_ROOT"
 
 CAMPAIGN_CONFIG="${CAMPAIGN_CONFIG:-configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml}"
 RESEARCH_MANIFEST="${RESEARCH_MANIFEST:-configs/benchmarks/issue_3425_empirical_vertical_slice_manifest.yaml}"
-CAMPAIGN_ID="${CAMPAIGN_ID:-issue_3425_empirical_vertical_slice}"
+CAMPAIGN_ID="${CAMPAIGN_ID:-issue_3425_empirical_vertical_slice_smoke}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-output/benchmarks/issue_3425_empirical_vertical_slice_smoke}"
 PACKET_DIR="${PACKET_DIR:-output/research_campaign_packets/issue_3425_empirical_vertical_slice}"
 
@@ -27,20 +27,25 @@ MANIFEST_ARGS=(
   --output-dir "$PACKET_DIR"
 )
 
-if [[ "${RUN_CAMPAIGN:-0}" == "1" ]]; then
-  echo "== [#3425] require decision-capable answerability before launch =="
-  MANIFEST_ARGS+=(--require-answerable)
-fi
-
 uv run python scripts/validation/run_research_campaign_manifest.py \
   "${MANIFEST_ARGS[@]}"
 
 echo "== [#3425] camera-ready campaign preflight =="
-uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config "$CAMPAIGN_CONFIG" \
-  --campaign-id "$CAMPAIGN_ID" \
-  --output-root "$OUTPUT_ROOT" \
+CAMERA_PREFLIGHT_ARGS=(
+  --config "$CAMPAIGN_CONFIG"
+  --campaign-id "$CAMPAIGN_ID"
+  --output-root "$OUTPUT_ROOT"
   --mode preflight
+)
+if [[ "${RUN_CAMPAIGN:-0}" == "1" ]]; then
+  echo "== [#3425] require decision-capable answerability before launch =="
+  CAMERA_PREFLIGHT_ARGS+=(
+    --research-manifest "$RESEARCH_MANIFEST"
+    --require-answerable
+  )
+fi
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  "${CAMERA_PREFLIGHT_ARGS[@]}"
 
 if [[ "${RUN_CAMPAIGN:-0}" != "1" ]]; then
   echo "== [#3425] readiness only; set RUN_CAMPAIGN=1 on the approved execution route to run episodes =="
@@ -48,7 +53,12 @@ if [[ "${RUN_CAMPAIGN:-0}" != "1" ]]; then
 fi
 
 echo "== [#3425] run bounded benchmark campaign =="
-uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config "$CAMPAIGN_CONFIG" \
-  --campaign-id "$CAMPAIGN_ID" \
+CAMPAIGN_RUN_ARGS=(
+  --config "$CAMPAIGN_CONFIG"
+  --campaign-id "$CAMPAIGN_ID"
   --output-root "$OUTPUT_ROOT"
+  --research-manifest "$RESEARCH_MANIFEST"
+  --require-answerable
+)
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  "${CAMPAIGN_RUN_ARGS[@]}"

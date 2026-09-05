@@ -128,6 +128,7 @@ def test_issue_3425_runner_preserves_diagnostic_preflight_without_answerability_
     assert "--require-answerable" not in calls[0]
     assert "run_camera_ready_benchmark.py" in calls[1]
     assert "--mode preflight" in calls[1]
+    assert "--require-answerable" not in calls[1]
 
 
 def test_issue_3425_runner_requires_answerability_before_campaign_launch(tmp_path: Path) -> None:
@@ -161,7 +162,47 @@ def test_issue_3425_runner_requires_answerability_before_campaign_launch(tmp_pat
 
     assert completed.returncode == 2
     calls = log_path.read_text(encoding="utf-8").splitlines()
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert "run_research_campaign_manifest.py" in calls[0]
-    assert "--require-answerable" in calls[0]
-    assert "run_camera_ready_benchmark.py" not in calls[0]
+    assert "--require-answerable" not in calls[0]
+    assert "run_camera_ready_benchmark.py" in calls[1]
+    assert "--mode preflight" in calls[1]
+    assert "--research-manifest" in calls[1]
+    assert "--require-answerable" in calls[1]
+
+
+def test_issue_3425_runner_rechecks_answerability_on_actual_campaign_command(
+    tmp_path: Path,
+) -> None:
+    """The execution command must carry the same admission gate as preflight."""
+    log_path = tmp_path / "uv-calls.log"
+    fake_uv = tmp_path / "uv"
+    fake_uv.write_text(
+        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$UV_CALL_LOG"\nexit 0\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    completed = subprocess.run(
+        ["bash", str(ISSUE_3425_RUNNER)],
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "RUN_CAMPAIGN": "1",
+            "UV_CALL_LOG": str(log_path),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    calls = log_path.read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 3
+    assert "--mode preflight" in calls[1]
+    assert "--research-manifest" in calls[1]
+    assert "--require-answerable" in calls[1]
+    assert "--mode preflight" not in calls[2]
+    assert "--research-manifest" in calls[2]
+    assert "--require-answerable" in calls[2]

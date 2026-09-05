@@ -56,9 +56,11 @@ artifacts. The approved private execution route should call it from a clean publ
 `RUN_CAMPAIGN=1` after duplicate, queue, branch, commit, and local-machine submission checks pass.
 When `RUN_CAMPAIGN=1` is set, the script also requires the manifest to declare
 `research_answerability.v1` with state `answerable` before camera-ready preflight or episode
-execution. The current smoke manifest is intentionally diagnostic-only and therefore fails closed
-in launch mode until a separately reviewed decision-capable manifest is provided; readiness-only
-mode remains available for packet/preflight diagnostics.
+execution. The requirement is passed to the canonical camera-ready launcher, which evaluates the
+existing proof surfaces once before preflight; no second readiness contract is created. The current
+smoke manifest is intentionally diagnostic-only and therefore fails closed in launch mode until a
+separately reviewed decision-capable manifest is provided; readiness-only mode remains available
+for packet/preflight diagnostics.
 The public campaign inputs are:
 
 - `configs/benchmarks/issue_3425_empirical_vertical_slice_manifest.yaml`

@@ -7,11 +7,17 @@ research-campaign manifest and figure-quality contracts.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 ANSWERABILITY_SCHEMA = "research_answerability.v1"
+PROOF_BINDING_SCHEMA = "research_answerability_proof_binding.v1"
 ANSWERABILITY_STATES = (
     "answerable",
     "diagnostic_only",
@@ -20,8 +26,29 @@ ANSWERABILITY_STATES = (
     "blocked_analysis_contract",
     "blocked_noncomparable_rows",
     "blocked_artifact_plan",
+    "blocked_missing_proof",
     "invalid_contract",
 )
+PROOF_SURFACES = (
+    "producer",
+    "preregistration",
+    "evidence_contract",
+    "analysis",
+    "artifact",
+    "result_packet",
+)
+# Decision-capable admission requires a claim-specific minimum.  A generic
+# result-packet validator remains optional because the canonical owner is not
+# present in every checkout; optionality is surfaced as a warning rather than
+# silently promoted to proof.
+DECISION_REQUIRED_PROOF_SURFACES = (
+    "producer",
+    "preregistration",
+    "evidence_contract",
+    "analysis",
+    "artifact",
+)
+PROOF_STATUSES = ("passed", "unavailable", "failed", "not_run")
 _DECISION_VOCABULARY = {"continue", "stop", "inconclusive", "invalid"}
 _REQUIRED_SECTIONS = ("question", "estimand", "producers", "analysis", "design", "artifacts")
 _REQUIRED_TEXT_FIELDS = {
@@ -76,10 +103,51 @@ _VALID_COMPARABILITY_STATUSES = {
     "unknown",
     "mismatched",
 }
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_GIT_SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
+ProofStatus = Literal["passed", "unavailable", "failed", "not_run"]
 
 
 class AnswerabilityContractError(ValueError):
     """Raised when a research-answerability contract is structurally invalid."""
+
+
+@dataclass(frozen=True)
+class ProofSurface:
+    """Typed admission proof for one answerability surface."""
+
+    status: ProofStatus
+    required: bool
+    unavailable_reason: str | None = None
+
+    @classmethod
+    def from_mapping(cls, value: Any, field: str) -> ProofSurface:
+        """Build and validate a proof surface from its contract mapping.
+
+        Returns:
+            The validated proof surface.
+        """
+        surface = _mapping(value, field)
+        status = surface.get("status")
+        if status not in PROOF_STATUSES:
+            raise AnswerabilityContractError(
+                f"{field}.status must be one of {list(PROOF_STATUSES)}"
+            )
+        required = surface.get("required")
+        if not isinstance(required, bool):
+            raise AnswerabilityContractError(f"{field}.required must be a boolean")
+        reason = surface.get("unavailable_reason")
+        if status == "unavailable":
+            if not isinstance(reason, str) or not reason.strip():
+                raise AnswerabilityContractError(
+                    f"{field}.unavailable_reason is required when status is unavailable"
+                )
+            reason = reason.strip()
+        elif reason is not None and (not isinstance(reason, str) or not reason.strip()):
+            raise AnswerabilityContractError(
+                f"{field}.unavailable_reason must be a non-empty string when provided"
+            )
+        return cls(status=status, required=required, unavailable_reason=reason)
 
 
 @dataclass(frozen=True)
@@ -111,6 +179,294 @@ def _text(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise AnswerabilityContractError(f"{field} must be a non-empty string")
     return value.strip()
+
+
+def compute_proof_digest(binding: Mapping[str, Any], proof_results: Mapping[str, Any]) -> str:
+    """Hash canonical binding inputs and the exact proof results.
+
+    ``proof_results`` is stored in the binding so the strict evaluator can
+    detect a later status mutation. The digest intentionally excludes the
+    self-referential ``proof_digest`` and the embedded results from the
+    binding portion, then includes those results once as the canonical
+    ``surfaces`` value.
+
+    Returns:
+        The SHA-256 digest of the canonical binding and proof results.
+    """
+    digest_binding = {
+        key: value for key, value in binding.items() if key not in {"proof_digest", "proof_results"}
+    }
+    payload = {"binding": digest_binding, "surfaces": proof_results}
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _repository_path_candidates(path: Path, repo_root: Path) -> tuple[tuple[Path, Path], ...]:
+    """Return lexical and resolved repository-relative candidates for a path."""
+    root = repo_root.resolve()
+    candidate = path if path.is_absolute() else root / path
+    candidates: list[tuple[Path, Path]] = []
+    for item in (candidate, candidate.resolve()):
+        try:
+            relative = item.relative_to(root)
+        except ValueError:
+            continue
+        pair = (item, relative)
+        if pair not in candidates:
+            candidates.append(pair)
+    return tuple(candidates)
+
+
+def _git_path_is_tracked(path: Path, repo_root: Path) -> bool:
+    """Return whether a repository-relative path is present in the Git index."""
+    root = repo_root.resolve()
+    candidate = path if path.is_absolute() else root / path
+    try:
+        relative = candidate.relative_to(root)
+    except ValueError:
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", relative.as_posix()],
+            cwd=root,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0 and relative.as_posix() in result.stdout.splitlines()
+
+
+def strict_proof_input_provenance_error(  # noqa: C901
+    path: Path,
+    *,
+    repo_root: Path,
+    field: str,
+) -> str | None:
+    """Reject fixture inputs and untracked disposable output from strict proof.
+
+    The strict admission path may hash a file successfully even when it is a
+    test fixture or an untracked file materialized under ``output/``.  Neither
+    condition is acceptable as provenance for decision-capable proof.
+
+    Returns:
+        An actionable error message, or ``None`` when provenance is allowed.
+    """
+    try:
+        candidates = _repository_path_candidates(path, repo_root)
+    except (OSError, RuntimeError):
+        return f"{field} cannot be resolved safely for provenance"
+    if any(relative.parts[:2] == ("tests", "fixtures") for _, relative in candidates):
+        return f"{field} cannot use tests/fixtures provenance for strict proof"
+    if not (repo_root.resolve() / ".git").exists():
+        return None
+    try:
+        git_root = subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=repo_root.resolve(),
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    if Path(git_root).resolve() != repo_root.resolve():
+        return None
+    output_candidates = [
+        candidate for candidate, relative in candidates if relative.parts[:1] == ("output",)
+    ]
+    try:
+        is_file = path.is_file()
+    except OSError:
+        is_file = False
+    if (
+        output_candidates
+        and is_file
+        and not all(_git_path_is_tracked(candidate, repo_root) for candidate in output_candidates)
+    ):
+        return (
+            f"{field} must use a tracked repository file; matching untracked files under "
+            "output/ are not valid strict proof inputs"
+        )
+    for candidate, relative_path in candidates:
+        if not _git_path_is_tracked(candidate, repo_root):
+            return f"{field} must use a tracked repository file: {relative_path.as_posix()}"
+        relative = relative_path.as_posix()
+        try:
+            committed_blob = subprocess.check_output(
+                ["git", "rev-parse", f"HEAD:{relative}"],
+                cwd=repo_root.resolve(),
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            committed_bytes = subprocess.check_output(
+                ["git", "show", f"HEAD:{relative}"],
+                cwd=repo_root.resolve(),
+                stderr=subprocess.DEVNULL,
+            )
+            current_bytes = candidate.read_bytes()
+        except (OSError, subprocess.CalledProcessError):
+            return f"{field} cannot be bound to the committed HEAD blob: {relative}"
+        if not committed_blob or current_bytes != committed_bytes:
+            return f"{field} does not match the committed HEAD blob: {relative}"
+    return None
+
+
+def _proof_binding_file_error(
+    binding: Mapping[str, Any],
+    *,
+    field: str,
+    digest_field: str,
+    repo_root: Path,
+) -> str | None:
+    """Validate one repository-bound proof input and its digest.
+
+    Returns:
+        An error message, or ``None`` when the path and digest match.
+    """
+    value = binding.get(field)
+    if not isinstance(value, str) or not value.strip():
+        return f"answerability.proof_binding.{field} must be a non-empty path"
+    path = Path(value.strip())
+    if path.is_absolute() or ".." in path.parts:
+        return f"answerability.proof_binding.{field} must be repository-relative"
+    root = repo_root.resolve()
+    candidate = root / path
+    try:
+        resolved = candidate.resolve()
+    except (OSError, RuntimeError):
+        return f"answerability.proof_binding.{field} cannot be resolved safely"
+    if resolved == root or root not in resolved.parents:
+        return f"answerability.proof_binding.{field} must resolve within the repository"
+    if not resolved.is_file():
+        return f"answerability.proof_binding.{field} must name an existing file"
+    provenance_error = strict_proof_input_provenance_error(
+        resolved,
+        repo_root=root,
+        field=f"answerability.proof_binding.{field}",
+    )
+    if provenance_error:
+        return provenance_error
+    try:
+        first = resolved.read_bytes()
+        second = resolved.read_bytes()
+    except OSError as exc:
+        return f"could not read answerability.proof_binding.{field}: {exc}"
+    if first != second:
+        return f"answerability.proof_binding.{field} changed while being verified"
+    actual = hashlib.sha256(first).hexdigest()
+    if actual != str(binding.get(digest_field, "")).lower():
+        return f"answerability.proof_binding.{digest_field} does not match {field} bytes"
+    return None
+
+
+def _proof_binding_error(  # noqa: C901, PLR0912
+    contract: Mapping[str, Any],
+    *,
+    campaign_id: str | None,
+    repo_root: Path | None,
+) -> str | None:
+    """Return a fail-closed error for a missing or malformed admission binding."""
+    binding = contract.get("proof_binding")
+    if not isinstance(binding, Mapping):
+        return "decision-capable admission requires answerability.proof_binding"
+    if binding.get("schema_version") != PROOF_BINDING_SCHEMA:
+        return f"answerability.proof_binding.schema_version must be {PROOF_BINDING_SCHEMA}"
+    for field in (
+        "campaign_id",
+        "question",
+        "estimand",
+        "source_manifest",
+        "campaign_config",
+        "manifest_sha256",
+        "config_sha256",
+        "head_commit",
+        "manifest_blob",
+        "config_blob",
+        "proof_digest",
+    ):
+        try:
+            value = _text(binding.get(field), f"answerability.proof_binding.{field}")
+        except AnswerabilityContractError as exc:
+            return str(exc)
+        if field.endswith("_sha256") or field == "proof_digest":
+            if not _SHA256_RE.fullmatch(value.lower()):
+                return f"answerability.proof_binding.{field} must be a 64-hex SHA-256"
+        if field.endswith("_commit") or field.endswith("_blob"):
+            if not _GIT_SHA1_RE.fullmatch(value.lower()):
+                return f"answerability.proof_binding.{field} must be a 40-hex Git identity"
+    if repo_root is None:
+        return "strict admission proof verification requires the repository root"
+    try:
+        current_head = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=repo_root.resolve(), text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "answerability.proof_binding cannot resolve the committed HEAD"
+    if binding["head_commit"] != current_head:
+        return "answerability.proof_binding.head_commit does not match HEAD"
+    if campaign_id is not None and binding["campaign_id"] != campaign_id:
+        return "answerability.proof_binding.campaign_id does not match the manifest"
+    if binding["question"] != contract["question"]["research_question"]:
+        return "answerability.proof_binding.question does not match the contract"
+    if binding["estimand"] != contract["estimand"]["primary"]:
+        return "answerability.proof_binding.estimand does not match the contract"
+    proof_results = binding.get("proof_results")
+    proof_surfaces = contract.get("proof_surfaces")
+    if not isinstance(proof_results, Mapping) or not isinstance(proof_surfaces, Mapping):
+        return "answerability.proof_binding must include canonical proof_results"
+    if set(proof_results) != set(PROOF_SURFACES) or set(proof_surfaces) != set(PROOF_SURFACES):
+        return "answerability.proof_binding proof_results must name exactly the six proof surfaces"
+    for surface in PROOF_SURFACES:
+        result = proof_results.get(surface)
+        declaration = proof_surfaces.get(surface)
+        if not isinstance(result, Mapping) or not isinstance(declaration, Mapping):
+            return f"answerability.proof_binding.{surface} proof result must be a mapping"
+        if result.get("status") != declaration.get("status"):
+            return f"answerability.proof_binding.{surface} status does not match proof results"
+        if result.get("required") != declaration.get("required"):
+            return (
+                f"answerability.proof_binding.{surface} required flag does not match proof results"
+            )
+    try:
+        expected_digest = compute_proof_digest(binding, proof_results)
+    except (TypeError, ValueError) as exc:
+        return f"answerability.proof_binding proof_results are not canonical JSON: {exc}"
+    if binding["proof_digest"].lower() != expected_digest:
+        return "answerability.proof_binding.proof_digest does not match proof results"
+    for field, digest_field in (
+        ("source_manifest", "manifest_sha256"),
+        ("campaign_config", "config_sha256"),
+    ):
+        file_error = _proof_binding_file_error(
+            binding,
+            field=field,
+            digest_field=digest_field,
+            repo_root=repo_root,
+        )
+        if file_error:
+            return file_error
+    for field, blob_field in (
+        ("source_manifest", "manifest_blob"),
+        ("campaign_config", "config_blob"),
+    ):
+        try:
+            actual_blob = subprocess.check_output(
+                ["git", "rev-parse", f"HEAD:{binding[field]}"],
+                cwd=repo_root.resolve(),
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            return f"answerability.proof_binding.{field} is not present at HEAD"
+        if actual_blob != binding[blob_field]:
+            return f"answerability.proof_binding.{blob_field} does not match HEAD"
+    return None
 
 
 def _list(value: Any, field: str) -> list[Any]:
@@ -193,9 +549,11 @@ def _validate_design(design: Mapping[str, Any]) -> None:
 def _validate_artifacts(artifacts: Mapping[str, Any]) -> None:
     for field in _REQUIRED_TEXT_FIELDS["artifacts"]:
         _text(artifacts.get(field), f"answerability.artifacts.{field}")
-    checksums = artifacts["checksums"]
-    if not isinstance(checksums, list) or not all(
-        isinstance(item, str) and item.strip() for item in checksums
+    checksums = artifacts.get("checksums")
+    if (
+        not isinstance(checksums, list)
+        or not checksums
+        or not all(isinstance(item, str) and item.strip() for item in checksums)
     ):
         raise AnswerabilityContractError(
             "answerability.artifacts.checksums must be a non-empty list of strings"
@@ -204,6 +562,64 @@ def _validate_artifacts(artifacts: Mapping[str, Any]) -> None:
         raise AnswerabilityContractError(
             "answerability.artifacts.durability_status must be ready, planned, missing, or blocked"
         )
+
+
+def _validate_proof_surfaces(contract: Mapping[str, Any]) -> dict[str, ProofSurface]:
+    """Validate an explicitly declared proof surface set.
+
+    The section is optional for compatibility with pre-proof contracts. Once
+    declared, all six named surfaces are required and each entry is strict.
+
+    Returns:
+        The validated proof surfaces, or an empty mapping for legacy contracts.
+    """
+    value = contract.get("proof_surfaces")
+    if value is None:
+        return {}
+    surfaces = _mapping(value, "answerability.proof_surfaces")
+    missing = sorted(set(PROOF_SURFACES) - set(surfaces))
+    if missing:
+        raise AnswerabilityContractError(
+            "answerability.proof_surfaces is missing: " + ", ".join(missing)
+        )
+    unknown = sorted(set(surfaces) - set(PROOF_SURFACES))
+    if unknown:
+        raise AnswerabilityContractError(
+            "answerability.proof_surfaces contains unsupported values: " + ", ".join(unknown)
+        )
+    return {
+        name: ProofSurface.from_mapping(surfaces[name], f"answerability.proof_surfaces.{name}")
+        for name in PROOF_SURFACES
+    }
+
+
+def _proof_findings(
+    contract: Mapping[str, Any],
+    *,
+    enforce_admission_proof: bool,
+) -> tuple[list[str], list[str]]:
+    proof_surfaces = _validate_proof_surfaces(contract)
+    if enforce_admission_proof and not proof_surfaces:
+        return list(DECISION_REQUIRED_PROOF_SURFACES), []
+    missing = [
+        name
+        for name, proof in proof_surfaces.items()
+        if proof.required and proof.status != "passed"
+    ]
+    if enforce_admission_proof:
+        missing.extend(
+            name
+            for name in DECISION_REQUIRED_PROOF_SURFACES
+            if name not in proof_surfaces
+            or not proof_surfaces[name].required
+            or proof_surfaces[name].status != "passed"
+        )
+    optional_not_passed = [
+        f"{name}={proof.status}"
+        for name, proof in proof_surfaces.items()
+        if not proof.required and proof.status != "passed"
+    ]
+    return missing, optional_not_passed
 
 
 def validate_answerability_contract(contract: Mapping[str, Any]) -> None:
@@ -224,9 +640,16 @@ def validate_answerability_contract(contract: Mapping[str, Any]) -> None:
     _validate_analysis(_mapping(contract["analysis"], "answerability.analysis"))
     _validate_design(_mapping(contract["design"], "answerability.design"))
     _validate_artifacts(_mapping(contract["artifacts"], "answerability.artifacts"))
+    _validate_proof_surfaces(contract)
 
 
-def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult:
+def evaluate_answerability(  # noqa: C901, PLR0912
+    contract: Mapping[str, Any],
+    *,
+    enforce_admission_proof: bool = False,
+    campaign_id: str | None = None,
+    repo_root: Path | None = None,
+) -> AnswerabilityResult:
     """Return the most conservative state supported by *contract*.
 
     Structural defects return ``invalid_contract``. Semantic blockers are
@@ -246,11 +669,6 @@ def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult:
         for producer in required_producers
         if producer["status"] != "available"
         or producer["execution_mode"] in {"fallback", "degraded", "unavailable"}
-    ]
-    optional_unavailable = [
-        producer["field"]
-        for producer in producers
-        if not producer.get("required", True) and producer["status"] == "unavailable"
     ]
     if missing_producers:
         return AnswerabilityResult(
@@ -293,12 +711,63 @@ def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult:
             (f"durable evidence plan is {durability_status}",),
         )
 
-    warnings = ()
-    if optional_unavailable:
-        warnings = (
-            "optional unavailable producers remain explicit and cannot be interpreted as zero: "
-            + ", ".join(sorted(optional_unavailable)),
+    if enforce_admission_proof and design["mode"] == "decision_capable":
+        if analysis["dry_run_status"] != "passed":
+            return AnswerabilityResult(
+                "blocked_analysis_contract",
+                (
+                    "decision-capable admission requires analysis dry-run status 'passed'; "
+                    f"got {analysis['dry_run_status']!r}",
+                ),
+            )
+        if design["power_status"] != "adequate":
+            return AnswerabilityResult(
+                "blocked_underpowered",
+                (
+                    "decision-capable admission requires power status 'adequate'; "
+                    f"got {design['power_status']!r}",
+                ),
+            )
+    missing_proof, optional_not_passed_proof = _proof_findings(
+        contract,
+        enforce_admission_proof=(enforce_admission_proof and design["mode"] == "decision_capable"),
+    )
+
+    strict_admission = enforce_admission_proof and design["mode"] == "decision_capable"
+    binding = contract.get("proof_binding")
+    has_bound_results = isinstance(binding, Mapping) and isinstance(
+        binding.get("proof_results"), Mapping
+    )
+    if strict_admission and has_bound_results:
+        binding_error = _proof_binding_error(
+            contract,
+            campaign_id=campaign_id,
+            repo_root=repo_root,
         )
+        if binding_error:
+            return AnswerabilityResult("blocked_missing_proof", (binding_error,))
+
+    warnings_list = []
+    optional_non_native = [
+        producer["field"]
+        for producer in producers
+        if not producer.get("required", True)
+        and (
+            producer["status"] != "available"
+            or producer["execution_mode"] not in {"native", "adapter"}
+        )
+    ]
+    if optional_non_native:
+        warnings_list.append(
+            "optional non-native or non-available producers remain explicit and cannot be "
+            "interpreted as zero: " + ", ".join(sorted(optional_non_native))
+        )
+    if optional_not_passed_proof:
+        warnings_list.append(
+            "optional proof surfaces are not passed and cannot support admission: "
+            + ", ".join(sorted(optional_not_passed_proof))
+        )
+    warnings = tuple(warnings_list)
     if design["mode"] == "diagnostic" or durability_status == "planned":
         return AnswerabilityResult(
             "diagnostic_only",
@@ -307,10 +776,32 @@ def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult:
             ),
             warnings,
         )
+    if strict_admission and not has_bound_results:
+        binding_error = _proof_binding_error(
+            contract,
+            campaign_id=campaign_id,
+            repo_root=repo_root,
+        )
+        if binding_error and not missing_proof:
+            return AnswerabilityResult("blocked_missing_proof", (binding_error,))
+    if missing_proof:
+        return AnswerabilityResult(
+            "blocked_missing_proof",
+            (
+                "required proof surfaces are missing, not_run, unavailable, or failed: "
+                + ", ".join(sorted(missing_proof)),
+            ),
+            warnings,
+        )
     return AnswerabilityResult("answerable", (), warnings)
 
 
-def answerability_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
+def answerability_from_manifest(
+    manifest: Mapping[str, Any],
+    *,
+    enforce_admission_proof: bool = False,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
     """Evaluate the optional answerability section of a campaign manifest.
 
     Returns:
@@ -329,15 +820,30 @@ def answerability_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
         return AnswerabilityResult(
             "invalid_contract", ("answerability must be a mapping",)
         ).as_dict()
-    return evaluate_answerability(contract).as_dict()
+    campaign = manifest.get("campaign")
+    campaign_id = campaign.get("id") if isinstance(campaign, Mapping) else None
+    return evaluate_answerability(
+        contract,
+        enforce_admission_proof=enforce_admission_proof,
+        campaign_id=campaign_id if isinstance(campaign_id, str) else None,
+        repo_root=repo_root,
+    ).as_dict()
 
 
 __all__ = [
     "ANSWERABILITY_SCHEMA",
     "ANSWERABILITY_STATES",
+    "DECISION_REQUIRED_PROOF_SURFACES",
+    "PROOF_BINDING_SCHEMA",
+    "PROOF_STATUSES",
+    "PROOF_SURFACES",
     "AnswerabilityContractError",
     "AnswerabilityResult",
+    "ProofStatus",
+    "ProofSurface",
     "answerability_from_manifest",
+    "compute_proof_digest",
     "evaluate_answerability",
+    "strict_proof_input_provenance_error",
     "validate_answerability_contract",
 ]

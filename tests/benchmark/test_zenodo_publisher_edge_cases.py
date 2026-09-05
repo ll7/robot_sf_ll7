@@ -1670,6 +1670,40 @@ def test_upload_rejects_non_finite_remote_metadata_before_delete(
     assert session.delete_urls == []
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_upload_rejects_non_finite_prereserve_metadata_before_delete(
+    tmp_path: Path,
+    value: float,
+) -> None:
+    """A direct DOI must not bypass reservation-hint validation before cleanup."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    pre_delete = _successor_draft()
+    pre_delete["files"] = [inherited, uploaded]
+    pre_delete["metadata"]["prereserve_doi"] = {
+        "doi": "10.5281/zenodo.8",
+        "unexpected": value,
+    }
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(pre_delete),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata is malformed"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.delete_urls == []
+
+
 @pytest.mark.parametrize("field", ["modified", "version", "revision"])
 def test_remote_revision_binding_retains_optimistic_metadata_digest(field: str) -> None:
     """Optimistic revision receipts retain the credential-free metadata binding."""

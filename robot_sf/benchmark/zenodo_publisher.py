@@ -250,6 +250,12 @@ def _remote_metadata_contract_sha256(payload: Mapping[str, Any]) -> str:
     if not isinstance(metadata, Mapping):
         raise ZenodoPublisherError("Zenodo remote metadata is malformed")
     try:
+        # Validate the complete server response before dropping Zenodo's
+        # reservation hint from the caller-owned stability contract. A direct
+        # DOI can make that hint irrelevant to identity extraction, but it is
+        # still untrusted remote metadata and must not contain non-finite or
+        # otherwise non-JSON values.
+        _canonical_bytes(metadata)
         return _metadata_sha256(metadata)
     except (TypeError, ValueError, OverflowError) as exc:
         raise ZenodoPublisherError("Zenodo remote metadata is malformed") from exc

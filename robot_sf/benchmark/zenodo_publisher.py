@@ -2149,6 +2149,7 @@ def _remote_revision_binding(
     Returns:
         A field name and SHA-256 digest for the final remote read.
     """
+    metadata_contract_sha256 = _remote_metadata_contract_sha256(payload)
     optimistic = _remote_optimistic_binding(payload)
     if optimistic is not None:
         return optimistic
@@ -2159,7 +2160,7 @@ def _remote_revision_binding(
         "doi": payload.get("doi"),
         "state": payload.get("state"),
         "submitted": payload.get("submitted"),
-        "metadata_contract_sha256": _remote_metadata_contract_sha256(payload),
+        "metadata_contract_sha256": metadata_contract_sha256,
         "files": [
             {"name": name, "id": file_id}
             for name, file_id in sorted(

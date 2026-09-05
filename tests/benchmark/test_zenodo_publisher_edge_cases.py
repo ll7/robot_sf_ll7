@@ -1564,6 +1564,19 @@ def test_remote_revision_binding_rejects_malformed_fallback_metadata(
         publisher._remote_revision_binding(payload, {})
 
 
+@pytest.mark.parametrize("field", ["modified", "version", "revision"])
+def test_remote_revision_binding_rejects_malformed_metadata_before_optimistic_binding(
+    field: str,
+) -> None:
+    """Malformed metadata cannot bypass validation through an optimistic revision."""
+    payload = _successor_draft()
+    payload["metadata"] = {"title": object()}
+    payload[field] = "remote-version"
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata is malformed"):
+        publisher._remote_revision_binding(payload, {})
+
+
 def test_upload_rejects_lifecycle_drift_during_pre_delete_readback(tmp_path: Path) -> None:
     """A lifecycle change in the exact pre-delete response blocks DELETE."""
     bundle = tmp_path / "successor.tar.gz"

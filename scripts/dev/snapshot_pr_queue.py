@@ -471,7 +471,9 @@ def _rest_route_check_evidence(
     if not isinstance(run, dict) or not isinstance(check_run, dict):
         return None
     if (
-        str(run.get("head_sha", "") or "") != expected_head_sha
+        str(run.get("id", "") or "") != str(run_id)
+        or str(check_run.get("id", "") or "") != str(job_id)
+        or str(run.get("head_sha", "") or "") != expected_head_sha
         or str(check_run.get("head_sha", "") or "") != expected_head_sha
         or str(run.get("name", "") or "") != ROUTE_CODERABBIT_WORKFLOW
         or str(check_run.get("name", "") or "") != ROUTE_CODERABBIT_CHECK
@@ -581,6 +583,12 @@ def _route_supersession_evidence(  # noqa: C901 - fail-closed identity and annot
             if replacement is not None:
                 break
         if replacement is None:
+            continue
+        if (
+            not cancelled_evidence["started_at"]
+            or not replacement["started_at"]
+            or replacement["started_at"] >= cancelled_evidence["started_at"]
+        ):
             continue
         superseded.append(
             {

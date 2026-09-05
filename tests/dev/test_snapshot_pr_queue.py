@@ -229,6 +229,55 @@ def test_snapshot_prs_keeps_route_cancellation_on_head_mismatch() -> None:
     assert "superseded_cancellations" not in checks
 
 
+def test_snapshot_prs_keeps_route_cancellation_when_rest_replacement_is_not_earlier() -> None:
+    """A REST replacement that starts after cancellation cannot suppress it."""
+    pr_payload = _route_cancellation_pr()
+    pr_payload["statusCheckRollup"][1]["startedAt"] = ""
+    rest_payloads = _route_cancellation_rest_payloads()
+    rest_payloads["actions/runs/33984605002"]["run_started_at"] = "2026-09-05T18:45:00Z"
+    rest_payloads["check-runs/101355720321"]["started_at"] = "2026-09-05T18:45:00Z"
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del timeout
+        assert repo == "ll7/robot_sf_ll7"
+        return rest_payloads[path]
+
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get),
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([8517], repo="ll7/robot_sf_ll7", expected_head_sha="route-head")
+
+    checks = payload["prs"][0]["checks"]
+    assert checks["overall"] == "failure"
+    assert checks["failed"][0]["conclusion"] == "cancelled"
+    assert "superseded_cancellations" not in checks
+
+
+def test_snapshot_prs_keeps_route_cancellation_when_rest_ids_do_not_match_urls() -> None:
+    """REST records with a mismatched returned ID cannot suppress a cancellation."""
+    pr_payload = _route_cancellation_pr()
+    rest_payloads = _route_cancellation_rest_payloads()
+    rest_payloads["check-runs/101356131316"]["id"] = 999
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del timeout
+        assert repo == "ll7/robot_sf_ll7"
+        return rest_payloads[path]
+
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get),
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([8517], repo="ll7/robot_sf_ll7", expected_head_sha="route-head")
+
+    checks = payload["prs"][0]["checks"]
+    assert checks["overall"] == "failure"
+    assert "superseded_cancellations" not in checks
+
+
 def test_base_freshness_fresh_preserves_merge_ready_action() -> None:
     """A fresh PR base should expose provenance without changing merge-ready routing."""
     pr = _pr_payload_from_dict(

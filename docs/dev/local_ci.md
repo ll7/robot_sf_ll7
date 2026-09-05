@@ -129,6 +129,17 @@ records the CUDA status, selected lane, worker count, and override or default re
 CUDA probe uses the serial safe default; an unavailable or unusable runtime keeps the CPU parallel
 path and CUDA-gated tests use their explicit unavailable receipt.
 
+## Parallel timeout diagnostics
+
+The parallel pytest wrapper captures every non-zero run and invokes
+`scripts/dev/diagnose_xdist_crash.py` with the selected worker count, distribution mode, execution
+mode, and pytest exit code. The reporter classifies pytest-timeout, subprocess, and silent
+process-timeout signatures and includes a bounded runtime fingerprint. A timeout remains an
+incomplete, fail-closed readiness result; an opt-in serial rerun can classify load-sensitive
+behavior but cannot promote the parallel lane to success evidence. Record the exact timed-out
+tests, worker count, runtime/dependency versions, cache location, and process-cleanup result when
+triaging parallel-load friction (issue #8469).
+
 ## Local CI-equivalent path
 
 Use `scripts/dev/run_ci_local.sh` when the repository's complete local CI contract is required. Run

@@ -9,11 +9,12 @@ exits non-zero, so the crash masquerades as an ordinary test failure and
 forces repeated manual reruns (issue #5633).
 
 This module turns that into an actionable, fail-closed diagnostic: it
-classifies the crash signature from captured pytest output, snapshots the
-runtime (Python version and the loaded native extensions), and recommends a
+classifies crash and timeout signatures from captured pytest output, snapshots
+the runtime (Python version and the loaded native extensions), and recommends a
 safe concurrency setting. It never marks an incomplete run as success; the
 calling shell wrapper stays fail-closed and only an explicit opt-in serial
-rerun separates an environment crash from real failures.
+rerun separates an environment crash or load-sensitive timeout from real
+failures.
 """
 
 from __future__ import annotations
@@ -102,6 +103,31 @@ CRASH_SIGNATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
+# Timeout signatures are kept separate from crash signatures so callers can
+# distinguish a load-sensitive/incomplete readiness lane from a native worker
+# crash. The wrapper invokes this reporter only after pytest exits non-zero,
+# so a plugin name in an ordinary successful collection cannot promote a pass
+# to a timeout diagnosis.
+TIMEOUT_SIGNATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "pytest-timeout",
+        (
+            r"(?i)\bpytest-timeout\b",
+            r"(?i)\btimeout\s*\(>[^)]*\)",
+        ),
+    ),
+    (
+        "subprocess-timeout",
+        (
+            r"(?i)\b(?:subprocess\.)?TimeoutExpired\b",
+            r"(?i)\btimed out\b",
+            r"(?i)\btimeout expired\b",
+        ),
+    ),
+)
+
+PROCESS_TIMEOUT_SIGNATURE = "process-timeout"
+
 # Crash classes that indicate an environment/native-extension failure rather
 # than an ordinary test assertion failure.
 ENVIRONMENT_CRASH_CLASSES: frozenset[str] = frozenset(
@@ -154,7 +180,7 @@ class RuntimeSnapshot:
 
 @dataclass(frozen=True)
 class Diagnostic:
-    """Classified crash diagnostic with a rendered fail-closed message."""
+    """Classified crash/timeout diagnostic with a rendered fail-closed message."""
 
     crash_classes: tuple[str, ...]
     requested_workers: str
@@ -164,20 +190,30 @@ class Diagnostic:
     raw_excerpts: tuple[str, ...] = ()
     recommendation: str | None = None
     serialized_ok: bool | None = None
+    timeout_signatures: tuple[str, ...] = ()
+    pytest_exit_code: int | None = None
 
     @property
     def is_environment_crash(self) -> bool:
         """True when at least one environment/runtime crash class matched."""
         return bool(ENVIRONMENT_CRASH_CLASSES & set(self.crash_classes))
 
+    @property
+    def is_parallel_timeout(self) -> bool:
+        """True when captured output or the exit status indicates a timeout."""
+        return bool(self.timeout_signatures) or self.pytest_exit_code == 124
+
     def to_dict(self) -> dict:
         """Return a JSON-serializable representation of the diagnostic."""
         return {
             "crash_classes": list(self.crash_classes),
             "is_environment_crash": self.is_environment_crash,
+            "timeout_signatures": list(self.timeout_signatures),
+            "is_parallel_timeout": self.is_parallel_timeout,
             "requested_workers": self.requested_workers,
             "dist_mode": self.dist_mode,
             "execution_mode": self.execution_mode,
+            "pytest_exit_code": self.pytest_exit_code,
             "recommendation": self.recommendation,
             "serialized_ok": self.serialized_ok,
             "raw_excerpts": list(self.raw_excerpts),
@@ -199,24 +235,47 @@ def classify_crash(log_text: str) -> tuple[str, ...]:
     return tuple(matches)
 
 
+def classify_timeout(log_text: str) -> tuple[str, ...]:
+    """Return stable timeout signature names present in captured output."""
+    if not log_text:
+        return ()
+    matches: list[str] = []
+    for name, patterns in TIMEOUT_SIGNATURES:
+        if any(re.search(pattern, log_text) for pattern in patterns):
+            matches.append(name)
+    return tuple(matches)
+
+
+def _first_matching_lines(
+    log_text: str,
+    signatures: tuple[tuple[str, tuple[str, ...]], ...],
+    max_lines: int,
+) -> tuple[str, ...]:
+    """Return bounded log excerpts matching one signature collection."""
+    if not log_text:
+        return ()
+    compiled_patterns = [re.compile(pattern) for _, patterns in signatures for pattern in patterns]
+    excerpts: list[str] = []
+    for line in log_text.splitlines():
+        if any(pattern.search(line) for pattern in compiled_patterns):
+            excerpts.append(line.strip())
+            if len(excerpts) >= max_lines:
+                break
+    return tuple(excerpts)
+
+
 def first_matching_lines(log_text: str, max_lines: int = 5) -> tuple[str, ...]:
     """Return a few representative lines that carry a crash signature.
 
     Helps a maintainer jump straight to the failing worker's import/test
     boundary without re-reading the whole captured log.
     """
-    if not log_text:
-        return ()
-    compiled_patterns = [
-        re.compile(pattern) for _, patterns in CRASH_SIGNATURES for pattern in patterns
-    ]
-    excerpts: list[str] = []
-    for line in log_text.splitlines():
-        if any(p.search(line) for p in compiled_patterns):
-            excerpts.append(line.strip())
-            if len(excerpts) >= max_lines:
-                break
-    return tuple(excerpts)
+    return _first_matching_lines(log_text, CRASH_SIGNATURES, max_lines)
+
+
+def first_timeout_matching_lines(log_text: str, max_lines: int = 5) -> tuple[str, ...]:
+    """Return a few representative lines carrying a timeout signature."""
+    return _first_matching_lines(log_text, TIMEOUT_SIGNATURES, max_lines)
 
 
 def _extension_version(name: str) -> str | None:
@@ -306,20 +365,30 @@ def build_diagnostic(
     execution_mode: str = "xdist",
     runtime: RuntimeSnapshot | None = None,
     serialized_ok: bool | None = None,
+    pytest_exit_code: int | None = None,
 ) -> Diagnostic:
     """Classify ``log_text`` and assemble a fail-closed diagnostic."""
     crash_classes = classify_crash(log_text)
+    timeout_signatures = list(classify_timeout(log_text))
+    if pytest_exit_code == 124 and PROCESS_TIMEOUT_SIGNATURE not in timeout_signatures:
+        timeout_signatures.append(PROCESS_TIMEOUT_SIGNATURE)
     runtime = runtime or snapshot_runtime()
     recommendation = recommend_safe_concurrency(crash_classes)
+    raw_excerpts = (
+        *first_matching_lines(log_text),
+        *first_timeout_matching_lines(log_text),
+    )[:5]
     return Diagnostic(
         crash_classes=crash_classes,
         requested_workers=requested_workers,
         dist_mode=dist_mode,
         runtime=runtime,
         execution_mode=execution_mode,
-        raw_excerpts=first_matching_lines(log_text),
+        raw_excerpts=raw_excerpts,
         recommendation=recommendation,
         serialized_ok=serialized_ok,
+        timeout_signatures=tuple(timeout_signatures),
+        pytest_exit_code=pytest_exit_code,
     )
 
 
@@ -382,6 +451,34 @@ def _diagnostic_verdict(diag: Diagnostic) -> list[str]:
     """Return the final diagnostic verdict lines."""
     if diag.is_environment_crash:
         return _environment_crash_verdict(diag)
+    if diag.is_parallel_timeout:
+        execution_boundary = (
+            "true no-xdist serial" if diag.execution_mode == "no-xdist" else "parallel pytest-xdist"
+        )
+        lines = [
+            "Captured output or exit status contains a timeout signature during "
+            f"{execution_boundary} readiness validation (issue #8469).",
+            "The run is incomplete/degraded and remains fail-closed; it is not success evidence.",
+        ]
+        if diag.serialized_ok is True:
+            lines.append(
+                "The true no-xdist serial rerun passed: this supports a "
+                "load-sensitive or environment-only classification, but does not "
+                "complete the parallel gate."
+            )
+        elif diag.serialized_ok is False:
+            lines.append(
+                "The true no-xdist serial rerun also failed; treat those test or "
+                "collection failures as real until fixed."
+            )
+        else:
+            lines.append(
+                "Recommended next step: rerun the exact timed-out tests in true "
+                "no-xdist serial mode and record worker count, distribution mode, "
+                "runtime, cache location, and process cleanup."
+            )
+            lines.append("  PYTEST_NUM_WORKERS=1 scripts/dev/run_tests_parallel.sh ...")
+        return lines
     if diag.crash_classes:
         return [
             "Captured output shows a non-environment crash class; investigate the "
@@ -406,11 +503,13 @@ def _diagnostic_verdict(diag: Diagnostic) -> list[str]:
 def render_diagnostic(diag: Diagnostic) -> str:
     """Render the diagnostic as a human-readable, fail-closed message."""
     lines: list[str] = []
-    lines.append("[pr_ready_check] pytest crash diagnostic (issue #5633)")
+    lines.append("[pr_ready_check] pytest crash/timeout diagnostic (issues #5633/#8469)")
     if diag.crash_classes:
         lines.append("Detected crash signature(s): " + ", ".join(diag.crash_classes))
     else:
         lines.append("No native-extension/xdist crash signature detected in captured output.")
+    if diag.timeout_signatures:
+        lines.append("Detected timeout signature(s): " + ", ".join(diag.timeout_signatures))
     lines.append("")
     lines.append("Runtime fingerprint:")
     lines.append(
@@ -445,7 +544,7 @@ def _read_log_source(args: argparse.Namespace) -> str:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """Build the CLI parser for the xdist crash diagnostic."""
+    """Build the CLI parser for the xdist crash/timeout diagnostic."""
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--log-file", help="Path to a captured pytest log file.")
@@ -480,6 +579,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Whether an opt-in serial rerun passed (drives the verdict text).",
     )
     parser.add_argument(
+        "--pytest-exit-code",
+        type=int,
+        help="Exit code from the captured pytest process; 124 records a process timeout.",
+    )
+    parser.add_argument(
         "--show-runtime",
         action="store_true",
         help="Always print the runtime fingerprint even when no crash is detected.",
@@ -502,11 +606,13 @@ def main(argv: list[str] | None = None) -> int:
     elif args.serialized_ok == "false":
         serialized_ok = False
 
-    # Only fingerprint the runtime when a crash was detected or the caller asked
-    # for it; the import probes are cheap but unnecessary on a clean run.
+    # Only fingerprint the runtime when a crash/timeout was detected or the
+    # caller asked for it; the import probes are cheap but unnecessary on a
+    # clean run.
     crash_classes = classify_crash(log_text)
+    timeout_signatures = classify_timeout(log_text)
     runtime = None
-    if crash_classes or args.show_runtime:
+    if crash_classes or timeout_signatures or args.pytest_exit_code == 124 or args.show_runtime:
         runtime = snapshot_runtime()
 
     diag = build_diagnostic(
@@ -516,6 +622,7 @@ def main(argv: list[str] | None = None) -> int:
         execution_mode=args.execution_mode,
         runtime=runtime,
         serialized_ok=serialized_ok,
+        pytest_exit_code=args.pytest_exit_code,
     )
 
     if args.json:

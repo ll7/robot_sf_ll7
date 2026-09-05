@@ -934,6 +934,7 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     venv_python.chmod(0o755)
 
     captured_args = repo / "captured-pytest-args.txt"
+    captured_diagnostic_args = repo / "captured-diagnostic-args.txt"
     invocation_count = repo / "pytest-invocations.txt"
     fake_uv = fake_bin / "uv"
     fake_uv.write_text(
@@ -944,6 +945,7 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
                 '  case "$3" in',
                 '    *resolve_pytest_workers.py) printf "2\\n" ;;',
                 "    *diagnose_xdist_crash.py)",
+                '      printf "%s\\n" "$*" >> "$UV_DIAGNOSTIC_ARGS"',
                 '      if [[ " $* " == *" --serialized-ok false "* ]]; then',
                 '        echo "serial diagnostic observed" >&2',
                 "      else",
@@ -985,6 +987,7 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
             "PYTEST_FAST_FAIL": "0",
             "PYTEST_ORDER_MODE": "none",
             "UV_CAPTURED_ARGS": str(captured_args),
+            "UV_DIAGNOSTIC_ARGS": str(captured_diagnostic_args),
             "UV_COUNT_FILE": str(invocation_count),
         },
         capture_output=True,
@@ -1005,6 +1008,10 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     assert "pytest-xdist disabled" in result.stderr
     assert "parallel diagnostic observed" in result.stderr
     assert "serial diagnostic observed" in result.stderr
+    diagnostic_calls = captured_diagnostic_args.read_text(encoding="utf-8").splitlines()
+    assert len(diagnostic_calls) == 2
+    assert "--pytest-exit-code 1" in diagnostic_calls[0]
+    assert "--pytest-exit-code 1" in diagnostic_calls[1]
 
 
 def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:

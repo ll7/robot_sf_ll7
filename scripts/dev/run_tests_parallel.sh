@@ -515,8 +515,8 @@ if [[ ${#pytest_args[@]} -gt 0 ]]; then
 fi
 
 # Run pytest, capturing output so parallel-worker crashes can be classified
-# (issue #5633). We capture to a log and print it on failure so the crash
-# signature is never silently swallowed by `set -e`.
+# (issues #5633 and #8469). We capture to a log and print it on failure so a
+# crash or timeout signature is never silently swallowed by `set -e`.
 pytest_log="$(mktemp "${TMPDIR:-/tmp}/pytest_run.XXXXXX.log")"
 set +e
 "${cmd[@]}" >"$pytest_log" 2>&1
@@ -540,7 +540,8 @@ if [[ "$pytest_exit" -ne 0 ]]; then
     --log-file "$pytest_log" \
     --requested-workers "$worker_spec" \
     --dist-mode "$dist_mode" \
-    --execution-mode "$pytest_execution_mode" >&2 || true
+    --execution-mode "$pytest_execution_mode" \
+    --pytest-exit-code "$pytest_exit" >&2 || true
   # Opt-in serial fallback: rerun with a single worker to separate an
   # environment crash from real failures. Disabled by default so the gate
   # stays fail-closed (an env crash is not success and not silently skipped).
@@ -564,6 +565,7 @@ if [[ "$pytest_exit" -ne 0 ]]; then
       --requested-workers 1 \
       --dist-mode "$dist_mode" \
       --execution-mode no-xdist \
+      --pytest-exit-code "$serial_exit" \
       --serialized-ok "$([[ "$serial_exit" -eq 0 ]] && echo true || echo false)" >&2 || true
     rm -f "$serial_log"
   fi

@@ -125,26 +125,66 @@ if [[ -s "$compact_json_output" ]]; then
   cat "$compact_json_output"
 fi
 if [[ "$validation_status" -eq 124 ]]; then
-  timeout_log_path="$(python3 - "$compact_json_output" <<'PY'
+  compact_timed_out="$(python3 - "$compact_json_output" <<'PY'
 import json
 import sys
 
 try:
     with open(sys.argv[1], encoding="utf-8") as handle:
-        print(json.load(handle).get("log_path", ""))
+        payload = json.load(handle)
 except (OSError, TypeError, ValueError):
-    print("")
+    payload = {}
+
+print("true" if payload.get("timed_out") is True else "false")
 PY
 )"
-  if [[ -n "$timeout_log_path" && -f "$timeout_log_path" ]]; then
-    uv run python "$SCRIPT_DIR/diagnose_xdist_crash.py" \
-      --log-file "$timeout_log_path" \
-      --requested-workers "$workers" \
-      --dist-mode "$PYTEST_XDIST_DIST" \
-      --execution-mode xdist \
-      --pytest-exit-code "$validation_status" >&2 || true
+  if [[ "$compact_timed_out" != "true" ]]; then
+    echo "xdist race timeout diagnostic unavailable: compact-validation did not report timed_out=true." >&2
   else
-    echo "xdist race timeout diagnostic unavailable: compact-validation log path was not recorded." >&2
+    timeout_log_path="$(python3 - "$compact_json_output" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        payload = json.load(handle)
+except (OSError, TypeError, ValueError):
+    payload = {}
+
+print(payload.get("log_path", ""))
+PY
+    )"
+    if [[ -n "$timeout_log_path" && -f "$timeout_log_path" ]]; then
+      execution_mode="$(python3 - "$timeout_log_path" <<'PY'
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8", errors="replace") as handle:
+        log_text = handle.read()
+except OSError:
+    log_text = ""
+
+mode_markers = {
+    "xdist": "Resolved pytest execution mode: pytest-xdist",
+    "no-xdist": "Resolved pytest execution mode: in-process serial",
+}
+matches = [mode for mode, marker in mode_markers.items() if marker in log_text]
+print(matches[0] if len(matches) == 1 else "unknown")
+PY
+      )"
+      if [[ "$execution_mode" == "xdist" || "$execution_mode" == "no-xdist" ]]; then
+        uv run python "$SCRIPT_DIR/diagnose_xdist_crash.py" \
+          --log-file "$timeout_log_path" \
+          --requested-workers "$workers" \
+          --dist-mode "$PYTEST_XDIST_DIST" \
+          --execution-mode "$execution_mode" \
+          --pytest-exit-code "$validation_status" >&2 || true
+      else
+        echo "xdist race timeout diagnostic unavailable: pytest execution mode was not uniquely recorded." >&2
+      fi
+    else
+      echo "xdist race timeout diagnostic unavailable: compact-validation log path was not recorded." >&2
+    fi
   fi
 fi
 rm -f "$compact_json_output"

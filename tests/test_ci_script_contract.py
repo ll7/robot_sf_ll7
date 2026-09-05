@@ -26,6 +26,7 @@ Excluded (no usage/help support at all):
 
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import shutil
@@ -1029,9 +1030,122 @@ def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
     assert '"$SCRIPT_DIR/run_tests_parallel.sh" "${pytest_args[@]}"' in script_text
     assert "diagnose_xdist_crash.py" in script_text
     assert "--pytest-exit-code" in script_text
-    assert "--execution-mode xdist" in script_text
+    assert '--execution-mode "$execution_mode"' in script_text
+    assert 'payload.get("timed_out") is True' in script_text
     assert "check_xdist_race_artifacts.py" in script_text
     assert "--baseline-json" in script_text
+
+
+@pytest.mark.parametrize(
+    ("compact_timed_out", "log_mode", "expected_execution_mode"),
+    [
+        (True, "serial", "no-xdist"),
+        (True, "xdist", "xdist"),
+        (True, "missing", None),
+        (True, "missing-path", None),
+        (True, "both", None),
+        (False, "serial", None),
+    ],
+)
+def test_xdist_race_validation_uses_compact_timeout_and_execution_mode(
+    tmp_path: Path,
+    compact_timed_out: bool,
+    log_mode: str,
+    expected_execution_mode: str | None,
+) -> None:
+    """Outer diagnosis follows compact truth and unique recorded pytest mode."""
+
+    fake_uv = tmp_path / "uv"
+    diagnostic_args = tmp_path / "diagnostic-args.txt"
+    artifact_dir = tmp_path / "artifacts"
+    fake_uv.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+
+case "$*" in
+  *check_xdist_race_artifacts.py*)
+    exit 0
+    ;;
+  *run_compact_validation.py*)
+    mkdir -p "$UV_ARTIFACT_DIR"
+    log_path="$UV_ARTIFACT_DIR/compact.log"
+    summary_log_path="$log_path"
+    case "$UV_LOG_MODE" in
+      serial)
+        printf '%s\\n' 'Resolved pytest execution mode: in-process serial' > "$log_path"
+        ;;
+      xdist)
+        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' > "$log_path"
+        ;;
+      both)
+        printf '%s\\n' 'Resolved pytest execution mode: in-process serial' > "$log_path"
+        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' >> "$log_path"
+        ;;
+      missing-path)
+        summary_log_path=""
+        ;;
+      missing)
+        ;;
+      *)
+        echo "unexpected log mode: $UV_LOG_MODE" >&2
+        exit 98
+        ;;
+    esac
+    printf '{"schema":"compact_validation_summary.v2","exit_code":124,"timed_out":%s,"log_path":"%s"}\\n' "$UV_COMPACT_TIMED_OUT" "$summary_log_path"
+    exit 124
+    ;;
+  *diagnose_xdist_crash.py*)
+    printf '%s\\n' "$*" > "$UV_DIAGNOSTIC_ARGS"
+    exit 0
+    ;;
+  *)
+    echo "unexpected uv invocation: $*" >&2
+    exit 99
+    ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            str(RUN_XDIST_RACE_VALIDATION),
+            "--workers",
+            "auto",
+            "--timeout-seconds",
+            "1",
+            "--artifact-dir",
+            str(artifact_dir),
+        ],
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+            "UV_ARTIFACT_DIR": str(artifact_dir),
+            "UV_COMPACT_TIMED_OUT": json.dumps(compact_timed_out).lower(),
+            "UV_DIAGNOSTIC_ARGS": str(diagnostic_args),
+            "UV_LOG_MODE": log_mode,
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 124
+    if expected_execution_mode is not None:
+        diagnostic_call = diagnostic_args.read_text(encoding="utf-8")
+        assert f"--execution-mode {expected_execution_mode}" in diagnostic_call
+        assert "--requested-workers auto" in diagnostic_call
+        assert "--dist-mode worksteal" in diagnostic_call
+        assert "--pytest-exit-code 124" in diagnostic_call
+    else:
+        assert not diagnostic_args.exists()
+        if compact_timed_out:
+            assert "diagnostic unavailable" in result.stderr
+        else:
+            assert "did not report timed_out=true" in result.stderr
 
 
 def test_xdist_race_validation_rejects_invalid_worker_value() -> None:

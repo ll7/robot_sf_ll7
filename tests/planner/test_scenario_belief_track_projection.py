@@ -423,6 +423,37 @@ def test_legacy_projection_rejects_non_mapping_uncertainty_reports(malformed_rep
     assert "uncertainty_compatibility" not in result.observation["pedestrians"]
 
 
+def test_legacy_projection_rejects_complex_observation_and_uncertainty_values() -> None:
+    """Complex values cannot cross the finite legacy projection boundary."""
+    malformed_observation = SimpleNamespace(
+        to_socnav_struct=lambda: {
+            "pedestrians": {
+                "count": np.asarray([1.0]),
+                "positions": np.asarray([[1.0 + 2.0j, 0.0]]),
+            }
+        }
+    )
+    observation_result = project_scenario_belief_for_planner(
+        malformed_observation,
+        planner_key="stream_gap",
+    )
+
+    assert observation_result.observation == {}
+    assert observation_result.compatibility["reason"] == "legacy_observation_nonfinite"
+
+    malformed_report = SimpleNamespace(
+        to_socnav_struct=lambda: {"pedestrians": {"count": np.asarray([1.0])}},
+        to_uncertainty_report=lambda: {"agents": [{"position": np.asarray([1.0 + 2.0j, 0.0])}]},
+    )
+    report_result = project_scenario_belief_for_planner(
+        malformed_report,
+        planner_key="stream_gap",
+    )
+
+    assert report_result.compatibility["reason"] == "malformed_uncertainty_report"
+    assert "uncertainty" not in report_result.observation["pedestrians"]
+
+
 def test_legacy_projection_preserves_canonical_observation_on_fail_closed_paths() -> None:
     """Compatibility diagnostics must not alter unsupported or malformed legacy inputs."""
     belief = _belief_fixture()

@@ -124,6 +124,13 @@ def project_scenario_belief_for_planner(
             reason="malformed_legacy_observation",
         )
         return ScenarioBeliefPlannerProjection(observation={}, compatibility=compatibility)
+    if not _runtime_value_is_finite(observation):
+        compatibility = _compatibility_payload(
+            planner_key=planner_key,
+            status="fail_closed",
+            reason="legacy_observation_nonfinite",
+        )
+        return ScenarioBeliefPlannerProjection(observation={}, compatibility=compatibility)
     pedestrians = observation.get("pedestrians")
     if not isinstance(pedestrians, dict):
         compatibility = _compatibility_payload(
@@ -537,20 +544,31 @@ def _entity_float_array(value: np.ndarray) -> np.ndarray:
         raise ValueError("entity state or covariance is malformed") from exc
 
 
-def _runtime_value_is_finite(value: Any) -> bool:
-    """Return whether nested numeric runtime values are finite."""
+def _runtime_numpy_value_is_finite(value: np.ndarray | np.generic) -> bool:
+    """Return whether a NumPy runtime value is real-valued and finite."""
     if isinstance(value, np.ndarray):
-        if value.dtype.kind in "fc":
+        if value.dtype.kind == "c":
+            return False
+        if value.dtype.kind == "f":
             return bool(np.all(np.isfinite(value)))
         return value.dtype.kind in "biu"
-    if isinstance(value, np.generic):
-        if np.issubdtype(value.dtype, np.floating):
-            return bool(np.isfinite(value))
-        return True
+    if np.issubdtype(value.dtype, np.complexfloating):
+        return False
+    if np.issubdtype(value.dtype, np.floating):
+        return bool(np.isfinite(value))
+    return True
+
+
+def _runtime_value_is_finite(value: Any) -> bool:
+    """Return whether nested numeric runtime values are finite."""
+    if isinstance(value, (np.ndarray, np.generic)):
+        return _runtime_numpy_value_is_finite(value)
     if isinstance(value, Mapping):
         return all(_runtime_value_is_finite(nested) for nested in value.values())
     if isinstance(value, (list, tuple)):
         return all(_runtime_value_is_finite(nested) for nested in value)
+    if isinstance(value, complex):
+        return False
     if isinstance(value, float):
         return bool(np.isfinite(value))
     return True

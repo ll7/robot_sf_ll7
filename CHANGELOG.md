@@ -887,7 +887,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `check_artifact_root`, `preflight_scenario_perturbations`, `preflight_adversarial_package_b`) now
   end `--help` with an `Example:` block showing the copy-pasteable
   `uv run python scripts/tools/<name>.py <required-arg>` command, so a new contributor no longer has
-  to guess the invocation (the bare `python scripts/tools/<name>.py ...` path still dies with
+  to guess the invocation (the bare `python scripts/tools/<name>.py ...` path still dies with <!-- active-docs-check: allow historical changelog entry -->
   `ModuleNotFoundError: No module named 'scripts'` because these tools import `scripts.tools.*`).
   Help-text only: each parser gained an `epilog` plus `RawDescriptionHelpFormatter`; no runtime
   behavior, exit codes, or non-`--help` output changed. New
@@ -917,7 +917,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Verified `README.md` and `docs/*.md` top-level docs against the current codebase and fixed incorrect
   statements in place across 13 files: renamed module path `robot_sf/sim/FastPysfWrapper.py` →
   `fast_pysf_wrapper.py` (SUBTREE_MIGRATION, dev_guide); fixed the `02_trained_model.py` JSONL output path
-  `output/benchmarks/` → `output/results/` and the `tests/test_gym_env.py` → `tests/test_gymnasium_env_contracts.py`
+  `output/benchmarks/` → `output/results/` and the `tests/test_gym_env.py` → `tests/test_gymnasium_env_contracts.py` <!-- active-docs-check: allow historical changelog entry -->
   example (dev_guide); corrected the `robot_sf_bench` CLI subcommand count 15 → 30 top-level commands (docs/README); corrected the
   benchmark scenario-schema location (`schema/` singular holds `scenarios.schema.json`, `schemas/` holds the
   episode schema); fixed OSM API examples to real kwargs (`osm_to_map_definition`/`render_osm_background`),

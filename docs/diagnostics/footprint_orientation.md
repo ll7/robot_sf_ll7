@@ -68,10 +68,10 @@ surface three distinct mechanisms:
 
 ```bash
 # JSON to stdout
-python scripts/diagnostics/run_footprint_orientation_diagnostic.py
+uv run python scripts/diagnostics/run_footprint_orientation_diagnostic.py
 
 # Markdown report to a file
-python scripts/diagnostics/run_footprint_orientation_diagnostic.py \
+uv run python scripts/diagnostics/run_footprint_orientation_diagnostic.py \
   --format markdown --output footprint_diagnostic.md
 ```
 

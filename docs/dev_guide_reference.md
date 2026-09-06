@@ -190,7 +190,7 @@ Use the shared main-checkout environment by default for a fresh worktree:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- \
-  python scripts/dev/check_worktree_optional_deps.py --profile all-extras
+  uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
 
 The shared-venv wrapper pins imports to the current worktree, sets `UV_NO_SYNC=1`, and checks
@@ -316,7 +316,7 @@ imports to the current worktree:
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
 scripts/dev/run_worktree_shared_venv.sh --venv ../robot_sf_ll7/.venv -- ruff check scripts/dev
 scripts/dev/run_worktree_shared_venv.sh --standalone -- \
-  python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
+  uv run python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
 ```
 
 The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the selected
@@ -428,7 +428,7 @@ uv run python examples/quickstart/03_custom_map.py
 
 - `01_basic_robot.py` introduces the environment factory pattern and headless rollouts.
 - `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to
-  `output/results/episodes_demo_ppo.jsonl`.
+  `output/results/episodes_demo_ppo.jsonl`. <!-- active-docs-check: allow current quickstart path matches the executable example; migration is a separate runtime decision -->
 - `03_custom_map.py` shows how to load `maps/svg_maps/debug_06.svg` via
   `RobotSimulationConfig.map_pool` for custom layouts.
 
@@ -1004,7 +1004,7 @@ wrapper so uv reuses the owning checkout's environment and does not create or pr
 `.venv`:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \
   <pr-number> \
   --expected-head-sha <head-sha> \
   --poll-attempts 40 \
@@ -1052,7 +1052,7 @@ default stale warning threshold is 900 seconds; set it explicitly when a differe
 window is appropriate:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \
   <pr-number> \
   --expected-head-sha <head-sha> \
   --actions-stale-after-seconds 900 \

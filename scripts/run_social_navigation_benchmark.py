@@ -25,6 +25,7 @@ The script will:
 from __future__ import annotations
 
 import datetime
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -165,13 +166,32 @@ def _compute_aggregates_payload(
         "bootstrap_samples": 1000,
         "bootstrap_confidence": 0.95,
     }
+    expected_algorithms_support: bool | None = None
     if expected_algorithms:
         aggregate_kwargs["expected_algorithms"] = set(expected_algorithms)
+        try:
+            parameters = inspect.signature(compute_aggregates_with_ci).parameters.values()
+        except (TypeError, ValueError):
+            pass
+        else:
+            expected_parameter = next(
+                (parameter for parameter in parameters if parameter.name == "expected_algorithms"),
+                None,
+            )
+            expected_algorithms_support = bool(
+                expected_parameter
+                and expected_parameter.kind
+                in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+            ) or any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters)
+            if not expected_algorithms_support:
+                aggregate_kwargs.pop("expected_algorithms", None)
 
     try:
         return compute_aggregates_with_ci(**aggregate_kwargs)
     except TypeError as exc:
         if "expected_algorithms" not in aggregate_kwargs:
+            raise
+        if expected_algorithms_support is not None:
             raise
         if "unexpected keyword argument 'expected_algorithms'" not in str(exc):
             raise

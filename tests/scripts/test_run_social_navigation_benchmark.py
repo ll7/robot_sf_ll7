@@ -95,3 +95,23 @@ def test_compute_aggregates_reraises_internal_type_error(
         benchmark._compute_aggregates_payload([], expected_algorithms={"sf"})
 
     assert calls == 1
+
+
+def test_compute_aggregates_reraises_canonical_internal_type_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A matching nested error from a keyword-capable callable must not trigger a retry."""
+
+    calls = 0
+
+    def broken_aggregator(**_: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        raise TypeError("got an unexpected keyword argument 'expected_algorithms'")
+
+    monkeypatch.setattr(benchmark, "compute_aggregates_with_ci", broken_aggregator)
+
+    with pytest.raises(TypeError, match="unexpected keyword argument 'expected_algorithms'"):
+        benchmark._compute_aggregates_payload([], expected_algorithms={"sf"})
+
+    assert calls == 1

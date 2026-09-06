@@ -128,6 +128,7 @@ EXPECTED_SCENARIO_CONTRACT = (
         "station_platform",
     ),
 )
+EXPECTED_PREREGISTRATION_SHA256 = "e769185c2ecfa9d7d4fc05b50ba75f6143afdae435720ac8f553b4155726144d"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -632,6 +633,12 @@ def _producer_command(commit: str) -> str:
 def _read_preregistration(path: Path) -> dict[str, Any]:
     """Load the frozen preregistration mapping."""
 
+    actual_sha256 = _sha256(path)
+    if actual_sha256 != EXPECTED_PREREGISTRATION_SHA256:
+        raise ValueError(
+            "preregistration bytes do not match the frozen issue #5578 contract "
+            f"(observed {actual_sha256}, expected {EXPECTED_PREREGISTRATION_SHA256})"
+        )
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"expected a YAML mapping: {path}")

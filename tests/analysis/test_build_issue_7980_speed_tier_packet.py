@@ -565,6 +565,20 @@ def test_validation_rejects_seed_value_or_uniqueness_mutation(mutation: str) -> 
         )
 
 
+def test_preregistration_file_digest_is_pinned(tmp_path: Path) -> None:
+    """Reject protocol-field drift that preserves the source row roster."""
+
+    mutated_path = tmp_path / "issue_5578_robot_speed_tier_preregistration.yaml"
+    mutated_text = PREREGISTRATION_PATH.read_text(encoding="utf-8").replace(
+        "collision_rate_harm_threshold: 0.02",
+        "collision_rate_harm_threshold: 0.03",
+    )
+    mutated_path.write_text(mutated_text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="preregistration bytes do not match"):
+        builder._read_preregistration(mutated_path)
+
+
 def test_validation_rejects_scenario_identity_mutation() -> None:
     """Bind scenario IDs and source paths instead of accepting any six-row list."""
 

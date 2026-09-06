@@ -1365,6 +1365,27 @@ def test_main_only_empty_ambiguous_rate_limit_remains_fail_closed(
     assert capsys.readouterr().out == ""
 
 
+def test_main_only_empty_write_phase_rate_limit_remains_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A write-phase rate limit remains fail closed even without telemetry flags."""
+
+    def _raise(*args: object, **kwargs: object) -> list[SyncPreview]:
+        raise ProjectRateLimitError(
+            command=("gh", "api", "graphql"),
+            details="GraphQL: API rate limit already exceeded",
+            phase="write",
+        )
+
+    monkeypatch.setattr(project_priority_score, "sync_scores", _raise)
+
+    with pytest.raises(ProjectRateLimitError):
+        main(["sync", "--only-empty"])
+
+    assert capsys.readouterr().out == ""
+
+
 def test_main_non_empty_scope_failure_remains_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

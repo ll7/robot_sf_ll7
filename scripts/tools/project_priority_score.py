@@ -2387,6 +2387,7 @@ def _handle_only_empty_failure(*, args: argparse.Namespace, error: Exception) ->
             error.writes_performed_count > 0
             or error.completed_write_count > 0
             or error.write_ambiguity is True
+            or error.phase == "write"
         ):
             # The documented non-fatal result is a no-write fallback. Once a
             # mutation is known or ambiguous, preserve fail-closed behavior

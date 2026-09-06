@@ -233,6 +233,57 @@ def test_directory_size_reports_unavailable_without_claiming_zero(
     )
 
 
+def test_worktree_directory_size_measures_fleet_children_concurrently(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Large worktree containers should use bounded child measurements."""
+    fleet = tmp_path / "repo.worktrees"
+    fleet.mkdir()
+    children = [fleet / f"worker-{index}" for index in range(20)]
+    for child in children:
+        child.mkdir()
+
+    calls: list[Path] = []
+
+    def fake_size(path: Path, *, timeout_seconds: float) -> capacity.DirectorySizeResult:
+        calls.append(path)
+        assert timeout_seconds == 1.5
+        return capacity.DirectorySizeResult(bytes=1024, status="ok")
+
+    monkeypatch.setattr(capacity, "_directory_size_bytes", fake_size)
+
+    result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=1.5)
+
+    assert result == capacity.DirectorySizeResult(bytes=20 * 1024, status="ok")
+    assert sorted(calls) == sorted(children)
+
+
+def test_worktree_directory_size_preserves_partial_timeout_evidence(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A fleet timeout returns a lower-bound estimate with an actionable reason."""
+    fleet = tmp_path / "repo.worktrees"
+    fleet.mkdir()
+    children = [fleet / "fast", fleet / "slow"]
+    for child in children:
+        child.mkdir()
+
+    def fake_size(path: Path, *, timeout_seconds: float) -> capacity.DirectorySizeResult:
+        del timeout_seconds
+        if path.name == "slow":
+            return capacity.DirectorySizeResult(bytes=None, status="timeout", reason="slow")
+        return capacity.DirectorySizeResult(bytes=4096, status="ok")
+
+    monkeypatch.setattr(capacity, "_directory_size_bytes", fake_size)
+
+    result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=1.5)
+
+    assert result.bytes == 4096
+    assert result.status == "partial"
+    assert "sized 1/2 entries" in (result.reason or "")
+    assert "1 child probes timed out" in (result.reason or "")
+
+
 def test_inventory_preserves_timeout_and_unavailable_evidence(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

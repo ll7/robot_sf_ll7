@@ -45,7 +45,9 @@ def test_hand_calculated_vector_and_direction_metrics() -> None:
 def test_censored_rows_are_direction_only_and_missing_truth_is_unavailable() -> None:
     summary = evaluate_goal_force_rows(
         [
-            GoalForceMetricRow((2.0, 0.0), (1.0, 0.0), censored=True),
+            GoalForceMetricRow(
+                (2.0, 0.0), (1.0, 0.0), censored=True, censored_direction_valid=True
+            ),
             GoalForceMetricRow((1.0, 0.0), None, censored=True),
         ]
     )
@@ -70,7 +72,9 @@ def test_censored_zero_and_near_zero_directions_are_excluded() -> None:
                 (0.5 * GOAL_FORCE_METRICS_NORM_EPSILON, 0.0),
                 censored=True,
             ),
-            GoalForceMetricRow((2.0, 0.0), (1.0, 0.0), censored=True),
+            GoalForceMetricRow(
+                (2.0, 0.0), (1.0, 0.0), censored=True, censored_direction_valid=True
+            ),
         ]
     )
 
@@ -86,7 +90,9 @@ def test_mixed_row_denominators_remain_separate() -> None:
         [
             GoalForceMetricRow((2.0, 0.0), (1.0, 0.0)),
             GoalForceMetricRow((0.0, 0.0), (0.0, 0.0)),
-            GoalForceMetricRow((3.0, 0.0), (1.0, 0.0), censored=True),
+            GoalForceMetricRow(
+                (3.0, 0.0), (1.0, 0.0), censored=True, censored_direction_valid=True
+            ),
             GoalForceMetricRow((0.0, 0.0), (0.0, 0.0), censored=True),
             GoalForceMetricRow((1.0, 0.0), None),
         ]
@@ -123,6 +129,18 @@ def test_zero_vectors_are_not_fabricated_as_direction_accuracy() -> None:
     assert summary.magnitude_count == 2
     assert summary.relative_magnitude_count == 0
     assert summary.relative_magnitude_excluded_count == 2
+
+
+def test_censored_direction_requires_explicit_model_eligibility() -> None:
+    summary = evaluate_goal_force_rows([GoalForceMetricRow((2.0, 0.0), (1.0, 0.0), censored=True)])
+
+    assert summary.direction_count == 0
+    assert summary.direction_excluded_count == 1
+
+
+def test_censored_direction_eligibility_must_be_bool() -> None:
+    with pytest.raises(TypeError, match="censored_direction_valid"):
+        GoalForceMetricRow((1.0, 0.0), (1.0, 0.0), censored_direction_valid=1)  # type: ignore[arg-type]
 
 
 def test_norm_epsilon_boundary_is_counted_and_serialized() -> None:

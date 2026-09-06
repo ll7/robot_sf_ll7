@@ -133,6 +133,7 @@ class GoalForceMetricRow:
     predicted_force_xy: Vector2
     oracle_force_xy: Vector2 | None
     censored: bool = False
+    censored_direction_valid: bool = False
 
     def __post_init__(self) -> None:
         """Validate vector shape, finiteness, and censoring type."""
@@ -146,6 +147,8 @@ class GoalForceMetricRow:
             )
         if type(self.censored) is not bool:
             raise TypeError("censored must be bool")
+        if type(self.censored_direction_valid) is not bool:
+            raise TypeError("censored_direction_valid must be bool")
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,13 +225,15 @@ def evaluate_goal_force_rows(rows: Sequence[GoalForceMetricRow]) -> GoalForceMet
     ``vector_l2_rmse`` is the root mean square of that same error.  Both use
     the uncensored, available-truth denominator.
 
-    Censored rows contribute to direction metrics when both vectors have a
-    norm strictly greater than :data:`GOAL_FORCE_METRICS_NORM_EPSILON`, but
-    never to force-magnitude or vector-error metrics.  Rows with missing oracle
-    truth contribute only to availability counts.  Available rows excluded
-    from direction scoring by the norm threshold are counted separately, as
-    are uncensored rows excluded from relative-magnitude scoring because their
-    truth norm is too small.
+    Censored rows contribute to direction metrics only when the caller marks
+    ``censored_direction_valid`` after selecting a censoring model that
+    preserves direction, and both vectors have a norm strictly greater than
+    :data:`GOAL_FORCE_METRICS_NORM_EPSILON`.  They never contribute to
+    force-magnitude or vector-error metrics.  Rows with missing oracle truth
+    contribute only to availability counts.  Available rows excluded from
+    direction scoring by the norm threshold or censoring policy are counted
+    separately, as are uncensored rows excluded from relative-magnitude
+    scoring because their truth norm is too small.
 
     Returns:
         A summary with separate denominators and exclusion counts for exact,
@@ -281,7 +286,8 @@ def evaluate_goal_force_rows(rows: Sequence[GoalForceMetricRow]) -> GoalForceMet
             else:
                 relative_magnitude_excluded_count += 1
         if (
-            predicted_norm > GOAL_FORCE_METRICS_NORM_EPSILON
+            (not row.censored or row.censored_direction_valid)
+            and predicted_norm > GOAL_FORCE_METRICS_NORM_EPSILON
             and truth_norm > GOAL_FORCE_METRICS_NORM_EPSILON
         ):
             cosine = _stable_cosine_similarity(row.predicted_force_xy, truth)

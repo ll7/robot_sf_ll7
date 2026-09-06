@@ -132,6 +132,30 @@ def test_projection_marks_equal_distance_parallel_branches_as_ambiguous() -> Non
     assert projection.distance_m == pytest.approx(1.0)
 
 
+def test_hinted_projection_rejects_forward_jump_to_nearby_parallel_branch() -> None:
+    """Continuity bounds must prevent a nearer later parallel branch from winning."""
+    route = RouteGeometry([(0, 0), (10, 0), (10, 1), (0, 1)])
+    query = (8.5, 0.9)
+
+    unconstrained = route.project(query)
+    hinted = route.project(
+        query,
+        hint=RouteProjectionHint(
+            previous_s_m=8.0,
+            previous_segment_index=0,
+            max_forward_jump_m=0.75,
+            max_backtrack_m=0.5,
+        ),
+    )
+
+    assert unconstrained.status == "ok"
+    assert unconstrained.segment_index == 2
+    assert unconstrained.arc_length_m == pytest.approx(12.5)
+    assert hinted.status == "ok"
+    assert hinted.segment_index == 0
+    assert hinted.arc_length_m == pytest.approx(8.5)
+
+
 def test_hinted_projection_stays_on_the_continuous_route_branch() -> None:
     """A bounded hint should reject a later self-intersection branch."""
     route = RouteGeometry([(0, 0), (2, 2), (0, 2), (2, 0)])

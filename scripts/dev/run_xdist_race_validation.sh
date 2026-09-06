@@ -165,10 +165,15 @@ except OSError:
     log_text = ""
 
 mode_markers = {
-    "xdist": "Resolved pytest execution mode: pytest-xdist",
-    "no-xdist": "Resolved pytest execution mode: in-process serial",
+    "xdist": "Resolved pytest execution mode: pytest-xdist (dist=",
+    "no-xdist": "Resolved pytest execution mode: in-process serial (pytest-xdist disabled).",
 }
-matches = [mode for mode, marker in mode_markers.items() if marker in log_text]
+matches = [
+    mode
+    for line in log_text.splitlines()
+    for mode, marker in mode_markers.items()
+    if line == marker or (mode == "xdist" and line.startswith(marker) and line.endswith(")."))
+]
 print(matches[0] if len(matches) == 1 else "unknown")
 PY
       )"

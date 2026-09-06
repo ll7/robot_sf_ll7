@@ -1044,6 +1044,8 @@ def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
         (True, "missing", None),
         (True, "missing-path", None),
         (True, "both", None),
+        (True, "duplicate", None),
+        (True, "spoofed", None),
         (False, "serial", None),
     ],
 )
@@ -1072,14 +1074,21 @@ case "$*" in
     summary_log_path="$log_path"
     case "$UV_LOG_MODE" in
       serial)
-        printf '%s\\n' 'Resolved pytest execution mode: in-process serial' > "$log_path"
+        printf '%s\\n' 'Resolved pytest execution mode: in-process serial (pytest-xdist disabled).' > "$log_path"
         ;;
       xdist)
         printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' > "$log_path"
         ;;
       both)
-        printf '%s\\n' 'Resolved pytest execution mode: in-process serial' > "$log_path"
+        printf '%s\\n' 'Resolved pytest execution mode: in-process serial (pytest-xdist disabled).' > "$log_path"
         printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' >> "$log_path"
+        ;;
+      duplicate)
+        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' > "$log_path"
+        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' >> "$log_path"
+        ;;
+      spoofed)
+        printf '%s\\n' 'test output: Resolved pytest execution mode: pytest-xdist (dist=worksteal).' > "$log_path"
         ;;
       missing-path)
         summary_log_path=""

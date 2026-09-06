@@ -340,4 +340,8 @@ main() {
   "$actionlint_bin" "${targets[@]}"
 }
 
-main "$@"
+# Keep the helper functions importable by contract tests and other callers
+# without launching the full actionlint download/cache path on source.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi

@@ -618,16 +618,18 @@ def _refresh_tracked_source_ref(source: Mapping[str, Any]) -> dict[str, Any]:
     return refreshed
 
 
-def _producer_command(commit: str) -> str:
+def _producer_command(commit: str, *, source_receipt: bool = False) -> str:
     """Return a checkout-pinned, non-self-referential reproduction command."""
 
-    return (
+    command = (
         f"git worktree add --detach <fresh-worktree> {commit} && "
         "cd <fresh-worktree> && "
         "scripts/dev/run_worktree_shared_venv.sh -- python "
-        f"{PRODUCER_SCRIPT_PATH} --synthesis <verified-synthesis.json> "
-        f"--producer-commit {commit}"
+        f"{PRODUCER_SCRIPT_PATH} --synthesis <verified-synthesis.json>"
     )
+    if source_receipt:
+        command += " --source-receipt <verified-source-receipt.json>"
+    return f"{command} --producer-commit {commit}"
 
 
 def _read_preregistration(path: Path) -> dict[str, Any]:
@@ -846,7 +848,13 @@ def _validate_synthesis(
     synthesis_sha256: str,
     recovery_manifest: Mapping[str, Any],
     preregistration: Mapping[str, Any],
-) -> tuple[list[dict[str, Any]], int, dict[str, float]]:
+) -> tuple[
+    list[dict[str, Any]],
+    int,
+    dict[str, float],
+    tuple[int, ...],
+    tuple[tuple[str, str, str], ...],
+]:
     """Validate immutable custody, the frozen grid, and every source decision row."""
 
     recorded_sha = recovery_manifest["local_artifact_sha256"]["synthesis.json"]
@@ -1258,7 +1266,10 @@ def build_packet(
         "producer": {
             "actor_id": "codex_issue_7980_packet_builder",
             "commit": producer_commit,
-            "command": _producer_command(producer_commit),
+            "command": _producer_command(
+                producer_commit,
+                source_receipt=source_receipt is not None,
+            ),
             "status": "draft",
         },
         "findings": [

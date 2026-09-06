@@ -10,6 +10,21 @@ import pytest
 from scripts.dev import issue_claim
 
 
+@pytest.fixture(autouse=True)
+def _implementation_capable_worktree(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep existing release fixtures independent of the checkout running the tests."""
+    monkeypatch.setattr(
+        issue_claim,
+        "_read_worktree_mode",
+        lambda: issue_claim.CommandResult(
+            command=tuple(issue_claim.build_worktree_mode_command()),
+            returncode=0,
+            stdout="implementation\n",
+            stderr="",
+        ),
+    )
+
+
 def test_claim_ref_is_stable_per_issue() -> None:
     """Claim refs should be predictable so every PC contends for the same ref."""
     assert issue_claim.claim_ref(123) == "refs/heads/agent-claims/issue-123"
@@ -31,6 +46,17 @@ def test_build_resolve_source_command_uses_requested_ref() -> None:
     command = issue_claim.build_resolve_source_command(source_ref="origin/main")
 
     assert command == ["git", "rev-parse", "--verify", "origin/main^{commit}"]
+
+
+def test_build_worktree_mode_command_reads_the_local_mode_marker() -> None:
+    """Release mode detection must use the worktree-local marker without mutating it."""
+    assert issue_claim.build_worktree_mode_command() == [
+        "git",
+        "config",
+        "--worktree",
+        "--get",
+        "robot-sf.worktree-mode",
+    ]
 
 
 def test_build_acquire_command_uses_github_create_ref_api() -> None:
@@ -201,6 +227,49 @@ def test_release_issue_deletes_existing_claim_ref(monkeypatch: pytest.MonkeyPatc
         "origin",
         ":refs/heads/agent-claims/issue-123",
     ]
+
+
+def test_release_from_review_worktree_fails_closed_and_retains_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review mode must explain the safe retry context without attempting deletion."""
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(
+        issue_claim,
+        "_read_worktree_mode",
+        lambda: issue_claim.CommandResult(
+            command=tuple(issue_claim.build_worktree_mode_command()),
+            returncode=0,
+            stdout="review\n",
+            stderr="",
+        ),
+    )
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123\trefs/heads/agent-claims/issue-123\n",
+                stderr="",
+            )
+        raise AssertionError("review-mode release must not inspect PRs or delete the claim")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.release_issue(
+        123, remote="origin", repo="ll7/robot_sf_ll7", reason="merged"
+    )
+
+    assert payload["ok"] is False
+    assert payload["claimed"] is True
+    assert payload["release_class"] is None
+    assert payload["worktree_mode"] == "review"
+    assert payload["error"] == issue_claim.REVIEW_WORKTREE_RELEASE_ERROR
+    assert "implementation-capable linked worktree" in payload["error"]
+    assert calls == [issue_claim.build_status_command(123, remote="origin")]
 
 
 def test_release_rejects_stale_claim_during_compare_and_delete(

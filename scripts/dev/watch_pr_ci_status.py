@@ -748,6 +748,12 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
                 multiplier=multiplier,
                 fetch_durations=fetch_durations,
             )
+            error = "CI remained pending after wait budget"
+            if checks.get("setup_starvation"):
+                error = (
+                    "CI setup starvation detected on hosted runner; manual inspection or "
+                    "authorized rerun required"
+                )
             return WatchResult(
                 pr=last_status.get("pr", pr_number),
                 head_sha=head_sha,
@@ -759,7 +765,7 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
                 poll_interval_seconds=poll_interval_seconds,
                 final_status="timeout",
                 checks=checks,
-                error="CI remained pending after wait budget",
+                error=error,
                 drift_sample=drift_sample,
                 target_kind=target_kind,
                 target_sha=target_sha or head_sha,
@@ -792,6 +798,11 @@ def format_human(result: WatchResult) -> str:
         )
     if result.checks:
         lines.append(f"  checks: {result.checks.get('overall', 'unknown')}")
+        pending_reason = result.checks.get("pending_reason")
+        if pending_reason:
+            lines.append(f"  pending_reason: {pending_reason}")
+        if result.checks.get("setup_starvation"):
+            lines.append("  setup_starvation: detected on hosted runner")
     if result.error:
         lines.append(f"  error: {result.error}")
     if result.drift_sample is not None:

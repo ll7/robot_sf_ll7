@@ -378,7 +378,9 @@ _FAST_FILES = {
     "navigation_test.py",
     "ped_grouping_test.py",
     "test_compare_coverage_cli.py",
+    "test_global_route.py",
     "test_open_coverage_report.py",
+    "test_route_geometry.py",
     "test_pytest_config_contract.py",
     # Canonical logging helper tests provide changed-line coverage when the
     # deprecated research logging shim is retired (issue #8378).

@@ -245,12 +245,22 @@ def test_worktree_directory_size_measures_fleet_children_concurrently(
 
     calls: list[Path] = []
 
-    def fake_size(path: Path, *, timeout_seconds: float) -> capacity.DirectorySizeResult:
-        calls.append(path)
-        assert timeout_seconds == 1.5
-        return capacity.DirectorySizeResult(bytes=1024, status="ok")
+    class ImmediateProbe:
+        returncode = 0
+        pid = -1
 
-    monkeypatch.setattr(capacity, "_directory_size_bytes", fake_size)
+        def poll(self) -> int:
+            return self.returncode
+
+        def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+            del timeout
+            return "1\t/path\n", ""
+
+    def fake_start(path: Path) -> ImmediateProbe:
+        calls.append(path)
+        return ImmediateProbe()
+
+    monkeypatch.setattr(capacity, "_start_directory_size_probe", fake_start)
 
     result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=1.5)
 
@@ -258,30 +268,61 @@ def test_worktree_directory_size_measures_fleet_children_concurrently(
     assert sorted(calls) == sorted(children)
 
 
-def test_worktree_directory_size_preserves_partial_timeout_evidence(
+def test_worktree_directory_size_terminates_pending_probe_at_fleet_deadline(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """A fleet timeout returns a lower-bound estimate with an actionable reason."""
+    """A fleet timeout terminates probes and returns a lower-bound estimate."""
     fleet = tmp_path / "repo.worktrees"
     fleet.mkdir()
     children = [fleet / "fast", fleet / "slow"]
     for child in children:
         child.mkdir()
 
-    def fake_size(path: Path, *, timeout_seconds: float) -> capacity.DirectorySizeResult:
-        del timeout_seconds
+    class ImmediateProbe:
+        returncode = 0
+        pid = -1
+
+        def poll(self) -> int:
+            return self.returncode
+
+        def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+            del timeout
+            return "4\t/path\n", ""
+
+    slow_probes: list[subprocess.Popen[str]] = []
+
+    def fake_start(path: Path) -> ImmediateProbe | subprocess.Popen[str]:
         if path.name == "slow":
-            return capacity.DirectorySizeResult(bytes=None, status="timeout", reason="slow")
-        return capacity.DirectorySizeResult(bytes=4096, status="ok")
+            process = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(60)"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                start_new_session=os.name == "posix",
+            )
+            slow_probes.append(process)
+            return process
+        return ImmediateProbe()
 
-    monkeypatch.setattr(capacity, "_directory_size_bytes", fake_size)
+    monkeypatch.setattr(capacity, "_start_directory_size_probe", fake_start)
+    monkeypatch.setattr(capacity, "WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER", 0.25)
 
-    result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=1.5)
+    started_at = time.monotonic()
+    try:
+        result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=1.0)
+    finally:
+        for process in slow_probes:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+    elapsed = time.monotonic() - started_at
 
     assert result.bytes == 4096
     assert result.status == "partial"
     assert "sized 1/2 entries" in (result.reason or "")
-    assert "1 child probes timed out" in (result.reason or "")
+    assert "1 still running at the fleet deadline" in (result.reason or "")
+    assert elapsed < 2.0
+    assert all(process.poll() is not None for process in slow_probes)
 
 
 def test_inventory_preserves_timeout_and_unavailable_evidence(tmp_path: Path) -> None:

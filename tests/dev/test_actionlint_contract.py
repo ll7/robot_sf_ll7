@@ -189,6 +189,28 @@ def test_actionlint_script_constants_and_pins() -> None:
     assert "compute_sha256" in text
 
 
+def test_actionlint_wrapper_can_be_sourced_without_running_main(tmp_path: Path) -> None:
+    """Sourcing the wrapper exposes helpers without starting an actionlint run."""
+    env = os.environ.copy()
+    env["ACTIONLINT_BIN"] = str(tmp_path / "must-not-run")
+    env["ROBOT_SF_ACTIONLINT_CACHE"] = str(tmp_path / "unused-cache")
+    res = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "source scripts/dev/check_github_actions_workflows.sh\nprintf '%s\\n' sourced",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert res.returncode == 0, f"sourcing wrapper unexpectedly failed:\n{res.stderr}"
+    assert res.stdout.strip() == "sourced"
+
+
 def test_actionlint_platform_mapping() -> None:
     """Verify platform detection correctly handles supported Linux and macOS architectures."""
     test_sh = """

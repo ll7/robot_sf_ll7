@@ -36,7 +36,9 @@ TRIAGE_SCHEMA = "blocked-triage-v1"
 REPORT_SCHEMA = "blocked_queue_watch_report.v1"
 TRIAGE_LABEL = "needs-triage"
 FORBIDDEN_WRITE_LABEL = "state:ready"
-MAX_ISSUES = 100
+MAX_ISSUES = 500
+ISSUES_PAGE_SIZE = 100
+MAX_ISSUE_PAGES = MAX_ISSUES // ISSUES_PAGE_SIZE + 1
 MAX_COMMENT_PAGES = 3
 ADAPTER_SCHEMA_VERSION = 1
 MAX_REPO_PREDICATE_FILES = 256
@@ -294,22 +296,30 @@ def _parse_adapter_spec(value: Any) -> tuple[AdapterSpec | None, str | None]:
 def _inventory(
     repo: str, *, runner: Callable[[list[str]], subprocess.CompletedProcess[str]]
 ) -> list[dict[str, Any]]:
-    """Read the bounded open ``state:blocked`` issue inventory."""
-    result = runner(
-        [
-            "api",
-            f"repos/{repo}/issues?state=open&labels=state:blocked&per_page={MAX_ISSUES}&page=1",
-        ]
-    )
-    payload = _json_result(result, what="blocked issue inventory")
-    if not isinstance(payload, list):
-        raise RuntimeError("blocked issue inventory was not a JSON list")
-    if len(payload) >= MAX_ISSUES:
-        raise RuntimeError(
-            f"blocked issue inventory reached the {MAX_ISSUES}-row limit; refusing truncated input"
+    """Read a bounded, paginated open ``state:blocked`` issue inventory."""
+    payload_rows: list[Any] = []
+    for page in range(1, MAX_ISSUE_PAGES + 1):
+        result = runner(
+            [
+                "api",
+                f"repos/{repo}/issues?state=open&labels=state:blocked&"
+                f"per_page={ISSUES_PAGE_SIZE}&page={page}",
+            ]
         )
+        payload = _json_result(result, what=f"blocked issue inventory page {page}")
+        if not isinstance(payload, list):
+            raise RuntimeError(f"blocked issue inventory page {page} was not a JSON list")
+        if not payload:
+            break
+        payload_rows.extend(payload)
+        if len(payload_rows) > MAX_ISSUES:
+            raise RuntimeError(
+                f"blocked issue inventory exceeded the {MAX_ISSUES}-row limit; refusing truncated input"
+            )
+        if len(payload) < ISSUES_PAGE_SIZE:
+            break
     rows: list[dict[str, Any]] = []
-    for index, row in enumerate(payload):
+    for index, row in enumerate(payload_rows):
         if not isinstance(row, dict) or type(row.get("number")) is not int:
             raise RuntimeError(f"blocked issue inventory row {index} is malformed")
         if "pull_request" in row:

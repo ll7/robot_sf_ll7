@@ -42,6 +42,21 @@ def _expected_issue(state: str = "open") -> dict[str, str]:
     return {"state": state, "updated_at": EXPECTED_ISSUE_UPDATED_AT}
 
 
+def _attach_valid_provenance(plan: dict[str, Any]) -> dict[str, Any]:
+    """Populate valid commit/classifier provenance and compute plan_digest for test plans."""
+    plan["source_sha"] = issue_audit_core.resolve_source_sha()
+    plan["classifier_digest"] = issue_audit_core.resolve_classifier_digest()
+    plan["producer"] = issue_audit_core.resolve_producer_identity()
+    plan["provenance"] = {
+        "schema": issue_audit_core.PROVENANCE_SCHEMA,
+        "source_sha": plan["source_sha"],
+        "classifier_digest": plan["classifier_digest"],
+        "producer": plan["producer"],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+    return plan
+
+
 def _issue(
     number: int,
     *,
@@ -2289,7 +2304,7 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
         ],
         "truncation_or_errors": [],
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    _attach_valid_provenance(plan)
     result = apply_mutations(plan, runner=runner)
 
     assert result["ok"] is True
@@ -2349,7 +2364,7 @@ def test_apply_treats_absent_label_delete_as_idempotent() -> None:
         ],
         "truncation_or_errors": [],
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
 
@@ -2402,7 +2417,7 @@ def test_apply_keeps_unrelated_label_404_as_failure() -> None:
         ],
         "truncation_or_errors": [],
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
 
@@ -2461,7 +2476,7 @@ def test_apply_skips_entire_issue_batch_when_state_or_version_is_stale(
         ],
         "truncation_or_errors": [],
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
 
@@ -2532,7 +2547,7 @@ def test_apply_proceeds_on_timestamp_only_drift_with_matching_labels() -> None:
         ],
         "truncation_or_errors": [],
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
 
@@ -2584,7 +2599,7 @@ def test_apply_blocks_on_label_drift_with_retry_handoff() -> None:
         ],
         "truncation_or_errors": [],
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
 
@@ -2633,7 +2648,7 @@ def test_apply_blocks_on_state_drift_with_labels() -> None:
         ],
         "truncation_or_errors": [],
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
 
@@ -2881,7 +2896,7 @@ def test_apply_readback_rejects_state_change_after_label_write() -> None:
         ],
         "truncation_or_errors": [],
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
 
@@ -3009,7 +3024,7 @@ def test_apply_accepts_reasoned_blocked_label() -> None:
         ],
         "truncation_or_errors": [],
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
 
@@ -3828,3 +3843,293 @@ def test_inventory_uses_explicit_retry_command_override(
     )
 
     assert observed_retry_command == custom_retry
+
+
+def test_apply_rejects_missing_source_sha() -> None:
+    """A plan missing source_sha is rejected before any mutations are executed."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 109,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert "plan is missing source_sha" in result["reason"]
+    assert calls == []
+
+
+def test_apply_rejects_source_sha_mismatch() -> None:
+    """A plan generated from a different commit SHA cannot be applied."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 109,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+    plan["source_sha"] = "0" * 40
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(
+        plan,
+        runner=runner,
+        apply_source_sha="1" * 40,
+    )
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert "source SHA" in result["reason"]
+    assert "does not match" in result["reason"]
+    assert calls == []
+
+
+def test_apply_rejects_classifier_digest_mismatch() -> None:
+    """A plan generated from a different classifier digest cannot be applied."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 109,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+    plan["classifier_digest"] = "a" * 64
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(
+        plan,
+        runner=runner,
+        apply_source_sha=plan["source_sha"],
+        apply_classifier_digest="b" * 64,
+    )
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert "classifier digest" in result["reason"]
+    assert calls == []
+
+
+def test_apply_rejects_read_only_diagnostic_plan() -> None:
+    """Mutations cannot be applied from a read-only diagnostic plan."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "diagnostic_mode": True,
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 109,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert "read-only diagnostic" in result["reason"]
+    assert calls == []
+
+
+def test_apply_rejects_stale_origin_main_revision() -> None:
+    """Apply with freshness check refuses when the revision does not contain origin/main."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    def fake_command_runner(args: list[str]) -> subprocess.CompletedProcess[str]:
+        if "merge-base" in args:
+            return subprocess.CompletedProcess(args, 1, "", "not ancestor")
+        if "rev-parse" in args:
+            return subprocess.CompletedProcess(args, 0, "a" * 40 + "\n", "")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 109,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+    result = apply_mutations(
+        plan,
+        runner=runner,
+        check_freshness=True,
+        command_runner=fake_command_runner,
+        apply_source_sha=plan["source_sha"],
+        apply_classifier_digest=plan["classifier_digest"],
+    )
+
+    assert result["ok"] is False
+    assert "does not contain current origin/main" in result["reason"]
+    assert calls == []
+
+
+def test_plan_read_only_diagnostic_mode_suppresses_mutations() -> None:
+    """Diagnostic mode sets diagnostic_mode flag and clears all mutations."""
+    inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [_issue(101, labels=[], body="## Definition of Done\n- [ ] verify")],
+        "labels": ["state:ready"],
+    }
+    plan = build_audit_plan(
+        inventory,
+        read_only_diagnostic=True,
+    )
+    assert plan["diagnostic_mode"] is True
+    assert plan["mutations"] == []
+    assert plan["classification_status"]["mutations_suppressed"] is True
+    assert "diagnostic" in str(plan["classification_status"]["reason"])
+
+
+def test_plan_rejects_stale_revision_in_autonomous_mode(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The autonomous plan CLI fails closed when executing revision does not contain origin/main."""
+    monkeypatch.setattr(
+        issue_audit_core,
+        "check_origin_main_freshness",
+        lambda *a, **k: (False, "head123", "main456", "stale revision"),
+    )
+    code = main(["plan", "--mode", "autonomous", "--repo", "ll7/robot_sf_ll7"])
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "does not contain current origin/main" in captured.err
+    assert "git fetch origin main && git merge origin/main" in captured.err
+    assert "--read-only-diagnostic" in captured.err
+
+
+def test_stale_producer_cannot_write_labels() -> None:
+    """A plan generated with pre-fix logic or stale producer identity is rejected at apply."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 7409,
+                "value": "decision-required",
+                "reason": "stale prompt interpretation",
+                "expected_issue": _expected_issue(),
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "issue_num",
+    [
+        3207,
+        3287,
+        6155,
+        7290,
+        7382,
+        7383,
+        7384,
+        7385,
+        7386,
+        7387,
+        7388,
+        7409,
+        7411,
+        7412,
+        7457,
+        7980,
+        8021,
+        8064,
+        8076,
+        8172,
+        8173,
+    ],
+)
+def test_ruled_issues_produce_no_decision_required_mutations(issue_num: int) -> None:
+    """All 21 previously affected issues produce no decision-required mutation after ruling."""
+    issue = _issue(
+        issue_num,
+        body="Owner decision required: maintainer choice on strategy.",
+    )
+    issue["comments"] = [
+        {
+            "body": f"ll7/robot_sf_ll7#{issue_num}: ruling-action-token",
+            "created_at": "2026-08-20T10:00:00Z",
+        }
+    ]
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+    assert classification.decision_required is False
+    assert not any(
+        m["operation"] == "add_label" and m["value"] == "decision-required"
+        for m in classification.mutations
+    )

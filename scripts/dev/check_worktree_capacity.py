@@ -25,6 +25,7 @@ DEFAULT_MINIMUM_FREE_BYTES = 2 * 1024**3
 DEFAULT_DIRECTORY_SIZE_TIMEOUT_SECONDS = 5.0
 WORKTREE_SIZE_MAX_WORKERS = 16
 WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER = 12
+_DIRECTORY_SIZE_PROBE_REAP_TIMEOUT_SECONDS = 0.5
 RECLAIM_CATEGORIES = {
     "output": "ignored generated output; preserve durable evidence before pruning",
     "uv-cache": "dependency cache; review active uv processes before clearing",
@@ -85,6 +86,7 @@ class _FleetSizeAccounting:
     child_timeouts: int = 0
     unavailable: int = 0
     incomplete: int = 0
+    not_started: int = 0
 
 
 def _positive_integer(value: str, *, option: str) -> int:
@@ -235,39 +237,124 @@ def _start_directory_size_probe(path: Path) -> subprocess.Popen[str]:
     )
 
 
-def _terminate_directory_size_probe(process: subprocess.Popen[str]) -> None:
-    """Terminate one probe and reap it without relying on executor shutdown."""
+def _kill_directory_size_probe(process: subprocess.Popen[str]) -> None:
+    """Send a hard termination signal to one still-running probe."""
 
-    if process.poll() is not None:
-        return
     try:
-        if os.name == "posix":
+        if os.name == "posix" and process.pid is not None and process.pid > 0:
             os.killpg(process.pid, signal.SIGKILL)
-        else:
+        elif process.poll() is None:
             process.kill()
     except (OSError, ProcessLookupError):
         try:
             process.kill()
         except (OSError, ProcessLookupError):
             pass
+
+
+def _reap_directory_size_probe(process: subprocess.Popen[str], *, timeout_seconds: float) -> None:
+    """Drain and reap one terminated probe, failing closed if it survives."""
+
+    if timeout_seconds <= 0:
+        if process.poll() is None:
+            raise RuntimeError("du probe was not ready to reap")
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
+        return
     try:
-        process.communicate(timeout=0.5)
+        process.communicate(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
         try:
             process.kill()
         except (OSError, ProcessLookupError):
             pass
         try:
-            process.wait(timeout=0.5)
-        except subprocess.TimeoutExpired:
-            pass
+            process.communicate(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired as second_timeout:
+            raise RuntimeError("du probe could not be terminated and reaped") from second_timeout
 
 
-def _completed_directory_size_probe(process: subprocess.Popen[str]) -> DirectorySizeResult:
+def _reap_ready_directory_size_probes(
+    pending: set[subprocess.Popen[str]],
+    active: dict[subprocess.Popen[str], float],
+) -> tuple[Exception | None, bool]:
+    """Reap probes that have exited without waiting on probes still running."""
+
+    cleanup_error: Exception | None = None
+    progressed = False
+    for process in tuple(pending):
+        if process.poll() is None:
+            continue
+        try:
+            _reap_directory_size_probe(process, timeout_seconds=0.0)
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+            cleanup_error = cleanup_error or exc
+            continue
+        pending.remove(process)
+        active.pop(process, None)
+        progressed = True
+    return cleanup_error, progressed
+
+
+def _terminate_active_directory_size_probes(
+    active: dict[subprocess.Popen[str], float],
+    *,
+    deadline: float | None = None,
+) -> None:
+    """Terminate and reap every active probe, surfacing cleanup failures."""
+
+    cleanup_error: Exception | None = None
+    processes = tuple(active)
+    for process in processes:
+        try:
+            _kill_directory_size_probe(process)
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+            cleanup_error = cleanup_error or exc
+    pending = set(processes)
+    cleanup_deadline = deadline
+    if cleanup_deadline is None:
+        cleanup_deadline = time.monotonic() + _DIRECTORY_SIZE_PROBE_REAP_TIMEOUT_SECONDS
+
+    while pending:
+        reap_error, progressed = _reap_ready_directory_size_probes(pending, active)
+        cleanup_error = cleanup_error or reap_error
+
+        if not pending:
+            break
+        remaining = cleanup_deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        if not progressed:
+            time.sleep(min(0.01, remaining))
+
+    if pending:
+        cleanup_error = cleanup_error or RuntimeError(
+            f"{len(pending)} du probes did not terminate before the cleanup deadline"
+        )
+    if cleanup_error is not None:
+        raise RuntimeError(
+            "one or more du probes could not be terminated and reaped"
+        ) from cleanup_error
+
+
+def _terminate_directory_size_probe(process: subprocess.Popen[str]) -> None:
+    """Terminate one probe and reap it without relying on executor shutdown."""
+
+    active = {process: time.monotonic()}
+    _terminate_active_directory_size_probes(
+        active,
+        deadline=time.monotonic() + _DIRECTORY_SIZE_PROBE_REAP_TIMEOUT_SECONDS,
+    )
+
+
+def _completed_directory_size_probe(
+    process: subprocess.Popen[str], *, timeout_seconds: float
+) -> DirectorySizeResult:
     """Collect one completed probe without allowing a non-zero exit to look empty."""
 
     try:
-        stdout, _ = process.communicate()
+        stdout, _ = process.communicate(timeout=max(0.0, timeout_seconds))
     except (OSError, ValueError):
         return DirectorySizeResult(
             bytes=None,
@@ -324,19 +411,43 @@ def _settle_directory_size_probes(
     *,
     now: float,
     timeout_seconds: float,
+    deadline: float,
+    cleanup_deadline: float,
 ) -> bool:
     settled = False
+    timed_out: list[subprocess.Popen[str]] = []
     for process, started_at in tuple(active.items()):
         if process.poll() is not None:
-            result = _completed_directory_size_probe(process)
+            try:
+                result = _completed_directory_size_probe(
+                    process,
+                    timeout_seconds=max(0.0, deadline - time.monotonic()),
+                )
+            except subprocess.TimeoutExpired:
+                _terminate_active_directory_size_probes(
+                    {process: started_at},
+                    deadline=cleanup_deadline,
+                )
+                del active[process]
+                accounting.unavailable += 1
+                settled = True
+                continue
             del active[process]
             _account_directory_size_result(accounting, result)
             settled = True
-        elif now - started_at >= timeout_seconds:
-            _terminate_directory_size_probe(process)
+        elif now < deadline and now - started_at >= timeout_seconds:
+            timed_out.append(process)
+
+    if timed_out:
+        timed_out_entries = {process: active[process] for process in timed_out}
+        _terminate_active_directory_size_probes(
+            timed_out_entries,
+            deadline=cleanup_deadline,
+        )
+        for process in timed_out:
             del active[process]
             accounting.child_timeouts += 1
-            settled = True
+        settled = True
     return settled
 
 
@@ -346,18 +457,25 @@ def _fleet_directory_size_result(
     child_count: int,
     total_timeout: float,
 ) -> DirectorySizeResult:
-    if not accounting.incomplete and not accounting.child_timeouts and not accounting.unavailable:
+    if (
+        not accounting.incomplete
+        and not accounting.not_started
+        and not accounting.child_timeouts
+        and not accounting.unavailable
+    ):
         return DirectorySizeResult(bytes=accounting.total_bytes, status="ok")
 
     reason = (
         f"bounded worktree estimate sized {accounting.completed_ok}/{child_count} entries; "
         f"{accounting.incomplete} still running at the fleet deadline, "
+        f"{accounting.not_started} not started, "
         f"{accounting.child_timeouts} child probes timed out, and "
         f"{accounting.unavailable} were unavailable within the {total_timeout:g}s fleet budget"
     )
+    partial_bytes = accounting.total_bytes if accounting.completed_ok else None
     return DirectorySizeResult(
-        bytes=accounting.total_bytes or None,
-        status="partial" if accounting.total_bytes else "timeout",
+        bytes=partial_bytes,
+        status="partial" if accounting.completed_ok else "timeout",
         reason=reason,
     )
 
@@ -389,38 +507,49 @@ def _worktree_directory_size_bytes(
         timeout_seconds * WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER,
         max(timeout_seconds, 60.0),
     )
+    cleanup_deadline = time.monotonic() + total_timeout
+    cleanup_grace = min(
+        _DIRECTORY_SIZE_PROBE_REAP_TIMEOUT_SECONDS,
+        total_timeout / 4,
+    )
+    deadline = cleanup_deadline - cleanup_grace
     accounting = _FleetSizeAccounting()
     next_child = 0
     active: dict[subprocess.Popen[str], float] = {}
-    deadline = time.monotonic() + total_timeout
 
-    while active or next_child < len(children):
-        next_child, unavailable = _start_directory_size_probes(
-            children,
-            next_child,
-            active,
-            max_workers=max_workers,
-            deadline=deadline,
-        )
-        accounting.unavailable += unavailable
+    try:
+        while active or next_child < len(children):
+            next_child, unavailable = _start_directory_size_probes(
+                children,
+                next_child,
+                active,
+                max_workers=max_workers,
+                deadline=deadline,
+            )
+            accounting.unavailable += unavailable
 
-        now = time.monotonic()
-        if now >= deadline:
-            accounting.incomplete = len(active) + len(children) - next_child
-            for process in tuple(active):
-                _terminate_directory_size_probe(process)
-            active.clear()
-            break
+            now = time.monotonic()
+            settled = _settle_directory_size_probes(
+                active,
+                accounting,
+                now=now,
+                timeout_seconds=timeout_seconds,
+                deadline=deadline,
+                cleanup_deadline=cleanup_deadline,
+            )
 
-        settled = _settle_directory_size_probes(
-            active,
-            accounting,
-            now=now,
-            timeout_seconds=timeout_seconds,
-        )
+            now = time.monotonic()
+            if now >= deadline:
+                accounting.incomplete = len(active)
+                accounting.not_started = len(children) - next_child
+                _terminate_active_directory_size_probes(active, deadline=cleanup_deadline)
+                break
 
-        if active and not settled:
-            time.sleep(min(0.01, max(0.0, deadline - now)))
+            if active and not settled:
+                time.sleep(min(0.01, max(0.0, deadline - now)))
+    finally:
+        if active:
+            _terminate_active_directory_size_probes(active, deadline=cleanup_deadline)
 
     return _fleet_directory_size_result(
         accounting,

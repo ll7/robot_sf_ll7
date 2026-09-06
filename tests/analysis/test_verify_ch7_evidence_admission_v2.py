@@ -258,9 +258,7 @@ def test_v21_custody_uses_canonical_source_gate_registry() -> None:
     assert manifest["custody"] == expected
 
 
-def test_admitted_v21_receipt_must_bind_the_custody_registry(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_admitted_v21_receipt_must_bind_the_custody_registry(tmp_path: Path, monkeypatch) -> None:
     package = tmp_path / "package"
     receipt_path = tmp_path / "receipt.json"
     package.mkdir()
@@ -293,7 +291,9 @@ def test_admitted_v21_receipt_must_bind_the_custody_registry(
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
 
-    monkeypatch.setattr(verifier.admission, "_verify_members", lambda *args, **kwargs: ("a" * 64, []))
+    monkeypatch.setattr(
+        verifier.admission, "_verify_members", lambda *args, **kwargs: ("a" * 64, [])
+    )
     monkeypatch.setattr(verifier, "_validate", lambda *args, **kwargs: None)
     monkeypatch.setattr(verifier, "_verify_projection_contract", lambda *args, **kwargs: None)
     monkeypatch.setattr(

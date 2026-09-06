@@ -2383,10 +2383,14 @@ def _handle_only_empty_failure(*, args: argparse.Namespace, error: Exception) ->
             error=error,
         )
     elif isinstance(error, ProjectRateLimitError):
-        if error.writes_performed_count > 0 or error.completed_write_count > 0:
+        if (
+            error.writes_performed_count > 0
+            or error.completed_write_count > 0
+            or error.write_ambiguity is True
+        ):
             # The documented non-fatal result is a no-write fallback. Once a
-            # partial mutation is known, preserve fail-closed behavior instead
-            # of presenting a successful queue fallback after Project writes.
+            # mutation is known or ambiguous, preserve fail-closed behavior
+            # instead of presenting a successful queue fallback after Project writes.
             return None
         payload = _blocked_project_rate_limit_payload(
             owner=args.owner,

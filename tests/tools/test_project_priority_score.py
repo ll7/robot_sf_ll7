@@ -1342,6 +1342,29 @@ def test_main_only_empty_rate_limit_reports_prior_field_writes(
     assert capsys.readouterr().out == ""
 
 
+def test_main_only_empty_ambiguous_rate_limit_remains_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An unconfirmed first write cannot be presented as a proven no-write fallback."""
+
+    def _raise(*args: object, **kwargs: object) -> list[SyncPreview]:
+        error = ProjectRateLimitError(
+            command=("gh", "api", "graphql"),
+            details="GraphQL: API rate limit already exceeded",
+            phase="write",
+        )
+        error.write_ambiguity = True
+        raise error
+
+    monkeypatch.setattr(project_priority_score, "sync_scores", _raise)
+
+    with pytest.raises(ProjectRateLimitError):
+        main(["sync", "--only-empty"])
+
+    assert capsys.readouterr().out == ""
+
+
 def test_main_non_empty_scope_failure_remains_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

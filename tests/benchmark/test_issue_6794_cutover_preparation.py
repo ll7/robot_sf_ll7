@@ -403,6 +403,38 @@ def test_compare_parity_rows_uses_execution_mode_for_native_admission(tmp_path: 
     assert any("execution mode drift" in blocker for blocker in report["blockers"])
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("execution_mode", "adapter"),
+        ("readiness_status", "adapter"),
+        ("availability_status", "failed"),
+    ],
+)
+def test_compare_parity_rows_rejects_unbound_canonical_status_fields(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    """Explicit availability axes cannot contradict the canonical classifier."""
+    before = tmp_path / "before.jsonl"
+    after = tmp_path / "after.jsonl"
+    args = _strict_comparison_args()
+    args["expected_keys"] = [("ppo", "fixture.scenario", 111)]
+    before_row = _row(111, provenance=args["expected_provenance"]["before"]["ppo"])
+    after_row = _row(111, provenance=args["expected_provenance"]["after"]["ppo"])
+    before_row[field] = value
+    after_row[field] = value
+    _write_rows(before, [before_row])
+    _write_rows(after, [after_row])
+
+    report = compare_parity_rows(before, after, **args)
+
+    assert report["status"] == "failed"
+    assert any(
+        f"{field} disagrees with canonical availability" in blocker
+        for blocker in report["blockers"]
+    )
+
+
 def test_compare_parity_rows_rejects_non_success_episode_status(tmp_path: Path) -> None:
     """A successful benchmark flag cannot mask a failed canonical episode status."""
     before = tmp_path / "before.jsonl"

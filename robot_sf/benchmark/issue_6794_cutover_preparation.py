@@ -1451,6 +1451,17 @@ def _validate_row_runtime_contract(  # noqa: C901, PLR0912
                 f"{label} canonical readiness drift at {key!r}: "
                 f"{availability.readiness_status!r} != {expected_readiness!r}"
             )
+        for field, canonical_value in (
+            ("execution_mode", availability.execution_mode),
+            ("readiness_status", availability.readiness_status),
+            ("availability_status", availability.availability_status),
+        ):
+            observed_value = row.get(field)
+            if observed_value != canonical_value:
+                blockers.append(
+                    f"{label} row {key!r} {field} disagrees with canonical availability: "
+                    f"{observed_value!r} != {canonical_value!r}"
+                )
     return blockers
 
 

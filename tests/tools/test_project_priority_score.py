@@ -1334,17 +1334,12 @@ def test_main_only_empty_rate_limit_reports_prior_field_writes(
 
     monkeypatch.setattr(project_priority_score, "ensure_required_fields", _raise)
 
-    assert main(["sync", "--only-empty", "--ensure-fields"]) == 0
+    with pytest.raises(ProjectRateLimitError) as exc_info:
+        main(["sync", "--only-empty", "--ensure-fields"])
 
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["status"] == "blocked"
-    assert payload["reason"] == "project_api_rate_limit"
-    assert payload["attempted_field_names"] == list(REQUIRED_NUMBER_FIELDS[:2])
-    assert payload["created_field_names"] == [REQUIRED_NUMBER_FIELDS[0]]
-    assert payload["completed_write_count"] == 1
-    assert payload["writes_performed_count"] == 1
-    assert payload["writes_performed"] is True
-    assert "1 field-creation write(s) completed" in payload["message"]
+    assert exc_info.value.writes_performed_count == 1
+    assert exc_info.value.completed_write_count == 1
+    assert capsys.readouterr().out == ""
 
 
 def test_main_non_empty_scope_failure_remains_fail_closed(

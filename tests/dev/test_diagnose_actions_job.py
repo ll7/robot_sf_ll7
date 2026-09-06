@@ -341,3 +341,24 @@ def test_main_fails_closed_when_gh_is_missing(monkeypatch, capsys) -> None:
 
     assert diagnose_actions_job.main(["123", "--repo", "owner/repo"]) == 1
     assert "gh CLI not found" in capsys.readouterr().err
+
+
+def test_gh_timeout_returns_a_structured_failure(monkeypatch) -> None:
+    """A hung gh request becomes a bounded diagnostic failure."""
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def raise_timeout(
+        command: list[str], *args: object, **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        del args
+        calls.append((command, kwargs))
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(diagnose_actions_job.subprocess, "run", raise_timeout)
+
+    result = diagnose_actions_job._gh(["api", "repos/owner/repo/actions/jobs/123"])
+
+    assert result.returncode == 124
+    assert result.stdout == ""
+    assert result.stderr == "gh command timed out after 30 seconds"
+    assert calls[0][1]["timeout"] == 30

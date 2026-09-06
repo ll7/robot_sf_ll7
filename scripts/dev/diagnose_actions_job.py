@@ -23,6 +23,7 @@ from typing import Any
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 API_PREFIX = "https://api.github.com/"
+DEFAULT_GH_TIMEOUT_SECONDS = 30
 # Safety guard for the rel="next" pagination loop. The check-run annotations
 # endpoint permits pages of up to 100 results; this is a local request budget.
 MAX_ANNOTATION_PAGES = 100
@@ -30,19 +31,28 @@ MAX_ANNOTATION_PAGES = 100
 
 def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
     """Run ``gh`` without raising so diagnostic fallback remains available."""
+    command = ["gh", *args]
     try:
         return subprocess.run(
-            ["gh", *args],
+            command,
             capture_output=True,
             text=True,
             check=False,
+            timeout=DEFAULT_GH_TIMEOUT_SECONDS,
         )
     except FileNotFoundError:
         return subprocess.CompletedProcess(
-            args=["gh", *args],
+            args=command,
             returncode=127,
             stdout="",
             stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=124,
+            stdout="",
+            stderr=f"gh command timed out after {DEFAULT_GH_TIMEOUT_SECONDS} seconds",
         )
 
 

@@ -582,6 +582,19 @@ def test_validation_rejects_scenario_identity_mutation() -> None:
         )
 
 
+def test_expected_design_rejects_preregistration_roster_mutation() -> None:
+    """Do not derive a fresh 24-row design from a renamed caller-supplied planner."""
+
+    _, _, _, preregistration = _validation_inputs()
+    ppo_arm = next(
+        arm for arm in preregistration["planner_roster"]["arms"] if arm["planner_id"] == "ppo"
+    )
+    ppo_arm["planner_id"] = "ppo_mutated"
+
+    with pytest.raises(ValueError, match="planner roster must exactly match"):
+        builder._expected_design(preregistration)
+
+
 def test_validation_rejects_row_identity_mismatch() -> None:
     """Keep source row IDs bound to their planner, tier, and metric fields."""
 

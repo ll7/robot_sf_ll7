@@ -67,10 +67,22 @@ EXPECTED_CLASSIFICATION_COUNTS = {
     "inconclusive": 8,
     "intervention_not_activated": 6,
 }
+EXPECTED_PREREGISTERED_PLANNER_IDS = (
+    "scenario_adaptive_hybrid_orca_v2_collision_guard",
+    "ppo",
+    "orca",
+    "prediction_planner",
+)
+EXPECTED_PREREGISTERED_TIER_IDS = ("cap_3_0", "cap_4_0")
+EXPECTED_PREREGISTERED_METRIC_IDS = (
+    "success_rate",
+    "collision_rate",
+    "near_miss_rate",
+)
 EXPECTED_NONACTIVATED_IDS = frozenset(
     f"prediction_planner__{tier}__{metric}"
-    for tier in ("cap_3_0", "cap_4_0")
-    for metric in ("collision_rate", "near_miss_rate", "success_rate")
+    for tier in EXPECTED_PREREGISTERED_TIER_IDS
+    for metric in EXPECTED_PREREGISTERED_METRIC_IDS
 )
 EXPECTED_SYNTHESIS_SCHEMA = "robot_sf.issue_5578_speed_tier_synthesis_adapter.v1"
 EXPECTED_EVIDENCE_STATUS = "native_grid_synthesis_complete_provenance_unverified"
@@ -676,23 +688,39 @@ def _expected_design(
     tuple[int, ...],
     tuple[tuple[str, str, str], ...],
 ]:
-    """Resolve exact contrast IDs, paired support, and harm margins from preregistration."""
+    """Resolve the frozen contrast design while preserving the preregistration contract."""
 
-    planners = [item.get("planner_id") for item in preregistration["planner_roster"]["arms"]]
-    tiers = [
+    configured_planners = tuple(
+        item.get("planner_id") for item in preregistration["planner_roster"]["arms"]
+    )
+    configured_tiers = tuple(
         item.get("tier_id")
         for item in preregistration["robot_speed_axis"]["tiers"]
         if item.get("role") != "nominal_reference"
-    ]
-    metrics = list(preregistration["inference_contract"]["primary_metrics"])
-    seed_values, scenario_contract = _validated_preregistration_pairing(preregistration)
-    if not all(isinstance(item, str) and item for item in [*planners, *tiers, *metrics]):
+    )
+    configured_metrics = tuple(preregistration["inference_contract"]["primary_metrics"])
+    configured_rosters = (
+        ("planner", configured_planners, EXPECTED_PREREGISTERED_PLANNER_IDS),
+        ("tier", configured_tiers, EXPECTED_PREREGISTERED_TIER_IDS),
+        ("metric", configured_metrics, EXPECTED_PREREGISTERED_METRIC_IDS),
+    )
+    if not all(
+        isinstance(item, str) and item for _, observed, _ in configured_rosters for item in observed
+    ):
         raise ValueError("preregistration planner, tier, and metric IDs must be non-empty strings")
+    for roster_name, observed, expected in configured_rosters:
+        if len(observed) != len(expected) or set(observed) != set(expected):
+            raise ValueError(
+                f"preregistration {roster_name} roster must exactly match the frozen "
+                f"issue #5578 roster: observed={observed!r}, expected={expected!r}"
+            )
+
+    seed_values, scenario_contract = _validated_preregistration_pairing(preregistration)
     expected_ids = {
         f"{planner}__{tier}__{metric}"
-        for planner in planners
-        for tier in tiers
-        for metric in metrics
+        for planner in EXPECTED_PREREGISTERED_PLANNER_IDS
+        for tier in EXPECTED_PREREGISTERED_TIER_IDS
+        for metric in EXPECTED_PREREGISTERED_METRIC_IDS
     }
     paired_denominator = len(seed_values) * len(scenario_contract)
     rules = preregistration["inference_contract"]["decision_rule"]

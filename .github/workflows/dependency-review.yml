@@ -77,11 +77,15 @@ jobs:
           comment-summary-in-pr: false
 
       - name: Generate dependency license inventory evidence
+        # Preserve diagnostic inventory evidence when the policy gate above rejects
+        # a dependency; the report is not an approval or release admission.
+        if: always()
         run: >-
           python scripts/tools/check_dependency_license_inventory.py
           --output output/validation/dependency-license-inventory.json
 
       - name: Check generated inventory freshness
+        if: always()
         run: >-
           python scripts/tools/check_dependency_license_inventory.py
           --check-freshness output/validation/dependency-license-inventory.json

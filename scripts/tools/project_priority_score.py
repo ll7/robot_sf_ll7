@@ -14,9 +14,10 @@ Projects API query, applies defaults and clamping for missing or invalid inputs,
 and writes the derived numeric score back to a `Priority Score` project field.
 
 The autopilot's ``sync --only-empty`` mode fails closed and returns a
-machine-readable blocked status when the GitHub token lacks ``read:project``.
-Callers can continue with live-label queue ordering and recover score sync by
-refreshing the token's Project scope. Other sync modes preserve their existing
+machine-readable blocked status when the GitHub token lacks ``read:project`` or
+the GitHub CLI reports an explicit API rate-limit failure. Callers can continue
+with live-label queue ordering and recover score sync after the relevant access
+or quota condition is cleared. Other sync modes preserve their existing
 exception behavior.
 """
 
@@ -98,6 +99,12 @@ REQUIRED_NUMBER_FIELDS: tuple[str, ...] = (
 )
 MISSING_PROJECT_SCOPE_RE = re.compile(
     r"missing required scopes?\s*\[(?P<scopes>[^\]]*\bread:project\b[^\]]*)\]",
+    re.IGNORECASE,
+)
+PROJECT_RATE_LIMIT_RE = re.compile(
+    r"(?:\bsecondary\s+rate\s+limit\b|"
+    r"\b(?:api\s+)?rate\s+limit(?:\s+of\s+\d+)?"
+    r"(?:\s+(?:has|is))?(?:\s+already)?(?:\s+been)?\s+exceeded\b)",
     re.IGNORECASE,
 )
 PROJECT_ITEM_GRAPHQL_PAGE_SIZE = 100
@@ -193,6 +200,19 @@ class MissingProjectScopeError(RuntimeError):
             "GitHub Project access requires scope(s) "
             + ", ".join(self.required_scopes)
             + ". Refresh the token before retrying Project #5 priority sync."
+            + f"\n{details}"
+        )
+
+
+class ProjectRateLimitError(RuntimeError):
+    """Raised when GitHub reports an explicit Project API rate-limit failure."""
+
+    def __init__(self, *, command: Sequence[str], details: str) -> None:
+        """Store the failed command and the original CLI diagnostic."""
+        self.command = tuple(command)
+        self.details = details
+        super().__init__(
+            "GitHub Project API rate limit exceeded; retry after the quota window resets."
             + f"\n{details}"
         )
 
@@ -607,6 +627,11 @@ class GhProjectClient:
                     command=("gh", *args),
                     details=details,
                     required_scopes=required_scopes,
+                ) from exc
+            if PROJECT_RATE_LIMIT_RE.search(details):
+                raise ProjectRateLimitError(
+                    command=("gh", *args),
+                    details=details,
                 ) from exc
             raise RuntimeError(
                 "gh command failed: "
@@ -2089,8 +2114,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Only assess issues whose Priority Score is currently empty; never re-score or "
             "overwrite an existing priority. Used by the autopilot auto-fill loop to stay cheap "
-            "and avoid churning human-set priorities. Missing read:project access returns a "
-            "non-fatal blocked result so live-label ordering can continue."
+            "and avoid churning human-set priorities. Missing read:project access and explicit "
+            "Project API rate-limit failures return a non-fatal blocked result so live-label "
+            "ordering can continue."
         ),
     )
     return parser
@@ -2114,6 +2140,31 @@ def _blocked_project_scope_payload(
             "Project #5 priority auto-fill was skipped because the GitHub token lacks "
             + ", ".join(error.required_scopes)
             + ". Continue with live-label ordering; refresh the token scope before retrying."
+        ),
+    }
+
+
+def _blocked_project_rate_limit_payload(
+    *, owner: str, project_number: int, error: ProjectRateLimitError
+) -> dict[str, Any]:
+    """Build the no-write payload for an explicit GitHub API rate-limit failure."""
+    command = " ".join(error.command)
+    return {
+        "status": "blocked",
+        "reason": "project_api_rate_limit",
+        "owner": owner,
+        "project_number": project_number,
+        "command": list(error.command),
+        "details": error.details,
+        "retryable": True,
+        "items": [],
+        "non_fatal": True,
+        "writes_performed": False,
+        "fallback": "live-label ordering",
+        "message": (
+            f"Project #5 priority auto-fill hit an explicit GitHub API rate limit while running "
+            f"{command}. No score write was attempted; retry after the quota window resets and "
+            "continue with live-label ordering."
         ),
     }
 
@@ -2224,6 +2275,12 @@ def _handle_only_empty_failure(*, args: argparse.Namespace, error: Exception) ->
             project_number=args.project_number,
             error=error,
         )
+    elif isinstance(error, ProjectRateLimitError):
+        payload = _blocked_project_rate_limit_payload(
+            owner=args.owner,
+            project_number=args.project_number,
+            error=error,
+        )
     elif isinstance(error, GhProjectTimeoutError):
         payload = _blocked_project_timeout_payload(
             owner=args.owner,
@@ -2292,6 +2349,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         previews = sync_scores(client, options)
     except (
         MissingProjectScopeError,
+        ProjectRateLimitError,
         GhProjectTimeoutError,
         ProjectQuotaBlockedError,
     ) as exc:

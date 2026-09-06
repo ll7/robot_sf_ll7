@@ -22,6 +22,7 @@ from scripts.tools.project_priority_score import (
     MissingProjectScopeError,
     ProjectItemFetchStats,
     ProjectQuotaBlockedError,
+    ProjectRateLimitError,
     ScoreInputs,
     SyncOptions,
     SyncPreview,
@@ -1198,6 +1199,47 @@ def test_gh_project_client_classifies_missing_read_project_scope(
     assert exc_info.value.command[:3] == ("gh", "project", "field-list")
 
 
+def test_gh_project_client_classifies_explicit_api_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The known owner fallback preserves an explicit GitHub rate-limit diagnostic."""
+
+    calls: list[list[str]] = []
+
+    def _raise(
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        owner = args[args.index("--owner") + 1]
+        if owner == "ll7":
+            raise subprocess.CalledProcessError(
+                1,
+                args,
+                output="",
+                stderr="unknown owner type",
+            )
+        raise subprocess.CalledProcessError(
+            1,
+            args,
+            output="",
+            stderr="GraphQL: API rate limit already exceeded",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _raise)
+
+    with pytest.raises(ProjectRateLimitError) as exc_info:
+        GhProjectClient().field_list(owner="ll7", project_number=5)
+
+    assert exc_info.value.command[:3] == ("gh", "project", "field-list")
+    assert exc_info.value.details == "GraphQL: API rate limit already exceeded"
+    assert [call[call.index("--owner") + 1] for call in calls] == ["ll7", "@me"]
+
+
 def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1232,6 +1274,40 @@ def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
     assert updates == []
 
 
+def test_main_only_empty_rate_limit_is_non_fatal_json_without_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The autopilot auto-fill path preserves an explicit rate-limit blocker."""
+
+    def _raise(*args: object, **kwargs: object) -> list[dict]:
+        raise ProjectRateLimitError(
+            command=("gh", "project", "field-list", "5"),
+            details="GraphQL: API rate limit already exceeded",
+        )
+
+    updates: list[float] = []
+    monkeypatch.setattr(GhProjectClient, "field_list", _raise)
+    monkeypatch.setattr(
+        GhProjectClient,
+        "update_number_field",
+        lambda self, **kwargs: updates.append(float(kwargs["number"])),
+    )
+
+    assert main(["sync", "--only-empty", "--ensure-fields"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "blocked"
+    assert payload["reason"] == "project_api_rate_limit"
+    assert payload["command"][:3] == ["gh", "project", "field-list"]
+    assert payload["details"] == "GraphQL: API rate limit already exceeded"
+    assert payload["retryable"] is True
+    assert payload["fallback"] == "live-label ordering"
+    assert payload["non_fatal"] is True
+    assert payload["writes_performed"] is False
+    assert updates == []
+
+
 def test_main_non_empty_scope_failure_remains_fail_closed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1250,6 +1326,26 @@ def test_main_non_empty_scope_failure_remains_fail_closed(
     )
 
     with pytest.raises(MissingProjectScopeError):
+        main(["sync"])
+
+
+def test_main_non_empty_rate_limit_remains_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only auto-fill mode converts an explicit rate-limit error to a non-fatal result."""
+
+    monkeypatch.setattr(
+        GhProjectClient,
+        "field_list",
+        lambda self, **kwargs: (_ for _ in ()).throw(
+            ProjectRateLimitError(
+                command=("gh", "project", "field-list", "5"),
+                details="GraphQL: API rate limit already exceeded",
+            )
+        ),
+    )
+
+    with pytest.raises(ProjectRateLimitError):
         main(["sync"])
 
 

@@ -73,7 +73,8 @@ def test_scan_file_allows_marked_and_historical_lines(tmp_path: Path) -> None:
     doc.parent.mkdir()
     doc.write_text(
         "Legacy `results/` paths have been migrated.\n"
-        "`python scripts/old_example.py` <!-- active-docs-check: allow -->\n",
+        "`python scripts/old_example.py` <!-- active-docs-check: allow -->\n"
+        "`output/results/old-example.json` <!-- active-docs-check: allow -->\n",
         encoding="utf-8",
     )
 

@@ -25,7 +25,7 @@ We define three incremental badging levels:
    - **Non-claims**: `functional` does **not** imply that the headline results, tables, or graphs in accompanying papers are reproduced.
 
 3. **`reproduced`**
-   - **Definition**: An independent execution of the documented commands on the release bundle regenerates the headline benchmark results/tables within a specified numeric tolerance.
+   - **Definition**: An independent execution of the documented commands on the release bundle regenerates the headline benchmark result tables within a specified numeric tolerance.
    - **Requirements**:
      - Must satisfy the `functional` badge.
      - Clear specification of target seeds, scenario matrices, and environment constraints.

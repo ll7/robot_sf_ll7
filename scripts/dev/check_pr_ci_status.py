@@ -875,6 +875,33 @@ def _timestamp_age_seconds(value: Any, *, now_epoch_seconds: float) -> int | Non
     return max(0, int(now_epoch_seconds - parsed.timestamp()))
 
 
+_SETUP_STEP_RE = re.compile(
+    r"\b(set\s*up|setup|install(?:ing)?\s+dependencies|install(?:ing)?\s+uv|actions/setup-)\b",
+    re.IGNORECASE,
+)
+
+
+def _job_active_step(job: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return the currently in-progress step of a job, if any."""
+    if not job:
+        return None
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return None
+    for step in steps:
+        if isinstance(step, dict) and str(step.get("status") or "").lower() == "in_progress":
+            return step
+    return None
+
+
+def _is_setup_step(step: dict[str, Any] | None) -> bool:
+    """Return whether a step represents environment or runner setup."""
+    if not step:
+        return False
+    name = str(step.get("name") or "")
+    return bool(_SETUP_STEP_RE.search(name))
+
+
 def _actions_lifecycle_phase(
     check: dict[str, Any],
     run: dict[str, Any] | None,
@@ -889,6 +916,23 @@ def _actions_lifecycle_phase(
     if job_status == "queued":
         return "setup" if run_status == "in_progress" else "queued"
     if job_status == "in_progress" or run_status == "in_progress":
+        active_step = _job_active_step(job)
+        if active_step is not None and _is_setup_step(active_step):
+            return "setup"
+        steps = (job or {}).get("steps")
+        if isinstance(steps, list) and steps:
+            completed_steps = [
+                s
+                for s in steps
+                if isinstance(s, dict) and str(s.get("status") or "").lower() == "completed"
+            ]
+            if (
+                active_step is None
+                and completed_steps
+                and all(_is_setup_step(s) for s in completed_steps)
+            ):
+                if not any(not _is_setup_step(s) for s in steps if isinstance(s, dict)):
+                    return "setup"
         return "in_progress"
     if check_status in PENDING_STATUSES:
         return "queued"
@@ -910,7 +954,11 @@ def _actions_lifecycle_age_source(
             (run.get("created_at"), "workflow_created_at"),
         )
     elif phase == "setup":
+        active_step = _job_active_step(job)
+        step_started_at = active_step.get("started_at") if active_step else None
         candidates = (
+            (step_started_at, "step_started_at"),
+            (job.get("started_at"), "job_started_at"),
             (job.get("created_at"), "job_created_at"),
             (run.get("run_started_at"), "workflow_started_at"),
             (run.get("created_at"), "workflow_created_at"),
@@ -941,6 +989,7 @@ def _actions_recovery_evidence(
             f"scripts/dev/check_pr_ci_status.py {pr_number} --expected-head-sha "
             f"{expected_head_sha} {_RESUME_MONITOR_ARGS} --json"
         )
+    has_setup_starvation = any(item.get("setup_starvation") for item in stale_items)
     stale_commands: list[dict[str, Any]] = []
     for item in stale_items:
         run_id = item.get("run_id")
@@ -951,32 +1000,48 @@ def _actions_recovery_evidence(
         if job_id is not None:
             inspect += f" --job {job_id}"
         exact_head_matches = item.get("exact_head_sha_matches")
-        stale_commands.append(
-            {
-                "run_id": run_id,
-                "job_id": job_id,
-                "phase": item.get("phase"),
-                "exact_head_sha_matches": exact_head_matches,
-                "inspect_command": inspect,
-                "cancel_command": (
-                    f"gh run cancel {run_id}" if exact_head_matches is True else None
-                ),
-                "replacement_command": (
-                    f"gh run rerun {run_id}" if exact_head_matches is True else None
-                ),
-                "mutation_authorized": False,
-            }
-        )
+        stale_cmd: dict[str, Any] = {
+            "run_id": run_id,
+            "job_id": job_id,
+            "phase": item.get("phase"),
+            "exact_head_sha_matches": exact_head_matches,
+            "inspect_command": inspect,
+            "cancel_command": (f"gh run cancel {run_id}" if exact_head_matches is True else None),
+            "replacement_command": (
+                f"gh run rerun {run_id}" if exact_head_matches is True else None
+            ),
+            "mutation_authorized": False,
+        }
+        if item.get("step_name"):
+            stale_cmd["step_name"] = item.get("step_name")
+        if item.get("setup_starvation"):
+            stale_cmd["setup_starvation"] = True
+        stale_commands.append(stale_cmd)
+
+    if has_setup_starvation:
+        action = "inspect_stalled_setup_then_cancel_or_replace"
+    elif stale_items:
+        action = "inspect_then_cancel_or_replace"
+    else:
+        action = "wait_for_replacement"
+
+    note = (
+        "Commands are explicit suggestions only; no cancellation or rerun was executed. "
+        "Cancellation or rerun requires explicit authorization, and merge admission stays blocked "
+        "until a fresh exact-head success."
+    )
+
     return {
-        "action": "inspect_then_cancel_or_replace" if stale_items else "wait_for_replacement",
+        "action": action,
         "authorized": False,
         "mutation_authorized": False,
         "route_evidence_only": True,
+        "setup_starvation": has_setup_starvation,
         "exact_head_sha": expected_head_sha or None,
         "monitor_command": monitor_command,
         "stale_runs": stale_commands,
         "superseded_runs": superseded_runs,
-        "note": "Commands are explicit suggestions only; no cancellation or rerun was executed.",
+        "note": note,
     }
 
 
@@ -1021,6 +1086,15 @@ def _annotate_actions_lifecycle(  # noqa: C901 - explicit fail-closed diagnostic
         else:
             exact_head_matches = bool(run_head_sha) and run_head_sha == expected_head_sha
         stale = age_seconds is not None and age_seconds >= actions_stale_after_seconds
+        active_step = _job_active_step(job)
+        step_name = str(active_step.get("name", "") or "") if active_step else None
+        step_status = str(active_step.get("status", "") or "") if active_step else None
+        step_started_at = str(active_step.get("started_at", "") or "") if active_step else None
+        is_setup_starvation = bool(
+            stale
+            and phase == "setup"
+            and str((job or {}).get("status", "") or "").lower() == "in_progress"
+        )
         items.append(
             {
                 "name": _rollup_name(check),
@@ -1032,6 +1106,10 @@ def _annotate_actions_lifecycle(  # noqa: C901 - explicit fail-closed diagnostic
                 "age_source": age_source,
                 "stale_after_seconds": actions_stale_after_seconds,
                 "stale": stale,
+                "setup_starvation": is_setup_starvation,
+                "step_name": step_name or None,
+                "step_status": step_status or None,
+                "step_started_at": step_started_at or None,
                 "run_id": run_id,
                 "job_id": job_id,
                 "details_url": details_url,
@@ -1053,18 +1131,26 @@ def _annotate_actions_lifecycle(  # noqa: C901 - explicit fail-closed diagnostic
         phase = str(item["phase"])
         by_phase[phase] = by_phase.get(phase, 0) + 1
     stale_items = [item for item in items if item["stale"]]
+    setup_starvation_items = [item for item in stale_items if item.get("setup_starvation")]
     checks["actions_lifecycle"] = {
         "items": items,
         "by_phase": by_phase,
         "stale_count": len(stale_items),
+        "setup_starvation_count": len(setup_starvation_items),
         "warning_threshold_seconds": actions_stale_after_seconds,
     }
     if stale_items:
         checks["age_warnings"] = stale_items
-        if not checks.get("pending_reason"):
-            checks["pending_reason"] = "actions_gate_age"
-        if not checks.get("diagnostic"):
-            checks["diagnostic"] = "actions_gate_queue_age"
+        if setup_starvation_items:
+            checks["setup_starvation"] = True
+            checks["setup_starvation_items"] = setup_starvation_items
+            checks["pending_reason"] = "setup_starvation"
+            checks["diagnostic"] = "actions_gate_setup_starvation"
+        else:
+            if not checks.get("pending_reason"):
+                checks["pending_reason"] = "actions_gate_age"
+            if not checks.get("diagnostic"):
+                checks["diagnostic"] = "actions_gate_queue_age"
     superseded_runs = checks.get("superseded_runs", [])
     if stale_items or superseded_runs:
         checks["recovery"] = _actions_recovery_evidence(
@@ -1484,6 +1570,21 @@ def _append_pending_reason(
             lines.append(f"    - {queued.get('name', 'unknown')}{suffix}")
         return
 
+    if pending_reason == "setup_starvation":
+        setup_items = checks.get("setup_starvation_items", [])
+        if not isinstance(setup_items, list):
+            setup_items = []
+        lines.append(f"  pending_reason: {pending_reason}  |  affected checks: {len(setup_items)}")
+        for item in setup_items:
+            step_name = item.get("step_name")
+            step_suffix = f" step={step_name}" if step_name else ""
+            lines.append(
+                f"    - {item.get('name', 'unknown')}: "
+                f"{item.get('phase', 'unknown')}{step_suffix} age={item.get('age_seconds', 'unknown')}s "
+                f"| run {item.get('run_id', 'unknown')} job {item.get('job_id', 'unknown')}"
+            )
+        return
+
     if pending_reason == "actions_gate_age":
         age_warnings = checks.get("age_warnings", [])
         if not isinstance(age_warnings, list):
@@ -1628,6 +1729,7 @@ def _monitor_terminal_reason(
     if terminal_reason == "attempt_exhausted" and pending_reason in {
         "status_propagation_lag",
         "runner_queue_starvation",
+        "setup_starvation",
     }:
         return str(pending_reason)
     return terminal_reason
@@ -1658,6 +1760,8 @@ def _resolve_ci_state(overall: str, pending_reason: str) -> str:
     if overall == "pending":
         if pending_reason == "status_propagation_lag":
             return "status_propagation_lag"
+        if pending_reason == "setup_starvation":
+            return "setup_starvation"
         return "pending"
     return "unknown"
 
@@ -1703,7 +1807,7 @@ def _snapshot_resume_command(
             "reason": "refresh_expecteds_and_rerun",
             "min_delay_seconds": None,
         }
-    if status in {"pending", "status_propagation_lag"}:
+    if status in {"pending", "status_propagation_lag", "setup_starvation"}:
         return {
             "command": (
                 f"scripts/dev/check_pr_ci_status.py {pr} --json "
@@ -1729,6 +1833,8 @@ def _snapshot_status(reasons: list[str], ci_state: str) -> str:
         return "failure"
     if ci_state == "status_propagation_lag":
         return "status_propagation_lag"
+    if ci_state == "setup_starvation":
+        return "setup_starvation"
     if ci_state == "pending":
         return "pending"
     if ci_state == "success":

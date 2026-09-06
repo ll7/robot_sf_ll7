@@ -71,7 +71,7 @@ the tests. Do not label a partial or historical count as the readiness suite wit
 
 ```bash
 # Docs and links
-python scripts/dev/check_docs_evidence_integrity.py --full
+uv run python scripts/dev/check_docs_evidence_integrity.py --full
 bash scripts/dev/check_context_notes.sh
 
 # Focused workflow/runtime proof

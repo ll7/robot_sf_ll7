@@ -13,12 +13,12 @@ The helper reads issue-backed project items through an explicit cursor-paginated
 Projects API query, applies defaults and clamping for missing or invalid inputs,
 and writes the derived numeric score back to a `Priority Score` project field.
 
-The autopilot's ``sync --only-empty`` mode fails closed and returns a
-machine-readable blocked status when the GitHub token lacks ``read:project`` or
-the GitHub CLI reports an explicit API rate-limit failure. Callers can continue
-with live-label queue ordering and recover score sync after the relevant access
-or quota condition is cleared. Other sync modes preserve their existing
-exception behavior.
+The autopilot's ``sync --only-empty`` mode returns a machine-readable blocked
+status for missing ``read:project`` access or an explicit API rate-limit failure
+when no Project mutation is known or ambiguous. Callers can continue with
+live-label queue ordering only after that proven no-write outcome; partial or
+write-phase failures remain fail closed. Other sync modes preserve their
+existing exception behavior.
 """
 
 from __future__ import annotations
@@ -2186,8 +2186,9 @@ def _build_parser() -> argparse.ArgumentParser:
             "Only assess issues whose Priority Score is currently empty; never re-score or "
             "overwrite an existing priority. Used by the autopilot auto-fill loop to stay cheap "
             "and avoid churning human-set priorities. Missing read:project access and explicit "
-            "Project API rate-limit failures return a non-fatal blocked result so live-label "
-            "ordering can continue."
+            "Project API rate-limit failures before any known or ambiguous Project mutation "
+            "return a non-fatal blocked result so live-label ordering can continue; partial or "
+            "write-phase failures remain fail closed."
         ),
     )
     return parser

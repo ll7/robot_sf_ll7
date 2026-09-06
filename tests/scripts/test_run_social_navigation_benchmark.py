@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _ORCHESTRATOR_MODULE = "robot_sf.benchmark.full_classic.orchestrator"
 _previous_orchestrator = sys.modules.get(_ORCHESTRATOR_MODULE)
@@ -26,8 +31,13 @@ def test_compute_aggregates_passes_expected_algorithms(monkeypatch: pytest.Monke
 
     captured: dict[str, object] = {}
 
-    def current_aggregator(**kwargs: object) -> dict[str, object]:
+    def current_aggregator(
+        *,
+        expected_algorithms: set[str],
+        **kwargs: object,
+    ) -> dict[str, object]:
         captured.update(kwargs)
+        captured["expected_algorithms"] = expected_algorithms
         return {"_meta": {"missing_algorithms": []}}
 
     monkeypatch.setattr(benchmark, "compute_aggregates_with_ci", current_aggregator)
@@ -41,10 +51,10 @@ def test_compute_aggregates_passes_expected_algorithms(monkeypatch: pytest.Monke
     assert captured["expected_algorithms"] == {"sf", "ppo"}
 
 
-def test_compute_aggregates_preserves_legacy_keyword_fallback(
+def test_compute_aggregates_omits_unsupported_expected_algorithms_keyword(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Only a legacy callable that rejects the keyword may use the compatibility retry."""
+    """A directly inspectable legacy callable is invoked without the optional keyword."""
 
     calls: list[dict[str, object]] = []
 
@@ -77,6 +87,66 @@ def test_compute_aggregates_preserves_legacy_keyword_fallback(
     assert "expected_algorithms" not in calls[0]
 
 
+def test_compute_aggregates_omits_keyword_for_forwarding_legacy_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A kwargs-only wrapper must not hide a legacy inner callable's TypeError."""
+
+    forwarded: list[dict[str, object]] = []
+
+    def legacy_aggregator(
+        records: list[dict[str, object]],
+        *,
+        group_by: str,
+        bootstrap_samples: int,
+        bootstrap_confidence: float,
+    ) -> dict[str, object]:
+        return {
+            "legacy": True,
+            "record_count": len(records),
+            "group_by": group_by,
+            "bootstrap_samples": bootstrap_samples,
+            "bootstrap_confidence": bootstrap_confidence,
+        }
+
+    def forwarding_wrapper(**kwargs: object) -> dict[str, object]:
+        forwarded.append(kwargs)
+        return legacy_aggregator(**kwargs)
+
+    monkeypatch.setattr(benchmark, "compute_aggregates_with_ci", forwarding_wrapper)
+
+    result = benchmark._compute_aggregates_payload([], expected_algorithms={"sf"})
+
+    assert result["legacy"] is True
+    assert len(forwarded) == 1
+    assert "expected_algorithms" not in forwarded[0]
+
+
+def test_compute_aggregates_fails_closed_for_uninspectable_aggregator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An opaque callable must not get an ambiguous keyword-retry fallback."""
+
+    calls = 0
+
+    class OpaqueAggregator:
+        @property
+        def __signature__(self) -> object:
+            raise ValueError("opaque signature")
+
+        def __call__(self, **_: object) -> dict[str, object]:
+            nonlocal calls
+            calls += 1
+            raise TypeError("got an unexpected keyword argument 'expected_algorithms'")
+
+    monkeypatch.setattr(benchmark, "compute_aggregates_with_ci", OpaqueAggregator())
+
+    with pytest.raises(TypeError, match="inspectable signature"):
+        benchmark._compute_aggregates_payload([], expected_algorithms={"sf"})
+
+    assert calls == 0
+
+
 def test_compute_aggregates_reraises_internal_type_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -84,7 +154,11 @@ def test_compute_aggregates_reraises_internal_type_error(
 
     calls = 0
 
-    def broken_aggregator(**_: object) -> dict[str, object]:
+    def broken_aggregator(
+        *,
+        expected_algorithms: set[str],
+        **_: object,
+    ) -> dict[str, object]:
         nonlocal calls
         calls += 1
         raise TypeError("malformed episode payload")
@@ -104,7 +178,11 @@ def test_compute_aggregates_reraises_canonical_internal_type_error(
 
     calls = 0
 
-    def broken_aggregator(**_: object) -> dict[str, object]:
+    def broken_aggregator(
+        *,
+        expected_algorithms: set[str],
+        **_: object,
+    ) -> dict[str, object]:
         nonlocal calls
         calls += 1
         raise TypeError("got an unexpected keyword argument 'expected_algorithms'")
@@ -115,3 +193,64 @@ def test_compute_aggregates_reraises_canonical_internal_type_error(
         benchmark._compute_aggregates_payload([], expected_algorithms={"sf"})
 
     assert calls == 1
+
+
+def test_aggregate_validation_preserves_missing_algorithm_failure_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Missing algorithms survive the runner's aggregation-to-validation boundary."""
+
+    real_aggregator = benchmark.compute_aggregates_with_ci
+
+    def fast_current_aggregator(
+        records: list[dict[str, object]],
+        *,
+        group_by: str,
+        bootstrap_samples: int,
+        bootstrap_confidence: float,
+        expected_algorithms: set[str],
+    ) -> dict[str, object]:
+        return real_aggregator(
+            records,
+            group_by=group_by,
+            bootstrap_samples=0,
+            bootstrap_confidence=bootstrap_confidence,
+            expected_algorithms=expected_algorithms,
+            return_ci=False,
+        )
+
+    monkeypatch.setattr(benchmark, "compute_aggregates_with_ci", fast_current_aggregator)
+    episodes_dir = tmp_path / "sf" / "episodes"
+    episodes_dir.mkdir(parents=True)
+    (episodes_dir / "episodes.jsonl").write_text(
+        json.dumps(
+            {
+                "episode_id": "sf-1",
+                "scenario_id": "scenario-1",
+                "scenario_params": {"algo": "sf"},
+                "metrics": {"success_rate": 1.0},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    aggregation = benchmark.aggregate_all_results(
+        [{"algo": "sf", "output_dir": str(tmp_path / "sf"), "success": True}],
+        str(tmp_path),
+        expected_algorithms={"sf", "ppo"},
+    )
+    validation = benchmark.validate_benchmark_results(
+        {
+            "output_root": str(tmp_path),
+            "baselines": aggregation["baselines"],
+            "total_episodes": aggregation["total_episodes"],
+            "meta": aggregation["meta"],
+        }
+    )
+
+    assert aggregation["success"] is True
+    assert aggregation["meta"]["missing_algorithms"] == ["ppo"]
+    assert validation["checks"]["expected_algorithms_present"] is False
+    assert validation["missing_algorithms"] == ["ppo"]

@@ -5,7 +5,9 @@ export resolves to the pre-change object on its pre-change import path, no
 declared name is missing, and private, stale, or unreviewed foreign names never leak
 into the public surface. The ``robot_sf.nav`` facade ``__init__`` is
 deliberately not exercised here (it is guarded by its own reviewed list);
-this module covers the fifteen individual modules that gained ``__all__``.
+this module covers the fourteen dependency-minimal modules that gained ``__all__``.
+The optional GeoJSON export contract lives in ``test_geojson_public_exports.py`` so
+core readiness does not import map-authoring extras.
 """
 
 from __future__ import annotations
@@ -17,7 +19,6 @@ import pytest
 
 MODULE_NAMES = [
     "footprint_diagnostic",
-    "geojson_map_builder",
     "geojson_map_provenance",
     "global_route",
     "map_config",
@@ -53,15 +54,6 @@ FOOTPRINT_DIAGNOSTIC_ALL = [
     "parse_footprints",
     "run_footprint_diagnostic",
     "validate_footprint_orientation_config",
-]
-
-GEOJSON_MAP_BUILDER_ALL = [
-    "build_parser",
-    "geojson_to_map_definition",
-    "geojson_to_map_structure",
-    "load_geojson",
-    "main",
-    "write_segment_map",
 ]
 
 GEOJSON_MAP_PROVENANCE_ALL = ["validate_import_provenance"]
@@ -187,7 +179,6 @@ UNCERTAINTY_ENVELOPE_ALL = [
 
 MODULE_ALL = {
     "footprint_diagnostic": FOOTPRINT_DIAGNOSTIC_ALL,
-    "geojson_map_builder": GEOJSON_MAP_BUILDER_ALL,
     "geojson_map_provenance": GEOJSON_MAP_PROVENANCE_ALL,
     "global_route": GLOBAL_ROUTE_ALL,
     "map_config": MAP_CONFIG_ALL,
@@ -208,7 +199,6 @@ MODULE_ALL = {
 # consumer imports it directly (see tests/perf/test_hotpath_perf.py).
 UNEXPORTED_NAMES = {
     "footprint_diagnostic": ["_parse_footprint", "_validate_top_level_contract"],
-    "geojson_map_builder": ["_ROLE_KEYS", "_extract_zones", "argparse"],
     "geojson_map_provenance": ["_SCHEMA_VERSION", "_require_mapping_fields", "hashlib"],
     "global_route": ["dist", "Rect", "Vec2D"],
     "map_config": ["_normalize_position", "os", "random", "logger"],

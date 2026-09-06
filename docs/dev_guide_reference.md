@@ -427,8 +427,10 @@ uv run python examples/quickstart/03_custom_map.py
 ```
 
 - `01_basic_robot.py` introduces the environment factory pattern and headless rollouts.
-- `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to
-  `output/results/episodes_demo_ppo.jsonl`. <!-- active-docs-check: allow current quickstart path matches the executable example; migration is a separate runtime decision -->
+- `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to the legacy
+  `output/results/episodes_demo_ppo.jsonl`. <!-- active-docs-check: allow current quickstart path matches the executable example -->
+  This quickstart output is retained for compatibility; new benchmark artifacts use
+  `output/benchmarks/`.
 - `03_custom_map.py` shows how to load `maps/svg_maps/debug_06.svg` via
   `RobotSimulationConfig.map_pool` for custom layouts.
 

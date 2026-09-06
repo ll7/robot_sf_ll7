@@ -179,7 +179,11 @@ class RouteGeometry:
             ValueError: If ``arc_length_m`` is not finite.
         """
 
-        if not isfinite(arc_length_m):
+        try:
+            finite_arc_length = isfinite(arc_length_m)
+        except (TypeError, OverflowError):
+            finite_arc_length = False
+        if not finite_arc_length:
             raise ValueError("arc_length_m must be finite.")
         if arc_length_m <= 0.0:
             return self.waypoints[0]
@@ -534,7 +538,11 @@ def _validate_tolerance(value: float, name: str) -> None:
 
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name} must be finite and non-negative.")
-    if not isfinite(value) or value < 0.0:
+    try:
+        finite_value = isfinite(value)
+    except OverflowError:
+        finite_value = False
+    if not finite_value or value < 0.0:
         raise ValueError(f"{name} must be finite and non-negative.")
 
 
@@ -554,7 +562,10 @@ def _finite_nonnegative_number(value: object, name: str) -> float:
 
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"snapshot {name} must be a finite non-negative number.")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        raise ValueError(f"snapshot {name} must be a finite non-negative number.") from None
     if not isfinite(number) or number < 0.0:
         raise ValueError(f"snapshot {name} must be a finite non-negative number.")
     return number
@@ -606,7 +617,12 @@ def _finite_point(value: Sequence[float], name: str) -> Vec2D:
 
     try:
         x, y = value
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(f"{name} must contain exactly two numeric values.") from None
+    try:
         point = (float(x), float(y))
+    except OverflowError:
+        raise ValueError(f"{name} must contain finite values.") from None
     except (TypeError, ValueError):
         raise ValueError(f"{name} must contain exactly two numeric values.") from None
     if not isfinite(point[0]) or not isfinite(point[1]):

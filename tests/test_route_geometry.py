@@ -87,6 +87,31 @@ def test_projection_fails_closed_for_invalid_queries() -> None:
         RouteGeometry([(0, 0), (math.inf, 1)])
 
 
+def test_projection_fails_closed_for_integer_conversion_overflow() -> None:
+    """Oversized integers must follow the invalid-input contract, not crash."""
+    overflowing = 10**400
+    route = RouteGeometry([(0, 0), (10, 0)])
+
+    projection = route.project((overflowing, 0))
+    assert projection.status == "invalid_query"
+
+    tracker = RouteProjectionTracker(route)
+    assert tracker.project((1.0, 0.0), step=0).is_valid
+    failed = tracker.project((overflowing, 0), step=1)
+    assert failed.status == "invalid_query"
+    assert failed.failure_count == 1
+    assert tracker.previous_s_m == pytest.approx(1.0)
+
+    with pytest.raises(ValueError, match="finite"):
+        RouteGeometry([(0, 0), (overflowing, 0)])
+    with pytest.raises(ValueError, match="finite"):
+        RouteProjectionHint(previous_s_m=overflowing)
+
+    snapshot = tracker.snapshot()
+    with pytest.raises(ValueError, match="max_forward_jump_m"):
+        RouteProjectionTracker.restore(route, dict(snapshot, max_forward_jump_m=overflowing))
+
+
 def test_projection_marks_self_intersection_as_ambiguous() -> None:
     """Equal-distance branches must not silently select one route arc."""
     route = RouteGeometry([(0, 0), (2, 2), (0, 2), (2, 0)])

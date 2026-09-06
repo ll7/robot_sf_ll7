@@ -1199,8 +1199,13 @@ def test_gh_project_client_classifies_missing_read_project_scope(
     assert exc_info.value.command[:3] == ("gh", "project", "field-list")
 
 
+@pytest.mark.parametrize(
+    "details",
+    ["GraphQL: API rate limit already exceeded", "secondary rate limit"],
+)
 def test_gh_project_client_classifies_explicit_api_rate_limit(
     monkeypatch: pytest.MonkeyPatch,
+    details: str,
 ) -> None:
     """The known owner fallback preserves an explicit GitHub rate-limit diagnostic."""
 
@@ -1227,7 +1232,7 @@ def test_gh_project_client_classifies_explicit_api_rate_limit(
             1,
             args,
             output="",
-            stderr="GraphQL: API rate limit already exceeded",
+            stderr=details,
         )
 
     monkeypatch.setattr(subprocess, "run", _raise)
@@ -1236,7 +1241,7 @@ def test_gh_project_client_classifies_explicit_api_rate_limit(
         GhProjectClient().field_list(owner="ll7", project_number=5)
 
     assert exc_info.value.command[:3] == ("gh", "project", "field-list")
-    assert exc_info.value.details == "GraphQL: API rate limit already exceeded"
+    assert exc_info.value.details == details
     assert [call[call.index("--owner") + 1] for call in calls] == ["ll7", "@me"]
 
 
@@ -1306,6 +1311,40 @@ def test_main_only_empty_rate_limit_is_non_fatal_json_without_writes(
     assert payload["non_fatal"] is True
     assert payload["writes_performed"] is False
     assert updates == []
+
+
+def test_main_only_empty_rate_limit_reports_prior_field_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A rate limit after schema writes cannot be reported as a no-write result."""
+
+    def _raise(client: GhProjectClient, **kwargs: object) -> dict[str, dict[str, object]]:
+        client._field_creation_progress = {
+            "attempted_field_names": list(REQUIRED_NUMBER_FIELDS[:2]),
+            "created_field_names": [REQUIRED_NUMBER_FIELDS[0]],
+            "completed_write_count": 1,
+            "writes_performed_count": 1,
+            "write_ambiguity": False,
+        }
+        raise ProjectRateLimitError(
+            command=("gh", "project", "field-create", "5"),
+            details="GraphQL: API rate limit already exceeded",
+        )
+
+    monkeypatch.setattr(project_priority_score, "ensure_required_fields", _raise)
+
+    assert main(["sync", "--only-empty", "--ensure-fields"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "blocked"
+    assert payload["reason"] == "project_api_rate_limit"
+    assert payload["attempted_field_names"] == list(REQUIRED_NUMBER_FIELDS[:2])
+    assert payload["created_field_names"] == [REQUIRED_NUMBER_FIELDS[0]]
+    assert payload["completed_write_count"] == 1
+    assert payload["writes_performed_count"] == 1
+    assert payload["writes_performed"] is True
+    assert "1 field-creation write(s) completed" in payload["message"]
 
 
 def test_main_non_empty_scope_failure_remains_fail_closed(
@@ -1693,6 +1732,53 @@ def test_ensure_required_fields_reports_partial_field_creation_timeout(
     assert payload["write_ambiguity"] is True
 
 
+def test_ensure_required_fields_reports_partial_field_creation_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later rate-limit failure retains earlier schema mutations."""
+
+    def _run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        command = list(args[0])  # type: ignore[arg-type]
+        if command[1:3] == ["project", "field-list"]:
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout=json.dumps({"fields": []}),
+            )
+        field_name = command[command.index("--name") + 1]
+        if field_name == REQUIRED_NUMBER_FIELDS[1]:
+            raise subprocess.CalledProcessError(
+                1,
+                command,
+                output="",
+                stderr="GraphQL: API rate limit already exceeded",
+            )
+        return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    with pytest.raises(ProjectRateLimitError) as exc_info:
+        project_priority_score.ensure_required_fields(
+            GhProjectClient(timeout_seconds=5.0),
+            owner="ll7",
+            project_number=5,
+        )
+
+    error = exc_info.value
+    assert error.attempted_field_names == list(REQUIRED_NUMBER_FIELDS[:2])
+    assert error.created_field_names == [REQUIRED_NUMBER_FIELDS[0]]
+    assert error.completed_write_count == 1
+    assert error.writes_performed_count == 1
+    assert error.write_ambiguity is False
+    payload = project_priority_score._blocked_project_rate_limit_payload(
+        owner="ll7", project_number=5, error=error
+    )
+    assert payload["completed_field_names"] == [REQUIRED_NUMBER_FIELDS[0]]
+    assert payload["completed_write_count"] == 1
+    assert payload["writes_performed"] is True
+    assert payload["write_ambiguity"] is False
+
+
 def test_ensure_required_fields_reports_completed_fields_when_final_read_times_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1887,6 +1973,71 @@ def test_apply_score_updates_reraises_write_phase_timeout() -> None:
     assert payload["write_ambiguity"] is True
     assert "1 score write(s) completed" in payload["message"]
     assert plan["status"] == "timeout_blocked"
+    assert plan["writes_performed_count"] == 1
+
+
+def test_apply_score_updates_reraises_write_phase_rate_limit() -> None:
+    """A partial rate-limited write reports known progress without timeout ambiguity."""
+    from types import SimpleNamespace
+
+    calls = 0
+
+    def _update(**kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise ProjectRateLimitError(
+                command=("gh", "api", "graphql"),
+                details="secondary rate limit",
+            )
+
+    plan: dict[str, object] = {}
+    client = SimpleNamespace(
+        current_phase="read",
+        last_eligibility_plan=plan,
+        update_number_field=_update,
+    )
+    options = SyncOptions(
+        owner="ll7",
+        project_number=5,
+        ensure_fields=False,
+        limit=10,
+        alpha=0.8,
+        round_digits=6,
+        issue_number=None,
+        dry_run=False,
+        skip_statuses=set(),
+    )
+    previews = [
+        SimpleNamespace(issue_number=1, new_score=3.0),
+        SimpleNamespace(issue_number=2, new_score=4.0),
+    ]
+
+    with pytest.raises(ProjectRateLimitError) as exc_info:
+        project_priority_score._apply_score_updates(
+            client,
+            options,
+            [(previews[0], {"id": "item-1"}), (previews[1], {"id": "item-2"})],
+            issue_snapshots={},
+            score_field_id="field-1",
+            project_id="project-1",
+        )
+    assert exc_info.value.attempted_rows == [
+        {"issue_number": 1, "item_id": "item-1", "written": True},
+        {"issue_number": 2, "item_id": "item-2", "written": False},
+    ]
+    assert exc_info.value.writes_performed_count == 1
+    payload = project_priority_score._blocked_project_rate_limit_payload(
+        owner="ll7",
+        project_number=5,
+        error=exc_info.value,
+    )
+    assert payload["attempted_rows"] == exc_info.value.attempted_rows
+    assert payload["writes_performed_count"] == 1
+    assert payload["writes_performed"] is True
+    assert payload["write_ambiguity"] is False
+    assert "1 score write(s) completed" in payload["message"]
+    assert plan["status"] == "rate_limit_blocked"
     assert plan["writes_performed_count"] == 1
 
 

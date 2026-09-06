@@ -398,6 +398,20 @@ def test_fleet_directory_size_preserves_zero_byte_partial_result() -> None:
     )
 
 
+def test_fleet_directory_size_does_not_report_unstarted_fleet_as_ok() -> None:
+    accounting = capacity._FleetSizeAccounting(not_started=1)
+
+    result = capacity._fleet_directory_size_result(
+        accounting,
+        child_count=1,
+        total_timeout=0.1,
+    )
+
+    assert result.bytes is None
+    assert result.status == "timeout"
+    assert "1 not started" in (result.reason or "")
+
+
 def test_worktree_directory_size_reaps_active_probe_after_unexpected_error(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -424,6 +438,46 @@ def test_worktree_directory_size_reaps_active_probe_after_unexpected_error(
     try:
         with pytest.raises(RuntimeError, match="test fleet failure"):
             capacity._worktree_directory_size_bytes(fleet, timeout_seconds=1.0)
+        assert process.poll() is not None
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+
+
+def test_worktree_directory_size_retries_probe_cleanup_after_reap_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A failed child reap leaves the probe tracked for outer cleanup retry."""
+    fleet = tmp_path / "repo.worktrees"
+    fleet.mkdir()
+    child = fleet / "slow"
+    child.mkdir()
+
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        start_new_session=os.name == "posix",
+    )
+    monkeypatch.setattr(capacity, "_start_directory_size_probe", lambda _path: process)
+    real_reap = capacity._reap_directory_size_probe
+    reap_calls = 0
+
+    def fail_once(probe: subprocess.Popen[str], *, timeout_seconds: float) -> None:
+        nonlocal reap_calls
+        reap_calls += 1
+        if reap_calls == 1:
+            raise RuntimeError("synthetic reap failure")
+        real_reap(probe, timeout_seconds=timeout_seconds)
+
+    monkeypatch.setattr(capacity, "_reap_directory_size_probe", fail_once)
+
+    try:
+        with pytest.raises(RuntimeError, match="synthetic reap failure"):
+            capacity._worktree_directory_size_bytes(fleet, timeout_seconds=0.01)
+        assert reap_calls == 2
         assert process.poll() is not None
     finally:
         if process.poll() is None:

@@ -396,7 +396,12 @@ def _fleet_directory_size_result(
     child_count: int,
     total_timeout: float,
 ) -> DirectorySizeResult:
-    if not accounting.incomplete and not accounting.child_timeouts and not accounting.unavailable:
+    if (
+        not accounting.incomplete
+        and not accounting.not_started
+        and not accounting.child_timeouts
+        and not accounting.unavailable
+    ):
         return DirectorySizeResult(bytes=accounting.total_bytes, status="ok")
 
     reason = (

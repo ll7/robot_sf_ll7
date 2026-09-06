@@ -379,6 +379,52 @@ def test_worktree_directory_size_marks_child_timeout_and_reaps_probe(
     assert "1 child probes timed out" in (result.reason or "")
 
 
+@pytest.mark.skipif(os.name != "posix", reason="probe process groups are POSIX-specific")
+def test_worktree_directory_size_bounds_collection_when_descendant_holds_stdout(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A completed parent cannot make collection exceed the shared fleet deadline."""
+    fleet = tmp_path / "repo.worktrees"
+    fleet.mkdir()
+    child = fleet / "leaky"
+    child.mkdir()
+
+    process: subprocess.Popen[str] | None = None
+
+    def fake_start(_path: Path) -> subprocess.Popen[str]:
+        nonlocal process
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import subprocess, sys; "
+                    "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); "
+                    "sys.exit(0)"
+                ),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            start_new_session=True,
+        )
+        return process
+
+    monkeypatch.setattr(capacity, "_start_directory_size_probe", fake_start)
+    monkeypatch.setattr(capacity, "WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER", 4.0)
+
+    started_at = time.monotonic()
+    result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=0.05)
+    elapsed = time.monotonic() - started_at
+
+    assert process is not None
+    assert process.poll() is not None
+    assert result.status == "timeout"
+    assert result.bytes is None
+    assert "1 were unavailable" in (result.reason or "")
+    assert elapsed < 1.0
+
+
 def test_fleet_directory_size_preserves_zero_byte_partial_result() -> None:
     accounting = capacity._FleetSizeAccounting(completed_ok=1, unavailable=1)
 

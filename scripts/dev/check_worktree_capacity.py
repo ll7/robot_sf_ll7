@@ -240,12 +240,10 @@ def _start_directory_size_probe(path: Path) -> subprocess.Popen[str]:
 def _kill_directory_size_probe(process: subprocess.Popen[str]) -> None:
     """Send a hard termination signal to one still-running probe."""
 
-    if process.poll() is not None:
-        return
     try:
-        if os.name == "posix":
+        if os.name == "posix" and process.pid is not None and process.pid > 0:
             os.killpg(process.pid, signal.SIGKILL)
-        else:
+        elif process.poll() is None:
             process.kill()
     except (OSError, ProcessLookupError):
         try:
@@ -350,11 +348,13 @@ def _terminate_directory_size_probe(process: subprocess.Popen[str]) -> None:
     )
 
 
-def _completed_directory_size_probe(process: subprocess.Popen[str]) -> DirectorySizeResult:
+def _completed_directory_size_probe(
+    process: subprocess.Popen[str], *, timeout_seconds: float
+) -> DirectorySizeResult:
     """Collect one completed probe without allowing a non-zero exit to look empty."""
 
     try:
-        stdout, _ = process.communicate()
+        stdout, _ = process.communicate(timeout=max(0.0, timeout_seconds))
     except (OSError, ValueError):
         return DirectorySizeResult(
             bytes=None,
@@ -418,7 +418,20 @@ def _settle_directory_size_probes(
     timed_out: list[subprocess.Popen[str]] = []
     for process, started_at in tuple(active.items()):
         if process.poll() is not None:
-            result = _completed_directory_size_probe(process)
+            try:
+                result = _completed_directory_size_probe(
+                    process,
+                    timeout_seconds=max(0.0, deadline - time.monotonic()),
+                )
+            except subprocess.TimeoutExpired:
+                _terminate_active_directory_size_probes(
+                    {process: started_at},
+                    deadline=cleanup_deadline,
+                )
+                del active[process]
+                accounting.unavailable += 1
+                settled = True
+                continue
             del active[process]
             _account_directory_size_result(accounting, result)
             settled = True

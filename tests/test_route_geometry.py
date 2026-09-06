@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import math
 
 import pytest
 
-from robot_sf.nav.global_route import RouteGeometry
+from robot_sf.nav.global_route import (
+    RouteGeometry,
+    RouteProjectionHint,
+    RouteProjectionTracker,
+)
 
 
 def test_route_geometry_normalizes_duplicates_and_exposes_stable_identity() -> None:
@@ -100,3 +105,103 @@ def test_projection_marks_equal_distance_parallel_branches_as_ambiguous() -> Non
     projection = route.project((1.0, 1.0))
     assert projection.status == "ambiguous"
     assert projection.distance_m == pytest.approx(1.0)
+
+
+def test_hinted_projection_stays_on_the_continuous_route_branch() -> None:
+    """A bounded hint should reject a later self-intersection branch."""
+    route = RouteGeometry([(0, 0), (2, 2), (0, 2), (2, 0)])
+    hint = RouteProjectionHint(
+        previous_s_m=0.5,
+        previous_segment_index=0,
+        max_forward_jump_m=1.5,
+        max_backtrack_m=0.5,
+    )
+
+    projection = route.project((1.0, 1.0), hint=hint)
+
+    assert projection.status == "ok"
+    assert projection.segment_index == 0
+    assert projection.arc_length_m == pytest.approx(math.sqrt(2.0))
+
+
+def test_hinted_projection_reports_discontinuity_without_overclaiming_progress() -> None:
+    """A query outside the continuity window must not return route progress."""
+    route = RouteGeometry([(0, 0), (2, 0)])
+    hint = RouteProjectionHint(
+        previous_s_m=0.0,
+        max_forward_jump_m=0.5,
+        max_backtrack_m=0.0,
+    )
+
+    projection = route.project((2.0, 0.0), hint=hint)
+
+    assert projection.status == "discontinuous"
+    assert projection.projected_point is None
+    assert projection.arc_length_m is None
+
+
+def test_route_tracker_preserves_last_valid_state_and_rejects_bad_step_order() -> None:
+    """Failures and duplicate/out-of-order steps must not rewrite continuity."""
+    route = RouteGeometry([(0, 0), (10, 0)])
+    tracker = RouteProjectionTracker(route, max_forward_jump_m=2.0, max_backtrack_m=0.5)
+
+    first = tracker.project((1.0, 0.0), step=0)
+    failed = tracker.project((5.0, 0.0), step=1)
+    duplicate = tracker.project((1.0, 0.0), step=1)
+    out_of_order = tracker.project((1.0, 0.0), step=0)
+    recovered = tracker.project((1.5, 0.0), step=2)
+
+    assert first.is_valid
+    assert failed.status == "discontinuous"
+    assert failed.failure_count == 1
+    assert tracker.previous_s_m == pytest.approx(1.5)
+    assert duplicate.status == "duplicate_step"
+    assert duplicate.failure_count == 1
+    assert out_of_order.status == "out_of_order"
+    assert recovered.is_valid
+    assert recovered.failure_count == 0
+
+
+def test_route_tracker_route_change_resets_continuity_explicitly() -> None:
+    """A route hash change must clear the prior projection before the next step."""
+    tracker = RouteProjectionTracker(RouteGeometry([(0, 0), (10, 0)]))
+    assert tracker.project((1.0, 0.0), step=4).is_valid
+
+    reset = tracker.update_route(RouteGeometry([(0, 0), (0, 10)]))
+    result = tracker.project((0.0, 1.0), step=0)
+
+    assert reset is not None
+    assert reset.status == "reset"
+    assert reset.step is None
+    assert result.is_valid
+    assert result.last_reset_reason == "route_changed"
+    assert tracker.previous_s_m == pytest.approx(1.0)
+
+    manual_reset = tracker.reset()
+    assert manual_reset.status == "reset"
+    assert tracker.previous_s_m is None
+
+
+def test_route_tracker_snapshot_restore_is_json_safe_and_replayable() -> None:
+    """A validated snapshot must reproduce the next projection exactly."""
+    route = RouteGeometry([(0, 0), (10, 0)])
+    tracker = RouteProjectionTracker(route)
+    tracker.project((1.0, 0.0), step=3)
+    snapshot = tracker.snapshot()
+    restored = RouteProjectionTracker.restore(route, snapshot)
+
+    assert json.loads(json.dumps(snapshot)) == snapshot
+    assert restored.snapshot() == snapshot
+    assert restored.project((2.0, 0.0), step=4) == tracker.project((2.0, 0.0), step=4)
+
+    invalid_hash = dict(snapshot, route_hash="changed")
+    with pytest.raises(ValueError, match="route_hash"):
+        RouteProjectionTracker.restore(route, invalid_hash)
+
+    invalid_number = dict(snapshot, previous_s_m=math.nan)
+    with pytest.raises(ValueError, match="previous_s_m"):
+        RouteProjectionTracker.restore(route, invalid_number)
+
+    invalid_segment = dict(snapshot, previous_segment_index=99)
+    with pytest.raises(ValueError, match="previous_segment_index"):
+        RouteProjectionTracker.restore(route, invalid_segment)

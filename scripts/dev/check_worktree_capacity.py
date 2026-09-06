@@ -305,7 +305,7 @@ def _terminate_active_directory_size_probes(
             _reap_directory_size_probe(process, timeout_seconds=reap_timeout)
         except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
             cleanup_error = cleanup_error or exc
-        finally:
+        else:
             active.pop(process, None)
     if cleanup_error is not None:
         raise RuntimeError(
@@ -383,10 +383,8 @@ def _settle_directory_size_probes(
             _account_directory_size_result(accounting, result)
             settled = True
         elif now - started_at >= timeout_seconds:
-            try:
-                _terminate_directory_size_probe(process)
-            finally:
-                del active[process]
+            _terminate_directory_size_probe(process)
+            del active[process]
             accounting.child_timeouts += 1
             settled = True
     return settled

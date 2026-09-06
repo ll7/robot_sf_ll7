@@ -735,6 +735,12 @@ def _entity_track_provenance(agent: Any) -> dict[str, Any]:
     if position_frame_id != velocity_frame_id:
         raise ValueError("position and velocity frame_id must match")
     tracking = getattr(agent, "tracking", None)
+    tracking_id = None
+    if tracking is not None:
+        missing = object()
+        tracking_id = getattr(tracking, "track_id", missing)
+        if tracking_id is missing:
+            raise ValueError("tracking metadata must provide track_id")
     return _normalize_track_provenance(
         frame_id=position_frame_id,
         position_units=getattr(agent.position, "units", None),
@@ -743,7 +749,7 @@ def _entity_track_provenance(agent: Any) -> dict[str, Any]:
         velocity_covariance_units=getattr(agent.velocity, "covariance_units", None),
         source_sensor_ids=getattr(agent.source, "sensor_ids", ()),
         calibration_status=getattr(agent.source, "calibration_status", "unknown"),
-        tracking_id=None if tracking is None else getattr(tracking, "track_id", None),
+        tracking_id=tracking_id,
     )
 
 

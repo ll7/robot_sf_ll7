@@ -757,3 +757,5 @@ def test_entity_projection_rejects_malformed_public_fields() -> None:
         )
     with pytest.raises(ValueError, match="source_sensor_ids"):
         project(replace(agent, source=replace(agent.source, sensor_ids=("",))))
+    with pytest.raises(ValueError, match="tracking metadata.*track_id"):
+        project(replace(agent, tracking=SimpleNamespace()))

@@ -25,7 +25,6 @@ The script will:
 from __future__ import annotations
 
 import datetime
-import dis
 import inspect
 import json
 import sys
@@ -147,35 +146,6 @@ def _collect_episode_records(
     return records, successful
 
 
-def _is_forwarded_expected_algorithms_type_error(
-    error: TypeError,
-    aggregator: Any,
-) -> bool:
-    """Identify an unsupported keyword raised at a forwarding call boundary."""
-    if "unexpected keyword argument 'expected_algorithms'" not in str(error):
-        return False
-
-    aggregator_code = getattr(aggregator, "__code__", None)
-    traceback = error.__traceback__
-    if aggregator_code is None or traceback is None:
-        return False
-    while traceback.tb_next is not None:
-        traceback = traceback.tb_next
-    if traceback.tb_frame.f_code is not aggregator_code:
-        return False
-
-    failing_line = traceback.tb_lineno
-    try:
-        instructions = dis.get_instructions(aggregator_code)
-    except (TypeError, ValueError):
-        return False
-    for instruction in instructions:
-        instruction_line = getattr(instruction.positions, "lineno", None)
-        if instruction_line == failing_line and instruction.opname == "CALL_FUNCTION_EX":
-            return True
-    return False
-
-
 def _compute_aggregates_payload(
     records: list[dict[str, Any]],
     *,
@@ -216,19 +186,7 @@ def _compute_aggregates_payload(
         if accepts_expected_algorithms:
             aggregate_kwargs["expected_algorithms"] = set(expected_algorithms)
 
-    try:
-        return compute_aggregates_with_ci(**aggregate_kwargs)
-    except TypeError as exc:
-        if "expected_algorithms" not in aggregate_kwargs:
-            raise
-        if not _is_forwarded_expected_algorithms_type_error(exc, compute_aggregates_with_ci):
-            raise
-        logger.debug(
-            "compute_aggregates_with_ci missing expected_algorithms support, falling back: {}",
-            exc,
-        )
-        aggregate_kwargs.pop("expected_algorithms", None)
-        return compute_aggregates_with_ci(**aggregate_kwargs)
+    return compute_aggregates_with_ci(**aggregate_kwargs)
 
 
 def _write_aggregates_file(output_root: str, aggregates: dict[str, Any]) -> Path:

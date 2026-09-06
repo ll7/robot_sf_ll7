@@ -178,10 +178,12 @@ def _compute_aggregates_payload(
             (parameter for parameter in parameters if parameter.name == "expected_algorithms"),
             None,
         )
-        if expected_parameter and expected_parameter.kind in (
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            inspect.Parameter.KEYWORD_ONLY,
-        ):
+        accepts_expected_algorithms = (
+            expected_parameter is not None
+            and expected_parameter.kind
+            in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        ) or any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters)
+        if accepts_expected_algorithms:
             aggregate_kwargs["expected_algorithms"] = set(expected_algorithms)
 
     return compute_aggregates_with_ci(**aggregate_kwargs)

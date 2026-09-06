@@ -87,39 +87,24 @@ def test_compute_aggregates_omits_unsupported_expected_algorithms_keyword(
     assert "expected_algorithms" not in calls[0]
 
 
-def test_compute_aggregates_omits_keyword_for_forwarding_legacy_wrapper(
+def test_compute_aggregates_passes_expected_algorithms_to_kwargs_callable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A kwargs-only wrapper must not hide a legacy inner callable's TypeError."""
+    """A keyword-capable current callable receives the completeness roster."""
 
     forwarded: list[dict[str, object]] = []
 
-    def legacy_aggregator(
-        records: list[dict[str, object]],
-        *,
-        group_by: str,
-        bootstrap_samples: int,
-        bootstrap_confidence: float,
-    ) -> dict[str, object]:
-        return {
-            "legacy": True,
-            "record_count": len(records),
-            "group_by": group_by,
-            "bootstrap_samples": bootstrap_samples,
-            "bootstrap_confidence": bootstrap_confidence,
-        }
-
     def forwarding_wrapper(**kwargs: object) -> dict[str, object]:
         forwarded.append(kwargs)
-        return legacy_aggregator(**kwargs)
+        return {"current": True}
 
     monkeypatch.setattr(benchmark, "compute_aggregates_with_ci", forwarding_wrapper)
 
     result = benchmark._compute_aggregates_payload([], expected_algorithms={"sf"})
 
-    assert result["legacy"] is True
+    assert result["current"] is True
     assert len(forwarded) == 1
-    assert "expected_algorithms" not in forwarded[0]
+    assert forwarded[0]["expected_algorithms"] == {"sf"}
 
 
 def test_compute_aggregates_fails_closed_for_uninspectable_aggregator(
@@ -155,8 +140,6 @@ def test_compute_aggregates_reraises_internal_type_error(
     calls = 0
 
     def broken_aggregator(
-        *,
-        expected_algorithms: set[str],
         **_: object,
     ) -> dict[str, object]:
         nonlocal calls
@@ -179,8 +162,6 @@ def test_compute_aggregates_reraises_canonical_internal_type_error(
     calls = 0
 
     def broken_aggregator(
-        *,
-        expected_algorithms: set[str],
         **_: object,
     ) -> dict[str, object]:
         nonlocal calls

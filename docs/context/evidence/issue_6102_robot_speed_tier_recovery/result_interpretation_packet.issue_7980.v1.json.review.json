@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/result_interpretation_packet.issue_7980.v1.json",
-  "artifact_sha256": "51918bbac50bfbc2d2d0f3c6c33458006a0b8fc1481e99735a3608d87bbfded8",
+  "artifact_sha256": "53356433dd370deb16faf7ec0f5435f04ebd57f348a650b948230a4d61924bf8",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

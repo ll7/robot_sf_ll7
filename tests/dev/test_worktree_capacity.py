@@ -412,6 +412,35 @@ def test_fleet_directory_size_does_not_report_unstarted_fleet_as_ok() -> None:
     assert "1 not started" in (result.reason or "")
 
 
+def test_worktree_directory_size_reports_controller_level_unstarted_entry(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A fleet that launches no probe is not reported as an exact zero size."""
+    fleet = tmp_path / "repo.worktrees"
+    fleet.mkdir()
+    (fleet / "queued").mkdir()
+
+    def never_start(
+        children: tuple[Path, ...],
+        next_child: int,
+        active: dict[object, float],
+        *,
+        max_workers: int,
+        deadline: float,
+    ) -> tuple[int, int]:
+        del children, active, max_workers, deadline
+        return next_child, 0
+
+    monkeypatch.setattr(capacity, "_start_directory_size_probes", never_start)
+    monkeypatch.setattr(capacity, "WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER", 0.000001)
+
+    result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=1.0)
+
+    assert result.bytes is None
+    assert result.status == "timeout"
+    assert "1 not started" in (result.reason or "")
+
+
 def test_worktree_directory_size_reaps_active_probe_after_unexpected_error(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -475,10 +504,56 @@ def test_worktree_directory_size_retries_probe_cleanup_after_reap_failure(
     monkeypatch.setattr(capacity, "_reap_directory_size_probe", fail_once)
 
     try:
-        with pytest.raises(RuntimeError, match="synthetic reap failure"):
+        with pytest.raises(RuntimeError, match="one or more du probes"):
             capacity._worktree_directory_size_bytes(fleet, timeout_seconds=0.01)
-        assert reap_calls == 2
+        assert reap_calls >= 3
         assert process.poll() is not None
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+
+
+def test_worktree_directory_size_fails_closed_after_repeated_reap_failures(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Repeated reap failures stop before the shared fleet budget is exceeded."""
+    fleet = tmp_path / "repo.worktrees"
+    fleet.mkdir()
+    child = fleet / "slow"
+    child.mkdir()
+
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        start_new_session=os.name == "posix",
+    )
+    monkeypatch.setattr(capacity, "_start_directory_size_probe", lambda _path: process)
+    monkeypatch.setattr(
+        capacity,
+        "WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER",
+        2.0,
+    )
+    reap_calls = 0
+
+    def always_fail(_probe: subprocess.Popen[str], *, timeout_seconds: float) -> None:
+        del timeout_seconds
+        nonlocal reap_calls
+        reap_calls += 1
+        raise RuntimeError("synthetic repeated reap failure")
+
+    monkeypatch.setattr(capacity, "_reap_directory_size_probe", always_fail)
+    started_at = time.monotonic()
+
+    try:
+        with pytest.raises(RuntimeError, match="one or more du probes"):
+            capacity._worktree_directory_size_bytes(fleet, timeout_seconds=0.01)
+        elapsed = time.monotonic() - started_at
+        assert reap_calls > 1
+        assert process.poll() is not None
+        assert elapsed < 1.0
     finally:
         if process.poll() is None:
             process.kill()

@@ -66,7 +66,7 @@ GEOJSON_MAP_BUILDER_ALL = [
 
 GEOJSON_MAP_PROVENANCE_ALL = ["validate_import_provenance"]
 
-GLOBAL_ROUTE_ALL = ["GlobalRoute"]
+GLOBAL_ROUTE_ALL = ["GlobalRoute", "RouteGeometry", "RouteProjection", "RouteProjectionStatus"]
 
 MAP_CONFIG_ALL = [
     "GlobalRoute",

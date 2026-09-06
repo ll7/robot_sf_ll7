@@ -32,7 +32,7 @@
       "properties": {
         "package_key": {"const": "issue-7322/ch7-evidence-package-v2.1"},
         "source_registry_key": {"const": "issue-6792/source-registry-v1"},
-        "source_registry_path": {"const": "docs/context/issue_6792_ch7_admission_receipt.v1.json"},
+        "source_registry_path": {"const": "configs/analysis/source_gate_registry.v1.json"},
         "source_registry_sha256": {"$ref": "#/$defs/sha256"}
       }
     },
@@ -137,7 +137,7 @@
         "required": ["package_revision", "custody"],
         "properties": {
           "claim_boundary": {"const": "Release-cell descriptive projections only. Collision-related metrics and SNQI remain explicitly excluded by the frozen #7042 ruling. No trace-level, causal, universal-ranking, or admission claim is produced by this builder."},
-          "custody": {"properties": {"source_registry_sha256": {"const": "9f19cae4ccdea9a2336eb1432f418e7df7af97f65eb6d95378023d802e4e64ac"}}}
+          "custody": {"properties": {"source_registry_sha256": {"const": "ebff0f47aeefd5e423c968f9c63f44961a7338765898874bb53b3a623e05944a"}}}
         }
       }
     },

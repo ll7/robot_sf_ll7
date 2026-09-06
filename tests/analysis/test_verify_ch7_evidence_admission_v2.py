@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 from jsonschema import Draft202012Validator
 
 from scripts.analysis import build_ch7_evidence_package_v2 as builder
@@ -242,6 +243,74 @@ def test_check_only_accepts_complete_review_sidecars_on_durable_package() -> Non
     assert diagnostic["diagnostics"]["package_checksums_verified"] is True
     assert diagnostic["diagnostics"]["admission_authorized"] is False
     assert diagnostic["receipt_template"]["template_status"] == "not_a_receipt"
+
+
+def test_v21_custody_uses_canonical_source_gate_registry() -> None:
+    config = yaml.safe_load(FROZEN_CONFIG_PATH.read_text(encoding="utf-8"))
+    expected = {
+        "package_key": builder.V21_PACKAGE_KEY,
+        "source_registry_key": builder.V21_SOURCE_REGISTRY_KEY,
+        "source_registry_path": "configs/analysis/source_gate_registry.v1.json",
+        "source_registry_sha256": "ebff0f47aeefd5e423c968f9c63f44961a7338765898874bb53b3a623e05944a",
+    }
+    assert config["custody"] == expected
+    manifest = json.loads((DURABLE_REFRESH_PACKAGE / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["custody"] == expected
+
+
+def test_admitted_v21_receipt_must_bind_the_custody_registry(
+    tmp_path: Path, monkeypatch
+) -> None:
+    package = tmp_path / "package"
+    receipt_path = tmp_path / "receipt.json"
+    package.mkdir()
+    manifest = {
+        "package_revision": "v2.1",
+        "custody": {"source_registry_sha256": "b" * 64},
+        "status": "admitted",
+        "admission_status": "admitted",
+        "source_integrity_gate": "passed",
+        "admission": {"status": "admitted"},
+        "source": {
+            "v1_package_sha256sums": "a" * 64,
+            "v1_manifest_sha256": "a" * 64,
+            "v1_audit_member_sha256": "a" * 64,
+            "v1_reduced_atlas_member_sha256": "a" * 64,
+        },
+        "inputs": {"portfolio_config": {"sha256": "a" * 64}},
+        "claim_boundary": "bound",
+        "roles": {
+            "cross_topology_inversion": {"grain": "release_cell"},
+            "cross_mechanism_inversion": {"grain": "release_cell"},
+            "feasibility_criticism": {"grain": "release_cell_geometry"},
+        },
+    }
+    receipt = _valid_receipt()
+    receipt["package"] = {"sha256sums_sha256": "a" * 64, "manifest_sha256": "a" * 64}
+    receipt["source"]["source_registry_sha256"] = "c" * 64
+    receipt["scope"]["claim_boundary"] = "bound"
+    manifest_path = package / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    monkeypatch.setattr(verifier.admission, "_verify_members", lambda *args, **kwargs: ("a" * 64, []))
+    monkeypatch.setattr(verifier, "_validate", lambda *args, **kwargs: None)
+    monkeypatch.setattr(verifier, "_verify_projection_contract", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        verifier,
+        "_read_object",
+        lambda path, label: manifest if path == manifest_path else receipt,
+    )
+    monkeypatch.setattr(verifier, "_sha256_file", lambda path: "a" * 64)
+
+    with pytest.raises(
+        verifier.Ch7EvidenceAdmissionV2Error,
+        match="source registry binding differs",
+    ):
+        verifier.verify_v2_admission(package, receipt_path)
+
+    receipt["source"]["source_registry_sha256"] = "b" * 64
+    assert verifier.verify_v2_admission(package, receipt_path)["status"] == "admitted"
 
 
 def test_check_only_template_is_rejected_as_an_admission_receipt(tmp_path: Path) -> None:

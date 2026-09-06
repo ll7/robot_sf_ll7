@@ -108,8 +108,8 @@ LEGACY_PANEL_LIMITATION = "collision-related metrics and SNQI excluded by the cl
 FROZEN_PANEL_LIMITATION = "collision-related metrics and SNQI excluded by the frozen #7042 ruling"
 V21_PACKAGE_KEY = "issue-7322/ch7-evidence-package-v2.1"
 V21_SOURCE_REGISTRY_KEY = "issue-6792/source-registry-v1"
-V21_SOURCE_REGISTRY_PATH = "docs/context/issue_6792_ch7_admission_receipt.v1.json"
-V21_SOURCE_REGISTRY_SHA256 = "9f19cae4ccdea9a2336eb1432f418e7df7af97f65eb6d95378023d802e4e64ac"
+V21_SOURCE_REGISTRY_PATH = "configs/analysis/source_gate_registry.v1.json"
+V21_SOURCE_REGISTRY_SHA256 = "ebff0f47aeefd5e423c968f9c63f44961a7338765898874bb53b3a623e05944a"
 
 
 class Ch7EvidencePackageV2Error(ValueError):

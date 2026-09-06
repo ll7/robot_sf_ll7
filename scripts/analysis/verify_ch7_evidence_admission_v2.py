@@ -498,6 +498,18 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
     }
 
 
+def _verify_v21_receipt_registry_binding(
+    manifest: Mapping[str, Any], source_binding: Mapping[str, Any]
+) -> None:
+    if manifest.get("package_revision") != "v2.1":
+        return
+    expected_registry_sha = manifest.get("custody", {}).get("source_registry_sha256")
+    if source_binding["source_registry_sha256"] != expected_registry_sha:
+        raise Ch7EvidenceAdmissionV2Error(
+            "receipt source registry binding differs from v2.1 custody"
+        )
+
+
 def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
     """Verify an admitted v2 package against its exact external receipt."""
 
@@ -541,6 +553,7 @@ def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
         != manifest["inputs"]["portfolio_config"]["sha256"]
     ):
         raise Ch7EvidenceAdmissionV2Error("receipt portfolio binding differs from manifest")
+    _verify_v21_receipt_registry_binding(manifest, source_binding)
     if receipt_payload["scope"]["claim_boundary"] != manifest["claim_boundary"]:
         raise Ch7EvidenceAdmissionV2Error("receipt claim boundary differs from manifest")
     expected_roles = {

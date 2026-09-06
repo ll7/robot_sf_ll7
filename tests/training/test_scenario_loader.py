@@ -1202,6 +1202,42 @@ def test_map_definition_cache_keys_include_geometry_contract(tmp_path: Path) -> 
     assert legacy_again is not corrected_again
 
 
+def test_build_robot_config_propagates_corrected_svg_contract_to_map_pool(
+    tmp_path: Path,
+) -> None:
+    """Scenario construction preserves corrected geometry through the map pool."""
+    map_file = Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_bottleneck.svg"
+    scenario_path = tmp_path / "scenario.yaml"
+    scenario_loader._load_map_definition.cache_clear()
+    try:
+        config = build_robot_config_from_scenario(
+            {
+                "name": "corrected_geometry",
+                "map_file": str(map_file),
+                "map_id": "corrected_bottleneck",
+                "map_geometry_contract": "corrected",
+            },
+            scenario_path=scenario_path,
+        )
+        legacy = resolve_map_definition(
+            str(map_file),
+            scenario_path=scenario_path,
+            geometry_contract="legacy",
+        )
+    finally:
+        scenario_loader._load_map_definition.cache_clear()
+
+    assert config.map_pool is not None
+    corrected = config.map_pool.map_defs["corrected_bottleneck"]
+    assert config.map_id == "corrected_bottleneck"
+    assert corrected.svg_geometry_contract == "corrected"
+    assert legacy is not None
+    assert corrected.ped_routes[0].waypoints == pytest.approx(
+        [(x, y - 4.3651647) for x, y in legacy.ped_routes[0].waypoints]
+    )
+    assert corrected.ped_spawn_zones[0] != legacy.ped_spawn_zones[0]
+
+
 def test_build_robot_config_rejects_unknown_contract_with_scenario_name(
     tmp_path: Path,
 ) -> None:

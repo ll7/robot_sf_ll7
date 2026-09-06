@@ -90,7 +90,7 @@ def test_projection_fails_closed_for_invalid_queries() -> None:
 def test_projection_fails_closed_for_integer_conversion_overflow() -> None:
     """Oversized integers must follow the invalid-input contract, not crash."""
     overflowing = 10**400
-    route = RouteGeometry([(0, 0), (10, 0)])
+    route = RouteGeometry([(0, 0), (5, 0), (10, 0)])
 
     projection = route.project((overflowing, 0))
     assert projection.status == "invalid_query"
@@ -165,6 +165,20 @@ def test_hinted_projection_reports_discontinuity_without_overclaiming_progress()
     assert projection.arc_length_m is None
 
 
+def test_hint_tolerance_does_not_expand_the_continuity_window() -> None:
+    """Tie tolerance must not permit motion outside explicit continuity bounds."""
+    route = RouteGeometry([(0, 0), (10, 0)], tie_tolerance_m=0.25)
+    hint = RouteProjectionHint(
+        previous_s_m=0.0,
+        max_forward_jump_m=0.0,
+        max_backtrack_m=0.0,
+    )
+
+    projection = route.project((0.1, 0.0), hint=hint)
+
+    assert projection.status == "discontinuous"
+
+
 def test_route_tracker_preserves_last_valid_state_and_rejects_bad_step_order() -> None:
     """Failures and duplicate/out-of-order steps must not rewrite continuity."""
     route = RouteGeometry([(0, 0), (10, 0)])
@@ -209,7 +223,7 @@ def test_route_tracker_route_change_resets_continuity_explicitly() -> None:
 
 def test_route_tracker_snapshot_restore_is_json_safe_and_replayable() -> None:
     """A validated snapshot must reproduce the next projection exactly."""
-    route = RouteGeometry([(0, 0), (10, 0)])
+    route = RouteGeometry([(0, 0), (5, 0), (10, 0)])
     tracker = RouteProjectionTracker(route)
     tracker.project((1.0, 0.0), step=3)
     snapshot = tracker.snapshot()
@@ -230,3 +244,11 @@ def test_route_tracker_snapshot_restore_is_json_safe_and_replayable() -> None:
     invalid_segment = dict(snapshot, previous_segment_index=99)
     with pytest.raises(ValueError, match="previous_segment_index"):
         RouteProjectionTracker.restore(route, invalid_segment)
+
+    invalid_pair = dict(snapshot, previous_s_m=6.0, previous_segment_index=0)
+    with pytest.raises(ValueError, match="does not belong"):
+        RouteProjectionTracker.restore(route, invalid_pair)
+
+    invalid_failure_state = dict(snapshot, last_step=None, failure_count=1)
+    with pytest.raises(ValueError, match="last_step"):
+        RouteProjectionTracker.restore(route, invalid_failure_state)

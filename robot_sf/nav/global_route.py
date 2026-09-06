@@ -258,11 +258,7 @@ class RouteGeometry:
             lower_bound = hint.previous_s_m - hint.max_backtrack_m
             upper_bound = hint.previous_s_m + hint.max_forward_jump_m
             candidates = [
-                candidate
-                for candidate in candidates
-                if lower_bound - self.tie_tolerance_m
-                <= candidate[3]
-                <= upper_bound + self.tie_tolerance_m
+                candidate for candidate in candidates if lower_bound <= candidate[3] <= upper_bound
             ]
             if not candidates:
                 return RouteProjection(
@@ -491,19 +487,11 @@ class RouteProjectionTracker:
         previous_segment_index = _optional_nonnegative_index(
             snapshot.get("previous_segment_index"), "previous_segment_index"
         )
-        if (previous_s_m is None) != (previous_segment_index is None):
-            raise ValueError("snapshot previous projection fields must be provided together.")
-        if previous_s_m is not None and previous_s_m > route.total_length_m:
-            raise ValueError("snapshot previous_s_m exceeds route length.")
-        if previous_segment_index is not None and previous_segment_index >= len(route.sections):
-            raise ValueError("snapshot previous_segment_index exceeds route sections.")
         last_step = _optional_nonnegative_index(snapshot.get("last_step"), "last_step")
         failure_count = _finite_nonnegative_index(snapshot.get("failure_count"), "failure_count")
-        last_reset_reason = snapshot.get("last_reset_reason")
-        if last_reset_reason is not None and (
-            not isinstance(last_reset_reason, str) or not last_reset_reason.strip()
-        ):
-            raise ValueError("snapshot last_reset_reason must be a non-empty string or None.")
+        _validate_snapshot_projection_state(route, previous_s_m, previous_segment_index)
+        _validate_snapshot_order_state(previous_s_m, last_step, failure_count)
+        last_reset_reason = _validated_reset_reason(snapshot.get("last_reset_reason"))
 
         tracker._previous_s_m = previous_s_m
         tracker._previous_segment_index = previous_segment_index
@@ -606,6 +594,54 @@ def _finite_nonnegative_index(value: object, name: str) -> int:
     if result is None:
         raise ValueError(f"snapshot {name} must be a non-negative integer.")
     return result
+
+
+def _validate_snapshot_projection_state(
+    route: RouteGeometry,
+    previous_s_m: float | None,
+    previous_segment_index: int | None,
+) -> None:
+    """Validate the restored arc position and its owning route section."""
+
+    if (previous_s_m is None) != (previous_segment_index is None):
+        raise ValueError("snapshot previous projection fields must be provided together.")
+    if previous_s_m is None:
+        return
+    if previous_s_m > route.total_length_m:
+        raise ValueError("snapshot previous_s_m exceeds route length.")
+    assert previous_segment_index is not None
+    if previous_segment_index >= len(route.sections):
+        raise ValueError("snapshot previous_segment_index exceeds route sections.")
+    section_start = route.section_offsets[previous_segment_index]
+    section_end = section_start + route.section_lengths[previous_segment_index]
+    if not section_start <= previous_s_m <= section_end:
+        raise ValueError("snapshot previous_s_m does not belong to previous_segment_index.")
+
+
+def _validate_snapshot_order_state(
+    previous_s_m: float | None,
+    last_step: int | None,
+    failure_count: int,
+) -> None:
+    """Validate the restored step and failure counters."""
+
+    if last_step is None:
+        if failure_count != 0 or previous_s_m is not None:
+            raise ValueError("snapshot last_step is required for prior projection or failures.")
+    elif previous_s_m is None and failure_count == 0:
+        raise ValueError("snapshot previous projection or failure state is required for last_step.")
+
+
+def _validated_reset_reason(value: object) -> str | None:
+    """Validate and return the restored reset reason.
+
+    Returns:
+        str | None: The validated reset reason.
+    """
+
+    if value is not None and (not isinstance(value, str) or not value.strip()):
+        raise ValueError("snapshot last_reset_reason must be a non-empty string or None.")
+    return value if isinstance(value, str) else None
 
 
 def _finite_point(value: Sequence[float], name: str) -> Vec2D:

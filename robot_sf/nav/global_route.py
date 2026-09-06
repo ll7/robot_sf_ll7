@@ -609,7 +609,8 @@ def _validate_snapshot_projection_state(
         return
     if previous_s_m > route.total_length_m:
         raise ValueError("snapshot previous_s_m exceeds route length.")
-    assert previous_segment_index is not None
+    if previous_segment_index is None:
+        raise ValueError("snapshot previous projection fields must be provided together.")
     if previous_segment_index >= len(route.sections):
         raise ValueError("snapshot previous_segment_index exceeds route sections.")
     section_start = route.section_offsets[previous_segment_index]

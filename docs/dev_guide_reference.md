@@ -190,7 +190,7 @@ Use the shared main-checkout environment by default for a fresh worktree:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- \
-  python scripts/dev/check_worktree_optional_deps.py --profile all-extras
+  uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
 
 The shared-venv wrapper pins imports to the current worktree, sets `UV_NO_SYNC=1`, and checks
@@ -230,11 +230,14 @@ The inventory covers ignored generated `output/`, the uv cache, repository workt
 and recognizable agent worktrees under `/dev/shm`. It is a review aid only. Preserve durable
 evidence before pruning `output/`; remove only clean, pushed Git worktrees with
 `git worktree remove`; and remove only task-owned, no-longer-running `/dev/shm` scratch. No
-automated cleanup is performed. Each existing candidate is sized with a five-second per-path
-timeout by default. Override it with `--size-timeout-seconds N` for a deliberately bounded local
-diagnostic. A timeout or unavailable `du` result is reported as `size_status` with a
-machine-readable `size_reason`; it never becomes a zero-size or cleanup recommendation and does
-not change the separate capacity verdict.
+automated cleanup is performed. Each ordinary candidate is sized with a five-second per-path
+timeout by default. The shared worktree container is measured by sizing its immediate children
+concurrently (up to 16 workers) with a bounded fleet budget of at most 12 times that timeout,
+capped at 60 seconds at the default setting. If some children do not finish, the inventory emits
+a clearly labeled partial lower-bound estimate and reason. Override the base timeout with
+`--size-timeout-seconds N` for a deliberately bounded local diagnostic. A timeout or unavailable
+`du` result is reported as `size_status` with a machine-readable `size_reason`; it never becomes a
+zero-size or cleanup recommendation and does not change the separate capacity verdict.
 
 ### Local CI scratch capacity
 
@@ -316,7 +319,7 @@ imports to the current worktree:
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
 scripts/dev/run_worktree_shared_venv.sh --venv ../robot_sf_ll7/.venv -- ruff check scripts/dev
 scripts/dev/run_worktree_shared_venv.sh --standalone -- \
-  python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
+  uv run python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
 ```
 
 The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the selected
@@ -427,8 +430,10 @@ uv run python examples/quickstart/03_custom_map.py
 ```
 
 - `01_basic_robot.py` introduces the environment factory pattern and headless rollouts.
-- `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to
-  `output/results/episodes_demo_ppo.jsonl`.
+- `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to the legacy
+  `output/results/episodes_demo_ppo.jsonl`. <!-- active-docs-check: allow current quickstart path matches the executable example -->
+  This quickstart output is retained for compatibility; new benchmark artifacts use
+  `output/benchmarks/`.
 - `03_custom_map.py` shows how to load `maps/svg_maps/debug_06.svg` via
   `RobotSimulationConfig.map_pool` for custom layouts.
 
@@ -1004,7 +1009,7 @@ wrapper so uv reuses the owning checkout's environment and does not create or pr
 `.venv`:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \
   <pr-number> \
   --expected-head-sha <head-sha> \
   --poll-attempts 40 \
@@ -1052,7 +1057,7 @@ default stale warning threshold is 900 seconds; set it explicitly when a differe
 window is appropriate:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \
   <pr-number> \
   --expected-head-sha <head-sha> \
   --actions-stale-after-seconds 900 \
@@ -1060,11 +1065,17 @@ scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status
 ```
 
 `checks.actions_lifecycle` reports `queued`, `setup`, and `in_progress` items with phase age,
-timestamp source, run/job IDs, and exact-head matching. `checks.age_warnings` marks gates that
-exceed the configured threshold without changing the fail-closed `checks.overall: "pending"`
-result. `checks.superseded_runs` names an older exact-head run and its newer same-workflow
-replacement rather than hiding the replacement relationship behind a count. When a stale run has
-an independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
+timestamp source, run/job IDs, and exact-head matching. When a job is actively running but stuck
+in environment setup (such as Python runtime or dependency provisioning) beyond
+`--actions-stale-after-seconds`, the payload emits `checks.setup_starvation: true`,
+`checks.pending_reason: "setup_starvation"`, and `checks.diagnostic: "actions_gate_setup_starvation"`.
+Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`. Cancellation
+or rerun requires explicit operator authorization, and merge admission stays strictly blocked until
+a fresh exact-head run succeeds. `checks.age_warnings` marks gates that exceed the configured
+threshold without changing the fail-closed `checks.overall: "pending"` result.
+`checks.superseded_runs` names an older exact-head run and its newer same-workflow replacement
+rather than hiding the replacement relationship behind a count. When a stale run has an
+independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
 monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
 and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
 mutation commands and leaves the route evidence incomplete.

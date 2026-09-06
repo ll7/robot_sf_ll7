@@ -378,7 +378,9 @@ _FAST_FILES = {
     "navigation_test.py",
     "ped_grouping_test.py",
     "test_compare_coverage_cli.py",
+    "test_global_route.py",
     "test_open_coverage_report.py",
+    "test_route_geometry.py",
     "test_pytest_config_contract.py",
     # Canonical logging helper tests provide changed-line coverage when the
     # deprecated research logging shim is retired (issue #8378).
@@ -546,6 +548,10 @@ _FAST_FILES = {
     "test_socnav_prediction_module.py",
     # Termination reason tests are deterministic unit contracts for canonical outcome flags.
     "test_termination_reason.py",
+    # Benchmark metric characterization tests are deterministic pure-metric
+    # contracts; keep them in fast shards for changed metrics coverage.
+    "test_metrics.py",
+    "test_aggregated_time_cooperative.py",
     # Classic planner adapter tests are deterministic planner-contract tests for
     # the changed classic_planner_adapter.py producer; keep in fast shards for
     # the exact-head changed-coverage gate.

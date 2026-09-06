@@ -14,7 +14,7 @@ seed_policy:
   seeds: []
 reproduction:
   environment_setup_command: "uv sync --all-extras"
-  functional_smoke_command: "python scripts/validation/run_release_functional_badge_smoke.py --bundle-path output/release_bundle"
+  functional_smoke_command: "uv run python scripts/validation/run_release_functional_badge_smoke.py --bundle-path output/release_bundle"
   headline_reproduction_command: ""
   tolerances: {}
 known_nondeterminism: []

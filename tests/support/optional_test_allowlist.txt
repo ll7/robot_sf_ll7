@@ -44,6 +44,7 @@ tests/sim/test_zanlungo_corridor_acceptance.py
 tests/unit/test_ch8_statistics.py
 tests/unit/test_evidence_integration_inventory.py
 tests/unit/test_full_classic_visuals.py
+tests/nav/test_geojson_public_exports.py
 tests/unit/test_geojson_map_builder.py
 tests/unit/test_cli_logging_flags.py
 tests/unit/test_figure_orchestrator_requirements.py

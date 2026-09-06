@@ -23,9 +23,11 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import shlex
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -69,6 +71,7 @@ DEFAULT_MAX_MUTATIONS = 250
 DEFAULT_GH_TIMEOUT_SECONDS = 60.0
 DEFAULT_MAX_AUDIT_WALL_SECONDS = 120.0
 PLAN_SCHEMA = "issue_audit_plan.v1"
+PROVENANCE_SCHEMA = "issue_audit_provenance.v1"
 ENVELOPE_SCHEMA = "issue_decision_envelope.v1"
 MAX_SOURCE_EXCERPT = 280
 
@@ -1229,6 +1232,99 @@ def discover_jobs(
     return jobs, {"available": True, "count": len(jobs), "errors": []}
 
 
+def resolve_source_sha(
+    repo_root: Path | None = None,
+    *,
+    command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
+) -> str:
+    """Resolve the git HEAD commit SHA for the active source tree."""
+    run = command_runner or _run_command
+    result = run(["git", "rev-parse", "HEAD"])
+    if result.returncode == 0:
+        candidate = (result.stdout or "").strip()
+        if re.fullmatch(r"^[0-9a-f]{40}$", candidate):
+            return candidate
+    return ""
+
+
+def resolve_classifier_digest(path: Path | None = None) -> str:
+    """Compute the SHA-256 digest of the issue-audit core classifier implementation."""
+    target = path or Path(__file__).resolve()
+    try:
+        data = target.read_bytes()
+        return hashlib.sha256(data).hexdigest()
+    except OSError:
+        return ""
+
+
+def resolve_producer_identity(
+    *,
+    task_id: str | None = None,
+    worktree: Path | str | None = None,
+) -> dict[str, Any]:
+    """Gather machine, user, and task identity for audit provenance."""
+    hostname = socket.gethostname() or "unknown"
+    username = os.environ.get("USER") or "unknown"
+    resolved_task_id = (
+        task_id
+        or os.environ.get("AGENT_RUN_ID")
+        or os.environ.get("CODEX_RUN_ID")
+        or os.environ.get("CONVERSATION_ID")
+        or os.environ.get("TASK_ID")
+        or ""
+    )
+    worktree_str = str(worktree or Path.cwd())
+    identity = f"{username}@{hostname}"
+    if resolved_task_id:
+        identity = f"{identity}:{resolved_task_id}"
+    return {
+        "identity": identity,
+        "hostname": hostname,
+        "username": username,
+        "task_id": resolved_task_id or None,
+        "worktree": worktree_str,
+    }
+
+
+def check_origin_main_freshness(
+    remote: str = DEFAULT_REMOTE,
+    *,
+    fetch: bool = True,
+    command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
+) -> tuple[bool, str, str, str | None]:
+    """Verify that HEAD has incorporated fetched <remote>/main.
+
+    Returns (fresh: bool, head_sha: str, main_sha: str, error_detail: str | None).
+    """
+    run = command_runner or _run_command
+    if fetch:
+        fetch_result = run(["git", "fetch", remote, "main"])
+        if fetch_result.returncode != 0:
+            err = (fetch_result.stderr or fetch_result.stdout).strip() or "git fetch failed"
+            return False, "", "", f"failed to fetch {remote}/main: {err}"
+
+    head_res = run(["git", "rev-parse", "HEAD"])
+    head_sha = (head_res.stdout or "").strip() if head_res.returncode == 0 else ""
+    if not re.fullmatch(r"^[0-9a-f]{40}$", head_sha):
+        return False, head_sha, "", "failed to resolve HEAD commit SHA"
+
+    main_res = run(["git", "rev-parse", f"{remote}/main"])
+    main_sha = (main_res.stdout or "").strip() if main_res.returncode == 0 else ""
+    if not re.fullmatch(r"^[0-9a-f]{40}$", main_sha):
+        return False, head_sha, main_sha, f"failed to resolve {remote}/main commit SHA"
+
+    ancestor_res = run(["git", "merge-base", "--is-ancestor", f"{remote}/main", "HEAD"])
+    if ancestor_res.returncode == 0:
+        return True, head_sha, main_sha, None
+
+    return (
+        False,
+        head_sha,
+        main_sha,
+        f"executing revision {head_sha} does not contain {remote}/main ({main_sha})",
+    )
+
+
 def _core_reset_handoff(
     *,
     retry_command: str,
@@ -1262,6 +1358,7 @@ def _build_plan_retry_command(
     max_mutations: int = DEFAULT_MAX_MUTATIONS,
     max_wall_seconds: float | None = None,
     output: Path | None = None,
+    read_only_diagnostic: bool = False,
 ) -> str:
     """Serialize the bounded plan invocation used by quota-reset handoffs."""
     command = [
@@ -1281,6 +1378,8 @@ def _build_plan_retry_command(
         "--max-closed-pr-pages",
         str(max_closed_pr_pages),
     ]
+    if read_only_diagnostic:
+        command.append("--read-only-diagnostic")
     if include_comments:
         command.append("--include-comments")
     command.extend(
@@ -2748,11 +2847,29 @@ def build_audit_plan(
     max_mutations: int = DEFAULT_MAX_MUTATIONS,
     max_wall_seconds: float | None = None,
     deadline: float | None = None,
+    source_sha: str | None = None,
+    classifier_digest: str | None = None,
+    producer: Mapping[str, Any] | None = None,
+    read_only_diagnostic: bool = False,
+    command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
 ) -> dict[str, Any]:
     """Build the shared issue_audit_plan.v1 from a read-only inventory."""
     if mode not in {"autonomous", "interactive"}:
         raise ValueError("mode must be autonomous or interactive")
     effective_deadline = _resolve_deadline(max_wall_seconds, deadline)
+    resolved_source_sha = (
+        source_sha if source_sha is not None else resolve_source_sha(command_runner=command_runner)
+    )
+    resolved_classifier_digest = (
+        classifier_digest if classifier_digest is not None else resolve_classifier_digest()
+    )
+    resolved_producer = dict(producer) if producer is not None else resolve_producer_identity()
+    provenance_available = bool(
+        resolved_source_sha
+        and resolved_classifier_digest
+        and isinstance(resolved_producer, Mapping)
+        and resolved_producer.get("identity")
+    )
     issues = [item for item in inventory.get("issues", []) if isinstance(item, Mapping)]
     open_prs = [item for item in inventory.get("open_prs", []) if isinstance(item, Mapping)]
     merged_prs = [item for item in inventory.get("merged_prs", []) if isinstance(item, Mapping)]
@@ -2939,10 +3056,27 @@ def build_audit_plan(
         int(issue.get("number", 0)) for issue in ordered_issues[len(classifications) :]
     ]
     classification_timed_out = classification_timeout_reason is not None
-    incomplete_inventory = classification_timed_out or quota_uncertain or bool(truncated)
+    if not read_only_diagnostic and not provenance_available:
+        truncated.append("provenance_unavailable")
+        inventory_uncertainties.append("provenance_unavailable")
+    incomplete_inventory = (
+        classification_timed_out
+        or quota_uncertain
+        or bool(truncated)
+        or read_only_diagnostic
+        or not provenance_available
+    )
+    if read_only_diagnostic and classification_timeout_reason is None:
+        effective_reason: str | None = (
+            "issue-audit running in read-only diagnostic mode; mutations suppressed"
+        )
+    elif not provenance_available and classification_timeout_reason is None:
+        effective_reason = "issue-audit source provenance is unavailable; mutations suppressed"
+    else:
+        effective_reason = classification_timeout_reason
     classification_status = {
         "status": "timed_out" if classification_timed_out else "complete",
-        "reason": classification_timeout_reason,
+        "reason": effective_reason,
         "classified_issues": len(classifications),
         "total_issues": len(ordered_issues),
         "remaining_issue_numbers": remaining_issue_numbers,
@@ -2965,6 +3099,16 @@ def build_audit_plan(
         "schema": PLAN_SCHEMA,
         "repo": str(inventory.get("repo") or DEFAULT_REPO),
         "mode": mode,
+        "source_sha": resolved_source_sha,
+        "classifier_digest": resolved_classifier_digest,
+        "producer": resolved_producer,
+        "diagnostic_mode": read_only_diagnostic,
+        "provenance": {
+            "schema": PROVENANCE_SCHEMA,
+            "source_sha": resolved_source_sha,
+            "classifier_digest": resolved_classifier_digest,
+            "producer": resolved_producer,
+        },
         "project5": {"writes": False, "owner": "gh-issue-sequencer"},
         "label_policy": {
             "create_missing": False,
@@ -3175,6 +3319,13 @@ def apply_mutations(
     *,
     max_mutations: int = DEFAULT_MAX_MUTATIONS,
     runner: Runner | None = None,
+    command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
+    apply_source_sha: str | None = None,
+    apply_classifier_digest: str | None = None,
+    apply_producer: Mapping[str, Any] | None = None,
+    check_freshness: bool = False,
+    enforce_provenance: bool = True,
+    remote: str = DEFAULT_REMOTE,
 ) -> dict[str, Any]:
     """Apply a bounded plan and read back every touched issue.
 
@@ -3184,6 +3335,24 @@ def apply_mutations(
     """
     raw_mutations = plan.get("mutations")
     planned_count = len(raw_mutations) if isinstance(raw_mutations, list) else 0
+
+    curr_source_sha = (
+        apply_source_sha
+        if apply_source_sha is not None
+        else resolve_source_sha(command_runner=command_runner)
+    )
+    curr_classifier_digest = (
+        apply_classifier_digest
+        if apply_classifier_digest is not None
+        else resolve_classifier_digest()
+    )
+    curr_producer = (
+        dict(apply_producer) if apply_producer is not None else resolve_producer_identity()
+    )
+    plan_source_sha = str(plan.get("source_sha") or "")
+    plan_classifier_digest = str(plan.get("classifier_digest") or "")
+    plan_producer = dict(plan["producer"]) if isinstance(plan.get("producer"), Mapping) else {}
+    recorded_digest = str(plan.get("plan_digest") or "")
 
     def empty_counts(failed: int) -> dict[str, int]:
         """Return the stable no-write count shape for an early refusal."""
@@ -3202,6 +3371,12 @@ def apply_mutations(
             "schema": "issue_audit_apply.v1",
             "ok": False,
             "reason": reason,
+            "source_sha": curr_source_sha,
+            "classifier_digest": curr_classifier_digest,
+            "producer": curr_producer,
+            "plan_digest": recorded_digest,
+            "plan_source_sha": plan_source_sha,
+            "plan_classifier_digest": plan_classifier_digest,
             "applied": [],
             "already_applied": [],
             "stale_states": [],
@@ -3213,6 +3388,8 @@ def apply_mutations(
 
     if plan.get("schema") != PLAN_SCHEMA:
         return refuse(f"expected {PLAN_SCHEMA}")
+    if plan.get("diagnostic_mode"):
+        return refuse("cannot apply mutations from a read-only diagnostic plan")
     if not isinstance(raw_mutations, list):
         return refuse("plan mutations must be a list")
     if len(raw_mutations) > max_mutations:
@@ -3305,6 +3482,41 @@ def apply_mutations(
             "readback": [],
             "counts": empty_counts(len(precondition_plan_errors)),
         }
+
+    if enforce_provenance and planned_count > 0:
+        if not plan_source_sha:
+            return refuse("plan is missing source_sha; regenerate it before applying")
+        if not plan_classifier_digest:
+            return refuse("plan is missing classifier_digest; regenerate it before applying")
+        if not plan_producer or not plan_producer.get("identity"):
+            return refuse("plan is missing producer identity; regenerate it before applying")
+        if not curr_source_sha:
+            return refuse("current source_sha is unavailable; cannot verify apply-time integrity")
+        if not curr_classifier_digest:
+            return refuse(
+                "current classifier_digest is unavailable; cannot verify apply-time integrity"
+            )
+        if not curr_producer or not curr_producer.get("identity"):
+            return refuse(
+                "current producer identity is unavailable; cannot verify apply-time integrity"
+            )
+        if plan_source_sha != curr_source_sha:
+            return refuse(
+                f"plan-time source SHA ({plan_source_sha}) does not match apply-time source SHA ({curr_source_sha})"
+            )
+        if plan_classifier_digest != curr_classifier_digest:
+            return refuse(
+                f"plan-time classifier digest ({plan_classifier_digest}) does not match apply-time classifier digest ({curr_classifier_digest})"
+            )
+        if check_freshness:
+            fresh, _head_sha, _main_sha, err = check_origin_main_freshness(
+                remote, command_runner=command_runner
+            )
+            if not fresh:
+                return refuse(
+                    f"autonomous apply refused: executing revision does not contain current {remote}/main ({err or 'stale revision'}). Refresh with: git fetch {remote} main && git merge {remote}/main"
+                )
+
     repo = str(plan.get("repo") or DEFAULT_REPO)
     run = _runner_or_default(runner)
     applied: list[dict[str, Any]] = []
@@ -3492,6 +3704,12 @@ def apply_mutations(
     return {
         "schema": "issue_audit_apply.v1",
         "ok": not failures and all(row.get("ok") for row in readback),
+        "source_sha": curr_source_sha,
+        "classifier_digest": curr_classifier_digest,
+        "producer": curr_producer,
+        "plan_digest": recorded_digest,
+        "plan_source_sha": plan_source_sha,
+        "plan_classifier_digest": plan_classifier_digest,
         "applied": applied,
         "already_applied": already_applied,
         "stale_states": stale_states,
@@ -3811,10 +4029,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             "zero emits a fail-closed empty plan"
         ),
     )
+    plan_parser.add_argument(
+        "--read-only-diagnostic",
+        action="store_true",
+        help=(
+            "run in read-only diagnostic mode without requiring origin/main freshness; "
+            "suppresses all mutations"
+        ),
+    )
     plan_parser.add_argument("--output", type=Path)
     apply_parser = subparsers.add_parser("apply", help="apply a previously emitted plan")
     apply_parser.add_argument("plan", type=Path)
+    apply_parser.add_argument("--remote", default=DEFAULT_REMOTE)
     apply_parser.add_argument("--max-mutations", type=int, default=DEFAULT_MAX_MUTATIONS)
+    apply_parser.add_argument(
+        "--no-freshness-check",
+        action="store_true",
+        help="bypass origin/main freshness check during manual maintainer apply",
+    )
     envelope_parser = subparsers.add_parser(
         "envelope", help="emit the next maintainer decision envelope from a plan"
     )
@@ -3826,6 +4058,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "plan":
         if not math.isfinite(args.max_wall_seconds) or args.max_wall_seconds < 0:
             parser.error("--max-wall-seconds must be finite and non-negative")
+        if (
+            args.mode == "autonomous"
+            and not args.read_only_diagnostic
+            and args.max_wall_seconds > 0
+        ):
+            should_fetch = args.max_wall_seconds >= 1.0
+            fresh, head_sha, main_sha, _err = check_origin_main_freshness(
+                args.remote, fetch=should_fetch
+            )
+            if not fresh:
+                sys.stderr.write(
+                    f"issue-audit: executing revision {head_sha} does not contain current "
+                    f"{args.remote}/main ({main_sha}). Refresh with: git fetch {args.remote} main "
+                    f"&& git merge {args.remote}/main (or pass --read-only-diagnostic for "
+                    "read-only inspection)\n"
+                )
+                return 2
+        elif args.read_only_diagnostic:
+            head_sha = resolve_source_sha()
+            sys.stderr.write(
+                f"issue-audit: running in read-only diagnostic mode on revision {head_sha or 'unknown'}; "
+                "all mutations are suppressed\n"
+            )
         deadline = _deadline_from_seconds(args.max_wall_seconds)
         retry_command = _build_plan_retry_command(
             args.repo,
@@ -3838,6 +4093,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_mutations=args.max_mutations,
             max_wall_seconds=args.max_wall_seconds,
             output=args.output,
+            read_only_diagnostic=args.read_only_diagnostic,
         )
         try:
             with _deadline_interrupt(deadline):
@@ -3862,6 +4118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             mode=args.mode,
             max_mutations=args.max_mutations,
             deadline=deadline,
+            read_only_diagnostic=args.read_only_diagnostic,
         )
         rendered = _render_plan(plan, deadline)
         if args.output:
@@ -3911,7 +4168,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             print(rendered, end="")
         return 0 if envelope is None or envelope["status"] == "ready" else 2
-    result = apply_mutations(_load_json(args.plan), max_mutations=args.max_mutations)
+    result = apply_mutations(
+        _load_json(args.plan),
+        max_mutations=args.max_mutations,
+        check_freshness=not args.no_freshness_check,
+        remote=args.remote,
+    )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["ok"] else 2
 

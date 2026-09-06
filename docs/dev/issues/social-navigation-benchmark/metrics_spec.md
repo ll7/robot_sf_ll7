@@ -15,6 +15,17 @@ Use Euclidean norm $\|\cdot\|$.
 - $\text{avg\_speed} = \frac{1}{T} \sum_{t=0}^{T-1} \| v_t \|$ (average robot speed magnitude).
 	Useful for sanity checks and distribution plots; not part of SNQI.
 
+### Cooperative Completion-Time Diagnostic
+- $\text{aggregated\_time} = \max_{a \in A}(s_a \cdot dt)$ for the explicitly requested
+  cooperative agent set $A$, where `s_a` is the first goal-reaching step in
+  `EpisodeData.cooperative_goal_steps`.
+- `cooperative_agents=None` preserves the existing single-robot `time_to_goal` behavior.
+- Empty requests, missing mappings or agents, negative/non-integral steps, invalid timestep
+  values, and negative indices return `NaN`; goal completion is never inferred from positions.
+- All-agent aggregation is explicit: callers pass every known agent index. The optional mapping
+  is not currently populated by episode producers, so this contract is implementation/test
+  evidence only and does not establish a benchmark result.
+
 ## Force / Comfort Metrics
 7. $\text{force\_quantiles}(q50,q90,q95)$: quantiles of all pedestrian force magnitudes $\|F_t^k\|$.
 8. $\text{per\_ped\_force\_quantiles}(q50,q90,q95)$: per-pedestrian force quantiles. For each pedestrian $k$, compute $M_k = \{\|F_{t}^k\|_2 : t = 0,\dots,T-1\}$; then compute quantiles $Q_k(q) = \text{quantile}(M_k, q)$ for each $q \in \{0.50, 0.90, 0.95\}$. Episode value is the mean across pedestrians: $\frac{1}{K} \sum_{k=1}^K Q_k(q)$. Returns NaN when $K=0$; single-pedestrian case ($K=1$) returns individual quantiles; NaN force samples are excluded using `nanquantile` and `nanmean`.

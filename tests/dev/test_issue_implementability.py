@@ -272,6 +272,7 @@ def test_two_execution_state_labels_fail_closed() -> None:
         (["state:blocked", "state:parked"], "blocked"),
         (["state:running", "state:blocked-no-code-slice"], "stale_running"),
         (["state:running", "state:parked"], "stale_running"),
+        (["state:running", "state:needs-interpretation"], "stale_running"),
     ],
 )
 def test_state_qualifiers_do_not_create_execution_state_conflicts(

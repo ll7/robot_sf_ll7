@@ -1769,14 +1769,14 @@ def test_ensure_required_fields_reports_partial_field_creation_rate_limit(
     assert error.created_field_names == [REQUIRED_NUMBER_FIELDS[0]]
     assert error.completed_write_count == 1
     assert error.writes_performed_count == 1
-    assert error.write_ambiguity is False
+    assert error.write_ambiguity is True
     payload = project_priority_score._blocked_project_rate_limit_payload(
         owner="ll7", project_number=5, error=error
     )
     assert payload["completed_field_names"] == [REQUIRED_NUMBER_FIELDS[0]]
     assert payload["completed_write_count"] == 1
     assert payload["writes_performed"] is True
-    assert payload["write_ambiguity"] is False
+    assert payload["write_ambiguity"] is True
 
 
 def test_ensure_required_fields_reports_completed_fields_when_final_read_times_out(
@@ -1977,7 +1977,7 @@ def test_apply_score_updates_reraises_write_phase_timeout() -> None:
 
 
 def test_apply_score_updates_reraises_write_phase_rate_limit() -> None:
-    """A partial rate-limited write reports known progress without timeout ambiguity."""
+    """A partial rate-limited write reports progress and write ambiguity."""
     from types import SimpleNamespace
 
     calls = 0
@@ -1989,6 +1989,7 @@ def test_apply_score_updates_reraises_write_phase_rate_limit() -> None:
             raise ProjectRateLimitError(
                 command=("gh", "api", "graphql"),
                 details="secondary rate limit",
+                phase="write",
             )
 
     plan: dict[str, object] = {}
@@ -2026,6 +2027,7 @@ def test_apply_score_updates_reraises_write_phase_rate_limit() -> None:
         {"issue_number": 1, "item_id": "item-1", "written": True},
         {"issue_number": 2, "item_id": "item-2", "written": False},
     ]
+    assert exc_info.value.phase == "write"
     assert exc_info.value.writes_performed_count == 1
     payload = project_priority_score._blocked_project_rate_limit_payload(
         owner="ll7",
@@ -2035,7 +2037,7 @@ def test_apply_score_updates_reraises_write_phase_rate_limit() -> None:
     assert payload["attempted_rows"] == exc_info.value.attempted_rows
     assert payload["writes_performed_count"] == 1
     assert payload["writes_performed"] is True
-    assert payload["write_ambiguity"] is False
+    assert payload["write_ambiguity"] is True
     assert "1 score write(s) completed" in payload["message"]
     assert plan["status"] == "rate_limit_blocked"
     assert plan["writes_performed_count"] == 1

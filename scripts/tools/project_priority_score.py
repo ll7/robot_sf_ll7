@@ -207,19 +207,23 @@ class MissingProjectScopeError(RuntimeError):
 class ProjectRateLimitError(RuntimeError):
     """Raised when GitHub reports an explicit Project API rate-limit failure."""
 
-    def __init__(self, *, command: Sequence[str], details: str) -> None:
-        """Store the failed command and the original CLI diagnostic."""
+    def __init__(
+        self,
+        *,
+        command: Sequence[str],
+        details: str,
+        phase: str = "read",
+    ) -> None:
+        """Store the failed command, phase, diagnostic, and write telemetry."""
         self.command = tuple(command)
         self.details = details
+        self.phase = phase
         self.attempted_rows: list[dict[str, Any]] = []
         self.attempted_field_names: list[str] = []
         self.created_field_names: list[str] = []
         self.completed_write_count = 0
         self.writes_performed_count = 0
-        self.write_ambiguity = False
-        self.budget_exhausted = False
-        self.progress_write_ambiguity = False
-        self.blocked_status = "rate_limit_blocked"
+        self.write_ambiguity: bool | None = None
         super().__init__(
             "GitHub Project API rate limit exceeded; retry after the quota window resets."
             + f"\n{details}"
@@ -643,6 +647,7 @@ class GhProjectClient:
                 raise ProjectRateLimitError(
                     command=("gh", *args),
                     details=details,
+                    phase=self.current_phase,
                 ) from exc
             raise RuntimeError(
                 "gh command failed: "
@@ -1266,7 +1271,9 @@ def ensure_required_fields(
                     client=client,
                     attempted_field_names=attempted_field_names,
                     created_field_names=created_field_names,
-                    write_ambiguity=exc.progress_write_ambiguity,
+                    write_ambiguity=(
+                        True if isinstance(exc, ProjectRateLimitError) else not exc.budget_exhausted
+                    ),
                 )
                 raise
             created_field_names.append(name)
@@ -1283,7 +1290,7 @@ def ensure_required_fields(
             return field_map(client.field_list(owner=owner, project_number=project_number))
         except (GhProjectTimeoutError, ProjectRateLimitError) as exc:
             # The schema mutations completed before this read are still part of the
-            # structured outcome, even though the final field-list is a read operation.
+            # bounded failure outcome, even though the final field-list is a read operation.
             _record_field_creation_progress(
                 exc,
                 client=client,
@@ -1339,7 +1346,7 @@ def _carry_field_creation_progress(
     client: Any,
     error: GhProjectTimeoutError | ProjectRateLimitError,
 ) -> None:
-    """Carry known schema writes into a later timeout without masking score writes."""
+    """Carry known schema writes without masking later score-write telemetry."""
     progress = getattr(client, "_field_creation_progress", None)
     if not isinstance(progress, dict):
         return
@@ -1845,29 +1852,37 @@ def _index_issue_items(items: Sequence[dict[str, Any]]) -> dict[int, dict[str, A
     return indexed
 
 
-def _apply_score_updates(
+def _record_rate_limit_write_progress(
+    error: ProjectRateLimitError,
+    *,
+    plan: dict[str, Any] | None,
+    attempted_rows: Sequence[dict[str, Any]],
+    writes_performed: int,
+) -> None:
+    """Attach partial score-write telemetry before propagating a rate-limit error."""
+    error.attempted_rows = [dict(row) for row in attempted_rows]
+    error.completed_write_count = writes_performed
+    error.writes_performed_count = writes_performed
+    error.write_ambiguity = True
+    if plan is None:
+        return
+    plan["status"] = "rate_limit_blocked"
+    plan["attempted_rows"] = [dict(row) for row in attempted_rows]
+    plan["completed_write_count"] = writes_performed
+    plan["writes_performed_count"] = writes_performed
+    plan["writes_performed"] = writes_performed > 0
+    plan["write_ambiguity"] = True
+
+
+def _write_score_updates(
     client: GhProjectClient,
-    options: SyncOptions,
     updates: Sequence[tuple[SyncPreview, dict[str, Any]]],
     *,
-    issue_snapshots: dict[int, dict[str, Any]],
+    plan: dict[str, Any] | None,
     score_field_id: str,
     project_id: str,
 ) -> bool:
-    """Revalidate guarded updates and apply the complete admitted mutation set."""
-
-    if not updates:
-        return True
-    client.current_phase = "read"
-    if options.only_empty:
-        if not _revalidate_guarded_updates(client, options, updates, issue_snapshots):
-            return False
-    else:
-        ensure_project_graphql_budget(
-            expected_graphql_requests=len(updates),
-            min_graphql_remaining=options.min_graphql_remaining,
-        )
-    plan = client.last_eligibility_plan
+    """Apply score updates and retain telemetry for partial failures."""
     attempted_rows: list[dict[str, Any]] = []
     writes_performed = 0
     client.current_phase = "write"
@@ -1887,7 +1902,7 @@ def _apply_score_updates(
             )
             row["written"] = True
             writes_performed += 1
-    except (GhProjectTimeoutError, ProjectRateLimitError) as exc:
+    except GhProjectTimeoutError as exc:
         # A timed-out write must reach the structured top-level timeout summary with its
         # command, budget, and phase instead of being folded into the generic apply failure.
         exc.attempted_rows = [dict(row) for row in attempted_rows]
@@ -1901,6 +1916,16 @@ def _apply_score_updates(
             plan["writes_performed_count"] = writes_performed
             plan["writes_performed"] = writes_performed > 0
             plan["write_ambiguity"] = exc.write_ambiguity
+        raise
+    except ProjectRateLimitError as exc:
+        # A rate-limited write may follow already-completed score writes, and the
+        # failed request itself must remain ambiguous until live state is reread.
+        _record_rate_limit_write_progress(
+            exc,
+            plan=plan,
+            attempted_rows=attempted_rows,
+            writes_performed=writes_performed,
+        )
         raise
     except (RuntimeError, ValueError, TypeError) as exc:
         # A rejected write (for example GitHub's numeric-shape enforcement) must
@@ -1919,6 +1944,41 @@ def _apply_score_updates(
         plan["attempted_rows"] = attempted_rows
         plan["writes_performed_count"] = writes_performed
     return True
+
+
+def _apply_score_updates(
+    client: GhProjectClient,
+    options: SyncOptions,
+    updates: Sequence[tuple[SyncPreview, dict[str, Any]]],
+    *,
+    issue_snapshots: dict[int, dict[str, Any]],
+    score_field_id: str,
+    project_id: str,
+) -> bool:
+    """Revalidate guarded updates and apply the complete admitted mutation set."""
+
+    if not updates:
+        return True
+    client.current_phase = "read"
+    if options.only_empty and not _revalidate_guarded_updates(
+        client,
+        options,
+        updates,
+        issue_snapshots,
+    ):
+        return False
+    if not options.only_empty:
+        ensure_project_graphql_budget(
+            expected_graphql_requests=len(updates),
+            min_graphql_remaining=options.min_graphql_remaining,
+        )
+    return _write_score_updates(
+        client,
+        updates,
+        plan=client.last_eligibility_plan,
+        score_field_id=score_field_id,
+        project_id=project_id,
+    )
 
 
 def _finalize_eligibility_plan(
@@ -2164,7 +2224,24 @@ def _blocked_project_rate_limit_payload(
     attempted_field_names = list(error.attempted_field_names)
     created_field_names = list(error.created_field_names)
     completed_write_count = error.completed_write_count or error.writes_performed_count
-    writes_performed_count = completed_write_count
+    writes_performed_count = error.writes_performed_count
+    write_ambiguity = (
+        error.write_ambiguity if error.write_ambiguity is not None else error.phase == "write"
+    )
+    if attempted_rows:
+        progress_message = (
+            f" {writes_performed_count} score write(s) completed before this rate limit."
+        )
+    elif created_field_names:
+        progress_message = (
+            f" {writes_performed_count} field-creation write(s) completed before this rate limit."
+        )
+    elif attempted_field_names:
+        progress_message = (
+            " No field-creation write is confirmed to have completed before this rate limit."
+        )
+    else:
+        progress_message = " No score write was attempted before this rate limit."
     return {
         "status": "blocked",
         "reason": "project_api_rate_limit",
@@ -2172,6 +2249,7 @@ def _blocked_project_rate_limit_payload(
         "project_number": project_number,
         "command": list(error.command),
         "details": error.details,
+        "phase": error.phase,
         "retryable": True,
         "items": [],
         "non_fatal": True,
@@ -2182,19 +2260,18 @@ def _blocked_project_rate_limit_payload(
         "completed_write_count": completed_write_count,
         "writes_performed_count": writes_performed_count,
         "writes_performed": writes_performed_count > 0,
-        "write_ambiguity": error.write_ambiguity,
+        "write_ambiguity": write_ambiguity,
         "fallback": "live-label ordering",
         "message": (
             f"Project #5 priority auto-fill hit an explicit GitHub API rate limit while running "
-            f"{command}."
+            f"{command} during {error.phase}."
+            + progress_message
             + (
-                f" {writes_performed_count} score write(s) completed before the rate limit."
-                if attempted_rows
-                else f" {writes_performed_count} field-creation write(s) completed before the rate limit."
-                if created_field_names
-                else " No write is claimed to have completed before the rate limit."
+                " A write may still have landed server-side; re-read live state before retrying."
+                if write_ambiguity
+                else ""
             )
-            + " Re-read live state before retrying; continue with live-label ordering."
+            + " Retry after the quota window resets and continue with live-label ordering."
         ),
     }
 

@@ -395,6 +395,34 @@ def test_legacy_projection_fails_closed_for_malformed_inputs() -> None:
     assert adapter._pedestrian_count({"pedestrians": {"count": [-1.0]}}) is None
 
 
+@pytest.mark.parametrize("malformed_observation", [None, []], ids=["none", "list"])
+def test_legacy_projection_rejects_non_mapping_observations(malformed_observation) -> None:
+    """Non-mapping legacy observations return an empty fail-closed projection."""
+    malformed = SimpleNamespace(to_socnav_struct=lambda: malformed_observation)
+
+    result = project_scenario_belief_for_planner(malformed, planner_key="stream_gap")
+
+    assert result.observation == {}
+    assert result.compatibility["status"] == "fail_closed"
+    assert result.compatibility["reason"] == "malformed_legacy_observation"
+
+
+@pytest.mark.parametrize("malformed_report", [None, []], ids=["none", "list"])
+def test_legacy_projection_rejects_non_mapping_uncertainty_reports(malformed_report) -> None:
+    """Non-mapping uncertainty reports preserve the legacy observation without sidecars."""
+    malformed = SimpleNamespace(
+        to_socnav_struct=lambda: {"pedestrians": {"count": np.asarray([1.0])}},
+        to_uncertainty_report=lambda: malformed_report,
+    )
+
+    result = project_scenario_belief_for_planner(malformed, planner_key="stream_gap")
+
+    assert result.compatibility["status"] == "fail_closed"
+    assert result.compatibility["reason"] == "malformed_uncertainty_report"
+    assert "uncertainty" not in result.observation["pedestrians"]
+    assert "uncertainty_compatibility" not in result.observation["pedestrians"]
+
+
 def test_legacy_projection_preserves_canonical_observation_on_fail_closed_paths() -> None:
     """Compatibility diagnostics must not alter unsupported or malformed legacy inputs."""
     belief = _belief_fixture()

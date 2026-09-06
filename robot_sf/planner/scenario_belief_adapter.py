@@ -117,6 +117,13 @@ def project_scenario_belief_for_planner(
             reason="legacy_observation_unavailable",
         )
         return ScenarioBeliefPlannerProjection(observation={}, compatibility=compatibility)
+    if not isinstance(observation, Mapping):
+        compatibility = _compatibility_payload(
+            planner_key=planner_key,
+            status="fail_closed",
+            reason="malformed_legacy_observation",
+        )
+        return ScenarioBeliefPlannerProjection(observation={}, compatibility=compatibility)
     pedestrians = observation.get("pedestrians")
     if not isinstance(pedestrians, dict):
         compatibility = _compatibility_payload(
@@ -150,6 +157,13 @@ def project_scenario_belief_for_planner(
             planner_key=planner_key,
             status="fail_closed",
             reason="uncertainty_report_unavailable",
+        )
+        return ScenarioBeliefPlannerProjection(observation=observation, compatibility=compatibility)
+    if not isinstance(report, Mapping):
+        compatibility = _compatibility_payload(
+            planner_key=planner_key,
+            status="fail_closed",
+            reason="malformed_uncertainty_report",
         )
         return ScenarioBeliefPlannerProjection(observation=observation, compatibility=compatibility)
     rows = report.get("agents")

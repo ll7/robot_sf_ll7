@@ -341,6 +341,71 @@ def test_main_persists_exact_answerability_admission_receipt(
     assert receipt["admission_sha256"] == sidecar["admission_sha256"]
 
 
+def test_main_preflight_fails_closed_when_answerability_receipt_persistence_fails(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """A strict preflight cannot succeed when its admission receipt is not durable."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    research_manifest = tmp_path / "research.yaml"
+    research_manifest.write_text("campaign: test\n", encoding="utf-8")
+
+    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "_research_answerability_block",
+        lambda **_: {
+            "mode": "preflight",
+            "status": "research_answerability_admitted",
+            "answerability": {"state": "answerable", "decision_capable": True},
+            "answerability_proof": {"binding": {"proof_digest": "a" * 64}},
+        },
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        lambda *args, **kwargs: {
+            "campaign_id": "cid",
+            "campaign_root": tmp_path / "out" / "cid",
+            "validate_config_path": tmp_path / "validate.json",
+            "preview_scenarios_path": tmp_path / "preview.json",
+            "matrix_summary_json_path": tmp_path / "matrix.json",
+            "matrix_summary_csv_path": tmp_path / "matrix.csv",
+            "amv_coverage_json_path": tmp_path / "amv.json",
+            "amv_coverage_md_path": tmp_path / "amv.md",
+            "comparability_json_path": None,
+            "comparability_md_path": None,
+        },
+    )
+
+    def _fail_persistence(_: dict[str, object]) -> None:
+        raise RuntimeError("simulated admission receipt persistence failure")
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark, "_persist_answerability_admission", _fail_persistence
+    )
+
+    exit_code = run_camera_ready_benchmark.main(
+        [
+            "--config",
+            str(config_path),
+            "--mode",
+            "preflight",
+            "--research-manifest",
+            str(research_manifest),
+            "--require-answerable",
+            "--campaign-id",
+            "fixed-campaign",
+        ]
+    )
+
+    assert exit_code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "research_answerability_receipt_failed"
+    assert payload["benchmark_success"] is False
+    assert "persistence failure" in payload["status_reason"]
+
+
 def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) -> None:
     """CLI run mode should call run_campaign and forward its payload."""
     config_path = tmp_path / "config.yaml"

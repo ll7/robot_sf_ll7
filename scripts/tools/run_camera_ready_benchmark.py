@@ -476,6 +476,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "orca_preflight_failed",
         "radius_binding_preflight_failed",
         "research_answerability_blocked",
+        "research_answerability_receipt_failed",
     }:
         return 0
     exit_code = campaign_exit_code(result)

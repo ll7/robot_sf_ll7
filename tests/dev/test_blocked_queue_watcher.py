@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from typing import TYPE_CHECKING, Any
 
@@ -226,6 +227,58 @@ def test_inventory_translates_shared_transport_diagnostics(
 
     with pytest.raises(RuntimeError, match=expected):
         watcher._inventory("owner/repo", runner=runner)
+
+
+def test_inventory_paginates_full_pages_before_collecting_candidates() -> None:
+    calls: list[list[str]] = []
+
+    def runner(args: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        page = int(args[1].rsplit("page=", maxsplit=1)[1])
+        count = watcher.ISSUES_PAGE_SIZE if page == 1 else 2
+        payload = [
+            {
+                "number": page * 1000 + index,
+                "title": f"blocked-{page}-{index}",
+                "labels": [{"name": "state:blocked"}],
+            }
+            for index in range(count)
+        ]
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+    rows = watcher._inventory("owner/repo", runner=runner)
+
+    assert len(rows) == watcher.ISSUES_PAGE_SIZE + 2
+    assert len(calls) == 2
+    assert f"per_page={watcher.ISSUES_PAGE_SIZE}&page=1" in calls[0][1]
+    assert f"per_page={watcher.ISSUES_PAGE_SIZE}&page=2" in calls[1][1]
+
+
+def test_inventory_refuses_rows_beyond_bounded_pagination_limit() -> None:
+    calls: list[list[str]] = []
+
+    def runner(args: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        page = int(args[1].rsplit("page=", maxsplit=1)[1])
+        count = (
+            watcher.ISSUES_PAGE_SIZE
+            if page <= watcher.MAX_ISSUES // watcher.ISSUES_PAGE_SIZE
+            else 1
+        )
+        payload = [
+            {
+                "number": page * 1000 + index,
+                "title": f"blocked-{page}-{index}",
+                "labels": [{"name": "state:blocked"}],
+            }
+            for index in range(count)
+        ]
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+    with pytest.raises(RuntimeError, match=f"{watcher.MAX_ISSUES}-row limit"):
+        watcher._inventory("owner/repo", runner=runner)
+
+    assert len(calls) == watcher.MAX_ISSUE_PAGES
 
 
 def test_build_report_surfaces_graphql_failure_as_top_level_error() -> None:

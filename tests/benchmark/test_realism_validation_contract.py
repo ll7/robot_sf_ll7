@@ -67,11 +67,14 @@ def test_preregistration_note_freezes_author_packet_and_external_boundary() -> N
         "required columns",
         "privacy/publication",
         "exact staging destination",
-        "provenance-manifest path",
+        "canonical repository manifest path",
+        "configs/data/sdd_staging_manifest.yaml",
+        "scripts/tools/sdd_curation_preflight.py --json",
         "metres-per-pixel",
         "source frame rate",
         "y-axis direction",
-        "fail-closed validation receipt",
+        "fail-closed",
+        "validation receipt",
         "no real-data or paper-facing claim",
     ):
         assert required_text in note

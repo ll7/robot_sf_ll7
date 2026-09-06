@@ -76,8 +76,9 @@ not satisfy the condition:
    time units, and y-axis direction.
 6. Annotation schema: required columns, accepted annotation labels, and the policy for lost,
    occluded, or interpolated tracks.
-7. Staging receipt: exact staging destination, provenance-manifest path, and the successful
-   fail-closed validation receipt.
+7. Staging receipt: exact staging destination, the canonical repository manifest path
+   `configs/data/sdd_staging_manifest.yaml`, and the successful fail-closed
+   `scripts/tools/sdd_curation_preflight.py --json` validation receipt.
 
 The revived run must additionally bind each evaluated arm to its baseline artifact/config hash,
 metric and analysis-version identifiers, and output receipt. It must state that no real-data or

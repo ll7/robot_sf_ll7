@@ -10,6 +10,7 @@ descriptive only: it never deletes, moves, prunes, or mutates a path.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import math
 import os
@@ -21,6 +22,8 @@ from pathlib import Path
 
 DEFAULT_MINIMUM_FREE_BYTES = 2 * 1024**3
 DEFAULT_DIRECTORY_SIZE_TIMEOUT_SECONDS = 5.0
+WORKTREE_SIZE_MAX_WORKERS = 16
+WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER = 12
 RECLAIM_CATEGORIES = {
     "output": "ignored generated output; preserve durable evidence before pruning",
     "uv-cache": "dependency cache; review active uv processes before clearing",
@@ -202,6 +205,76 @@ def _directory_size_bytes(
     return DirectorySizeResult(bytes=int(fields[0]) * 1024, status="ok")
 
 
+def _worktree_directory_size_bytes(
+    path: Path, *, timeout_seconds: float = DEFAULT_DIRECTORY_SIZE_TIMEOUT_SECONDS
+) -> DirectorySizeResult:
+    """Bounded-size a worktree fleet by measuring immediate children concurrently.
+
+    A recursive ``du`` over a large linked-worktree fleet can spend minutes walking
+    every checkout before producing one number.  Measuring each immediate child in
+    bounded parallel workers keeps the inventory useful on large fleets while
+    preserving an explicit partial estimate when the aggregate deadline expires.
+    """
+
+    try:
+        children = tuple(path.iterdir())
+    except OSError as exc:
+        return DirectorySizeResult(
+            bytes=None,
+            status="unavailable",
+            reason=f"could not enumerate worktree entries: {exc}",
+        )
+    if not children:
+        return _directory_size_bytes(path, timeout_seconds=timeout_seconds)
+
+    max_workers = min(WORKTREE_SIZE_MAX_WORKERS, len(children))
+    total_timeout = min(
+        timeout_seconds * WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER,
+        max(timeout_seconds, 60.0),
+    )
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+    futures = [
+        executor.submit(_directory_size_bytes, child, timeout_seconds=timeout_seconds)
+        for child in children
+    ]
+    done, pending = concurrent.futures.wait(futures, timeout=total_timeout)
+    executor.shutdown(wait=False, cancel_futures=True)
+
+    total_bytes = 0
+    completed_ok = 0
+    incomplete = len(pending)
+    child_timeouts = 0
+    unavailable = 0
+    for future in done:
+        try:
+            result = future.result()
+        except (concurrent.futures.CancelledError, OSError, RuntimeError, ValueError):
+            unavailable += 1
+            continue
+        if result.status == "ok" and result.bytes is not None:
+            total_bytes += result.bytes
+            completed_ok += 1
+        elif result.status == "timeout":
+            child_timeouts += 1
+        else:
+            unavailable += 1
+
+    if not pending and child_timeouts == 0 and unavailable == 0:
+        return DirectorySizeResult(bytes=total_bytes, status="ok")
+
+    reason = (
+        f"bounded worktree estimate sized {completed_ok}/{len(children)} entries; "
+        f"{incomplete} still running at the fleet deadline, {child_timeouts} child probes timed out, "
+        f"and {unavailable} were unavailable within the "
+        f"{total_timeout:g}s fleet budget"
+    )
+    return DirectorySizeResult(
+        bytes=total_bytes or None,
+        status="partial" if total_bytes else "timeout",
+        reason=reason,
+    )
+
+
 def _shm_candidates(shm_root: Path) -> Iterable[Path]:
     if not shm_root.is_dir():
         return ()
@@ -262,7 +335,11 @@ def build_reclaim_inventory(
             )
         else:
             measured = (
-                _directory_size_bytes(path, timeout_seconds=size_timeout_seconds)
+                (
+                    _worktree_directory_size_bytes(path, timeout_seconds=size_timeout_seconds)
+                    if category == "worktrees"
+                    else _directory_size_bytes(path, timeout_seconds=size_timeout_seconds)
+                )
                 if size_fn is None
                 else size_fn(path)
             )

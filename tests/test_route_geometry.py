@@ -221,6 +221,22 @@ def test_route_tracker_route_change_resets_continuity_explicitly() -> None:
     assert tracker.previous_s_m is None
 
 
+def test_route_tracker_resets_when_projection_policy_changes() -> None:
+    """A same-waypoint route with different projection policy must reset state."""
+    route = RouteGeometry([(0, 0), (10, 0)])
+    tracker = RouteProjectionTracker(route)
+    assert tracker.project((1.0, 0.0), step=4).is_valid
+
+    changed_policy = RouteGeometry([(0, 0), (10, 0)], tie_tolerance_m=0.5)
+    reset = tracker.update_route(changed_policy)
+
+    assert changed_policy.route_hash == route.route_hash
+    assert reset is not None
+    assert reset.status == "reset"
+    assert reset.last_reset_reason == "route_changed"
+    assert tracker.previous_s_m is None
+
+
 def test_route_tracker_snapshot_restore_is_json_safe_and_replayable() -> None:
     """A validated snapshot must reproduce the next projection exactly."""
     route = RouteGeometry([(0, 0), (5, 0), (10, 0)])
@@ -252,3 +268,7 @@ def test_route_tracker_snapshot_restore_is_json_safe_and_replayable() -> None:
     invalid_failure_state = dict(snapshot, last_step=None, failure_count=1)
     with pytest.raises(ValueError, match="last_step"):
         RouteProjectionTracker.restore(route, invalid_failure_state)
+
+    changed_policy = RouteGeometry([(0, 0), (5, 0), (10, 0)], tie_tolerance_m=0.5)
+    with pytest.raises(ValueError, match="tie_tolerance_m"):
+        RouteProjectionTracker.restore(changed_policy, snapshot)

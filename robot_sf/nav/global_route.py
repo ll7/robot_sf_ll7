@@ -400,7 +400,11 @@ class RouteProjectionTracker:
 
         if not isinstance(route, RouteGeometry):
             raise TypeError("route must be a RouteGeometry.")
-        if route.route_hash == self._route.route_hash:
+        if (
+            route.route_hash == self._route.route_hash
+            and route.duplicate_tolerance_m == self._route.duplicate_tolerance_m
+            and route.tie_tolerance_m == self._route.tie_tolerance_m
+        ):
             self._route = route
             return None
         self._route = route
@@ -446,6 +450,8 @@ class RouteProjectionTracker:
         return {
             "schema_version": "route_projection_tracker.v1",
             "route_hash": self.route_hash,
+            "duplicate_tolerance_m": self._route.duplicate_tolerance_m,
+            "tie_tolerance_m": self._route.tie_tolerance_m,
             "max_forward_jump_m": self._max_forward_jump_m,
             "max_backtrack_m": self._max_backtrack_m,
             "previous_s_m": self._previous_s_m,
@@ -473,6 +479,7 @@ class RouteProjectionTracker:
             raise ValueError("snapshot schema_version is unsupported.")
         if snapshot.get("route_hash") != route.route_hash:
             raise ValueError("snapshot route_hash does not match the route.")
+        _validate_snapshot_route_policy(route, snapshot)
 
         tracker = cls(
             route,
@@ -557,6 +564,21 @@ def _finite_nonnegative_number(value: object, name: str) -> float:
     if not isfinite(number) or number < 0.0:
         raise ValueError(f"snapshot {name} must be a finite non-negative number.")
     return number
+
+
+def _validate_snapshot_route_policy(route: RouteGeometry, snapshot: Mapping[str, object]) -> None:
+    """Require snapshot projection tolerances to match the route exactly."""
+
+    snapshot_duplicate_tolerance = _finite_nonnegative_number(
+        snapshot.get("duplicate_tolerance_m"), "duplicate_tolerance_m"
+    )
+    snapshot_tie_tolerance = _finite_nonnegative_number(
+        snapshot.get("tie_tolerance_m"), "tie_tolerance_m"
+    )
+    if snapshot_duplicate_tolerance != route.duplicate_tolerance_m:
+        raise ValueError("snapshot duplicate_tolerance_m does not match the route.")
+    if snapshot_tie_tolerance != route.tie_tolerance_m:
+        raise ValueError("snapshot tie_tolerance_m does not match the route.")
 
 
 def _optional_nonnegative_number(value: object, name: str) -> float | None:

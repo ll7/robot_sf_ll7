@@ -310,19 +310,125 @@ def test_worktree_directory_size_terminates_pending_probe_at_fleet_deadline(
     started_at = time.monotonic()
     try:
         result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=1.0)
+        elapsed = time.monotonic() - started_at
+        assert all(process.poll() is not None for process in slow_probes)
     finally:
         for process in slow_probes:
             if process.poll() is None:
                 process.kill()
             process.wait()
-    elapsed = time.monotonic() - started_at
 
     assert result.bytes == 4096
     assert result.status == "partial"
     assert "sized 1/2 entries" in (result.reason or "")
     assert "1 still running at the fleet deadline" in (result.reason or "")
     assert elapsed < 2.0
-    assert all(process.poll() is not None for process in slow_probes)
+
+
+def test_worktree_directory_size_marks_child_timeout_and_reaps_probe(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A per-child timeout is reaped before the partial result is returned."""
+    fleet = tmp_path / "repo.worktrees"
+    fleet.mkdir()
+    children = [fleet / "fast", fleet / "slow"]
+    for child in children:
+        child.mkdir()
+
+    class ImmediateProbe:
+        returncode = 0
+        pid = -1
+
+        def poll(self) -> int:
+            return self.returncode
+
+        def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+            del timeout
+            return "4\t/path\n", ""
+
+    slow_probes: list[subprocess.Popen[str]] = []
+
+    def fake_start(path: Path) -> ImmediateProbe | subprocess.Popen[str]:
+        if path.name == "slow":
+            process = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(60)"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                start_new_session=os.name == "posix",
+            )
+            slow_probes.append(process)
+            return process
+        return ImmediateProbe()
+
+    monkeypatch.setattr(capacity, "_start_directory_size_probe", fake_start)
+    monkeypatch.setattr(capacity, "WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER", 2.0)
+
+    try:
+        result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=0.1)
+        assert all(process.poll() is not None for process in slow_probes)
+    finally:
+        for process in slow_probes:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+
+    assert result.bytes == 4096
+    assert result.status == "partial"
+    assert "0 still running at the fleet deadline" in (result.reason or "")
+    assert "1 child probes timed out" in (result.reason or "")
+
+
+def test_fleet_directory_size_preserves_zero_byte_partial_result() -> None:
+    accounting = capacity._FleetSizeAccounting(completed_ok=1, unavailable=1)
+
+    result = capacity._fleet_directory_size_result(
+        accounting,
+        child_count=2,
+        total_timeout=60.0,
+    )
+
+    assert result == capacity.DirectorySizeResult(
+        bytes=0,
+        status="partial",
+        reason=(
+            "bounded worktree estimate sized 1/2 entries; 0 still running at the fleet deadline, "
+            "0 not started, 0 child probes timed out, and 1 were unavailable within the 60s fleet budget"
+        ),
+    )
+
+
+def test_worktree_directory_size_reaps_active_probe_after_unexpected_error(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Unexpected fleet errors still clean up probes before propagating."""
+    fleet = tmp_path / "repo.worktrees"
+    fleet.mkdir()
+    child = fleet / "slow"
+    child.mkdir()
+
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(60)"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        start_new_session=os.name == "posix",
+    )
+    monkeypatch.setattr(capacity, "_start_directory_size_probe", lambda _path: process)
+
+    def fail_settle(*_args: object, **_kwargs: object) -> bool:
+        raise RuntimeError("test fleet failure")
+
+    monkeypatch.setattr(capacity, "_settle_directory_size_probes", fail_settle)
+
+    try:
+        with pytest.raises(RuntimeError, match="test fleet failure"):
+            capacity._worktree_directory_size_bytes(fleet, timeout_seconds=1.0)
+        assert process.poll() is not None
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
 
 
 def test_inventory_preserves_timeout_and_unavailable_evidence(tmp_path: Path) -> None:

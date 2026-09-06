@@ -78,7 +78,10 @@ not satisfy the condition:
    occluded, or interpolated tracks.
 7. Staging receipt: exact staging destination, the canonical repository manifest path
    `configs/data/sdd_staging_manifest.yaml`, and the successful fail-closed
-   `scripts/tools/sdd_curation_preflight.py --json` validation receipt.
+   `uv run python scripts/tools/sdd_curation_preflight.py --require-benchmark-ready --json`
+   validation receipt. The receipt is valid only when this command exits zero and its JSON report
+   records `benchmark_promotion_allowed: true`; `--json` without `--require-benchmark-ready` is
+   report-only and must not be used as the gate.
 
 The revived run must additionally bind each evaluated arm to its baseline artifact/config hash,
 metric and analysis-version identifiers, and output receipt. It must state that no real-data or

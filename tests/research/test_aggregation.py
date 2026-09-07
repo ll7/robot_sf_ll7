@@ -1,6 +1,7 @@
 """Unit tests for metric aggregation module."""
 
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -119,6 +120,16 @@ def test_bootstrap_ci_insufficient_data():
     assert ci_high is None
 
 
+def test_bootstrap_ci_excludes_nonfinite_values():
+    """Bootstrap intervals use only finite samples and fail closed below two."""
+    ci_low, ci_high = bootstrap_ci([1.0, float("nan"), float("inf"), 3.0], seed=42)
+
+    assert ci_low is not None and ci_high is not None
+    assert math.isfinite(ci_low)
+    assert math.isfinite(ci_high)
+    assert 1.0 <= ci_low <= ci_high <= 3.0
+
+
 def test_aggregate_metrics_empty():
     """Test aggregation with empty records."""
     result = aggregate_metrics([], group_by="policy_type")
@@ -156,6 +167,34 @@ def test_aggregate_metrics_missing_values():
     )
     assert baseline_collision["sample_size"] == 1
     assert baseline_collision["mean"] == 0.1
+
+
+def test_aggregate_metrics_excludes_nonfinite_values():
+    """Non-finite samples cannot become report aggregates."""
+    metric_records = [
+        {"seed": 1, "policy_type": "baseline", "success_rate": 0.7},
+        {"seed": 2, "policy_type": "baseline", "success_rate": float("inf")},
+        {"seed": 3, "policy_type": "baseline", "success_rate": float("nan")},
+    ]
+
+    result = aggregate_metrics(metric_records, ci_samples=50, seed=42)
+
+    assert len(result) == 1
+    aggregate = result[0]
+    assert aggregate["sample_size"] == 1
+    assert aggregate["mean"] == 0.7
+    assert aggregate["ci_low"] is None
+    assert aggregate["ci_high"] is None
+
+
+def test_aggregate_metrics_skips_all_nonfinite_metric():
+    """A metric with no finite samples is omitted instead of emitting NaNs."""
+    metric_records = [
+        {"seed": 1, "policy_type": "baseline", "bad_metric": float("inf")},
+        {"seed": 2, "policy_type": "baseline", "bad_metric": float("nan")},
+    ]
+
+    assert aggregate_metrics(metric_records) == []
 
 
 def test_completeness_score():

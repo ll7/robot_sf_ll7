@@ -66,6 +66,7 @@ def aggregate_metrics(
     for condition, group in df.groupby(group_by):
         for metric_name in metric_cols:
             values = group[metric_name].dropna().to_numpy()
+            values = values[np.isfinite(values)]
             if len(values) == 0:
                 continue
             mean = float(np.mean(values))
@@ -150,10 +151,13 @@ def bootstrap_ci(
         Uses percentile method. Returns None for single-value inputs.
     """
     np.random.seed(seed)
-    if len(values) < 2:
+    finite_values = np.asarray(values, dtype=float)
+    finite_values = finite_values[np.isfinite(finite_values)]
+    if len(finite_values) < 2:
         return None, None
     boot_samples = [
-        np.mean(np.random.choice(values, size=len(values), replace=True)) for _ in range(ci_samples)
+        np.mean(np.random.choice(finite_values, size=len(finite_values), replace=True))
+        for _ in range(ci_samples)
     ]
     alpha = 1 - ci_confidence
     ci_low = float(np.percentile(boot_samples, 100 * alpha / 2))

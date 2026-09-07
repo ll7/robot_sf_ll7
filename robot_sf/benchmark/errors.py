@@ -50,11 +50,16 @@ class EpisodeRecordInputError(RobotSfError, ValueError):
     """Raised when benchmark episode JSONL input is missing or malformed."""
 
 
+class AggregationInputError(RobotSfError, ValueError):
+    """Raised when benchmark aggregation controls are invalid."""
+
+
 class DistributionInputError(RobotSfError, ValueError):
     """Raised when plot-distributions controls cannot produce a valid plot."""
 
 
 __all__ = [
+    "AggregationInputError",
     "AggregationMetadataError",
     "DistributionInputError",
     "EpisodeRecordInputError",

@@ -11,8 +11,6 @@ from pathlib import Path
 
 from loguru import logger
 
-from robot_sf.research.orchestrator import ReportOrchestrator
-
 
 def load_tracker_manifest(tracker_run_id: str) -> dict:
     """Load tracker manifest from run ID (supports jsonl + json)."""
@@ -96,6 +94,11 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    # Keep ``--help`` and argument validation usable in the core installation. The
+    # report implementation imports optional analytics dependencies, so defer it
+    # until after argparse has handled lightweight CLI paths.
+    from robot_sf.research.orchestrator import ReportOrchestrator
 
     # Determine output directory
     if args.output:

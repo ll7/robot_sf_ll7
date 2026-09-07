@@ -1317,6 +1317,7 @@ def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
         "project_priority_eligibility_plan.v1"
     )
     assert ordinary_persisted["eligibility_plan"]["reason"] == "missing_project_scope"
+    assert ordinary_persisted["eligibility_plan"]["non_fatal"] is False
 
 
 def test_main_only_empty_rate_limit_is_non_fatal_json_without_writes(
@@ -1368,6 +1369,12 @@ def test_main_only_empty_rate_limit_is_non_fatal_json_without_writes(
     assert persisted["eligibility_plan"]["schema"] == "project_priority_eligibility_plan.v1"
     assert persisted["eligibility_plan"]["status"] == "blocked"
     assert persisted["eligibility_plan"]["reason"] == "project_api_rate_limit"
+
+    ordinary_summary = tmp_path / "ordinary-rate-limit-summary.json"
+    with pytest.raises(ProjectRateLimitError):
+        main(["sync", "--ensure-fields", "--summary-file", str(ordinary_summary)])
+    ordinary_persisted = json.loads(ordinary_summary.read_text(encoding="utf-8"))
+    assert ordinary_persisted["eligibility_plan"]["non_fatal"] is False
 
 
 def test_main_only_empty_rate_limit_reports_prior_field_writes(
@@ -1588,6 +1595,12 @@ def test_main_only_empty_timeout_is_non_fatal_json_without_writes(
     assert persisted["eligibility_plan"]["schema"] == "project_priority_eligibility_plan.v1"
     assert persisted["eligibility_plan"]["status"] == "timeout_blocked"
     assert persisted["eligibility_plan"]["reason"] == "gh_subprocess_timeout"
+
+    ordinary_summary = tmp_path / "ordinary-timeout-summary.json"
+    with pytest.raises(GhProjectTimeoutError):
+        main(["sync", "--ensure-fields", "--summary-file", str(ordinary_summary)])
+    ordinary_persisted = json.loads(ordinary_summary.read_text(encoding="utf-8"))
+    assert ordinary_persisted["eligibility_plan"]["non_fatal"] is False
 
 
 def test_main_non_empty_timeout_remains_fail_closed(
@@ -2226,10 +2239,13 @@ def test_main_quota_block_is_explicit_and_performs_no_project_writes(
     assert persisted["eligibility_plan"]["status"] == "quota_blocked"
     assert persisted["eligibility_plan"]["non_fatal"] is True
 
-    assert main(["sync"]) == 2
+    ordinary_summary = tmp_path / "ordinary-quota-summary.json"
+    assert main(["sync", "--summary-file", str(ordinary_summary)]) == 2
     second_payload = json.loads(capsys.readouterr().out)
     assert second_payload["status"] == "quota_blocked"
     assert second_payload["non_fatal"] is False
+    ordinary_persisted = json.loads(ordinary_summary.read_text(encoding="utf-8"))
+    assert ordinary_persisted["eligibility_plan"]["non_fatal"] is False
     assert project_reads == []
 
 

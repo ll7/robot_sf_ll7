@@ -5,10 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
 
 from scripts.dev import gate_worktree_guard as guard
 from scripts.dev import stale_worktree_reaper as reaper

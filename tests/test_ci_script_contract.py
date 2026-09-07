@@ -2889,6 +2889,86 @@ def test_gh_comment_invalid_target_exits_2() -> None:
     assert "Usage:" in result.stdout
 
 
+def test_gh_comment_fails_closed_on_gh_timeout(tmp_path: Path) -> None:
+    """A stalled GitHub CLI must produce a bounded, classified failure."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_gh = fake_bin / "gh"
+    # Replace the fake executable with the sleeper so the timeout test does not
+    # leave a descendant behind when the pre-fix helper is interrupted.
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\nexec sleep 10\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("timeout must fail closed\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["GH_COMMENT_TIMEOUT_SECONDS"] = "0.1"
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "8560",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=2,
+        check=False,
+    )
+
+    assert result.returncode == 124
+    assert "GitHub CLI command timed out after 0.1 seconds" in result.stderr
+
+
+def test_gh_comment_rejects_invalid_timeout_before_gh_call(tmp_path: Path) -> None:
+    """A non-positive timeout must not silently disable the transport bound."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    marker = tmp_path / "gh-called"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        f"#!/usr/bin/env bash\ntouch {shlex.quote(str(marker))}\nexit 0\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("invalid timeout must fail closed\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["GH_COMMENT_TIMEOUT_SECONDS"] = "0"
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "8560",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=2,
+        check=False,
+    )
+
+    assert result.returncode == 125
+    assert "GH_COMMENT_TIMEOUT_SECONDS must be a finite positive number" in result.stderr
+    assert not marker.exists()
+
+
 def test_gh_comment_pr_uses_rest_api(tmp_path: Path) -> None:
     """PR comment publication must use REST validation and issue comments, not ``gh pr comment``."""
     fake_bin = tmp_path / "bin"

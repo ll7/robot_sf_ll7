@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from robot_sf.benchmark.errors import AggregationMetadataError
@@ -124,3 +126,25 @@ def test_compute_ranking_ignores_non_finite_metric_values() -> None:
         ("b", 1.0, 1),
         ("a", 2.0, 1),
     ]
+
+
+def test_compute_ranking_ignores_metric_conversion_overflow() -> None:
+    """Integer-to-float overflow must be treated like any other unavailable metric."""
+    rows = compute_ranking(
+        [_rec("a", collisions=10**1000), _rec("a", collisions=2)],
+        metric="collisions",
+    )
+
+    assert [(row.group, row.mean, row.count) for row in rows] == [("a", 2.0, 1)]
+
+
+def test_compute_ranking_keeps_large_finite_means_finite() -> None:
+    """Finite inputs must not overflow the aggregate mean calculation."""
+    rows = compute_ranking(
+        [_rec("a", collisions=1e308), _rec("a", collisions=1e308)],
+        metric="collisions",
+    )
+
+    assert len(rows) == 1
+    assert math.isfinite(rows[0].mean)
+    assert rows[0].mean == pytest.approx(1e308)

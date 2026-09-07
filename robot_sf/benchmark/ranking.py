@@ -50,8 +50,20 @@ def _to_float(x: Any) -> float | None:
             return None
         value = float(x)
         return value if math.isfinite(value) else None
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return None
+
+
+def _finite_mean(values: list[float]) -> float | None:
+    """Return a finite mean without overflowing on large finite inputs."""
+    if not values:
+        return None
+    count = len(values)
+    try:
+        mean = math.fsum(value / count for value in values)
+    except (OverflowError, ValueError):
+        return None
+    return mean if math.isfinite(mean) else None
 
 
 @dataclass
@@ -110,7 +122,9 @@ def compute_ranking(
     for gid, vals in by_group.items():
         if not vals:
             continue
-        m = sum(vals) / float(len(vals))
+        m = _finite_mean(vals)
+        if m is None:
+            continue
         rows.append(RankingRow(group=gid, mean=m, count=len(vals)))
 
     rows.sort(key=lambda r: r.mean, reverse=not ascending)

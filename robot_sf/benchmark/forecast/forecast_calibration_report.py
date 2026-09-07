@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -296,6 +297,9 @@ def _require_forecast_metrics_report(report: dict[str, Any]) -> None:
             raise ValueError(f"metric report aggregate_rows[{index}] must be a mapping")
         for key in ("metric", "horizon_s", "status", "denominator"):
             _required_value(row, key)
+        _require_finite_number(row["horizon_s"], f"aggregate_rows[{index}].horizon_s")
+        if row.get("value") is not None:
+            _require_finite_number(row["value"], f"aggregate_rows[{index}].value")
 
 
 def _require_calibration_report(report: dict[str, Any]) -> None:
@@ -318,6 +322,17 @@ def _required_value(payload: dict[str, Any], key: str) -> Any:
     if key not in payload or payload[key] is None:
         raise ValueError(f"required metric report field is missing: {key}")
     return payload[key]
+
+
+def _require_finite_number(value: Any, field_name: str) -> float:
+    """Return a finite numeric value for a metric-report field."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{field_name} must be numeric") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"{field_name} must be finite")
+    return number
 
 
 def _metric_name(row: dict[str, Any]) -> str:

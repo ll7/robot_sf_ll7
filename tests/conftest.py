@@ -403,6 +403,9 @@ _FAST_FILES = {
     # Distribution plotting tests use Agg and deterministic fixtures; keep their
     # changed-line coverage in the exact-head fast lane.
     "test_distributions.py",
+    # CLI distribution-control regressions are deterministic input-boundary
+    # contracts and exercise the benchmark error path in PR fast shards.
+    "test_cli_plot_distributions_ci.py",
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",

@@ -148,10 +148,13 @@ def save_publication_figure(
     """
     if not formats:
         raise ValueError("At least one format must be specified")
+    # Validate the complete request before writing any output.
+    if len(set(formats)) != len(formats) or any(fmt not in ("pdf", "png", "svg") for fmt in formats):
+        raise ValueError("Formats must be unique and chosen from 'pdf', 'png', or 'svg'.")
 
     # Ensure matplotlib is available
     try:
-        plt = importlib.import_module("matplotlib.pyplot")
+        importlib.import_module("matplotlib.pyplot")
     except ImportError:
         raise RuntimeError("matplotlib is required for figure export")
 
@@ -188,7 +191,8 @@ def save_publication_figure(
             save_kwargs["dpi"] = 300
             save_kwargs["metadata"] = _embedded_metadata(provenance, output_base.name, "png")
 
-        plt.savefig(output_path, **save_kwargs)
+        # The caller's figure need not be pyplot's current figure (or pyplot-managed).
+        fig.savefig(output_path, **save_kwargs)
         saved_files.append(output_path)
 
         # Add to provenance output hashes

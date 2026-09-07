@@ -16,15 +16,12 @@ set, preventing parallel focused pytest runs from sharing output/coverage/.cover
 
 Because the shared env is reused without resync (UV_NO_SYNC=1), a stale owning-checkout .venv can
 lag the current worktree source. Before interpreter or pytest commands, the helper checks the
-installed vendored `pysocialforce` package against this checkout and fails closed with the exact
-`uv sync --all-extras --reinstall-package robot-sf` repair command when it is stale. After that
-check, PYTHONPATH=$PWD:$PWD/fast-pysf makes the checkout source authoritative for the command. Use
---standalone for commands that do not import project code, or --no-freshness-check only after
-confirming the environment matches.
-When that check reports stale fast-pysf in a linked worktree, rerun the same command with
---recover-stale-fast-pysf. This explicit mode creates or refreshes only the current worktree's
-.venv, checks capacity, serializes recovery, and verifies freshness before the command starts; it
-never repairs the owning checkout implicitly.
+installed vendored `pysocialforce` package against this checkout. If it is stale in a linked
+worktree using the default environment, the helper automatically creates or refreshes only that
+worktree's `.venv`, checks capacity, serializes recovery, and verifies freshness before the command
+starts. It never repairs the owning checkout implicitly. Explicit `--recover-stale-fast-pysf`
+remains available to force the same worktree-local recovery. Use --standalone for commands that do
+not import project packages, or --no-freshness-check only after confirming the environment matches.
 Pinned tool binaries are a separate boundary (issue #8250): `uv run` executes the requested tool
 from the selected venv, so a stale venv would silently run a drifted binary. Before proceeding,
 the freshness preflight compares the resolved `<venv>/bin/<tool>` version against the exact `==`
@@ -42,9 +39,10 @@ Options:
                          use all-extras (or a named pyproject extra) when the command needs it.
   --scratch-dir PATH     Use PATH for temporary files and default uv/XDG caches for this run.
   --recover-stale-fast-pysf
-                         Explicitly create or refresh a worktree-local .venv after stale fast-pysf
-                         detection. Requires a linked worktree; cannot be combined with --venv,
-                         --standalone, or a freshness bypass.
+                         Explicitly create or refresh a worktree-local .venv before the command.
+                         Requires a linked worktree; cannot be combined with --venv, --standalone,
+                         or a freshness bypass. Default linked-worktree runs recover automatically
+                         after a stale fast-pysf detection.
   --standalone           Run a command that is verified not to import project packages. This skips
                          the dependency-profile and project-source checks, but still applies the
                          pinned-tool freshness gate; it does not prepend the worktree root to
@@ -229,6 +227,10 @@ if [[ "$git_common_dir" != /* ]]; then
   git_common_dir="$(cd "$repo_root/$git_common_dir" && pwd)"
 fi
 main_repo_root="$(cd "$git_common_dir/.." && pwd)"
+is_linked_worktree=0
+if [[ "$git_common_dir" != "$repo_root/.git" ]]; then
+  is_linked_worktree=1
+fi
 
 if [[ -n "$scratch_dir" ]]; then
   configure_scratch_dir "$scratch_dir"
@@ -322,11 +324,38 @@ check_project_package_freshness() {
   if ! report="$(env -u PYTHONPATH "$venv_path/bin/python" "$checker" 2>&1)"; then
     echo "ERROR: shared-venv project package freshness preflight failed in $venv_path." >&2
     printf '%s\n' "$report" >&2
-    echo "Remedy (linked worktree): rerun the command with --recover-stale-fast-pysf -- to build a worktree-local environment." >&2
+    local stale_diagnostic="installed pysocialforce package is stale relative to this checkout"
+    if [[ "$report" != *"$stale_diagnostic"* ]]; then
+      echo "The checker failure is not the supported stale-package condition; refusing automatic recovery." >&2
+      echo "Remedy: inspect the checker failure and repair the selected environment explicitly." >&2
+      return 2
+    fi
+    echo "Remedy (linked worktree): the wrapper will retry with a worktree-local environment automatically." >&2
+    echo "To force that recovery before the freshness check, use --recover-stale-fast-pysf." >&2
     echo "Remedy: run 'uv sync --all-extras --reinstall-package robot-sf' in the owning checkout, then retry." >&2
-    return 2
+    return 3
   fi
   echo "Shared-venv project package freshness preflight passed: package=pysocialforce venv=$venv_path" >&2
+}
+
+recover_stale_fast_pysf_automatically() {
+  if [[ "$is_linked_worktree" -ne 1 || -n "$venv_override" ]]; then
+    return 1
+  fi
+
+  recovery_script="$repo_root/scripts/dev/recover_fast_pysf_worktree.sh"
+  if [[ ! -x "$recovery_script" ]]; then
+    echo "ERROR: automatic worktree fast-pysf recovery helper is missing or not executable: $recovery_script" >&2
+    return 2
+  fi
+  echo "Recovering stale fast-pysf in the linked worktree: $repo_root/.venv" >&2
+  "$recovery_script" || return $?
+  venv_path="$repo_root/.venv"
+  if [[ ! -x "$venv_path/bin/python" ]]; then
+    echo "ERROR: automatic fast-pysf recovery did not create a usable worktree environment: $venv_path" >&2
+    return 2
+  fi
+  echo "Automatic fast-pysf recovery selected worktree environment: $venv_path" >&2
 }
 
 check_shared_venv_freshness() {
@@ -451,8 +480,20 @@ check_shared_venv_freshness() {
   if [[ -n "$skip_reason" ]]; then
     if [[ -z "$standalone" && "$skip_reason" == "interpreter-or-shell" ]] \
       && is_project_interpreter_command "$tool"; then
-      if ! check_project_package_freshness "$venv_path"; then
-        return 2
+      if check_project_package_freshness "$venv_path"; then
+        :
+      else
+        freshness_rc=$?
+        if [[ "$freshness_rc" -eq 3 ]] && recover_stale_fast_pysf_automatically; then
+          if ! check_dependency_profile; then
+            return 2
+          fi
+          if ! check_project_package_freshness "$venv_path"; then
+            return 2
+          fi
+        else
+          return 2
+        fi
       fi
     fi
     echo "Shared-venv tool freshness preflight skipped: tool=${tool:-none} reason=$skip_reason elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2

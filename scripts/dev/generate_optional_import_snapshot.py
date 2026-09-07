@@ -55,6 +55,11 @@ NOTES = {
         "exists to catch and report arm-dependency import failures with a remediation "
         "message, so try_import (which discards the exception) is the wrong tool there."
     ),
+    "ImportError+OSError+ValueError": (
+        "Blessed broad catch: the offline figure-pack CLI converts optional dependency, "
+        "filesystem, and invalid-input failures into an actionable exit; keep the "
+        "handler scoped to this boundary."
+    ),
     "ImportError+SyntaxError": (
         "Blessed broad catch: parser/extension load may surface SyntaxError."
     ),

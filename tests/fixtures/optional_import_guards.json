@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 119,
+  "total_guards": 120,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -17,7 +17,7 @@
       "samples": [
         "robot_sf/baselines/sicnav.py:378",
         "robot_sf/benchmark/latency/latency_stress.py:826",
-        "robot_sf/planner/socnav_base.py:738"
+        "robot_sf/planner/socnav_base.py:764"
       ]
     },
     "AttributeError+ImportError+IndexError+KeyError+OSError+RuntimeError+TypeError+ValueError": {
@@ -57,7 +57,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive best-effort boundary. Very broad; do not extend further without strong justification.",
       "samples": [
-        "robot_sf/planner/socnav_base.py:603"
+        "robot_sf/planner/socnav_base.py:629"
       ]
     },
     "AttributeError+ImportError+OSError": {
@@ -128,7 +128,7 @@
         "robot_sf/benchmark/episode_replay_figure.py:890",
         "robot_sf/benchmark/figure_qa.py:651",
         "robot_sf/benchmark/figure_qa.py:720",
-        "robot_sf/benchmark/figures/export.py:155",
+        "robot_sf/benchmark/figures/export.py:160",
         "robot_sf/benchmark/full_classic/encode.py:36",
         "robot_sf/benchmark/full_classic/encode.py:86",
         "robot_sf/benchmark/full_classic/orchestrator.py:87",
@@ -203,7 +203,7 @@
         "robot_sf/benchmark/cli.py:3356",
         "robot_sf/benchmark/cli.py:3390",
         "robot_sf/benchmark/full_classic/visual_deps.py:45",
-        "robot_sf/benchmark/orca_preflight.py:90"
+        "robot_sf/benchmark/orca_preflight.py:91"
       ]
     },
     "ImportError+OSError+RuntimeError+ValueError": {
@@ -214,6 +214,16 @@
       "note": "Blessed broad catch: defensive ingest boundary. Review carefully.",
       "samples": [
         "robot_sf/benchmark/camera_ready/resource_lifecycle.py:284"
+      ]
+    },
+    "ImportError+OSError+ValueError": {
+      "count_ceiling": 1,
+      "has_as_count": 1,
+      "pragma_no_cover_count": 0,
+      "blessed": true,
+      "note": "Blessed broad catch: the offline figure-pack CLI converts optional dependency, filesystem, and invalid-input failures into an actionable exit; keep the handler scoped to this boundary.",
+      "samples": [
+        "robot_sf/benchmark/figures/scenario_pack.py:760"
       ]
     },
     "ImportError+ParquetDependencyError": {

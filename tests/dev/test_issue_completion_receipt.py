@@ -243,6 +243,49 @@ def test_git_verifier_checks_exact_diff_and_pull_request_snapshot() -> None:
     assert result["git"]["diff"] == receipt["diff"]
 
 
+def test_git_subprocess_timeout_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stalled default Git command becomes structured verification failure."""
+    receipt = _receipt()
+
+    def timeout(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs.get("timeout") == 30
+        raise subprocess.TimeoutExpired(command, 30)
+
+    monkeypatch.setattr("scripts.dev.issue_completion_receipt.subprocess.run", timeout)
+
+    result = verify_receipt_against_git(
+        receipt,
+        repo_root=Path("/tmp/receipt-test-repo"),
+        repository="ll7/robot_sf_ll7",
+        issue_contract=CONTRACT,
+    )
+
+    assert result["ok"] is False
+    assert any("git command timed out after" in error for error in result["errors"])
+
+
+def test_github_subprocess_timeout_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stalled default GitHub command becomes structured verification failure."""
+    receipt = _receipt()
+
+    def timeout(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs.get("timeout") == 30
+        raise subprocess.TimeoutExpired(command, 30)
+
+    monkeypatch.setattr("scripts.dev.issue_completion_receipt.subprocess.run", timeout)
+
+    result = verify_receipt_against_git(
+        receipt,
+        repo_root=Path("/tmp/receipt-test-repo"),
+        repository="ll7/robot_sf_ll7",
+        issue_contract=CONTRACT,
+        git_runner=_git_runner(),
+    )
+
+    assert result["ok"] is False
+    assert any("gh command timed out after" in error for error in result["errors"])
+
+
 def test_git_verifier_rejects_a_later_branch_head() -> None:
     """A branch that moved after review cannot reuse the earlier receipt."""
     receipt = _receipt()

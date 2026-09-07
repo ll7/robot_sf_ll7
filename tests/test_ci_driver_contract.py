@@ -706,6 +706,20 @@ def test_wheel_console_scripts_have_an_installed_package_boundary() -> None:
     assert '"console_script_probes": console_probes["entries"]' in smoke_text
 
 
+def test_wheel_console_metadata_lookup_avoids_source_checkout_cwd() -> None:
+    """The installed-wheel metadata probe must not be shadowed by checkout metadata."""
+    smoke_text = WHEEL_INSTALL_SMOKE.read_text(encoding="utf-8")
+    console_block = smoke_text.split('console_scripts_path="${WORK_DIR}/console-scripts.json"', 1)[
+        1
+    ]
+    console_block = console_block.split('extras_status_json="[]"', 1)[0]
+
+    assert console_block.count("cd /tmp") == 2
+    assert 'PYTHONPATH= PYTHONNOUSERSITE=1 "${PYTHON_BIN}" - "${console_scripts_path}"' in (
+        console_block
+    )
+
+
 def test_wheel_metadata_vendors_compatible_fast_pysf_package() -> None:
     """Clean wheel installs must not resolve the incompatible PyPI pysocialforce package."""
     project = _pyproject()

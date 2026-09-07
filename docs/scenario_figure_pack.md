@@ -6,9 +6,11 @@ new relevance ranking, or evidence-admission mechanism.
 
 **Claim boundary:** exact recorded episodes only. Selection does not estimate
 failure prevalence, planner superiority, causal mechanisms, or deployment safety.
-**Evidence status:** tooling with synthetic-fixture validation; a generated pack
-is either `diagnostic` or derived from an already `admitted` source package.
-Neither a successful export nor a checksum promotes the underlying evidence.
+**Evidence status:** every generated pack and view sidecar is
+`diagnostic-only`; `source_admission_status` separately records whether the
+input package was `admitted` or `not_admitted`. A generated pack may be derived
+from an admitted source package, but neither a successful export nor a checksum
+promotes the underlying evidence.
 Missing geometry and telemetry remain explicit; native campaign validation is a
 separate proof obligation.
 
@@ -26,7 +28,10 @@ Every case gets separate figures; the exporter never invents a comparison pair,
 normalizes episode duration, interpolates a snapshot, or infers a causal pivot.
 A missing actor frame breaks that actor's path. Missing applied controls are not
 replaced by estimated velocity. A clearance sample with any missing body radius
-is unavailable rather than a minimum over only the conveniently known actors.
+or expected pedestrian identity is unavailable rather than a minimum over only
+the conveniently known actors. Series receipts use `available`,
+`partly_unavailable`, or `unavailable` and include the missing-sample count and
+reason.
 Canonical benchmark metrics and collision labels are not rewritten.
 
 ## Generate a pack
@@ -55,10 +60,13 @@ uv run python -m robot_sf.benchmark.figures.scenario_pack \
 
 For an already source-verified, author-admitted workbench package, use
 `configs/analysis/scenario_figure_pack.v1.json` instead. The default profile calls
-both existing source-integrity and publication-admission checks. Diagnostic mode
-skips **only admission**, never source checksums or trace validation, and every
-figure visibly says `DIAGNOSTIC ONLY - not author admitted`. This feature does not
-populate the source-gate registry or perform admission on the operator's behalf.
+both existing source-integrity and publication-admission checks and requires
+canonical trace hash and complete coverage validation. Diagnostic mode skips
+**only admission**, never source checksums or structural trace validation; when
+canonical trace provenance is incomplete it records `structural-only` rather
+than emitting an unverified source hash. Every figure visibly says
+`DIAGNOSTIC ONLY - not author admitted`. This feature does not populate the
+source-gate registry or perform admission on the operator's behalf.
 
 Pass repeated `--case-id` arguments to restrict the existing portfolio. Its order
 is preserved regardless of argument order. Every excluded case is recorded as
@@ -72,9 +80,9 @@ Unknown fields, invalid settings and duplicate requests are refused.
 | --- | --- | --- |
 | `trajectory` | Full robot and stable-identity pedestrian paths, start/end markers, recorded body footprints at the selected frame | Missing actor frames remain gaps; map loading requires matching bytes. |
 | `snapshot` | Recorded state nearest the first event, otherwise minimum fully observed clearance, otherwise first frame | Reports the actual frame time and selection rule; never interpolated or called a causal pivot. |
-| `clearance` | Minimum robot-pedestrian disc-surface separation from recorded radii | Missing radii invalidate that sample; zero is not a recomputed benchmark collision label. |
-| `speed` | Recorded applied linear command series | Missing commands remain unavailable, not zero or estimated motion. |
-| `turn` | Recorded applied turn-rate series | Same absolute recorded times; no invented controls or dual axes. |
+| `clearance` | Minimum robot-pedestrian disc-surface separation from recorded radii | Missing radii or any expected actor invalidate that sample; zero is not a recomputed benchmark collision label. |
+| `speed` | Recorded applied linear command series | Missing commands remain unavailable, not zero or estimated motion; partial coverage is labeled. |
+| `turn` | Recorded applied turn-rate series | Same absolute recorded times; no invented controls or dual axes; partial coverage is labeled. |
 
 The `single` (3.4-inch) and `double` (7-inch) profiles use separate one-axis views,
 readable typography, units, non-color marker/line distinctions, and restrained
@@ -90,8 +98,11 @@ PNG is exported at 300 dpi. Each view has a provenance JSON companion and an
 escaped caption fragment. `manifest.json` inventories every artifact by relative
 path, byte count and SHA-256, and records source/config/producer digests, source
 trace identifiers, the Matplotlib version, selection/omission receipts and panel
-availability. Case IDs are hashed into path-safe filenames; raw traces and local
-absolute map/source paths are not copied into the output.
+availability. Admitted mode requires canonical trace hash and complete coverage
+validation; diagnostic mode labels incomplete trace provenance `structural-only`
+and does not emit it as a verified source hash. Case IDs are hashed into
+path-safe filenames; raw traces and local absolute map/source paths are not
+copied into the output.
 
 Reproduction requires the exact source package (identified by its complete
 inventory digest), its referenced map bytes where applicable, the generated
@@ -126,10 +137,11 @@ uv run ruff format --check robot_sf/benchmark/figures/scenario_pack.py \
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
 
-The tests cover ordering, omission accounting, invalid traces, actor gaps,
-partial radius coverage, missing controls, event/frame timing, budget refusals,
-layout, path safety, gate delegation, tampering, interrupted exports and concurrent
-output appearance. The shared exporter regression intentionally leaves a different
+The tests cover ordering, omission accounting, invalid traces, actor gaps and
+complete expected actor sets, partial radius/control coverage with explicit
+statuses, event/frame timing, budget refusals, layout, path safety, gate
+delegation, tampering, interrupted exports and concurrent output appearance.
+The shared exporter regression intentionally leaves a different
 pyplot figure current and proves that the supplied figure is the one saved.
 
 The implementation was exercised with synthetic traces in an isolated dependency

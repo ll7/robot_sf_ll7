@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import replace
 
 import matplotlib
@@ -121,12 +122,57 @@ def test_actor_disappearance_is_a_gap_not_a_join(case):
     assert result["series"]["clearance"][0] == pytest.approx(np.hypot(1.6, 1.5) - 0.55)
 
 
+def test_clearance_requires_the_complete_expected_actor_set(case):
+    for index, step in enumerate(case["trace"]["steps"]):
+        step["pedestrians"].append(
+            {
+                "actor_id": "pedestrian-8",
+                "position": [2.0, -1.0 + index * 0.1],
+                "radius_m": 0.2,
+            }
+        )
+    case["trace"]["steps"][3]["pedestrians"] = case["trace"]["steps"][3]["pedestrians"][:1]
+    result = pack.prepare_case(case, diagnostic())
+    assert math.isfinite(result["series"]["clearance"][0])
+    assert np.isnan(result["series"]["clearance"][3])
+
+
 def test_partial_radius_coverage_cannot_be_a_complete_minimum(case):
     step = case["trace"]["steps"][4]
     step["pedestrians"].append({"actor_id": "unknown-radius", "position": [1.6, 0.1]})
     result = pack.prepare_case(case, diagnostic())
     assert np.isnan(result["series"]["clearance"][4])
     assert result["critical_index"] != 4
+
+
+def test_partial_recorded_series_reports_missing_count_and_reason(case):
+    case["trace"]["steps"][4]["controls"]["applied"].pop("linear_m_s")
+    prepared = pack.prepare_case(case, diagnostic())
+    figure, receipt = pack.render_view(prepared, "speed", diagnostic())
+    assert receipt["status"] == "partly_unavailable"
+    assert receipt["finite_samples"] == 8
+    assert receipt["missing_samples"] == 1
+    assert "linear_m_s" in receipt["missing_reason"]
+    figure.clear()
+
+
+def test_partial_clearance_reports_missing_radius_reason(case):
+    for index, step in enumerate(case["trace"]["steps"]):
+        actor = {"actor_id": "unknown-radius", "position": [1.6, 0.1], "radius_m": 0.2}
+        if index == 4:
+            actor.pop("radius_m")
+        step["pedestrians"].append(actor)
+    prepared = pack.prepare_case(case, diagnostic())
+    figure, receipt = pack.render_view(prepared, "clearance", diagnostic())
+    assert receipt["status"] == "partly_unavailable"
+    assert receipt["missing_samples"] == 1
+    assert "radius" in receipt["missing_reason"]
+    figure.clear()
+
+
+def test_admitted_trace_requires_canonical_provenance(case):
+    with pytest.raises(ValueError, match="provenance"):
+        pack.prepare_case(case, pack.PackConfig(mode="admitted"))
 
 
 @pytest.mark.parametrize(
@@ -225,7 +271,15 @@ def test_bundle_roundtrip_inventory_and_no_raw_trace(source, tmp_path):
     assert pack.PackConfig.from_file(output / "config.json") == config
     assert len(result["cases"][0]["views"]) == 5
     assert result["selection"]["selected_count"] == 1
+    assert result["evidence_status"] == "diagnostic-only"
+    assert result["source_admission_status"] == "not_admitted"
+    assert result["cases"][0]["source_trace"]["status"] == "structural-only"
     assert '"steps"' not in (output / "manifest.json").read_text()
+    sidecar = next(output.rglob("*.provenance.json"))
+    sidecar_payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert sidecar_payload["evidence_status"] == "diagnostic-only"
+    assert sidecar_payload["source_trace_provenance_status"] == "structural-only"
+    assert sidecar_payload["source_trace_sha256"] is None
     for artifact in result["artifacts"]:
         assert pack._sha(output / artifact["path"]) == artifact["sha256"]
     assert {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()} == {

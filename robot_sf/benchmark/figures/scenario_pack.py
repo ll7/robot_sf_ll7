@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "scenario-figure-pack.v1"
+EVIDENCE_STATUS = "diagnostic-only"
 BOUNDARY = (
     "Exact recorded episode only. Selection is not prevalence, planner superiority, "
     "a causal explanation, or deployment-safety evidence."
@@ -152,6 +153,41 @@ def _verify_source(root: Path, mode: str) -> None:
         owner._verify_publication_gate(root)
 
 
+def _trace_provenance(case: dict[str, Any], trace: dict[str, Any], mode: str) -> dict[str, Any]:
+    """Validate canonical trace provenance before exposing it in a pack."""
+    from robot_sf.benchmark.analysis_trace import trace_artifact_sha256, trace_coverage
+
+    coverage = trace_coverage(
+        {
+            "scenario_id": case.get("scenario_id"),
+            "planner": case.get("planner"),
+            "algo": case.get("planner"),
+            "provenance": case.get("provenance", {}),
+            "algorithm_metadata": {"analysis_trace": trace},
+        }
+    )
+    artifact_sha = trace.get("artifact_sha256")
+    artifact_verified = isinstance(artifact_sha, str) and artifact_sha == trace_artifact_sha256(
+        trace
+    )
+    coverage_complete = coverage.get("status") == "complete"
+    if mode == "admitted" and not (artifact_verified and coverage_complete):
+        reasons = list(coverage.get("reasons") or [])
+        if not artifact_verified:
+            reasons.append("artifact_hash")
+        detail = ", ".join(dict.fromkeys(str(reason) for reason in reasons))
+        raise ValueError(f"admitted source trace provenance is incomplete: {detail}")
+    verified = artifact_verified and coverage_complete
+    return {
+        "status": "verified" if verified else "structural-only",
+        "coverage_status": coverage.get("status"),
+        "coverage_reasons": list(coverage.get("reasons") or []),
+        "artifact_sha256": artifact_sha if verified else None,
+        "map_digest": trace.get("map_digest") if verified else None,
+        "git_hash": trace.get("git_hash") if verified else None,
+    }
+
+
 def select_cases(
     proposal: dict[str, Any], config: PackConfig, case_ids: tuple[str, ...] = ()
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
@@ -217,6 +253,7 @@ def prepare_case(case: dict[str, Any], config: PackConfig) -> dict[str, Any]:
     times: list[float] = []
     robot_xy: list[list[float]] = []
     actor_ids: set[str] = set()
+    actor_ids_by_frame: list[set[str]] = []
     for step in steps:
         if not isinstance(step, dict) or not _number(step.get("time_s")):
             raise ValueError("every frame requires a finite time_s")
@@ -242,6 +279,7 @@ def prepare_case(case: dict[str, Any], config: PackConfig) -> dict[str, Any]:
                 raise ValueError("pedestrian position must be finite")
             frame_ids.add(key)
             actor_ids.add(key)
+        actor_ids_by_frame.append(frame_ids)
         if len(actor_ids) > config.max_actors:
             raise ValueError("trace exceeds max_actors; no silent actor truncation")
         controls = step.get("controls")
@@ -271,7 +309,9 @@ def prepare_case(case: dict[str, Any], config: PackConfig) -> dict[str, Any]:
     # rather than promoting a partial canonical result to a complete minimum.
     for index, step in enumerate(steps):
         actors = [step["robot"], *step["pedestrians"]]
-        if any(not _number(actor.get("radius_m")) or actor["radius_m"] <= 0 for actor in actors):
+        if actor_ids_by_frame[index] != actor_ids or any(
+            not _number(actor.get("radius_m")) or actor["radius_m"] <= 0 for actor in actors
+        ):
             series["clearance"][index] = float("nan")
     critical = owner._critical_step(trace)
     critical_index = next((i for i, step in enumerate(steps) if step is critical), None)
@@ -283,6 +323,7 @@ def prepare_case(case: dict[str, Any], config: PackConfig) -> dict[str, Any]:
         critical_index = min(finite, key=lambda i: series["clearance"][i]) if finite else 0
     if any(not _number(t) or t < times[0] or t > times[-1] for t in event_times):
         raise ValueError("recorded event is outside the trace time range")
+    trace_provenance = _trace_provenance(case, trace, config.mode)
     return {
         "case": case,
         "trace": trace,
@@ -292,6 +333,7 @@ def prepare_case(case: dict[str, Any], config: PackConfig) -> dict[str, Any]:
         "series": series,
         "critical_index": critical_index,
         "event_times": event_times,
+        "trace_provenance": trace_provenance,
         "snapshot_reason": (
             f"nearest recorded frame to event at {event_times[0]:g} s"
             if event_times
@@ -311,6 +353,33 @@ def _case_title(case: dict[str, Any], *, width: int = 76) -> str:
         f"| seed {case.get('seed', 'unavailable')}",
         width=width,
     )
+
+
+def _series_status(view: str, values: list[float]) -> dict[str, Any]:
+    """Classify finite, partial and unavailable recorded series explicitly."""
+    total_samples = len(values)
+    finite_samples = sum(math.isfinite(value) for value in values)
+    missing_samples = total_samples - finite_samples
+    reasons = {
+        "clearance": (
+            "an expected pedestrian identity or positive recorded body radius is missing"
+        ),
+        "speed": "recorded applied linear_m_s is missing",
+        "turn": "recorded applied turn_rate_rad_s is missing",
+    }
+    return {
+        "total_samples": total_samples,
+        "finite_samples": finite_samples,
+        "missing_samples": missing_samples,
+        "missing_reason": reasons[view] if missing_samples else None,
+        "status": (
+            "unavailable"
+            if finite_samples == 0
+            else "partly_unavailable"
+            if missing_samples
+            else "available"
+        ),
+    }
 
 
 def render_view(
@@ -429,16 +498,13 @@ def render_view(
             "turn": "Recorded applied turn rate [rad/s]",
         }
         values = prepared["series"][view]
-        status.update(
-            {"total_samples": len(values), "finite_samples": sum(math.isfinite(v) for v in values)}
-        )
+        status.update(_series_status(view, values))
         ax.set(xlabel="Absolute recorded time [s]", ylabel=labels[view])
         if any(math.isfinite(v) for v in values):
             ax.plot(
                 prepared["times"], values, linewidth=1.6, marker="." if len(values) < 15 else None
             )
         else:
-            status["status"] = "unavailable"
             ax.text(
                 0.5,
                 0.5,
@@ -456,6 +522,11 @@ def render_view(
         ax.set_xlim(low - pad, high + pad)
         ax.grid(True, alpha=0.2)
         notes = "Dashed vertical lines: recorded event times. Missing samples remain gaps."
+        if status["missing_samples"]:
+            notes += (
+                f"\n{status['missing_samples']} of {status['total_samples']} samples unavailable: "
+                f"{status['missing_reason']}."
+            )
         if view == "clearance":
             notes += "\nDisc-surface separation is not a recomputed benchmark collision label."
     fig.supxlabel(textwrap.fill(notes, width=100 if width > 4 else 48), fontsize=8)
@@ -521,6 +592,10 @@ def build_pack(
         receipt: dict[str, Any] = {
             "schema_version": SCHEMA,
             "mode": config.mode,
+            "evidence_status": EVIDENCE_STATUS,
+            "source_admission_status": (
+                "admitted" if config.mode == "admitted" else "not_admitted"
+            ),
             "claim_boundary": BOUNDARY,
             "source_proposal_sha256": before["proposal.json"],
             "source_inventory_sha256": hashlib.sha256(_json(before).encode()).hexdigest(),
@@ -566,8 +641,10 @@ def build_pack(
                     for key in ("case_id", "scenario_id", "planner", "seed", "role")
                 }
                 case_record["source_trace"] = {
-                    key: item["trace"].get(key)
-                    for key in ("artifact_sha256", "map_digest", "config_digest", "git_hash")
+                    **item["trace_provenance"],
+                    "config_digest": item["trace"].get("config_digest")
+                    if item["trace_provenance"]["status"] == "verified"
+                    else None,
                 }
                 case_record["views"] = []
                 for view in config.views:
@@ -582,12 +659,14 @@ def build_pack(
                         "generator_command": "python -m robot_sf.benchmark.figures.scenario_pack",
                         "figure_formats": list(config.formats),
                         "claim_boundary": BOUNDARY,
-                        "evidence_status": config.mode,
+                        "evidence_status": EVIDENCE_STATUS,
+                        "source_admission_status": receipt["source_admission_status"],
+                        "source_trace_provenance_status": item["trace_provenance"]["status"],
                         "producer_sha256": receipt["producer_sha256"],
                         "config_hash": receipt["config_sha256"],
-                        "source_repo_commit": item["trace"].get("git_hash"),
-                        "source_trace_sha256": item["trace"].get("artifact_sha256"),
-                        "map_sha256": item["trace"].get("map_digest"),
+                        "source_repo_commit": item["trace_provenance"]["git_hash"],
+                        "source_trace_sha256": item["trace_provenance"]["artifact_sha256"],
+                        "map_sha256": item["trace_provenance"]["map_digest"],
                     }
                     caption = provenance.build_caption_fragment(
                         scenario_id=str(case.get("scenario_id", "unavailable")),
@@ -612,7 +691,8 @@ def build_pack(
         catalog = [
             "# Scenario figure pack",
             "",
-            f"Evidence status: **{config.mode}**",
+            f"Evidence status: **{EVIDENCE_STATUS}**",
+            f"Source admission status: **{receipt['source_admission_status']}**",
             "",
             BOUNDARY,
             "",

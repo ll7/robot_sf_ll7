@@ -153,6 +153,16 @@ def _verify_source(root: Path, mode: str) -> None:
         owner._verify_publication_gate(root)
 
 
+def _source_admission_status(proposal: dict[str, Any]) -> str:
+    """Report admission of the input package independently from export mode."""
+    admission = proposal.get("author_admission")
+    return (
+        "admitted"
+        if isinstance(admission, dict) and str(admission.get("status") or "").lower() == "admitted"
+        else "not_admitted"
+    )
+
+
 def _trace_provenance(case: dict[str, Any], trace: dict[str, Any], mode: str) -> dict[str, Any]:
     """Validate canonical trace provenance before exposing it in a pack."""
     from robot_sf.benchmark.analysis_trace import trace_artifact_sha256, trace_coverage
@@ -556,6 +566,7 @@ def build_pack(
     before = _inventory(package)
     _verify_source(package, config.mode)
     proposal = _object(package / "proposal.json")
+    source_admission_status = _source_admission_status(proposal)
     selected, omitted = select_cases(proposal, config, case_ids)
     point_count = 0
     for case in selected:
@@ -593,9 +604,7 @@ def build_pack(
             "schema_version": SCHEMA,
             "mode": config.mode,
             "evidence_status": EVIDENCE_STATUS,
-            "source_admission_status": (
-                "admitted" if config.mode == "admitted" else "not_admitted"
-            ),
+            "source_admission_status": source_admission_status,
             "claim_boundary": BOUNDARY,
             "source_proposal_sha256": before["proposal.json"],
             "source_inventory_sha256": hashlib.sha256(_json(before).encode()).hexdigest(),

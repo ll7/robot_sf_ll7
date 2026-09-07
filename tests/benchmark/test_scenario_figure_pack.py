@@ -288,6 +288,27 @@ def test_bundle_roundtrip_inventory_and_no_raw_trace(source, tmp_path):
     assert not (output / ".INCOMPLETE").exists()
 
 
+def test_diagnostic_export_preserves_admitted_source_status(source, tmp_path):
+    proposal_path = source / "proposal.json"
+    proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+    proposal["author_admission"] = {"status": "admitted"}
+    proposal_path.write_text(json.dumps(proposal), encoding="utf-8")
+    (source / "SHA256SUMS").write_text(
+        "\n".join(
+            hashlib.sha256(path.read_bytes()).hexdigest() + "  " + path.name
+            for path in sorted(source.iterdir())
+            if path.name != "SHA256SUMS"
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = pack.build_pack(source, tmp_path / "diagnostic", config=diagnostic())
+
+    assert result["evidence_status"] == "diagnostic-only"
+    assert result["source_admission_status"] == "admitted"
+
+
 def test_admission_gate_default_and_integrity_in_both_modes(source, tmp_path, monkeypatch):
     called = []
     owner = pack._owner()

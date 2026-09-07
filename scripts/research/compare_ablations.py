@@ -21,8 +21,6 @@ from pathlib import Path
 
 from loguru import logger
 
-from robot_sf.research.orchestrator import AblationOrchestrator
-
 
 def parse_args() -> argparse.Namespace:
     """TODO docstring. Document this function.
@@ -49,6 +47,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """TODO docstring. Document this function."""
     args = parse_args()
+    # Defer optional analytics dependencies until after argparse has handled
+    # lightweight help and validation paths in the core installation.
+    from robot_sf.research.orchestrator import AblationOrchestrator
+
     # Parse params first (use a temporary orchestrator for parser only)
     temp = AblationOrchestrator(
         experiment_name=args.experiment_name,

@@ -124,6 +124,7 @@ def test_report_cli_help_does_not_require_optional_analytics(tmp_path: Path) -> 
     for script in (
         "scripts/research/generate_report.py",
         "scripts/research/compare_ablations.py",
+        "scripts/research/generate_extractor_report.py",
     ):
         result = _run_core_cli(tmp_path, script, "--help")
         assert result.returncode == 0, result.stderr
@@ -135,6 +136,7 @@ def test_report_cli_argument_errors_do_not_require_optional_analytics(tmp_path: 
     for script in (
         "scripts/research/generate_report.py",
         "scripts/research/compare_ablations.py",
+        "scripts/research/generate_extractor_report.py",
     ):
         result = _run_core_cli(tmp_path, script)
         assert result.returncode == 2, result.stdout

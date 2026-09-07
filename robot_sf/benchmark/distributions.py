@@ -24,6 +24,7 @@ from robot_sf.benchmark.aggregate import (
     normalize_observation_track_mode,
     observation_track_group_label,
 )
+from robot_sf.benchmark.errors import DistributionInputError
 from robot_sf.benchmark.grouping import resolve_report_group_key
 from robot_sf.benchmark.plotting_style import apply_latex_style
 
@@ -106,6 +107,34 @@ class DistPlotMeta:
 
     wrote: list[str]
     pdfs: list[str]
+
+
+def _validate_plot_controls(
+    *,
+    bins: int,
+    ci: bool,
+    ci_samples: int,
+    ci_confidence: float,
+) -> None:
+    """Validate histogram and optional confidence-interval controls."""
+    if bins < 1:
+        raise DistributionInputError(f"bins must be >= 1 (got {bins})")
+    if not ci:
+        return
+    if ci_samples < 1:
+        raise DistributionInputError(
+            f"ci_samples must be >= 1 when CI is enabled (got {ci_samples})"
+        )
+    try:
+        confidence = float(ci_confidence)
+    except (TypeError, ValueError) as exc:
+        raise DistributionInputError(
+            f"ci_confidence must be finite and in (0, 1) when CI is enabled (got {ci_confidence!r})"
+        ) from exc
+    if not np.isfinite(confidence) or not 0.0 < confidence < 1.0:
+        raise DistributionInputError(
+            f"ci_confidence must be finite and in (0, 1) when CI is enabled (got {ci_confidence!r})"
+        )
 
 
 def _apply_rcparams() -> None:
@@ -322,6 +351,12 @@ def save_distributions(  # noqa: PLR0913
     Returns:
         DistPlotMeta containing lists of written PNG and PDF paths.
     """
+    _validate_plot_controls(
+        bins=bins,
+        ci=ci,
+        ci_samples=ci_samples,
+        ci_confidence=ci_confidence,
+    )
     _apply_rcparams()
     out_dir = str(out_dir)
     Path(out_dir).mkdir(parents=True, exist_ok=True)

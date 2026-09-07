@@ -18,15 +18,6 @@ import argparse
 import json
 import sys
 
-from robot_sf.research.continual_adaptation_launcher import (
-    render_markdown,
-    run_continual_adaptation_diagnostics,
-)
-from robot_sf.research.continual_adaptation_protocol import (
-    ContinualAdaptationProtocolError,
-    load_continual_adaptation_run,
-)
-
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build command-line parser."""
@@ -61,6 +52,17 @@ def main(argv: list[str] | None = None) -> int:
         protocol status.
     """
     args = build_arg_parser().parse_args(argv)
+    # Defer research and analytics imports until after argparse has handled
+    # lightweight help and validation paths in the core installation.
+    from robot_sf.research.continual_adaptation_launcher import (
+        render_markdown,
+        run_continual_adaptation_diagnostics,
+    )
+    from robot_sf.research.continual_adaptation_protocol import (
+        ContinualAdaptationProtocolError,
+        load_continual_adaptation_run,
+    )
+
     try:
         manifest = load_continual_adaptation_run(args.manifest)
         report = run_continual_adaptation_diagnostics(

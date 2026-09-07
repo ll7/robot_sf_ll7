@@ -804,6 +804,18 @@ def _rollup_overall(rollup: list[dict[str, Any]]) -> str:  # noqa: C901
     effective_rollup, _superseded_count = _latest_check_runs(rollup)
     gate_checks = [check for check in rollup if check.get("name") == GATE_JOB_NAME]
     if any(
+        not (
+            check.get("startedAt")
+            or check.get("started_at")
+            or check.get("completedAt")
+            or check.get("completed_at")
+        )
+        for check in gate_checks
+    ):
+        # A queued gate without a timestamp cannot be ordered against an older green run.
+        # Keep the result fail-closed instead of allowing stale success to establish CI.
+        return "unknown"
+    if any(
         check.get("workflowName") != GATE_WORKFLOW_NAME
         and not (check.get("startedAt") or check.get("started_at"))
         for check in gate_checks

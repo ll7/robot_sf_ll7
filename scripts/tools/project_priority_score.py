@@ -2412,9 +2412,17 @@ def _only_empty_failure_payload(
         )
     else:
         return None
-    if not args.only_empty:
-        return None
     return payload
+
+
+def _blocked_summary_plan(payload: dict[str, Any]) -> dict[str, Any]:
+    """Wrap a known blocked result in the versioned eligibility-plan envelope."""
+    plan = dict(payload)
+    plan["schema"] = "project_priority_eligibility_plan.v1"
+    plan["counts"] = {"eligible": 0, "skipped": 0, "blocked": 0}
+    plan.setdefault("writes_performed", False)
+    plan.setdefault("items", [])
+    return plan
 
 
 def _handle_only_empty_failure(*, args: argparse.Namespace, error: Exception) -> int | None:
@@ -2424,7 +2432,7 @@ def _handle_only_empty_failure(*, args: argparse.Namespace, error: Exception) ->
     ``--only-empty`` mode, else None so the caller re-raises fail-closed.
     """
     payload = _only_empty_failure_payload(args=args, error=error)
-    if payload is None:
+    if payload is None or not args.only_empty:
         return None
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
@@ -2467,7 +2475,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             non_fatal=args.only_empty,
         )
         if args.summary_file is not None:
-            write_summary(args.summary_file, [], payload)
+            write_summary(args.summary_file, [], _blocked_summary_plan(payload))
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0 if args.only_empty else 2
 
@@ -2485,7 +2493,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ) as exc:
         blocked_payload = _only_empty_failure_payload(args=args, error=exc)
         if blocked_payload is not None and args.summary_file is not None:
-            write_summary(args.summary_file, [], blocked_payload)
+            write_summary(args.summary_file, [], _blocked_summary_plan(blocked_payload))
         handled = _handle_only_empty_failure(args=args, error=exc)
         if handled is None:
             raise

@@ -400,6 +400,9 @@ _FAST_FILES = {
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",
+    # Generic ranking tests provide deterministic evidence-admission and finite-
+    # metric coverage for the changed benchmark ranking helper.
+    "test_ranking.py",
     # Distribution plotting tests use Agg and deterministic fixtures; keep their
     # changed-line coverage in the exact-head fast lane.
     "test_distributions.py",

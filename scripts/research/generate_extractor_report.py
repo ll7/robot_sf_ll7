@@ -7,8 +7,6 @@ from pathlib import Path
 
 from loguru import logger
 
-from robot_sf.research.extractor_report import ReportConfig, generate_extractor_report
-
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """TODO docstring. Document this function.
@@ -80,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
         TODO docstring.
     """
     args = parse_args(argv)
+    from robot_sf.research.extractor_report import ReportConfig, generate_extractor_report
+
     cfg = ReportConfig(
         experiment_name=args.experiment_name,
         hypothesis=args.hypothesis,

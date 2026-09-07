@@ -7,7 +7,7 @@ See docs/scenario_figure_pack.md for the config-first workflow.
 """
 
 # Optional rendering imports remain lazy at this artifact boundary.
-# ruff: noqa: DOC201, PLC0415
+# ruff: noqa: DOC201, PLC0415, C901, PLR0912, PLR0915
 
 from __future__ import annotations
 
@@ -49,6 +49,7 @@ def _sha(path: Path) -> str:
 
 def _object(path: Path) -> dict[str, Any]:
     """Read a JSON object, rejecting duplicate keys and non-finite literals."""
+
     def pairs(items: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for key, value in items:
@@ -60,8 +61,9 @@ def _object(path: Path) -> dict[str, Any]:
     def invalid(value: str) -> None:
         raise ValueError(f"non-finite JSON literal: {value}")
 
-    value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=pairs,
-                       parse_constant=invalid)
+    value = json.loads(
+        path.read_text(encoding="utf-8"), object_pairs_hook=pairs, parse_constant=invalid
+    )
     if not isinstance(value, dict):
         raise ValueError(f"expected JSON object: {path.name}")
     return value
@@ -88,12 +90,20 @@ class PackConfig:
             raise ValueError("size must be single or double")
         for name, allowed in (("formats", {"pdf", "svg", "png"}), ("views", set(VIEWS))):
             values = getattr(self, name)
-            if not isinstance(values, tuple) or not values or any(not isinstance(v, str) or v not in allowed for v in values):
+            if (
+                not isinstance(values, tuple)
+                or not values
+                or any(not isinstance(v, str) or v not in allowed for v in values)
+            ):
                 raise ValueError(f"invalid {name}")
             if len(values) != len(set(values)):
                 raise ValueError(f"duplicate {name}")
-        for name, ceiling in (("max_cases", 100), ("max_frames", 1000000), ("max_actors", 1000),
-                              ("max_points", 5000000)):
+        for name, ceiling in (
+            ("max_cases", 100),
+            ("max_frames", 1000000),
+            ("max_actors", 1000),
+            ("max_points", 5000000),
+        ):
             value = getattr(self, name)
             if type(value) is not int or not 1 <= value <= ceiling:
                 raise ValueError(f"{name} must be an integer in [1, {ceiling}]")
@@ -142,8 +152,9 @@ def _verify_source(root: Path, mode: str) -> None:
         owner._verify_publication_gate(root)
 
 
-def select_cases(proposal: dict[str, Any], config: PackConfig,
-                 case_ids: tuple[str, ...] = ()) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+def select_cases(
+    proposal: dict[str, Any], config: PackConfig, case_ids: tuple[str, ...] = ()
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """Keep workbench order, with explicit accounting for every portfolio omission.
 
     This is a presentation budget, not a new relevance score or an admission
@@ -154,7 +165,11 @@ def select_cases(proposal: dict[str, Any], config: PackConfig,
         raise ValueError("proposal must have a nonempty portfolio")
     lookup: dict[str, dict[str, Any]] = {}
     for case in portfolio:
-        if not isinstance(case, dict) or not isinstance(case.get("case_id"), str) or not case["case_id"]:
+        if (
+            not isinstance(case, dict)
+            or not isinstance(case.get("case_id"), str)
+            or not case["case_id"]
+        ):
             raise ValueError("every portfolio case must have a nonempty case_id")
         if case["case_id"] in lookup:
             raise ValueError("duplicate portfolio case_id")
@@ -268,23 +283,39 @@ def prepare_case(case: dict[str, Any], config: PackConfig) -> dict[str, Any]:
         critical_index = min(finite, key=lambda i: series["clearance"][i]) if finite else 0
     if any(not _number(t) or t < times[0] or t > times[-1] for t in event_times):
         raise ValueError("recorded event is outside the trace time range")
-    return {"case": case, "trace": trace, "times": times, "robot": robot_xy,
-            "actors": tracks, "series": series, "critical_index": critical_index,
-            "event_times": event_times,
-            "snapshot_reason": (f"nearest recorded frame to event at {event_times[0]:g} s"
-                                if event_times else
-                ("minimum trace-derived surface clearance" if any(math.isfinite(v) for v in series["clearance"])
-                 else "first recorded frame; no event or clearance available"))}
+    return {
+        "case": case,
+        "trace": trace,
+        "times": times,
+        "robot": robot_xy,
+        "actors": tracks,
+        "series": series,
+        "critical_index": critical_index,
+        "event_times": event_times,
+        "snapshot_reason": (
+            f"nearest recorded frame to event at {event_times[0]:g} s"
+            if event_times
+            else (
+                "minimum trace-derived surface clearance"
+                if any(math.isfinite(v) for v in series["clearance"])
+                else "first recorded frame; no event or clearance available"
+            )
+        ),
+    }
 
 
 def _case_title(case: dict[str, Any], *, width: int = 76) -> str:
     """Wrap identifiers instead of shrinking all figure typography."""
     return textwrap.fill(
         f"{case.get('scenario_id', 'unknown scenario')} | {case.get('planner', 'unknown planner')} "
-        f"| seed {case.get('seed', 'unavailable')}", width=width)
+        f"| seed {case.get('seed', 'unavailable')}",
+        width=width,
+    )
 
 
-def render_view(prepared: dict[str, Any], view: str, config: PackConfig) -> tuple[Any, dict[str, Any]]:
+def render_view(
+    prepared: dict[str, Any], view: str, config: PackConfig
+) -> tuple[Any, dict[str, Any]]:
     """Build a single-axis view; use absolute times and keep telemetry gaps visible."""
     import numpy as np
     from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -299,7 +330,11 @@ def render_view(prepared: dict[str, Any], view: str, config: PackConfig) -> tupl
     ax = fig.add_subplot(111)
     case, trace = prepared["case"], prepared["trace"]
     status: dict[str, Any] = {"view": view, "status": "available"}
-    mode_label = "DIAGNOSTIC ONLY - not author admitted" if config.mode == "diagnostic" else "Author-admitted recorded case"
+    mode_label = (
+        "DIAGNOSTIC ONLY - not author admitted"
+        if config.mode == "diagnostic"
+        else "Author-admitted recorded case"
+    )
     title = f"{view.replace('_', ' ').title()}\n{_case_title(case, width=76 if width > 4 else 35)}\n{mode_label}"
     ax.set_title(title, fontsize=10, pad=12)
     if view in {"trajectory", "snapshot"}:
@@ -329,8 +364,14 @@ def render_view(prepared: dict[str, Any], view: str, config: PackConfig) -> tupl
             ax.scatter(*xy[-1], marker="s", s=38, label="robot end", zorder=5)
             for index, (key, positions) in enumerate(prepared["actors"].items()):
                 points = np.asarray(positions)
-                ax.plot(points[:, 0], points[:, 1], linestyle="--", linewidth=1,
-                        alpha=0.7, label="pedestrian paths" if index == 0 else None)
+                ax.plot(
+                    points[:, 0],
+                    points[:, 1],
+                    linestyle="--",
+                    linewidth=1,
+                    alpha=0.7,
+                    label="pedestrian paths" if index == 0 else None,
+                )
         index = prepared["critical_index"]
         step = trace["steps"][index]
         status["footprints"] = "available"
@@ -338,42 +379,81 @@ def render_view(prepared: dict[str, Any], view: str, config: PackConfig) -> tupl
             x, y = actor["position"]
             radius = actor.get("radius_m")
             if _number(radius) and radius > 0:
-                ax.add_patch(Circle((x, y), radius, fill=False, linewidth=1.4,
-                                   linestyle="-" if actor_index == 0 else "--", zorder=6))
+                ax.add_patch(
+                    Circle(
+                        (x, y),
+                        radius,
+                        fill=False,
+                        linewidth=1.4,
+                        linestyle="-" if actor_index == 0 else "--",
+                        zorder=6,
+                    )
+                )
             else:
                 status["footprints"] = "partly_unavailable"
-            ax.scatter(x, y, marker="*" if actor_index == 0 else "+", s=60, zorder=7,
-                       label=("robot at selected time" if actor_index == 0 else
-                              "pedestrians at selected time" if actor_index == 1 else None))
+            ax.scatter(
+                x,
+                y,
+                marker="*" if actor_index == 0 else "+",
+                s=60,
+                zorder=7,
+                label=(
+                    "robot at selected time"
+                    if actor_index == 0
+                    else "pedestrians at selected time"
+                    if actor_index == 1
+                    else None
+                ),
+            )
         ax.set(xlim=limits[0], ylim=limits[1], xlabel="World x [m]", ylabel="World y [m]")
         ax.set_aspect("equal", adjustable="box")
-        notes = (f"Selected frame: t={step['time_s']:g} s ({prepared['snapshot_reason']}).\n"
-                 f"Map: {status['map_geometry']}. Footprints: {status['footprints'].replace('_', ' ')}. "
-                 "Circles use recorded radii; no perception is inferred.")
-        status.update({"snapshot_time_s": step["time_s"], "snapshot_reason": prepared["snapshot_reason"],
-                       "world_limits": limits})
-        ax.legend(loc="upper left", bbox_to_anchor=(0, -0.25),
-                  ncol=2 if width > 4 else 1, fontsize=8)
+        notes = (
+            f"Selected frame: t={step['time_s']:g} s ({prepared['snapshot_reason']}).\n"
+            f"Map: {status['map_geometry']}. Footprints: {status['footprints'].replace('_', ' ')}. "
+            "Circles use recorded radii; no perception is inferred."
+        )
+        status.update(
+            {
+                "snapshot_time_s": step["time_s"],
+                "snapshot_reason": prepared["snapshot_reason"],
+                "world_limits": limits,
+            }
+        )
+        ax.legend(
+            loc="upper left", bbox_to_anchor=(0, -0.25), ncol=2 if width > 4 else 1, fontsize=8
+        )
     else:
-        labels = {"clearance": "Minimum robot-pedestrian surface clearance [m]",
-                  "speed": "Recorded applied speed [m/s]", "turn": "Recorded applied turn rate [rad/s]"}
+        labels = {
+            "clearance": "Minimum robot-pedestrian surface clearance [m]",
+            "speed": "Recorded applied speed [m/s]",
+            "turn": "Recorded applied turn rate [rad/s]",
+        }
         values = prepared["series"][view]
-        status.update({"total_samples": len(values),
-                       "finite_samples": sum(math.isfinite(v) for v in values)})
+        status.update(
+            {"total_samples": len(values), "finite_samples": sum(math.isfinite(v) for v in values)}
+        )
         ax.set(xlabel="Absolute recorded time [s]", ylabel=labels[view])
         if any(math.isfinite(v) for v in values):
-            ax.plot(prepared["times"], values, linewidth=1.6, marker="." if len(values) < 15 else None)
+            ax.plot(
+                prepared["times"], values, linewidth=1.6, marker="." if len(values) < 15 else None
+            )
         else:
             status["status"] = "unavailable"
-            ax.text(0.5, 0.5, "Recorded telemetry unavailable\nNot zero; not estimated",
-                    transform=ax.transAxes, ha="center", va="center")
+            ax.text(
+                0.5,
+                0.5,
+                "Recorded telemetry unavailable\nNot zero; not estimated",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+            )
         if view == "clearance":
             ax.axhline(0, linewidth=0.8, linestyle=":")
         for event_time in prepared["event_times"]:
             ax.axvline(event_time, linewidth=0.8, linestyle="--", alpha=0.6)
         low, high = prepared["times"][0], prepared["times"][-1]
-        pad = max(0.01, (high-low)*0.025)
-        ax.set_xlim(low-pad, high+pad)
+        pad = max(0.01, (high - low) * 0.025)
+        ax.set_xlim(low - pad, high + pad)
         ax.grid(True, alpha=0.2)
         notes = "Dashed vertical lines: recorded event times. Missing samples remain gaps."
         if view == "clearance":
@@ -383,8 +463,13 @@ def render_view(prepared: dict[str, Any], view: str, config: PackConfig) -> tupl
     return fig, status
 
 
-def build_pack(package: Path, output: Path, *, config: PackConfig = PackConfig(),
-               case_ids: tuple[str, ...] = ()) -> dict[str, Any]:
+def build_pack(
+    package: Path,
+    output: Path,
+    *,
+    config: PackConfig = PackConfig(),
+    case_ids: tuple[str, ...] = (),
+) -> dict[str, Any]:
     """Export a transactional, bounded pack without changing source or existing output.
 
     A sibling lock coordinates cooperating writers; exclusive directory creation
@@ -429,37 +514,57 @@ def build_pack(package: Path, output: Path, *, config: PackConfig = PackConfig()
         provenance = importlib.import_module("robot_sf.benchmark.figures.provenance")
         import matplotlib
 
-        producer_files = {module.__name__: _sha(Path(inspect.getfile(module)))
-                          for module in (_owner(), style, exporter, provenance)}
+        producer_files = {
+            module.__name__: _sha(Path(inspect.getfile(module)))
+            for module in (_owner(), style, exporter, provenance)
+        }
         receipt: dict[str, Any] = {
-            "schema_version": SCHEMA, "mode": config.mode, "claim_boundary": BOUNDARY,
+            "schema_version": SCHEMA,
+            "mode": config.mode,
+            "claim_boundary": BOUNDARY,
             "source_proposal_sha256": before["proposal.json"],
             "source_inventory_sha256": hashlib.sha256(_json(before).encode()).hexdigest(),
             "config_sha256": hashlib.sha256(config_json.encode()).hexdigest(),
             "recorded_world_points": point_count,
-            "producer_sha256": _sha(Path(__file__)), "producer_dependencies": producer_files,
+            "producer_sha256": _sha(Path(__file__)),
+            "producer_dependencies": producer_files,
             "matplotlib_version": matplotlib.__version__,
             "reproduce": {
                 "module": "robot_sf.benchmark.figures.scenario_pack",
-                "config": "config.json", "case_ids": list(case_ids),
+                "config": "config.json",
+                "case_ids": list(case_ids),
                 "source": "restore the exact source_inventory_sha256 package separately",
                 "output": "choose a new, non-existing directory",
             },
-            "selection": {"policy": "existing workbench portfolio order; no new ranking",
-                          "portfolio_count": len(proposal["portfolio"]), "selected_count": len(selected),
-                          "requested_case_ids": list(case_ids),
-                          "omitted": omitted}, "cases": [], "artifacts": [],
+            "selection": {
+                "policy": "existing workbench portfolio order; no new ranking",
+                "portfolio_count": len(proposal["portfolio"]),
+                "selected_count": len(selected),
+                "requested_case_ids": list(case_ids),
+                "omitted": omitted,
+            },
+            "cases": [],
+            "artifacts": [],
         }
         (stage / "config.json").write_text(config_json, encoding="utf-8")
-        with style.publication_style(size=config.size), matplotlib.rc_context(
-            {"text.usetex": False, "text.parse_math": False, "svg.hashsalt": receipt["config_sha256"]}
+        with (
+            style.publication_style(size=config.size),
+            matplotlib.rc_context(
+                {
+                    "text.usetex": False,
+                    "text.parse_math": False,
+                    "svg.hashsalt": receipt["config_sha256"],
+                }
+            ),
         ):
             for item in prepared:
                 case = item["case"]
                 # Identifiers never become paths or executable TeX.
                 stem = "case-" + hashlib.sha256(case["case_id"].encode()).hexdigest()[:24]
-                case_record = {key: case.get(key) for key in
-                               ("case_id", "scenario_id", "planner", "seed", "role")}
+                case_record = {
+                    key: case.get(key)
+                    for key in ("case_id", "scenario_id", "planner", "seed", "role")
+                }
                 case_record["source_trace"] = {
                     key: item["trace"].get(key)
                     for key in ("artifact_sha256", "map_digest", "config_digest", "git_hash")
@@ -469,12 +574,16 @@ def build_pack(package: Path, output: Path, *, config: PackConfig = PackConfig()
                     figure, view_info = render_view(item, view, config)
                     view_info["stem"] = f"{stem}/{view}"
                     prov = {
-                        "source_artifacts": [{"path": "proposal.json", "sha256": before["proposal.json"]}],
+                        "source_artifacts": [
+                            {"path": "proposal.json", "sha256": before["proposal.json"]}
+                        ],
                         "episode_ids": [str(case.get("episode_id") or case["case_id"])],
                         "seeds": [case["seed"]] if type(case.get("seed")) is int else [],
                         "generator_command": "python -m robot_sf.benchmark.figures.scenario_pack",
-                        "figure_formats": list(config.formats), "claim_boundary": BOUNDARY,
-                        "evidence_status": config.mode, "producer_sha256": receipt["producer_sha256"],
+                        "figure_formats": list(config.formats),
+                        "claim_boundary": BOUNDARY,
+                        "evidence_status": config.mode,
+                        "producer_sha256": receipt["producer_sha256"],
                         "config_hash": receipt["config_sha256"],
                         "source_repo_commit": item["trace"].get("git_hash"),
                         "source_trace_sha256": item["trace"].get("artifact_sha256"),
@@ -482,11 +591,16 @@ def build_pack(package: Path, output: Path, *, config: PackConfig = PackConfig()
                     }
                     caption = provenance.build_caption_fragment(
                         scenario_id=str(case.get("scenario_id", "unavailable")),
-                        episode_ids=prov["episode_ids"])
+                        episode_ids=prov["episode_ids"],
+                    )
                     try:
                         exporter.save_publication_figure(
-                            figure, stage / stem / view, formats=config.formats,
-                            provenance=prov, caption_fragment=caption + " " + BOUNDARY)
+                            figure,
+                            stage / stem / view,
+                            formats=config.formats,
+                            provenance=prov,
+                            caption_fragment=caption + " " + BOUNDARY,
+                        )
                     finally:
                         figure.clear()
                     case_record["views"].append(view_info)
@@ -495,9 +609,17 @@ def build_pack(package: Path, output: Path, *, config: PackConfig = PackConfig()
         if _inventory(package) != before:
             raise ValueError("source package changed while rendering; export discarded")
         _verify_source(package, config.mode)
-        catalog = ["# Scenario figure pack", "", f"Evidence status: **{config.mode}**", "", BOUNDARY, "",
-                   f"Selected {len(selected)} / {len(proposal['portfolio'])} workbench portfolio cases.",
-                   "No population denominator or new relevance ranking is inferred.", ""]
+        catalog = [
+            "# Scenario figure pack",
+            "",
+            f"Evidence status: **{config.mode}**",
+            "",
+            BOUNDARY,
+            "",
+            f"Selected {len(selected)} / {len(proposal['portfolio'])} workbench portfolio cases.",
+            "No population denominator or new relevance ranking is inferred.",
+            "",
+        ]
         for case in receipt["cases"]:
             catalog.extend(["## " + str(case["case_id"]).replace("\n", " "), ""])
             for view in case["views"]:
@@ -510,8 +632,13 @@ def build_pack(package: Path, output: Path, *, config: PackConfig = PackConfig()
             catalog.extend(["## Omitted cases", "", "See manifest.json for every ID and reason."])
         (stage / "README.md").write_text("\n".join(catalog) + "\n", encoding="utf-8")
         for path in sorted(p for p in stage.rglob("*") if p.is_file()):
-            receipt["artifacts"].append({"path": path.relative_to(stage).as_posix(),
-                                         "sha256": _sha(path), "size_bytes": path.stat().st_size})
+            receipt["artifacts"].append(
+                {
+                    "path": path.relative_to(stage).as_posix(),
+                    "sha256": _sha(path),
+                    "size_bytes": path.stat().st_size,
+                }
+            )
         (stage / "manifest.json").write_text(_json(receipt), encoding="utf-8")
         # mkdir is the atomic no-replace reservation (rename could replace an
         # empty directory created by another process between check and publish).
@@ -520,7 +647,9 @@ def build_pack(package: Path, output: Path, *, config: PackConfig = PackConfig()
         except FileExistsError as exc:
             raise ValueError("output appeared during rendering; export discarded") from exc
         marker = output / ".INCOMPLETE"
-        marker.write_text("Publication interrupted unless manifest.json is present.\n", encoding="utf-8")
+        marker.write_text(
+            "Publication interrupted unless manifest.json is present.\n", encoding="utf-8"
+        )
         for child in sorted(stage.iterdir()):
             if child.name != "manifest.json":
                 os.rename(child, output / child.name)
@@ -542,8 +671,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--case-id", action="append", default=[])
     args = parser.parse_args(argv)
     try:
-        receipt = build_pack(args.package, args.output, config=PackConfig.from_file(args.config),
-                             case_ids=tuple(args.case_id))
+        receipt = build_pack(
+            args.package,
+            args.output,
+            config=PackConfig.from_file(args.config),
+            case_ids=tuple(args.case_id),
+        )
     except (ValueError, OSError, ImportError) as exc:
         parser.exit(2, f"scenario figure pack: {exc}\n")
     print(f"{receipt['selection']['selected_count']} cases -> {args.output}")  # noqa: T201

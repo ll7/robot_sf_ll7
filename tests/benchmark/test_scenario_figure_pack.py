@@ -13,7 +13,8 @@ import matplotlib
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.figures import export, scenario_pack as pack
+from robot_sf.benchmark.figures import export
+from robot_sf.benchmark.figures import scenario_pack as pack
 
 
 @pytest.fixture
@@ -21,17 +22,32 @@ def case():
     """Build a synthetic trace with known coordinates, radii and applied controls."""
     steps = []
     for index in range(9):
-        steps.append({
-            "time_s": index * 0.5,
-            "robot": {"actor_id": "robot", "position": [index * 0.4, 0.0], "radius_m": 0.3},
-            "pedestrians": [{"actor_id": "pedestrian-7", "position": [1.6, 1.5 - index * 0.25], "radius_m": 0.25}],
-            "controls": {"applied": {"linear_m_s": 0.8, "turn_rate_rad_s": 0.0}},
-        })
+        steps.append(
+            {
+                "time_s": index * 0.5,
+                "robot": {"actor_id": "robot", "position": [index * 0.4, 0.0], "radius_m": 0.3},
+                "pedestrians": [
+                    {
+                        "actor_id": "pedestrian-7",
+                        "position": [1.6, 1.5 - index * 0.25],
+                        "radius_m": 0.25,
+                    }
+                ],
+                "controls": {"applied": {"linear_m_s": 0.8, "turn_rate_rad_s": 0.0}},
+            }
+        )
     return {
-        "case_id": "synthetic-crossing", "scenario_id": "synthetic-crossing", "planner": "fixture",
-        "seed": 7, "role": "diagnostic-fixture", "trace": {
-            "schema_version": "analysis-trace.v1", "coordinate_frame": "world",
-            "units": {"position": "m", "time": "s"}, "steps": steps, "events": [],
+        "case_id": "synthetic-crossing",
+        "scenario_id": "synthetic-crossing",
+        "planner": "fixture",
+        "seed": 7,
+        "role": "diagnostic-fixture",
+        "trace": {
+            "schema_version": "analysis-trace.v1",
+            "coordinate_frame": "world",
+            "units": {"position": "m", "time": "s"},
+            "steps": steps,
+            "events": [],
         },
     }
 
@@ -43,8 +59,9 @@ def source(tmp_path, case):
     root.mkdir()
     (root / "proposal.json").write_text(json.dumps({"portfolio": [case]}), encoding="utf-8")
     (root / "manifest.json").write_text("{}", encoding="utf-8")
-    checksums = [hashlib.sha256(p.read_bytes()).hexdigest() + "  " + p.name
-                 for p in sorted(root.iterdir())]
+    checksums = [
+        hashlib.sha256(p.read_bytes()).hexdigest() + "  " + p.name for p in sorted(root.iterdir())
+    ]
     (root / "SHA256SUMS").write_text("\n".join(checksums) + "\n", encoding="utf-8")
     return root
 
@@ -54,11 +71,21 @@ def diagnostic(**kwargs):
     return pack.PackConfig(mode="diagnostic", formats=("svg",), views=("trajectory",), **kwargs)
 
 
-@pytest.mark.parametrize("kwargs", [
-    {"mode": "automatic"}, {"size": "tiny"}, {"max_cases": True}, {"max_cases": 0},
-    {"max_frames": 1_000_001}, {"max_actors": -1}, {"formats": ()},
-    {"formats": ("svg", "svg")}, {"formats": ("png", "html")}, {"views": ("unknown",)},
-])
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"mode": "automatic"},
+        {"size": "tiny"},
+        {"max_cases": True},
+        {"max_cases": 0},
+        {"max_frames": 1_000_001},
+        {"max_actors": -1},
+        {"formats": ()},
+        {"formats": ("svg", "svg")},
+        {"formats": ("png", "html")},
+        {"views": ("unknown",)},
+    ],
+)
 def test_configuration_refuses_invalid_requests(kwargs):
     with pytest.raises(ValueError):
         pack.PackConfig(**kwargs)
@@ -68,8 +95,10 @@ def test_selection_retains_order_and_accounts_for_every_omission(case):
     cases = [{**case, "case_id": name} for name in ("c", "a", "b")]
     selected, omitted = pack.select_cases({"portfolio": cases}, diagnostic(max_cases=1), ("b", "a"))
     assert [item["case_id"] for item in selected] == ["a"]
-    assert omitted == [{"case_id": "c", "reason": "not_requested"},
-                       {"case_id": "b", "reason": "presentation_budget"}]
+    assert omitted == [
+        {"case_id": "c", "reason": "not_requested"},
+        {"case_id": "b", "reason": "presentation_budget"},
+    ]
     with pytest.raises(ValueError, match="duplicate"):
         pack.select_cases({"portfolio": [case, case]}, diagnostic())
     with pytest.raises(ValueError, match="absent"):
@@ -100,7 +129,9 @@ def test_partial_radius_coverage_cannot_be_a_complete_minimum(case):
     assert result["critical_index"] != 4
 
 
-@pytest.mark.parametrize("field,value", [("coordinate_frame", "ego"), ("units", {}), ("schema_version", "legacy")])
+@pytest.mark.parametrize(
+    "field,value", [("coordinate_frame", "ego"), ("units", {}), ("schema_version", "legacy")]
+)
 def test_explicit_trace_contract_required(case, field, value):
     case["trace"][field] = value
     with pytest.raises(ValueError):
@@ -115,7 +146,9 @@ def test_duplicate_actor_and_resource_budgets_refused(case):
         pack.prepare_case(case, diagnostic())
 
 
-@pytest.mark.parametrize("controls", [False, [], {"applied": []}, {"applied": {"linear_m_s": True}}])
+@pytest.mark.parametrize(
+    "controls", [False, [], {"applied": []}, {"applied": {"linear_m_s": True}}]
+)
 def test_malformed_controls_are_not_missing_controls(case, controls):
     case["trace"]["steps"][0]["controls"] = controls
     with pytest.raises(ValueError, match="control"):
@@ -164,7 +197,9 @@ def test_export_saves_supplied_figure_not_pyplot_current(tmp_path):
         current = plt.figure()
         current.text(0.5, 0.5, "WRONG_FIGURE")
         try:
-            export.save_publication_figure(requested, tmp_path / "figure", formats=("svg",), provenance={})
+            export.save_publication_figure(
+                requested, tmp_path / "figure", formats=("svg",), provenance={}
+            )
             result = (tmp_path / "figure.svg").read_text(encoding="utf-8")
             assert "REQUESTED_FIGURE" in result
             assert "WRONG_FIGURE" not in result
@@ -177,7 +212,9 @@ def test_invalid_format_cannot_leave_partial_outputs(tmp_path):
     from matplotlib.figure import Figure
 
     with pytest.raises(ValueError):
-        export.save_publication_figure(Figure(), tmp_path / "new" / "figure", formats=("svg", "bad"))
+        export.save_publication_figure(
+            Figure(), tmp_path / "new" / "figure", formats=("svg", "bad")
+        )
     assert not (tmp_path / "new").exists()
 
 
@@ -192,7 +229,8 @@ def test_bundle_roundtrip_inventory_and_no_raw_trace(source, tmp_path):
     for artifact in result["artifacts"]:
         assert pack._sha(output / artifact["path"]) == artifact["sha256"]
     assert {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()} == {
-        artifact["path"] for artifact in result["artifacts"]} | {"manifest.json"}
+        artifact["path"] for artifact in result["artifacts"]
+    } | {"manifest.json"}
     assert not (output / ".INCOMPLETE").exists()
 
 
@@ -217,7 +255,9 @@ def test_admission_gate_default_and_integrity_in_both_modes(source, tmp_path, mo
 
 
 @pytest.mark.parametrize("failure", ["export", "source_change", "output_race"])
-def test_failed_export_preserves_source_or_other_writer_and_releases_lock(source, tmp_path, monkeypatch, failure):
+def test_failed_export_preserves_source_or_other_writer_and_releases_lock(
+    source, tmp_path, monkeypatch, failure
+):
     output = tmp_path / "pack"
     original = export.save_publication_figure
     initial_rc = dict(matplotlib.rcParams)

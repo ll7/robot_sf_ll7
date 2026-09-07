@@ -120,7 +120,7 @@ def _embedded_metadata(
     }
 
 
-def save_publication_figure(
+def save_publication_figure(  # noqa: C901 - format validation and transactional export gates
     fig,
     output_base: Path,
     *,
@@ -149,7 +149,9 @@ def save_publication_figure(
     if not formats:
         raise ValueError("At least one format must be specified")
     # Validate the complete request before writing any output.
-    if len(set(formats)) != len(formats) or any(fmt not in ("pdf", "png", "svg") for fmt in formats):
+    if len(set(formats)) != len(formats) or any(
+        fmt not in ("pdf", "png", "svg") for fmt in formats
+    ):
         raise ValueError("Formats must be unique and chosen from 'pdf', 'png', or 'svg'.")
 
     # Ensure matplotlib is available

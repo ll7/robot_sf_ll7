@@ -3,7 +3,8 @@
 
 Emits a preservation-aware deletion plan without removing anything by default.
 Use --apply to actually remove safe candidates; risky candidates are refused
-unless explicit safeguards are satisfied.
+unless explicit safeguards are satisfied. Apply-time lease checks serialize on
+the same repository lifecycle lock as worktree creation and lease mutation.
 
 Default behavior is dry-run only.
 """
@@ -16,6 +17,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 SCHEMA_VERSION = "stale_worktree_reaper.v1"
 
@@ -155,14 +157,28 @@ def _has_ignored_output(path: str) -> bool:
     return False
 
 
-def _check_worktree_lease_state(path: str) -> str | None:
-    """Check lease state for a worktree.
+def _lease_owner_summary(lease: Any) -> str:
+    """Return a deterministic task/owner description for cleanup refusal."""
+    parts: list[str] = []
+    gate_id = getattr(lease, "gate_id", None)
+    owner = getattr(lease, "owner", None)
+    pr_number = getattr(lease, "pr_number", None)
+    expires_at = getattr(lease, "expires_at", None)
+    if gate_id:
+        parts.append(f"task={gate_id}")
+    if owner and owner != gate_id:
+        parts.append(f"owner={owner}")
+    elif owner and not gate_id:
+        parts.append(f"owner={owner}")
+    if pr_number is not None:
+        parts.append(f"pr=#{pr_number}")
+    if expires_at:
+        parts.append(f"expires={expires_at}")
+    return "; ".join(parts) if parts else "owner/task unknown"
 
-    Returns:
-        "active" if there is an active lease.
-        "unreadable" if a lease file exists but cannot be read/parsed.
-        None if there is no lease file or if the lease has expired.
-    """
+
+def _worktree_lease_state(path: str) -> tuple[str | None, Any | None]:
+    """Return the active/unreadable lease state plus the loaded live lease."""
     try:
         from scripts.dev.pr_gate_lease import lease_path, legacy_lease_path, load_lease
 
@@ -178,16 +194,28 @@ def _check_worktree_lease_state(path: str) -> str | None:
                 continue
             lease = load_lease(l_path)
             if lease is not None and not lease.is_expired():
-                return "active"
-        return None
+                return "active", lease
+        return None, None
     except (ImportError, OSError, RuntimeError, TypeError, ValueError):
         # File exists but could not be loaded/parsed successfully, or lease
         # discovery failed. Both cases must fail closed.
-        return "unreadable"
+        return "unreadable", None
+
+
+def _check_worktree_lease_state(path: str) -> str | None:
+    """Check lease state for a worktree.
+
+    Returns:
+        "active" if there is an active lease.
+        "unreadable" if a lease file exists but cannot be read/parsed.
+        None if there is no lease file or if the lease has expired.
+    """
+    state, _lease = _worktree_lease_state(path)
+    return state
 
 
 def _has_active_pr_gate_lease(path: str) -> bool:
-    """Check if a worktree has an active PR-gate lease."""
+    """Check if a worktree has an active path-scoped worktree lease."""
     return _check_worktree_lease_state(path) == "active"
 
 
@@ -257,6 +285,7 @@ def build_plan(
     current_path: str | None = None,
     skip_pr_check: bool = False,
     limit: int = 0,
+    target_path: str | None = None,
 ) -> ReaperPlan:
     """Build a deletion plan from current repository worktrees."""
     errors: list[str] = []
@@ -283,7 +312,18 @@ def build_plan(
     candidates: list[WorktreeCandidate] = []
     audit_log: list[str] = []
 
-    worktrees_to_check = parsed[:limit] if limit > 0 else parsed
+    worktrees_to_check = parsed
+    if target_path is not None:
+        target = Path(target_path).resolve()
+        worktrees_to_check = [
+            wt for wt in parsed if wt.get("path") and Path(wt["path"]).resolve() == target
+        ]
+        if not worktrees_to_check:
+            errors.append(f"target worktree is not registered: {target}")
+            audit_log.append(f"target worktree not registered: {target}")
+    elif limit > 0:
+        worktrees_to_check = parsed[:limit]
+
     for wt in worktrees_to_check:
         wt_path = wt.get("path", "")
         branch = wt.get("branch", "")
@@ -320,8 +360,49 @@ def build_plan(
     )
 
 
+def _attempt_candidate_removal(candidate: WorktreeCandidate) -> tuple[str, str, str | None]:
+    """Remove one candidate under the lifecycle lock after rechecking its lease."""
+    from scripts.dev.pr_gate_lease import worktree_lifecycle_lock
+
+    try:
+        # Lease acquisition/release and worktree creation use this same lock.
+        # Re-read the lease while the lock is held and keep it held through
+        # `git worktree remove`; this closes the plan->apply TOCTOU window.
+        with worktree_lifecycle_lock():
+            lease_state, lease = _worktree_lease_state(candidate.path)
+            if lease_state == "active":
+                return (
+                    "refused",
+                    "refused live lease candidate "
+                    f"{candidate.path} ({_lease_owner_summary(lease)})",
+                    None,
+                )
+            if lease_state == "unreadable":
+                return (
+                    "refused",
+                    f"refused unreadable lease candidate {candidate.path} (owner/task unknown)",
+                    None,
+                )
+
+            result = _run_command(["git", "worktree", "remove", candidate.path])
+    except RuntimeError as exc:
+        return (
+            "error",
+            f"refused lifecycle-lock failure {candidate.path}",
+            f"failed lifecycle guard for {candidate.path}: {exc}",
+        )
+
+    if result.returncode != 0:
+        return (
+            "error",
+            f"failed to remove {candidate.path}",
+            f"failed to remove {candidate.path}: {result.stderr.strip()}",
+        )
+    return "removed", f"removed {candidate.path}", None
+
+
 def apply_deletions(plan: ReaperPlan, *, force: bool = False) -> ReaperPlan:
-    """Apply safe deletions from the plan. Refuses risky candidates."""
+    """Apply safe deletions, atomically refusing leases acquired after planning."""
     errors = list(plan.errors)
 
     if plan.errors:
@@ -341,14 +422,13 @@ def apply_deletions(plan: ReaperPlan, *, force: bool = False) -> ReaperPlan:
             audit_log.append(f"refused current worktree {candidate.path}")
             continue
 
-        result = _run_command(["git", "worktree", "remove", candidate.path])
-        if result.returncode != 0:
-            errors.append(f"failed to remove {candidate.path}: {result.stderr.strip()}")
+        outcome, audit_event, error = _attempt_candidate_removal(candidate)
+        audit_log.append(audit_event)
+        deletable = [path for path in deletable if path != candidate.path]
+        if error is not None:
+            errors.append(error)
+        if outcome != "removed" and candidate.path not in refused:
             refused.append(candidate.path)
-            audit_log.append(f"failed to remove {candidate.path}")
-        else:
-            deletable = [d for d in deletable if d != candidate.path]
-            audit_log.append(f"removed {candidate.path}")
 
     return ReaperPlan(
         schema=plan.schema,
@@ -435,6 +515,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=0,
         help="Maximum worktrees to consider (0 = all)",
     )
+    parser.add_argument(
+        "--path",
+        help="Restrict planning/apply to one exact registered worktree path",
+    )
     return parser.parse_args(argv)
 
 
@@ -446,6 +530,7 @@ def main(argv: list[str] | None = None) -> int:
         plan = build_plan(
             skip_pr_check=args.skip_pr_check,
             limit=args.limit,
+            target_path=args.path,
         )
     except Exception as exc:
         print(f"ERROR building reaper plan: {exc}", file=sys.stderr)

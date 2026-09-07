@@ -12,19 +12,26 @@ git fetch origin main
 scripts/dev/create_worktree.sh \
   --branch issue-123-short-description \
   --path "$WORKTREE_PARENT/issue-123-short-description" \
-  --base origin/main
+  --base origin/main \
+  --task-id issue-123
 cd "$WORKTREE_PARENT/issue-123-short-description"
 scripts/dev/bootstrap_worktree.sh
 ```
 
 The capacity-guarded helper must create the worktree before editing, running PR validation,
-pushing, or publishing. Use `--exec` when the first command must be bound to the new directory:
+pushing, or publishing. Active task-owned worktrees should pass `--task-id`; the creator writes a
+path-scoped ownership lease before it releases the repository worktree mutation lock. This makes
+creation and repository-owned cleanup atomic with respect to task ownership. Short-lived human
+scratch worktrees may omit the task lease when no autonomous worker can race their teardown.
+
+Use `--exec` when the first command must be bound to the new directory:
 
 ```bash
 scripts/dev/create_worktree.sh \
   --branch issue-123-short-description \
   --path "$WORKTREE_PARENT/issue-123-short-description" \
   --base origin/main \
+  --task-id issue-123 \
   --exec git rev-parse --show-toplevel
 ```
 
@@ -41,7 +48,8 @@ scripts/dev/create_worktree.sh \
   --branch review/pr-123 \
   --path "$WORKTREE_PARENT/review-pr-123" \
   --base origin/main \
-  --mode review
+  --mode review \
+  --task-id review-pr-123
 scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/review_worktree_guard.py integrate \
   --worktree "$WORKTREE_PARENT/review-pr-123" \
   --source-ref origin/main \
@@ -87,10 +95,68 @@ previously protected worktree, run `scripts/dev/run_worktree_shared_venv.sh -- u
 configuration captured when review mode was enabled. Re-fetch `origin/main` before creating a new
 review worktree so its source ref is explicit and current.
 
+## Active-worktree lease
+
+`--task-id` is the owner-visible lifecycle marker for an autonomous task. The lease lives in the
+shared Git common directory, not inside the linked worktree, so it remains inspectable if the
+worktree directory disappears. The compatibility schema is still `pr_gate_lease.v1`; for ordinary
+task-owned worktrees the creator records the task id in the existing gate/owner fields instead of
+introducing a second lease format.
+
+The default lease lifetime is two hours. Long-running controllers should heartbeat at phase or
+handoff boundaries before the current lease expires:
+
+```bash
+uv run python scripts/dev/pr_gate_lease.py heartbeat \
+  --worktree "$WORKTREE_PATH" \
+  --extend-hours 2
+```
+
+Run heartbeat/release commands from any surviving checkout of the same repository. Do not depend on
+the leased worktree as the command's current directory: the recovery path exists specifically for a
+missing worktree directory. When the task has completed or emitted a durable handoff, release its
+lease explicitly:
+
+```bash
+uv run python scripts/dev/pr_gate_lease.py release --worktree "$WORKTREE_PATH"
+```
+
+Lease creation, heartbeat, release, and guarded cleanup all serialize on the existing
+`robot-sf-create-worktree.lock` identity. Cleanup therefore cannot observe "no lease" and then
+remove the worktree while a task concurrently claims it. Expired leases are deliberately non-live:
+a crashed owner that never releases eventually stops blocking safe cleanup after its TTL.
+Malformed or unreadable lease state fails closed.
+
+## Missing-path recovery
+
+If an active task reports that its worktree path disappeared while its branch ref survived, do not
+continue commands from the deleted current working directory. Move to a surviving checkout and
+inspect the leased path:
+
+```bash
+uv run python scripts/dev/gate_worktree_guard.py verify \
+  --path "$WORKTREE_PATH" \
+  --json
+```
+
+The JSON health result is the compact recovery handoff: for a live lease it names the owner/task,
+PR/gate identifiers when present, expiry, and missing path. To recreate the checkout from the
+persisted branch/commit metadata, use:
+
+```bash
+uv run python scripts/dev/gate_worktree_guard.py ensure \
+  --path "$WORKTREE_PATH" \
+  --json
+```
+
+Recreation restores the branch checkout only. It cannot restore dirty, untracked, or ignored state
+that vanished with the directory; treat such state as lost and report that boundary explicitly.
+The guard never chooses a replacement branch or transport policy.
+
 ## Delegated-worker isolation receipt
 
-Repository-owned delegated workers should opt into an immutable, credential-free receipt and bind
-their first command to the new worktree:
+Repository-owned delegated workers can additionally opt into an immutable, credential-free receipt
+and bind their first command to the new worktree:
 
 ```bash
 scripts/dev/create_worktree.sh \
@@ -102,12 +168,14 @@ scripts/dev/create_worktree.sh \
   --exec <worker-command>
 ```
 
-Creation writes the receipt atomically after the linked worktree exists. The `--exec` command is
-guarded before it starts; the read-only guard exits nonzero with one JSON result when the current
-working directory, top-level, shared Git directory, branch/ref, or base ancestry differs. Workers
-started separately must run the equivalent check from inside the assigned worktree with
-`scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/worktree_receipt.py check`.
-Ordinary callers retain the existing behavior when receipt options are omitted.
+`--task-id` creates the lifecycle lease regardless of whether `--receipt` is supplied. When a
+receipt is requested, creation writes it atomically after the linked worktree exists. The `--exec`
+command is guarded before it starts; the read-only receipt check exits nonzero with one JSON result
+when the current working directory, top-level, shared Git directory, branch/ref, or base ancestry
+differs. Workers started separately must run the equivalent check from inside the assigned worktree
+with `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/worktree_receipt.py check`.
+The receipt proves assignment identity; the lease protects the active path from repository-owned
+cleanup. They are deliberately separate contracts.
 
 Bootstrap symlinks the local machine context and creates a worktree-local `.venv`. Do not run a
 bare `uv run ...` first in a fresh worktree: it can materialize a partial local environment, which
@@ -149,12 +217,23 @@ uv run python scripts/dev/worktree_hygiene_snapshot.py \
 
 Preserve tracked changes, unpushed commits, and ignored-but-important evidence before removal.
 Classify `output/` as temporary scratch, durable evidence, or handoff-needed; worktree-local output
-is not durable storage. Remove only a clean, no-longer-needed worktree:
+is not durable storage. Once the owning task has completed, release its lease and use the targeted
+reaper path rather than a bare `git worktree remove`:
 
 ```bash
-git worktree remove "$WORKTREE_PATH"
+uv run python scripts/dev/pr_gate_lease.py release --worktree "$WORKTREE_PATH"
+uv run python scripts/dev/stale_worktree_reaper.py \
+  --path "$WORKTREE_PATH" \
+  --apply \
+  --json
 git worktree prune
 ```
 
-Do not remove a dirty worktree, an unpushed branch, or a durable artifact without an explicit
-preservation record.
+The targeted reaper retains the existing dirty/unpushed/open-PR/ignored-output checks. Immediately
+before removal it reacquires the shared lifecycle lock and re-reads the lease. If another task
+claimed the worktree after planning, cleanup refuses it and the audit log names the live task/owner.
+An unreadable lease also refuses removal. An expired lease does not block cleanup, providing the
+bounded stale-owner recovery path.
+
+Do not remove a dirty worktree, an unpushed branch, a live-leased worktree, or a durable artifact
+without an explicit preservation record.

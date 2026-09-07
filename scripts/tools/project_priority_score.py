@@ -2371,12 +2371,10 @@ def _blocked_project_quota_payload(
     }
 
 
-def _handle_only_empty_failure(*, args: argparse.Namespace, error: Exception) -> int | None:
-    """Print the structured no-write payload for a known auto-fill blocker.
-
-    Returns the process exit code when the failure is a known blocker in
-    ``--only-empty`` mode, else None so the caller re-raises fail-closed.
-    """
+def _only_empty_failure_payload(
+    *, args: argparse.Namespace, error: Exception
+) -> dict[str, Any] | None:
+    """Build the structured payload for a known auto-fill blocker."""
     if isinstance(error, MissingProjectScopeError):
         payload = _blocked_project_scope_payload(
             owner=args.owner,
@@ -2415,6 +2413,18 @@ def _handle_only_empty_failure(*, args: argparse.Namespace, error: Exception) ->
     else:
         return None
     if not args.only_empty:
+        return None
+    return payload
+
+
+def _handle_only_empty_failure(*, args: argparse.Namespace, error: Exception) -> int | None:
+    """Print the structured no-write payload for a known auto-fill blocker.
+
+    Returns the process exit code when the failure is a known blocker in
+    ``--only-empty`` mode, else None so the caller re-raises fail-closed.
+    """
+    payload = _only_empty_failure_payload(args=args, error=error)
+    if payload is None:
         return None
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
@@ -2456,6 +2466,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             decision=decision,
             non_fatal=args.only_empty,
         )
+        if args.summary_file is not None:
+            write_summary(args.summary_file, [], payload)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0 if args.only_empty else 2
 
@@ -2471,6 +2483,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         GhProjectTimeoutError,
         ProjectQuotaBlockedError,
     ) as exc:
+        blocked_payload = _only_empty_failure_payload(args=args, error=exc)
+        if blocked_payload is not None and args.summary_file is not None:
+            write_summary(args.summary_file, [], blocked_payload)
         handled = _handle_only_empty_failure(args=args, error=exc)
         if handled is None:
             raise

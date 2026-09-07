@@ -1248,6 +1248,7 @@ def test_gh_project_client_classifies_explicit_api_rate_limit(
 def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     """The autopilot auto-fill path reports a blocker and leaves score writes untouched."""
 
@@ -1266,7 +1267,19 @@ def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
         lambda self, **kwargs: updates.append(float(kwargs["number"])),
     )
 
-    assert main(["sync", "--only-empty", "--ensure-fields"]) == 0
+    summary_file = tmp_path / "priority-summary.json"
+    assert (
+        main(
+            [
+                "sync",
+                "--only-empty",
+                "--ensure-fields",
+                "--summary-file",
+                str(summary_file),
+            ]
+        )
+        == 0
+    )
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "blocked"
@@ -1277,6 +1290,10 @@ def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
     assert payload["writes_performed"] is False
     assert payload["items"] == []
     assert updates == []
+    persisted = json.loads(summary_file.read_text(encoding="utf-8"))
+    assert persisted["items"] == []
+    assert persisted["eligibility_plan"]["status"] == "blocked"
+    assert persisted["eligibility_plan"]["reason"] == "missing_project_scope"
 
 
 def test_main_only_empty_rate_limit_is_non_fatal_json_without_writes(
@@ -2111,6 +2128,7 @@ def test_main_reports_complete_item_fetch_stats(
 def test_main_quota_block_is_explicit_and_performs_no_project_writes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     """A low quota blocks before schema/item reads or score writes and can be resumed later."""
     monkeypatch.setattr(
@@ -2131,7 +2149,8 @@ def test_main_quota_block_is_explicit_and_performs_no_project_writes(
         lambda self, **kwargs: project_reads.append("field-list") or [],
     )
 
-    assert main(["sync", "--only-empty"]) == 0
+    summary_file = tmp_path / "quota-summary.json"
+    assert main(["sync", "--only-empty", "--summary-file", str(summary_file)]) == 0
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["status"] == "quota_blocked"
@@ -2139,6 +2158,10 @@ def test_main_quota_block_is_explicit_and_performs_no_project_writes(
     assert payload["non_fatal"] is True
     assert payload["resume_after"] == 1_800_000_123
     assert project_reads == []
+    persisted = json.loads(summary_file.read_text(encoding="utf-8"))
+    assert persisted["items"] == []
+    assert persisted["eligibility_plan"]["status"] == "quota_blocked"
+    assert persisted["eligibility_plan"]["non_fatal"] is True
 
     assert main(["sync"]) == 2
     second_payload = json.loads(capsys.readouterr().out)

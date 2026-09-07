@@ -339,6 +339,29 @@ goes through readback. The apply result also exposes `counts` for planned,
 applied, already-applied, and failed operations. Other 404s remain failures.
 Project changes are intentionally absent.
 
+## Provenance and freshness contract
+
+To prevent stale workers or shared credentials from applying out-of-date classifications
+(e.g., re-adding `decision-required` to already-settled issues), every write-capable plan
+and apply receipt records cryptographic and contextual provenance:
+
+- `source_sha`: 40-character Git commit SHA of the producing repository tree;
+- `classifier_digest`: SHA-256 digest of the issue-audit classification code;
+- `producer`: caller environment metadata (`machine`, `user`, `task_id`, `identity`); and
+- `plan_digest`: canonical SHA-256 hash over all plan fields.
+
+The apply path enforces provenance fail-closed before any mutation can reach GitHub:
+
+1. The plan must contain a non-empty `source_sha`, `classifier_digest`, and `producer` identity.
+2. The apply environment must match the plan-time `source_sha` and `classifier_digest` exactly.
+   Any revision drift or classifier edit between plan and apply aborts the execution with zero writes.
+3. Autonomous write mode verifies that the executing revision has incorporated fetched
+   `origin/main` (`git merge-base --is-ancestor origin/main HEAD`). Stale revisions fail closed
+   with return code 2 and emit a concrete refresh command (`git fetch origin main && git merge origin/main`).
+4. Older revisions or diagnostic audits must use `--read-only-diagnostic`. Diagnostic plans
+   set `diagnostic_mode: true`, clear all mutation lists, and suppress label writes; the apply
+   executor strictly refuses any attempt to execute mutations from a diagnostic plan.
+
 ## Decision envelope
 
 The interactive path presents exactly one `issue_decision_envelope.v1` at a

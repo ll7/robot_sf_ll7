@@ -25,6 +25,7 @@ The script will:
 from __future__ import annotations
 
 import datetime
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -166,19 +167,26 @@ def _compute_aggregates_payload(
         "bootstrap_confidence": 0.95,
     }
     if expected_algorithms:
-        aggregate_kwargs["expected_algorithms"] = set(expected_algorithms)
-
-    try:
-        return compute_aggregates_with_ci(**aggregate_kwargs)
-    except TypeError as exc:
-        if "expected_algorithms" not in aggregate_kwargs:
-            raise
-        logger.debug(
-            "compute_aggregates_with_ci missing expected_algorithms support, falling back: {}",
-            exc,
+        try:
+            parameters = inspect.signature(compute_aggregates_with_ci).parameters.values()
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                "compute_aggregates_with_ci must expose an inspectable signature when "
+                "expected_algorithms validation is requested"
+            ) from exc
+        expected_parameter = next(
+            (parameter for parameter in parameters if parameter.name == "expected_algorithms"),
+            None,
         )
-        aggregate_kwargs.pop("expected_algorithms", None)
-        return compute_aggregates_with_ci(**aggregate_kwargs)
+        accepts_expected_algorithms = (
+            expected_parameter is not None
+            and expected_parameter.kind
+            in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        ) or any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters)
+        if accepts_expected_algorithms:
+            aggregate_kwargs["expected_algorithms"] = set(expected_algorithms)
+
+    return compute_aggregates_with_ci(**aggregate_kwargs)
 
 
 def _write_aggregates_file(output_root: str, aggregates: dict[str, Any]) -> Path:

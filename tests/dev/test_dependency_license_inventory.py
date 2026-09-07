@@ -51,6 +51,10 @@ def test_dependency_review_runs_inventory_and_freshness_checks() -> None:
     } <= paths
     steps = workflow["jobs"]["review"]["steps"]
     run_commands = [step.get("run", "") for step in steps]
+    evidence_steps = {step["name"]: step for step in steps if "name" in step}
+    assert evidence_steps["Generate dependency license inventory evidence"]["if"] == "always()"
+    assert evidence_steps["Check generated inventory freshness"]["if"] == "always()"
+    assert evidence_steps["Upload dependency license inventory"]["if"] == "always()"
     assert any(
         "--output output/validation/dependency-license-inventory.json" in run
         for run in run_commands

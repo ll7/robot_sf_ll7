@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -188,6 +189,36 @@ class TestRecreateGateWorktree:
 
         assert result.recreated is False
         assert "boom" in (result.error or "")
+
+    def test_recreate_serializes_registry_mutation(self, mock_git_dirs: Path) -> None:
+        """Recovery enters the shared lifecycle lock for add and lease refresh."""
+        wt = mock_git_dirs / "gone-wt"
+        _write_active_lease(
+            mock_git_dirs,
+            wt,
+            owner="auto-smart-routing",
+            head_ref="gate/branch",
+            head_sha="head-sha",
+        )
+        lock_events: list[str] = []
+
+        @contextmanager
+        def fake_lock():
+            lock_events.append("enter")
+            yield
+            lock_events.append("exit")
+
+        def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="")
+
+        with (
+            patch.object(guard, "_run_command", side_effect=fake_run),
+            patch("scripts.dev.pr_gate_lease.worktree_lifecycle_lock", fake_lock),
+        ):
+            result = guard.recreate_gate_worktree(wt)
+
+        assert result.recreated is True
+        assert lock_events == ["enter", "exit", "enter", "exit"]
 
 
 class TestEnsureGateWorktree:

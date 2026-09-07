@@ -197,6 +197,24 @@ def verify_gate_worktree(path: str | Path) -> GateWorktreeHealth:
     return GateWorktreeHealth(**base)
 
 
+def _add_worktree_under_lifecycle_lock(
+    resolved: Path, add_args: list[str]
+) -> tuple[subprocess.CompletedProcess | None, str | None]:
+    """Run a recovery checkout under the repository lifecycle lock."""
+    try:
+        from scripts.dev.pr_gate_lease import worktree_lifecycle_lock
+
+        # Recovery mutates the shared Git worktree registry just like creation
+        # and cleanup. Hold the same lock through `git worktree add` so a
+        # concurrent creator or prune cannot invalidate the recovery decision.
+        with worktree_lifecycle_lock():
+            if resolved.exists():
+                return None, "worktree path appeared before recovery; refusing overwrite"
+            return _run_command(add_args), None
+    except (ImportError, RuntimeError, OSError) as exc:
+        return None, f"worktree lifecycle lock failed: {exc}"
+
+
 def recreate_gate_worktree(
     path: str | Path,
     *,
@@ -258,40 +276,27 @@ def recreate_gate_worktree(
         )
         return GateWorktreeRecreate(**base)
 
-    if branch:
-        if _local_branch_exists(branch):
-            add_args = ["git", "worktree", "add", "--force", str(resolved), branch]
-        elif not head_sha:
-            base["recreated"] = False
-            base["branch"] = branch
-            base["lease_owner"] = lease.owner
-            base["lease_pr_number"] = lease.pr_number
-            base["lease_gate_id"] = lease.gate_id
-            base["error"] = f"leased branch {branch!r} is unavailable and has no commit fallback"
-            return GateWorktreeRecreate(**base)
-        else:
-            add_args = [
-                "git",
-                "worktree",
-                "add",
-                "--force",
-                "-b",
-                branch,
-                str(resolved),
-                head_sha,
-            ]
-    else:
-        add_args = [
-            "git",
-            "worktree",
-            "add",
-            "--force",
-            "--detach",
-            str(resolved),
-            head_sha,
-        ]
+    add_args, add_error = _recovery_add_args(branch, head_sha, resolved)
+    if add_error is not None:
+        base["recreated"] = False
+        base["branch"] = branch
+        base["lease_owner"] = lease.owner
+        base["lease_pr_number"] = lease.pr_number
+        base["lease_gate_id"] = lease.gate_id
+        base["error"] = add_error
+        return GateWorktreeRecreate(**base)
 
-    result = _run_command(add_args)
+    result, recovery_error = _add_worktree_under_lifecycle_lock(resolved, add_args)
+    if recovery_error is not None:
+        base["recreated"] = False
+        base["branch"] = branch
+        base["lease_owner"] = lease.owner
+        base["lease_pr_number"] = lease.pr_number
+        base["lease_gate_id"] = lease.gate_id
+        base["error"] = recovery_error
+        return GateWorktreeRecreate(**base)
+
+    assert result is not None
     if result.returncode != 0:
         base["recreated"] = False
         base["branch"] = branch
@@ -387,6 +392,36 @@ def _local_branch_exists(branch: str) -> bool:
     """Return whether a local branch ref exists for the restore operation."""
     result = _run_command(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"])
     return result.returncode == 0
+
+
+def _recovery_add_args(
+    branch: str | None, head_sha: str | None, resolved: Path
+) -> tuple[list[str], str | None]:
+    """Build a deterministic ``git worktree add`` command for recovery."""
+    if branch:
+        if _local_branch_exists(branch):
+            return ["git", "worktree", "add", "--force", str(resolved), branch], None
+        if not head_sha:
+            return [], f"leased branch {branch!r} is unavailable and has no commit fallback"
+        return [
+            "git",
+            "worktree",
+            "add",
+            "--force",
+            "-b",
+            branch,
+            str(resolved),
+            head_sha,
+        ], None
+    return [
+        "git",
+        "worktree",
+        "add",
+        "--force",
+        "--detach",
+        str(resolved),
+        head_sha,
+    ], None
 
 
 def _branch_for_path(path: str | Path) -> str | None:

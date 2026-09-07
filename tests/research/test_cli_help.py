@@ -10,6 +10,16 @@ from pathlib import Path
 
 import pytest
 
+REPO_ROOT = Path(__file__).parents[2]
+OPTIONAL_IMPORTS = {
+    "matplotlib",
+    "pandas",
+    "scipy",
+    "seaborn",
+    "stable_baselines3",
+    "torch",
+}
+
 
 def _run(cmd: list[str]) -> str:
     """TODO docstring. Document this function.
@@ -21,6 +31,33 @@ def _run(cmd: list[str]) -> str:
         TODO docstring.
     """
     return subprocess.check_output(cmd, text=True)
+
+
+def _run_core_cli(tmp_path: Path, script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+    """Run a report CLI while making optional analytics imports unavailable."""
+    sitecustomize = tmp_path / "sitecustomize.py"
+    sitecustomize.write_text(
+        "import builtins\n"
+        f"BLOCKED = {OPTIONAL_IMPORTS!r}\n"
+        "original_import = builtins.__import__\n"
+        "def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):\n"
+        "    if name.split('.', maxsplit=1)[0] in BLOCKED:\n"
+        "        raise ModuleNotFoundError(f'blocked optional import: {name}')\n"
+        "    return original_import(name, globals, locals, fromlist, level)\n"
+        "builtins.__import__ = guarded_import\n",
+        encoding="utf-8",
+    )
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(filter(None, (str(tmp_path), os.environ.get("PYTHONPATH")))),
+    }
+    return subprocess.run(
+        [sys.executable, str(REPO_ROOT / script), *arguments],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
 
 
 def test_generate_report_cli_help():
@@ -80,3 +117,25 @@ def test_diagnostic_cli_help_does_not_require_optional_analytics(script: str):
     )
     assert result.returncode == 0, result.stderr
     assert "usage:" in result.stdout.lower()
+
+
+def test_report_cli_help_does_not_require_optional_analytics(tmp_path: Path) -> None:
+    """Help stays available from the core installation without analytics extras."""
+    for script in (
+        "scripts/research/generate_report.py",
+        "scripts/research/compare_ablations.py",
+    ):
+        result = _run_core_cli(tmp_path, script, "--help")
+        assert result.returncode == 0, result.stderr
+        assert "usage:" in result.stdout.lower()
+
+
+def test_report_cli_argument_errors_do_not_require_optional_analytics(tmp_path: Path) -> None:
+    """Argparse failures happen before optional analytics imports are needed."""
+    for script in (
+        "scripts/research/generate_report.py",
+        "scripts/research/compare_ablations.py",
+    ):
+        result = _run_core_cli(tmp_path, script)
+        assert result.returncode == 2, result.stdout
+        assert "required" in result.stderr.lower()

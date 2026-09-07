@@ -59,6 +59,7 @@ from robot_sf.benchmark.distributions import collect_grouped_values as _dist_col
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
 from robot_sf.benchmark.errors import (
+    AggregationInputError,
     AggregationMetadataError,
     DistributionInputError,
     EpisodeRecordInputError,
@@ -136,6 +137,7 @@ _CLI_INPUT_ERRORS = (
     OSError,
     json.JSONDecodeError,
     yaml.YAMLError,
+    AggregationInputError,
     AggregationMetadataError,
     DistributionInputError,
     EpisodeRecordInputError,
@@ -603,6 +605,9 @@ def _handle_aggregate(args) -> int:
         except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Aggregated summary' failed", exc_info=True)
         return 0
+    except AggregationInputError as exc:  # pragma: no cover - error path
+        logging.log(logging.ERROR, "Aggregation failed: %s", exc)
+        return 2
     except _CLI_INPUT_ERRORS as exc:  # pragma: no cover - error path
         logging.exception("Aggregation failed: %s", exc)
         return 2

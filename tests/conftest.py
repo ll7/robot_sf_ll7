@@ -553,6 +553,7 @@ _FAST_FILES = {
     "test_termination_reason.py",
     # Benchmark metric characterization tests are deterministic pure-metric
     # contracts; keep them in fast shards for changed metrics coverage.
+    "test_aggregate.py",
     "test_metrics.py",
     "test_aggregated_time_cooperative.py",
     # Classic planner adapter tests are deterministic planner-contract tests for

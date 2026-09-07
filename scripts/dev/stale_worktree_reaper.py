@@ -360,6 +360,47 @@ def build_plan(
     )
 
 
+def _attempt_candidate_removal(candidate: WorktreeCandidate) -> tuple[str, str, str | None]:
+    """Remove one candidate under the lifecycle lock after rechecking its lease."""
+    from scripts.dev.pr_gate_lease import worktree_lifecycle_lock
+
+    try:
+        # Lease acquisition/release and worktree creation use this same lock.
+        # Re-read the lease while the lock is held and keep it held through
+        # `git worktree remove`; this closes the plan->apply TOCTOU window.
+        with worktree_lifecycle_lock():
+            lease_state, lease = _worktree_lease_state(candidate.path)
+            if lease_state == "active":
+                return (
+                    "refused",
+                    "refused live lease candidate "
+                    f"{candidate.path} ({_lease_owner_summary(lease)})",
+                    None,
+                )
+            if lease_state == "unreadable":
+                return (
+                    "refused",
+                    f"refused unreadable lease candidate {candidate.path} (owner/task unknown)",
+                    None,
+                )
+
+            result = _run_command(["git", "worktree", "remove", candidate.path])
+    except RuntimeError as exc:
+        return (
+            "error",
+            f"refused lifecycle-lock failure {candidate.path}",
+            f"failed lifecycle guard for {candidate.path}: {exc}",
+        )
+
+    if result.returncode != 0:
+        return (
+            "error",
+            f"failed to remove {candidate.path}",
+            f"failed to remove {candidate.path}: {result.stderr.strip()}",
+        )
+    return "removed", f"removed {candidate.path}", None
+
+
 def apply_deletions(plan: ReaperPlan, *, force: bool = False) -> ReaperPlan:
     """Apply safe deletions, atomically refusing leases acquired after planning."""
     errors = list(plan.errors)
@@ -371,8 +412,6 @@ def apply_deletions(plan: ReaperPlan, *, force: bool = False) -> ReaperPlan:
     refused = list(plan.refused)
     audit_log = list(plan.audit_log)
 
-    from scripts.dev.pr_gate_lease import worktree_lifecycle_lock
-
     for candidate in plan.candidates:
         if candidate.classification != "clean_stale":
             if candidate.classification == "risky":
@@ -383,47 +422,13 @@ def apply_deletions(plan: ReaperPlan, *, force: bool = False) -> ReaperPlan:
             audit_log.append(f"refused current worktree {candidate.path}")
             continue
 
-        try:
-            # Lease acquisition/release and worktree creation use this same lock.
-            # Re-read the lease while the lock is held and keep it held through
-            # `git worktree remove`; this closes the plan->apply TOCTOU window.
-            with worktree_lifecycle_lock():
-                lease_state, lease = _worktree_lease_state(candidate.path)
-                if lease_state == "active":
-                    if candidate.path not in refused:
-                        refused.append(candidate.path)
-                    deletable = [d for d in deletable if d != candidate.path]
-                    audit_log.append(
-                        "refused live lease candidate "
-                        f"{candidate.path} ({_lease_owner_summary(lease)})"
-                    )
-                    continue
-                if lease_state == "unreadable":
-                    if candidate.path not in refused:
-                        refused.append(candidate.path)
-                    deletable = [d for d in deletable if d != candidate.path]
-                    audit_log.append(
-                        f"refused unreadable lease candidate {candidate.path} (owner/task unknown)"
-                    )
-                    continue
-
-                result = _run_command(["git", "worktree", "remove", candidate.path])
-        except RuntimeError as exc:
-            errors.append(f"failed lifecycle guard for {candidate.path}: {exc}")
-            if candidate.path not in refused:
-                refused.append(candidate.path)
-            deletable = [d for d in deletable if d != candidate.path]
-            audit_log.append(f"refused lifecycle-lock failure {candidate.path}")
-            continue
-
-        if result.returncode != 0:
-            errors.append(f"failed to remove {candidate.path}: {result.stderr.strip()}")
-            if candidate.path not in refused:
-                refused.append(candidate.path)
-            audit_log.append(f"failed to remove {candidate.path}")
-        else:
-            deletable = [d for d in deletable if d != candidate.path]
-            audit_log.append(f"removed {candidate.path}")
+        outcome, audit_event, error = _attempt_candidate_removal(candidate)
+        audit_log.append(audit_event)
+        deletable = [path for path in deletable if path != candidate.path]
+        if error is not None:
+            errors.append(error)
+        if outcome != "removed" and candidate.path not in refused:
+            refused.append(candidate.path)
 
     return ReaperPlan(
         schema=plan.schema,

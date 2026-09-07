@@ -34,7 +34,10 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 SCHEMA_VERSION = "pr_gate_lease.v1"
 DEFAULT_TTL_HOURS = 2
@@ -143,7 +146,9 @@ def worktree_lifecycle_lock() -> Iterator[None]:
     try:
         import fcntl
     except ImportError as exc:  # pragma: no cover - supported repository hosts are POSIX
-        raise RuntimeError("fcntl is unavailable; cannot guard worktree lifecycle mutation") from exc
+        raise RuntimeError(
+            "fcntl is unavailable; cannot guard worktree lifecycle mutation"
+        ) from exc
 
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -347,7 +352,9 @@ def heartbeat(
             wt_path = str(wt_root)
         else:
             try:
-                wt_root = Path(lease.worktree_path).resolve() if lease.worktree_path else _repo_root()
+                wt_root = (
+                    Path(lease.worktree_path).resolve() if lease.worktree_path else _repo_root()
+                )
                 wt_path = str(wt_root)
             except RuntimeError:
                 wt_root = Path.cwd().resolve()

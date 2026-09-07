@@ -5,7 +5,10 @@ from __future__ import annotations
 import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from scripts.dev import gate_worktree_guard as guard
 from scripts.dev import stale_worktree_reaper as reaper
@@ -43,7 +46,9 @@ def _repo_with_worktree(tmp_path: Path, branch: str) -> tuple[Path, Path, str]:
     return repo, worktree, head_sha
 
 
-def _clean_candidate_plan(repo: Path, worktree: Path, branch: str, head_sha: str) -> reaper.ReaperPlan:
+def _clean_candidate_plan(
+    repo: Path, worktree: Path, branch: str, head_sha: str
+) -> reaper.ReaperPlan:
     candidate = reaper.WorktreeCandidate(
         path=str(worktree),
         branch=branch,

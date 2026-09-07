@@ -91,3 +91,36 @@ def test_compute_ranking_requires_explicit_cross_track_mode() -> None:
         observation_track_mode="diagnostic-cross-track",
     )
     assert [row.group for row in rows] == ["grid_socnav_v1 :: a", "lidar_2d_v1 :: a"]
+
+
+def test_compute_ranking_excludes_explicitly_ineligible_records() -> None:
+    """Ranking must share aggregate evidence admission and omit marked-out rows."""
+    ineligible = _rec("a", collisions=100)
+    ineligible["algorithm_metadata"] = {
+        "foresight_prediction": {"evidence_eligible": False},
+    }
+    records = [_rec("a", collisions=0), ineligible, _rec("b", collisions=2)]
+
+    rows = compute_ranking(records, metric="collisions")
+
+    assert [(row.group, row.mean, row.count) for row in rows] == [
+        ("a", 0.0, 1),
+        ("b", 2.0, 1),
+    ]
+
+
+def test_compute_ranking_ignores_non_finite_metric_values() -> None:
+    """Ranking must not emit non-finite means from NaN or infinite input metrics."""
+    records = [
+        _rec("a", collisions=float("nan")),
+        _rec("a", collisions=2),
+        _rec("b", collisions=float("inf")),
+        _rec("b", collisions=1),
+    ]
+
+    rows = compute_ranking(records, metric="collisions")
+
+    assert [(row.group, row.mean, row.count) for row in rows] == [
+        ("b", 1.0, 1),
+        ("a", 2.0, 1),
+    ]

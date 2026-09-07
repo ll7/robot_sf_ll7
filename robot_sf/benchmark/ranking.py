@@ -12,11 +12,13 @@ Programmatic contract
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.aggregate import (
     ensure_observation_track_policy,
+    filter_evidence_eligible_records,
     normalize_observation_track_mode,
     observation_track_group_label,
 )
@@ -46,7 +48,8 @@ def _to_float(x: Any) -> float | None:
     try:
         if x is None:
             return None
-        return float(x)
+        value = float(x)
+        return value if math.isfinite(value) else None
     except (TypeError, ValueError):
         return None
 
@@ -72,7 +75,8 @@ def compute_ranking(
 ) -> list[RankingRow]:
     """Compute ranking by mean of metrics.<metric> per group.
 
-    - Missing/non-numeric metric values are ignored.
+    - Explicitly evidence-ineligible records and missing/non-numeric metric values are ignored.
+    - Non-finite metric values are ignored.
     - Groups with no valid values are omitted.
     - Sorting is ascending by default (smaller-is-better). Use ascending=False for higher-is-better metrics.
 
@@ -80,6 +84,7 @@ def compute_ranking(
         List of RankingRow objects sorted by mean metric value, optionally limited to top N.
     """
     record_list = [dict(record) for record in records]
+    record_list, _ = filter_evidence_eligible_records(record_list)
     track_meta = ensure_observation_track_policy(
         record_list,
         observation_track_mode=observation_track_mode,

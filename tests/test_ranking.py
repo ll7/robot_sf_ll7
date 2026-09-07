@@ -6,6 +6,7 @@ import math
 
 import pytest
 
+from robot_sf.benchmark import ranking as ranking_module
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.ranking import compute_ranking, format_csv, format_markdown
 
@@ -148,3 +149,19 @@ def test_compute_ranking_keeps_large_finite_means_finite() -> None:
     assert len(rows) == 1
     assert math.isfinite(rows[0].mean)
     assert rows[0].mean == pytest.approx(1e308)
+
+
+def test_finite_mean_returns_none_for_empty_values() -> None:
+    """Empty groups have no finite mean available for ranking."""
+    assert ranking_module._finite_mean([]) is None
+
+
+def test_compute_ranking_omits_group_when_mean_calculation_overflows(monkeypatch) -> None:
+    """A defensive mean-calculation failure must omit the affected group."""
+
+    def raise_overflow(_values):
+        raise OverflowError("synthetic fsum overflow")
+
+    monkeypatch.setattr(ranking_module.math, "fsum", raise_overflow)
+
+    assert compute_ranking([_rec("a", collisions=1)], metric="collisions") == []

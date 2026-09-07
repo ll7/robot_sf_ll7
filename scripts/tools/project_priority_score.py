@@ -2412,6 +2412,7 @@ def _only_empty_failure_payload(
         )
     else:
         return None
+    payload["non_fatal"] = args.only_empty
     return payload
 
 

@@ -9,7 +9,10 @@ from pathlib import Path
 
 from scripts.dev import gate_worktree_guard as guard
 from scripts.dev import stale_worktree_reaper as reaper
-from scripts.dev.pr_gate_lease import PRGateLease, create_lease, lease_path, save_lease
+from scripts.dev.pr_gate_lease import PRGateLease, create_lease, lease_path, save_lease, status
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CREATE_WORKTREE = REPO_ROOT / "scripts" / "dev" / "create_worktree.sh"
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -59,6 +62,52 @@ def _clean_candidate_plan(repo: Path, worktree: Path, branch: str, head_sha: str
         errors=[],
         audit_log=[f"classified {worktree} as clean_stale"],
     )
+
+
+def test_creator_task_id_acquires_path_lease_before_return(tmp_path: Path, monkeypatch) -> None:
+    """The canonical shell creator publishes ownership even when no receipt is requested."""
+    repo = tmp_path / "creator-repo"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "init", "-b", "main", str(repo)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    _git(repo, "config", "user.name", "Issue 8553 Test")
+    _git(repo, "config", "user.email", "issue-8553@example.invalid")
+    (repo / "README.md").write_text("fixture\n", encoding="utf-8")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "fixture")
+    worktree = tmp_path / "creator-worktree"
+
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(worktree),
+            "--branch",
+            "cycle-180-created",
+            "--base",
+            "HEAD",
+            "--minimum-free-bytes",
+            "0",
+            "--task-id",
+            "cycle-180-created",
+        ],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    monkeypatch.chdir(repo)
+    lease_status = status(worktree_path=worktree)
+    assert lease_status["active"] is True
+    assert lease_status["lease"]["gate_id"] == "cycle-180-created"
+    assert lease_status["lease"]["owner"] == "cycle-180-created"
+    assert lease_status["lease"]["worktree_path"] == str(worktree.resolve())
 
 
 def test_apply_refuses_lease_acquired_after_plan(tmp_path: Path, monkeypatch) -> None:

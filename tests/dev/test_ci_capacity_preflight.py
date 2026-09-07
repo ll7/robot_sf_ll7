@@ -9,6 +9,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import pytest
+
 from tests.support.environment_guards import configure_git_identity
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -302,6 +304,135 @@ def test_shared_venv_recovery_refreshes_stale_package_in_worktree(tmp_path: Path
         assert (worktree / ".venv" / "bin" / "python").is_file()
         assert not (repo / ".venv").exists()
         assert "verified worktree-owned fast-pysf environment" in result.stderr
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_auto_recovers_stale_default_environment_in_worktree(
+    tmp_path: Path,
+) -> None:
+    """Default linked-worktree runs recover stale fast-pysf without touching main."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    main_python = repo / ".venv" / "bin" / "python"
+    main_python.parent.mkdir(parents=True)
+    _write_executable(
+        main_python,
+        "#!/usr/bin/env bash\n"
+        'case "${1:-}" in\n'
+        "  *check_worktree_optional_deps.py) exit 0 ;;\n"
+        '  *check_fast_pysf_runtime.py) printf "installed pysocialforce package is stale relative to this checkout\\n" >&2; exit 1 ;;\n'
+        "  *) exit 0 ;;\n"
+        "esac\n",
+    )
+    main_python_before = main_python.read_bytes()
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RUN_SHARED_VENV.name), "--", "python", "-V"],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        calls = capture.read_text(encoding="utf-8").splitlines()
+        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "run python -V" in calls
+        assert (worktree / ".venv" / "bin" / "python").is_file()
+        assert main_python.read_bytes() == main_python_before
+        assert "Recovering stale fast-pysf in the linked worktree" in result.stderr
+        assert "Automatic fast-pysf recovery selected worktree environment" in result.stderr
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+@pytest.mark.parametrize(
+    "checker_output",
+    [
+        "could not import pysocialforce.forces (No module named 'pysocialforce')",
+        "pysocialforce.forces.social_force_gil_releasing_context is missing or not callable",
+    ],
+)
+def test_shared_venv_does_not_auto_recover_other_checker_failures(
+    tmp_path: Path,
+    checker_output: str,
+) -> None:
+    """Only the exact stale-package diagnostic can trigger automatic recovery."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    main_python = repo / ".venv" / "bin" / "python"
+    main_python.parent.mkdir(parents=True)
+    _write_executable(
+        main_python,
+        "#!/usr/bin/env bash\n"
+        'case "${1:-}" in\n'
+        "  *check_worktree_optional_deps.py) exit 0 ;;\n"
+        f'  *check_fast_pysf_runtime.py) printf "{checker_output}\\n" >&2; exit 1 ;;\n'
+        "  *) exit 0 ;;\n"
+        "esac\n",
+    )
+    main_python_before = main_python.read_bytes()
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RUN_SHARED_VENV.name), "--", "python", "-V"],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert checker_output in result.stderr
+        assert "refusing automatic recovery" in result.stderr
+        assert "Recovering stale fast-pysf" not in result.stderr
+        assert not (worktree / ".venv").exists()
+        assert not capture.exists()
+        assert main_python.read_bytes() == main_python_before
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_explicit_environment_does_not_auto_recover(
+    tmp_path: Path,
+) -> None:
+    """An explicit environment remains fail-closed even for the stale diagnostic."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    main_python = repo / ".venv" / "bin" / "python"
+    main_python.parent.mkdir(parents=True)
+    _write_executable(
+        main_python,
+        "#!/usr/bin/env bash\n"
+        'case "${1:-}" in\n'
+        "  *check_worktree_optional_deps.py) exit 0 ;;\n"
+        '  *check_fast_pysf_runtime.py) printf "installed pysocialforce package is stale relative to this checkout\\n" >&2; exit 1 ;;\n'
+        "  *) exit 0 ;;\n"
+        "esac\n",
+    )
+    try:
+        result = subprocess.run(
+            [
+                str(worktree / "scripts" / "dev" / RUN_SHARED_VENV.name),
+                "--venv",
+                str(repo / ".venv"),
+                "--",
+                "python",
+                "-V",
+            ],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "Recovering stale fast-pysf" not in result.stderr
+        assert not (worktree / ".venv").exists()
+        assert not capture.exists()
     finally:
         _remove_linked_recovery_fixture(repo, worktree)
 

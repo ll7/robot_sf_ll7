@@ -135,7 +135,14 @@ def worktree_lifecycle_lock() -> Iterator[None]:
             fd = int(inherited_fd)
             if fd < 0:
                 raise ValueError
-            from scripts.dev.worktree_creation_lock import verify_lock_fd
+            try:
+                from scripts.dev.worktree_creation_lock import verify_lock_fd
+            except ModuleNotFoundError:
+                # When this file is executed by absolute path, Python puts only
+                # ``scripts/dev`` on sys.path. Re-entry from a temporary or
+                # linked worktree must not depend on the caller's repository
+                # root being importable as the ``scripts`` package.
+                from worktree_creation_lock import verify_lock_fd
 
             verify_lock_fd(str(lock_path), fd)
         except (ImportError, OSError, ValueError) as exc:

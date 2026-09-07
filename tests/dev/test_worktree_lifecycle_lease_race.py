@@ -1,11 +1,15 @@
-"""Regression coverage for issue #8553 active-worktree cleanup races."""
+"""Regression coverage for active-worktree cleanup and task-lease races."""
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 from scripts.dev import gate_worktree_guard as guard
 from scripts.dev import stale_worktree_reaper as reaper
@@ -66,7 +70,10 @@ def _clean_candidate_plan(
     )
 
 
-def test_creator_task_id_acquires_path_lease_before_return(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("force_python", (False, True), ids=("flock-cli", "portable-python"))
+def test_creator_task_id_acquires_path_lease_before_return(
+    tmp_path: Path, monkeypatch, force_python: bool
+) -> None:
     """The canonical shell creator publishes ownership even when no receipt is requested."""
     repo = tmp_path / "creator-repo"
     repo.mkdir()
@@ -82,6 +89,13 @@ def test_creator_task_id_acquires_path_lease_before_return(tmp_path: Path, monke
     _git(repo, "add", "README.md")
     _git(repo, "commit", "-m", "fixture")
     worktree = tmp_path / "creator-worktree"
+
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    if force_python:
+        environment["ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK"] = "1"
+    else:
+        environment.pop("ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK", None)
 
     result = subprocess.run(
         [
@@ -101,15 +115,102 @@ def test_creator_task_id_acquires_path_lease_before_return(tmp_path: Path, monke
         capture_output=True,
         text=True,
         check=False,
+        env=environment,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "No module named 'scripts'" not in result.stderr
     monkeypatch.chdir(repo)
     lease_status = status(worktree_path=worktree)
     assert lease_status["active"] is True
     assert lease_status["lease"]["gate_id"] == "cycle-180-created"
     assert lease_status["lease"]["owner"] == "cycle-180-created"
     assert lease_status["lease"]["worktree_path"] == str(worktree.resolve())
+
+
+@pytest.mark.parametrize("force_python", (False, True), ids=("flock-cli", "portable-python"))
+def test_creator_task_id_failure_rolls_back_worktree_and_branch(
+    tmp_path: Path, monkeypatch, force_python: bool
+) -> None:
+    """A failed lease handoff cannot leave an unleased checkout or orphan branch."""
+    repo = tmp_path / "creator-repo"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "init", "-b", "main", str(repo)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    _git(repo, "config", "user.name", "Issue 8577 Test")
+    _git(repo, "config", "user.email", "issue-8577@example.invalid")
+    (repo / "README.md").write_text("fixture\n", encoding="utf-8")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "fixture")
+    unrelated_branch = "unrelated-branch"
+    _git(repo, "branch", unrelated_branch)
+    main_sha = _git(repo, "rev-parse", "refs/heads/main").stdout.strip()
+    unrelated_sha = _git(repo, "rev-parse", f"refs/heads/{unrelated_branch}").stdout.strip()
+    worktree = tmp_path / "creator-worktree"
+    branch = "cycle-181-failed-lease"
+
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    python_stub = stub_bin / "python3"
+    python_stub.write_text(
+        f"#!{sys.executable}\n"
+        "import os\n"
+        "import sys\n"
+        "if (\n"
+        "    len(sys.argv) > 2\n"
+        "    and sys.argv[1].endswith('/pr_gate_lease.py')\n"
+        "    and sys.argv[2] == 'create'\n"
+        "):\n"
+        "    print('injected lease handoff failure', file=sys.stderr)\n"
+        "    raise SystemExit(73)\n"
+        f"os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n",
+        encoding="utf-8",
+    )
+    python_stub.chmod(0o755)
+
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment["PATH"] = f"{stub_bin}:{environment['PATH']}"
+    if force_python:
+        environment["ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK"] = "1"
+    else:
+        environment.pop("ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK", None)
+
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(worktree),
+            "--branch",
+            branch,
+            "--base",
+            "HEAD",
+            "--minimum-free-bytes",
+            "0",
+            "--task-id",
+            "cycle-181-failed-lease",
+        ],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
+
+    assert result.returncode == 73, result.stdout + result.stderr
+    assert "injected lease handoff failure" in result.stderr
+    assert not worktree.exists()
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "main"
+    assert _git(repo, "rev-parse", "refs/heads/main").stdout.strip() == main_sha
+    assert _git(repo, "rev-parse", f"refs/heads/{unrelated_branch}").stdout.strip() == unrelated_sha
+    assert not _git(repo, "branch", "--list", branch).stdout.strip()
+    assert branch not in _git(repo, "worktree", "list", "--porcelain").stdout
+    monkeypatch.chdir(repo)
+    assert status(worktree_path=worktree)["active"] is False
 
 
 def test_apply_refuses_lease_acquired_after_plan(tmp_path: Path, monkeypatch) -> None:

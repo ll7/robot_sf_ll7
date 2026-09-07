@@ -60,6 +60,8 @@ command_args=()
 # fcntl holder owns the shared lock file. The inherited lock descriptor is
 # validated below; never pass this flag directly.
 locked_transaction=0
+created_worktree=0
+created_branch_sha=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -219,6 +221,83 @@ report_and_exec() {
   fi
 }
 
+lease_file_for_worktree() {
+  python3 - "$worktree_path" "$git_common_dir" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+
+worktree_path = Path(sys.argv[1]).resolve()
+common_dir = Path(sys.argv[2])
+digest = hashlib.sha256(str(worktree_path).encode("utf-8")).hexdigest()
+print(common_dir / f".pr-gate-lease-{digest}.json")
+PY
+}
+
+release_task_lease() {
+  if [[ -z "$task_id" ]]; then
+    return 0
+  fi
+
+  if python3 "$SCRIPT_DIR/pr_gate_lease.py" release --worktree "$worktree_path" >/dev/null; then
+    return 0
+  fi
+
+  # The normal release path is serialized by the inherited lock. If it cannot
+  # run, remove only this path-scoped lease file as a last-resort rollback so a
+  # failed creation cannot leave an active lease for a deleted worktree.
+  local lease_file
+  if ! lease_file="$(lease_file_for_worktree)"; then
+    return 1
+  fi
+  rm -f -- "$lease_file"
+}
+
+cleanup_failed_creation() {
+  local failure_rc="$1"
+  local cleanup_failed=0
+
+  if [[ "$created_worktree" -ne 1 ]]; then
+    return "$failure_rc"
+  fi
+
+  if ! release_task_lease; then
+    echo "create_worktree: failed to remove the task lease during rollback" >&2
+    cleanup_failed=1
+  fi
+
+  if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
+    if ! git worktree remove --force "$worktree_path"; then
+      echo "create_worktree: failed to remove worktree during rollback: $worktree_path" >&2
+      cleanup_failed=1
+    fi
+  fi
+  if ! git worktree prune; then
+    echo "create_worktree: failed to prune worktree metadata during rollback" >&2
+    cleanup_failed=1
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+    local current_branch_sha
+    current_branch_sha="$(git rev-parse --verify "$branch_name^{commit}" 2>/dev/null || true)"
+    if [[ -n "$created_branch_sha" && "$current_branch_sha" == "$created_branch_sha" ]] &&
+       ! git worktree list --porcelain | grep -q "^branch refs/heads/$branch_name$"; then
+      if ! git branch -D "$branch_name"; then
+        echo "create_worktree: failed to remove created branch during rollback: $branch_name" >&2
+        cleanup_failed=1
+      fi
+    else
+      echo "create_worktree: preserved branch during rollback: $branch_name" >&2
+      cleanup_failed=1
+    fi
+  fi
+
+  if [[ "$cleanup_failed" -ne 0 ]]; then
+    echo "create_worktree: rollback was incomplete after creation failure" >&2
+  fi
+  return "$failure_rc"
+}
+
 run_locked_transaction() {
   # Capacity and parent checks must share the same lock as branch cleanup and
   # worktree registration. This applies to both the flock CLI and portable
@@ -256,7 +335,16 @@ run_locked_transaction() {
   # linked worktree's branch can be configured explicitly later with
   # ``git branch --set-upstream-to``; creation itself must remain safe when
   # several workers create worktrees concurrently.
-  git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"
+  if git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"; then
+    created_worktree=1
+    created_branch_sha="$(git rev-parse --verify "$branch_name^{commit}")"
+  else
+    local worktree_add_rc=$?
+    if ! cleanup_failed_creation "$worktree_add_rc"; then
+      :
+    fi
+    return "$worktree_add_rc"
+  fi
   if [[ "$worktree_mode" == "review" ]]; then
     review_guard_args=(--worktree "$worktree_path" --mode review)
     # A review candidate may be created from a base that predates this guard.
@@ -266,17 +354,53 @@ run_locked_transaction() {
           ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
       review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
     fi
-    python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"
+    if python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"; then
+      :
+    else
+      local review_guard_rc=$?
+      if ! cleanup_failed_creation "$review_guard_rc"; then
+        :
+      fi
+      return "$review_guard_rc"
+    fi
   fi
   if [[ -n "$task_id" ]]; then
     # The lease helper reuses the inherited repository lock. Creating the lease
     # before this transaction releases the lock closes the add->claim cleanup gap.
-    python3 "$SCRIPT_DIR/pr_gate_lease.py" create \
-      --worktree "$worktree_path" --gate-id "$task_id" --owner "$task_id"
+    if python3 "$SCRIPT_DIR/pr_gate_lease.py" create \
+      --worktree "$worktree_path" --gate-id "$task_id" --owner "$task_id"; then
+      :
+    else
+      local lease_create_rc=$?
+      echo "create_worktree: task-id lease handoff failed; rolling back creation" >&2
+      if ! cleanup_failed_creation "$lease_create_rc"; then
+        :
+      fi
+      return "$lease_create_rc"
+    fi
+    if python3 "$SCRIPT_DIR/pr_gate_lease.py" is-active --worktree "$worktree_path"; then
+      :
+    else
+      local lease_observation_rc=$?
+      echo "create_worktree: task-id lease was not observable after creation; rolling back" >&2
+      if ! cleanup_failed_creation "$lease_observation_rc"; then
+        :
+      fi
+      return "$lease_observation_rc"
+    fi
   fi
   if [[ -n "$receipt_path" ]]; then
-    python3 "$SCRIPT_DIR/worktree_receipt.py" create \
-      --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"
+    if python3 "$SCRIPT_DIR/worktree_receipt.py" create \
+      --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"; then
+      :
+    else
+      local receipt_rc=$?
+      echo "create_worktree: receipt handoff failed; rolling back creation" >&2
+      if ! cleanup_failed_creation "$receipt_rc"; then
+        :
+      fi
+      return "$receipt_rc"
+    fi
   fi
 }
 

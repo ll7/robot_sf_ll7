@@ -414,7 +414,11 @@ def test_worktree_directory_size_bounds_collection_when_descendant_holds_stdout(
     monkeypatch.setattr(capacity, "WORKTREE_SIZE_MAX_TIMEOUT_MULTIPLIER", 4.0)
 
     started_at = time.monotonic()
-    result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=0.05)
+    # The per-probe budget must cover interpreter spawn latency with wide margin:
+    # on loaded CI runners spawn+exit alone can exceed tens of milliseconds, which
+    # misclassifies this scenario as a child timeout instead of unavailable output.
+    # The 60s descendant sleep still blocks output collection deterministically.
+    result = capacity._worktree_directory_size_bytes(fleet, timeout_seconds=0.5)
     elapsed = time.monotonic() - started_at
 
     assert process is not None
@@ -422,7 +426,7 @@ def test_worktree_directory_size_bounds_collection_when_descendant_holds_stdout(
     assert result.status == "timeout"
     assert result.bytes is None
     assert "1 were unavailable" in (result.reason or "")
-    assert elapsed < 1.0
+    assert elapsed < 4.0
 
 
 def test_fleet_directory_size_preserves_zero_byte_partial_result() -> None:

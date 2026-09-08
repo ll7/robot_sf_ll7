@@ -106,6 +106,15 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_references=_NEW_RESIDUAL_REFS,
     ),
     (
+        "robot_sf/nav/global_route.py",
+        "_project_candidate_sample",
+        "projection.distance_m is not None",
+    ): _review(
+        "The preceding finite-projection predicate guarantees the optional distance field before the lateral-error comparison; this is an internal type-narrowing invariant.",
+        ownership_status="unowned_residual",
+        ownership_references=_NEW_RESIDUAL_REFS,
+    ),
+    (
         "robot_sf/data/external/ind.py",
         "_resolve_dataset_paths",
         "tracks_meta is not None",

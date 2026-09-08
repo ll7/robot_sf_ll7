@@ -93,7 +93,14 @@ def _prepare_helper_cache(
 def test_workflow_is_directly_dispatchable_single_job_and_least_privilege() -> None:
     text, workflow = _workflow()
 
-    assert set(_trigger(workflow)) == {"workflow_dispatch"}
+    trigger = _trigger(workflow)
+    assert set(trigger) == {"workflow_dispatch"}
+    inputs = trigger["workflow_dispatch"]["inputs"]
+    assert inputs["requested_source_sha"] == {
+        "description": "Exact lowercase 40-hex commit SHA bound by the dispatch helper",
+        "required": True,
+        "type": "string",
+    }
     assert workflow["permissions"] == {"contents": "read"}
     assert len(workflow["jobs"]) == 1
     job = workflow["jobs"]["build-candidate"]
@@ -125,6 +132,30 @@ def test_workflow_is_directly_dispatchable_single_job_and_least_privilege() -> N
         assert name in identity_run
     assert "secrets" not in text.lower()
     assert "id-token" not in text.lower()
+
+
+def test_workflow_fails_closed_on_dispatch_source_drift_before_build() -> None:
+    _text, workflow = _workflow()
+    steps = _steps(workflow)
+    guard = next(
+        step
+        for step in steps
+        if step.get("name") == "Require the requested source SHA to equal the workflow commit"
+    )
+    assert guard["env"] == {"REQUESTED_SOURCE_SHA": "${{ inputs.requested_source_sha }}"}
+    assert "^[0-9a-f]{40}$" in guard["run"]
+    assert '"${REQUESTED_SOURCE_SHA}" != "${GITHUB_SHA}"' in guard["run"]
+    checkout_index = next(
+        i for i, step in enumerate(steps) if "actions/checkout@" in step.get("uses", "")
+    )
+    guard_index = steps.index(guard)
+    build_index = next(i for i, step in enumerate(steps) if "uv build" in step.get("run", ""))
+    assert checkout_index < guard_index < build_index
+
+    assemble = next(step["run"] for step in steps if " assemble" in step.get("run", ""))
+    assert '--requested-source-sha "${REQUESTED_SOURCE_SHA}"' in assemble
+    identity = next(step for step in steps if step.get("id") == "identity")
+    assert "requested-source-sha" in identity["run"]
 
 
 def test_workflow_keeps_python_bytecode_outside_the_frozen_source() -> None:

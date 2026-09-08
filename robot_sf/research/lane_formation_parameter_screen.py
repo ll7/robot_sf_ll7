@@ -8,6 +8,7 @@ anchors, and no profile is selected for a held-out claim in this module.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
@@ -49,6 +50,7 @@ PARAMETER_BOUNDS: dict[str, tuple[float, float]] = {
     "desired_speed_mean_mps": (0.65, 1.3),
     "desired_speed_std_mps": (0.0, 0.2),
 }
+_METRIC_NAMES = ("lane_segregation_index", "lane_purity")
 
 
 @dataclass(frozen=True)
@@ -197,6 +199,29 @@ def _stats(values: list[float]) -> dict[str, float]:
     }
 
 
+def _validate_metric_mapping(metrics: Any, *, label: str) -> None:
+    """Reject malformed or non-finite metric mappings before aggregation."""
+    if not isinstance(metrics, Mapping):
+        raise ValueError(f"{label} must be a mapping of finite numeric metrics")
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, (int, float, np.integer, np.floating))
+        or not np.isfinite(float(value))
+        for value in (metrics.get(name) for name in _METRIC_NAMES)
+    ):
+        raise ValueError(f"{label} must contain finite numeric metrics")
+
+
+def _validate_parameter_screen_row(row: Mapping[str, Any]) -> None:
+    """Validate the metric payload carried by one native parameter-screen row."""
+    _validate_metric_mapping(row.get("metrics"), label="metrics")
+    sampling_metrics = row.get("sampling_metrics")
+    if not isinstance(sampling_metrics, Mapping):
+        raise ValueError("sampling_metrics must map strides to finite metric mappings")
+    for stride, metrics in sampling_metrics.items():
+        _validate_metric_mapping(metrics, label=f"sampling_metrics[{stride!r}]")
+
+
 def summarize_parameter_screen_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Summarize Stage A cells without ranking or selecting candidates.
 
@@ -205,6 +230,7 @@ def summarize_parameter_screen_rows(rows: list[dict[str, Any]]) -> list[dict[str
     """
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
+        _validate_parameter_screen_row(row)
         grouped.setdefault(row["profile"]["profile_id"], []).append(row)
     summaries: list[dict[str, Any]] = []
     for profile_id, records in sorted(grouped.items()):
@@ -270,6 +296,7 @@ def run_parameter_screen(
                     "claim_boundary": CLAIM_BOUNDARY,
                 }
             )
+            _validate_parameter_screen_row(row)
             rows.append(row)
     if any(
         row["execution"]["execution_mode"] != "native" or row["execution"]["status"] != "computed"

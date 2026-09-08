@@ -451,6 +451,35 @@ def test_run_map_episode_records_wrapper_metadata_when_enabled(monkeypatch) -> N
     assert ledger["provenance"]["safety_wrapper"] == summary
 
 
+def test_run_map_episode_records_native_pairing_trace_for_wrapper_off(monkeypatch) -> None:
+    """The off arm retains native command and post-step state for later pairing."""
+
+    record = _run_episode_with_policy(
+        monkeypatch,
+        _policy_builder,
+        safety_wrapper={"enabled": False, "arm_key": "wrapper_off", "record_step_trace": True},
+    )
+
+    summary = record["algorithm_metadata"]["safety_wrapper"]
+    native = record["algorithm_metadata"]["paired_effect_native_trace"]
+    step_record = summary["step_trace"][0]
+    assert summary["enabled"] is False
+    assert summary["arm_key"] == "wrapper_off"
+    assert record["metrics"]["wrapper_intervention_rate"] == 0.0
+    assert native["schema_version"] == "paired_effect_native_trace.v1"
+    assert native["arm_key"] == "wrapper_off"
+    assert native["declared_timeout"] is False
+    assert step_record["time_s"] == pytest.approx(0.1)
+    assert step_record["forward_progress_command"]["status"] == "valid"
+    assert step_record["post_step_outcome"]["status"] == "available"
+    assert (
+        record["algorithm_metadata"]["paired_effect_metric_producer"]["fields"][
+            "false_positive_stop_rate"
+        ]["reason"]
+        == "wrapper_on_arm_required"
+    )
+
+
 def test_run_map_episode_fails_closed_for_native_action_when_wrapper_enabled(
     monkeypatch,
 ) -> None:

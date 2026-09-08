@@ -8,7 +8,7 @@
   "benchmark_evidence": false,
   "campaign_submission_authorized": false,
   "source_revisions": {
-    "base_commit": "9f0915112155df3f6094b98a1b372be63ad44b5",
+    "base_commit": "9f0915112155df3f6094b98a1b372be63ad44b5b",
     "implementation_head_commit": "e896fc2b0a42a713b78606a4587f68d826ffc104",
     "smoke_rows_commit": "e896fc2b0a42a713b78606a4587f68d826ffc104",
     "smoke_worktree": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-8567-native-counterfactual-fields-20260908",

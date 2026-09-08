@@ -466,12 +466,8 @@ def _signal_from_row(row: Mapping[str, Any], name: str) -> RelevanceSignal:
             missingness = "observed"
     availability = metadata.get("available_at_step", row.get("available_at_step"))
     if availability is not None:
-        try:
-            availability = int(availability)
-        except (TypeError, ValueError) as exc:
-            raise RelevanceContractError(
-                f"signals.{name}.available_at_step must be integer"
-            ) from exc
+        if not isinstance(availability, int) or isinstance(availability, bool):
+            raise RelevanceContractError(f"signals.{name}.available_at_step must be integer")
     return RelevanceSignal(
         name=name,
         value=value,

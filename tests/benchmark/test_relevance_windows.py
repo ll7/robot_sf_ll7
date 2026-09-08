@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from robot_sf.benchmark.relevance_windows import (
     ExcerptContractError,
+    RelevanceContractError,
     RelevanceThresholds,
     compute_parent_rows_sha256,
     select_relevance_windows,
@@ -135,6 +136,14 @@ def test_missing_signal_is_unknown_not_a_safe_zero() -> None:
     assert "ttc_s" in vector.unknown_signals
     assert "ttc_s" in selection.manifest.missing_signals
     assert "ttc_s" not in vector.active_reasons
+
+
+def test_fractional_signal_availability_is_rejected() -> None:
+    """Timing provenance must not silently truncate a fractional step."""
+    rows = _parent_rows(1)
+    rows[0]["signal_metadata"] = {"ttc_s": {"available_at_step": 1.5}}
+    with pytest.raises(RelevanceContractError, match="available_at_step must be integer"):
+        select_relevance_windows(rows, parent_digest=_parent_digest())
 
 
 def test_manifest_writer_preserves_parent_rows_and_digest(tmp_path: Path) -> None:

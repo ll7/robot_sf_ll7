@@ -500,7 +500,8 @@ jobs:
 
   xdist-scratch-isolation:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Shared all-extras setup can take ~19 minutes before the guard runs (#8631).
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -522,7 +523,8 @@ jobs:
 
   wheel-smoke-install:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Leave smoke-test headroom after an observed ~18-minute setup (#8631).
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

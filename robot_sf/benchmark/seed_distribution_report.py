@@ -18,9 +18,10 @@ normalized ``surface`` dictionaries conforming to ``seed_distribution_report.v1`
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from typing import Any
+
+from robot_sf.common.validation import finite_float as _finite_float
 
 SEED_DISTRIBUTION_REPORT_SCHEMA_VERSION = "seed_distribution_report.v1"
 _SUPPORTED_SCHEMA_VERSIONS = frozenset({SEED_DISTRIBUTION_REPORT_SCHEMA_VERSION})
@@ -212,21 +213,6 @@ def _build_surface(  # noqa: PLR0913
         "diagnostics": diagnostics,
         "provenance": provenance,
     }
-
-
-def _finite_float(value: Any) -> float | None:
-    """Coerce a value to float, returning None when missing or non-finite.
-
-    Returns:
-        The value as a finite float, or None when missing/non-finite/uncoercible.
-    """
-    if value is None:
-        return None
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return None
-    return result if math.isfinite(result) else None
 
 
 def _confidence_block(data: dict[str, Any]) -> dict[str, Any]:

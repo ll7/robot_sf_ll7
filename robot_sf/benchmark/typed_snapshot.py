@@ -35,6 +35,15 @@ SNAPSHOT_SCHEMA = "simulator_typed_snapshot.v1"
 SNAPSHOT_BOUNDARY = "pre_step"
 _DIGEST_FIELDS = ("map_sha256", "config_sha256", "code_revision")
 _MISSING = object()
+_RESTORE_FAILURES = (
+    AttributeError,
+    IndexError,
+    KeyError,
+    OverflowError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class SnapshotContractError(ValueError):
@@ -1022,10 +1031,10 @@ def restore_typed_snapshot(
     before = snapshot_method()
     try:
         restore_method(runtime_snapshot)
-    except Exception as exc:
+    except _RESTORE_FAILURES as exc:
         try:
             restore_method(before)
-        except Exception as rollback_exc:
+        except _RESTORE_FAILURES as rollback_exc:
             raise SnapshotContractError(
                 "typed snapshot restore failed and destination rollback failed; "
                 "destination state may be partial"

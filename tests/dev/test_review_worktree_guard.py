@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CREATE_WORKTREE = REPO_ROOT / "scripts" / "dev" / "create_worktree.sh"
@@ -71,6 +74,31 @@ def _integrate(worktree: Path, source_ref: str = "origin/main") -> subprocess.Co
         text=True,
         check=False,
     )
+
+
+def _run_isolated(worktree: Path, *command: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(GUARD),
+            "run",
+            "--worktree",
+            str(worktree),
+            "--",
+            *command,
+        ],
+        cwd=worktree,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _require_isolation(worktree: Path) -> None:
+    probe = _run_isolated(worktree, "true")
+    if sys.platform != "linux" or (probe.returncode == 2 and "is unavailable" in probe.stderr):
+        pytest.skip(f"Linux Landlock process boundary unavailable: {probe.stderr.strip()}")
+    assert probe.returncode == 0, probe.stdout + probe.stderr
 
 
 def _remove_worktree(repo: Path, worktree: Path, branch: str) -> None:
@@ -420,6 +448,141 @@ def test_review_worktree_allows_ls_remote_and_fetch_while_blocking_pushes(
         _remove_worktree(repo, worktree, branch)
 
 
+def test_review_process_boundary_blocks_override_and_alternate_receive_pack(
+    tmp_path: Path,
+) -> None:
+    """Landlock blocks the #8321 override and a malicious receive-pack descendant."""
+    repo, remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review-process-boundary"
+    branch = "review/process-boundary"
+    helper = tmp_path / "alternate-receive-pack.sh"
+    helper.write_text(
+        "#!/bin/sh\n"
+        "set -eu\n"
+        'remote="$1"\n'
+        'mkdir -p "$remote/refs/heads"\n'
+        'printf bypass > "$remote/refs/heads/process-boundary-bypass"\n',
+        encoding="utf-8",
+    )
+    helper.chmod(0o755)
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        configured = _configure(worktree, "review")
+        assert configured.returncode == 0, configured.stderr
+        _require_isolation(worktree)
+
+        blocked_url = _git(
+            worktree,
+            "config",
+            "--get",
+            "robot-sf.review-push-blocked-url",
+        ).stdout.strip()
+        actual_url = remote.resolve().as_uri()
+        override = f"url.{actual_url}.insteadOf={blocked_url}"
+        before = _remote_refs(worktree)
+
+        override_push = _run_isolated(
+            worktree,
+            "git",
+            "-c",
+            override,
+            "push",
+            "--no-verify",
+            "--receive-pack=git-receive-pack",
+            "origin",
+            "HEAD:refs/heads/override-process-bypass",
+        )
+        assert override_push.returncode != 0, override_push.stdout + override_push.stderr
+        assert _remote_refs(worktree) == before
+
+        direct_receive_pack = _run_isolated(
+            worktree,
+            "git",
+            "-c",
+            override,
+            "push",
+            "--no-verify",
+            f"--receive-pack={helper}",
+            "origin",
+            "HEAD:refs/heads/direct-receive-pack-bypass",
+        )
+        assert direct_receive_pack.returncode != 0, (
+            direct_receive_pack.stdout + direct_receive_pack.stderr
+        )
+        assert _remote_refs(worktree) == before
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_review_process_boundary_rejects_network_and_requires_review_mode(tmp_path: Path) -> None:
+    """The OS boundary denies TCP and cannot be requested for an implementation worktree."""
+    repo, _remote = _fixture_repo(tmp_path)
+    review = tmp_path / "review-network-boundary"
+    review_branch = "review/network-boundary"
+    implementation = tmp_path / "implementation-network-boundary"
+    implementation_branch = "implementation/network-boundary"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", review_branch, str(review), "HEAD")
+        configured = _configure(review, "review")
+        assert configured.returncode == 0, configured.stderr
+        _require_isolation(review)
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        try:
+            network_probe = _run_isolated(
+                review,
+                sys.executable,
+                "-c",
+                (
+                    "import socket; "
+                    "sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM); "
+                    "sock.settimeout(1); "
+                    f"\ntry: sock.connect(('127.0.0.1', {listener.getsockname()[1]}))\n"
+                    "except PermissionError: raise SystemExit(0)\n"
+                    "except OSError: raise SystemExit(2)\n"
+                    "else: raise SystemExit(1)"
+                ),
+            )
+            assert network_probe.returncode == 0, network_probe.stdout + network_probe.stderr
+        finally:
+            listener.close()
+
+        _git(
+            repo,
+            "worktree",
+            "add",
+            "--no-track",
+            "-b",
+            implementation_branch,
+            str(implementation),
+            "HEAD",
+        )
+        rejected = _run_isolated(implementation, "true")
+        assert rejected.returncode == 2
+        assert "requires a review-mode worktree" in rejected.stderr
+    finally:
+        _remove_worktree(repo, review, review_branch)
+        _remove_worktree(repo, implementation, implementation_branch)
+
+
+def test_review_process_boundary_fails_closed_on_an_old_landlock_abi() -> None:
+    """An OS capability below the declared contract must not launch a child command."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("review_worktree_guard_under_test", GUARD)
+    assert spec is not None and spec.loader is not None
+    guard = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guard)
+
+    class OldKernel:
+        def syscall(self, *_args):
+            return 3
+
+    with pytest.raises(guard.GuardError, match="older than required ABI 4"):
+        guard._landlock_abi(OldKernel())
+
+
 def test_review_mode_blocks_preconfigured_custom_transport(tmp_path: Path, monkeypatch) -> None:
     """A common-config custom transport cannot bypass the review barrier."""
     repo, _remote = _fixture_repo(tmp_path)
@@ -506,6 +669,57 @@ def test_create_review_worktree_bootstraps_from_invoking_checkout(tmp_path: Path
             check=False,
         )
         assert blocked.returncode != 0, blocked.stdout + blocked.stderr
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_create_review_worktree_binds_exec_to_process_boundary(tmp_path: Path) -> None:
+    """Review creation must not launch its optional command outside the OS boundary."""
+    if sys.platform != "linux":
+        pytest.skip("Linux Landlock process boundary is required")
+    repo, remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review-exec-boundary"
+    branch = "review/exec-boundary"
+    helper = tmp_path / "write-remote.py"
+    helper.write_text(
+        "import sys\n"
+        "from pathlib import Path\n"
+        "try:\n"
+        "    (Path(sys.argv[1]) / 'refs/heads/create-exec-bypass').write_text('bypass')\n"
+        "except PermissionError:\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+    try:
+        created = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(worktree),
+                "--branch",
+                branch,
+                "--base",
+                "HEAD",
+                "--minimum-free-bytes",
+                "0",
+                "--mode",
+                "review",
+                "--exec",
+                sys.executable,
+                "-B",
+                str(helper),
+                str(remote),
+            ],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if created.returncode == 2 and "is unavailable" in created.stderr:
+            pytest.skip(created.stderr.strip())
+        assert created.returncode == 0, created.stdout + created.stderr
+        assert "create-exec-bypass" not in _remote_refs(worktree)
     finally:
         _remove_worktree(repo, worktree, branch)
 

@@ -43,6 +43,11 @@ When --exec is supplied, the command is launched in the created worktree even
 though this script itself may have been invoked from another checkout.  The
 worktree is left in place when the command fails so its diagnostics remain
 available for inspection.
+
+For --mode review, --exec is launched through the review guard's Linux
+Landlock process boundary and fails closed when that boundary is unavailable.
+Commands started later must remain descendants of that process to retain the
+boundary; use the guard's `run -- ... bash` form for a bounded session.
 EOF
 }
 
@@ -215,6 +220,12 @@ report_and_exec() {
       cd -- "$worktree_path"
       if [[ -n "$receipt_path" ]]; then
         python3 "$SCRIPT_DIR/worktree_receipt.py" check --receipt "$receipt_path" --worktree . --json
+      fi
+      if [[ "$worktree_mode" == "review" ]]; then
+        # Bind the optional first command to the real process boundary. Later
+        # commands must remain descendants of this process to retain it.
+        exec python3 "$SCRIPT_DIR/review_worktree_guard.py" run \
+          --worktree "$worktree_path" -- "${command_args[@]}"
       fi
       exec "${command_args[@]}"
     )

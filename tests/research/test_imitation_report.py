@@ -12,11 +12,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+from robot_sf.research.exceptions import ValidationError
 from robot_sf.research.imitation_report import (
     ImitationReportConfig,
     _ci_from_samples,
     _copy_figures,
     _extract_seeds,
+    _extract_timings,
     _fmt_ci,
     generate_imitation_report,
 )
@@ -109,6 +111,114 @@ def test_generate_imitation_report(tmp_path: Path):
     assert out["metadata"].exists()
     assert out["figures_dir"].exists()
     assert out["latex"] is not None and out["latex"].exists()
+
+
+def test_generate_imitation_report_preserves_zero_scalar_convergence(tmp_path: Path):
+    """A scalar zero remains available for hypothesis evaluation."""
+    summary = {
+        "run_id": "zero-only",
+        "extractor_results": [
+            {
+                "config_name": "baseline_run",
+                "metrics": {"timesteps_to_convergence": 0},
+            },
+            {
+                "config_name": "pretrained_run",
+                "metrics": {"timesteps_to_convergence": 0},
+            },
+        ],
+    }
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    out = generate_imitation_report(
+        summary_path=summary_path,
+        output_root=tmp_path,
+        config=ImitationReportConfig(experiment_name="zero-only"),
+    )
+
+    assert "Baseline mean is zero" in out["report"].read_text(encoding="utf-8")
+
+
+def test_generate_imitation_report_rejects_negative_convergence(tmp_path: Path):
+    """Negative scalar convergence values fail closed before report creation."""
+    from robot_sf.research.exceptions import ValidationError
+
+    summary = {
+        "extractor_results": [
+            {
+                "config_name": "baseline_run",
+                "metrics": {"timesteps_to_convergence": -1},
+            },
+            {
+                "config_name": "pretrained_run",
+                "metrics": {"timesteps_to_convergence": 1},
+            },
+        ]
+    }
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="must be non-negative"):
+        generate_imitation_report(
+            summary_path=summary_path,
+            output_root=tmp_path,
+            config=ImitationReportConfig(experiment_name="negative-convergence"),
+        )
+
+    assert not list(tmp_path.glob("imitation_*"))
+
+
+@pytest.mark.parametrize(
+    ("duration", "message"),
+    [
+        pytest.param("not-a-duration", "finite number", id="malformed"),
+        pytest.param(None, "finite number", id="null"),
+        pytest.param(float("nan"), "finite number", id="nan"),
+        pytest.param(float("inf"), "finite number", id="positive-infinity"),
+        pytest.param(float("-inf"), "finite number", id="negative-infinity"),
+        pytest.param(-1.0, "non-negative", id="negative"),
+    ],
+)
+def test_generate_imitation_report_rejects_invalid_extractor_timings(
+    tmp_path: Path, duration: object, message: str
+):
+    """Invalid extractor timing provenance fails before report materialization."""
+
+    summary = {
+        "extractor_results": [
+            _minimal_record("baseline_run", 1000.0, 0.6, 0.2, 0.5),
+            _minimal_record("pretrained_run", 600.0, 0.8, 0.1, 0.7),
+        ]
+    }
+    summary["extractor_results"][0]["duration_seconds"] = duration
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    with pytest.raises(ValidationError, match=message):
+        generate_imitation_report(
+            summary_path=summary_path,
+            output_root=tmp_path,
+            config=ImitationReportConfig(experiment_name="invalid-timing"),
+        )
+
+    assert not list(tmp_path.glob("imitation_*"))
+
+
+def test_extract_timings_preserves_finite_nonnegative_durations():
+    """Finite non-negative extractor durations retain their report metadata values."""
+
+    total, per_run = _extract_timings(
+        {
+            "extractor_results": [
+                {"config_name": "baseline_run", "duration_seconds": 12.5},
+                {"config_name": "pretrained_run", "duration_seconds": 0},
+            ]
+        }
+    )
+
+    assert total == 12.5
+    assert per_run == {"baseline_run": 12.5, "pretrained_run": 0.0}
 
 
 def test_ci_from_samples_requires_two_or_more():

@@ -9,6 +9,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from robot_sf.common.validation import finite_float as _finite_float
+
 SCHEMA_VERSION = "scenario_coverage_entropy.v1"
 
 _REDUNDANT_THRESHOLD = 0.15
@@ -28,19 +30,6 @@ def _metadata(scenario: Mapping[str, Any]) -> dict[str, Any]:
     """Return a shallow metadata mapping for a scenario."""
     value = scenario.get("metadata")
     return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _finite_float(value: Any) -> float | None:
-    """Parse a finite float while preserving missing values.
-
-    Returns:
-        Finite float, or ``None`` for missing, invalid, NaN, or infinite values.
-    """
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed if math.isfinite(parsed) else None
 
 
 def _density_bin(value: Any) -> str:

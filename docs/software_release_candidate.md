@@ -1,9 +1,12 @@
 # Immutable software candidate
 
 `.github/workflows/software-candidate.yml` is the credential-free producer for a Robot SF
-software-package candidate. Its canonical invocation is a direct `workflow_dispatch` at the
-reviewed source head. One job builds one wheel and one source distribution once, validates those
-exact files, creates deterministic provenance, and uploads the checked bundle once.
+software-package candidate. Its canonical invocation is
+[`scripts/dev/dispatch_software_candidate.py`](../scripts/dev/dispatch_software_candidate.py)
+with one exact source SHA. The helper creates a short-lived branch at that commit, dispatches the
+workflow with the same SHA as a required input, and waits for the run to finish before deleting
+the branch. One job builds one wheel and one source distribution once, validates those exact files,
+creates deterministic provenance, and uploads the checked bundle once.
 
 This slice does **not** authorize or perform a package-index upload, GitHub Release, Zenodo
 deposit, DOI reservation, tag, environment approval, or trusted-publisher/OIDC exchange. It does
@@ -17,11 +20,38 @@ environments, and requires a byte-checked TestPyPI cold-install receipt before p
 
 ## Dispatching the producer
 
-Dispatch the workflow at the reviewed source head. It requests no secrets and emits two separate
-artifacts. A later consumer must bind the candidate and rights-receipt artifact IDs, names, and
-digests to the successful run metadata before downloading or promoting either artifact; a matching
-name alone is not identity evidence. Direct dispatch uses the deterministic name
-`robot-sf-software-rights-admission-<source-sha>-<run-id>-<attempt>` for the receipt artifact.
+Use a clean checkout and an exact lowercase 40-character commit SHA:
+
+```bash
+uv run python scripts/dev/dispatch_software_candidate.py \
+  --repo ll7/robot_sf_ll7 \
+  --source-sha <exact-source-sha> \
+  --receipt /absolute/path/software-candidate-dispatch.json
+```
+
+The command requires an authenticated `gh` CLI because it creates and removes one temporary
+branch; it never reads, prints, or stores the token. It first confirms that GitHub resolves the
+requested commit, then creates a uniquely named `automation/software-candidate/...` branch and
+passes `requested_source_sha` to the workflow. The first workflow step rejects malformed input or
+any mismatch between that value and `GITHUB_SHA`, before dependency setup or package build.
+The receipt records both requested and observed SHAs, the run ID/status/conclusion, and whether the
+temporary ref was deleted. A run is not candidate evidence until its artifact IDs and digests are
+read back from that exact run.
+
+For an asynchronous diagnostic, `--no-wait` returns after the exact run is observed but deliberately
+leaves the temporary ref in place so a queued runner can still check it out. Delete the recorded
+`temporary_ref` only after the run reaches a terminal state:
+
+```bash
+gh api --method DELETE \
+  repos/ll7/robot_sf_ll7/git/refs/heads/<temporary-branch>
+```
+
+The workflow requests no secrets and emits two separate artifacts. A later consumer must bind the
+candidate and rights-receipt artifact IDs, names, and digests to the successful run metadata before
+downloading or promoting either artifact; a matching name alone is not identity evidence. Artifact
+names remain deterministic:
+`robot-sf-software-rights-admission-<source-sha>-<run-id>-<attempt>`.
 
 ## Candidate contents
 

@@ -15,8 +15,8 @@ The lifetime guarantee is intentionally descriptor-based: the helper supervises
 the direct child's process group for signal forwarding, while the kernel lock
 also remains held through inherited descriptors after a descendant daemonizes.
 Commands that deliberately close the inherited descriptor (or otherwise move
-work outside that ownership boundary) require the stronger process/OS sandbox
-tracked by issue #8343 and are not covered by this helper.
+work outside that ownership boundary) require the explicit process/OS boundary
+provided by ``review_worktree_guard.py run`` and are not covered by this helper.
 """
 
 from __future__ import annotations

@@ -19,9 +19,7 @@ import matplotlib.pyplot as plt
 from loguru import logger
 from scipy.stats import mannwhitneyu, t
 
-if TYPE_CHECKING:
-    from pathlib import Path
-from robot_sf.common.metrics_utils import metric_samples
+from robot_sf.research.exceptions import ValidationError
 from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.statistics import (
     cohen_d,
@@ -29,6 +27,10 @@ from robot_sf.research.statistics import (
     format_test_results,
     paired_t_test,
 )
+from robot_sf.research.tracker_manifest import coerce_nonnegative_tracker_float
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass
@@ -133,6 +135,36 @@ def _metric(record: dict[str, Any], key: str) -> float:
     metrics = record.get("metrics") or {}
     val = metrics.get(key)
     return float(val) if isinstance(val, (int, float)) else 0.0
+
+
+def _validated_convergence_value(record: dict[str, Any]) -> float | None:
+    """Return a validated scalar convergence value, preserving numeric zero."""
+    metrics = record.get("metrics") or {}
+    if not isinstance(metrics, dict):
+        raise ValidationError("report metrics must be an object")
+    value = metrics.get("timesteps_to_convergence")
+    if value is None:
+        return None
+    return coerce_nonnegative_tracker_float(value, "report.metrics.timesteps_to_convergence")
+
+
+def _validated_convergence_samples(record: dict[str, Any]) -> list[float]:
+    """Return validated convergence samples, rejecting malformed or negative values."""
+    metrics = record.get("metrics") or {}
+    if not isinstance(metrics, dict):
+        raise ValidationError("report metrics must be an object")
+    raw_samples = metrics.get("timesteps_to_convergence_samples")
+    if raw_samples is None:
+        return []
+    if not isinstance(raw_samples, list):
+        raise ValidationError("report.metrics.timesteps_to_convergence_samples must be a list")
+    return [
+        coerce_nonnegative_tracker_float(
+            value, f"report.metrics.timesteps_to_convergence_samples[{index}]"
+        )
+        for index, value in enumerate(raw_samples)
+        if value is not None
+    ]
 
 
 def _ci_from_samples(samples: list[float]) -> tuple[float, float] | str:
@@ -507,7 +539,7 @@ def _extract_seeds(summary: dict[str, Any]) -> list[int]:
 
 
 def _extract_timings(summary: dict[str, Any]) -> tuple[float | None, dict[str, float]]:
-    """Extract total and per-run duration from extractor records if available.
+    """Extract validated total and per-run durations from extractor records if available.
 
     Returns:
         Tuple of (total_duration, per_run_durations_dict).
@@ -515,12 +547,16 @@ def _extract_timings(summary: dict[str, Any]) -> tuple[float | None, dict[str, f
 
     total = 0.0
     per_run: dict[str, float] = {}
-    for record in summary.get("extractor_results") or []:
+    for index, record in enumerate(summary.get("extractor_results") or []):
         name = record.get("config_name", "run")
-        duration = record.get("duration_seconds")
-        if isinstance(duration, (int, float)):
-            per_run[name] = float(duration)
-            total += float(duration)
+        if "duration_seconds" not in record:
+            continue
+        duration = coerce_nonnegative_tracker_float(
+            record["duration_seconds"],
+            f"summary.extractor_results[{index}].duration_seconds",
+        )
+        per_run[name] = duration
+        total += duration
     if not per_run:
         return None, {}
     return total, per_run
@@ -544,12 +580,14 @@ def generate_imitation_report(
     baseline_rec, pretrained_rec = _select_records(
         summary, config.baseline_run_id, config.pretrained_run_id
     )
+    # Validate timing provenance before creating any report directories or copying inputs.
+    total_duration, per_run_duration = _extract_timings(summary)
     figures = _figure_paths(summary_path)
 
-    baseline_ts = _metric(baseline_rec, "timesteps_to_convergence")
-    pretrained_ts = _metric(pretrained_rec, "timesteps_to_convergence")
-    baseline_samples = metric_samples(baseline_rec, "timesteps_to_convergence")
-    pretrained_samples = metric_samples(pretrained_rec, "timesteps_to_convergence")
+    baseline_ts = _validated_convergence_value(baseline_rec)
+    pretrained_ts = _validated_convergence_value(pretrained_rec)
+    baseline_samples = _validated_convergence_samples(baseline_rec)
+    pretrained_samples = _validated_convergence_samples(pretrained_rec)
     baseline_ci = _ci_from_samples(baseline_samples)
     pretrained_ci = _ci_from_samples(pretrained_samples)
 
@@ -576,8 +614,10 @@ def generate_imitation_report(
         stats["t_stat"] = None
         stats["test"] = "mannwhitneyu"
 
-    improvement_baseline = baseline_samples or ([baseline_ts] if baseline_ts else [])
-    improvement_pretrained = pretrained_samples or ([pretrained_ts] if pretrained_ts else [])
+    improvement_baseline = baseline_samples or ([baseline_ts] if baseline_ts is not None else [])
+    improvement_pretrained = pretrained_samples or (
+        [pretrained_ts] if pretrained_ts is not None else []
+    )
     hypothesis_result = evaluate_hypothesis(
         improvement_baseline, improvement_pretrained, threshold=config.improvement_threshold_pct
     )
@@ -598,7 +638,6 @@ def generate_imitation_report(
         seeds=seeds,
         config_paths=config.config_paths,
     )
-    total_duration, per_run_duration = _extract_timings(summary)
     if total_duration is not None:
         metadata.timing = {
             "total_duration_seconds": total_duration,

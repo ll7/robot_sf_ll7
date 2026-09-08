@@ -1,0 +1,227 @@
+{
+  "entries": [
+    {
+      "classification": "dynamic",
+      "owner": "Simulator",
+      "path": "actors.order",
+      "restore_method": "reject count drift",
+      "serialization": "JSON actor count/order",
+      "status": "supported",
+      "test": "test_snapshot_restore_reproduces_baseline_deterministically",
+      "type": "stable row order",
+      "unit": "index",
+      "unsupported_modes": [],
+      "update_phase": "all"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "Simulator.pysf_state",
+      "path": "pysf_state",
+      "restore_method": "SimulatorCounterfactualModel.restore",
+      "serialization": "NPZ numeric array",
+      "status": "supported",
+      "test": "test_snapshot_restore_reproduces_baseline_deterministically",
+      "type": "float[N,6]",
+      "unit": "m/seconds",
+      "unsupported_modes": [],
+      "update_phase": "pedestrian step"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "PySocialForce.peds",
+      "path": "ped_max_speeds",
+      "restore_method": "adapter restore",
+      "serialization": "NPZ numeric array",
+      "status": "supported",
+      "test": "test_snapshot_restore_reproduces_baseline_deterministically",
+      "type": "float[N]",
+      "unit": "m/s",
+      "unsupported_modes": [],
+      "update_phase": "force update"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "robot drive model",
+      "path": "robot.state",
+      "restore_method": "destination-owned dataclass",
+      "serialization": "JSON typed fields",
+      "status": "supported",
+      "test": "test_adapter_satisfies_counterfactual_model_protocol",
+      "type": "typed dataclass",
+      "unit": "native SI",
+      "unsupported_modes": [],
+      "update_phase": "robot step"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "Simulator.robot_navs",
+      "path": "robot_navs",
+      "restore_method": "destination-owned navigator",
+      "serialization": "JSON stable fields",
+      "status": "supported",
+      "test": "test_route_group_navigator_progress_restores",
+      "type": "RouteNavigator",
+      "unit": "m",
+      "unsupported_modes": [],
+      "update_phase": "route update"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "SinglePedestrianBehavior",
+      "path": "peds_behaviors.single_runtimes",
+      "restore_method": "adapter restore",
+      "serialization": "JSON stable actor IDs",
+      "status": "supported",
+      "test": "test_route_group_navigator_progress_restores",
+      "type": "typed runtime list",
+      "unit": "seconds/index",
+      "unsupported_modes": [],
+      "update_phase": "behavior step"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "FollowRouteBehavior",
+      "path": "peds_behaviors.route_navigators",
+      "restore_method": "adapter restore",
+      "serialization": "JSON stable behavior IDs",
+      "status": "supported",
+      "test": "test_route_group_navigator_progress_restores",
+      "type": "mapping[str, state]",
+      "unit": "index",
+      "unsupported_modes": [],
+      "update_phase": "behavior step"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "process RNG",
+      "path": "numpy.random",
+      "restore_method": "numpy.random.set_state",
+      "serialization": "NPZ state + JSON scalars",
+      "status": "supported",
+      "test": "test_rng_capture_seam_prevents_divergence",
+      "type": "legacy RNG tuple",
+      "unit": "stream",
+      "unsupported_modes": [],
+      "update_phase": "sampling"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "stdlib RNG",
+      "path": "random",
+      "restore_method": "random.setstate",
+      "serialization": "JSON tuple encoding",
+      "status": "supported",
+      "test": "test_rng_capture_seam_prevents_divergence",
+      "type": "tuple",
+      "unit": "stream",
+      "unsupported_modes": [],
+      "update_phase": "route sampling"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "behavior owner",
+      "path": "behavior.rng",
+      "restore_method": "generator.bit_generator.state",
+      "serialization": "JSON/NPZ typed state",
+      "status": "conditional",
+      "test": "owned-generator probe",
+      "type": "Generator state",
+      "unit": "stream",
+      "unsupported_modes": [
+        "unknown behavior generator implementation"
+      ],
+      "update_phase": "behavior step"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "Simulator._residual_adversary",
+      "path": "residual_adversary",
+      "restore_method": "adapter restore or reject",
+      "serialization": "JSON/NPZ typed state",
+      "status": "conditional",
+      "test": "residual-adversary state probe",
+      "type": "typed mutable fields",
+      "unit": "native SI",
+      "unsupported_modes": [
+        "inactive/uninstantiated adversary"
+      ],
+      "update_phase": "force update"
+    },
+    {
+      "classification": "immutable",
+      "owner": "immutable inputs",
+      "path": "map/config/model",
+      "restore_method": "compatibility check before mutation",
+      "serialization": "JSON SHA-256",
+      "status": "supported",
+      "test": "test_incompatible_digest_rejected",
+      "type": "digest references",
+      "unit": "n/a",
+      "unsupported_modes": [],
+      "update_phase": "construction"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "planner/controller owner",
+      "path": "controller.planner_memory",
+      "restore_method": "reject as full restart",
+      "serialization": "not serialized by native adapter",
+      "status": "unsupported",
+      "test": "test_recurrent_state_is_not_claimed",
+      "type": "implementation-specific",
+      "unit": "native",
+      "unsupported_modes": [
+        "recurrent planners",
+        "hidden controller state"
+      ],
+      "update_phase": "decision"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "Gym/SensorFusion",
+      "path": "observation.sensor_history",
+      "restore_method": "reject as full restart",
+      "serialization": "not serialized by native adapter",
+      "status": "unsupported",
+      "test": "test_history_omission_not_evaluable",
+      "type": "history buffers",
+      "unit": "native",
+      "unsupported_modes": [
+        "stacked observations",
+        "sensor caches"
+      ],
+      "update_phase": "observation"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "RobotState",
+      "path": "clock.termination_budget",
+      "restore_method": "caller must preserve",
+      "serialization": "JSON boundary",
+      "status": "boundary_only",
+      "test": "test_boundary_preserves_remaining_budget",
+      "type": "step/time/budget",
+      "unit": "steps/seconds",
+      "unsupported_modes": [],
+      "update_phase": "termination"
+    },
+    {
+      "classification": "output-only",
+      "owner": "Gym/benchmark metrics",
+      "path": "metrics.events",
+      "restore_method": "recompute only with owner",
+      "serialization": "not serialized by native adapter",
+      "status": "unsupported",
+      "test": "test_metric_omission_not_evaluable",
+      "type": "accumulators",
+      "unit": "metric units",
+      "unsupported_modes": [
+        "full-episode metric recomposition"
+      ],
+      "update_phase": "post-step"
+    }
+  ],
+  "platform": "linux",
+  "schema_version": "simulator_state_inventory.v1",
+  "snapshot_schema": "simulator_typed_snapshot.v1"
+}

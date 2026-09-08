@@ -150,7 +150,8 @@ A current `goal-autopilot-preparation:v1` body marker is a negative readiness
 fence applied after issue-local readiness evidence is collected and before
 state repair mutations are planned. The core accepts it only when the marker
 is unique, structurally valid, bound to the containing issue and repository,
-and its `source_body_sha256` still matches the bytes outside the marker. If
+and its `source_body_sha256` still matches the exact source bytes outside the
+marker (apart from the one known composer separator newline). If
 either `implementation_admitted` or `state_ready_change_proposed` is false,
 the audit retains a non-ready classification, exposes the packet's
 `next_action`, and never proposes `state:ready`. Malformed, stale, duplicate,

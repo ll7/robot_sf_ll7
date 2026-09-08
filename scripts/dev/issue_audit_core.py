@@ -2270,17 +2270,11 @@ def _parse_preparation_packet(body: str, *, issue_number: int) -> dict[str, Any]
     if not isinstance(audit_digest, str) or _PREPARATION_SHA256_RE.fullmatch(audit_digest) is None:
         return _invalid_preparation_packet("audit_digest is not a lowercase SHA-256 digest")
 
-    body_without_marker = body[: marker_match.start()] + body[marker_match.end() :]
-    normalized_body = re.sub(r"\n{3,}", "\n\n", body_without_marker).strip("\n") + "\n"
-    source_candidates = (
-        body_without_marker,
-        body_without_marker.rstrip("\r\n"),
-        normalized_body,
-    )
-    if not any(
-        hashlib.sha256(candidate.encode("utf-8")).hexdigest() == source_body_sha
-        for candidate in source_candidates
-    ):
+    try:
+        actual_source_sha = prepare_open_issue_contracts.preparation_source_body_sha256(body)
+    except (TypeError, ValueError) as exc:
+        return _invalid_preparation_packet(str(exc))
+    if actual_source_sha != source_body_sha:
         return _invalid_preparation_packet(
             "source_body_sha256 does not match body content outside marker"
         )
@@ -2305,6 +2299,14 @@ def _parse_preparation_packet(body: str, *, issue_number: int) -> dict[str, Any]
         ):
             return _invalid_preparation_packet(
                 "readiness_gate expected_labels must be a string list"
+            )
+        if len(expected_labels) != len(set(expected_labels)):
+            return _invalid_preparation_packet(
+                "readiness_gate expected_labels must not contain duplicates"
+            )
+        if "state:ready" in expected_labels:
+            return _invalid_preparation_packet(
+                "readiness_gate expected_labels must not already contain state:ready"
             )
         if packet["next_action"] != "gate_readiness":
             return _invalid_preparation_packet(

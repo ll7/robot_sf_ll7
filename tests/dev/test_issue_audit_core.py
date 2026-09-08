@@ -415,6 +415,69 @@ def test_marker_free_issue_preserves_existing_readiness_behavior() -> None:
     )
 
 
+def test_preparation_marker_refresh_preserves_source_digest() -> None:
+    """Replacing a writer-owned marker keeps the packet bound to source content."""
+    source_body = "## Acceptance Criteria\n- [ ] keep formalizing\n"
+    initial_body = _preparation_body(source_body)
+    item = {
+        "number": 7382,
+        "classification": "needs_spec",
+        "next_action": "formalize_issue",
+        "authority": "preparation",
+        "dispatch_eligible": False,
+        "labels": [],
+        "body_sha256": prepare_open_issue_contracts._sha256_text(initial_body),
+    }
+    replacement = prepare_open_issue_contracts._render_marker_block(
+        item,
+        audit_digest="b" * 64,
+        batch_id="cycle269",
+        source_body=initial_body,
+    )
+    refreshed_body = prepare_open_issue_contracts._compose_body(initial_body, replacement)
+
+    classification = classify_issue(
+        _issue(7382, body=refreshed_body),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "valid"
+    assert classification.preparation_packet["next_action"] == "formalize_issue"
+
+
+def test_preparation_packet_rejects_internal_newline_drift() -> None:
+    """Only the known compose boundary may differ; internal whitespace is byte-exact."""
+    source_body = "## Objective\ntext\n\n## Acceptance Criteria\n- [ ] keep\n"
+    body = _preparation_body(source_body, readiness_gate=True)
+    body = body.replace("text\n\n## Acceptance", "text\n\n\n## Acceptance")
+
+    classification = classify_issue(
+        _issue(7382, body=body),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "invalid"
+    assert "source_body_sha256" in " ".join(classification.findings)
+
+
+def test_positive_preparation_packet_rejects_invalid_expected_labels() -> None:
+    """Readiness packets cannot duplicate or predeclare the state:ready label."""
+    source_body = "## Acceptance Criteria\n- [ ] keep formalizing\n"
+    body = _preparation_body(source_body, readiness_gate=True)
+    body = body.replace(
+        "'expected_labels': []",
+        "'expected_labels': [state:ready, state:ready]",
+    )
+
+    classification = classify_issue(
+        _issue(7382, body=body),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "invalid"
+    assert "must not contain duplicates" in " ".join(classification.findings)
+
+
 @pytest.mark.parametrize("variant", ["stale", "malformed", "duplicate", "duplicate_key"])
 def test_invalid_preparation_packet_never_promotes_readiness(variant: str) -> None:
     """Stale, malformed, and duplicate packets are uncertainty, not permission."""

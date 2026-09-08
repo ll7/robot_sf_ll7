@@ -11,7 +11,7 @@
     "base_commit": "8efa8a8e8aa2a51e520a2781c8b4be33fefe74d7",
     "implementation_head_commit": "4580b07eeb57e587354fb7c1530d26194c368ba4",
     "smoke_rows_commit": "4580b07eeb57e587354fb7c1530d26194c368ba4",
-    "smoke_worktree": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-8567-native-counterfactual-fields-20260908",
+    "smoke_worktree": ".",
     "head_scope": "The implementation_head_commit is the exact clean source commit recorded by every smoke row. This receipt is a subsequent documentation commit; the PR exact-head gate binds the final documentation tip separately."
   },
   "frozen_inputs": [

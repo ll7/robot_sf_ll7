@@ -55,6 +55,9 @@ _FALLBACK_PALETTE: list[str] = [
 # Metric and planner display semantics live in the versioned registry loaded by
 # ``robot_sf.benchmark.figures.semantics``. Color assignment remains here because
 # it is a renderer style concern rather than a scientific/display-name contract.
+# Existing aggregate tables historically used the episode keys below as aggregate
+# column labels; retain that narrow bridge only for non-strict legacy callers.
+_LEGACY_AGGREGATE_KEYS = {"success": "success_rate", "collisions": "collision_rate"}
 
 
 def planner_palette() -> dict[str, str]:
@@ -116,8 +119,9 @@ def metric_label(
         The formatted display label, including its unit when declared.
     """
     semantics = importlib.import_module("robot_sf.benchmark.figures.semantics")
+    lookup_key = _LEGACY_AGGREGATE_KEYS.get(metric_key, metric_key) if not strict else metric_key
     return semantics.default_registry().metric_label(
-        metric_key,
+        lookup_key,
         language=language,
         short=short,
         aggregation=aggregation,

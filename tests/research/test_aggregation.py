@@ -1,6 +1,7 @@
 """Unit tests for metric aggregation module."""
 
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from robot_sf.research.aggregation import (
     export_metrics_json,
     extract_seed_metrics,
 )
+from robot_sf.research.exceptions import ValidationError
 
 
 def test_aggregate_metrics_basic():
@@ -101,6 +103,15 @@ def test_aggregate_metrics_single_value():
     assert baseline_success["ci_high"] is None
 
 
+def test_aggregate_metrics_rejects_negative_convergence() -> None:
+    """The canonical convergence metric cannot contain negative timesteps."""
+    with pytest.raises(ValidationError, match="must be non-negative"):
+        aggregate_metrics(
+            [{"seed": 1, "policy_type": "baseline", "timesteps_to_convergence": -1}],
+            ci_samples=10,
+        )
+
+
 def test_bootstrap_ci_basic():
     """Test bootstrap CI computation."""
     values = [1.0, 2.0, 3.0, 4.0, 5.0]
@@ -117,6 +128,16 @@ def test_bootstrap_ci_insufficient_data():
 
     assert ci_low is None
     assert ci_high is None
+
+
+def test_bootstrap_ci_excludes_nonfinite_values():
+    """Bootstrap intervals use only finite samples and fail closed below two."""
+    ci_low, ci_high = bootstrap_ci([1.0, float("nan"), float("inf"), 3.0], seed=42)
+
+    assert ci_low is not None and ci_high is not None
+    assert math.isfinite(ci_low)
+    assert math.isfinite(ci_high)
+    assert 1.0 <= ci_low <= ci_high <= 3.0
 
 
 def test_aggregate_metrics_empty():
@@ -156,6 +177,34 @@ def test_aggregate_metrics_missing_values():
     )
     assert baseline_collision["sample_size"] == 1
     assert baseline_collision["mean"] == 0.1
+
+
+def test_aggregate_metrics_excludes_nonfinite_values():
+    """Non-finite samples cannot become report aggregates."""
+    metric_records = [
+        {"seed": 1, "policy_type": "baseline", "success_rate": 0.7},
+        {"seed": 2, "policy_type": "baseline", "success_rate": float("inf")},
+        {"seed": 3, "policy_type": "baseline", "success_rate": float("nan")},
+    ]
+
+    result = aggregate_metrics(metric_records, ci_samples=50, seed=42)
+
+    assert len(result) == 1
+    aggregate = result[0]
+    assert aggregate["sample_size"] == 1
+    assert aggregate["mean"] == 0.7
+    assert aggregate["ci_low"] is None
+    assert aggregate["ci_high"] is None
+
+
+def test_aggregate_metrics_skips_all_nonfinite_metric():
+    """A metric with no finite samples is omitted instead of emitting NaNs."""
+    metric_records = [
+        {"seed": 1, "policy_type": "baseline", "bad_metric": float("inf")},
+        {"seed": 2, "policy_type": "baseline", "bad_metric": float("nan")},
+    ]
+
+    assert aggregate_metrics(metric_records) == []
 
 
 def test_completeness_score():
@@ -352,12 +401,73 @@ def test_load_manifest_payload_jsonl_takes_last_line(tmp_path: Path):
     assert payload == {"seed": 2, "policy_type": "x"}
 
 
+def test_load_manifest_payload_jsonl_rejects_malformed_earlier_line(tmp_path: Path):
+    """JSONL manifests reject corruption before the final record."""
+    path = tmp_path / "m.jsonl"
+    path.write_text('{"seed": 1}\nnot-json\n{"seed": 2}\n', encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        _load_manifest_payload(path)
+
+
+def test_load_manifest_payload_jsonl_rejects_malformed_earlier_shape(tmp_path: Path):
+    """A valid final JSONL record cannot hide an invalid earlier record."""
+    path = tmp_path / "m.jsonl"
+    path.write_text('{"metrics": []}\n{"seed": 2, "policy_type": "x"}\n', encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="metrics must be an object"):
+        _load_manifest_payload(path)
+
+
 def test_load_manifest_payload_empty_jsonl_raises(tmp_path: Path):
     """Empty JSONL manifests raise ValueError."""
     path = tmp_path / "empty.jsonl"
     path.write_text("\n\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Empty manifest"):
         _load_manifest_payload(path)
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"steps": "not-a-list", "metrics": {"success_rate": 0.8}}, "steps must be a list"),
+        ({"metrics": "not-an-object"}, "metrics must be an object"),
+        ({"summary": {"metrics": []}}, "summary metrics must be an object"),
+    ],
+)
+def test_extract_seed_metrics_rejects_malformed_manifest_shapes(
+    tmp_path: Path, payload: dict, message: str
+):
+    """Metric extraction records malformed tracker shapes as failures."""
+    path = tmp_path / "malformed.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    records, failures = extract_seed_metrics([path])
+
+    assert records == []
+    assert len(failures) == 1
+    assert message in failures[0]["reason"]
+
+
+def test_extract_seed_metrics_records_numeric_overflow_as_failure(tmp_path: Path):
+    """Unrepresentable numeric values are skipped instead of escaping extraction."""
+    path = tmp_path / "overflow.json"
+    path.write_text(
+        json.dumps(
+            {
+                "seed": 5,
+                "policy_type": "baseline",
+                "metrics": {"success_rate": int("9" * 1000)},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    records, failures = extract_seed_metrics([path])
+
+    assert records == []
+    assert len(failures) == 1
+    assert "metrics.success_rate must contain a finite number" in failures[0]["reason"]
 
 
 def test_extract_seed_metrics_basic(tmp_path: Path):
@@ -494,6 +604,34 @@ def test_extract_seed_metrics_avg_timesteps_alias(tmp_path: Path):
     )
 
 
+@pytest.mark.parametrize(
+    "metrics",
+    [
+        pytest.param(
+            {
+                "timesteps_to_convergence": 0,
+                "avg_timesteps": 12000.0,
+                "total_timesteps": 99000.0,
+            },
+            id="timesteps-to-convergence",
+        ),
+        pytest.param(
+            {"avg_timesteps": 0.0, "total_timesteps": 99000.0},
+            id="avg-timesteps",
+        ),
+        pytest.param({"total_timesteps": 0}, id="total-timesteps"),
+    ],
+)
+def test_extract_seed_metrics_preserves_zero_for_each_timestep_alias(
+    tmp_path: Path, metrics: dict[str, object]
+):
+    """Numeric zero remains present for each supported timestep alias."""
+    path = _write_manifest(tmp_path, "zero.json", {"success_rate": 0.8, **metrics})
+    records, failures = extract_seed_metrics([str(path)])
+    assert failures == []
+    assert records[0]["timesteps_to_convergence"] == 0.0
+
+
 def test_extract_seed_metrics_total_timesteps_alias(tmp_path: Path):
     """The ``total_timesteps`` alias is used when no earlier timestep key is present.
 
@@ -506,6 +644,73 @@ def test_extract_seed_metrics_total_timesteps_alias(tmp_path: Path):
     assert records[0]["timesteps_to_convergence"] == 99000.0, (
         f"total_timesteps alias was not resolved: {records[0]}"
     )
+
+
+@pytest.mark.parametrize(
+    "fallback_value",
+    [
+        pytest.param(None, id="null"),
+        pytest.param(False, id="false"),
+        pytest.param("", id="empty-string"),
+        pytest.param([], id="empty-list"),
+        pytest.param({}, id="empty-object"),
+    ],
+)
+@pytest.mark.parametrize("field", ["timesteps_to_convergence", "avg_timesteps"])
+def test_extract_seed_metrics_skips_falsy_malformed_timestep_alias(
+    tmp_path: Path, field: str, fallback_value: object
+):
+    """Null and malformed falsy earlier aliases retain legacy fallback behavior."""
+    path = _write_manifest(
+        tmp_path,
+        "a.json",
+        {field: fallback_value, "total_timesteps": 99000.0},
+    )
+    records, failures = extract_seed_metrics([str(path)])
+    assert failures == []
+    assert records[0]["timesteps_to_convergence"] == 99000.0
+
+
+@pytest.mark.parametrize(
+    "malformed_value",
+    [
+        pytest.param(False, id="false"),
+        pytest.param("", id="empty-string"),
+        pytest.param([], id="empty-list"),
+        pytest.param({}, id="empty-object"),
+    ],
+)
+def test_extract_seed_metrics_rejects_falsy_final_timestep_alias(
+    tmp_path: Path, malformed_value: object
+):
+    """Malformed final aliases retain their existing coercion failure."""
+    path = _write_manifest(
+        tmp_path,
+        "a.json",
+        {"success_rate": 0.8, "total_timesteps": malformed_value},
+    )
+    records, failures = extract_seed_metrics([str(path)])
+    assert records == []
+    assert (
+        failures[0]["reason"] == "Tracker manifest metrics.timesteps must contain a finite number"
+    )
+
+
+def test_extract_seed_metrics_omits_null_final_timestep_alias(tmp_path: Path):
+    """A null final alias remains missing when another numeric metric is present."""
+    path = _write_manifest(tmp_path, "a.json", {"success_rate": 0.8, "total_timesteps": None})
+    records, failures = extract_seed_metrics([str(path)])
+    assert failures == []
+    assert "timesteps_to_convergence" not in records[0]
+
+
+def test_extract_seed_metrics_rejects_negative_timestep_alias(tmp_path: Path):
+    """Negative timestep aliases fail closed instead of becoming metric records."""
+    path = _write_manifest(tmp_path, "a.json", {"success_rate": 0.8, "avg_timesteps": -1})
+    records, failures = extract_seed_metrics([str(path)])
+    assert records == []
+    assert len(failures) == 1
+    assert "must be non-negative" in failures[0]["reason"]
 
 
 def test_extract_seed_metrics_final_reward_mean_field(tmp_path: Path):

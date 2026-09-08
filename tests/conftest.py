@@ -400,6 +400,18 @@ _FAST_FILES = {
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",
+    # Generic ranking tests provide deterministic evidence-admission and finite-
+    # metric coverage for the changed benchmark ranking helper.
+    "test_ranking.py",
+    # Research tracker-manifest tests cover the fail-closed reproducibility
+    # metadata parser in exact-head fast shards.
+    "test_metadata.py",
+    # Distribution plotting tests use Agg and deterministic fixtures; keep their
+    # changed-line coverage in the exact-head fast lane.
+    "test_distributions.py",
+    # CLI distribution-control regressions are deterministic input-boundary
+    # contracts and exercise the benchmark error path in PR fast shards.
+    "test_cli_plot_distributions_ci.py",
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",
@@ -410,6 +422,13 @@ _FAST_FILES = {
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.
     "test_feasibility_first_real.py",
+    # The feasibility-first predicates and planner-free contract are
+    # deterministic schema/provenance surfaces; keep their proof in fast PR
+    # shards.
+    "test_feasibility_first.py",
+    # The versioned scenario-feasibility facade is deterministic contract
+    # coverage for the changed feasibility module; keep it in fast shards too.
+    "test_scenario_feasibility_contract.py",
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
@@ -434,12 +453,38 @@ _FAST_FILES = {
     # for the changed release identity module; keep them in fast shards for the
     # exact-head changed-coverage gate (issue #7938).
     "test_release_tag_identity.py",
+    # Finite-float helper migration touches these deterministic benchmark
+    # producers; their focused contract suites provide exact-head coverage.
+    "test_collision_scenario_similarity.py",
+    "test_event_ledger.py",
+    "test_scenario_coverage.py",
+    "test_seed_distribution_report.py",
     # ORCA preflight tests are deterministic contract coverage for the changed
     # benchmark preflight module; keep them in fast PR shards (issue #8021).
     "test_orca_preflight.py",
     # Predictive multimodal forecast types tests are deterministic pure-contract
     # coverage for the changed predictive types module (issue #8049).
     "test_predictive_types.py",
+    # Forecast calibration and transferability reports are deterministic
+    # evidence-boundary contracts; keep their changed-line coverage in fast PR
+    # shards for the exact-head changed-coverage gate.
+    "test_forecast_calibration_report.py",
+    "test_forecast_transferability_stress_matrix.py",
+    # Research metric aggregation tests are deterministic finite-value and
+    # bootstrap-boundary contracts; keep changed-line coverage in fast shards.
+    "test_aggregation.py",
+    # Statistical report helpers use deterministic finite-value admission
+    # contracts; keep their changed-line coverage in fast shards as well.
+    "test_statistics.py",
+    # Imitation-report provenance validation is a deterministic materialization
+    # contract; keep its changed-line coverage in fast shards as well.
+    "test_imitation_report.py",
+    # Lane-formation parameter-screen validation is a deterministic metric
+    # admission contract; keep its changed-line coverage in fast shards as well.
+    "test_lane_formation_parameter_screen.py",
+    # Lane-formation sensitivity validation is a deterministic metric admission
+    # contract; keep its changed-line coverage in fast shards as well.
+    "test_lane_formation_sensitivity.py",
     # Goal-belief contract tests are deterministic schema/lineage coverage for
     # the changed actor-observation producer; keep them in fast PR shards
     # (issue #8063).
@@ -547,6 +592,7 @@ _FAST_FILES = {
     "test_termination_reason.py",
     # Benchmark metric characterization tests are deterministic pure-metric
     # contracts; keep them in fast shards for changed metrics coverage.
+    "test_aggregate.py",
     "test_metrics.py",
     "test_aggregated_time_cooperative.py",
     # Classic planner adapter tests are deterministic planner-contract tests for

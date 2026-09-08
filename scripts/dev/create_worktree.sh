@@ -19,13 +19,18 @@ Options:
   --mode MODE              Worktree mode: implementation (default) or review.
   --minimum-free-bytes N   Override ROBOT_SF_WORKTREE_MIN_FREE_BYTES.
   --receipt PATH            Write a delegated-worker receipt after creation.
-  --task-id ID              Task identifier for --receipt (delegated mode).
+  --task-id ID              Acquire an active-worktree lease for this task.
   --dry-run                Run the preflight without invoking Git.
   --exec COMMAND [ARG...]  Run an explicit command from inside the new worktree.
   -h, --help               Show this help and exit.
 
-The default threshold is 2 GiB (ROBOT_SF_WORKTREE_MIN_FREE_BYTES).  After
-creation, targeted validation should use the main checkout's shared environment:
+The default threshold is 2 GiB (ROBOT_SF_WORKTREE_MIN_FREE_BYTES).  Supplying
+--task-id creates a path-scoped ownership lease before the repository worktree
+mutation lock is released, so repository-owned cleanup cannot race the task
+claim.  --receipt remains optional; when supplied it requires --task-id and
+also writes the immutable delegated-worker identity receipt.
+
+After creation, targeted validation should use the main checkout's shared environment:
 
   scripts/dev/run_worktree_shared_venv.sh -- <command>
 
@@ -38,6 +43,11 @@ When --exec is supplied, the command is launched in the created worktree even
 though this script itself may have been invoked from another checkout.  The
 worktree is left in place when the command fails so its diagnostics remain
 available for inspection.
+
+For --mode review, --exec is launched through the review guard's Linux
+Landlock process boundary and fails closed when that boundary is unavailable.
+Commands started later must remain descendants of that process to retain the
+boundary; use the guard's `run -- ... bash` form for a bounded session.
 EOF
 }
 
@@ -55,6 +65,8 @@ command_args=()
 # fcntl holder owns the shared lock file. The inherited lock descriptor is
 # validated below; never pass this flag directly.
 locked_transaction=0
+created_worktree=0
+created_branch_sha=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -133,8 +145,8 @@ if [[ "$worktree_mode" != "implementation" && "$worktree_mode" != "review" ]]; t
   exit 2
 fi
 
-if [[ -n "$task_id" && -z "$receipt_path" ]] || [[ -n "$receipt_path" && -z "$task_id" ]]; then
-  echo "--receipt and --task-id must be supplied together" >&2
+if [[ -n "$receipt_path" && -z "$task_id" ]]; then
+  echo "--receipt requires --task-id" >&2
   exit 2
 fi
 
@@ -190,11 +202,16 @@ worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
 # Git derives linked-worktree administrative directory names from the target
 # basename. Independent callers with distinct full paths but the same basename
 # can therefore race while Git allocates (or prunes) entries under the shared
-# common directory. Serialize the complete orphan-recovery/prune/add
+# common directory. Serialize the complete orphan-recovery/prune/add/lease
 # transaction per repository; target and capacity validation run inside that
 # transaction so the admission decision matches the mutation it protects.
 report_and_exec() {
   echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
+  if [[ -n "$task_id" ]]; then
+    echo "create_worktree: active lease owner/task: $task_id"
+    echo "create_worktree: heartbeat with scripts/dev/pr_gate_lease.py heartbeat --worktree '$worktree_path' --extend-hours 2"
+    echo "create_worktree: release before teardown with scripts/dev/pr_gate_lease.py release --worktree '$worktree_path'"
+  fi
   echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
 
   if [[ "${#command_args[@]}" -gt 0 ]]; then
@@ -204,8 +221,115 @@ report_and_exec() {
       if [[ -n "$receipt_path" ]]; then
         python3 "$SCRIPT_DIR/worktree_receipt.py" check --receipt "$receipt_path" --worktree . --json
       fi
+      if [[ "$worktree_mode" == "review" ]]; then
+        # Bind the optional first command to the real process boundary. Later
+        # commands must remain descendants of this process to retain it.
+        exec python3 "$SCRIPT_DIR/review_worktree_guard.py" run \
+          --worktree "$worktree_path" -- "${command_args[@]}"
+      fi
       exec "${command_args[@]}"
     )
+  fi
+}
+
+lease_file_for_worktree() {
+  python3 - "$worktree_path" "$git_common_dir" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+
+worktree_path = Path(sys.argv[1]).resolve()
+common_dir = Path(sys.argv[2])
+digest = hashlib.sha256(str(worktree_path).encode("utf-8")).hexdigest()
+print(common_dir / f".pr-gate-lease-{digest}.json")
+PY
+}
+
+release_task_lease() {
+  if [[ -z "$task_id" ]]; then
+    return 0
+  fi
+
+  if python3 "$SCRIPT_DIR/pr_gate_lease.py" release --worktree "$worktree_path" >/dev/null; then
+    return 0
+  fi
+
+  # The normal release path is serialized by the inherited lock. If it cannot
+  # run, remove only this path-scoped lease file as a last-resort rollback so a
+  # failed creation cannot leave an active lease for a deleted worktree.
+  local lease_file
+  if ! lease_file="$(lease_file_for_worktree)"; then
+    return 1
+  fi
+  rm -f -- "$lease_file"
+}
+
+cleanup_failed_creation() {
+  local failure_rc="$1"
+  local cleanup_failed=0
+
+  if [[ "$created_worktree" -ne 1 ]]; then
+    return "$failure_rc"
+  fi
+
+  if ! release_task_lease; then
+    echo "create_worktree: failed to remove the task lease during rollback" >&2
+    cleanup_failed=1
+  fi
+
+  if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
+    if ! git worktree remove --force "$worktree_path"; then
+      echo "create_worktree: failed to remove worktree during rollback: $worktree_path" >&2
+      cleanup_failed=1
+    fi
+  fi
+  if ! git worktree prune; then
+    echo "create_worktree: failed to prune worktree metadata during rollback" >&2
+    cleanup_failed=1
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+    local current_branch_sha
+    current_branch_sha="$(git rev-parse --verify "$branch_name^{commit}" 2>/dev/null || true)"
+    if [[ -n "$created_branch_sha" && "$current_branch_sha" == "$created_branch_sha" ]] &&
+       ! git worktree list --porcelain | grep -q "^branch refs/heads/$branch_name$"; then
+      if ! git branch -D "$branch_name"; then
+        echo "create_worktree: failed to remove created branch during rollback: $branch_name" >&2
+        cleanup_failed=1
+      fi
+    else
+      echo "create_worktree: preserved branch during rollback: $branch_name" >&2
+      cleanup_failed=1
+    fi
+  fi
+
+  if [[ "$cleanup_failed" -ne 0 ]]; then
+    echo "create_worktree: rollback was incomplete after creation failure" >&2
+  fi
+  return "$failure_rc"
+}
+
+clear_inherited_worktree_config() {
+  # ``git worktree add`` copies the invoking worktree's config.worktree when
+  # worktreeConfig is enabled. Never let review-only push barriers or arbitrary
+  # per-worktree settings leak into a newly created target. The path check keeps
+  # this cleanup scoped to the newly registered linked-worktree admin directory.
+  local target_git_dir
+  if ! target_git_dir="$(git -C "$worktree_path" rev-parse --path-format=absolute --git-dir)"; then
+    echo "create_worktree: could not resolve the target linked Git directory" >&2
+    return 1
+  fi
+  if [[ "$target_git_dir" != "$git_common_dir"/worktrees/* ]]; then
+    echo "create_worktree: refusing to clear an unexpected target Git directory: $target_git_dir" >&2
+    return 1
+  fi
+  local target_config="$target_git_dir/config.worktree"
+  if [[ -L "$target_config" ]]; then
+    echo "create_worktree: refusing to follow a symlinked target worktree config: $target_config" >&2
+    return 1
+  fi
+  if [[ -e "$target_config" ]]; then
+    rm -f -- "$target_config"
   fi
 }
 
@@ -246,7 +370,25 @@ run_locked_transaction() {
   # linked worktree's branch can be configured explicitly later with
   # ``git branch --set-upstream-to``; creation itself must remain safe when
   # several workers create worktrees concurrently.
-  git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"
+  if git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"; then
+    created_worktree=1
+    created_branch_sha="$(git rev-parse --verify "$branch_name^{commit}")"
+    if clear_inherited_worktree_config; then
+      :
+    else
+      local config_cleanup_rc=$?
+      if ! cleanup_failed_creation "$config_cleanup_rc"; then
+        :
+      fi
+      return "$config_cleanup_rc"
+    fi
+  else
+    local worktree_add_rc=$?
+    if ! cleanup_failed_creation "$worktree_add_rc"; then
+      :
+    fi
+    return "$worktree_add_rc"
+  fi
   if [[ "$worktree_mode" == "review" ]]; then
     review_guard_args=(--worktree "$worktree_path" --mode review)
     # A review candidate may be created from a base that predates this guard.
@@ -256,11 +398,53 @@ run_locked_transaction() {
           ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
       review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
     fi
-    python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"
+    if python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"; then
+      :
+    else
+      local review_guard_rc=$?
+      if ! cleanup_failed_creation "$review_guard_rc"; then
+        :
+      fi
+      return "$review_guard_rc"
+    fi
+  fi
+  if [[ -n "$task_id" ]]; then
+    # The lease helper reuses the inherited repository lock. Creating the lease
+    # before this transaction releases the lock closes the add->claim cleanup gap.
+    if python3 "$SCRIPT_DIR/pr_gate_lease.py" create \
+      --worktree "$worktree_path" --gate-id "$task_id" --owner "$task_id"; then
+      :
+    else
+      local lease_create_rc=$?
+      echo "create_worktree: task-id lease handoff failed; rolling back creation" >&2
+      if ! cleanup_failed_creation "$lease_create_rc"; then
+        :
+      fi
+      return "$lease_create_rc"
+    fi
+    if python3 "$SCRIPT_DIR/pr_gate_lease.py" is-active --worktree "$worktree_path"; then
+      :
+    else
+      local lease_observation_rc=$?
+      echo "create_worktree: task-id lease was not observable after creation; rolling back" >&2
+      if ! cleanup_failed_creation "$lease_observation_rc"; then
+        :
+      fi
+      return "$lease_observation_rc"
+    fi
   fi
   if [[ -n "$receipt_path" ]]; then
-    python3 "$SCRIPT_DIR/worktree_receipt.py" create \
-      --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"
+    if python3 "$SCRIPT_DIR/worktree_receipt.py" create \
+      --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"; then
+      :
+    else
+      local receipt_rc=$?
+      echo "create_worktree: receipt handoff failed; rolling back creation" >&2
+      if ! cleanup_failed_creation "$receipt_rc"; then
+        :
+      fi
+      return "$receipt_rc"
+    fi
   fi
 }
 
@@ -285,7 +469,11 @@ if [[ "$use_python_lock" -eq 0 ]]; then
     echo "create_worktree: failed to acquire repository worktree-creation lock" >&2
     exit 2
   fi
+  # Expose the already-held descriptor so the lease helper can verify and reuse
+  # this same lock identity instead of opening a second descriptor and deadlocking.
+  export ROBOT_SF_WORKTREE_LOCK_FD="$worktree_lock_fd"
   run_locked_transaction
+  unset ROBOT_SF_WORKTREE_LOCK_FD
   flock -u "$worktree_lock_fd"
   exec {worktree_lock_fd}>&-
 else
@@ -297,8 +485,11 @@ else
   if [[ -n "$minimum_free_bytes" ]]; then
     locked_args+=(--minimum-free-bytes "$minimum_free_bytes")
   fi
+  if [[ -n "$task_id" ]]; then
+    locked_args+=(--task-id "$task_id")
+  fi
   if [[ -n "$receipt_path" ]]; then
-    locked_args+=(--receipt "$receipt_path" --task-id "$task_id")
+    locked_args+=(--receipt "$receipt_path")
   fi
   python_lock_rc=0
   python3 "$SCRIPT_DIR/worktree_creation_lock.py" "$worktree_lock_path" -- \

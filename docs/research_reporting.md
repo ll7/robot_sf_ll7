@@ -19,6 +19,32 @@ The research reporting system automates the generation of comprehensive research
 - Ablation study support (BC epochs, dataset sizes)
  - Telemetry section (optional) for runtime performance metrics
 
+Statistical helpers use a finite-value admission boundary: `NaN`, positive infinity, and negative
+infinity are excluded before tests, effect sizes, or threshold comparisons. Paired analyses drop a
+pair when either side is non-finite; independent analyses filter each sample separately. Returned
+sample counts are the effective finite counts, and analyses with too few finite values return an
+incomplete result rather than emitting non-finite research evidence. This is filtering, not
+imputation; the source run should still be investigated when invalid values occur.
+
+Native lane-formation parameter-screen rows use the same boundary: both primary and sampled lane
+metrics must be finite numeric values before a Stage A diagnostic summary is materialized. Missing,
+malformed, or non-finite metric payloads fail closed; they are not converted into placeholder
+values or counted as successful evidence.
+
+Native lane-formation sensitivity rows apply the same boundary before cell summaries are
+materialized. Required lane-segregation and lane-purity values must be finite numeric values;
+malformed or non-finite rows fail closed instead of emitting `NaN` summary statistics.
+
+### Timestep metric contract
+
+Tracker manifests normalize `timesteps_to_convergence`, `avg_timesteps`, and `total_timesteps` in
+that priority order. A numeric `0` is valid for instantaneous or diagnostic convergence and is
+preserved as a present metric. Negative values fail closed at the parser and provenance boundaries.
+`null` or malformed falsy values in an earlier alias retain the legacy fall-through behavior; a
+final `null` is treated as missing, and malformed values that reach numeric coercion fail closed.
+See the [imitation-report data model](../specs/270-imitation-report/data-model.md) for the
+authoritative validation rule.
+
 ### High-Level Flow
 
 ```mermaid
@@ -199,6 +225,22 @@ For issue-791 PPO reporting, the active boundary is recorded in
 policy on a broad scenario matrix, not OOD generalization. Internal engineering notes may still use
 distribution-alignment language to explain why one training recipe beat another, but manuscript,
 PR, and issue summary text should use the narrower benchmark-set wording.
+
+### Seed metadata validation
+
+Report generation rejects malformed `summary.seeds` metadata before it writes a report directory.
+When the field is present, it must be a list of integer seed values; an absent field remains
+allowed for legacy summaries and is rendered as unavailable metadata rather than evidence of a
+seeded run.
+
+### Extractor timing metadata validation
+
+Report generation validates each present `extractor_results[].duration_seconds` value before it
+writes a report directory. Values must be finite and non-negative; malformed, non-finite, or
+negative timing values fail through the shared research validation boundary. An absent duration
+remains allowed for legacy summaries, while valid durations are preserved in reproducibility
+metadata.
+
 ## H500 Reporting Language
 
 Use h500 as a long-horizon sensitivity/report surface, not as a replacement for the fixed-horizon
@@ -315,6 +357,14 @@ Figures follow `docs/dev_guide_reference.md` guidelines:
 ```bash
 ls output/run-tracker/<run_id>/manifest.json
 ```
+
+Tracker manifests must contain a JSON object with list-shaped `steps`,
+`enabled_steps`, and `seeds` fields when present, plus object-shaped `summary` and `metrics`
+fields when present (including `summary.metrics`).
+Malformed JSON, invalid UTF-8, and schema-drifted shapes are rejected as validation failures so
+the report and aggregation pipelines do not treat incomplete reproducibility metadata as valid
+evidence. The report CLI, multi-seed orchestrator, and per-seed metric extraction share this
+validation and numeric-coercion boundary; unrepresentable numeric values are skipped as failures.
 
 ### Issue: LaTeX export fails
 

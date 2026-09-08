@@ -58,7 +58,12 @@ from robot_sf.benchmark.collision.collision_scenario_similarity import (
 from robot_sf.benchmark.distributions import collect_grouped_values as _dist_collect
 from robot_sf.benchmark.distributions import save_distributions as _dist_save
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
-from robot_sf.benchmark.errors import AggregationMetadataError, EpisodeRecordInputError
+from robot_sf.benchmark.errors import (
+    AggregationInputError,
+    AggregationMetadataError,
+    DistributionInputError,
+    EpisodeRecordInputError,
+)
 from robot_sf.benchmark.failure_extractor import extract_failures as _extract_failures
 from robot_sf.benchmark.failure_mechanism_classifier import (
     classify_failure_mechanisms_from_jsonl,
@@ -132,7 +137,9 @@ _CLI_INPUT_ERRORS = (
     OSError,
     json.JSONDecodeError,
     yaml.YAMLError,
+    AggregationInputError,
     AggregationMetadataError,
+    DistributionInputError,
     EpisodeRecordInputError,
 )
 # AttributeError is limited to the optional tqdm API probe below; ordinary CLI
@@ -598,6 +605,9 @@ def _handle_aggregate(args) -> int:
         except _CLI_LOGGING_ERRORS:  # pragma: no cover - defensive logging boundary
             logging.debug("Logging 'Aggregated summary' failed", exc_info=True)
         return 0
+    except AggregationInputError as exc:  # pragma: no cover - error path
+        logging.log(logging.ERROR, "Aggregation failed: %s", exc)
+        return 2
     except _CLI_INPUT_ERRORS as exc:  # pragma: no cover - error path
         logging.exception("Aggregation failed: %s", exc)
         return 2
@@ -1203,6 +1213,9 @@ def _handle_plot_distributions(args) -> int:
             ci_seed=(int(args.ci_seed) if getattr(args, "ci_seed", None) is not None else None),
         )
         return 0
+    except DistributionInputError as exc:
+        logging.warning("plot-distributions input error: %s", exc)
+        return 2
     except _CLI_INPUT_ERRORS:  # pragma: no cover - input/output boundary
         return 2
 

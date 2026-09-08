@@ -96,6 +96,41 @@ resolve_agent_artifact_dir() {
   fi
 }
 
+# Provision the exact CI helper pins before the software-candidate test switches
+# to offline mode. Use a disposable environment and an explicit fixture cache;
+# never reinstall into the caller's environment or prime the global uv cache.
+prepare_software_candidate_test_cache() (
+  set -euo pipefail
+  local python_bin="${1:?expected Python 3.12 executable}"
+  local scratch_dir="${2:?expected fixture scratch directory}"
+  mkdir -p "$scratch_dir"
+  scratch_dir="$(cd "$scratch_dir" && pwd -P)"
+  export UV_CACHE_DIR="$scratch_dir/uv-cache"
+  export UV_NO_CONFIG=1
+  export UV_PYTHON_DOWNLOADS=never
+
+  local primer_env
+  primer_env="$(mktemp -d "$scratch_dir/cache-primer.XXXXXX")"
+  if ! uv venv --python "$python_bin" "$primer_env"; then
+    printf 'Cannot prepare the offline helper cache with Python %s. Provide a working Python 3.12 executable.\n' \
+      "$python_bin" >&2
+    return 2
+  fi
+  # Match ci.yml: wheel payloads alone do not guarantee that an offline pip
+  # resolution has the registry and wheel metadata it needs.
+  if ! uv pip install --python "$primer_env/bin/python" \
+    --refresh-package packaging \
+    --refresh-package pyyaml \
+    --reinstall \
+    "packaging==26.0" \
+    "pyyaml==6.0.3"; then
+    printf 'Cannot provision packaging==26.0 and pyyaml==6.0.3 for the offline helper bootstrap in %s.\n' \
+      "$UV_CACHE_DIR" >&2
+    printf 'Restore package-index access for preparation, then rerun the test; the bootstrap itself stays offline.\n' >&2
+    return 2
+  fi
+)
+
 # Cheap shell preflight: verify that test-collection dependencies (duckdb,
 # pyarrow, pandas) are importable before expensive pytest collection runs.  Exit 2
 # with a concise message on failure so agents see the blocker immediately.

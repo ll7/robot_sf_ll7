@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import numpy as np
 
+from robot_sf.common.validation import finite_float
 from robot_sf.planner.guarded_ppo import GuardedPPOAdapter, GuardedPPOConfig
 from robot_sf.planner.mppi_social import (
     MPPISocialConfig,
@@ -45,6 +46,7 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
 
     _TRACE_LIMIT = 128
     _PLANNER_EXCEPTIONS = (RuntimeError, TypeError, ValueError)
+    _finite_float = staticmethod(finite_float)
 
     def __init__(
         self,
@@ -94,19 +96,6 @@ class HybridORCASamplerAdapter(GuardedPPOAdapter):
         self._last_goal_distance: float | None = None
         self._best_goal_distance: float | None = None
         self._route_stall_cycles: int = 0
-
-    @staticmethod
-    def _finite_float(value: Any) -> float | None:
-        """Convert numeric values to finite floats for JSON-safe diagnostics.
-
-        Returns:
-            float | None: Finite float value, or ``None`` for non-finite/invalid inputs.
-        """
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            return None
-        return number if np.isfinite(number) else None
 
     def _sanitize_eval(self, values: dict[str, Any] | None) -> dict[str, Any] | None:
         """Return a JSON-safe view of rollout evaluation metrics."""

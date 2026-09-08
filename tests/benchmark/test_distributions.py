@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.distributions import collect_grouped_values, save_distributions
-from robot_sf.benchmark.errors import AggregationMetadataError
+from robot_sf.benchmark.errors import AggregationMetadataError, DistributionInputError
 
 
 def test_collect_grouped_values_filters_invalid_entries() -> None:
@@ -60,3 +60,37 @@ def test_save_distributions_writes_pngs(tmp_path: Path) -> None:
     meta = save_distributions(grouped, tmp_path, bins=5, kde=False, out_pdf=False, ci=True)
     assert meta.wrote
     assert Path(meta.wrote[0]).exists()
+
+
+def test_save_distributions_skips_ci_control_validation_when_disabled(tmp_path: Path) -> None:
+    """Non-CI plots do not require bootstrap-only controls to be meaningful."""
+    grouped = {"algoA": {"success_rate": [0.1, 0.2, 0.3]}}
+
+    meta = save_distributions(
+        grouped,
+        tmp_path,
+        bins=2,
+        kde=False,
+        out_pdf=False,
+        ci=False,
+        ci_samples=0,
+        ci_confidence=float("nan"),
+    )
+
+    assert meta.wrote
+
+
+def test_save_distributions_rejects_non_numeric_ci_confidence(tmp_path: Path) -> None:
+    """Non-numeric CI confidence values fail at the reusable plotting boundary."""
+    grouped = {"algoA": {"success_rate": [0.1, 0.2, 0.3]}}
+
+    with pytest.raises(DistributionInputError, match="ci_confidence must be finite"):
+        save_distributions(
+            grouped,
+            tmp_path,
+            bins=2,
+            kde=False,
+            out_pdf=False,
+            ci=True,
+            ci_confidence=object(),  # type: ignore[arg-type]
+        )

@@ -12,16 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 
-from robot_sf.research.forecast_heavy_model_inventory import (
-    ENTRY_POINT_SURFACES,
-    EXPERIMENT_PREREQUISITES,
-    MODEL_FAMILIES,
-    build_inventory_report,
-    build_revival_decision_packet,
-    render_markdown,
-    render_revival_decision_packet_markdown,
-)
-
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build command-line parser."""
@@ -47,6 +37,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Run inventory preflight CLI and return shell-friendly exit code."""
     args = build_arg_parser().parse_args(argv)
+    # Keep lightweight help usable without the optional analytics stack. The
+    # inventory module is imported only after argparse handles core CLI paths.
+    from robot_sf.research.forecast_heavy_model_inventory import (
+        ENTRY_POINT_SURFACES,
+        EXPERIMENT_PREREQUISITES,
+        MODEL_FAMILIES,
+        build_inventory_report,
+        build_revival_decision_packet,
+        render_markdown,
+        render_revival_decision_packet_markdown,
+    )
+
     if args.list:
         payload = {
             "issue": 2845,

@@ -8,9 +8,13 @@ import math
 import pytest
 
 from robot_sf.nav.global_route import (
+    AdaptiveLocalGoalConfig,
+    CandidateProgressConfig,
     RouteGeometry,
     RouteProjectionHint,
     RouteProjectionTracker,
+    compute_candidate_progress,
+    select_adaptive_local_goal,
 )
 
 
@@ -296,3 +300,177 @@ def test_route_tracker_snapshot_restore_is_json_safe_and_replayable() -> None:
     changed_policy = RouteGeometry([(0, 0), (5, 0), (10, 0)], tie_tolerance_m=0.5)
     with pytest.raises(ValueError, match="tie_tolerance_m"):
         RouteProjectionTracker.restore(changed_policy, snapshot)
+
+
+def test_candidate_progress_uses_route_arc_length_and_reports_lateral_diagnostics() -> None:
+    """Candidate progress must follow route arc length, not Euclidean displacement."""
+    route = RouteGeometry([(0, 0), (10, 0), (10, 10)])
+
+    result = compute_candidate_progress(
+        route,
+        [(0.0, 0.25), (4.0, 0.25), (8.0, 0.25), (10.0, 3.0)],
+    )
+
+    assert result.is_valid
+    assert result.start_arc_length_m == pytest.approx(0.0)
+    assert result.end_arc_length_m == pytest.approx(13.0)
+    assert result.signed_progress_m == pytest.approx(13.0)
+    assert result.bounded_progress_m == pytest.approx(13.0)
+    assert result.progress_ratio == pytest.approx(13.0 / 20.0)
+    assert result.start_lateral_error_m == pytest.approx(0.25)
+    assert result.end_lateral_error_m == pytest.approx(0.0)
+    assert result.max_lateral_error_m == pytest.approx(0.25)
+    assert result.ambiguity_count == 0
+    assert result.discontinuity_count == 0
+    assert result.invalid_count == 0
+    assert result.diagnostics()["schema_version"] == "route_candidate_progress.v1"
+    assert json.loads(json.dumps(result.as_dict(), allow_nan=False)) == result.as_dict()
+
+
+def test_candidate_progress_rejects_parallel_branch_jumps_with_continuity_bounds() -> None:
+    """A jump to a wrong parallel branch must not manufacture route progress."""
+    route = RouteGeometry([(0, 0), (10, 0), (10, 1), (0, 1)])
+
+    result = compute_candidate_progress(
+        route,
+        [(8.0, 0.0), (1.0, 1.0)],
+        config=CandidateProgressConfig(max_forward_jump_m=0.75, max_backtrack_m=0.5),
+    )
+
+    assert result.status == "discontinuous"
+    assert result.discontinuity_count == 1
+    assert result.start_arc_length_m is None
+    assert result.end_arc_length_m is None
+    assert result.signed_progress_m is None
+    assert result.bounded_progress_m is None
+
+
+def test_candidate_progress_rejects_ambiguous_and_invalid_traces_fail_closed() -> None:
+    """Ambiguous or malformed samples must clear all progress diagnostics."""
+    route = RouteGeometry([(0, 0), (2, 2), (0, 2), (2, 0)])
+
+    ambiguous = compute_candidate_progress(route, [(1.0, 1.0), (1.5, 1.5)])
+    assert ambiguous.status == "ambiguous"
+    assert ambiguous.ambiguity_count == 1
+    assert ambiguous.bounded_progress_m is None
+
+    invalid = compute_candidate_progress(route, [(0.0, 0.0), (math.nan, 0.0)])
+    assert invalid.status == "invalid_trace"
+    assert invalid.invalid_count == 1
+    assert invalid.bounded_progress_m is None
+    assert json.loads(json.dumps(invalid.diagnostics(), allow_nan=False)) == invalid.diagnostics()
+
+
+@pytest.mark.parametrize("malformed_point", [None, (0.0,), (0.0, 1.0, 2.0), (10**400, 0.0)])
+def test_candidate_progress_rejects_malformed_point_shapes(
+    malformed_point: object,
+) -> None:
+    """Malformed samples must return a JSON-safe invalid result, not leak conversion errors."""
+    route = RouteGeometry([(0, 0), (2, 0)])
+
+    result = compute_candidate_progress(route, [(0.0, 0.0), malformed_point])  # type: ignore[list-item]
+
+    assert result.status == "invalid_trace"
+    assert result.invalid_count == 1
+    assert result.bounded_progress_m is None
+    assert json.loads(json.dumps(result.diagnostics(), allow_nan=False)) == result.diagnostics()
+
+
+def test_candidate_progress_preserves_signed_backtracking_and_bounds_it_at_zero() -> None:
+    """Backtracking is visible in signed progress but never becomes positive progress."""
+    route = RouteGeometry([(0, 0), (10, 0)])
+
+    result = route.candidate_progress([(5.0, 0.0), (4.0, 0.0)])
+
+    assert result.status == "ok"
+    assert result.signed_progress_m == pytest.approx(-1.0)
+    assert result.bounded_progress_m == pytest.approx(0.0)
+    assert result.progress_ratio == pytest.approx(0.0)
+
+
+def test_adaptive_local_goal_is_deterministic_bounded_and_route_relative() -> None:
+    """Adaptive lookahead must be explicit, deterministic, and clipped to the route."""
+    route = RouteGeometry([(0, 0), (20, 0)])
+    config = AdaptiveLocalGoalConfig(
+        min_lookahead_m=1.0,
+        max_lookahead_m=6.0,
+        base_lookahead_m=2.0,
+        speed_gain_s=1.0,
+        crowd_penalty_m_per_density=1.0,
+        uncertainty_weight=1.0,
+    )
+
+    first = select_adaptive_local_goal(
+        route,
+        (4.0, 0.5),
+        speed_m_s=2.0,
+        crowd_density=0.5,
+        uncertainty_m=0.5,
+        config=config,
+    )
+    second = route.adaptive_local_goal(
+        (4.0, 0.5),
+        speed_m_s=2.0,
+        crowd_density=0.5,
+        uncertainty_m=0.5,
+        config=config,
+    )
+
+    assert first == second
+    assert first.is_valid
+    assert first.current_arc_length_m == pytest.approx(4.0)
+    assert first.arc_length_m == pytest.approx(7.0)
+    assert first.point == pytest.approx((7.0, 0.0))
+    assert 1.0 <= first.lookahead_m <= 6.0
+    assert first.effective_lookahead_m == pytest.approx(3.0)
+    assert first.lateral_error_m == pytest.approx(0.5)
+    assert first.projection_status == "ok"
+    assert json.loads(json.dumps(first.diagnostics(), allow_nan=False)) == first.diagnostics()
+
+    high_context = select_adaptive_local_goal(
+        route,
+        (4.0, 0.0),
+        speed_m_s=0.0,
+        crowd_density=10.0,
+        uncertainty_m=10.0,
+        config=config,
+    )
+    assert high_context.lookahead_m == pytest.approx(1.0)
+
+    near_end = select_adaptive_local_goal(
+        route,
+        (19.0, 0.0),
+        speed_m_s=2.0,
+        crowd_density=0.0,
+        uncertainty_m=0.0,
+        config=config,
+    )
+    assert near_end.arc_length_m == pytest.approx(route.total_length_m)
+    assert near_end.effective_lookahead_m == pytest.approx(1.0)
+
+
+def test_adaptive_local_goal_propagates_projection_failures_and_validates_context() -> None:
+    """Adaptive goals must fail closed on projection failures and bad context values."""
+    route = RouteGeometry([(0, 0), (10, 0)])
+    discontinuous = select_adaptive_local_goal(
+        route,
+        (10.0, 0.0),
+        speed_m_s=1.0,
+        crowd_density=0.0,
+        uncertainty_m=0.0,
+        hint=RouteProjectionHint(previous_s_m=0.0, max_forward_jump_m=0.5),
+    )
+    assert discontinuous.status == "discontinuous"
+    assert discontinuous.point is None
+    assert discontinuous.arc_length_m is None
+
+    with pytest.raises(ValueError, match="speed_m_s must be finite"):
+        select_adaptive_local_goal(
+            route,
+            (0.0, 0.0),
+            speed_m_s=math.nan,
+            crowd_density=0.0,
+            uncertainty_m=0.0,
+        )
+    with pytest.raises(ValueError, match="min_lookahead_m"):
+        AdaptiveLocalGoalConfig(min_lookahead_m=3.0, max_lookahead_m=2.0)

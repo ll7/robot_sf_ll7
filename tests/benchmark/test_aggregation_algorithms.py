@@ -6,7 +6,7 @@ import pytest
 from loguru import logger
 
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci
-from robot_sf.benchmark.errors import AggregationMetadataError
+from robot_sf.benchmark.errors import AggregationInputError, AggregationMetadataError
 
 
 def _make_record(
@@ -92,3 +92,42 @@ def test_missing_algo_fields_raise():
 
     with pytest.raises(AggregationMetadataError):
         compute_aggregates_with_ci(records, return_ci=False)
+
+
+@pytest.mark.parametrize(
+    "confidence",
+    [0.0, 1.0, -0.5, 1.5, float("nan"), float("inf"), float("-inf")],
+)
+def test_invalid_bootstrap_confidence_fails_closed_when_ci_enabled(confidence: float) -> None:
+    """Bootstrap CI controls must be finite probabilities in the open unit interval."""
+    records = [_make_record("sf", scenario_id="scenario-sf")]
+
+    with pytest.raises(AggregationInputError, match="bootstrap_confidence"):
+        compute_aggregates_with_ci(
+            records,
+            bootstrap_samples=16,
+            bootstrap_confidence=confidence,
+        )
+
+
+@pytest.mark.parametrize(
+    ("return_ci", "bootstrap_samples", "confidence"),
+    [(True, 0, 0.0), (False, 16, 1.5)],
+)
+def test_invalid_bootstrap_confidence_is_ignored_when_ci_disabled(
+    return_ci: bool,
+    bootstrap_samples: int,
+    confidence: float,
+) -> None:
+    """Explicit no-CI modes preserve aggregation without validating unused controls."""
+    records = [_make_record("sf", scenario_id="scenario-sf")]
+
+    result = compute_aggregates_with_ci(
+        records,
+        return_ci=return_ci,
+        bootstrap_samples=bootstrap_samples,
+        bootstrap_confidence=confidence,
+    )
+
+    assert result["sf"]["success_rate"]["mean"] == pytest.approx(1.0)
+    assert "mean_ci" not in result["sf"]["success_rate"]

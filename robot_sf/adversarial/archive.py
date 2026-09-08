@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-import math
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from robot_sf.common.validation import finite_float as _finite_float
 
 ARCHIVE_SCHEMA_VERSION = "adversarial_failure_archive.v1"
 SEARCH_MANIFEST_SCHEMA_VERSION = "adversarial-search-manifest.v1"
@@ -341,15 +342,6 @@ def _nested_float(payload: dict[str, Any], path: tuple[str, ...]) -> float | Non
             return None
         current = current.get(part)
     return _finite_float(current)
-
-
-def _finite_float(value: Any) -> float | None:
-    """Return a finite float or None."""
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed if math.isfinite(parsed) else None
 
 
 def _objective_sort_value(value: Any) -> float:

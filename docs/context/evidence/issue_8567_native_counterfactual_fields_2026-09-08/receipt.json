@@ -8,9 +8,9 @@
   "benchmark_evidence": false,
   "campaign_submission_authorized": false,
   "source_revisions": {
-    "base_commit": "69683f73343ec7b60425dc98080c2fa120f44f4a",
-    "implementation_head_commit": "568369587de13273bdc59e5ce15266d8e1cd7d6e",
-    "smoke_rows_commit": "568369587de13273bdc59e5ce15266d8e1cd7d6e",
+    "base_commit": "9557d3aba9910bd039c1e689973fd51e9713603",
+    "implementation_head_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
+    "smoke_rows_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
     "smoke_worktree": ".",
     "head_scope": "The implementation_head_commit is the exact clean source commit recorded by every smoke row. This receipt is a subsequent documentation commit; the PR exact-head gate binds the final documentation tip separately."
   },
@@ -63,8 +63,8 @@
   "smoke": {
     "config": "configs/benchmarks/paired_effect_native_smoke_v1.yaml",
     "config_sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b",
-    "campaign_id": "paired_effect_native_smoke_v1_20260909_004532",
-    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260909_004532",
+    "campaign_id": "paired_effect_native_smoke_v1_20260909_005337",
+    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260909_005337",
     "scenario_matrix": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
     "scenario_matrix_sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
     "scenario_matrix_internal_hash": "fbed5c9e0876",
@@ -81,14 +81,14 @@
     "fallback_or_degraded_rows": 0,
     "total_arms": 2,
     "total_episodes": 2,
-    "runtime_s": 25.030958655057475,
+    "runtime_s": 25.565905549097806,
     "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paired_effect_native_smoke_v1.yaml --output-root output/validation/paired_effect_native_smoke --mode run --arm-isolation subprocess --skip-publication-bundle"
   },
   "arms": {
     "wrapper_off": {
-      "row_jsonl_sha256": "d2576b07a9ce686300b6ceb67fc13e018678015763414396b17d6d119055682f",
+      "row_jsonl_sha256": "82ee4982457b172613871042423fca78dba3adda5864fe1a1074b22faa459921",
       "pair_config_hash": "fba9cf7b51b248a5",
-      "source_commit": "568369587de13273bdc59e5ce15266d8e1cd7d6e",
+      "source_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
       "wrapper_trace_sha256": "9d70a670cb5ca68780825254dbe20e423994a1bf88c1e5cdfd407408b1e71443",
       "simulation_trace_sha256": "0389e037539c4a7d5a6f74152aecc984a513efcff91b0b69e309e48229cf4bca",
       "trace_steps": 100,
@@ -102,9 +102,9 @@
       }
     },
     "wrapper_on": {
-      "row_jsonl_sha256": "6d8d35cd60ea955cf2722ad9ec135fe3b99f0c25003d79db2fe7aee2def27518",
+      "row_jsonl_sha256": "c26812527adbf728d9294c499d36cc42665c3b647c968feaabdf3a0c75c00ba7",
       "pair_config_hash": "fba9cf7b51b248a5",
-      "source_commit": "568369587de13273bdc59e5ce15266d8e1cd7d6e",
+      "source_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
       "wrapper_trace_sha256": "c4f833fac60b0932699546f46942752a274337f8290c9d3c639a2f94c4d39325",
       "simulation_trace_sha256": "86d856ff0eaa7c046b3c252f689b5abda1747fcc1659981e20ea8541d50b0cfc",
       "trace_steps": 100,
@@ -127,7 +127,7 @@
       "seed": 111
     },
     "pair_config_hash": "fba9cf7b51b248a5",
-    "source_commit": "568369587de13273bdc59e5ce15266d8e1cd7d6e",
+    "source_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
     "values": {
       "false_positive_stop_rate": 1.0,
       "stop_yield_latency_s": 9.5,

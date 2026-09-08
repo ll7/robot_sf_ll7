@@ -466,6 +466,9 @@ _FAST_FILES = {
     # Lane-formation parameter-screen validation is a deterministic metric
     # admission contract; keep its changed-line coverage in fast shards as well.
     "test_lane_formation_parameter_screen.py",
+    # Lane-formation sensitivity validation is a deterministic metric admission
+    # contract; keep its changed-line coverage in fast shards as well.
+    "test_lane_formation_sensitivity.py",
     # Goal-belief contract tests are deterministic schema/lineage coverage for
     # the changed actor-observation producer; keep them in fast PR shards
     # (issue #8063).

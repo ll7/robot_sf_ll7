@@ -31,6 +31,10 @@ metrics must be finite numeric values before a Stage A diagnostic summary is mat
 malformed, or non-finite metric payloads fail closed; they are not converted into placeholder
 values or counted as successful evidence.
 
+Native lane-formation sensitivity rows apply the same boundary before cell summaries are
+materialized. Required lane-segregation and lane-purity values must be finite numeric values;
+malformed or non-finite rows fail closed instead of emitting `NaN` summary statistics.
+
 ### High-Level Flow
 
 ```mermaid

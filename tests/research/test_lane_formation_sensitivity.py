@@ -114,7 +114,7 @@ def test_summarize_sensitivity_rows_reports_threshold_hit_rates_by_cell():
             "geometry": {"length_m": 10.0, "half_width_m": 2.0},
             "population": {"n_pedestrians": 8},
             "duration": {"n_steps": 20},
-            "metrics": {"lane_segregation_index": 0.2},
+            "metrics": {"lane_segregation_index": 0.2, "lane_purity": 0.4},
             "threshold_evaluations": {"lane_segregation_index>=0.15": {"meets_threshold": True}},
             "execution": {"execution_mode": "native"},
         },
@@ -124,7 +124,7 @@ def test_summarize_sensitivity_rows_reports_threshold_hit_rates_by_cell():
             "geometry": {"length_m": 10.0, "half_width_m": 2.0},
             "population": {"n_pedestrians": 8},
             "duration": {"n_steps": 20},
-            "metrics": {"lane_segregation_index": 0.1},
+            "metrics": {"lane_segregation_index": 0.1, "lane_purity": 0.3},
             "threshold_evaluations": {"lane_segregation_index>=0.15": {"meets_threshold": False}},
             "execution": {"execution_mode": "native"},
         },
@@ -133,3 +133,42 @@ def test_summarize_sensitivity_rows_reports_threshold_hit_rates_by_cell():
     assert summary["n_seeds"] == 2
     assert summary["threshold_hit_rates"]["lane_segregation_index>=0.15"] == pytest.approx(0.5)
     assert summary["metric_stats"]["lane_segregation_index"]["mean"] == pytest.approx(0.15)
+
+
+def _sensitivity_row(metrics):
+    return {
+        "calibration": "released_default",
+        "seed": 1,
+        "geometry": {"length_m": 10.0, "half_width_m": 2.0},
+        "population": {"n_pedestrians": 8},
+        "duration": {"n_steps": 20},
+        "metrics": metrics,
+        "threshold_evaluations": {"lane_segregation_index>=0.15": {"meets_threshold": False}},
+        "execution": {"execution_mode": "native"},
+    }
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), float("-inf")])
+def test_summarize_sensitivity_rows_rejects_nonfinite_metrics(bad_value):
+    """Non-finite diagnostic metrics cannot become summary statistics."""
+
+    with pytest.raises(ValueError, match="finite numeric metrics"):
+        summarize_sensitivity_rows(
+            [_sensitivity_row({"lane_segregation_index": bad_value, "lane_purity": 0.4})]
+        )
+
+
+@pytest.mark.parametrize(
+    "metrics",
+    [
+        None,
+        {"lane_segregation_index": 0.2},
+        {"lane_segregation_index": "0.2", "lane_purity": 0.4},
+        {"lane_segregation_index": True, "lane_purity": 0.4},
+    ],
+)
+def test_summarize_sensitivity_rows_rejects_malformed_metrics(metrics):
+    """Missing or malformed metric mappings fail closed before aggregation."""
+
+    with pytest.raises(ValueError, match="finite numeric metrics"):
+        summarize_sensitivity_rows([_sensitivity_row(metrics)])

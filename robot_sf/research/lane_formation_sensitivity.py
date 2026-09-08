@@ -8,6 +8,7 @@ change released defaults, metric semantics, or benchmark/paper claims.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import product
 from typing import TYPE_CHECKING, Any
@@ -27,7 +28,7 @@ from robot_sf.research.emergent_phenomena import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Sequence
 
     from pysocialforce.config import SimulatorConfig
 
@@ -60,6 +61,8 @@ DEFAULT_THRESHOLD_GRID: dict[str, tuple[float, ...]] = {
     "lane_purity": (0.4, 0.6, 0.8),
 }
 SUPPORTED_METRICS = frozenset(DEFAULT_THRESHOLD_GRID)
+_METRIC_NAMES = tuple(sorted(SUPPORTED_METRICS))
+_MISSING = object()
 
 
 @dataclass(frozen=True)
@@ -109,6 +112,21 @@ def _validate_int_axis(name: str, values: Sequence[int]) -> None:
     for value in values:
         if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value <= 0:
             raise ValueError(f"{name} values must be positive integers; got {value!r}")
+
+
+def _validate_metric_mapping(metrics: Any, *, label: str) -> None:
+    """Reject malformed or non-finite lane metrics before aggregation."""
+    if not isinstance(metrics, Mapping):
+        raise ValueError(f"{label} must be a mapping of finite numeric metrics")
+    for metric_name in _METRIC_NAMES:
+        value = metrics.get(metric_name, _MISSING)
+        if (
+            value is _MISSING
+            or isinstance(value, bool)
+            or not isinstance(value, (int, float, np.integer, np.floating))
+            or not np.isfinite(float(value))
+        ):
+            raise ValueError(f"{label} must contain finite numeric metrics")
 
 
 def build_threshold_grid(
@@ -236,6 +254,7 @@ def _scenario_record(
         "lane_segregation_index": float(lane_segregation_index(result.trajectory)),
         "lane_purity": float(lane_purity(result.trajectory)),
     }
+    _validate_metric_mapping(metrics, label="metrics")
     # Cross-check the canonical run_scenario order-parameter dispatch without
     # changing its metric semantics.
     for metric_name, metric_value in result.order_parameters.items():
@@ -292,6 +311,7 @@ def summarize_sensitivity_rows(rows: Sequence[dict[str, Any]]) -> list[dict[str,
     """
     groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for row in rows:
+        _validate_metric_mapping(row.get("metrics"), label="metrics")
         key = (
             row["calibration"],
             row["geometry"]["length_m"],

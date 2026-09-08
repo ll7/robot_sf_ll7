@@ -2421,6 +2421,16 @@ def test_worktree_shared_venv_pin_layout_equivalence(
         ),
         ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff @ https://invalid/ruff"]', "error"),
         ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff[extra]==0.16.5"]', "error"),
+        ("[dependency-groups]\ndev = [\"ruff==0.16.5; os_name == 'nt'\"]", "error"),
+        ('[dependency-groups]\ndev = ["ruff[extra]==0.16.5"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff == 0.16.5"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff=="]', "error"),
+        ('[dependency-groups]\ndev = ["ruff===0.16.5"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5!"]', "error"),
+        (
+            '[dependency-groups]\ndev = ["ruff[extra]==0.16.5", "ruff[extra]==0.16.4"]',
+            "error",
+        ),
         ('[dependency-groups]\ndev = [{include-group = "other"}]', "error"),
         ("[dependency-groups]\ndev = [123]", "error"),
         ('[dependency-groups]\ndev = "ruff==0.16.5"', "error"),
@@ -2429,6 +2439,9 @@ def test_worktree_shared_venv_pin_layout_equivalence(
         ("", "unpinned"),
         ("[dependency-groups]\nother = ['ruff==0.16.4']", "unpinned"),
         ("[dependency-groups]\ndev = ['ruff>=0.16']", "unpinned"),
+        ("[dependency-groups]\ndev = [\"ruff>=0.16; python_version == '3.13'\"]", "unpinned"),
+        ('[dependency-groups]\ndev = ["ruff @ https://invalid/ruff?version==0.16.5"]', "unpinned"),
+        ("[dependency-groups]\ndev = [\"ruff==0.16.*; python_version == '3.13'\"]", "unpinned"),
         ("[dependency-groups]\ndev = ['ruff==0.16.*']", "unpinned"),
         (
             '# "ruff==0.16.4"\n[project]\ndescription = """\n"ruff==0.16.4"\n"""\n'

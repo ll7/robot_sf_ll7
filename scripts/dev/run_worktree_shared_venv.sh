@@ -28,7 +28,7 @@ the freshness preflight compares the resolved `<venv>/bin/<tool>` version agains
 pin in the active checkout's pyproject; on mismatch it fails closed with the exact `--venv`
 remedy instead of running. One preflight log line (with elapsed ms) is always emitted.
 Exact development pins are parsed structurally using host Python 3.11+ (stdlib only).
-Malformed or ambiguous dev declarations fail closed; genuinely unpinned tools retain their skip.
+Malformed TOML or ambiguous/unsupported exact declarations fail closed; unpinned tools still skip.
 
 Standalone commands with a verified boundary that does not import project packages can use
 --standalone. That mode skips the project-source freshness check and does not add the worktree root
@@ -655,6 +655,15 @@ try:
         exact = re.fullmatch(re.escape(tool) + r"==([0-9A-Za-z._+-]+)", item.strip())
         if exact:
             pins.add(exact.group(1))
+        else:
+            # Marker/URL equality is not a tool pin. Preserve plain wildcard-only ranges,
+            # but never disguise an unsupported exact-looking declaration as unpinned.
+            requirement = item.partition(";")[0].partition("@")[0].strip()
+            wildcard = re.fullmatch(
+                re.escape(tool) + r"\s*==\s*[0-9]+(?:\.[0-9]+)*\.\*", requirement
+            )
+            if "==" in requirement and wildcard is None:
+                raise ValueError(f"unsupported exact development declaration for {tool}")
     if len(pins) > 1:
         raise ValueError(f"conflicting exact development pins for {tool}")
     if pins and any(item.strip() != f"{tool}=={next(iter(pins))}" for item in declarations):

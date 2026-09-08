@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from robot_sf.common.validation import finite_float as _finite_float
+
 
 def normalize_pedestrian_impact_controls(
     *,
@@ -43,15 +45,6 @@ def collision_metric_value(metrics: dict[str, Any], key: str) -> float:
     except (TypeError, ValueError):
         return 0.0
     return value if math.isfinite(value) else 0.0
-
-
-def _finite_float(value: Any) -> float | None:
-    """Return a finite float value, or ``None`` when the input is unavailable."""
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return None
-    return result if math.isfinite(result) else None
 
 
 def _exact_collision_event(record: dict[str, Any]) -> bool | None:

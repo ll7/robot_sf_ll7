@@ -539,7 +539,7 @@ def _extract_seeds(summary: dict[str, Any]) -> list[int]:
 
 
 def _extract_timings(summary: dict[str, Any]) -> tuple[float | None, dict[str, float]]:
-    """Extract total and per-run duration from extractor records if available.
+    """Extract validated total and per-run durations from extractor records if available.
 
     Returns:
         Tuple of (total_duration, per_run_durations_dict).
@@ -547,12 +547,16 @@ def _extract_timings(summary: dict[str, Any]) -> tuple[float | None, dict[str, f
 
     total = 0.0
     per_run: dict[str, float] = {}
-    for record in summary.get("extractor_results") or []:
+    for index, record in enumerate(summary.get("extractor_results") or []):
         name = record.get("config_name", "run")
-        duration = record.get("duration_seconds")
-        if isinstance(duration, (int, float)):
-            per_run[name] = float(duration)
-            total += float(duration)
+        if "duration_seconds" not in record:
+            continue
+        duration = coerce_nonnegative_tracker_float(
+            record["duration_seconds"],
+            f"summary.extractor_results[{index}].duration_seconds",
+        )
+        per_run[name] = duration
+        total += duration
     if not per_run:
         return None, {}
     return total, per_run
@@ -576,6 +580,8 @@ def generate_imitation_report(
     baseline_rec, pretrained_rec = _select_records(
         summary, config.baseline_run_id, config.pretrained_run_id
     )
+    # Validate timing provenance before creating any report directories or copying inputs.
+    total_duration, per_run_duration = _extract_timings(summary)
     figures = _figure_paths(summary_path)
 
     baseline_ts = _validated_convergence_value(baseline_rec)
@@ -632,7 +638,6 @@ def generate_imitation_report(
         seeds=seeds,
         config_paths=config.config_paths,
     )
-    total_duration, per_run_duration = _extract_timings(summary)
     if total_duration is not None:
         metadata.timing = {
             "total_duration_seconds": total_duration,

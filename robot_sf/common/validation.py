@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
+def finite_float(value: object) -> float | None:
+    """Return ``value`` as a finite float, or ``None`` when unavailable.
+
+    Boolean values retain Python's numeric coercion behavior.  Only the
+    ``TypeError`` and ``ValueError`` raised by ordinary failed conversions are
+    absorbed; other conversion failures remain visible to callers.
+    """
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
 def require_finite(name: str, value: Real, *, allow_negative: bool = True) -> float:
     """Return ``value`` as a finite float, optionally rejecting negative values.
 
@@ -150,6 +164,7 @@ def _require_finite_position(position: list[object]) -> None:
 
 
 __all__ = [
+    "finite_float",
     "require_finite",
     "require_finite_array",
     "require_finite_fields",

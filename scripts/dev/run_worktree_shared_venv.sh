@@ -47,6 +47,11 @@ Options:
                          the dependency-profile and project-source checks, but still applies the
                          pinned-tool freshness gate; it does not prepend the worktree root to
                          PYTHONPATH.
+  --isolated-ruff        Validate with the active checkout's exact Ruff pin, without a project
+                         environment. Accepts only `ruff check` or `ruff format --check` with
+                         safe selectors and file paths. Uses the root pyproject configuration,
+                         an ephemeral /tmp tool cache, and no shared/project environment writes.
+                         Cannot be combined with other wrapper options. May download Ruff.
   --no-freshness-check   Retained for compatibility; checkout-local fast-pysf source takes
                           precedence after the interpreter package-coherence check. Also accepted
                           via ROBOT_SF_VENV_FRESHNESS_CHECK=skip. Bypasses all freshness gates; use
@@ -150,11 +155,15 @@ dependency_profile="core"
 skip_freshness=""
 recover_stale_fast_pysf=""
 standalone=""
+isolated_ruff=""
+isolated_conflict=""
+command_separator=""
 scratch_dir="${ROBOT_SF_CI_SCRATCH_DIR:-}"
 cmd=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --venv)
+      isolated_conflict=1
       if [[ $# -lt 2 ]]; then
         echo "--venv requires a path." >&2
         exit 2
@@ -163,6 +172,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --profile)
+      isolated_conflict=1
       if [[ $# -lt 2 || -z "${2:-}" ]]; then
         echo "--profile requires a dependency profile name." >&2
         exit 2
@@ -171,6 +181,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --scratch-dir)
+      isolated_conflict=1
       if [[ $# -lt 2 || -z "${2:-}" ]]; then
         echo "--scratch-dir requires a path." >&2
         exit 2
@@ -179,15 +190,22 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --recover-stale-fast-pysf)
+      isolated_conflict=1
       recover_stale_fast_pysf=1
       shift
       ;;
     --standalone)
+      isolated_conflict=1
       standalone=1
       shift
       ;;
     --no-freshness-check)
+      isolated_conflict=1
       skip_freshness=1
+      shift
+      ;;
+    --isolated-ruff)
+      isolated_ruff=1
       shift
       ;;
     -h|--help)
@@ -195,6 +213,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     --)
+      command_separator=1
       shift
       cmd=("$@")
       break
@@ -217,6 +236,235 @@ if [[ "${cmd[0]}" == -* ]]; then
 fi
 
 repo_root="$(git rev-parse --show-toplevel)"
+if [[ -n "$isolated_ruff" ]]; then
+  if [[ -n "$isolated_conflict" || -n "$scratch_dir" || -z "$command_separator" \
+    || "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" == "skip" ]]; then
+    echo "ERROR: --isolated-ruff requires '--' and cannot be combined with other wrapper options or a freshness bypass." >&2
+    exit 2
+  fi
+  # Host-only stdlib parsing/execution: never select a project interpreter or load site hooks.
+  host_python=""
+  for candidate in /usr/bin/python3 /usr/local/bin/python3; do
+    if [[ -x "$candidate" ]] && "$candidate" -I -S -B -c 'import tomllib' 2>/dev/null; then
+      host_python="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$host_python" ]]; then
+    echo "ERROR: --isolated-ruff requires host Python 3.11+ with stdlib tomllib." >&2
+    exit 2
+  fi
+  # Preserve caller cwd; the default shared-env branch below retains its root normalization.
+  exec "$host_python" -I -S -B - "$repo_root" "${cmd[@]}" <<'PY'
+import os
+from pathlib import Path
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import tomllib
+
+
+def fail(message):
+    raise ValueError(message)
+
+
+def admit(root, argv):
+    if len(argv) < 2 or argv[0] != "ruff" or argv[1] not in {"check", "format"}:
+        fail("expected bare 'ruff check' or 'ruff format --check'")
+    mode = argv[1]
+    flags = {"--no-cache", "--quiet", "-q", "--verbose", "-v", "--respect-gitignore",
+             "--no-respect-gitignore", "--force-exclude", "--no-force-exclude"}
+    values = {"--exclude", "--extend-exclude", "--line-length", "--target-version", "--extension"}
+    if mode == "check":
+        flags |= {"--no-fix", "--no-fix-only", "--no-unsafe-fixes", "--preview", "--no-preview"}
+        values |= {"--select", "--extend-select", "--ignore", "--extend-ignore",
+                   "--per-file-ignores", "--extend-per-file-ignores", "--output-format"}
+    else:
+        flags |= {"--check", "--preview", "--no-preview"}
+    options = argv[2:]
+    index = 0
+    format_check = False
+    while index < len(options):
+        arg = options[index]
+        if arg == "--":
+            if "-" in options[index + 1:]:
+                fail("stdin is not supported; supply file paths")
+            break
+        if arg == "-":
+            fail("stdin is not supported; supply file paths")
+        if arg.startswith("-"):
+            name, equals, value = arg.partition("=")
+            if name in flags and not equals:
+                format_check |= name == "--check"
+            elif name in values:
+                if not equals:
+                    index += 1
+                    if index >= len(options) or options[index].startswith("-"):
+                        fail(f"missing value for {name}")
+                    value = options[index]
+                if not value:
+                    fail(f"missing value for {name}")
+            else:
+                fail(f"unsupported validation option: {name}")
+        index += 1
+    if mode == "format" and not format_check:
+        fail("format requires --check before the filename separator")
+    manifest = root / "pyproject.toml"
+    data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    dev = data.get("dependency-groups", {}).get("dev", [])
+    if not isinstance(dev, list):
+        fail("expected one exact Ruff dependency in dependency-groups.dev")
+    # Include malformed/extras/URL/marker forms in the candidate count, never first-match grep.
+    declarations = [item for item in dev if isinstance(item, str)
+                    and re.match(r"(?i)^\s*ruff(?=[^a-z0-9_.-]|$)", item)]
+    if len(declarations) != 1 or not re.fullmatch(r"ruff==[0-9]+\.[0-9]+\.[0-9]+", declarations[0]):
+        fail("expected one exact unqualified ruff==X.Y.Z dev dependency")
+    if any(not isinstance(item, str) for item in dev):
+        fail("included/ambiguous dev dependency groups are unsupported")
+    pin = declarations[0].split("==")[1]
+    config = data.get("tool", {}).get("ruff", {})
+    if config.get("required-version") != "==" + pin:
+        fail("Ruff dev pin and tool.ruff.required-version must be exactly equal")
+    if any(key in config for key in ("extend", "cache-dir", "output-file")):
+        fail("root Ruff configuration cannot extend or redirect cache/output")
+    if config.get("fix", False) is not False or config.get("fix-only", False) is not False:
+        fail("root Ruff configuration cannot enable fix or fix-only")
+    return pin, manifest, mode
+
+
+def run():
+    root = Path(sys.argv[1]).resolve(strict=True)
+    argv = sys.argv[2:]
+    pin, manifest, mode = admit(root, argv)
+    common = Path(subprocess.check_output(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True).strip())
+    owner = common.parent.resolve(strict=True)
+    protected = [root, owner, (root / ".venv").resolve(), (owner / ".venv").resolve()]
+    for key in ("VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT"):
+        if os.environ.get(key):
+            protected.append(Path(os.environ[key]).resolve())
+
+    def check_location(path):
+        resolved = path.resolve()
+        if any(resolved == item or item in resolved.parents for item in protected):
+            fail("isolated cache/temp overlaps a project or environment (including symlinks)")
+        return resolved
+
+    # These variables are never used, but reject dangerous aliases explicitly before any writes.
+    for key in ("UV_CACHE_DIR", "UV_TOOL_DIR", "TMPDIR", "TMP", "TEMP", "XDG_CACHE_HOME",
+                "RUFF_CACHE_DIR"):
+        if os.environ.get(key):
+            check_location(Path(os.environ[key]))
+    temp_base = check_location(Path("/tmp"))
+    uv = shutil.which("uv")
+    if not uv:
+        fail("uv executable is unavailable; no unpinned fallback")
+    uv = str(Path(uv).resolve(strict=True))
+    child_env = {key: value for key, value in os.environ.items()
+                 if not key.startswith(("UV_", "PYTHON", "RUFF_", "VIRTUAL_ENV", "XDG_"))
+                 and key not in {"TMPDIR", "TMP", "TEMP", "__PYVENV_LAUNCHER__"}}
+    # The sole supported inherited uv control is offline operation. No fallback on a cache miss.
+    offline = os.environ.get("UV_OFFLINE")
+    if offline is not None:
+        if offline not in {"0", "1", "true", "false"}:
+            fail("UV_OFFLINE must be 0, 1, true, or false")
+        child_env["UV_OFFLINE"] = offline
+    child = None
+    interrupted = 0
+    task_dir = None
+
+    def on_signal(signum, _frame):
+        nonlocal interrupted
+        interrupted = signum
+        if child is not None:
+            try:
+                os.killpg(child.pid, signum)
+            except ProcessLookupError:
+                pass
+
+    for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, on_signal)
+
+    def invoke(command, capture=False):
+        nonlocal child
+        if interrupted:
+            return None
+        child = subprocess.Popen(command, env=child_env, start_new_session=True,
+                                 stdout=subprocess.PIPE if capture else None,
+                                 stderr=subprocess.PIPE if capture else None, text=True)
+        if interrupted:
+            on_signal(interrupted, None)
+        deadline = None
+        while True:
+            try:
+                stdout, stderr = child.communicate(timeout=0.2)
+                break
+            except subprocess.TimeoutExpired:
+                if interrupted:
+                    if deadline is None:
+                        deadline = time.monotonic() + 2
+                    if time.monotonic() >= deadline:
+                        try:
+                            os.killpg(child.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+        result = (child.returncode, stdout, stderr)
+        # Stop any surviving descendants before deleting this invocation's temporary state.
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        child = None
+        return result
+
+    try:
+        task_dir = Path(tempfile.mkdtemp(prefix="robot-sf-isolated-ruff-", dir=temp_base))
+        check_location(task_dir)
+        for name in ("uv-cache", "tmp", "xdg-cache", "tools"):
+            (task_dir / name).mkdir()
+        child_env.update(UV_CACHE_DIR=str(task_dir / "uv-cache"), TMPDIR=str(task_dir / "tmp"),
+                         UV_TOOL_DIR=str(task_dir / "tools"),
+                         XDG_CACHE_HOME=str(task_dir / "xdg-cache"))
+        base = [uv, "tool", "run", "--isolated", "--no-config", "--no-env-file",
+                "--no-python-downloads", "--python", sys.executable,
+                "--from", "ruff==" + pin, "ruff"]
+        version = invoke([*base, "--version"], capture=True)
+        if interrupted:
+            return 128 + interrupted
+        if version[0] != 0 or version[1].strip() != "ruff " + pin:
+            fail("isolated Ruff provisioning/version verification failed; "
+                 + (version[2] or version[1] or "no version output")[:2000])
+        print(f"Isolated Ruff verified: ruff=={pin}; temporary cache={task_dir}", file=sys.stderr)
+        guards = ["--config", str(manifest), "--no-cache"]
+        if mode == "check":
+            guards += ["--no-fix", "--no-fix-only", "--no-unsafe-fixes"]
+        result = invoke([*base, mode, *guards, *argv[2:]])
+        if interrupted:
+            return 128 + interrupted
+        return result[0] if result[0] >= 0 else 128 - result[0]
+    finally:
+        if child is not None:
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            child.wait()
+        if task_dir is not None:
+            shutil.rmtree(task_dir)
+
+
+try:
+    status = run()
+except (OSError, ValueError, TypeError, KeyError, AttributeError, subprocess.SubprocessError) as error:
+    print(f"ERROR: isolated Ruff validation refused: {error}", file=sys.stderr)
+    status = 2
+sys.exit(status)
+PY
+fi
 cd "$repo_root"
 # Do not let an ambient UV_PROJECT redirect dependency resolution to another
 # checkout. The effective project is always the current worktree.
@@ -513,6 +761,39 @@ check_shared_venv_freshness() {
 
   echo "ERROR: Shared-venv tool freshness preflight failed: tool '$tool' resolved to $resolved but the active checkout pins $tool==$pin." >&2
   echo "Selected environment: $venv_path (active checkout: $repo_root)." >&2
+  if [[ "$tool" == "ruff" ]]; then
+    local owner_manifest="" owner_pin="unknown"
+    if [[ "$venv_path" == "$repo_root/.venv" ]]; then
+      owner_manifest="$repo_root/pyproject.toml"
+    elif [[ "$venv_path" == "$main_repo_root/.venv" ]]; then
+      owner_manifest="$main_repo_root/pyproject.toml"
+    fi
+    if [[ -n "$owner_manifest" && -x /usr/bin/python3 ]]; then
+      owner_pin="$(/usr/bin/python3 -I -S -B - "$owner_manifest" <<'PY'
+import re
+import sys
+import tomllib
+try:
+    with open(sys.argv[1], "rb") as stream:
+        dev = tomllib.load(stream).get("dependency-groups", {}).get("dev", [])
+    pins = [item for item in dev if isinstance(item, str) and item.startswith("ruff")]
+    print(pins[0][6:] if len(pins) == 1 and re.fullmatch(r"ruff==\d+\.\d+\.\d+", pins[0]) else "unknown")
+except (OSError, ValueError, AttributeError, TypeError):
+    print("unknown")
+PY
+      )" || owner_pin="unknown"
+    fi
+    echo "Selected executable: $venv_path/bin/ruff; owning manifest pin: ruff==$owner_pin." >&2
+    if [[ "$owner_pin" == "unknown" ]]; then
+      echo "Owning manifest identity/pin is unknown; owner re-sync has not been verified as a remedy." >&2
+    elif [[ "$owner_pin" != "$pin" ]]; then
+      echo "Owning manifest differs from the active checkout; owner re-sync alone reinstalls ruff==$owner_pin, not ruff==$pin." >&2
+    else
+      echo "Owning manifest matches the active pin; the selected installation is stale. Owner-managed re-sync or a matching explicit --venv can repair it." >&2
+    fi
+    echo "Remedy: for focused validation use --isolated-ruff -- ruff check <paths> or --isolated-ruff -- ruff format --check <paths>." >&2
+    return 2
+  fi
   if [[ "$venv_path" == "$repo_root/.venv" && "$main_repo_root/.venv" != "$venv_path" ]]; then
     echo "Remedy: rerun with --venv $main_repo_root/.venv, or re-sync the owning checkout and retry." >&2
   else

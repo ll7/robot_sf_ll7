@@ -30,6 +30,7 @@ import json
 import os
 import shlex
 import shutil
+import signal
 import subprocess
 import tomllib
 from pathlib import Path
@@ -2357,6 +2358,100 @@ def _make_pinned_tool_fixture_repo(
     return repo, venv, env
 
 
+def _make_isolated_ruff_worktree(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+    """Model an older owning manifest/environment and a newer real linked checkout."""
+    owner, _, env = _make_pinned_tool_fixture_repo(tmp_path)
+    worktree = tmp_path / "new worker"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=owner,
+        check=True,
+        capture_output=True,
+    )
+    shutil.rmtree(worktree / ".venv")
+    (worktree / "pyproject.toml").write_text(
+        '[dependency-groups]\ndev = [\n    "ruff==0.16.6",\n]\n'
+        '[tool.ruff]\nrequired-version = "==0.16.6"\n',
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["git", "commit", "-am", "newer worktree pin"],
+        cwd=worktree,
+        check=True,
+        capture_output=True,
+    )
+    log = tmp_path / "uv calls.jsonl"
+    uv = owner / "fake-bin" / "uv"
+    uv.write_text(
+        "#!/usr/bin/python3\n"
+        "import json, os, signal, subprocess, sys, time\n"
+        "args = sys.argv[1:]\n"
+        "assert args[:2] == ['tool', 'run'], args\n"
+        "assert args[args.index('--from') + 1] == 'ruff==0.16.6', args\n"
+        "with open(os.environ['FAKE_RUFF_LOG'], 'a') as stream:\n"
+        "    stream.write(json.dumps({'argv': args, 'cwd': os.getcwd(), 'pid': os.getpid(), "
+        "'cache': os.environ.get('UV_CACHE_DIR'), 'tmp': os.environ.get('TMPDIR'), "
+        "'env': {k: v for k, v in os.environ.items() if k.startswith(('UV_', 'PYTHON', "
+        "'RUFF_', 'VIRTUAL_ENV'))}}) + '\\n')\n"
+        "if args[-1] == '--version':\n"
+        "    print('ruff ' + os.environ.get('FAKE_RUFF_VERSION', '0.16.6'))\n"
+        "    sys.exit(int(os.environ.get('FAKE_RUFF_PROVISION_STATUS', '0')))\n"
+        "if os.environ.get('FAKE_RUFF_BLOCK'):\n"
+        "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "    subprocess.Popen(['/bin/sleep', '60'])\n"
+        "    print('validation waiting', flush=True)\n"
+        "    time.sleep(60)\n"
+        "sys.exit(int(os.environ.get('FAKE_RUFF_STATUS', '0')))\n",
+        encoding="utf-8",
+    )
+    uv.chmod(0o755)
+    env = {**env, "FAKE_RUFF_LOG": str(log)}
+    return owner, worktree, env
+
+
+def test_worktree_isolated_ruff_uses_new_pin_without_changing_project_env(tmp_path: Path) -> None:
+    """Explicit recovery validates the active pin without rewriting the older owner's env."""
+    owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    caller = worktree / "sub directory"
+    caller.mkdir()
+    before = {path: path.read_bytes() for path in (owner / ".venv").rglob("*") if path.is_file()}
+    manifests = {root: (root / "pyproject.toml").read_bytes() for root in (owner, worktree)}
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--isolated-ruff",
+            "--",
+            "ruff",
+            "check",
+            "--select",
+            "F",
+            "file with spaces.py",
+            "--",
+            "-leading.py",
+        ],
+        cwd=caller,
+        env={**env, "FAKE_RUFF_STATUS": "1"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 1, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    assert len(calls) == 2
+    assert calls[0]["argv"][-1] == "--version"
+    assert calls[1]["argv"][-5:] == ["--select", "F", "file with spaces.py", "--", "-leading.py"]
+    assert all(call["cwd"] == str(caller) for call in calls)
+    assert all(not Path(call["tmp"]).exists() for call in calls)
+    assert {
+        path: path.read_bytes() for path in (owner / ".venv").rglob("*") if path.is_file()
+    } == before
+    assert not (worktree / ".venv").exists()
+    assert all(
+        (root / "pyproject.toml").read_bytes() == content for root, content in manifests.items()
+    )
+
+
 def test_worktree_shared_venv_fails_closed_on_stale_pinned_tool(
     tmp_path: Path,
 ) -> None:
@@ -2377,7 +2472,345 @@ def test_worktree_shared_venv_fails_closed_on_stale_pinned_tool(
     assert "uv-reached" not in result.stderr
     assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
     assert "Remedy:" in result.stderr
-    assert "--no-freshness-check" in result.stderr
+    assert "--isolated-ruff" in result.stderr
+    assert "selected installation is stale" in result.stderr
+
+
+@pytest.mark.parametrize("prefix", [[], ["--standalone"]])
+@pytest.mark.parametrize("command", [["ruff", "check", "."], ["uv", "run", "ruff", "check", "."]])
+def test_worktree_isolated_ruff_default_explains_older_owner(
+    tmp_path: Path, prefix: list[str], command: list[str]
+) -> None:
+    """An older owning manifest cannot recover a newer active pin through owner sync alone."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), *prefix, "--", *command],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "owner re-sync alone" in result.stderr
+    assert "ruff==0.16.5" in result.stderr
+    assert "ruff==0.16.6" in result.stderr
+    assert "--isolated-ruff" in result.stderr
+    assert "--no-freshness-check" not in result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP])
+def test_worktree_isolated_ruff_interruption_cleans_task_cache(tmp_path: Path, signum: int) -> None:
+    """Termination must stop even a stubborn tool group before removing task-owned state."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    process = subprocess.Popen(
+        [str(RUN_WORKTREE_SHARED_VENV), "--isolated-ruff", "--", "ruff", "check", "."],
+        cwd=worktree,
+        env={**env, "FAKE_RUFF_BLOCK": "1"},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    calls = []
+    timed_out = False
+    try:
+        assert process.stdout is not None
+        assert process.stdout.readline().strip() == "validation waiting"
+        calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+        process.send_signal(signum)
+        try:
+            process.communicate(timeout=6)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+    finally:
+        if process.poll() is None:
+            for call in calls:
+                try:
+                    os.killpg(call["pid"], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            process.communicate(timeout=5)
+    assert not timed_out, "wrapper failed to bound interruption cleanup"
+    assert process.returncode == 128 + signum
+    assert calls and all(not Path(call["tmp"]).exists() for call in calls)
+
+
+def _run_isolated_ruff(
+    worktree: Path,
+    env: dict[str, str],
+    args: list[str] | None = None,
+    prefix: list[str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Exercise the public opt-in subprocess boundary with deterministic fake provisioning."""
+    return subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--isolated-ruff",
+            *(prefix or []),
+            "--",
+            *(args if args is not None else ["ruff", "check", "."]),
+        ],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "dev",
+    [
+        [],
+        ["ruff>=0.16.6"],
+        ["ruff==0.16.6", "ruff==0.16.6"],
+        ["ruff==0.16.6; python_version >= '3.11'"],
+        ["ruff @ https://example.invalid/ruff.whl"],
+        ["ruff==0.16.*"],
+        ["ruff[extra]==0.16.6"],
+        [{"include-group": "lint"}],
+    ],
+)
+def test_worktree_isolated_ruff_rejects_ambiguous_pin(tmp_path: Path, dev: list) -> None:
+    """Unsupported dependency forms fail closed before uv is invoked."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    # JSON scalars/arrays also form TOML values; the group-table case uses native inline TOML.
+    value = '[{include-group = "lint"}]' if dev and isinstance(dev[0], dict) else json.dumps(dev)
+    (worktree / "pyproject.toml").write_text(
+        f'[dependency-groups]\ndev = {value}\n[tool.ruff]\nrequired-version = "==0.16.6"\n',
+        encoding="utf-8",
+    )
+    result = _run_isolated_ruff(worktree, env)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        "",
+        'required-version = "==0.16.5"',
+        'required-version = ">=0.16.6"',
+        'required-version = "==0.16.6"\nfix = true',
+        'required-version = "==0.16.6"\nfix-only = true',
+        'required-version = "==0.16.6"\nextend = "other.toml"',
+        'required-version = "==0.16.6"\ncache-dir = ".venv/cache"',
+        'required-version = "==0.16.6"\noutput-file = ".venv/report"',
+        'required-version = "==0.16.6"\nrequired-version = "==0.16.6"',
+    ],
+)
+def test_worktree_isolated_ruff_rejects_unsafe_root_configuration(
+    tmp_path: Path, config: str
+) -> None:
+    """Root configuration must match the pin and cannot fix files or redirect writes."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    (worktree / "pyproject.toml").write_text(
+        '[dependency-groups]\ndev = ["ruff==0.16.6"]\n[tool.ruff]\n' + config,
+        encoding="utf-8",
+    )
+    result = _run_isolated_ruff(worktree, env)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["uv", "run", "ruff", "check", "."],
+        ["/usr/bin/ruff", "check", "."],
+        ["pytest", "tests"],
+        ["ruff", "format", "."],
+        ["ruff", "format", "--", "--check"],
+        ["ruff", "check", "--fix"],
+        ["ruff", "check", "--fix=true"],
+        ["ruff", "check", "--fix-only"],
+        ["ruff", "check", "--unsafe-fixes"],
+        ["ruff", "check", "--add-noqa"],
+        ["ruff", "check", "--watch"],
+        ["ruff", "check", "--output-file", "report"],
+        ["ruff", "check", "--output-file=report"],
+        ["ruff", "check", "--cache-dir", "cache"],
+        ["ruff", "check", "--cache-dir=cache"],
+        ["ruff", "check", "--config", "fix=true"],
+        ["ruff", "check", "--config=fix=true"],
+        ["ruff", "check", "--isolated"],
+        ["ruff", "check", "-"],
+        ["ruff", "check", "--select"],
+        ["ruff", "check", "--select="],
+        ["ruff", "format", "--check", "--output-file=report"],
+    ],
+)
+def test_worktree_isolated_ruff_rejects_unsupported_commands(
+    tmp_path: Path, args: list[str]
+) -> None:
+    """Mutation and redirect options, including equals forms, never reach provisioning."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = _run_isolated_ruff(worktree, env, args)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        ["--venv", "unused"],
+        ["--profile", "core"],
+        ["--scratch-dir", "unused"],
+        ["--standalone"],
+        ["--no-freshness-check"],
+        ["--recover-stale-fast-pysf"],
+    ],
+)
+def test_worktree_isolated_ruff_rejects_conflicting_wrapper_options(
+    tmp_path: Path, prefix: list[str]
+) -> None:
+    """Explicit wrapper conflicts fail before cache creation or uv execution."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = _run_isolated_ruff(worktree, env, prefix=prefix)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"FAKE_RUFF_VERSION": "0.16.5"},
+        {"FAKE_RUFF_VERSION": "unknown"},
+        {"FAKE_RUFF_PROVISION_STATUS": "1"},
+    ],
+)
+def test_worktree_isolated_ruff_provision_failure_stops_validation(
+    tmp_path: Path, overrides: dict[str, str]
+) -> None:
+    """Version/provisioning failure cannot fall back to another tool or leak task cache."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = _run_isolated_ruff(worktree, {**env, **overrides})
+    assert result.returncode == 2, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    assert len(calls) == 1
+    assert not Path(calls[0]["tmp"]).exists()
+
+
+@pytest.mark.parametrize("mode", [["check"], ["format", "--check"]])
+@pytest.mark.parametrize("status", [0, 1, 2])
+def test_worktree_isolated_ruff_preserves_status_and_root_config(
+    tmp_path: Path, mode: list[str], status: int
+) -> None:
+    """Both validation commands preserve Ruff's status and explicitly bind the root config."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = _run_isolated_ruff(
+        worktree, {**env, "FAKE_RUFF_STATUS": str(status)}, ["ruff", *mode, "."]
+    )
+    assert result.returncode == status, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    args = calls[-1]["argv"]
+    assert args[args.index("--config") + 1] == str(worktree / "pyproject.toml")
+    assert "--no-cache" in args
+    assert not Path(calls[-1]["tmp"]).exists()
+
+
+def test_worktree_isolated_ruff_sanitizes_environment_and_host_imports(tmp_path: Path) -> None:
+    """Host parsing and tool provisioning ignore inherited project/site/config redirection."""
+    owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    shared_cache = tmp_path / "user cache"
+    shared_cache.mkdir()
+    sentinel = shared_cache / "preserve"
+    sentinel.write_text("user-managed", encoding="utf-8")
+    for module in ("tomllib.py", "sitecustomize.py", "usercustomize.py"):
+        (worktree / module).write_text(
+            'raise RuntimeError("untrusted import executed")\n', encoding="utf-8"
+        )
+    redirected = owner / ".venv" / "must-not-create"
+    overrides = dict.fromkeys(
+        [
+            "UV_PROJECT_ENVIRONMENT",
+            "UV_PROJECT",
+            "UV_WORKING_DIR",
+            "UV_CONFIG_FILE",
+            "UV_ENV_FILE",
+            "UV_CONSTRAINT",
+            "UV_OVERRIDE",
+            "UV_PYTHON",
+            "RUFF_OUTPUT_FILE",
+            "VIRTUAL_ENV",
+        ],
+        str(redirected),
+    )
+    overrides.update(
+        PYTHONPATH=str(worktree),
+        PYTHONHOME=str(worktree),
+        PYTHONUSERBASE=str(worktree),
+        UV_CACHE_DIR=str(shared_cache),
+        RUFF_CACHE_DIR=str(shared_cache),
+        UV_TOOL_DIR=str(shared_cache),
+        XDG_CACHE_HOME=str(shared_cache),
+        UV_OFFLINE="1",
+    )
+    result = _run_isolated_ruff(worktree, {**env, **overrides})
+    assert result.returncode == 0, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    for call in calls:
+        assert set(call["env"]) == {"UV_CACHE_DIR", "UV_TOOL_DIR", "UV_OFFLINE"}
+        assert call["env"]["UV_OFFLINE"] == "1"
+        assert "--no-config" in call["argv"]
+        assert "--no-env-file" in call["argv"]
+        assert "--no-python-downloads" in call["argv"]
+        assert not Path(call["tmp"]).exists()
+    assert not redirected.exists()
+    assert list(shared_cache.iterdir()) == [sentinel]
+    assert not list(worktree.rglob("__pycache__"))
+
+
+@pytest.mark.parametrize("variable", ["UV_CACHE_DIR", "UV_TOOL_DIR", "TMPDIR", "RUFF_CACHE_DIR"])
+def test_worktree_isolated_ruff_rejects_symlinked_cache_overlap(
+    tmp_path: Path, variable: str
+) -> None:
+    """A cache/temp alias into a project environment is rejected without changing it."""
+    owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    alias = tmp_path / "cache alias"
+    alias.symlink_to(owner / ".venv", target_is_directory=True)
+    result = _run_isolated_ruff(worktree, {**env, variable: str(alias)})
+    assert result.returncode == 2, result.stderr
+    assert "including symlinks" in result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+def test_worktree_isolated_ruff_missing_uv_fails_closed(tmp_path: Path) -> None:
+    """No uv executable means no fallback or project bootstrap."""
+    owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    (owner / "fake-bin" / "uv").unlink()
+    result = _run_isolated_ruff(worktree, {**env, "PATH": "/usr/bin:/bin"})
+    assert result.returncode == 2, result.stderr
+    assert "uv executable is unavailable" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        None,
+        "not valid TOML!",
+        "dependency-groups = []",
+        "tool = []\n[dependency-groups]\ndev = ['ruff==0.16.6']",
+        "[dependency-groups]\ndev = ['ruff==0.16.6']\n[tool]\nruff = []",
+    ],
+)
+def test_worktree_isolated_ruff_rejects_malformed_manifest(
+    tmp_path: Path, manifest: str | None
+) -> None:
+    """Missing manifests and malformed table shapes consistently refuse before provisioning."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    path = worktree / "pyproject.toml"
+    if manifest is None:
+        path.unlink()
+    else:
+        path.write_text(manifest, encoding="utf-8")
+    result = _run_isolated_ruff(worktree, env)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
 
 
 def test_worktree_shared_venv_standalone_fails_closed_on_stale_pinned_tool(

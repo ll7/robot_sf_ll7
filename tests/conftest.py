@@ -691,6 +691,9 @@ _FAST_FILES = {
     # shells, no environments) for the changed recording-save path; keep them in
     # PR fast shards for the exact-head changed-coverage gate (issue #8422).
     "test_recording_save_policy.py",
+    # Typed simulator snapshots are deterministic serialization and compatibility
+    # contracts for the preparation-only continuation prototype (issue #8620).
+    "test_typed_snapshot.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

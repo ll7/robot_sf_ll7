@@ -487,6 +487,8 @@ def test_custom_collision_predicate_is_used_and_labeled() -> None:
 
     assert model.collision() is True
     assert model.collision_predicate == "custom_collision_fn"
+
+
 def test_pedestrian_response_covers_lead_hold_and_replayed_paths() -> None:
     """Classify the remaining native behavior-response modes explicitly."""
     robot = SimpleNamespace(pos=(0.0, 0.0), config=SimpleNamespace(radius=0.5))
@@ -670,6 +672,8 @@ def test_adapter_contract_edges_cover_native_action_and_collision_branches() -> 
     unknown = SimulatorCounterfactualModel(sim)
     assert unknown.feasible_actions() == ()
     assert unknown.action_label((0.0, 0.0)).startswith("robot_cmd=")
+
+
 def test_all_collision_scope_covers_bounds_and_pedestrian_footprints() -> None:
     """Cover non-wall all-scope outcomes for bounds, empty space, and pedestrians."""
     base_config = SimpleNamespace(ped_radius=0.4)

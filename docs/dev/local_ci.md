@@ -167,10 +167,12 @@ tests, worker count, runtime/dependency versions, cache location, and process-cl
 triaging parallel-load friction (issue #8469).
 
 The high-concurrency `run_xdist_race_validation.sh` route also preserves the compact-validation
-summary and, when its outer process boundary returns exit code 124, feeds the recorded log through
-the same reporter with the requested worker and distribution settings. If the outer summary cannot
-provide a log path, the route reports that diagnostic as unavailable and remains failed; it never
-turns an outer timeout into a pass.
+summary. It invokes the reporter only when that summary's `timed_out` field is true, rather than
+assuming that every exit code 124 came from the outer process boundary. The route reads the actual
+pytest execution-mode marker from the captured log, so true in-process serial execution is not
+reported as parallel xdist. If the summary, log path, or unique execution-mode marker is missing,
+the route reports the diagnostic as unavailable and remains failed; it never turns an incomplete
+or ambiguous timeout into a pass.
 
 ## Local CI-equivalent path
 

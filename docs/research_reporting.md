@@ -19,6 +19,13 @@ The research reporting system automates the generation of comprehensive research
 - Ablation study support (BC epochs, dataset sizes)
  - Telemetry section (optional) for runtime performance metrics
 
+Statistical helpers use a finite-value admission boundary: `NaN`, positive infinity, and negative
+infinity are excluded before tests, effect sizes, or threshold comparisons. Paired analyses drop a
+pair when either side is non-finite; independent analyses filter each sample separately. Returned
+sample counts are the effective finite counts, and analyses with too few finite values return an
+incomplete result rather than emitting non-finite research evidence. This is filtering, not
+imputation; the source run should still be investigated when invalid values occur.
+
 ### High-Level Flow
 
 ```mermaid

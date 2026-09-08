@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from scripts.dev import issue_audit_core
+from scripts.dev import issue_audit_core, prepare_open_issue_contracts
 from scripts.dev.issue_audit_core import (
     _run_command,
     _run_gh,
@@ -75,6 +75,52 @@ def _issue(
         "body": body,
         "comments": [],
     }
+
+
+def _preparation_body(
+    source_body: str,
+    number: int = 7382,
+    *,
+    classification: str = "needs_spec",
+    dispatch_eligible: bool = False,
+    readiness_gate: bool = False,
+) -> str:
+    """Render a current writer-owned preparation packet around an issue body."""
+    item: dict[str, Any] = {
+        "number": number,
+        "classification": classification,
+        "next_action": "claim" if dispatch_eligible else "formalize_issue",
+        "authority": "preparation",
+        "dispatch_eligible": dispatch_eligible,
+        "labels": [],
+        "body_sha256": prepare_open_issue_contracts._sha256_text(source_body),
+    }
+    if readiness_gate:
+        item.update(
+            {
+                "classification": "state_conflict",
+                "admission_reason": "state_label_conflict",
+                "applicable": True,
+                "dispatch_eligible": False,
+                "state": "open",
+                "assignees": [],
+                "missing_fields": [],
+                "claim": {"ok": True, "claimed": False},
+                "execution_contract": {
+                    "valid": True,
+                    "route_required": "local",
+                    "external_inputs": [],
+                    "owning_repo": "ll7/robot_sf_ll7",
+                    "mutation_repos": ["ll7/robot_sf_ll7"],
+                },
+            }
+        )
+    block = prepare_open_issue_contracts._render_marker_block(
+        item,
+        audit_digest="a" * 64,
+        batch_id="cycle268",
+    )
+    return prepare_open_issue_contracts._compose_body(source_body, block)
 
 
 def _healthy_quota_meta(*, core_remaining: int = 500) -> tuple:
@@ -318,6 +364,169 @@ def test_future_terminal_review_rule_is_not_current_status_evidence() -> None:
 
     assert classification.terminal_review_evidence == ()
     assert classification.mutations == ()
+
+
+@pytest.mark.parametrize(
+    ("packet_kind", "expected_next_action"),
+    [
+        ("needs_spec", "formalize_issue"),
+        ("readiness_gate", "gate_readiness"),
+        ("ready", "claim"),
+    ],
+)
+def test_non_admitting_preparation_packet_fences_readiness(
+    packet_kind: str, expected_next_action: str
+) -> None:
+    """Either explicit false admission field blocks a new state:ready mutation."""
+    source_body = "## Acceptance Criteria\n- [ ] keep formalizing\n"
+    body = _preparation_body(
+        source_body,
+        classification=packet_kind,
+        dispatch_eligible=packet_kind == "ready",
+        readiness_gate=packet_kind == "readiness_gate",
+    )
+    classification = classify_issue(
+        _issue(7382, body=body),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "valid"
+    assert classification.preparation_packet["next_action"] == expected_next_action
+    assert classification.classification != "ready"
+    assert not any(
+        mutation["operation"] == "add_label" and mutation["value"] == "state:ready"
+        for mutation in classification.mutations
+    )
+    assert expected_next_action in " ".join(classification.findings)
+
+
+def test_marker_free_issue_preserves_existing_readiness_behavior() -> None:
+    """Issues without a preparation marker retain the original readiness path."""
+    classification = classify_issue(
+        _issue(7382, body="## Acceptance Criteria\n- [ ] implement the change\n"),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "absent"
+    assert classification.classification == "ready"
+    assert any(
+        mutation["operation"] == "add_label" and mutation["value"] == "state:ready"
+        for mutation in classification.mutations
+    )
+
+
+def test_preparation_marker_refresh_preserves_source_digest() -> None:
+    """Replacing a writer-owned marker keeps the packet bound to source content."""
+    source_body = "## Acceptance Criteria\n- [ ] keep formalizing\n"
+    initial_body = _preparation_body(source_body)
+    item = {
+        "number": 7382,
+        "classification": "needs_spec",
+        "next_action": "formalize_issue",
+        "authority": "preparation",
+        "dispatch_eligible": False,
+        "labels": [],
+        "body_sha256": prepare_open_issue_contracts._sha256_text(initial_body),
+    }
+    replacement = prepare_open_issue_contracts._render_marker_block(
+        item,
+        audit_digest="b" * 64,
+        batch_id="cycle269",
+        source_body=initial_body,
+    )
+    refreshed_body = prepare_open_issue_contracts._compose_body(initial_body, replacement)
+
+    classification = classify_issue(
+        _issue(7382, body=refreshed_body),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "valid"
+    assert classification.preparation_packet["next_action"] == "formalize_issue"
+
+
+def test_preparation_packet_rejects_internal_newline_drift() -> None:
+    """Only the known compose boundary may differ; internal whitespace is byte-exact."""
+    source_body = "## Objective\ntext\n\n## Acceptance Criteria\n- [ ] keep\n"
+    body = _preparation_body(source_body, readiness_gate=True)
+    body = body.replace("text\n\n## Acceptance", "text\n\n\n## Acceptance")
+
+    classification = classify_issue(
+        _issue(7382, body=body),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "invalid"
+    assert "source_body_sha256" in " ".join(classification.findings)
+
+
+def test_positive_preparation_packet_rejects_invalid_expected_labels() -> None:
+    """Readiness packets cannot duplicate or predeclare the state:ready label."""
+    source_body = "## Acceptance Criteria\n- [ ] keep formalizing\n"
+    body = _preparation_body(source_body, readiness_gate=True)
+    body = body.replace(
+        "'expected_labels': []",
+        "'expected_labels': [state:ready, state:ready]",
+    )
+
+    classification = classify_issue(
+        _issue(7382, body=body),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "invalid"
+    assert "must not contain duplicates" in " ".join(classification.findings)
+
+
+@pytest.mark.parametrize("variant", ["stale", "malformed", "duplicate", "duplicate_key"])
+def test_invalid_preparation_packet_never_promotes_readiness(variant: str) -> None:
+    """Stale, malformed, and duplicate packets are uncertainty, not permission."""
+    source_body = "## Acceptance Criteria\n- [ ] keep formalizing\n"
+    body = _preparation_body(source_body)
+    if variant == "stale":
+        body = body.replace("keep formalizing", "changed after preparation")
+    elif variant == "malformed":
+        body = body.replace("implementation_admitted: False", "implementation_admitted: maybe")
+    elif variant == "duplicate":
+        marker = body[body.index(prepare_open_issue_contracts.MARKER_START) :]
+        body += "\n" + marker
+    else:
+        body = body.replace(
+            "implementation_admitted: False\n",
+            "implementation_admitted: False\nimplementation_admitted: True\n",
+        )
+
+    classification = classify_issue(
+        _issue(7382, body=body),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "invalid"
+    assert classification.classification != "ready"
+    assert not any(
+        mutation["operation"] == "add_label" and mutation["value"] == "state:ready"
+        for mutation in classification.mutations
+    )
+    assert any("readiness promotion withheld" in finding for finding in classification.findings)
+
+
+def test_conflicting_preparation_readiness_gate_fails_closed() -> None:
+    """A false readiness flag cannot coexist with a live readiness-gate payload."""
+    source_body = "## Acceptance Criteria\n- [ ] keep formalizing\n"
+    body = _preparation_body(source_body, readiness_gate=True)
+    body = body.replace("state_ready_change_proposed: True", "state_ready_change_proposed: False")
+
+    classification = classify_issue(
+        _issue(7382, body=body),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.preparation_packet["status"] == "invalid"
+    assert "readiness_gate must be empty" in " ".join(classification.findings)
+    assert not any(
+        mutation["operation"] == "add_label" and mutation["value"] == "state:ready"
+        for mutation in classification.mutations
+    )
 
 
 def test_state_qualifiers_are_preserved_during_execution_state_cleanup() -> None:

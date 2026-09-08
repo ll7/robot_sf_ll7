@@ -252,8 +252,8 @@ def extract_seed_metrics(
                 )
 
             timesteps = metrics.get("timesteps_to_convergence")
-            timesteps = timesteps or metrics.get("avg_timesteps")
-            timesteps = timesteps or metrics.get("total_timesteps")
+            timesteps = timesteps if timesteps is not None else metrics.get("avg_timesteps")
+            timesteps = timesteps if timesteps is not None else metrics.get("total_timesteps")
             if timesteps is not None:
                 record["timesteps_to_convergence"] = coerce_tracker_float(
                     timesteps, "metrics.timesteps"

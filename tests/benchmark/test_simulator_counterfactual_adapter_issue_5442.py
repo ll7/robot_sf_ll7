@@ -331,6 +331,105 @@ def test_robot_relative_behavior_is_closed_loop_provenance() -> None:
     assert model.pedestrian_response == "closed_loop"
 
 
+def test_pedestrian_response_covers_lead_hold_and_replayed_paths() -> None:
+    """Classify the remaining native behavior-response modes explicitly."""
+    robot = SimpleNamespace(pos=(0.0, 0.0), config=SimpleNamespace(radius=0.5))
+    config = SimpleNamespace(
+        prf_config=SimpleNamespace(is_active=False),
+        apf_config=SimpleNamespace(is_active=False),
+        residual_adversary=SimpleNamespace(is_active=False),
+    )
+
+    lead_sim = SimpleNamespace(
+        robots=[robot],
+        config=config,
+        peds_behaviors=[
+            SimpleNamespace(
+                single_pedestrians=[
+                    SimpleNamespace(
+                        role="lead", goal=None, trajectory=None, hold_until_robot_within_m=None
+                    )
+                ]
+            )
+        ],
+    )
+    assert SimulatorCounterfactualModel(lead_sim).pedestrian_response == "closed_loop"
+
+    hold_sim = SimpleNamespace(
+        robots=[robot],
+        config=config,
+        peds_behaviors=[
+            SimpleNamespace(
+                single_pedestrians=[
+                    SimpleNamespace(
+                        role="wander",
+                        goal=(1.0, 1.0),
+                        trajectory=None,
+                        hold_until_robot_within_m=0.5,
+                    )
+                ]
+            )
+        ],
+    )
+    assert SimulatorCounterfactualModel(hold_sim).pedestrian_response == "closed_loop"
+
+    replayed_sim = SimpleNamespace(
+        robots=[robot],
+        config=config,
+        peds_behaviors=[SimpleNamespace(single_pedestrians=[])],
+    )
+    assert SimulatorCounterfactualModel(replayed_sim).pedestrian_response == "replayed"
+
+
+def test_native_action_lattices_and_labels_cover_robot_modes() -> None:
+    """Use each supported native action convention and fail closed for unknown modes."""
+    bicycle = SimpleNamespace(
+        config=SimpleNamespace(max_decel=2.0, max_steer=0.4),
+        state=SimpleNamespace(),
+    )
+    bicycle_model = SimulatorCounterfactualModel(SimpleNamespace(robots=[bicycle]))
+    bicycle_actions = bicycle_model.feasible_actions()
+    assert bicycle_actions[-1] == (0.0, 0.4)
+    assert "steering_angle_rad=" in bicycle_model.action_label(bicycle_actions[-1])
+
+    holonomic = SimpleNamespace(
+        config=SimpleNamespace(command_mode="vx_vy", max_speed=2.0),
+        state=SimpleNamespace(velocity_xy=(0.3, -0.2)),
+    )
+    holonomic_model = SimulatorCounterfactualModel(SimpleNamespace(robots=[holonomic]))
+    assert holonomic_model.feasible_actions()[0] == (0.3, -0.2)
+    assert holonomic_model.action_label((0.3, -0.2)).startswith("robot_velocity=(vx_mps=")
+
+    unicycle = SimpleNamespace(
+        config=SimpleNamespace(command_mode="unicycle_vw", max_angular_speed=0.7),
+        state=SimpleNamespace(velocity_vw=(0.5, 0.1)),
+    )
+    unicycle_model = SimulatorCounterfactualModel(SimpleNamespace(robots=[unicycle]))
+    assert unicycle_model.feasible_actions()[2] == (0.5, -0.7)
+    assert "angular_radps=" in unicycle_model.action_label((0.5, -0.7))
+
+    unknown = SimpleNamespace(config=SimpleNamespace(), state=SimpleNamespace())
+    unknown_model = SimulatorCounterfactualModel(SimpleNamespace(robots=[unknown]))
+    assert unknown_model.feasible_actions() == ()
+    assert unknown_model.action_label((1.0, 2.0)) == "robot_cmd=(first=1,second=2)"
+
+
+def test_adapter_validation_and_custom_collision_provenance() -> None:
+    """Reject unsupported construction and preserve custom collision provenance."""
+    with pytest.raises(ValueError, match="exactly one robot"):
+        SimulatorCounterfactualModel(SimpleNamespace(robots=[]))
+
+    robot = SimpleNamespace(pos=(0.0, 0.0), config=SimpleNamespace(radius=0.5))
+    with pytest.raises(ValueError, match="collision_scope"):
+        SimulatorCounterfactualModel(SimpleNamespace(robots=[robot]), collision_scope="unknown")
+
+    model = SimulatorCounterfactualModel(
+        SimpleNamespace(robots=[robot]), collision_fn=lambda _: True
+    )
+    assert model.collision_predicate == "custom_collision_fn"
+    assert model.collision() is True
+
+
 def test_all_collision_scope_detects_wall_without_pedestrian() -> None:
     """The explicit all-collisions mode cannot call a wall state safe."""
     robot = SimpleNamespace(
@@ -355,6 +454,42 @@ def test_all_collision_scope_detects_wall_without_pedestrian() -> None:
         "continuous_occupancy_robot_bounds_obstacles_pedestrians_v1"
     )
     assert model.collision() is True
+
+
+def test_all_collision_scope_covers_bounds_and_pedestrian_footprints() -> None:
+    """Cover non-wall all-scope outcomes for bounds, empty space, and pedestrians."""
+    base_config = SimpleNamespace(ped_radius=0.4)
+
+    out_of_bounds_robot = SimpleNamespace(
+        pos=(-0.1, 1.0), config=SimpleNamespace(radius=0.5), state=SimpleNamespace()
+    )
+    out_of_bounds_sim = SimpleNamespace(
+        robots=[out_of_bounds_robot],
+        map_def=SimpleNamespace(width=10.0, height=10.0),
+        ped_pos=np.empty((0, 2)),
+        config=base_config,
+    )
+    assert SimulatorCounterfactualModel(out_of_bounds_sim, collision_scope="all").collision()
+
+    empty_robot = SimpleNamespace(
+        pos=(1.0, 1.0), config=SimpleNamespace(radius=0.5), state=SimpleNamespace()
+    )
+    empty_sim = SimpleNamespace(
+        robots=[empty_robot],
+        map_def=SimpleNamespace(width=10.0, height=10.0),
+        ped_pos=np.empty((0, 2)),
+        config=base_config,
+    )
+    assert not SimulatorCounterfactualModel(empty_sim, collision_scope="all").collision()
+
+    pedestrian_sim = SimpleNamespace(
+        robots=[empty_robot],
+        map_def=SimpleNamespace(width=10.0, height=10.0),
+        ped_pos=np.asarray([[1.8, 1.0]]),
+        config=base_config,
+        get_obstacle_lines=lambda: (),
+    )
+    assert SimulatorCounterfactualModel(pedestrian_sim, collision_scope="all").collision()
 
 
 def test_route_group_navigator_progress_restores() -> None:

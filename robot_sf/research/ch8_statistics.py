@@ -360,8 +360,8 @@ def _check_eta_squared(
 def _parse_float(raw: Any) -> float | None:
     """Return ``raw`` coerced to ``float``, or ``None`` when it is unparseable.
 
-    Blank strings, the literal ``nan`` (case-insensitive), and surrounding quotes are
-    treated as missing rather than raising.
+    Blank strings, non-finite values, and surrounding quotes are treated as missing rather
+    than raising.
     """
     if raw is None:
         return None
@@ -369,9 +369,10 @@ def _parse_float(raw: Any) -> float | None:
     if s == "" or s.lower() == "nan":
         return None
     try:
-        return float(s)
+        value = float(s)
     except ValueError:
         return None
+    return value if math.isfinite(value) else None
 
 
 def _mean_ch8(xs: list[float | None]) -> float:

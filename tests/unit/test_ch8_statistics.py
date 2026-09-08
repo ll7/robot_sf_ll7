@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from robot_sf.research.ch8_statistics import (
@@ -207,6 +209,44 @@ def test_finite_sequence_validation_rejects_non_finite_values() -> None:
 
     with pytest.raises(ValueError, match="non-finite"):
         spearman_rho([1.0, float("nan")], [1.0, 2.0])
+
+
+def test_row_statistics_exclude_non_finite_values() -> None:
+    """Row-based statistics must exclude non-finite cells to avoid invalid evidence."""
+    from robot_sf.research.ch8_statistics import _parse_float, _spearman_ch8
+
+    assert _parse_float("inf") is None
+    assert _parse_float("-inf") is None
+    assert _parse_float("1e309") is None
+
+    eta_result = evaluate_statistic(
+        {
+            "id": "eta_rows",
+            "statistic_kind": "partial_eta_squared",
+            "data": {
+                "rows": [
+                    {"planner_key": "p1", "scenario_family": "f1", "metric": "Infinity"},
+                    {"planner_key": "p1", "scenario_family": "f2", "metric": "1.0"},
+                    {"planner_key": "p2", "scenario_family": "f1", "metric": "2.0"},
+                    {"planner_key": "p2", "scenario_family": "f2", "metric": "3.0"},
+                ],
+                "metric": "metric",
+            },
+        }
+    )
+    assert eta_result.status == "computed_expected_value_missing"
+    assert all(math.isfinite(value) for value in eta_result.computed.values())
+
+    with pytest.raises(ValueError, match="less than 3 pairs"):
+        _spearman_ch8(
+            [
+                {"x": "1.0", "y": "1.0"},
+                {"x": "2.0", "y": "2.0"},
+                {"x": "inf", "y": "3.0"},
+            ],
+            "x",
+            "y",
+        )
 
 
 def test_evaluate_statistic_fails_closed_on_malformed_expected_block() -> None:

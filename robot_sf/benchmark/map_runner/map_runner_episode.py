@@ -3839,6 +3839,12 @@ def _build_episode_record_dict(  # noqa: PLR0913
         "planner_commit": analysis_trace.get("planner_commit"),
         "telemetry_profile": algo_meta.get("telemetry"),
     }
+    # The paired-effect report builder consumes the retained-row mapping at the
+    # episode-record root. Keep the historical nested metrics envelope intact,
+    # but expose the producer-owned mapping at its declared contract path too.
+    retained_metric_values = metrics.get("metric_values")
+    if not isinstance(retained_metric_values, Mapping):
+        retained_metric_values = {}
     return {
         "version": "v1",
         "episode_id": _compute_map_episode_id(scenario_params, seed),
@@ -3846,6 +3852,7 @@ def _build_episode_record_dict(  # noqa: PLR0913
         "seed": seed,
         "scenario_params": scenario_params,
         "metrics": metrics,
+        "metric_values": dict(retained_metric_values),
         "safety_predicates": safety_predicates,
         "public_requirement": public_requirement_events,
         "algorithm_metadata": algo_meta,

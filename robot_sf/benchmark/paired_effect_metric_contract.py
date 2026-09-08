@@ -719,6 +719,16 @@ def _trace_view(record: Mapping[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         seen_steps.add(step)
         previous_step = step
 
+    # A declared timeout is only complete when its wrapper trace reaches the
+    # declared horizon. Without this check, a truncated timeout trace could be
+    # misclassified as a valid no-opportunity or recovered intervention.
+    if native.get("declared_timeout") is True:
+        horizon = native.get("horizon_steps")
+        if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon <= 0:
+            return _status_payload("invalid", "invalid_declared_horizon")
+        if int(trace[-1]["step"]) != horizon - 1:
+            return _status_payload("unavailable", "timeout_trace_truncated")
+
     return {
         "status": "available",
         "reason": None,

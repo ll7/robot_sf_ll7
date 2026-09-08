@@ -1768,6 +1768,7 @@ class _EpisodeStepLoopResult:
 
     map_def: Any
     goal_vec: np.ndarray
+    initial_goal_vec: np.ndarray
     initial_robot_pos: np.ndarray
     initial_robot_heading: float
     initial_ped_positions: np.ndarray
@@ -1846,6 +1847,7 @@ class _StepLoopState:
     simulation_step_trace: list[dict[str, Any]] = field(default_factory=list)
     map_def: Any = None
     goal_vec: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
+    initial_goal_vec: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
     initial_robot_pos: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
     initial_robot_heading: float = 0.0
     initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
@@ -2098,6 +2100,7 @@ def _init_step_loop_state(
     state.previous_collision_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
     state.map_def = map_def
     state.goal_vec = goal_vec
+    state.initial_goal_vec = np.array(goal_vec, dtype=float, copy=True)
     state.initial_robot_pos = initial_robot_pos
     state.initial_ped_positions = initial_ped_positions
     state.initial_robot_velocity = initial_robot_velocity
@@ -3043,6 +3046,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
     return _EpisodeStepLoopResult(
         map_def=state.map_def,
         goal_vec=state.goal_vec,
+        initial_goal_vec=state.initial_goal_vec,
         initial_robot_pos=state.initial_robot_pos,
         initial_robot_heading=state.initial_robot_heading,
         initial_ped_positions=state.initial_ped_positions,
@@ -3973,7 +3977,10 @@ def _attach_paired_effect_native_trace_metadata(
     if not loop_result.safety_wrapper_trace and not loop_result.simulation_step_trace:
         return
     outcome, _ = _episode_outcome(loop_result)
-    goal = np.asarray(loop_result.goal_vec, dtype=float).reshape(-1)
+    # Route navigation can advance ``goal_vec`` to a later waypoint during the
+    # rollout. The timeout denominator is measured from the reset-time goal, so
+    # the native trace must carry that same goal rather than the final waypoint.
+    goal = np.asarray(loop_result.initial_goal_vec, dtype=float).reshape(-1)
     goal_position = (
         [float(goal[0]), float(goal[1])]
         if goal.size >= 2 and np.all(np.isfinite(goal[:2]))

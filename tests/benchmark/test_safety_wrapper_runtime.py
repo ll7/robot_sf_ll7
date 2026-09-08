@@ -480,6 +480,37 @@ def test_run_map_episode_records_native_pairing_trace_for_wrapper_off(monkeypatc
     )
 
 
+def test_native_pairing_trace_uses_reset_time_goal_after_route_advances() -> None:
+    """Timeout progress must use the goal paired with its initial denominator."""
+
+    context = SimpleNamespace(
+        config=SimpleNamespace(sim_config=SimpleNamespace(time_per_step_in_secs=0.1)),
+        horizon_val=2,
+        safety_wrapper_runtime=SimpleNamespace(arm_key="wrapper_on"),
+    )
+    loop_result = SimpleNamespace(
+        collision_seen=False,
+        goal_vec=np.array([9.0, 0.0], dtype=float),
+        initial_goal_vec=np.array([1.0, 0.0], dtype=float),
+        initial_goal_distance=1.0,
+        reached_goal_step=None,
+        safety_wrapper_trace=[{"step": 0}],
+        simulation_step_trace=[{"step": 0}],
+        termination_reason="max_steps",
+        timeout_seen=True,
+    )
+    algo_meta: dict[str, object] = {}
+
+    map_runner_episode._attach_paired_effect_native_trace_metadata(
+        algo_meta,
+        ctx=context,
+        loop_result=loop_result,
+    )
+
+    native = algo_meta["paired_effect_native_trace"]
+    assert native["goal_position"] == [1.0, 0.0]
+
+
 def test_run_map_episode_fails_closed_for_native_action_when_wrapper_enabled(
     monkeypatch,
 ) -> None:

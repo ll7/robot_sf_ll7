@@ -248,6 +248,7 @@
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_relevance_windows.py tests/benchmark/test_continuation_experiment_plan.py -q", "exit_code": 0, "result": "10 passed"},
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/dev/test_issue_7331_benchmark_namespace_inventory.py -q", "exit_code": 0, "result": "7 passed"},
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check <changed files>", "exit_code": 0, "result": "passed on focused changed files"},
+    {"command": "BASE_REF=origin/main PR_READY_MODE=interim PR_READY_ADVISORY=1 PR_READY_PR_BODY_FILE=/tmp/pr8622.body.md scripts/dev/pr_ready_check.sh", "exit_code": 2, "result": "core readiness passed; optional predictive lane blocked by missing declared extras (missing_optional), setup evidence only"},
     {"command": "isolated supplied replay contract probe at exact top checkout head 378726b6c946ac0e4ab20c75c129f2ea4486d2b8", "exit_code": 0, "result": "route_restore and complete_horizon contract_holds=true"}
   ],
   "submission_boundary": {

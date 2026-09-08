@@ -289,6 +289,40 @@ def test_row_statistics_exclude_non_finite_values() -> None:
     assert "no finite metric values" in bootstrap_result.blockers[0]
 
 
+def test_partial_non_finite_bootstrap_draws_fail_closed_at_evaluator_boundary() -> None:
+    """A draw with no finite value for a retained planner cannot become a zero rank."""
+    from robot_sf.research.ch8_statistics import _rank_stability_bootstrap_ch8
+
+    rows = [
+        {"planner_key": "p1", "scenario_family": "f1", "metric": "-3.0"},
+        {"planner_key": "p1", "scenario_family": "f2", "metric": "-inf"},
+        {"planner_key": "p1", "scenario_family": "f3", "metric": "-inf"},
+        {"planner_key": "p2", "scenario_family": "f1", "metric": "-2.0"},
+        {"planner_key": "p2", "scenario_family": "f2", "metric": "-2.0"},
+        {"planner_key": "p2", "scenario_family": "f3", "metric": "-2.0"},
+    ]
+
+    with pytest.raises(ValueError, match="p1.*bootstrap draw"):
+        _rank_stability_bootstrap_ch8(rows, "metric", n_boot=100, seed=3)
+
+    result = evaluate_statistic(
+        {
+            "id": "partial_non_finite_bootstrap",
+            "statistic_kind": "bootstrap_mean_ci",
+            "data": {
+                "rows": rows,
+                "metric": "metric",
+                "samples": 100,
+                "seed": 3,
+                "planner": "p1",
+            },
+        }
+    )
+    assert result.status == "blocked_invalid_source_data"
+    assert "p1" in result.blockers[0]
+    assert "bootstrap draw" in result.blockers[0]
+
+
 def test_evaluate_statistic_fails_closed_on_malformed_expected_block() -> None:
     """A non-numeric expected value fails closed instead of raising unhandled."""
 

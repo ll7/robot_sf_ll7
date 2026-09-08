@@ -446,6 +446,12 @@ _FAST_FILES = {
     # for the changed release identity module; keep them in fast shards for the
     # exact-head changed-coverage gate (issue #7938).
     "test_release_tag_identity.py",
+    # Finite-float helper migration touches these deterministic benchmark
+    # producers; their focused contract suites provide exact-head coverage.
+    "test_collision_scenario_similarity.py",
+    "test_event_ledger.py",
+    "test_scenario_coverage.py",
+    "test_seed_distribution_report.py",
     # ORCA preflight tests are deterministic contract coverage for the changed
     # benchmark preflight module; keep them in fast PR shards (issue #8021).
     "test_orca_preflight.py",

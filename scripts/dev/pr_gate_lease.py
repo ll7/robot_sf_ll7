@@ -135,13 +135,13 @@ def worktree_lifecycle_lock() -> Iterator[None]:
             fd = int(inherited_fd)
             if fd < 0:
                 raise ValueError
-            try:
+            if __package__:
                 from scripts.dev.worktree_creation_lock import verify_lock_fd
-            except ModuleNotFoundError:
-                # When this file is executed by absolute path, Python puts only
-                # ``scripts/dev`` on sys.path. Re-entry from a temporary or
-                # linked worktree must not depend on the caller's repository
-                # root being importable as the ``scripts`` package.
+            else:
+                # Direct execution must load this checkout's sibling even with
+                # Python's safe-path mode or another checkout's editable install.
+                # This interpreter-local path never alters the worker environment.
+                sys.path.insert(0, str(Path(__file__).resolve().parent))
                 from worktree_creation_lock import verify_lock_fd
 
             verify_lock_fd(str(lock_path), fd)

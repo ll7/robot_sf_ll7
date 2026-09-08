@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.failure_extractor import is_failure
+from robot_sf.common.validation import finite_float as _finite_float
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
@@ -154,21 +155,6 @@ def _first_present(record: dict[str, Any], paths: Sequence[str]) -> Any:
         value = _nested(record, path)
         if value is not None:
             return value
-    return None
-
-
-def _finite_float(value: Any) -> float | None:
-    """Coerce ``value`` to a finite float, returning ``None`` on failure.
-
-    Returns:
-        The finite float, or ``None`` on failure.
-    """
-    try:
-        candidate = float(value)
-    except (TypeError, ValueError):
-        return None
-    if math.isfinite(candidate):
-        return candidate
     return None
 
 

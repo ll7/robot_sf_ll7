@@ -5,6 +5,9 @@ scientific inputs. Generated bundles hash and copy the normalized profile so a
 consumer can distinguish byte transport, source admission, and presentation intent.
 """
 
+# Public helpers are compact immutable contract accessors.
+# ruff: noqa: DOC201
+
 from __future__ import annotations
 
 import hashlib

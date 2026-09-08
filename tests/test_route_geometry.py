@@ -361,6 +361,21 @@ def test_candidate_progress_rejects_ambiguous_and_invalid_traces_fail_closed() -
     assert json.loads(json.dumps(invalid.diagnostics(), allow_nan=False)) == invalid.diagnostics()
 
 
+@pytest.mark.parametrize("malformed_point", [None, (0.0,), (0.0, 1.0, 2.0), (10**400, 0.0)])
+def test_candidate_progress_rejects_malformed_point_shapes(
+    malformed_point: object,
+) -> None:
+    """Malformed samples must return a JSON-safe invalid result, not leak conversion errors."""
+    route = RouteGeometry([(0, 0), (2, 0)])
+
+    result = compute_candidate_progress(route, [(0.0, 0.0), malformed_point])  # type: ignore[list-item]
+
+    assert result.status == "invalid_trace"
+    assert result.invalid_count == 1
+    assert result.bounded_progress_m is None
+    assert json.loads(json.dumps(result.diagnostics(), allow_nan=False)) == result.diagnostics()
+
+
 def test_candidate_progress_preserves_signed_backtracking_and_bounds_it_at_zero() -> None:
     """Backtracking is visible in signed progress but never becomes positive progress."""
     route = RouteGeometry([(0, 0), (10, 0)])

@@ -135,6 +135,36 @@ terminal-label mapping and `SHA256SUMS` covers the generated payload. The v2
 package remains `not_admitted`; a maintainer-owned
 `ch7-evidence-admission.v2` receipt is required before paper-facing use.
 
+### Commit-pinned source custody (#7411)
+
+The v2 manifest also carries a `source_registry` binding. The existing
+[`source_gate_registry.v1.json`](../configs/analysis/source_gate_registry.v1.json)
+record `issue-7411-ch7-v1-v2-source.v1` pins both compact package trees to
+commit `a1892cf453973cd19e7bbba158a9f4132009bcee`, their Git tree identities,
+package `SHA256SUMS` digests, and every listed member digest. The record also
+binds the authorized #7411 approval tuple and package contracts, and records
+public access plus immutable repository-history retention. Its rights field is
+explicitly `not_evaluated_by_this_record`; custody verification does not grant
+member-level redistribution clearance. The v2 manifest's own bytes remain
+covered by its current package `SHA256SUMS`; the registry's v2 pointer is the
+immutable pre-binding source snapshot, which avoids a circular registry/package
+self-hash.
+
+From a fresh checkout, retrieve the pinned commit if needed and run the
+registry check before treating the package as durable custody evidence:
+
+```bash
+git fetch --no-tags origin a1892cf453973cd19e7bbba158a9f4132009bcee
+uv run python scripts/analysis/verify_ch7_source_registry.py --check-only
+```
+
+The check verifies both Git tree objects, the package `SHA256SUMS` files, every
+listed member, and the record self-hash. Missing registry or Git objects return
+`unavailable`; moving or malformed references return `blocked`; and changed
+tree or member bytes return `mismatch`. There is no local-path or moving-branch
+fallback. This registry is custody/provenance support only and is separate from
+the maintainer-owned #7323 admission receipt.
+
 ### Outcome-free admission diagnostic
 
 Before domain review and durable source retrieval are available, validate a

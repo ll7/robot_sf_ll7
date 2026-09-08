@@ -19,8 +19,8 @@ latest_reviewed_date: 2026-09-01
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 429
-refreshed_baseline_files_with_findings: 95
+refreshed_baseline_total_findings: 433
+refreshed_baseline_files_with_findings: 96
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -129,6 +129,14 @@ decision_summary: >-
 # docs/RELEASE.md bytes and is already current at this head. No
 # artifact_hash_mismatch was admitted to the machine baseline; the six
 # pre-existing hash_without_artifact_path findings remain unchanged.
+source_registry_addendum_7411: >-
+  The final repaired tree intentionally changes the v2 admission schema and source-registry/verifier
+  implementation. The linter therefore reports four `artifact_hash_mismatch` findings against the
+  byte-frozen #7410 build receipt, whose embedded hashes still describe the historical producer
+  state. Baseline this narrow frozen-receipt delta without rewriting the receipt or its review
+  sidecar; it is diagnostic provenance bookkeeping, not admission or benchmark evidence. This repair
+  also does not create the downstream #7323 receipt, admit the package, publish it, or propagate
+  claims.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -331,6 +339,16 @@ reviewed_files:
       and worktree-local dataset identities have the same four generic-linter findings; the atlas
       validator and review-marker sidecar provide the stronger path/digest checks. This remains
       diagnostic-only and is not benchmark, paper, or dissertation evidence.
+  - path: docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The historical #7410 build receipt and adjacent review sidecar remain byte-frozen by the
+      #7411 disposition. Its embedded schema and builder/verifier digests intentionally describe
+      the historical producer tree, so the final repaired tree reports four expected digest
+      mismatches. Preserve the receipt bytes and baseline only this narrow diagnostic provenance
+      delta; do not treat it as package admission, benchmark evidence, publication, or consumer
+      propagation.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

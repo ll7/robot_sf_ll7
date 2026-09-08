@@ -51,7 +51,9 @@ def test_public_scalar_entry_point_and_exports() -> None:
     with pytest.raises(ValueError, match=r"^metric must be non-negative: -1\.0$"):
         validation.require_finite("metric", -1, allow_negative=False)
 
+    assert common.finite_float is validation.finite_float
     assert validation.__all__ == [
+        "finite_float",
         "require_finite",
         "require_finite_array",
         "require_finite_fields",

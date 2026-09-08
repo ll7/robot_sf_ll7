@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -164,6 +165,16 @@ def _native_record(
         for step in range(length)
     ]
     termination_reason = "max_steps" if timeout else "success"
+    arm_independent_params = {
+        "id": "fixture_scenario",
+        "algo": "social_force",
+        "run_dt": 0.1,
+        "safety_wrapper": {"enabled": arm == "wrapper_on", "arm_key": arm},
+    }
+    arm_independent_params.pop("safety_wrapper")
+    pair_config_hash = hashlib.sha256(
+        json.dumps(arm_independent_params, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()[:16]
     return {
         "algo": "social_force",
         "scenario_id": "fixture_scenario",
@@ -197,7 +208,7 @@ def _native_record(
                 "declared_timeout": timeout,
                 "termination_reason": termination_reason,
                 "source_commit": "fixture-source-commit",
-                "pair_config_hash": "fixture-pair-config",
+                "pair_config_hash": pair_config_hash,
             },
             "simulation_step_trace": {
                 "schema_version": "simulation-step-trace.v1",
@@ -327,6 +338,64 @@ def test_native_pair_mismatch_fails_closed(mismatch: str) -> None:
     assert "false_positive_stop_rate" not in result["metric_values"]
 
 
+def test_native_pair_requires_declared_native_provenance() -> None:
+    """Generic row provenance cannot substitute for native pair identity."""
+
+    wrapper_off = _native_record("wrapper_off")
+    wrapper_on = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    wrapper_on["algorithm_metadata"]["paired_effect_native_trace"].pop("source_commit")
+    wrapper_on["algorithm_metadata"]["paired_effect_native_trace"].pop("pair_config_hash")
+
+    result = evaluate_paired_effect_metric_fields(
+        wrapper_on,
+        paired_wrapper_off_record=wrapper_off,
+    )
+
+    assert result["fields"]["false_positive_stop_rate"] == {
+        "status": "unavailable",
+        "reason": "pair_config_identity_unavailable",
+        "details": {"side": "wrapper_on"},
+    }
+
+
+def test_native_pair_does_not_fallback_to_generic_source_provenance() -> None:
+    """A generic row git hash cannot substitute for native source identity."""
+
+    wrapper_off = _native_record("wrapper_off")
+    wrapper_on = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    wrapper_on["algorithm_metadata"]["paired_effect_native_trace"].pop("source_commit")
+
+    result = evaluate_paired_effect_metric_fields(
+        wrapper_on,
+        paired_wrapper_off_record=wrapper_off,
+    )
+
+    assert result["fields"]["false_positive_stop_rate"] == {
+        "status": "unavailable",
+        "reason": "pair_source_identity_unavailable",
+        "details": {"side": "wrapper_on"},
+    }
+
+
+def test_native_pair_recomputes_config_identity_before_pairing() -> None:
+    """A copied native hash cannot hide drift in the arm-independent parameters."""
+
+    wrapper_off = _native_record("wrapper_off")
+    wrapper_on = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    wrapper_off["scenario_params"]["planner_override"] = "drifted"
+
+    result = evaluate_paired_effect_metric_fields(
+        wrapper_on,
+        paired_wrapper_off_record=wrapper_off,
+    )
+
+    assert result["fields"]["false_positive_stop_rate"]["status"] == "invalid"
+    assert result["fields"]["false_positive_stop_rate"]["reason"] == (
+        "pair_config_identity_mismatch"
+    )
+    assert "false_positive_stop_rate" not in result["metric_values"]
+
+
 def test_native_false_positive_requires_complete_inclusive_two_second_window() -> None:
     """The endpoint at onset+20 is required at dt=0.1; a missing endpoint is unavailable."""
 
@@ -393,6 +462,25 @@ def test_native_trace_required_state_and_nonfinite_window_fail_closed() -> None:
         window_s=float("nan"),
     )
     assert invalid_window["fields"]["false_positive_stop_rate"] == {
+        "status": "invalid",
+        "reason": "invalid_counterfactual_window",
+    }
+
+
+@pytest.mark.parametrize("window_s", [1.0, 5.0])
+def test_native_false_positive_rejects_non_contract_window(window_s: float) -> None:
+    """The companion's fixed 2.0-second window cannot be overridden by callers."""
+
+    wrapper_on = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    wrapper_off = _native_record("wrapper_off")
+
+    result = evaluate_paired_effect_metric_fields(
+        wrapper_on,
+        paired_wrapper_off_record=wrapper_off,
+        window_s=window_s,
+    )
+
+    assert result["fields"]["false_positive_stop_rate"] == {
         "status": "invalid",
         "reason": "invalid_counterfactual_window",
     }

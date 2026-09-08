@@ -33,6 +33,7 @@ native_trace:
 unavailable_status: unavailable
 invalid_status: invalid
 no_campaign_compute: true
+counterfactual_window_s: 2.0
 
 fields:
   - name: false_positive_stop_rate

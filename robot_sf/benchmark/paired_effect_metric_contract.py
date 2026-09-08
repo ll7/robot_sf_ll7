@@ -53,6 +53,7 @@ _DEFAULT_CLARIFICATION_PATH = (
     Path(__file__).resolve().parents[2]
     / "configs/benchmarks/paired_effect_metric_contract_v1_clarification.yaml"
 )
+_COUNTERFACTUAL_WINDOW_S = 2.0
 REQUIRED_RETAINED_ROW_PATH = "metric_values"
 MAX_INVALID_ROW_SAMPLES = 10
 _REQUIRED_FIELD_KEYS = {
@@ -169,6 +170,24 @@ def validate_paired_effect_metric_clarification(  # noqa: C901, PLR0912, PLR0915
         raise PairedEffectMetricContractError(f"invalid_status must be 'invalid'{location}")
     if normalized.get("no_campaign_compute") is not True:
         raise PairedEffectMetricContractError(f"no_campaign_compute must be true{location}")
+    raw_window_s = normalized.get("counterfactual_window_s")
+    if isinstance(raw_window_s, bool):
+        raise PairedEffectMetricContractError(
+            f"counterfactual_window_s must be {_COUNTERFACTUAL_WINDOW_S!r}{location}"
+        )
+    try:
+        window_s = float(raw_window_s)
+    except (TypeError, ValueError):
+        raise PairedEffectMetricContractError(
+            f"counterfactual_window_s must be {_COUNTERFACTUAL_WINDOW_S!r}{location}"
+        ) from None
+    if not math.isfinite(window_s) or not math.isclose(
+        window_s, _COUNTERFACTUAL_WINDOW_S, rel_tol=0.0, abs_tol=1.0e-12
+    ):
+        raise PairedEffectMetricContractError(
+            f"counterfactual_window_s must be {_COUNTERFACTUAL_WINDOW_S!r}{location}"
+        )
+    normalized["counterfactual_window_s"] = window_s
 
     raw_fields = normalized.get("fields")
     if not isinstance(raw_fields, Sequence) or isinstance(raw_fields, (str, bytes)):
@@ -534,7 +553,12 @@ def _record_pair_identity(record: Mapping[str, Any]) -> tuple[dict[str, Any] | N
 
 
 def _record_source_commit(record: Mapping[str, Any]) -> str | None:
-    """Return the native source commit identity from canonical record provenance."""
+    """Return only the declared native source commit identity.
+
+    Pair-level causal fields must not fall back to generic row provenance: a copied or
+    hand-authored generic ``git_hash`` is not evidence that both arms share the native
+    producer implementation.
+    """
 
     metadata = record.get("algorithm_metadata")
     if isinstance(metadata, Mapping):
@@ -543,40 +567,46 @@ def _record_source_commit(record: Mapping[str, Any]) -> str | None:
             value = native.get("source_commit")
             if isinstance(value, str) and value.strip():
                 return value.strip()
-    for value in (
-        record.get("git_hash"),
-        (record.get("provenance") or {}).get("git_hash")
-        if isinstance(record.get("provenance"), Mapping)
-        else None,
-    ):
-        if isinstance(value, str) and value.strip():
-            return value.strip()
     return None
 
 
-def _record_pair_config_hash(record: Mapping[str, Any]) -> str | None:
-    """Return the arm-independent configuration identity used for pairing."""
+def _native_pair_config_identity(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the native arm-independent config hash against record contents.
 
-    metadata = record.get("algorithm_metadata")
-    if isinstance(metadata, Mapping):
-        native = metadata.get("paired_effect_native_trace")
-        if isinstance(native, Mapping):
-            value = native.get("pair_config_hash")
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-    explicit = record.get("pair_config_hash")
-    if isinstance(explicit, str) and explicit.strip():
-        return explicit.strip()
+    Returns:
+        Machine-readable identity status and, when valid, the recomputed hash.
+    """
+
+    native = _record_native_trace_metadata(record)
+    if native is None:
+        return _status_payload("unavailable", "pair_config_identity_unavailable")
+    value = native.get("pair_config_hash")
+    if not isinstance(value, str) or not value.strip():
+        return _status_payload("unavailable", "pair_config_identity_unavailable")
     scenario_params = record.get("scenario_params")
-    if isinstance(scenario_params, Mapping):
-        arm_independent = dict(scenario_params)
-        # The wrapper arm is deliberately a separate identity dimension.  The
-        # planner, scenario, seed, horizon, dt, and all other declared config
-        # fields remain in the hash.
-        arm_independent.pop("safety_wrapper", None)
-        return _canonical_digest(arm_independent)
-    value = record.get("config_hash")
-    return value.strip() if isinstance(value, str) and value.strip() else None
+    if not isinstance(scenario_params, Mapping):
+        return _status_payload("unavailable", "pair_config_identity_unavailable")
+    arm_independent = dict(scenario_params)
+    arm_independent.pop("safety_wrapper", None)
+    digest = _canonical_digest(arm_independent)
+    expected = digest[:16] if digest is not None else None
+    if expected is None:
+        return _status_payload("unavailable", "pair_config_identity_unavailable")
+    if value.strip() != expected:
+        return _status_payload(
+            "invalid",
+            "pair_config_identity_mismatch",
+            declared=value.strip(),
+            recomputed=expected,
+        )
+    return {"status": "available", "reason": None, "value": value.strip()}
+
+
+def _record_pair_config_hash(record: Mapping[str, Any]) -> str | None:
+    """Return a recomputed-and-validated native config identity for metadata only."""
+
+    identity = _native_pair_config_identity(record)
+    return identity.get("value") if identity.get("status") == "available" else None
 
 
 def _record_safety_wrapper_summary(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -794,16 +824,32 @@ def _validate_pair(  # noqa: C901
             interventions=sorted(off_interventions),
         )
 
-    on_config = _record_pair_config_hash(wrapper_on_record)
-    off_config = _record_pair_config_hash(wrapper_off_record)
-    if on_config is None or off_config is None:
-        return _status_payload("unavailable", "pair_config_identity_unavailable")
+    on_config_state = _native_pair_config_identity(wrapper_on_record)
+    off_config_state = _native_pair_config_identity(wrapper_off_record)
+    for config_state in (on_config_state, off_config_state):
+        if config_state["status"] != "available":
+            return _status_payload(
+                str(config_state["status"]),
+                str(config_state["reason"]),
+                side="wrapper_on" if config_state is on_config_state else "wrapper_off",
+                **(
+                    config_state.get("details", {})
+                    if isinstance(config_state.get("details"), Mapping)
+                    else {}
+                ),
+            )
+    on_config = str(on_config_state["value"])
+    off_config = str(off_config_state["value"])
     if on_config != off_config:
         return _status_payload("invalid", "pair_config_mismatch")
     on_source = _record_source_commit(wrapper_on_record)
     off_source = _record_source_commit(wrapper_off_record)
     if on_source is None or off_source is None:
-        return _status_payload("unavailable", "pair_source_identity_unavailable")
+        return _status_payload(
+            "unavailable",
+            "pair_source_identity_unavailable",
+            side="wrapper_on" if on_source is None else "wrapper_off",
+        )
     if on_source != off_source:
         return _status_payload("invalid", "pair_source_mismatch")
     if not math.isclose(on_trace["dt_s"], off_trace["dt_s"], rel_tol=0.0, abs_tol=1.0e-12):
@@ -1269,8 +1315,13 @@ def evaluate_paired_effect_metric_fields(
             "metric_values": {},
             "fields": {},
         }
-    _load_default_paired_effect_metric_clarification()
+    clarification = _load_default_paired_effect_metric_clarification()
+    configured_window_s = float(clarification["counterfactual_window_s"])
     window_value = _finite_metric_scalar(window_s)
+    if window_value is None or not math.isclose(
+        window_value, configured_window_s, rel_tol=0.0, abs_tol=1.0e-12
+    ):
+        window_value = None
     fields = {
         "false_positive_stop_rate": _evaluate_false_positive_stop_rate(
             record,

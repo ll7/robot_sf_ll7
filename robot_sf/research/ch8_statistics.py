@@ -495,6 +495,15 @@ def _rank_stability_bootstrap_ch8(
         if v is not None:
             cell[r["planner_key"]][r["scenario_family"]] = v
 
+    # Do not rank planners or resample families that have no finite source cell.
+    # Otherwise an all-invalid table can silently become a synthetic all-zero rank.
+    planners = [planner for planner in planners if cell[planner]]
+    families = [
+        family for family in families if any(family in cell[planner] for planner in planners)
+    ]
+    if not planners or not families:
+        raise ValueError("rows contain no finite metric values for rank-stability bootstrap")
+
     def rank_by_mean(sampled_families: list[str]) -> dict[str, int]:
         """Return planner ranks (1 = highest mean metric) over the given scenario families."""
         means = {}

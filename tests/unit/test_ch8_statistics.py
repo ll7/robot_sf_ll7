@@ -213,7 +213,11 @@ def test_finite_sequence_validation_rejects_non_finite_values() -> None:
 
 def test_row_statistics_exclude_non_finite_values() -> None:
     """Row-based statistics must exclude non-finite cells to avoid invalid evidence."""
-    from robot_sf.research.ch8_statistics import _parse_float, _spearman_ch8
+    from robot_sf.research.ch8_statistics import (
+        _parse_float,
+        _rank_stability_bootstrap_ch8,
+        _spearman_ch8,
+    )
 
     assert _parse_float("inf") is None
     assert _parse_float("-inf") is None
@@ -247,6 +251,42 @@ def test_row_statistics_exclude_non_finite_values() -> None:
             "x",
             "y",
         )
+
+    filtered_family = _rank_stability_bootstrap_ch8(
+        [
+            {"planner_key": "p1", "scenario_family": "f1", "metric": "1.0"},
+            {"planner_key": "p2", "scenario_family": "f1", "metric": "2.0"},
+            {"planner_key": "p1", "scenario_family": "f2", "metric": "inf"},
+            {"planner_key": "p2", "scenario_family": "f2", "metric": "-inf"},
+        ],
+        "metric",
+        n_boot=8,
+        seed=3,
+    )
+    assert filtered_family == {
+        "p1": {"observed": 2, "ci_lo": 2, "ci_hi": 2},
+        "p2": {"observed": 1, "ci_lo": 1, "ci_hi": 1},
+    }
+
+    bootstrap_result = evaluate_statistic(
+        {
+            "id": "bootstrap_rows",
+            "statistic_kind": "bootstrap_mean_ci",
+            "expected": {"samples": 8, "seed": 3, "observed_rank": 1, "rank_ci": [1, 1]},
+            "data": {
+                "rows": [
+                    {"planner_key": "p1", "scenario_family": "f1", "metric": "inf"},
+                    {"planner_key": "p2", "scenario_family": "f1", "metric": "-inf"},
+                ],
+                "metric": "metric",
+                "samples": 8,
+                "seed": 3,
+                "planner": "p1",
+            },
+        }
+    )
+    assert bootstrap_result.status == "blocked_invalid_source_data"
+    assert "no finite metric values" in bootstrap_result.blockers[0]
 
 
 def test_evaluate_statistic_fails_closed_on_malformed_expected_block() -> None:

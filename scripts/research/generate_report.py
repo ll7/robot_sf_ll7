@@ -60,7 +60,7 @@ def extract_metric_records_from_manifest(manifest: dict) -> tuple[list[dict], li
 def _coerce_summary_float_list(summary: dict, field: str) -> list[float]:
     """Coerce an optional summary sequence to finite floats."""
     from robot_sf.research.exceptions import ValidationError
-    from robot_sf.research.tracker_manifest import coerce_tracker_float
+    from robot_sf.research.tracker_manifest import coerce_nonnegative_tracker_float
 
     values = summary.get(field)
     if values is None:
@@ -68,7 +68,9 @@ def _coerce_summary_float_list(summary: dict, field: str) -> list[float]:
     if not isinstance(values, list):
         raise ValidationError(f"Tracker manifest summary {field} must be a list")
     return [
-        coerce_tracker_float(value, f"summary.{field}") for value in values if value is not None
+        coerce_nonnegative_tracker_float(value, f"summary.{field}")
+        for value in values
+        if value is not None
     ]
 
 
@@ -129,7 +131,7 @@ def _apply_comparison_fallback(
 ) -> tuple[list[dict], list[int], list[float], list[float]]:
     """Apply validated comparison-summary fallback values without fabrication."""
     from robot_sf.research.exceptions import ValidationError
-    from robot_sf.research.tracker_manifest import coerce_tracker_float
+    from robot_sf.research.tracker_manifest import coerce_nonnegative_tracker_float
 
     if metric_records:
         return metric_records, seeds, baseline_timesteps, pretrained_timesteps
@@ -151,12 +153,12 @@ def _apply_comparison_fallback(
             baseline = ts.get("baseline")
             pretrained = ts.get("pretrained")
             baseline_timesteps = (
-                [coerce_tracker_float(baseline, "comparison.timesteps.baseline")]
+                [coerce_nonnegative_tracker_float(baseline, "comparison.timesteps.baseline")]
                 if baseline is not None
                 else []
             )
             pretrained_timesteps = (
-                [coerce_tracker_float(pretrained, "comparison.timesteps.pretrained")]
+                [coerce_nonnegative_tracker_float(pretrained, "comparison.timesteps.pretrained")]
                 if pretrained is not None
                 else []
             )

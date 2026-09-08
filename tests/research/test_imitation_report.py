@@ -111,6 +111,62 @@ def test_generate_imitation_report(tmp_path: Path):
     assert out["latex"] is not None and out["latex"].exists()
 
 
+def test_generate_imitation_report_preserves_zero_scalar_convergence(tmp_path: Path):
+    """A scalar zero remains available for hypothesis evaluation."""
+    summary = {
+        "run_id": "zero-only",
+        "extractor_results": [
+            {
+                "config_name": "baseline_run",
+                "metrics": {"timesteps_to_convergence": 0},
+            },
+            {
+                "config_name": "pretrained_run",
+                "metrics": {"timesteps_to_convergence": 0},
+            },
+        ],
+    }
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    out = generate_imitation_report(
+        summary_path=summary_path,
+        output_root=tmp_path,
+        config=ImitationReportConfig(experiment_name="zero-only"),
+    )
+
+    assert "Baseline mean is zero" in out["report"].read_text(encoding="utf-8")
+
+
+def test_generate_imitation_report_rejects_negative_convergence(tmp_path: Path):
+    """Negative scalar convergence values fail closed before report creation."""
+    from robot_sf.research.exceptions import ValidationError
+
+    summary = {
+        "extractor_results": [
+            {
+                "config_name": "baseline_run",
+                "metrics": {"timesteps_to_convergence": -1},
+            },
+            {
+                "config_name": "pretrained_run",
+                "metrics": {"timesteps_to_convergence": 1},
+            },
+        ]
+    }
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="must be non-negative"):
+        generate_imitation_report(
+            summary_path=summary_path,
+            output_root=tmp_path,
+            config=ImitationReportConfig(experiment_name="negative-convergence"),
+        )
+
+    assert not list(tmp_path.glob("imitation_*"))
+
+
 def test_ci_from_samples_requires_two_or_more():
     """_ci_from_samples returns n/a for insufficient samples."""
 

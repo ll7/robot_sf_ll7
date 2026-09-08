@@ -52,6 +52,44 @@ def _steps(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return jobs["build-candidate"]["steps"]
 
 
+def _prepare_helper_cache(
+    tmp_path: Path, python312: str, env: dict[str, str], *, provision_artifacts: bool
+) -> None:
+    """Exercise shared cache preparation and its missing-artifact diagnostic."""
+    preparation_env = env.copy()
+    if provision_artifacts:
+        # Only preparation may use the network; the workflow keeps UV_OFFLINE=1.
+        preparation_env.pop("UV_OFFLINE")
+    preparation = subprocess.run(
+        [
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-euo",
+            "pipefail",
+            "-c",
+            'source "$1"; prepare_software_candidate_test_cache "$2" "$3"',
+            "prepare-helper-cache",
+            str(REPO_ROOT / "scripts" / "dev" / "common_setup.sh"),
+            python312,
+            str(tmp_path),
+        ],
+        cwd=REPO_ROOT,
+        env=preparation_env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if provision_artifacts:
+        assert preparation.returncode == 0, preparation.stdout + preparation.stderr
+    else:
+        assert preparation.returncode == 2, preparation.stdout + preparation.stderr
+        assert "Cannot provision packaging==26.0 and pyyaml==6.0.3" in preparation.stderr
+        assert env["UV_CACHE_DIR"] in preparation.stderr
+        assert "Restore package-index access for preparation" in preparation.stderr
+
+
 def test_workflow_is_directly_dispatchable_single_job_and_least_privilege() -> None:
     text, workflow = _workflow()
 
@@ -143,8 +181,13 @@ def test_workflow_bootstraps_one_isolated_pinned_helper_environment() -> None:
     assert "uv run --no-project --with" not in license_run
 
 
-def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: Path) -> None:
-    """The real bootstrap reaches semantic validation from an offline source clone."""
+@pytest.mark.parametrize(
+    "provision_artifacts", [False, True], ids=["missing-artifacts", "clean-cache"]
+)
+def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(
+    tmp_path: Path, provision_artifacts: bool
+) -> None:
+    """Provision a fresh cache before the real offline bootstrap and source check."""
     uv = shutil.which("uv")
     if uv is None:
         pytest.fail("uv is required to exercise the clean-runner bootstrap contract")
@@ -188,23 +231,10 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: 
     python312 = shutil.which("python3.12")
     if python312 is None:
         pytest.fail("python3.12 is required to match the GitHub Actions bootstrap runtime")
-    cache_dir = os.environ.get("UV_CACHE_DIR", "")
-    if cache_dir:
-        # The child runs from tmp_path; anchor relative configured paths before handing them over.
-        cache_dir = str(Path(cache_dir).resolve())
-    if not cache_dir:
-        cache_dir = subprocess.run(
-            [uv, "cache", "dir"],
-            check=True,
-            capture_output=True,
-            text=True,
-            env={
-                key: value
-                for key, value in os.environ.items()
-                if key != "XDG_CACHE_HOME" and not key.startswith("UV_") and key != "UV"
-            },
-        ).stdout.strip()
-    assert cache_dir
+    # Neither a caller's scratch cache nor the user's global cache is an input.
+    # A locked sync/shared venv may have the packages without the resolver metadata.
+    cache_dir = tmp_path / "uv-cache"
+    assert not cache_dir.exists()
     tool_bin = tmp_path / "tool-bin"
     tool_bin.mkdir()
     (tool_bin / "python").symlink_to(python312)
@@ -231,12 +261,16 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: 
             "PYTHONPATH": "",
             "UV_NO_CONFIG": "1",
             "UV_OFFLINE": "1",
-            "UV_CACHE_DIR": cache_dir,
+            "UV_PYTHON_DOWNLOADS": "never",
+            "UV_CACHE_DIR": str(cache_dir),
+            "XDG_CACHE_HOME": str(tmp_path / "xdg-cache"),
             "HELPER_ENV": str(tmp_path / "helper-env"),
             "GITHUB_ENV": str(tmp_path / "github-env"),
             "PATH": f"{tool_bin}{os.pathsep}{os.environ['PATH']}",
         }
     )
+    _prepare_helper_cache(tmp_path, python312, env, provision_artifacts=provision_artifacts)
+    assert not Path(env["HELPER_ENV"]).exists()
     bootstrap_result = subprocess.run(
         ["bash", "--noprofile", "--norc", "-euo", "pipefail", "-c", bootstrap_run],
         cwd=tmp_path,
@@ -244,7 +278,15 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: 
         check=False,
         capture_output=True,
         text=True,
+        timeout=60,
     )
+    if not provision_artifacts:
+        assert bootstrap_result.returncode != 0
+        assert "packaging==26.0" in bootstrap_result.stderr
+        assert "not found in the cache" in bootstrap_result.stderr
+        assert "network was disabled" in bootstrap_result.stderr
+        assert not Path(env["GITHUB_ENV"]).exists()
+        return
     assert bootstrap_result.returncode == 0, (
         f"bootstrap failed with exit code {bootstrap_result.returncode}:\n"
         f"stdout:\n{bootstrap_result.stdout}\n"
@@ -258,6 +300,16 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: 
     helper_python = Path(github_env["SOFTWARE_CANDIDATE_PYTHON"])
     assert helper_python == Path(env["HELPER_ENV"]) / "bin" / "python"
     assert helper_python.is_file()
+    runtime = subprocess.run(
+        [str(helper_python), "-I", "-c", "import sys; assert sys.version_info[:2] == (3, 12)"],
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert runtime.returncode == 0, runtime.stderr
 
     helper_command = [
         str(helper_python),

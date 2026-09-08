@@ -29,6 +29,7 @@ import pandas as pd
 from robot_sf.common.logging import get_logger
 from robot_sf.research.exceptions import ValidationError
 from robot_sf.research.tracker_manifest import (
+    coerce_nonnegative_tracker_float,
     coerce_tracker_float,
     coerce_tracker_int,
     validate_tracker_payload,
@@ -58,6 +59,12 @@ def aggregate_metrics(
         List of aggregated metric dicts (see AggregatedMetrics in data model)
     """
     # Group by condition and metric
+    for record in metric_records:
+        timestep_value = record.get("timesteps_to_convergence")
+        if timestep_value is not None:
+            coerce_nonnegative_tracker_float(
+                timestep_value, "metric_records.timesteps_to_convergence"
+            )
     df = pd.DataFrame(metric_records)
     if df.empty or group_by not in df.columns:
         return []
@@ -206,7 +213,16 @@ def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
 
 
 def _first_timestep_metric(metrics: dict[str, Any]) -> object | None:
-    """Return a timestep alias while preserving legacy fallback and validation behavior."""
+    """Select the first timestep alias while preserving the zero/fallback contract.
+
+    The aliases are considered in priority order: ``timesteps_to_convergence``,
+    ``avg_timesteps``, then ``total_timesteps``. Numeric zero is a valid value;
+    null or malformed falsy values in earlier aliases retain legacy fall-through,
+    while values that reach coercion retain the existing validation behavior.
+
+    Returns:
+        The selected alias value, or ``None`` when no alias is present.
+    """
     for field in ("timesteps_to_convergence", "avg_timesteps"):
         candidate = metrics.get(field)
         # Keep the legacy fallback for malformed falsy values while treating
@@ -271,7 +287,7 @@ def extract_seed_metrics(
 
             timesteps = _first_timestep_metric(metrics)
             if timesteps is not None:
-                record["timesteps_to_convergence"] = coerce_tracker_float(
+                record["timesteps_to_convergence"] = coerce_nonnegative_tracker_float(
                     timesteps, "metrics.timesteps"
                 )
 

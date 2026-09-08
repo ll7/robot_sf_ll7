@@ -739,6 +739,53 @@ def test_ordinary_implementation_worktree_remains_pushable(tmp_path: Path) -> No
         _remove_worktree(repo, worktree, branch)
 
 
+def test_implementation_creation_from_review_worktree_does_not_inherit_barriers(
+    tmp_path: Path,
+) -> None:
+    """A new implementation worktree remains publishable when its source is protected."""
+    repo, remote = _fixture_repo(tmp_path)
+    source = tmp_path / "review-source"
+    source_branch = "review/source"
+    target = tmp_path / "implementation-target"
+    target_branch = "implementation/target"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", source_branch, str(source), "HEAD")
+        configured = _configure(source, "review")
+        assert configured.returncode == 0, configured.stderr
+
+        created = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                target_branch,
+                "--base",
+                "HEAD",
+                "--minimum-free-bytes",
+                "0",
+                "--mode",
+                "implementation",
+            ],
+            cwd=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert created.returncode == 0, created.stdout + created.stderr
+        mode = _git(target, "config", "--get", "robot-sf.worktree-mode", check=False)
+        assert mode.returncode != 0
+        assert _git(target, "remote", "get-url", "--push", "origin").stdout.strip() == str(remote)
+        push = _git(target, "push", "origin", "HEAD:refs/heads/from-review-source", check=False)
+        assert push.returncode == 0, push.stdout + push.stderr
+        assert (
+            "refs/heads/from-review-source" in _git(target, "ls-remote", "--refs", "origin").stdout
+        )
+    finally:
+        _remove_worktree(repo, target, target_branch)
+        _remove_worktree(repo, source, source_branch)
+
+
 def test_review_configuration_rejects_a_symlinked_worktree_config(tmp_path: Path) -> None:
     """The guard must not follow a linked worktree config symlink while mutating metadata."""
     repo, _remote = _fixture_repo(tmp_path)

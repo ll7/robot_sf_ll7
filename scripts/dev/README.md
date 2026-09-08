@@ -196,6 +196,8 @@ so commands launched later from another terminal or raw Git invocations outside 
 the contract; use `run -- ... bash` for a bounded session. Landlock's policy also deliberately
 excludes remotes inside its writable roots, Unix-domain/existing privileged helper channels, and
 privileged host escapes.
-Implementation worktrees keep the default pushable behavior. See
+The creation helper clears copied per-worktree configuration before applying the requested mode, so
+an implementation worktree created from a protected review checkout remains independently
+pushable. Implementation worktrees keep the default pushable behavior. See
 [`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md) for the complete invocation and
 restoration procedure.

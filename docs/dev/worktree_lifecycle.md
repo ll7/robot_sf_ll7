@@ -43,6 +43,11 @@ New branches are created without automatic upstream tracking. This avoids concur
 contending on the shared repository configuration while they create linked worktrees. Configure a
 remote explicitly when publishing a branch, for example with `git push -u origin <branch>`.
 
+The creation helper clears any `config.worktree` copied from the invoking checkout before applying
+the requested mode. Review-only push barriers therefore cannot leak into a newly created
+implementation worktree, and implementation worktrees do not inherit arbitrary per-worktree
+settings from a protected review checkout.
+
 ## Protected review worktrees
 
 Review and synthetic-integration worktrees must opt into the protected mode explicitly:

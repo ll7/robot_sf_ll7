@@ -14,6 +14,7 @@ from robot_sf.research.metadata import parse_tracker_manifest
         ("[]", "JSON object"),
         ('{"steps": "not-a-list"}', "steps must be a list"),
         ('{"steps": ["not-an-object"]}', "steps must contain objects"),
+        ('{"enabled_steps": "not-a-list"}', "enabled_steps must be a list"),
         ('{"summary": []}', "summary must be an object"),
         ('{"seeds": "not-a-list"}', "seeds must be a list"),
     ],

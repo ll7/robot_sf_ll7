@@ -694,6 +694,12 @@ _FAST_FILES = {
     # Typed simulator snapshots are deterministic serialization and compatibility
     # contracts for the preparation-only continuation prototype (issue #8620).
     "test_typed_snapshot.py",
+    # Continuation-plan tests are deterministic admission and cost-table
+    # contracts for the preparation-only research scaffold (issue #8622).
+    "test_continuation_experiment_plan.py",
+    # Relevance-window tests are deterministic selector, manifest, and missing
+    # signal contracts for the preparation-only research scaffold (issue #8622).
+    "test_relevance_windows.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

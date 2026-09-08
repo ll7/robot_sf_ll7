@@ -9,62 +9,62 @@
   "campaign_submission_authorized": false,
   "source_revisions": {
     "base_commit": "9f0915112155df3f6094b98a1b372be63ad44b5b",
-    "implementation_head_commit": "e896fc2b0a42a713b78606a4587f68d826ffc104",
-    "smoke_rows_commit": "e896fc2b0a42a713b78606a4587f68d826ffc104",
+    "implementation_head_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
+    "smoke_rows_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
     "smoke_worktree": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-8567-native-counterfactual-fields-20260908",
     "head_scope": "The implementation_head_commit is the exact clean source commit recorded by every smoke row. This receipt is a subsequent documentation commit; the PR exact-head gate binds the final documentation tip separately."
   },
   "frozen_inputs": [
     {
       "path": "configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml",
-      "sha256": "1f4c958c5c1d97f37127f1925041cec3ca0ff0267233c6bc572e7302592011d6",
+      "config_sha256": "1f4c958c5c1d97f37127f1925041cec3ca0ff0267233c6bc572e7302592011d6",
       "unchanged_from_base": true
     },
     {
       "path": "configs/research/safety_wrapper_ablation_v1.yaml",
-      "sha256": "635262978e20bf1427b4545dff7d1e6e9f315b2d19cc5b0c9b38cdb90836fef3",
+      "config_sha256": "635262978e20bf1427b4545dff7d1e6e9f315b2d19cc5b0c9b38cdb90836fef3",
       "unchanged_from_base": true
     },
     {
       "path": "configs/benchmarks/paired_effect_metric_contract_v1.yaml",
-      "sha256": "cc423c03fac128f21681504fdda85f18606eb66ea292f5c145181ec3c63dc309",
+      "config_sha256": "cc423c03fac128f21681504fdda85f18606eb66ea292f5c145181ec3c63dc309",
       "unchanged_from_base": true
     },
     {
       "path": "configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml",
-      "sha256": "42d04db0da0e35f1aca9e98c00239936b765f9b94f6928098a72d2e50da5379c",
+      "config_sha256": "42d04db0da0e35f1aca9e98c00239936b765f9b94f6928098a72d2e50da5379c",
       "unchanged_from_base": true
     },
     {
       "path": "configs/scenarios/classic_interactions_francis2023.yaml",
-      "sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+      "config_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
       "unchanged_from_base": true
     },
     {
       "path": "configs/benchmarks/seed_sets_v1.yaml",
-      "sha256": "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6",
+      "config_sha256": "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6",
       "unchanged_from_base": true
     }
   ],
   "new_contract_and_smoke_inputs": [
     {
       "path": "configs/benchmarks/paired_effect_metric_contract_v1_clarification.yaml",
-      "sha256": "5d8fa955d78f6e639174bf582e1da6fbedecad4016dabd8c1196c5d6aff138e9"
+      "config_sha256": "5d8fa955d78f6e639174bf582e1da6fbedecad4016dabd8c1196c5d6aff138e9"
     },
     {
       "path": "configs/benchmarks/paired_effect_native_smoke_v1.yaml",
-      "sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b"
+      "config_sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b"
     },
     {
       "path": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
-      "sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8"
+      "config_sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8"
     }
   ],
   "smoke": {
     "config": "configs/benchmarks/paired_effect_native_smoke_v1.yaml",
     "config_sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b",
-    "campaign_id": "paired_effect_native_smoke_v1_20260908_233025",
-    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260908_233025",
+    "campaign_id": "paired_effect_native_smoke_v1_20260908_235317",
+    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260908_235317",
     "scenario_matrix": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
     "scenario_matrix_sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
     "scenario_matrix_internal_hash": "fbed5c9e0876",
@@ -81,14 +81,14 @@
     "fallback_or_degraded_rows": 0,
     "total_arms": 2,
     "total_episodes": 2,
-    "runtime_s": 25.87654476799071,
+    "runtime_s": 25.268730096984655,
     "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paired_effect_native_smoke_v1.yaml --output-root output/validation/paired_effect_native_smoke --mode run --arm-isolation subprocess --skip-publication-bundle"
   },
   "arms": {
     "wrapper_off": {
-      "row_jsonl_sha256": "d7e26a36844481b6952b6b9a14cf100c4e7a99a546ef54c5b337b80abc5732cc",
+      "row_jsonl_sha256": "478bd423db092921c0e417fbca9878d861881f12d94a2121da5751ce94e0fb8b",
       "pair_config_hash": "fba9cf7b51b248a5",
-      "source_commit": "e896fc2b0a42a713b78606a4587f68d826ffc104",
+      "source_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
       "wrapper_trace_sha256": "9d70a670cb5ca68780825254dbe20e423994a1bf88c1e5cdfd407408b1e71443",
       "simulation_trace_sha256": "0389e037539c4a7d5a6f74152aecc984a513efcff91b0b69e309e48229cf4bca",
       "trace_steps": 100,
@@ -102,9 +102,9 @@
       }
     },
     "wrapper_on": {
-      "row_jsonl_sha256": "0d915073306a02763c796927c645cc608582930ad75747859ae1dac698e75174",
+      "row_jsonl_sha256": "14a4418978202773a7c678d1c8d0cefa8c1d43940d5d533e296e6f0e13528cdb",
       "pair_config_hash": "fba9cf7b51b248a5",
-      "source_commit": "e896fc2b0a42a713b78606a4587f68d826ffc104",
+      "source_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
       "wrapper_trace_sha256": "c4f833fac60b0932699546f46942752a274337f8290c9d3c639a2f94c4d39325",
       "simulation_trace_sha256": "86d856ff0eaa7c046b3c252f689b5abda1747fcc1659981e20ea8541d50b0cfc",
       "trace_steps": 100,
@@ -127,7 +127,7 @@
       "seed": 111
     },
     "pair_config_hash": "fba9cf7b51b248a5",
-    "source_commit": "e896fc2b0a42a713b78606a4587f68d826ffc104",
+    "source_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
     "values": {
       "false_positive_stop_rate": 1.0,
       "stop_yield_latency_s": 9.5,
@@ -152,7 +152,7 @@
   },
   "retained_row_gate": {
     "validator": "configs/benchmarks/paired_effect_metric_contract_v1.yaml",
-    "input_shape": "each full episode envelope was reduced to its metrics mapping, matching the frozen retained-row contract owner",
+    "input_shape": "each full episode envelope exposes the producer-owned mapping at root metric_values; the historical nested metrics.metric_values copy remains for compatibility",
     "wrapper_off": {
       "status": "blocked",
       "complete": false,
@@ -167,7 +167,7 @@
       "complete": false,
       "missing_fields": ["metric_values.false_positive_stop_rate"]
     },
-    "interpretation": "This is the expected fail-closed per-arm state before a validated counterpart-aware producer stage; the pair evaluator does not rewrite either row or bypass this gate."
+    "interpretation": "The root mapping is now available to the existing gate. The per-arm state remains fail-closed because wrapper-off has no wrapper-on counterpart and wrapper-on has no paired false-positive value; the pair evaluator does not rewrite either row or bypass this gate."
   },
   "campaign_report": {
     "execution_status": "completed",
@@ -215,7 +215,7 @@
   "limitations": [
     "Only one fixed scenario/seed pair was acquired, so no scientific effect estimate or generalization claim is supported.",
     "The wrapper-off policy moved away from the reset-time goal, so its progress_at_timeout observation is explicitly invalid and omitted rather than clamped or imputed.",
-    "The wrapper-on row is unpaired in the per-arm producer output; false_positive_stop_rate becomes available only in the explicit post-hoc counterpart evaluation.",
+    "The wrapper-on row is unpaired in the per-arm producer output; false_positive_stop_rate becomes available only in the explicit post-hoc counterpart evaluation. Both full episode envelopes now expose the retained mapping at the root contract path.",
     "The smoke reports campaign benchmark_success mechanically, but its diagnostic claim boundary, blocked retained-row gate, and failed SNQI contract exclude benchmark or paper interpretation.",
     "The campaign arm execution reports adapter mode; the native claim here is limited to the producer-owned trace instrumentation and fail-closed evaluator, not an independent planner-native claim."
   ],

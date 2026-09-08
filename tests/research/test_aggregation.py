@@ -15,6 +15,7 @@ from robot_sf.research.aggregation import (
     export_metrics_json,
     extract_seed_metrics,
 )
+from robot_sf.research.exceptions import ValidationError
 
 
 def test_aggregate_metrics_basic():
@@ -391,12 +392,73 @@ def test_load_manifest_payload_jsonl_takes_last_line(tmp_path: Path):
     assert payload == {"seed": 2, "policy_type": "x"}
 
 
+def test_load_manifest_payload_jsonl_rejects_malformed_earlier_line(tmp_path: Path):
+    """JSONL manifests reject corruption before the final record."""
+    path = tmp_path / "m.jsonl"
+    path.write_text('{"seed": 1}\nnot-json\n{"seed": 2}\n', encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        _load_manifest_payload(path)
+
+
+def test_load_manifest_payload_jsonl_rejects_malformed_earlier_shape(tmp_path: Path):
+    """A valid final JSONL record cannot hide an invalid earlier record."""
+    path = tmp_path / "m.jsonl"
+    path.write_text('{"metrics": []}\n{"seed": 2, "policy_type": "x"}\n', encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="metrics must be an object"):
+        _load_manifest_payload(path)
+
+
 def test_load_manifest_payload_empty_jsonl_raises(tmp_path: Path):
     """Empty JSONL manifests raise ValueError."""
     path = tmp_path / "empty.jsonl"
     path.write_text("\n\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Empty manifest"):
         _load_manifest_payload(path)
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"steps": "not-a-list", "metrics": {"success_rate": 0.8}}, "steps must be a list"),
+        ({"metrics": "not-an-object"}, "metrics must be an object"),
+        ({"summary": {"metrics": []}}, "summary metrics must be an object"),
+    ],
+)
+def test_extract_seed_metrics_rejects_malformed_manifest_shapes(
+    tmp_path: Path, payload: dict, message: str
+):
+    """Metric extraction records malformed tracker shapes as failures."""
+    path = tmp_path / "malformed.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    records, failures = extract_seed_metrics([path])
+
+    assert records == []
+    assert len(failures) == 1
+    assert message in failures[0]["reason"]
+
+
+def test_extract_seed_metrics_records_numeric_overflow_as_failure(tmp_path: Path):
+    """Unrepresentable numeric values are skipped instead of escaping extraction."""
+    path = tmp_path / "overflow.json"
+    path.write_text(
+        json.dumps(
+            {
+                "seed": 5,
+                "policy_type": "baseline",
+                "metrics": {"success_rate": int("9" * 1000)},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    records, failures = extract_seed_metrics([path])
+
+    assert records == []
+    assert len(failures) == 1
+    assert "metrics.success_rate must contain a finite number" in failures[0]["reason"]
 
 
 def test_extract_seed_metrics_basic(tmp_path: Path):

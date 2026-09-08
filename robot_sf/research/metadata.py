@@ -36,6 +36,10 @@ import psutil
 from robot_sf.common.logging import get_logger
 from robot_sf.research.aggregation import compute_completeness_score
 from robot_sf.research.exceptions import ValidationError
+from robot_sf.research.tracker_manifest import (
+    validate_tracker_payload,
+    validate_tracker_payload_records,
+)
 
 logger = get_logger(__name__)
 
@@ -285,6 +289,36 @@ def collect_reproducibility_metadata(
     return metadata
 
 
+def load_tracker_manifest_payload(manifest_path: str | Path) -> dict[str, Any]:
+    """Load and validate the raw tracker payload used by report consumers.
+
+    Returns:
+        The most recent JSON object for JSONL inputs, after shape validation.
+    """
+    path = Path(manifest_path)
+    if not path.exists():
+        msg = f"Tracker manifest does not exist: {path}"
+        logger.warning(msg)
+        raise ValidationError(msg)
+
+    try:
+        text = path.read_text(encoding="utf-8")
+        if path.suffix == ".jsonl":
+            payload = validate_tracker_payload_records(
+                [json.loads(line) for line in text.splitlines() if line.strip()], path
+            )
+        else:
+            payload = json.loads(text)
+    except (OSError, UnicodeError, ValueError) as exc:
+        msg = f"Failed to parse tracker manifest at {path}"
+        logger.warning(msg, error=str(exc))
+        raise ValidationError(msg) from exc
+
+    if path.suffix != ".jsonl":
+        validate_tracker_payload(payload, path)
+    return payload
+
+
 def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
     """Parse a run-tracker manifest (JSON or JSONL) into a structured dict.
 
@@ -298,29 +332,8 @@ def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
     """
 
     path = Path(manifest_path)
-    if not path.exists():
-        msg = f"Tracker manifest does not exist: {path}"
-        logger.warning(msg)
-        raise ValidationError(msg)
-
-    try:
-        text = path.read_text(encoding="utf-8")
-        if path.suffix == ".jsonl":
-            lines = [json.loads(line) for line in text.splitlines() if line.strip()]
-            if not lines:
-                raise ValidationError(f"Tracker manifest empty: {path}")
-            payload = lines[-1]
-        else:
-            payload = json.loads(text)
-    except (OSError, json.JSONDecodeError) as exc:
-        msg = f"Failed to parse tracker manifest at {path}"
-        logger.warning(msg, error=str(exc))
-        raise ValidationError(msg) from exc
-
-    steps = payload.get("steps") or []
-    enabled_steps = payload.get("enabled_steps") or [
-        s.get("step_id") for s in steps if s.get("step_id")
-    ]
+    payload = load_tracker_manifest_payload(path)
+    payload, steps, enabled_steps, summary, raw_seeds = validate_tracker_payload(payload, path)
     completed_steps = [
         s.get("step_id")
         for s in steps
@@ -346,7 +359,7 @@ def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
         "enabled_steps": enabled_steps,
         "completed_steps": completed_steps,
         "failed_steps": failed_steps,
-        "seeds": payload.get("seeds") or payload.get("summary", {}).get("seeds", []),
-        "summary": payload.get("summary", {}),
+        "seeds": raw_seeds,
+        "summary": summary,
         "completeness": completeness,
     }

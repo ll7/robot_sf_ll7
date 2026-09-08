@@ -78,6 +78,9 @@ class _SimulatorSnapshot:
         robot_navigators: Deep copy of robot route-navigator progress.
         single_runtimes: Deep copy of single-pedestrian behavior runtimes.
         route_navigators: Deep copy of route-group navigators' mutable state.
+        pedestrian_groups: Deep copy of mutable pedestrian group membership.
+        behavior_rng_states: Per-behavior NumPy generator states.
+        residual_adversary: Deep copy of the stateful residual controller, if active.
         global_rng_state: Numpy global RNG state captured via ``get_state``.
         peds_have_obstacle_forces: Simulator obstacle-force flag (affects stepping).
     """
@@ -91,6 +94,10 @@ class _SimulatorSnapshot:
     robot_navigators: list[Any]
     single_runtimes: list[Any]
     route_navigators: dict[int, Any]
+    pedestrian_groups: dict[int, set[int]]
+    pedestrian_group_by_ped: dict[int, int]
+    behavior_rng_states: dict[int, Any]
+    residual_adversary: Any
     global_rng_state: Any
     peds_have_obstacle_forces: bool
 
@@ -135,6 +142,62 @@ def _restore_single_runtimes(peds_behaviors: list[Any], runtimes: list[Any]) -> 
         if saved is None or not hasattr(behavior, "_runtimes"):
             continue
         behavior._runtimes = [SinglePedestrianRuntime(**fields) for fields in saved]
+
+
+def _capture_behavior_rng_states(peds_behaviors: list[Any]) -> dict[int, Any]:
+    """Capture state for per-behavior NumPy generators.
+
+    The simulator also uses the legacy global NumPy stream, but some behavior
+    controllers own an independent ``numpy.random.Generator``. Restoring only
+    the global stream would leave those controllers one or more draws ahead on
+    the next counterfactual branch.
+
+    Returns:
+        Mapping from behavior identity to a deep-copied bit-generator state.
+    """
+    states: dict[int, Any] = {}
+    for behavior in peds_behaviors:
+        rng = getattr(behavior, "rng", None)
+        bit_generator = getattr(rng, "bit_generator", None)
+        if bit_generator is not None:
+            states[id(behavior)] = deepcopy(bit_generator.state)
+    return states
+
+
+def _restore_behavior_rng_states(peds_behaviors: list[Any], states: dict[int, Any]) -> None:
+    """Restore per-behavior NumPy generator states from a snapshot."""
+    for behavior in peds_behaviors:
+        saved = states.get(id(behavior))
+        if saved is None:
+            continue
+        rng = getattr(behavior, "rng", None)
+        bit_generator = getattr(rng, "bit_generator", None)
+        if bit_generator is not None:
+            bit_generator.state = deepcopy(saved)
+
+
+def _capture_pedestrian_groups(groups: Any) -> tuple[dict[int, set[int]], dict[int, int]]:
+    """Capture mutable pedestrian group membership and reverse lookup.
+
+    Returns:
+        A deep-copied ``groups`` mapping and its ``group_by_ped_id`` reverse lookup.
+    """
+    return deepcopy(groups.groups), deepcopy(groups.group_by_ped_id)
+
+
+def _restore_pedestrian_groups(
+    groups: Any,
+    memberships: dict[int, set[int]],
+    group_by_ped: dict[int, int],
+) -> None:
+    """Restore pedestrian group membership and invalidate the derived list cache."""
+    groups.groups = deepcopy(memberships)
+    groups.group_by_ped_id = deepcopy(group_by_ped)
+    invalidate_cache = getattr(groups, "_invalidate_groups_as_lists_cache", None)
+    if callable(invalidate_cache):
+        invalidate_cache()
+    elif hasattr(groups, "_groups_as_lists_cache"):
+        groups._groups_as_lists_cache = None
 
 
 def _capture_route_navigators(peds_behaviors: list[Any]) -> dict[int, Any]:
@@ -312,6 +375,18 @@ class SimulatorCounterfactualModel:
             for name in ("prf_config", "apf_config", "residual_adversary")
         ):
             return PED_RESPONSE_CLOSED_LOOP
+        for behavior in self.sim.peds_behaviors:
+            definitions = getattr(behavior, "single_pedestrians", ())
+            for definition in definitions:
+                role = getattr(definition, "role", None)
+                if role in {"follow", "accompany"}:
+                    return PED_RESPONSE_CLOSED_LOOP
+                if role == "lead" and not (
+                    getattr(definition, "goal", None) or getattr(definition, "trajectory", None)
+                ):
+                    return PED_RESPONSE_CLOSED_LOOP
+                if getattr(definition, "hold_until_robot_within_m", None) is not None:
+                    return PED_RESPONSE_CLOSED_LOOP
         return PED_RESPONSE_REPLAYED
 
     def snapshot(self) -> _SimulatorSnapshot:
@@ -320,6 +395,7 @@ class SimulatorCounterfactualModel:
         Returns:
             A :class:`_SimulatorSnapshot` restorable via :meth:`restore`.
         """
+        pedestrian_groups, pedestrian_group_by_ped = _capture_pedestrian_groups(self.sim.groups)
         return _SimulatorSnapshot(
             step_index=self._step_index,
             pysf_state=self.sim.pysf_state.pysf_states().copy(),
@@ -330,6 +406,10 @@ class SimulatorCounterfactualModel:
             robot_navigators=deepcopy(self.sim.robot_navs),
             single_runtimes=_capture_single_runtimes(self.sim.peds_behaviors),
             route_navigators=_capture_route_navigators(self.sim.peds_behaviors),
+            pedestrian_groups=pedestrian_groups,
+            pedestrian_group_by_ped=pedestrian_group_by_ped,
+            behavior_rng_states=_capture_behavior_rng_states(self.sim.peds_behaviors),
+            residual_adversary=deepcopy(getattr(self.sim, "_residual_adversary", None)),
             global_rng_state=_copy_global_rng_state() if self.capture_rng else None,
             peds_have_obstacle_forces=bool(self.sim.peds_have_obstacle_forces),
         )
@@ -347,6 +427,13 @@ class SimulatorCounterfactualModel:
         _restore_robot_navigators(self.sim.robot_navs, snapshot.robot_navigators)
         _restore_single_runtimes(self.sim.peds_behaviors, snapshot.single_runtimes)
         _restore_route_navigators(self.sim.peds_behaviors, snapshot.route_navigators)
+        _restore_pedestrian_groups(
+            self.sim.groups,
+            snapshot.pedestrian_groups,
+            snapshot.pedestrian_group_by_ped,
+        )
+        _restore_behavior_rng_states(self.sim.peds_behaviors, snapshot.behavior_rng_states)
+        self.sim._residual_adversary = deepcopy(snapshot.residual_adversary)
         self.sim.peds_have_obstacle_forces = snapshot.peds_have_obstacle_forces
         if snapshot.global_rng_state is not None:
             key, state, pos, has_gauss, cached_gauss = snapshot.global_rng_state

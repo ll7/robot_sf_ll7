@@ -20,6 +20,7 @@ from robot_sf.benchmark import last_avoidable_fixtures as fx
 from robot_sf.benchmark.last_avoidable_replay import (
     LAST_AVOIDABLE_REPLAY_SCHEMA,
     SUBSTITUTION_HOLD,
+    SUBSTITUTION_SINGLE_STEP,
     VERDICT_ALREADY_UNAVOIDABLE,
     VERDICT_AVOIDABLE,
     VERDICT_UNKNOWN,
@@ -144,6 +145,70 @@ def test_avoidable_records_exact_no_return_point() -> None:
     report = _run(fx.preventable_late_braking_scenario())
     assert report.t_uca == 0
     assert report.t_inevitable == 7
+
+
+def test_initial_contact_abstains_before_branching() -> None:
+    """Contact at the initial snapshot cannot be attributed to a later action."""
+    scenario = fx.KinematicScenario(
+        robot_x0=0.0,
+        robot_speed0=1.0,
+        ped_pos0=(0.0, 0.0),
+        ped_vel0=(0.0, 0.0),
+    )
+    report = locate_last_avoidable(
+        fx.KinematicCollisionModel(scenario),
+        [0.0] * 8,
+        ReplayConfig(t_danger=0, t_contact=3, horizon=2, substitution_mode=SUBSTITUTION_HOLD),
+    )
+
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstained is True
+    assert report.abstain_reason == "baseline_initial_contact"
+    assert report.t_uca is None
+
+
+@pytest.mark.parametrize(
+    ("substitution_mode", "extra_actions"),
+    ((SUBSTITUTION_HOLD, 1), (SUBSTITUTION_SINGLE_STEP, 5 - 1)),
+)
+def test_minimal_recorded_continuation_is_accepted(substitution_mode, extra_actions) -> None:
+    """The engine accepts the shortest suffix required by each substitution mode."""
+    scenario = fx.preventable_late_braking_scenario()
+    contact_step = fx.find_contact_step(scenario)
+    assert contact_step is not None
+    horizon = 5
+    report = locate_last_avoidable(
+        fx.KinematicCollisionModel(scenario),
+        fx.maintain_baseline_actions(contact_step + extra_actions),
+        ReplayConfig(
+            t_danger=0,
+            t_contact=contact_step,
+            horizon=horizon,
+            substitution_mode=substitution_mode,
+        ),
+    )
+
+    assert report.verdict == VERDICT_AVOIDABLE
+
+
+def test_hold_requires_inclusive_contact_prefix() -> None:
+    """A hold replay must record the action whose result is the declared contact."""
+    scenario = fx.preventable_late_braking_scenario()
+    contact_step = fx.find_contact_step(scenario)
+    assert contact_step is not None
+    report = locate_last_avoidable(
+        fx.KinematicCollisionModel(scenario),
+        fx.maintain_baseline_actions(contact_step),
+        ReplayConfig(
+            t_danger=0,
+            t_contact=contact_step,
+            horizon=1,
+            substitution_mode=SUBSTITUTION_HOLD,
+        ),
+    )
+
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstain_reason == "insufficient_baseline_actions"
 
 
 # -- acceptance criterion: already-unavoidable contact ----------------------

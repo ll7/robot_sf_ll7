@@ -476,7 +476,7 @@ def _bind_model_metadata(
     return bound_config, tuple(mismatches)
 
 
-def locate_last_avoidable(
+def locate_last_avoidable(  # noqa: C901 - explicit fail-closed verdict state machine
     model: CounterfactualModel,
     baseline_actions: Sequence[Any],
     config: ReplayConfig,
@@ -533,11 +533,17 @@ def locate_last_avoidable(
         )
     config = bound_config
 
-    # A baseline shorter than the replay bound cannot support either the
-    # expected-contact check or a complete branch horizon.  Report this as a
-    # deterministic, fail-closed non-evaluation rather than treating an empty
-    # suffix as a successful avoidance witness.
-    required_baseline = config.t_contact + config.horizon
+    # A baseline shorter than the decision window cannot support branch capture.
+    # Single-step substitutions additionally need the recorded suffix they
+    # resume; hold substitutions do not consume baseline actions after the
+    # decision window.  Report missing support as a fail-closed non-evaluation
+    # rather than treating an empty suffix as a successful avoidance witness.
+    contact_prefix = config.t_contact + 1
+    required_baseline = (
+        max(contact_prefix, config.t_contact + config.horizon - 1)
+        if config.substitution_mode == SUBSTITUTION_SINGLE_STEP
+        else contact_prefix
+    )
     if len(baseline_actions) < required_baseline:
         determinism = DeterminismCheck(
             replays=config.determinism_replays,
@@ -602,6 +608,24 @@ def locate_last_avoidable(
         )
 
     observed_contact = determinism.observed_contact_steps[0]
+    if observed_contact == 0:
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="baseline_initial_contact",
+            notes=(
+                "baseline was already in contact at the initial snapshot; "
+                "no pre-contact unsafe control action can be identified",
+            ),
+        )
     if observed_contact is None or not (config.t_danger <= observed_contact <= config.t_contact):
         return LastAvoidableReport(
             verdict=VERDICT_UNKNOWN,

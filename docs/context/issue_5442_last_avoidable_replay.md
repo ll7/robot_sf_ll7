@@ -34,8 +34,9 @@ remaining (the global-RNG snapshot seam was the gated dependency):
   a `CounterfactualModel` over the live `Simulator`. It captures the pedestrian PySF
   state buffer, per-pedestrian behavior runtimes (single-pedestrian waypoint/hold
   state and route-group navigator waypoint index), robot pose/velocity and route
-  navigator progress, and the
-  **global numpy RNG** via `numpy.random.get_state`/`set_state` (deep-copied so
+  navigator progress, mutable group membership, per-behavior generators, and the
+  stateful residual controller, plus the **global numpy RNG** via
+  `numpy.random.get_state`/`set_state` (deep-copied so
   repeated restores stay independent). The `capture_rng` flag documents the seam:
   omitting it lets a mid-episode pedestrian respawn (`sample_zone` draws from the
   global RNG) diverge a replay by meters, which the engine's fail-closed `unknown`

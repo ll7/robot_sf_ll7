@@ -137,6 +137,53 @@ def test_snapshot_restore_reproduces_baseline_deterministically() -> None:
     assert contacts == [_FIXTURE_CONTACT_STEP] * 4
 
 
+def test_snapshot_restores_groups_behavior_rng_and_residual_state() -> None:
+    """Every mutable branch controller state returns to the captured snapshot."""
+    ped_state = np.zeros((1, 6), dtype=float)
+    groups = SimpleNamespace(
+        groups={0: {0}},
+        group_by_ped_id={0: 0},
+        _groups_as_lists_cache=[[0]],
+    )
+    behavior_rng = np.random.default_rng(7)
+    behavior = SimpleNamespace(rng=behavior_rng)
+    residual = SimpleNamespace(counter=1)
+    robot = SimpleNamespace(
+        pose=((0.0, 0.0), 0.0),
+        state=SimpleNamespace(),
+        config=SimpleNamespace(radius=0.5),
+        pos=(0.0, 0.0),
+    )
+    sim = SimpleNamespace(
+        robots=[robot],
+        robot_navs=[],
+        peds_behaviors=[behavior],
+        groups=groups,
+        pysf_state=SimpleNamespace(pysf_states=lambda: ped_state),
+        ped_headings=np.zeros(1),
+        ped_angular_velocities=np.zeros(1),
+        peds_have_obstacle_forces=False,
+        _residual_adversary=residual,
+    )
+    model = SimulatorCounterfactualModel(sim, capture_rng=False)
+    snapshot = model.snapshot()
+
+    expected_rng_draw = behavior_rng.random()
+    groups.groups[0].clear()
+    groups.groups[1] = {0}
+    groups.group_by_ped_id[0] = 1
+    behavior_rng.random()
+    residual.counter = 9
+
+    model.restore(snapshot)
+
+    assert groups.groups == {0: {0}}
+    assert groups.group_by_ped_id == {0: 0}
+    assert groups._groups_as_lists_cache is None
+    assert behavior_rng.random() == expected_rng_draw
+    assert sim._residual_adversary.counter == 1
+
+
 def test_rng_capture_seam_prevents_divergence() -> None:
     """Without the global-RNG capture seam, a mid-episode respawn replay diverges.
 
@@ -218,6 +265,34 @@ def test_response_and_collision_metadata_are_bound_to_native_contract() -> None:
     model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
     assert model.pedestrian_response == "closed_loop"
     assert model.collision_predicate == "robot_pedestrian_center_distance_v1"
+
+
+def test_robot_relative_behavior_is_closed_loop_provenance() -> None:
+    """Robot-relative scripted pedestrians read the substituted robot pose."""
+    robot = SimpleNamespace(pos=(0.0, 0.0), config=SimpleNamespace(radius=0.5))
+    sim = SimpleNamespace(
+        robots=[robot],
+        config=SimpleNamespace(
+            prf_config=SimpleNamespace(is_active=False),
+            apf_config=SimpleNamespace(is_active=False),
+            residual_adversary=SimpleNamespace(is_active=False),
+        ),
+        peds_behaviors=[
+            SimpleNamespace(
+                single_pedestrians=[
+                    SimpleNamespace(
+                        role="follow",
+                        goal=None,
+                        trajectory=None,
+                        hold_until_robot_within_m=None,
+                    )
+                ]
+            )
+        ],
+    )
+    model = SimulatorCounterfactualModel(sim)
+
+    assert model.pedestrian_response == "closed_loop"
 
 
 def test_all_collision_scope_detects_wall_without_pedestrian() -> None:

@@ -80,6 +80,7 @@ class _SimulatorSnapshot:
         single_runtimes: Deep copy of single-pedestrian behavior runtimes.
         route_navigators: Deep copy of route-group navigators' mutable state.
         pedestrian_groups: Deep copy of mutable pedestrian group membership.
+        pedestrian_group_by_ped: Deep copy of the pedestrian-to-group reverse lookup.
         behavior_rng_states: Per-behavior NumPy generator states.
         residual_adversary: Deep copy of the stateful residual controller, if active.
         global_rng_state: Numpy global RNG state captured via ``get_state``.

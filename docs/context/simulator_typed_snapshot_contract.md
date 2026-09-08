@@ -1,6 +1,8 @@
 # Typed simulator snapshot prototype
 
-Status: preparation-only (`RW-03`/`RW-04`, cross-reference #7394). This document
+Status: preparation-only (`RW-03`/`RW-04`, cross-reference #7394). The durable
+format is `simulator_typed_snapshot.v2`; v1 artifacts are rejected because the
+group-state and complete-RNG requirements are not backward-compatible. This document
 describes a typed continuation seam over the existing
 `SimulatorCounterfactualModel`; it does not admit shortened benchmark execution,
 replace the replay engine, or establish a scientific speed-up.
@@ -14,10 +16,18 @@ the next observation after restore using the same wrapper contract.
 
 Before a destination simulator is mutated, the snapshot checks the map, config,
 code-revision, planner, checkpoint (when present), platform, and timestep identity.
-Actor counts/order are checked as well. A mismatch raises
-`SnapshotCompatibilityError`; malformed metadata, unknown schema versions, missing
-arrays, descriptor drift, object dtypes, non-finite values, and payload digest/size
-drift raise `SnapshotPayloadError`.
+Actor counts/order, every restored numeric-array shape, and every restored numeric-array
+dtype are checked as well.
+Pedestrian group membership and its reverse lookup are serialized as integer-entry
+lists so JSON object-key coercion cannot change force-relevant group state. A
+typed snapshot is restorable only when both the global NumPy and stdlib `random`
+streams were captured and the destination adapter also supports those streams;
+RNG-incomplete captures fail closed before mutation.
+Such a mismatch raises `SnapshotCompatibilityError`; malformed metadata, unknown schema
+versions, missing arrays, descriptor drift, object dtypes, non-finite values, and
+payload digest/size drift raise `SnapshotPayloadError`. If the live adapter fails
+after beginning a restore, the previous adapter snapshot is restored before the
+failure is reported.
 
 The durable pair is a JSON metadata file and a compressed `.npz` numeric payload.
 Loading uses `allow_pickle=False`. JSON values carry typed tuple and array references;
@@ -30,6 +40,8 @@ process-local object IDs.
 The first native subset is one-robot `SimulatorCounterfactualModel` state:
 
 - PySocialForce state, headings, angular velocities, and pedestrian speed caps;
+- pedestrian group membership and pedestrian-to-group reverse lookup, including
+  synchronization of the backend force model;
 - robot pose, differential-drive velocity, wheel integration fields, and route
   progress;
 - single-pedestrian runtime fields and route-group waypoint state;
@@ -54,7 +66,7 @@ are visible as unsupported rather than silently treated as equivalent.
 ## Cost receipt
 
 The focused doorway fixture records artifact sizes through `SnapshotArtifact`.
-The current native fixture produced a 18,903-byte JSON metadata file and a 3,893-byte
+The current native fixture produced a 19,657-byte JSON metadata file and a 3,893-byte
 compressed numeric payload in the local headless environment (7 pedestrians,
 `float64` state arrays). These are engineering measurements, not a benchmark result;
 size varies with actor count and state contents. End-to-end accounting must still

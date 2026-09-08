@@ -132,8 +132,10 @@ When working in a linked Git worktree, detect bootstrap state before running exp
   cycle (`git fetch origin main && git merge origin/main`) so the branch benefits from repository-wide
   fixes before local changes diverge. For read-only review worktrees/passes, record target/base/head
   SHAs and inspect or fetch as needed; never merge `origin/main` into the implementation branch or
-  push to it during review (relying on the machine-enforced read-only guard in
-  `scripts/dev/review_worktree_guard.py` / issue #8321).
+  push to it during review. Ordinary Git invocations rely on the machine Git guard in
+  `scripts/dev/review_worktree_guard.py` / issue #8321; deliberate override or alternate
+  receive-pack probes must run as descendants of its Linux Landlock `run` boundary because raw
+  commands launched outside that process are not adversarially isolated.
 - Do not create divergent per-worktree machine context files unless the worktree really needs
   machine-specific behavior that should not be inherited from the main checkout.
 

@@ -35,9 +35,18 @@ scripts/dev/create_worktree.sh \
   --exec git rev-parse --show-toplevel
 ```
 
+For `--mode review`, the creator launches that optional first command through the Linux Landlock
+process boundary. Keep later review commands as descendants of it, or invoke the guard's `run -- ...`
+form explicitly; the mode marker and Git hook do not attach an OS policy to future raw processes.
+
 New branches are created without automatic upstream tracking. This avoids concurrent workers
 contending on the shared repository configuration while they create linked worktrees. Configure a
 remote explicitly when publishing a branch, for example with `git push -u origin <branch>`.
+
+The creation helper clears any `config.worktree` copied from the invoking checkout before applying
+the requested mode. Review-only push barriers therefore cannot leak into a newly created
+implementation worktree, and implementation worktrees do not inherit arbitrary per-worktree
+settings from a protected review checkout.
 
 ## Protected review worktrees
 
@@ -65,7 +74,7 @@ separated from read-only URL resolution: direct `git fetch` and `git ls-remote` 
 operational for inspection and ref verification. A remote added after activation with an explicit
 `remote.<name>.pushurl` is still protected on the ordinary hook path, but Git does not apply
 `pushInsteadOf` to that explicit value when `--no-verify` bypasses the hook. That deliberate
-configuration/command-line override belongs to the stronger process boundary tracked in #8343. This
+configuration/command-line override belongs to the stronger process boundary described below. This
 is a Git-level workflow guard, not an operating-system sandbox; a deliberate per-command Git
 configuration override can bypass it.
 
@@ -75,6 +84,45 @@ outrank the worktree barrier, setup fails closed before enabling review mode; re
 the alias and retry. This refusal is required because a guard-specific lock would not serialize
 arbitrary Git processes in other linked worktrees. Generic `url.*.insteadOf` entries remain intact
 for read URL resolution.
+
+The stronger adversarial process boundary is explicit and must wrap any command that may reach a
+local remote or invoke an alternate receive-pack:
+
+```bash
+python "$MAIN_REPO_ROOT/scripts/dev/review_worktree_guard.py" run \
+  --worktree "$WORKTREE_PARENT/review-pr-123" -- \
+  git -c url.<actual-file-url>.insteadOf=<blocked-file-url> push \
+  --no-verify --receive-pack=git-receive-pack origin HEAD:refs/heads/example
+```
+
+On Linux with Landlock application binary interface (ABI) 4 or newer, `run` is a real
+descendant-inherited operating-system boundary: it allows reads and execution throughout the host,
+permits filesystem mutation only below the review worktree and its linked Git admin directory,
+closes inherited file descriptors,
+and denies TCP bind/connect. It therefore protects a temporary bare remote outside those writable
+roots even when Git URL configuration, `--receive-pack`, and `--no-verify` are supplied on the
+command line. Direct alternate receive-pack descendants inherit the same policy. The command's
+output and exit status are preserved.
+
+`run` fails closed on non-Linux hosts, unsupported architectures, kernels without the required
+Landlock ABI, unavailable `/proc/self/fd` inspection, or any policy-installation error. Landlock
+is Linux-specific, so this is not a portable all-host guarantee. The process boundary is not
+attached to a directory: a new terminal or a raw `/usr/bin/git` invocation launched outside `run`
+is outside the contract. Use `run -- ... bash` for a bounded multi-command session. The strict
+boundary denies TCP, so stage network refs before entering it; Unix-domain/existing privileged
+helper channels, remotes placed inside the two writable roots, and privileged host escape remain
+outside this bounded threat model. This paragraph describes the OS policy; the Git configuration
+above remains only a defense-in-depth workflow guard.
+
+For a local bare-remote or otherwise network-free synthetic integration probe, the integration
+helper can itself be made a descendant of the boundary:
+
+```bash
+python "$MAIN_REPO_ROOT/scripts/dev/review_worktree_guard.py" run \
+  --worktree "$WORKTREE_PARENT/review-pr-123" -- \
+  python "$MAIN_REPO_ROOT/scripts/dev/review_worktree_guard.py" integrate \
+  --worktree "$WORKTREE_PARENT/review-pr-123" --source-ref origin/main --remote origin
+```
 
 If the selected base predates the guard files, `create_worktree.sh --mode review` keeps the target
 clean and temporarily points its worktree-local hooks path at the invoking checkout's tracked

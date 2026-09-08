@@ -41,6 +41,32 @@
     },
     {
       "classification": "dynamic",
+      "owner": "Simulator.groups",
+      "path": "pedestrian_groups",
+      "restore_method": "adapter restore plus backend synchronization",
+      "serialization": "JSON integer-entry lists",
+      "status": "supported",
+      "test": "test_typed_snapshot_round_trip_preserves_exact_continuation",
+      "type": "mapping[int, set[int]]",
+      "unit": "pedestrian IDs",
+      "unsupported_modes": [],
+      "update_phase": "behavior/force update"
+    },
+    {
+      "classification": "dynamic",
+      "owner": "Simulator.groups",
+      "path": "pedestrian_group_by_ped",
+      "restore_method": "adapter restore plus backend synchronization",
+      "serialization": "JSON integer-entry lists",
+      "status": "supported",
+      "test": "test_typed_snapshot_round_trip_preserves_exact_continuation",
+      "type": "mapping[int, int]",
+      "unit": "group IDs",
+      "unsupported_modes": [],
+      "update_phase": "behavior/force update"
+    },
+    {
+      "classification": "dynamic",
       "owner": "robot drive model",
       "path": "robot.state",
       "restore_method": "destination-owned dataclass",
@@ -223,5 +249,5 @@
   ],
   "platform": "linux",
   "schema_version": "simulator_state_inventory.v1",
-  "snapshot_schema": "simulator_typed_snapshot.v1"
+  "snapshot_schema": "simulator_typed_snapshot.v2"
 }

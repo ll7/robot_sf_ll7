@@ -46,6 +46,18 @@ def coerce_tracker_float(value: object, field: str) -> float:
     return converted
 
 
+def coerce_nonnegative_tracker_float(value: object, field: str) -> float:
+    """Coerce a tracker field to a finite, non-negative float.
+
+    Returns:
+        The coerced finite, non-negative float value.
+    """
+    converted = coerce_tracker_float(value, field)
+    if converted < 0:
+        raise ValidationError(f"Tracker manifest {field} must be non-negative")
+    return converted
+
+
 def validate_tracker_payload(
     payload: object, path: Path
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[Any], dict[str, Any], list[Any]]:

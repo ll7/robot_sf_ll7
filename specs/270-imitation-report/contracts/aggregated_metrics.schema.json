@@ -73,7 +73,40 @@
           "type": ["number", "null"],
           "description": "Cohen's d when comparing two conditions"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "metric_name": {
+                "const": "timesteps_to_convergence"
+              }
+            },
+            "required": ["metric_name"]
+          },
+          "then": {
+            "properties": {
+              "mean": {
+                "minimum": 0
+              },
+              "median": {
+                "minimum": 0
+              },
+              "p95": {
+                "minimum": 0
+              },
+              "ci_low": {
+                "type": ["number", "null"],
+                "minimum": 0
+              },
+              "ci_high": {
+                "type": ["number", "null"],
+                "minimum": 0
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

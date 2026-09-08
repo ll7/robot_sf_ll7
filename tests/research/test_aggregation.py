@@ -103,6 +103,15 @@ def test_aggregate_metrics_single_value():
     assert baseline_success["ci_high"] is None
 
 
+def test_aggregate_metrics_rejects_negative_convergence() -> None:
+    """The canonical convergence metric cannot contain negative timesteps."""
+    with pytest.raises(ValidationError, match="must be non-negative"):
+        aggregate_metrics(
+            [{"seed": 1, "policy_type": "baseline", "timesteps_to_convergence": -1}],
+            ci_samples=10,
+        )
+
+
 def test_bootstrap_ci_basic():
     """Test bootstrap CI computation."""
     values = [1.0, 2.0, 3.0, 4.0, 5.0]
@@ -693,6 +702,15 @@ def test_extract_seed_metrics_omits_null_final_timestep_alias(tmp_path: Path):
     records, failures = extract_seed_metrics([str(path)])
     assert failures == []
     assert "timesteps_to_convergence" not in records[0]
+
+
+def test_extract_seed_metrics_rejects_negative_timestep_alias(tmp_path: Path):
+    """Negative timestep aliases fail closed instead of becoming metric records."""
+    path = _write_manifest(tmp_path, "a.json", {"success_rate": 0.8, "avg_timesteps": -1})
+    records, failures = extract_seed_metrics([str(path)])
+    assert records == []
+    assert len(failures) == 1
+    assert "must be non-negative" in failures[0]["reason"]
 
 
 def test_extract_seed_metrics_final_reward_mean_field(tmp_path: Path):

@@ -152,6 +152,14 @@ def test_report_summary_numeric_coercion_preserves_zero_and_ignores_null() -> No
     ]
 
 
+def test_report_summary_numeric_coercion_rejects_negative_timesteps() -> None:
+    """Report provenance summaries reject negative convergence values."""
+    from scripts.research.generate_report import _coerce_summary_float_list
+
+    with pytest.raises(ValidationError, match="must be non-negative"):
+        _coerce_summary_float_list({"baseline_timesteps": [-1]}, "baseline_timesteps")
+
+
 def test_tracker_float_coercion_rejects_nonfinite_values() -> None:
     """Shared metric coercion rejects NaN before report aggregation."""
     from robot_sf.research.tracker_manifest import coerce_tracker_float

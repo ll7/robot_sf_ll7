@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 import pytest
 
+from robot_sf.research.exceptions import ValidationError
 from robot_sf.research.orchestrator import ReportOrchestrator
 from robot_sf.research.schema_loader import load_schema, validate_data
 
@@ -119,6 +120,33 @@ def test_metrics_schema_accepts_zero_convergence_summary() -> None:
         },
         schema,
     )
+
+
+def test_metrics_schema_rejects_negative_convergence_summary() -> None:
+    """The aggregate schema rejects negative convergence summaries."""
+    schema = load_schema("aggregated_metrics.schema.json")
+    with pytest.raises(ValidationError, match="less than the minimum of 0"):
+        validate_data(
+            {
+                "schema_version": "1.0.0",
+                "metrics": [
+                    {
+                        "metric_name": "timesteps_to_convergence",
+                        "condition": "baseline",
+                        "mean": -1,
+                        "median": 0,
+                        "p95": 0,
+                        "std": 0,
+                        "ci_low": None,
+                        "ci_high": None,
+                        "ci_confidence": 0.95,
+                        "sample_size": 1,
+                        "effect_size": None,
+                    }
+                ],
+            },
+            schema,
+        )
 
 
 def test_metadata_schema(report_dir: Path):

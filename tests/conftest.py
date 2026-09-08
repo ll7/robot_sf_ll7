@@ -454,6 +454,9 @@ _FAST_FILES = {
     # shards for the exact-head changed-coverage gate.
     "test_forecast_calibration_report.py",
     "test_forecast_transferability_stress_matrix.py",
+    # Research metric aggregation tests are deterministic finite-value and
+    # bootstrap-boundary contracts; keep changed-line coverage in fast shards.
+    "test_aggregation.py",
     # Goal-belief contract tests are deterministic schema/lineage coverage for
     # the changed actor-observation producer; keep them in fast PR shards
     # (issue #8063).

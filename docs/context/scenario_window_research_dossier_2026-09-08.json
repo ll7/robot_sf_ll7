@@ -17,8 +17,9 @@
   ],
   "repository_heads": {
     "origin_main_at_start": "a918124a21da2e801434ef1b99c60467af673157",
-    "rw01_rw02_pr_8612_head": "7963b5c4a3f0c028c8151aaeef22e3d816cb2e9c",
-    "rw03_rw04_pr_8620_head": "a554fabf8e699420e82f27c909fc0f5cdff1462e"
+    "rw01_rw02_pr_8612_head": "0f891fa2a09643c798fa07c173bc213dd06c8f41",
+    "rw03_rw04_pr_8620_head": "01fb8ecd4a5f033b1e87910b694ace37ccee7e33",
+    "rw05_rw06_rw07_pr_8622_head": "6cc19cf3ccefa5541ab6d76f96cd435f5ea5ae44"
   },
   "pull_requests": [
     {
@@ -31,6 +32,12 @@
       "number": 8620,
       "scope": ["RW-03", "RW-04"],
       "url": "https://github.com/ll7/robot_sf_ll7/pull/8620",
+      "status": "open"
+    },
+    {
+      "number": 8622,
+      "scope": ["RW-05", "RW-06", "RW-07"],
+      "url": "https://github.com/ll7/robot_sf_ll7/pull/8622",
       "status": "open"
     }
   ],
@@ -236,11 +243,11 @@
     {"id": "H9", "statement": "PELT or a learned selector is needed for v1", "status": "blocked", "evidence": "Option A selected for preparation; alternatives deferred", "limitation": "reopen only after measured baseline shortcomings"}
   ],
   "command_receipts": [
-    {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_last_avoidable_replay_issue_5442.py -q", "exit_code": 0, "result": "23 passed"},
+    {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_last_avoidable_replay_issue_5442.py tests/benchmark/test_typed_snapshot.py tests/benchmark/test_relevance_windows.py tests/benchmark/test_continuation_experiment_plan.py tests/benchmark/test_scenario_window_research_dossier.py -q", "exit_code": 0, "result": "62 passed"},
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_typed_snapshot.py -q", "exit_code": 0, "result": "5 passed"},
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_relevance_windows.py tests/benchmark/test_continuation_experiment_plan.py -q", "exit_code": 0, "result": "10 passed"},
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check <changed files>", "exit_code": 0, "result": "passed on focused changed files"},
-    {"command": "isolated supplied replay contract probe at exact RW-01/RW-02 head", "exit_code": 0, "result": "route_restore and complete_horizon contract_holds=true"}
+    {"command": "isolated supplied replay contract probe at exact RW-05 head 6cc19cf3ccefa5541ab6d76f96cd435f5ea5ae44", "exit_code": 0, "result": "route_restore and complete_horizon contract_holds=true"}
   ],
   "submission_boundary": {
     "new_mainline_evidence": false,

@@ -13,7 +13,7 @@ The bounded result is an auditable implementation seam, not a shortened benchmar
 - RW-03/RW-04 typed state inventory, JSON+NPZ snapshot prototype, and no-op
   comparator are in [PR #8620](https://github.com/ll7/robot_sf_ll7/pull/8620).
 - RW-05 deterministic relevance selection and the RW-06/RW-07 gated plan are in
-  this stacked preparation slice.
+  [PR #8622](https://github.com/ll7/robot_sf_ll7/pull/8622).
 - No campaign, planner ranking, manuscript, release artifact, or new mainline
   evidence was produced. RW-06 and RW-07 remain `BLOCKED_ADMISSION`.
 

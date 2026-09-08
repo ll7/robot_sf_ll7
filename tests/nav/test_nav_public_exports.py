@@ -59,6 +59,12 @@ FOOTPRINT_DIAGNOSTIC_ALL = [
 GEOJSON_MAP_PROVENANCE_ALL = ["validate_import_provenance"]
 
 GLOBAL_ROUTE_ALL = [
+    "AdaptiveLocalGoalConfig",
+    "AdaptiveLocalGoalResult",
+    "AdaptiveLocalGoalStatus",
+    "CandidateProgressConfig",
+    "CandidateProgressResult",
+    "CandidateProgressStatus",
     "GlobalRoute",
     "RouteGeometry",
     "RouteProjection",
@@ -67,6 +73,8 @@ GLOBAL_ROUTE_ALL = [
     "RouteProjectionTracker",
     "RouteTrackerResult",
     "RouteTrackerStatus",
+    "compute_candidate_progress",
+    "select_adaptive_local_goal",
 ]
 
 MAP_CONFIG_ALL = [

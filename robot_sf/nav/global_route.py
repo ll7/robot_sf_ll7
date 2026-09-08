@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from json import dumps
 from math import dist, isfinite
-from typing import Literal
+from typing import Literal, cast
 
 from robot_sf.common.types import Rect, Vec2D  # noqa: TC001
 
@@ -15,6 +15,12 @@ _DEFAULT_DUPLICATE_TOLERANCE_M = 1e-9
 _DEFAULT_TIE_TOLERANCE_M = 1e-9
 _DEFAULT_MAX_FORWARD_JUMP_M = 5.0
 _DEFAULT_MAX_BACKTRACK_M = 1.0
+_DEFAULT_MIN_LOOKAHEAD_M = 0.5
+_DEFAULT_MAX_LOOKAHEAD_M = 5.0
+_DEFAULT_BASE_LOOKAHEAD_M = 2.0
+_DEFAULT_SPEED_LOOKAHEAD_GAIN_S = 1.0
+_DEFAULT_CROWD_LOOKAHEAD_PENALTY_M_PER_DENSITY = 0.5
+_DEFAULT_UNCERTAINTY_LOOKAHEAD_WEIGHT = 0.5
 RouteProjectionStatus = Literal["ok", "ambiguous", "invalid_query", "discontinuous"]
 RouteTrackerStatus = Literal[
     "ok",
@@ -24,6 +30,21 @@ RouteTrackerStatus = Literal[
     "reset",
     "duplicate_step",
     "out_of_order",
+]
+CandidateProgressStatus = Literal[
+    "ok",
+    "invalid_trace",
+    "insufficient_trace",
+    "ambiguous",
+    "discontinuous",
+]
+AdaptiveLocalGoalStatus = Literal[
+    "ok",
+    "invalid_input",
+    "invalid_query",
+    "invalid_route",
+    "ambiguous",
+    "discontinuous",
 ]
 
 
@@ -99,6 +120,186 @@ class RouteTrackerResult:
         """Whether this step produced one valid route branch."""
 
         return self.status == "ok" and self.projection is not None
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateProgressConfig:
+    """Continuity policy for route-relative candidate progress.
+
+    The first candidate point is projected without a prior position. Each
+    subsequent point is constrained to this forward/backward arc-length window
+    through :class:`RouteProjectionTracker`. ``max_lateral_error_m`` is an
+    optional diagnostic acceptance bound; when set, a point farther from its
+    nearest route section makes the whole candidate invalid.
+    """
+
+    max_forward_jump_m: float = _DEFAULT_MAX_FORWARD_JUMP_M
+    max_backtrack_m: float = _DEFAULT_MAX_BACKTRACK_M
+    max_lateral_error_m: float | None = None
+
+    def __post_init__(self) -> None:
+        """Validate finite, non-negative continuity and lateral-error bounds."""
+
+        _validate_tolerance(self.max_forward_jump_m, "max_forward_jump_m")
+        _validate_tolerance(self.max_backtrack_m, "max_backtrack_m")
+        if self.max_lateral_error_m is not None:
+            _validate_tolerance(self.max_lateral_error_m, "max_lateral_error_m")
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateProgressResult:
+    """Route-relative progress and fail-closed projection diagnostics.
+
+    ``signed_progress_m`` is the end arc position minus the start arc position
+    and may be negative when a candidate backtracks. ``bounded_progress_m`` is
+    clipped to ``[0, route.total_length_m]`` and is only populated for a fully
+    valid trace. Any invalid, ambiguous, discontinuous, or off-route sample
+    clears the progress fields so a malformed candidate cannot look optimistic.
+    """
+
+    status: CandidateProgressStatus
+    route_hash: str
+    start_arc_length_m: float | None
+    end_arc_length_m: float | None
+    signed_progress_m: float | None
+    bounded_progress_m: float | None
+    progress_ratio: float | None
+    start_lateral_error_m: float | None
+    end_lateral_error_m: float | None
+    max_lateral_error_m: float | None
+    mean_lateral_error_m: float | None
+    start_lateral_offset_m: float | None
+    end_lateral_offset_m: float | None
+    sample_count: int
+    valid_sample_count: int
+    ambiguity_count: int
+    discontinuity_count: int
+    invalid_count: int
+    failure_status: str | None
+
+    @property
+    def is_valid(self) -> bool:
+        """Whether the complete candidate trace has usable route progress."""
+
+        return self.status == "ok"
+
+    def diagnostics(self) -> dict[str, object]:
+        """Return a finite, JSON-safe diagnostic mapping for this result."""
+
+        return {
+            "schema_version": "route_candidate_progress.v1",
+            "status": self.status,
+            "route_hash": self.route_hash,
+            "start_arc_length_m": self.start_arc_length_m,
+            "end_arc_length_m": self.end_arc_length_m,
+            "signed_progress_m": self.signed_progress_m,
+            "bounded_progress_m": self.bounded_progress_m,
+            "progress_ratio": self.progress_ratio,
+            "start_lateral_error_m": self.start_lateral_error_m,
+            "end_lateral_error_m": self.end_lateral_error_m,
+            "max_lateral_error_m": self.max_lateral_error_m,
+            "mean_lateral_error_m": self.mean_lateral_error_m,
+            "start_lateral_offset_m": self.start_lateral_offset_m,
+            "end_lateral_offset_m": self.end_lateral_offset_m,
+            "sample_count": self.sample_count,
+            "valid_sample_count": self.valid_sample_count,
+            "ambiguity_count": self.ambiguity_count,
+            "discontinuity_count": self.discontinuity_count,
+            "invalid_count": self.invalid_count,
+            "failure_status": self.failure_status,
+        }
+
+    def as_dict(self) -> dict[str, object]:
+        """Return the JSON-safe diagnostic representation of this result."""
+
+        return self.diagnostics()
+
+
+@dataclass(frozen=True, slots=True)
+class AdaptiveLocalGoalConfig:
+    """Bounds and gains for deterministic route-arc local-goal selection.
+
+    The unclipped lookahead is
+    ``base + speed_gain_s * speed - crowd_penalty * crowd_density -
+    uncertainty_weight * uncertainty_m``. Higher speed permits a longer
+    preview, while crowding and uncertainty shorten it. The result is clipped
+    to the configured bounds and then to the remaining route arc; this is a
+    guidance utility only and performs no collision or planner arbitration.
+    """
+
+    min_lookahead_m: float = _DEFAULT_MIN_LOOKAHEAD_M
+    max_lookahead_m: float = _DEFAULT_MAX_LOOKAHEAD_M
+    base_lookahead_m: float = _DEFAULT_BASE_LOOKAHEAD_M
+    speed_gain_s: float = _DEFAULT_SPEED_LOOKAHEAD_GAIN_S
+    crowd_penalty_m_per_density: float = _DEFAULT_CROWD_LOOKAHEAD_PENALTY_M_PER_DENSITY
+    uncertainty_weight: float = _DEFAULT_UNCERTAINTY_LOOKAHEAD_WEIGHT
+
+    def __post_init__(self) -> None:
+        """Validate finite, non-negative lookahead bounds and gains."""
+
+        _validate_tolerance(self.min_lookahead_m, "min_lookahead_m")
+        _validate_tolerance(self.max_lookahead_m, "max_lookahead_m")
+        _validate_tolerance(self.base_lookahead_m, "base_lookahead_m")
+        _validate_tolerance(self.speed_gain_s, "speed_gain_s")
+        _validate_tolerance(
+            self.crowd_penalty_m_per_density,
+            "crowd_penalty_m_per_density",
+        )
+        _validate_tolerance(self.uncertainty_weight, "uncertainty_weight")
+        if self.min_lookahead_m > self.max_lookahead_m:
+            raise ValueError("min_lookahead_m must be <= max_lookahead_m.")
+        if not self.min_lookahead_m <= self.base_lookahead_m <= self.max_lookahead_m:
+            raise ValueError("base_lookahead_m must be within the lookahead bounds.")
+
+
+@dataclass(frozen=True, slots=True)
+class AdaptiveLocalGoalResult:
+    """Selected route point plus explicit lookahead and projection diagnostics."""
+
+    status: AdaptiveLocalGoalStatus
+    route_hash: str
+    current_arc_length_m: float | None
+    arc_length_m: float | None
+    point: Vec2D | None
+    lookahead_m: float | None
+    effective_lookahead_m: float | None
+    speed_m_s: float | None
+    crowd_density: float | None
+    uncertainty_m: float | None
+    lateral_error_m: float | None
+    lateral_offset_m: float | None
+    projection_status: RouteProjectionStatus | None
+
+    @property
+    def is_valid(self) -> bool:
+        """Whether a bounded route point was selected."""
+
+        return self.status == "ok" and self.point is not None and self.arc_length_m is not None
+
+    def diagnostics(self) -> dict[str, object]:
+        """Return a finite, JSON-safe diagnostic mapping for this result."""
+
+        return {
+            "schema_version": "adaptive_local_goal.v1",
+            "status": self.status,
+            "route_hash": self.route_hash,
+            "current_arc_length_m": self.current_arc_length_m,
+            "arc_length_m": self.arc_length_m,
+            "point": list(self.point) if self.point is not None else None,
+            "lookahead_m": self.lookahead_m,
+            "effective_lookahead_m": self.effective_lookahead_m,
+            "speed_m_s": self.speed_m_s,
+            "crowd_density": self.crowd_density,
+            "uncertainty_m": self.uncertainty_m,
+            "lateral_error_m": self.lateral_error_m,
+            "lateral_offset_m": self.lateral_offset_m,
+            "projection_status": self.projection_status,
+        }
+
+    def as_dict(self) -> dict[str, object]:
+        """Return the JSON-safe diagnostic representation of this result."""
+
+        return self.diagnostics()
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,6 +405,46 @@ class RouteGeometry:
                     start[1] + fraction * (end[1] - start[1]),
                 )
         return self.waypoints[-1]
+
+    def candidate_progress(
+        self,
+        candidate_trace: Sequence[Sequence[float]],
+        *,
+        config: CandidateProgressConfig | None = None,
+    ) -> CandidateProgressResult:
+        """Evaluate one ordered candidate trace in the route's arc-length frame.
+
+        Returns:
+            CandidateProgressResult: Route-relative progress and diagnostics.
+        """
+
+        return compute_candidate_progress(self, candidate_trace, config=config)
+
+    def adaptive_local_goal(
+        self,
+        current_position: Sequence[float],
+        *,
+        speed_m_s: float,
+        crowd_density: float,
+        uncertainty_m: float,
+        config: AdaptiveLocalGoalConfig | None = None,
+        hint: RouteProjectionHint | None = None,
+    ) -> AdaptiveLocalGoalResult:
+        """Select a bounded local goal from explicit route and context inputs.
+
+        Returns:
+            AdaptiveLocalGoalResult: Selected route point and diagnostics.
+        """
+
+        return select_adaptive_local_goal(
+            self,
+            current_position,
+            speed_m_s=speed_m_s,
+            crowd_density=crowd_density,
+            uncertainty_m=uncertainty_m,
+            config=config,
+            hint=hint,
+        )
 
     def project(
         self, query: Sequence[float], *, hint: RouteProjectionHint | None = None
@@ -528,6 +769,500 @@ class RouteProjectionTracker:
         )
 
 
+def compute_candidate_progress(
+    route: RouteGeometry,
+    candidate_trace: Sequence[Sequence[float]],
+    *,
+    config: CandidateProgressConfig | None = None,
+) -> CandidateProgressResult:
+    """Compute route-arc progress for one ordered candidate trace.
+
+    Every trace point is projected through :class:`RouteProjectionTracker`, so
+    a nearer point on a later parallel branch cannot silently inflate progress.
+    A single invalid, ambiguous, discontinuous, or over-lateral sample makes
+    the result unusable and clears all progress values.
+
+    Args:
+        route: Immutable ordered route geometry.
+        candidate_trace: Ordered candidate positions, including its start and
+            end points.
+        config: Optional continuity and lateral-error policy.
+
+    Returns:
+        CandidateProgressResult: Signed and non-negative-bounded route progress
+        with finite diagnostics. Configuration errors raise ``ValueError``;
+        malformed candidate samples are represented by an invalid result.
+    """
+
+    if not isinstance(route, RouteGeometry):
+        raise TypeError("route must be a RouteGeometry.")
+    resolved_config = _resolve_candidate_progress_config(config)
+
+    try:
+        points = tuple(candidate_trace)
+    except (TypeError, ValueError, OverflowError):
+        return _candidate_progress_failure(
+            route,
+            status="invalid_trace",
+            sample_count=0,
+            valid_sample_count=0,
+            invalid_count=1,
+            failure_status="invalid_trace",
+        )
+
+    summary = _project_candidate_trace(route, points, resolved_config)
+    sample_count = len(points)
+    if summary.failure_status is not None:
+        return _candidate_progress_failure(
+            route,
+            status=_candidate_progress_status(summary.failure_status),
+            sample_count=sample_count,
+            valid_sample_count=len(summary.projections),
+            ambiguity_count=summary.ambiguity_count,
+            discontinuity_count=summary.discontinuity_count,
+            invalid_count=summary.invalid_count,
+            failure_status=summary.failure_status,
+        )
+
+    if sample_count < 2:
+        return _candidate_progress_failure(
+            route,
+            status="insufficient_trace",
+            sample_count=sample_count,
+            valid_sample_count=len(summary.projections),
+            failure_status="insufficient_trace",
+        )
+
+    return _build_candidate_progress_result(
+        route,
+        summary,
+        sample_count=sample_count,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _CandidateProjectionSummary:
+    """Private aggregate of ordered candidate projections and failure counts."""
+
+    projections: tuple[RouteProjection, ...]
+    ambiguity_count: int
+    discontinuity_count: int
+    invalid_count: int
+    failure_status: str | None
+
+
+def _resolve_candidate_progress_config(
+    config: CandidateProgressConfig | None,
+) -> CandidateProgressConfig:
+    """Resolve and type-check the candidate progress policy.
+
+    Returns:
+        CandidateProgressConfig: Validated continuity policy.
+    """
+
+    if config is None:
+        return CandidateProgressConfig()
+    if not isinstance(config, CandidateProgressConfig):
+        raise TypeError("config must be a CandidateProgressConfig or None.")
+    return config
+
+
+def _project_candidate_trace(
+    route: RouteGeometry,
+    points: tuple[object, ...],
+    config: CandidateProgressConfig,
+) -> _CandidateProjectionSummary:
+    """Project every candidate sample with one continuity-aware tracker.
+
+    Returns:
+        _CandidateProjectionSummary: Valid projections and explicit failure counts.
+    """
+
+    tracker = RouteProjectionTracker(
+        route,
+        max_forward_jump_m=config.max_forward_jump_m,
+        max_backtrack_m=config.max_backtrack_m,
+    )
+    projections: list[RouteProjection] = []
+    ambiguity_count = 0
+    discontinuity_count = 0
+    invalid_count = 0
+    failure_status: str | None = None
+    for step, point in enumerate(points):
+        projection, failure = _project_candidate_sample(
+            tracker,
+            point,
+            step=step,
+            max_lateral_error_m=config.max_lateral_error_m,
+        )
+        if projection is not None:
+            projections.append(projection)
+        ambiguity_count += int(failure == "ambiguous")
+        discontinuity_count += int(failure == "discontinuous")
+        invalid_count += int(failure is not None and failure not in {"ambiguous", "discontinuous"})
+        failure_status = failure_status or failure
+    return _CandidateProjectionSummary(
+        projections=tuple(projections),
+        ambiguity_count=ambiguity_count,
+        discontinuity_count=discontinuity_count,
+        invalid_count=invalid_count,
+        failure_status=failure_status,
+    )
+
+
+def _project_candidate_sample(
+    tracker: RouteProjectionTracker,
+    point: object,
+    *,
+    step: int,
+    max_lateral_error_m: float | None,
+) -> tuple[RouteProjection | None, str | None]:
+    """Project one sample and classify unusable route-frame outcomes.
+
+    Returns:
+        tuple[RouteProjection | None, str | None]: A validated projection and
+        optional failure reason.
+    """
+
+    tracker_result = tracker.project(cast("Sequence[float]", point), step=step)
+    if tracker_result.status in {"ambiguous", "discontinuous"}:
+        return None, tracker_result.status
+    if not tracker_result.is_valid or tracker_result.projection is None:
+        return None, "invalid_query"
+    projection = tracker_result.projection
+    if not _projection_values_are_finite(projection):
+        return None, "invalid_projection"
+    assert projection.distance_m is not None
+    if max_lateral_error_m is not None and projection.distance_m > max_lateral_error_m:
+        return None, "lateral_error"
+    return projection, None
+
+
+def _projection_values_are_finite(projection: RouteProjection) -> bool:
+    """Return whether all numeric fields needed for route progress are finite."""
+
+    return (
+        projection.arc_length_m is not None
+        and projection.distance_m is not None
+        and projection.lateral_offset_m is not None
+        and isfinite(projection.arc_length_m)
+        and isfinite(projection.distance_m)
+        and isfinite(projection.lateral_offset_m)
+    )
+
+
+def _candidate_progress_status(failure_status: str) -> CandidateProgressStatus:
+    """Map a projection failure reason to the public candidate status.
+
+    Returns:
+        CandidateProgressStatus: Public fail-closed status.
+    """
+
+    if failure_status == "ambiguous":
+        return "ambiguous"
+    if failure_status == "discontinuous":
+        return "discontinuous"
+    return "invalid_trace"
+
+
+def _build_candidate_progress_result(
+    route: RouteGeometry,
+    summary: _CandidateProjectionSummary,
+    *,
+    sample_count: int,
+) -> CandidateProgressResult:
+    """Build a successful progress record or a fail-closed numeric result.
+
+    Returns:
+        CandidateProgressResult: Progress metrics and their diagnostics.
+    """
+
+    projections = summary.projections
+    valid_sample_count = len(projections)
+    total_length_m = route.total_length_m
+    if not isfinite(total_length_m) or total_length_m < 0.0:
+        return _candidate_progress_failure(
+            route,
+            status="invalid_trace",
+            sample_count=sample_count,
+            valid_sample_count=valid_sample_count,
+            invalid_count=1,
+            failure_status="invalid_route",
+        )
+
+    start_projection = projections[0]
+    end_projection = projections[-1]
+    if start_projection.arc_length_m is None or end_projection.arc_length_m is None:
+        return _candidate_progress_failure(
+            route,
+            status="invalid_trace",
+            sample_count=sample_count,
+            valid_sample_count=valid_sample_count,
+            invalid_count=1,
+            failure_status="invalid_projection",
+        )
+
+    start_arc_length_m = start_projection.arc_length_m
+    end_arc_length_m = end_projection.arc_length_m
+    signed_progress_m = end_arc_length_m - start_arc_length_m
+    bounded_progress_m = min(max(signed_progress_m, 0.0), total_length_m)
+    progress_ratio = bounded_progress_m / total_length_m if total_length_m > 0.0 else 0.0
+    lateral_errors = [projection.distance_m for projection in projections]
+    lateral_offsets = [projection.lateral_offset_m for projection in projections]
+    if (
+        not isfinite(signed_progress_m)
+        or not isfinite(bounded_progress_m)
+        or not isfinite(progress_ratio)
+        or any(value is None or not isfinite(value) for value in lateral_errors)
+        or any(value is None or not isfinite(value) for value in lateral_offsets)
+    ):
+        return _candidate_progress_failure(
+            route,
+            status="invalid_trace",
+            sample_count=sample_count,
+            valid_sample_count=valid_sample_count,
+            invalid_count=1,
+            failure_status="nonfinite_result",
+        )
+
+    finite_lateral_errors = [float(value) for value in lateral_errors if value is not None]
+    finite_lateral_offsets = [float(value) for value in lateral_offsets if value is not None]
+    return CandidateProgressResult(
+        status="ok",
+        route_hash=route.route_hash,
+        start_arc_length_m=float(start_arc_length_m),
+        end_arc_length_m=float(end_arc_length_m),
+        signed_progress_m=float(signed_progress_m),
+        bounded_progress_m=float(bounded_progress_m),
+        progress_ratio=float(progress_ratio),
+        start_lateral_error_m=finite_lateral_errors[0],
+        end_lateral_error_m=finite_lateral_errors[-1],
+        max_lateral_error_m=float(max(finite_lateral_errors)),
+        mean_lateral_error_m=float(sum(finite_lateral_errors) / len(finite_lateral_errors)),
+        start_lateral_offset_m=finite_lateral_offsets[0],
+        end_lateral_offset_m=finite_lateral_offsets[-1],
+        sample_count=sample_count,
+        valid_sample_count=valid_sample_count,
+        ambiguity_count=summary.ambiguity_count,
+        discontinuity_count=summary.discontinuity_count,
+        invalid_count=summary.invalid_count,
+        failure_status=None,
+    )
+
+
+def select_adaptive_local_goal(
+    route: RouteGeometry,
+    current_position: Sequence[float],
+    *,
+    speed_m_s: float,
+    crowd_density: float,
+    uncertainty_m: float,
+    config: AdaptiveLocalGoalConfig | None = None,
+    hint: RouteProjectionHint | None = None,
+) -> AdaptiveLocalGoalResult:
+    """Select a deterministic, bounded point ahead in the route arc frame.
+
+    ``speed_m_s``, ``crowd_density`` (people per square metre), and
+    ``uncertainty_m`` are explicit inputs. The validated configuration maps
+    these inputs to a bounded lookahead, then the remaining route length caps
+    the selected point. Projection failures are returned with no route point;
+    this helper does not arbitrate planners or evaluate collisions.
+
+    Raises:
+        ValueError: If a context input is not finite and non-negative.
+        TypeError: If ``route`` or ``config`` has the wrong type.
+
+    Returns:
+        AdaptiveLocalGoalResult: Selected route point and finite diagnostics,
+            or an explicit failure status without a route point.
+    """
+
+    if not isinstance(route, RouteGeometry):
+        raise TypeError("route must be a RouteGeometry.")
+    if config is None:
+        resolved_config = AdaptiveLocalGoalConfig()
+    elif isinstance(config, AdaptiveLocalGoalConfig):
+        resolved_config = config
+    else:
+        raise TypeError("config must be an AdaptiveLocalGoalConfig or None.")
+
+    speed = _finite_nonnegative_input(speed_m_s, "speed_m_s")
+    crowd = _finite_nonnegative_input(crowd_density, "crowd_density")
+    uncertainty = _finite_nonnegative_input(uncertainty_m, "uncertainty_m")
+    total_length_m = route.total_length_m
+    if not isfinite(total_length_m) or total_length_m < 0.0:
+        return _adaptive_local_goal_failure(
+            route,
+            status="invalid_route",
+            speed_m_s=speed,
+            crowd_density=crowd,
+            uncertainty_m=uncertainty,
+            projection_status=None,
+        )
+
+    projection = route.project(current_position, hint=hint)
+    if projection.status != "ok":
+        status: AdaptiveLocalGoalStatus = projection.status
+        return _adaptive_local_goal_failure(
+            route,
+            status=status,
+            speed_m_s=speed,
+            crowd_density=crowd,
+            uncertainty_m=uncertainty,
+            projection_status=projection.status,
+        )
+    if (
+        projection.arc_length_m is None
+        or projection.distance_m is None
+        or projection.lateral_offset_m is None
+        or not isfinite(projection.arc_length_m)
+        or not isfinite(projection.distance_m)
+        or not isfinite(projection.lateral_offset_m)
+    ):
+        return _adaptive_local_goal_failure(
+            route,
+            status="invalid_route",
+            speed_m_s=speed,
+            crowd_density=crowd,
+            uncertainty_m=uncertainty,
+            projection_status="invalid_query",
+        )
+
+    raw_lookahead_m = (
+        resolved_config.base_lookahead_m
+        + resolved_config.speed_gain_s * speed
+        - resolved_config.crowd_penalty_m_per_density * crowd
+        - resolved_config.uncertainty_weight * uncertainty
+    )
+    if not isfinite(raw_lookahead_m):
+        return _adaptive_local_goal_failure(
+            route,
+            status="invalid_input",
+            speed_m_s=speed,
+            crowd_density=crowd,
+            uncertainty_m=uncertainty,
+            projection_status=projection.status,
+        )
+    lookahead_m = min(
+        max(raw_lookahead_m, resolved_config.min_lookahead_m),
+        resolved_config.max_lookahead_m,
+    )
+    current_arc_length_m = projection.arc_length_m
+    target_arc_length_m = min(current_arc_length_m + lookahead_m, total_length_m)
+    effective_lookahead_m = target_arc_length_m - current_arc_length_m
+    if not isfinite(target_arc_length_m) or not isfinite(effective_lookahead_m):
+        return _adaptive_local_goal_failure(
+            route,
+            status="invalid_input",
+            speed_m_s=speed,
+            crowd_density=crowd,
+            uncertainty_m=uncertainty,
+            projection_status=projection.status,
+        )
+    point = route.point_at_arc_length(target_arc_length_m)
+    return AdaptiveLocalGoalResult(
+        status="ok",
+        route_hash=route.route_hash,
+        current_arc_length_m=float(current_arc_length_m),
+        arc_length_m=float(target_arc_length_m),
+        point=point,
+        lookahead_m=float(lookahead_m),
+        effective_lookahead_m=float(effective_lookahead_m),
+        speed_m_s=speed,
+        crowd_density=crowd,
+        uncertainty_m=uncertainty,
+        lateral_error_m=float(projection.distance_m),
+        lateral_offset_m=float(projection.lateral_offset_m),
+        projection_status=projection.status,
+    )
+
+
+def _candidate_progress_failure(
+    route: RouteGeometry,
+    *,
+    status: CandidateProgressStatus,
+    sample_count: int,
+    valid_sample_count: int,
+    ambiguity_count: int = 0,
+    discontinuity_count: int = 0,
+    invalid_count: int = 0,
+    failure_status: str | None,
+) -> CandidateProgressResult:
+    """Build a progress result with all optimistic route values cleared.
+
+    Returns:
+        CandidateProgressResult: Failure result with route-relative values unset.
+    """
+
+    return CandidateProgressResult(
+        status=status,
+        route_hash=route.route_hash,
+        start_arc_length_m=None,
+        end_arc_length_m=None,
+        signed_progress_m=None,
+        bounded_progress_m=None,
+        progress_ratio=None,
+        start_lateral_error_m=None,
+        end_lateral_error_m=None,
+        max_lateral_error_m=None,
+        mean_lateral_error_m=None,
+        start_lateral_offset_m=None,
+        end_lateral_offset_m=None,
+        sample_count=sample_count,
+        valid_sample_count=valid_sample_count,
+        ambiguity_count=ambiguity_count,
+        discontinuity_count=discontinuity_count,
+        invalid_count=invalid_count,
+        failure_status=failure_status,
+    )
+
+
+def _adaptive_local_goal_failure(
+    route: RouteGeometry,
+    *,
+    status: AdaptiveLocalGoalStatus,
+    speed_m_s: float | None,
+    crowd_density: float | None,
+    uncertainty_m: float | None,
+    projection_status: RouteProjectionStatus | None,
+) -> AdaptiveLocalGoalResult:
+    """Build an adaptive-goal result without a potentially misleading point.
+
+    Returns:
+        AdaptiveLocalGoalResult: Failure result with the route point unset.
+    """
+
+    return AdaptiveLocalGoalResult(
+        status=status,
+        route_hash=route.route_hash,
+        current_arc_length_m=None,
+        arc_length_m=None,
+        point=None,
+        lookahead_m=None,
+        effective_lookahead_m=None,
+        speed_m_s=speed_m_s,
+        crowd_density=crowd_density,
+        uncertainty_m=uncertainty_m,
+        lateral_error_m=None,
+        lateral_offset_m=None,
+        projection_status=projection_status,
+    )
+
+
+def _finite_nonnegative_input(value: object, name: str) -> float:
+    """Return a finite non-negative runtime context value as a float."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be finite and non-negative.")
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(f"{name} must be finite and non-negative.") from None
+    if not isfinite(number) or number < 0.0:
+        raise ValueError(f"{name} must be finite and non-negative.")
+    return number
+
+
 def _validate_tolerance(value: float, name: str) -> None:
     """Require a finite non-negative geometric tolerance."""
 
@@ -765,6 +1500,12 @@ class GlobalRoute:
 
 
 __all__ = [
+    "AdaptiveLocalGoalConfig",
+    "AdaptiveLocalGoalResult",
+    "AdaptiveLocalGoalStatus",
+    "CandidateProgressConfig",
+    "CandidateProgressResult",
+    "CandidateProgressStatus",
     "GlobalRoute",
     "RouteGeometry",
     "RouteProjection",
@@ -773,4 +1514,6 @@ __all__ = [
     "RouteProjectionTracker",
     "RouteTrackerResult",
     "RouteTrackerStatus",
+    "compute_candidate_progress",
+    "select_adaptive_local_goal",
 ]

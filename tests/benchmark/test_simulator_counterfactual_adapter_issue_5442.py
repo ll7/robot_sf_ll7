@@ -108,8 +108,8 @@ def _run_engine(model: SimulatorCounterfactualModel, *, determinism_replays: int
         determinism_replays=determinism_replays,
         action_set_id="simulator_native_action_lattice",
         feasibility_filter="native_maintain_or_brake",
-        collision_predicate="robot_ped_euclidean<=radius",
-        pedestrian_response="replayed",
+        collision_predicate="robot_pedestrian_center_distance_v1",
+        pedestrian_response="closed_loop",
     )
     baseline = [(float(_FIXTURE_SPEED), 0.0)] * (contact_step + horizon + 2)
     return locate_last_avoidable(model, baseline, config)
@@ -206,6 +206,44 @@ def test_adapter_satisfies_counterfactual_model_protocol() -> None:
     actions = model.feasible_actions()
     assert len(actions) >= 2
     assert model.action_label(actions[0]).startswith("robot_accel=")
+    assert any(action[0] < 0 for action in actions)
+    assert any(action[1] < 0 for action in actions)
+    assert any(action[1] > 0 for action in actions)
+    assert "linear_mps2=" in model.action_label(actions[0])
+
+
+def test_response_and_collision_metadata_are_bound_to_native_contract() -> None:
+    """Native metadata exposes the actual closed-loop response and predicate."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    assert model.pedestrian_response == "closed_loop"
+    assert model.collision_predicate == "robot_pedestrian_center_distance_v1"
+
+
+def test_all_collision_scope_detects_wall_without_pedestrian() -> None:
+    """The explicit all-collisions mode cannot call a wall state safe."""
+    robot = SimpleNamespace(
+        pos=(1.0, 1.0),
+        config=SimpleNamespace(radius=0.5),
+        state=SimpleNamespace(),
+    )
+    sim = SimpleNamespace(
+        robots=[robot],
+        map_def=SimpleNamespace(width=10.0, height=10.0),
+        ped_pos=np.empty((0, 2)),
+        config=SimpleNamespace(
+            ped_radius=0.4,
+            prf_config=SimpleNamespace(is_active=False),
+            apf_config=SimpleNamespace(is_active=False),
+            residual_adversary=SimpleNamespace(is_active=False),
+        ),
+        get_obstacle_lines=lambda: np.asarray([[1.4, 0.0, 1.4, 2.0]]),
+    )
+    model = SimulatorCounterfactualModel(sim, collision_scope="all")
+    assert model.collision_predicate == (
+        "continuous_occupancy_robot_bounds_obstacles_pedestrians_v1"
+    )
+    assert model.collision() is True
 
 
 def test_route_group_navigator_progress_restores() -> None:

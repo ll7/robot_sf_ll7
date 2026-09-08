@@ -48,12 +48,20 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.ped_npc.ped_behavior import SinglePedestrianRuntime
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from robot_sf.sim.simulator import Simulator
+
+
+COLLISION_SCOPE_PEDESTRIAN_ONLY = "pedestrian_only"
+COLLISION_SCOPE_ALL = "all"
+_COLLISION_SCOPES = (COLLISION_SCOPE_PEDESTRIAN_ONLY, COLLISION_SCOPE_ALL)
+PED_RESPONSE_REPLAYED = "replayed"
+PED_RESPONSE_CLOSED_LOOP = "closed_loop"
 
 
 @dataclass
@@ -192,8 +200,12 @@ class SimulatorCounterfactualModel:
         simulator: A constructed ``Simulator`` (robot-only or with pedestrians).
         collision_fn: Optional callable ``(model) -> bool``; defaults to Euclidean
             proximity between the first robot and any pedestrian within
-            ``collision_radius``.
+            ``collision_radius``. This deliberately narrow predicate is labelled
+            ``pedestrian_only`` in the adapter metadata.
         collision_radius: Contact distance (m) used by the default collision predicate.
+        collision_scope: ``pedestrian_only`` preserves the historical diagnostic
+            predicate; ``all`` uses the simulator's robot footprint against map
+            bounds, obstacle segments, and pedestrian footprints.
         capture_rng: When ``True`` (default) the global numpy RNG state is captured and
             restored so pedestrian goal/zone resampling replays deterministically. When
             ``False`` the RNG seam is intentionally omitted, exercising the engine's
@@ -206,6 +218,7 @@ class SimulatorCounterfactualModel:
         collision_fn: Any | None = None,
         collision_radius: float = 0.5,
         capture_rng: bool = True,
+        collision_scope: str = COLLISION_SCOPE_PEDESTRIAN_ONLY,
     ) -> None:
         """Initialize the adapter at step 0 of the simulator."""
         if len(simulator.robots) != 1:
@@ -215,17 +228,91 @@ class SimulatorCounterfactualModel:
         self.sim = simulator
         self.collision_radius = float(collision_radius)
         self.capture_rng = bool(capture_rng)
+        scope = str(collision_scope).strip().lower()
+        if scope not in _COLLISION_SCOPES:
+            raise ValueError(
+                f"collision_scope must be one of {_COLLISION_SCOPES} (got {collision_scope!r})"
+            )
+        self.collision_scope = scope
         self._step_index = 0
         self._collision_fn = collision_fn
 
     def _default_collision(self) -> bool:
-        """Return whether the first robot is within ``collision_radius`` of any ped."""
+        """Return the selected collision predicate for the live simulator."""
+        if self.collision_scope == COLLISION_SCOPE_ALL:
+            return self._all_collisions()
+        return self._pedestrian_only_collision()
+
+    def _pedestrian_only_collision(self) -> bool:
+        """Return the historical narrow robot-centre/pedestrian-centre predicate."""
         robot_pos = np.asarray(self.sim.robot_pos[0], dtype=float)
         ped_positions = np.asarray(self.sim.ped_pos, dtype=float)
         if ped_positions.size == 0:
             return False
         distances = np.linalg.norm(ped_positions - robot_pos, axis=-1)
         return bool(np.any(distances <= self.collision_radius))
+
+    def _all_collisions(self) -> bool:
+        """Return canonical footprint collision against bounds, walls, and peds.
+
+        ``ContinuousOccupancy`` is the source of truth for circle/segment and
+        circle/circle geometry. The adapter keeps this mode explicit because the
+        legacy default above intentionally reports only pedestrian proximity.
+        """
+        robot = self.sim.robots[0]
+        robot_pos = tuple(float(value) for value in robot.pos)
+        robot_radius = float(getattr(robot.config, "radius", self.collision_radius))
+        map_def = self.sim.map_def
+        if not (0.0 <= robot_pos[0] <= float(map_def.width)) or not (
+            0.0 <= robot_pos[1] <= float(map_def.height)
+        ):
+            return True
+
+        get_obstacles = getattr(self.sim, "get_obstacle_lines", None)
+        obstacle_lines = get_obstacles() if callable(get_obstacles) else ()
+        if circle_collides_any_lines((robot_pos, robot_radius), obstacle_lines):
+            return True
+
+        ped_positions = np.asarray(self.sim.ped_pos, dtype=float)
+        if ped_positions.size == 0:
+            return False
+        ped_radius = float(
+            getattr(
+                getattr(self.sim, "config", None),
+                "ped_radius",
+                getattr(
+                    getattr(getattr(self.sim, "pysf_sim", None), "peds", None), "agent_radius", 0.4
+                ),
+            )
+        )
+        distances = np.linalg.norm(ped_positions - np.asarray(robot_pos), axis=-1)
+        return bool(np.any(distances <= robot_radius + ped_radius))
+
+    @property
+    def collision_predicate(self) -> str:
+        """Return a stable provenance identifier for the executed predicate."""
+        if self._collision_fn is not None:
+            return "custom_collision_fn"
+        if self.collision_scope == COLLISION_SCOPE_ALL:
+            return "continuous_occupancy_robot_bounds_obstacles_pedestrians_v1"
+        return "robot_pedestrian_center_distance_v1"
+
+    @property
+    def pedestrian_response(self) -> str:
+        """Return whether pedestrian stepping is independent or robot-reactive.
+
+        Robot-aware forces and the residual adversary read the live robot pose on
+        every simulator step. Their presence therefore makes a branch closed-loop;
+        with all such forces disabled, the pedestrian path is independent of the
+        substituted robot action and can be treated as replayed.
+        """
+        config = self.sim.config
+        if any(
+            bool(getattr(getattr(config, name, None), "is_active", False))
+            for name in ("prf_config", "apf_config", "residual_adversary")
+        ):
+            return PED_RESPONSE_CLOSED_LOOP
+        return PED_RESPONSE_REPLAYED
 
     def snapshot(self) -> _SimulatorSnapshot:
         """Capture the full live simulator state including the global RNG.
@@ -290,25 +377,47 @@ class SimulatorCounterfactualModel:
         config = robot.config
         if hasattr(config, "max_linear_decel"):
             max_decel = float(config.max_linear_decel)
+            max_angular_accel = float(config.max_angular_accel)
+            # Differential-drive actions are accelerations (m/s^2, rad/s^2),
+            # integrated by DifferentialDriveMotion over the simulator timestep.
             return (
                 (0.0, 0.0),
                 (-0.5 * max_decel, 0.0),
                 (-max_decel, 0.0),
+                (0.0, -max_angular_accel),
+                (0.0, max_angular_accel),
             )
-        if hasattr(config, "max_decel"):
+        if hasattr(config, "max_decel") and hasattr(config, "max_steer"):
             max_decel = float(config.max_decel)
+            max_steer = float(config.max_steer)
+            # Bicycle actions are (linear acceleration, steering angle), not
+            # velocity/turn-rate commands.
             return (
                 (0.0, 0.0),
                 (-0.5 * max_decel, 0.0),
                 (-max_decel, 0.0),
+                (0.0, -max_steer),
+                (0.0, max_steer),
             )
         command_mode = getattr(config, "command_mode", None)
         if command_mode == "vx_vy":
             vx, vy = robot.state.velocity_xy
-            return ((float(vx), float(vy)), (0.0, 0.0))
+            max_speed = float(config.max_speed)
+            return (
+                (float(vx), float(vy)),
+                (0.0, 0.0),
+                (0.0, -max_speed),
+                (0.0, max_speed),
+            )
         if command_mode == "unicycle_vw":
             velocity, angular_velocity = robot.state.velocity_vw
-            return ((float(velocity), float(angular_velocity)), (0.0, 0.0))
+            max_angular_speed = float(config.max_angular_speed)
+            return (
+                (float(velocity), float(angular_velocity)),
+                (0.0, 0.0),
+                (float(velocity), -max_angular_speed),
+                (float(velocity), max_angular_speed),
+            )
         return ()
 
     def action_label(self, action: Any) -> str:
@@ -316,8 +425,12 @@ class SimulatorCounterfactualModel:
         first = float(action[0])
         second = float(action[1])
         config = self.sim.robots[0].config
-        if hasattr(config, "max_linear_decel") or hasattr(config, "max_decel"):
-            return f"robot_accel=(first={first:g},second={second:g})"
-        if getattr(config, "command_mode", None) in {"vx_vy", "unicycle_vw"}:
-            return f"robot_velocity=(first={first:g},second={second:g})"
+        if hasattr(config, "max_linear_decel"):
+            return f"robot_accel=(linear_mps2={first:g},angular_radps2={second:g})"
+        if hasattr(config, "max_decel") and hasattr(config, "max_steer"):
+            return f"robot_accel=(linear_mps2={first:g},steering_angle_rad={second:g})"
+        if getattr(config, "command_mode", None) == "vx_vy":
+            return f"robot_velocity=(vx_mps={first:g},vy_mps={second:g})"
+        if getattr(config, "command_mode", None) == "unicycle_vw":
+            return f"robot_velocity=(linear_mps={first:g},angular_radps={second:g})"
         return f"robot_cmd=(first={first:g},second={second:g})"

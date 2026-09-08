@@ -361,20 +361,12 @@ class ReportOrchestrator:
         manifest_map: dict[int, dict[str, Any]] = {}
         records, _ = extract_seed_metrics(manifests)
         for record in records:
-            if record.get("seed") is None:
-                continue
-            try:
-                seed_val = int(record["seed"])
-            except (OverflowError, TypeError, ValueError):
-                logger.warning(
-                    "Skipping {} manifest record with non-integer seed",
-                    label=label,
-                    seed=record.get("seed"),
-                )
+            seed = record.get("seed")
+            if seed is None:
                 continue
             normalized = dict(record)
             normalized["policy_type"] = label
-            manifest_map[seed_val] = normalized
+            manifest_map[int(seed)] = normalized
         return manifest_map
 
     def orchestrate_multi_seed(

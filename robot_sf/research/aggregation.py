@@ -28,7 +28,11 @@ import pandas as pd
 
 from robot_sf.common.logging import get_logger
 from robot_sf.research.exceptions import ValidationError
-from robot_sf.research.tracker_manifest import validate_tracker_payload
+from robot_sf.research.tracker_manifest import (
+    coerce_tracker_float,
+    coerce_tracker_int,
+    validate_tracker_payload,
+)
 
 logger = get_logger(__name__)
 
@@ -189,7 +193,7 @@ def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
         lines = [line for line in text.splitlines() if line.strip()]
         if not lines:
             raise ValueError(f"Empty manifest file: {manifest_path}")
-        payload = json.loads(lines[-1])
+        payload = [json.loads(line) for line in lines][-1]
     else:
         payload = json.loads(text)
 
@@ -218,7 +222,11 @@ def extract_seed_metrics(
         payload: dict[str, Any] | None = None
         try:
             payload = _load_manifest_payload(manifest_path)
-            seed = int(payload.get("seed")) if payload.get("seed") is not None else None
+            seed = (
+                coerce_tracker_int(payload.get("seed"), "seed")
+                if payload.get("seed") is not None
+                else None
+            )
             metrics = payload.get("metrics") or payload.get("summary", {}).get("metrics")
             if metrics is None:
                 raise KeyError("metrics not found")
@@ -231,20 +239,30 @@ def extract_seed_metrics(
             }
 
             if "success_rate" in metrics:
-                record["success_rate"] = float(metrics["success_rate"])
+                record["success_rate"] = coerce_tracker_float(
+                    metrics["success_rate"], "metrics.success_rate"
+                )
             if "collision_rate" in metrics:
-                record["collision_rate"] = float(metrics["collision_rate"])
+                record["collision_rate"] = coerce_tracker_float(
+                    metrics["collision_rate"], "metrics.collision_rate"
+                )
 
             timesteps = metrics.get("timesteps_to_convergence")
             timesteps = timesteps or metrics.get("avg_timesteps")
             timesteps = timesteps or metrics.get("total_timesteps")
             if timesteps is not None:
-                record["timesteps_to_convergence"] = float(timesteps)
+                record["timesteps_to_convergence"] = coerce_tracker_float(
+                    timesteps, "metrics.timesteps"
+                )
 
             if "final_reward_mean" in metrics:
-                record["final_reward_mean"] = float(metrics["final_reward_mean"])
+                record["final_reward_mean"] = coerce_tracker_float(
+                    metrics["final_reward_mean"], "metrics.final_reward_mean"
+                )
             if "run_duration_seconds" in metrics:
-                record["run_duration_seconds"] = float(metrics["run_duration_seconds"])
+                record["run_duration_seconds"] = coerce_tracker_float(
+                    metrics["run_duration_seconds"], "metrics.run_duration_seconds"
+                )
 
             if len(record.keys() - {"seed", "policy_type", "variant_id"}) == 0:
                 raise ValueError("no numeric metrics found")

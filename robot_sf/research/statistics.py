@@ -6,11 +6,35 @@ export_hypothesis_json
 """
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from scipy import stats
+
+
+def _finite_values(values: list[float]) -> list[float]:
+    """Return numeric finite samples, excluding NaN and infinite values."""
+    finite: list[float] = []
+    for value in values:
+        numeric = float(value)
+        if math.isfinite(numeric):
+            finite.append(numeric)
+    return finite
+
+
+def _finite_pairs(x: list[float], y: list[float]) -> tuple[list[float], list[float]]:
+    """Return pair-aligned finite samples, dropping incomplete pairs."""
+    finite_x: list[float] = []
+    finite_y: list[float] = []
+    for x_value, y_value in zip(x, y, strict=True):
+        numeric_x = float(x_value)
+        numeric_y = float(y_value)
+        if math.isfinite(numeric_x) and math.isfinite(numeric_y):
+            finite_x.append(numeric_x)
+            finite_y.append(numeric_y)
+    return finite_x, finite_y
 
 
 def paired_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
@@ -24,16 +48,19 @@ def paired_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
         Dictionary containing:
             - t_stat: Test statistic (None if insufficient data)
             - p_value: Two-tailed p-value (None if insufficient data)
-            - n: Sample size (minimum of len(x), len(y))
+            - n: Effective finite paired sample size
 
     Note:
-        Requires len(x) == len(y) >= 2 for valid results.
+        Requires len(x) == len(y) and at least two finite pairs for valid results.
         Uses scipy.stats.ttest_rel for computation.
     """
     if len(x) != len(y) or len(x) < 2:
         return {"t_stat": None, "p_value": None, "n": min(len(x), len(y))}
-    t_stat, p_value = stats.ttest_rel(x, y)
-    return {"t_stat": float(t_stat), "p_value": float(p_value), "n": len(x)}
+    finite_x, finite_y = _finite_pairs(x, y)
+    if len(finite_x) < 2:
+        return {"t_stat": None, "p_value": None, "n": len(finite_x)}
+    t_stat, p_value = stats.ttest_rel(finite_x, finite_y)
+    return {"t_stat": float(t_stat), "p_value": float(p_value), "n": len(finite_x)}
 
 
 def welch_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
@@ -47,30 +74,32 @@ def welch_t_test(x: list[float], y: list[float]) -> dict[str, Any]:
         Dictionary containing:
             - t_stat: Test statistic (None if insufficient data)
             - p_value: Two-tailed p-value (None if insufficient data)
-            - n: Total sample size len(x) + len(y)
-            - n_x / n_y: Individual sample sizes for reference
+            - n: Total effective finite sample size
+            - n_x / n_y: Individual effective sample sizes for reference
 
     Note:
-        Requires len(x) >= 2 and len(y) >= 2 for valid results.
+        Requires at least two finite values in each sample for valid results.
         Uses scipy.stats.ttest_ind with equal_var=False (Welch's test).
     """
 
-    if len(x) < 2 or len(y) < 2:
+    finite_x = _finite_values(x)
+    finite_y = _finite_values(y)
+    if len(finite_x) < 2 or len(finite_y) < 2:
         return {
             "t_stat": None,
             "p_value": None,
-            "n": len(x) + len(y),
-            "n_x": len(x),
-            "n_y": len(y),
+            "n": len(finite_x) + len(finite_y),
+            "n_x": len(finite_x),
+            "n_y": len(finite_y),
         }
 
-    t_stat, p_value = stats.ttest_ind(x, y, equal_var=False)
+    t_stat, p_value = stats.ttest_ind(finite_x, finite_y, equal_var=False)
     return {
         "t_stat": float(t_stat),
         "p_value": float(p_value),
-        "n": len(x) + len(y),
-        "n_x": len(x),
-        "n_y": len(y),
+        "n": len(finite_x) + len(finite_y),
+        "n_x": len(finite_x),
+        "n_y": len(finite_y),
     }
 
 
@@ -96,7 +125,10 @@ def cohen_d(x: list[float], y: list[float]) -> float | None:
     """
     if len(x) != len(y) or len(x) < 2:
         return None
-    diff = np.array(x) - np.array(y)
+    finite_x, finite_y = _finite_pairs(x, y)
+    if len(finite_x) < 2:
+        return None
+    diff = np.array(finite_x) - np.array(finite_y)
     return float(np.mean(diff) / np.std(diff, ddof=1)) if np.std(diff, ddof=1) > 0 else None
 
 
@@ -105,14 +137,17 @@ def cohen_d_independent(x: list[float], y: list[float]) -> float | None:
 
     Returns:
         Cohen's d value (standardized mean difference) or None when inputs are
-        too small (n < 2 per sample) or when the pooled variance is zero.
+        too small (fewer than two finite values per sample) or when the pooled
+        variance is zero.
     """
 
-    if len(x) < 2 or len(y) < 2:
+    finite_x = _finite_values(x)
+    finite_y = _finite_values(y)
+    if len(finite_x) < 2 or len(finite_y) < 2:
         return None
 
-    x_arr = np.array(x)
-    y_arr = np.array(y)
+    x_arr = np.array(finite_x)
+    y_arr = np.array(finite_y)
     var_x = np.var(x_arr, ddof=1)
     var_y = np.var(y_arr, ddof=1)
     pooled_denom = np.sqrt(
@@ -146,15 +181,25 @@ def evaluate_hypothesis(
     Decision Logic:
         - PASS: improvement_pct >= threshold
         - FAIL: improvement_pct < threshold or negative (degradation)
-        - INCOMPLETE: Insufficient data or zero baseline mean
+        - INCOMPLETE: Insufficient finite data or zero baseline mean
     """
-    if not baseline or not pretrained or min(len(baseline), len(pretrained)) < 1:
-        return {"decision": "INCOMPLETE", "note": "Insufficient data for hypothesis evaluation"}
-    mean_base = float(np.mean(baseline))
-    mean_pre = float(np.mean(pretrained))
+    finite_baseline = _finite_values(baseline)
+    finite_pretrained = _finite_values(pretrained)
+    sample_counts = {
+        "n_baseline": len(finite_baseline),
+        "n_pretrained": len(finite_pretrained),
+    }
+    if not finite_baseline or not finite_pretrained:
+        return {
+            "decision": "INCOMPLETE",
+            "note": "Insufficient finite data for hypothesis evaluation",
+            **sample_counts,
+        }
+    mean_base = float(np.mean(finite_baseline))
+    mean_pre = float(np.mean(finite_pretrained))
     improvement_pct = 100 * (mean_base - mean_pre) / mean_base if mean_base > 0 else None
     if improvement_pct is None:
-        return {"decision": "INCOMPLETE", "note": "Baseline mean is zero"}
+        return {"decision": "INCOMPLETE", "note": "Baseline mean is zero", **sample_counts}
     if improvement_pct >= threshold:
         decision = "PASS"
         note = f"Improvement {improvement_pct:.1f}% >= threshold {threshold}%"
@@ -172,6 +217,7 @@ def evaluate_hypothesis(
         "decision": decision,
         "measured_value": improvement_pct,
         "note": note,
+        **sample_counts,
     }
 
 
@@ -180,14 +226,16 @@ def validate_sample_size(x: list[float], y: list[float]) -> dict[str, Any]:
 
     Returns:
         Dictionary with a 'valid' flag and auxiliary fields. When invalid,
-        includes a 'reason' key (e.g., 'mismatched_lengths', 'insufficient_samples').
-        Criteria: lengths equal and >= 2.
+        includes a 'reason' key (e.g., 'mismatched_lengths',
+        'insufficient_finite_samples'). Criteria: lengths equal and at least
+        two finite pairs.
     """
     if len(x) != len(y):
         return {"valid": False, "reason": "mismatched_lengths", "n_x": len(x), "n_y": len(y)}
-    if len(x) < 2:
-        return {"valid": False, "reason": "insufficient_samples", "n": len(x)}
-    return {"valid": True, "n": len(x)}
+    finite_x, _ = _finite_pairs(x, y)
+    if len(finite_x) < 2:
+        return {"valid": False, "reason": "insufficient_finite_samples", "n": len(finite_x)}
+    return {"valid": True, "n": len(finite_x)}
 
 
 def format_test_results(
@@ -250,14 +298,31 @@ def compare_to_threshold(
 
     Returns:
         Dictionary with 'improvement_pct', 'decision' (PASS/FAIL/INCOMPLETE),
-        and summary statistics such as baseline/treatment means.
+        summary statistics such as baseline/treatment means, and effective
+        finite sample counts.
     """
-    if not baseline or not treatment:
-        return {"decision": "INCOMPLETE", "improvement_pct": None, "threshold": threshold}
-    mean_base = float(np.mean(baseline))
-    mean_treat = float(np.mean(treatment))
+    finite_baseline = _finite_values(baseline)
+    finite_treatment = _finite_values(treatment)
+    sample_counts = {
+        "n_baseline": len(finite_baseline),
+        "n_treatment": len(finite_treatment),
+    }
+    if not finite_baseline or not finite_treatment:
+        return {
+            "decision": "INCOMPLETE",
+            "improvement_pct": None,
+            "threshold": threshold,
+            **sample_counts,
+        }
+    mean_base = float(np.mean(finite_baseline))
+    mean_treat = float(np.mean(finite_treatment))
     if mean_base <= 0:
-        return {"decision": "INCOMPLETE", "improvement_pct": None, "threshold": threshold}
+        return {
+            "decision": "INCOMPLETE",
+            "improvement_pct": None,
+            "threshold": threshold,
+            **sample_counts,
+        }
     improvement_pct = 100.0 * (mean_base - mean_treat) / mean_base
     # Decision: PASS if meets threshold, otherwise FAIL
     decision = "PASS" if improvement_pct >= threshold else "FAIL"
@@ -267,6 +332,7 @@ def compare_to_threshold(
         "threshold": threshold,
         "baseline_mean": mean_base,
         "treatment_mean": mean_treat,
+        **sample_counts,
     }
 
 

@@ -75,3 +75,42 @@ def test_report_loader_rejects_malformed_manifest(tmp_path: Path, monkeypatch) -
         load_tracker_manifest("run-1")
 
     assert exc_info.value.code == 1
+
+
+def test_report_summary_numeric_coercion_fails_closed() -> None:
+    """Report summary seeds and timesteps reject mixed or unrepresentable values."""
+    from scripts.research.generate_report import (
+        _coerce_summary_float_list,
+        _extract_report_inputs,
+        extract_metric_records_from_manifest,
+    )
+
+    with pytest.raises(ValidationError, match="summary.seeds must contain an integer"):
+        extract_metric_records_from_manifest({"summary": {"seeds": [1, None]}})
+
+    assert _coerce_summary_float_list({"baseline_timesteps": [12.5]}, "baseline_timesteps") == [
+        12.5
+    ]
+    with pytest.raises(ValidationError, match="summary.baseline_timesteps must contain"):
+        _coerce_summary_float_list({"baseline_timesteps": [int("9" * 1000)]}, "baseline_timesteps")
+
+    with pytest.raises(SystemExit) as exc_info:
+        _extract_report_inputs({"summary": {"seeds": [1, None]}})
+    assert exc_info.value.code == 1
+
+    summary, records, seeds, baseline, pretrained = _extract_report_inputs(
+        {"summary": {"seeds": [2], "baseline_timesteps": [10.0]}}
+    )
+    assert summary["seeds"] == [2]
+    assert records == []
+    assert seeds == [2]
+    assert baseline == [10.0]
+    assert pretrained == []
+
+
+def test_tracker_float_coercion_rejects_nonfinite_values() -> None:
+    """Shared metric coercion rejects NaN before report aggregation."""
+    from robot_sf.research.tracker_manifest import coerce_tracker_float
+
+    with pytest.raises(ValidationError, match="finite number"):
+        coerce_tracker_float(float("nan"), "metrics.success_rate")

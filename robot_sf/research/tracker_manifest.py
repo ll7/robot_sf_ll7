@@ -2,12 +2,40 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.research.exceptions import ValidationError
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def coerce_tracker_int(value: object, field: str) -> int:
+    """Coerce a tracker field to an integer or raise a validation error.
+
+    Returns:
+        The coerced integer value.
+    """
+    try:
+        return int(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValidationError(f"Tracker manifest {field} must contain an integer") from exc
+
+
+def coerce_tracker_float(value: object, field: str) -> float:
+    """Coerce a tracker field to a finite float or raise a validation error.
+
+    Returns:
+        The coerced finite float value.
+    """
+    try:
+        converted = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValidationError(f"Tracker manifest {field} must contain a finite number") from exc
+    if not math.isfinite(converted):
+        raise ValidationError(f"Tracker manifest {field} must contain a finite number")
+    return converted
 
 
 def validate_tracker_payload(

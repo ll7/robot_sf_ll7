@@ -283,6 +283,40 @@ def test_run_full_skips_invalid_manifest_metrics(tmp_path, invalid_metrics):
     assert hypothesis["hypotheses"][0]["decision"] == "INCOMPLETE"
 
 
+def test_orchestrate_multi_seed_skips_manifest_without_seed(tmp_path):
+    """A metric-bearing manifest without a seed is not admitted to a seed map."""
+    baseline = tmp_path / "baseline.json"
+    pretrained = tmp_path / "pretrained.json"
+    baseline.write_text(
+        json.dumps({"policy_type": "baseline", "metrics": {"avg_timesteps": 100.0}}),
+        encoding="utf-8",
+    )
+    pretrained.write_text(
+        json.dumps(
+            {
+                "seed": 1,
+                "policy_type": "pretrained",
+                "metrics": {"avg_timesteps": 100.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    records, _, seed_status = ReportOrchestrator(
+        output_dir=tmp_path / "report"
+    ).orchestrate_multi_seed([baseline], [pretrained], expected_seeds=[1])
+
+    assert len(records) == 1
+    assert seed_status == [
+        {
+            "seed": 1,
+            "baseline_status": "missing",
+            "pretrained_status": "completed",
+            "note": "Seed incomplete",
+        }
+    ]
+
+
 def test_metadata_collection(output_dir):
     """Test metadata collection."""
     orchestrator = ReportOrchestrator(output_dir=output_dir)

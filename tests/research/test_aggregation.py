@@ -391,6 +391,15 @@ def test_load_manifest_payload_jsonl_takes_last_line(tmp_path: Path):
     assert payload == {"seed": 2, "policy_type": "x"}
 
 
+def test_load_manifest_payload_jsonl_rejects_malformed_earlier_line(tmp_path: Path):
+    """JSONL manifests reject corruption before the final record."""
+    path = tmp_path / "m.jsonl"
+    path.write_text('{"seed": 1}\nnot-json\n{"seed": 2}\n', encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        _load_manifest_payload(path)
+
+
 def test_load_manifest_payload_empty_jsonl_raises(tmp_path: Path):
     """Empty JSONL manifests raise ValueError."""
     path = tmp_path / "empty.jsonl"
@@ -439,7 +448,7 @@ def test_extract_seed_metrics_records_numeric_overflow_as_failure(tmp_path: Path
 
     assert records == []
     assert len(failures) == 1
-    assert "int too large to convert to float" in failures[0]["reason"]
+    assert "metrics.success_rate must contain a finite number" in failures[0]["reason"]
 
 
 def test_extract_seed_metrics_basic(tmp_path: Path):

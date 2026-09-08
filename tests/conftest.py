@@ -526,6 +526,9 @@ _FAST_FILES = {
     # diagnostic export/render paths required by the exact-head changed-
     # coverage gate.
     "test_scenario_figure_pack.py",
+    # Versioned figure display-semantics tests cover the registry and its
+    # explicit legacy compatibility bridge in the fast changed-coverage lane.
+    "test_figure_semantics.py",
     # Release admission, staging, doctor, and publisher suites are deterministic
     # provenance/schema contracts for the benchmark-data release lane.
     # The direct source/test pairs are required by the changed-coverage router

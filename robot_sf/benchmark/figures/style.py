@@ -119,7 +119,10 @@ def metric_label(
         The formatted display label, including its unit when declared.
     """
     semantics = importlib.import_module("robot_sf.benchmark.figures.semantics")
-    lookup_key = _LEGACY_AGGREGATE_KEYS.get(metric_key, metric_key) if not strict else metric_key
+    normalized_key = metric_key.strip()
+    lookup_key = (
+        _LEGACY_AGGREGATE_KEYS.get(normalized_key, normalized_key) if not strict else metric_key
+    )
     return semantics.default_registry().metric_label(
         lookup_key,
         language=language,

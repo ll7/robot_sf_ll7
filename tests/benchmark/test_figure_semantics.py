@@ -11,6 +11,7 @@ from robot_sf.benchmark.figures.semantics import (
     SCHEMA,
     SemanticsRegistry,
     default_registry,
+    main,
 )
 from robot_sf.benchmark.figures.style import metric_label, semantics_sha256
 
@@ -116,6 +117,40 @@ def test_suggestion_is_review_only_and_does_not_mutate_registry():
     assert registry.sha256() == before
     with pytest.raises(ValueError, match="already mapped"):
         registry.suggest_metric("success")
+
+
+def test_registry_cli_covers_query_summary_and_review_proposal_paths(capsys):
+    assert main([]) == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["schema_version"] == SCHEMA
+
+    assert main(["--metric", "success"]) == 0
+    metric = json.loads(capsys.readouterr().out)
+    assert metric["canonical_key"] == "success"
+
+    assert main(["--planner", "ORCA", "--language", "de"]) == 0
+    planner = json.loads(capsys.readouterr().out)
+    assert planner["canonical_key"] == "orca"
+
+    assert (
+        main(
+            [
+                "--suggest-metric",
+                "lateral_jerk_cli",
+                "--unit",
+                "m/s³",
+                "--context",
+                "tests/benchmark/test_figure_semantics.py:132",
+            ]
+        )
+        == 0
+    )
+    proposal = json.loads(capsys.readouterr().out)
+    assert proposal["proposal_only"] is True
+
+    with pytest.raises(SystemExit, match="2"):
+        main(["--metric", "unregistered_metric"])
+    assert "unmapped metric" in capsys.readouterr().err
 
 
 def test_planner_rows_always_include_non_color_distinction():

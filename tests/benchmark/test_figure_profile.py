@@ -100,6 +100,23 @@ def test_profile_rejects_unknown_duplicate_incomplete_and_implausible_fields(tmp
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("font_family", ("",)), ("font_size_pt", 3.0)],
+)
+def test_profile_rejects_invalid_extracted_typography_fields(field, value):
+    values = {
+        "profile_id": "invalid-typography",
+        "target_width_in": 5.0,
+        "height_ratio": 0.8,
+        "font_family": ("serif",),
+    }
+    values[field] = value
+
+    with pytest.raises(ValueError, match=field):
+        FigureProfile(**values)
+
+
 def test_builtin_profiles_preserve_existing_scenario_pack_dimensions():
     assert FigureProfile.builtin("single").figure_size() == pytest.approx((3.4, 6.2))
     assert FigureProfile.builtin("double").figure_size() == pytest.approx((7.0, 5.6))

@@ -1,0 +1,253 @@
+{
+  "schema_version": "scenario_window_research_dossier.v1",
+  "status": "preparation_only",
+  "authority": {
+    "parent_programme": "#7381",
+    "relevance_ruling": "#7383",
+    "snapshot_ruling": "#7384",
+    "paired_epics": ["#7393", "#7394"],
+    "execution_admitted": false,
+    "manuscript_or_release_changed": false
+  },
+  "source_documents": [
+    "ISSUE_PLAN.md",
+    "RESEARCH_AND_AUDIT.md",
+    "AGENT_PROMPT.md",
+    "live issues and ruling comments"
+  ],
+  "repository_heads": {
+    "origin_main_at_start": "a918124a21da2e801434ef1b99c60467af673157",
+    "rw01_rw02_pr_8612_head": "7963b5c4a3f0c028c8151aaeef22e3d816cb2e9c",
+    "rw03_rw04_pr_8620_head": "a554fabf8e699420e82f27c909fc0f5cdff1462e"
+  },
+  "pull_requests": [
+    {
+      "number": 8612,
+      "scope": ["RW-01", "RW-02"],
+      "url": "https://github.com/ll7/robot_sf_ll7/pull/8612",
+      "status": "open"
+    },
+    {
+      "number": 8620,
+      "scope": ["RW-03", "RW-04"],
+      "url": "https://github.com/ll7/robot_sf_ll7/pull/8620",
+      "status": "open"
+    }
+  ],
+  "timelines": [
+    {
+      "id": "no_event",
+      "evidence_grade": "synthetic_preparation",
+      "steps": "0..9",
+      "signals": {
+        "clearance_m": "3.0 throughout",
+        "closing_velocity_m_s": "0.0 throughout",
+        "ttc_s": "10.0 throughout",
+        "path_conflict": false,
+        "fallback_or_saturation": false,
+        "collision": false
+      },
+      "expected_windows": [],
+      "interpretation": "control timeline; no relevance interval is selected"
+    },
+    {
+      "id": "doorway_interaction",
+      "evidence_grade": "synthetic_preparation",
+      "steps": "0..9",
+      "event_id": "doorway",
+      "precursor_steps": [2],
+      "signals": {
+        "step_2": "precursor=true; visibility/route decision available",
+        "step_4": "clearance_m=0.8; closing_velocity_m_s=0.3",
+        "step_5": "clearance_m=0.7; closing_velocity_m_s=0.3",
+        "step_6": "hysteresis hold remains active for one safe step",
+        "step_8": "post-roll row retained"
+      },
+      "proposed_window": {
+        "start_step": 2,
+        "end_step": 8,
+        "trigger_steps": [4, 5, 6],
+        "reasons": ["clearance_m", "closing_velocity_m_s"]
+      },
+      "interpretation": "single interaction with an explicit pre-roll precursor and post-roll"
+    },
+    {
+      "id": "multi_stage_interaction",
+      "evidence_grade": "synthetic_preparation",
+      "steps": "0..11",
+      "event_id": "multi",
+      "precursor_steps": [1],
+      "signals": {
+        "step_1": "precursor=true; visibility/route decision",
+        "step_3": "clearance_m=0.8",
+        "step_5": "path_conflict=true",
+        "step_8": "collision=true"
+      },
+      "proposed_window": {
+        "start_step": 1,
+        "end_step": 11,
+        "trigger_steps": [3, 4, 5, 6, 8, 9],
+        "reasons": ["clearance_m", "path_conflict", "collision"]
+      },
+      "interpretation": "nearby stages merge; the complete parent remains the authority"
+    }
+  ],
+  "unsafe_crop_counterexample": {
+    "parent_timeline": "multi_stage_interaction",
+    "late_crop_steps": "6..11",
+    "omitted_steps": [1, 3, 5],
+    "omitted_precursor": 1,
+    "result": "rejected",
+    "reason": "unsafe crop: selected excerpt omits required precursor steps",
+    "evidence_grade": "synthetic_preparation"
+  },
+  "relevance_vector": {
+    "method": "deterministic threshold/hysteresis (Option A)",
+    "components": [
+      {"name": "clearance_m", "unit": "m", "provenance": "trace.geometry"},
+      {"name": "closing_velocity_m_s", "unit": "m/s", "provenance": "trace.kinematics"},
+      {"name": "ttc_s", "unit": "s", "provenance": "trace.derived"},
+      {"name": "closest_approach_m", "unit": "m", "provenance": "trace.derived"},
+      {"name": "braking_margin_m", "unit": "m", "provenance": "trace.derived"},
+      {"name": "visibility_latency_s", "unit": "s", "provenance": "trace.observation"},
+      {"name": "path_conflict", "unit": "bool", "provenance": "trace.geometry"},
+      {"name": "fallback_or_saturation", "unit": "bool", "provenance": "trace.controller"},
+      {"name": "progress_m", "unit": "m", "provenance": "trace.metrics"},
+      {"name": "stall_s", "unit": "s", "provenance": "trace.metrics"},
+      {"name": "discomfort", "unit": "unitless", "provenance": "trace.metrics"},
+      {"name": "collision", "unit": "bool", "provenance": "trace.events"}
+    ],
+    "proposed_rules": {
+      "clearance_m": 1.0,
+      "closing_velocity_m_s": 0.2,
+      "ttc_s": 3.0,
+      "closest_approach_m": 1.0,
+      "braking_margin_m": 0.0,
+      "visibility_latency_s": 0.5,
+      "stall_s": 2.0,
+      "discomfort": 0.5,
+      "pre_roll_steps": 2,
+      "post_roll_steps": 2,
+      "merge_gap_steps": 1,
+      "hysteresis_steps": 1
+    },
+    "approved_rules": null,
+    "missingness_policy": "unknown, never imputed to a safe zero",
+    "hindsight_policy": "allowed only when explicitly marked offline in the manifest"
+  },
+  "fidelity_table": [
+    {
+      "property": "state_observation_action_equivalence",
+      "unit": "native values / per-step arrays",
+      "direction": "exact equality; no tolerance widening",
+      "proposed_tolerance": 0.0,
+      "approved_tolerance": null,
+      "status": "proposed"
+    },
+    {
+      "property": "verdict_agreement",
+      "unit": "categorical",
+      "direction": "exact category agreement",
+      "proposed_tolerance": 0,
+      "approved_tolerance": null,
+      "status": "proposed"
+    },
+    {
+      "property": "failure_mechanism_agreement",
+      "unit": "categorical trace label",
+      "direction": "exact where mechanism labels are available; otherwise not evaluable",
+      "proposed_tolerance": 0,
+      "approved_tolerance": null,
+      "status": "proposed"
+    },
+    {
+      "property": "bounded_primary_metric_error",
+      "unit": "metric-specific native units",
+      "direction": "absolute or relative bound declared per metric before validation",
+      "proposed_tolerance": null,
+      "approved_tolerance": null,
+      "status": "proposed_not_frozen"
+    },
+    {
+      "property": "planner_ranking",
+      "unit": "ordering / rank correlation",
+      "direction": "preserve only with full metric support and independent parents",
+      "proposed_tolerance": null,
+      "approved_tolerance": null,
+      "status": "blocked_until_transfer"
+    },
+    {
+      "property": "replay_determinism",
+      "unit": "per-step state and RNG stream",
+      "direction": "exact same-platform continuation for supported subset",
+      "proposed_tolerance": 0.0,
+      "approved_tolerance": null,
+      "status": "proposed_subset_only"
+    },
+    {
+      "property": "declared_precursor_or_avoidability_event",
+      "unit": "step index / event identity",
+      "direction": "zero missing declared precursor; finite search failure is unknown",
+      "proposed_tolerance": 0,
+      "approved_tolerance": null,
+      "status": "proposed"
+    }
+  ],
+  "snapshot_dependency_map": [
+    {"work_package": "RW-01", "dependency": "route restore and horizon checks", "status": "supported_in_PR_8612"},
+    {"work_package": "RW-02", "dependency": "native action/collision/response contracts", "status": "supported_in_PR_8612"},
+    {"work_package": "RW-03", "dependency": "typed JSON+NPZ snapshot and inventory", "status": "supported_subset_in_PR_8620"},
+    {"work_package": "RW-04", "dependency": "same-object no-op comparator", "status": "supported_subset_in_PR_8620"},
+    {"work_package": "RW-05", "dependency": "retained parent rows and deterministic selector", "status": "implemented_in_this_preparation_slice"},
+    {"work_package": "RW-06", "dependency": "gated action search and complete horizon", "status": "BLOCKED_ADMISSION"},
+    {"work_package": "RW-07", "dependency": "independent transfer and cost pilot", "status": "BLOCKED_ADMISSION"}
+  ],
+  "cost_and_sample_size": {
+    "measured_snapshot_fixture": {
+      "metadata_bytes": 18903,
+      "payload_bytes": 3893,
+      "total_bytes": 22796,
+      "environment": "local headless native doorway fixture; 7 pedestrians"
+    },
+    "wall_time": {
+      "status": "not_evaluable_as_speedup",
+      "reason": "preparation tests do not run an admitted shortened campaign"
+    },
+    "equations": {
+      "plain": "C_plain = K*C(T)",
+      "window": "C_window = C_parent + C_selection + C_validation + K*(C_load + C(W))"
+    },
+    "sample_size_design": {
+      "pilot": "30 independent parents to find feasibility bugs; zero failures still has about a 9.5% one-sided 95% upper bound",
+      "validation": "300 independent parents for about a 1.0% one-sided 95% upper bound when zero failures are observed",
+      "split": "hold out by parent/scenario/seed lineage, with a geometry-family holdout where available",
+      "status": "proposed_not_executed"
+    }
+  },
+  "hypotheses": [
+    {"id": "H1", "statement": "route progress is restored rather than left at branch state", "status": "supported", "evidence": "native route regression and focused tests", "limitation": "function/fixture scope"},
+    {"id": "H2", "statement": "a declared replay horizon cannot be certified when baseline suffix support is truncated", "status": "supported", "evidence": "isolated probe and focused horizon refusal", "limitation": "contract guard, not campaign effect"},
+    {"id": "H3", "statement": "the supported native state subset round-trips an exact same-object continuation", "status": "supported", "evidence": "native doorway typed JSON+NPZ test", "limitation": "fresh process, recurrent history, and metrics remain unsupported"},
+    {"id": "H4", "statement": "threshold/hysteresis selection can retain three representative preparation timelines", "status": "supported", "evidence": "deterministic synthetic timeline tests", "limitation": "no false-shortening rate without held-out traces"},
+    {"id": "H5", "statement": "a late crop that drops a declared precursor is safe", "status": "rejected", "evidence": "unsafe-crop counterexample and manifest refusal", "limitation": "rejection is a contract result, not a physical claim"},
+    {"id": "H6", "statement": "shortened continuation produces positive compute break-even", "status": "not_evaluable", "evidence": "cost equation and snapshot-size receipt only", "limitation": "no admitted pilot or wall-time comparison"},
+    {"id": "H7", "statement": "fresh-process/recurrent/controller continuation is covered by this snapshot", "status": "blocked", "evidence": "inventory marks planner memory and sensor history unsupported", "limitation": "requires owner adapter and authorized probe"},
+    {"id": "H8", "statement": "paired planner transfer and ranking are preserved", "status": "blocked", "evidence": "RW-07 admission gate remains closed", "limitation": "requires independent held-out campaign"},
+    {"id": "H9", "statement": "PELT or a learned selector is needed for v1", "status": "blocked", "evidence": "Option A selected for preparation; alternatives deferred", "limitation": "reopen only after measured baseline shortcomings"}
+  ],
+  "command_receipts": [
+    {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_last_avoidable_replay_issue_5442.py -q", "exit_code": 0, "result": "23 passed"},
+    {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_typed_snapshot.py -q", "exit_code": 0, "result": "5 passed"},
+    {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_relevance_windows.py tests/benchmark/test_continuation_experiment_plan.py -q", "exit_code": 0, "result": "10 passed"},
+    {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check <changed files>", "exit_code": 0, "result": "passed on focused changed files"},
+    {"command": "isolated supplied replay contract probe at exact RW-01/RW-02 head", "exit_code": 0, "result": "route_restore and complete_horizon contract_holds=true"}
+  ],
+  "submission_boundary": {
+    "new_mainline_evidence": false,
+    "benchmark_denominator_changed": false,
+    "planner_ranking_claim": false,
+    "causal_or_safety_claim": false,
+    "manuscript_changed": false,
+    "next_smallest_authorized_step": "review the preparation packet and grant stage-specific live authority before any RW-06/RW-07 execution"
+  }
+}

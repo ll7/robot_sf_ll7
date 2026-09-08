@@ -13,6 +13,14 @@ opt-in, domain-gated runtime correction boundary. This is a compatibility and im
 note only; it does not establish physical, safety, benchmark, or paper-facing evidence:
 [issue_8222_obstacle_force_compatibility.md](issue_8222_obstacle_force_compatibility.md).
 
+Scenario-window preparation packet (RW-01—RW-08): source-contract repairs, typed native
+continuation snapshot inventory, deterministic relevance-window selector, explicit unsafe-crop
+refusal, and gated experiment/dossier boundary. Preparation-only; no shortened benchmark or
+planner-ranking claim:
+[scenario_window_research_dossier_2026-09-08.md](scenario_window_research_dossier_2026-09-08.md),
+[simulator_typed_snapshot_contract.md](simulator_typed_snapshot_contract.md),
+[simulator_state_inventory.v1.json](simulator_state_inventory.v1.json).
+
 Public pedestrian goal and force prediction research: observation-only candidate generation,
 path-tangent/open-ray/unknown semantics, coverage-only evaluation, and the next held-out research
 directions. Current receipts are smoke evidence only:

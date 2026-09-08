@@ -200,6 +200,24 @@ def _restore_pedestrian_groups(
         groups._groups_as_lists_cache = None
 
 
+def _synchronize_pysf_groups(simulator: Any) -> None:
+    """Synchronize the PySocialForce group list with restored public membership.
+
+    ``Simulator.step_once`` computes forces before it passes the current public
+    grouping to the pedestrian integrator.  The force objects therefore read
+    ``simulator.pysf_sim.peds.groups`` during that first phase; restoring only
+    ``simulator.groups`` would leave branch-specific backend membership active.
+    Small test doubles may omit the backend, so they remain compatible with the
+    public grouping snapshot seam.
+    """
+    pysf_peds = getattr(getattr(simulator, "pysf_sim", None), "peds", None)
+    if pysf_peds is not None:
+        groups_as_lists = getattr(simulator.groups, "groups_as_lists", None)
+        if groups_as_lists is None:
+            groups_as_lists = [list(ped_ids) for ped_ids in simulator.groups.groups.values()]
+        pysf_peds.groups = deepcopy(groups_as_lists)
+
+
 def _capture_route_navigators(peds_behaviors: list[Any]) -> dict[int, Any]:
     """Deep-copy route-group navigator mutable state for a snapshot.
 
@@ -432,6 +450,7 @@ class SimulatorCounterfactualModel:
             snapshot.pedestrian_groups,
             snapshot.pedestrian_group_by_ped,
         )
+        _synchronize_pysf_groups(self.sim)
         _restore_behavior_rng_states(self.sim.peds_behaviors, snapshot.behavior_rng_states)
         self.sim._residual_adversary = deepcopy(snapshot.residual_adversary)
         self.sim.peds_have_obstacle_forces = snapshot.peds_have_obstacle_forces

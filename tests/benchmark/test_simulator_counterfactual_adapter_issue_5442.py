@@ -159,6 +159,7 @@ def test_snapshot_restores_groups_behavior_rng_and_residual_state() -> None:
         robot_navs=[],
         peds_behaviors=[behavior],
         groups=groups,
+        pysf_sim=SimpleNamespace(peds=SimpleNamespace(groups=[[0]])),
         pysf_state=SimpleNamespace(pysf_states=lambda: ped_state),
         ped_headings=np.zeros(1),
         ped_angular_velocities=np.zeros(1),
@@ -180,8 +181,43 @@ def test_snapshot_restores_groups_behavior_rng_and_residual_state() -> None:
     assert groups.groups == {0: {0}}
     assert groups.group_by_ped_id == {0: 0}
     assert groups._groups_as_lists_cache is None
+    assert sim.pysf_sim.peds.groups == [[0]]
     assert behavior_rng.random() == expected_rng_draw
     assert sim._residual_adversary.counter == 1
+
+
+def test_restore_resynchronizes_backend_groups_and_branch_outcomes() -> None:
+    """Restoring mutated membership reproduces forces and outcomes on every branch."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    snapshot = model.snapshot()
+    expected_groups = [list(group) for group in sim.groups.groups_as_lists]
+
+    def run_branch() -> tuple[np.ndarray, np.ndarray, bool]:
+        model.restore(snapshot)
+        forces = np.asarray(sim.pysf_sim.compute_forces()).copy()
+        model.step((float(_FIXTURE_SPEED), 0.0))
+        return forces, sim.pysf_state.pysf_states().copy(), model.collision()
+
+    expected_forces, expected_state, expected_collision = run_branch()
+
+    # Mirror the state transition that normally updates the backend after a
+    # behavior step, leaving the public and backend groupings on a branch.
+    sim.groups.add_to_group(0, 1)
+    sim.pysf_sim.peds.groups = sim.groups.groups_as_lists
+    assert sim.groups.groups_as_lists[:2] == [[1], [0, 2]]
+    assert sim.pysf_sim.peds.groups[:2] == [[1], [0, 2]]
+
+    first_forces, first_state, first_collision = run_branch()
+    second_forces, second_state, second_collision = run_branch()
+
+    assert sim.groups.groups_as_lists == expected_groups
+    assert sim.pysf_sim.peds.groups == expected_groups
+    np.testing.assert_array_equal(first_forces, expected_forces)
+    np.testing.assert_array_equal(second_forces, expected_forces)
+    np.testing.assert_array_equal(first_state, expected_state)
+    np.testing.assert_array_equal(second_state, expected_state)
+    assert (first_collision, second_collision) == (expected_collision, expected_collision)
 
 
 def test_rng_capture_seam_prevents_divergence() -> None:

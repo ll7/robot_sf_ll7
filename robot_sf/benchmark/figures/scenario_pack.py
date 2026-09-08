@@ -25,6 +25,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.figures.profile import FigureProfile
+
 SCHEMA = "scenario-figure-pack.v1"
 EVIDENCE_STATUS = "diagnostic-only"
 BOUNDARY = (
@@ -393,9 +395,27 @@ def _series_status(view: str, values: list[float]) -> dict[str, Any]:
 
 
 def render_view(
-    prepared: dict[str, Any], view: str, config: PackConfig
+    prepared: dict[str, Any],
+    view: str,
+    config: PackConfig,
+    *,
+    profile: FigureProfile | None = None,
 ) -> tuple[Any, dict[str, Any]]:
-    """Build a single-axis view; use absolute times and keep telemetry gaps visible."""
+    """Build one view under its complete final-size rendering profile."""
+    import matplotlib
+
+    selected_profile = profile or FigureProfile.builtin(config.size)
+    with matplotlib.rc_context(selected_profile.rc_params()):
+        return _render_view(prepared, view, config, selected_profile)
+
+
+def _render_view(
+    prepared: dict[str, Any],
+    view: str,
+    config: PackConfig,
+    profile: FigureProfile,
+) -> tuple[Any, dict[str, Any]]:
+    """Compose one profiled single-axis view while preserving telemetry gaps."""
     import numpy as np
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
@@ -403,19 +423,28 @@ def render_view(
 
     if view not in VIEWS:
         raise ValueError("unknown view")
-    width = 7.0 if config.size == "double" else 3.4
-    fig = Figure(figsize=(width, 5.6 if width > 4 else 6.2), layout="constrained")
+    width, height = profile.figure_size()
+    fig = Figure(figsize=(width, height), layout="constrained")
     FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
     case, trace = prepared["case"], prepared["trace"]
-    status: dict[str, Any] = {"view": view, "status": "available"}
+    status: dict[str, Any] = {
+        "view": view,
+        "status": "available",
+        "figure_profile_id": profile.profile_id,
+        "figure_profile_sha256": profile.sha256(),
+        "figure_size_in": [width, height],
+    }
     mode_label = (
         "DIAGNOSTIC ONLY - not author admitted"
         if config.mode == "diagnostic"
         else "Author-admitted recorded case"
     )
-    title = f"{view.replace('_', ' ').title()}\n{_case_title(case, width=76 if width > 4 else 35)}\n{mode_label}"
-    ax.set_title(title, fontsize=10, pad=12)
+    title = (
+        f"{view.replace('_', ' ').title()}\n"
+        f"{_case_title(case, width=76 if width > 4 else 35)}\n{mode_label}"
+    )
+    ax.set_title(title, fontsize=profile.axes_title_size_pt, pad=12)
     if view in {"trajectory", "snapshot"}:
         owner = _owner()
         geometry = owner._resolve_map_geometry([case])
@@ -462,7 +491,9 @@ def render_view(
                 {
                     "status": "partly_unavailable",
                     "missing_actor_ids": missing_actor_ids,
-                    "missing_reason": "expected pedestrian identity is absent at the selected frame",
+                    "missing_reason": (
+                        "expected pedestrian identity is absent at the selected frame"
+                    ),
                 }
             )
         for actor_index, actor in enumerate([step["robot"], *step["pedestrians"]]):
@@ -513,17 +544,24 @@ def render_view(
             }
         )
         ax.legend(
-            loc="upper left", bbox_to_anchor=(0, -0.25), ncol=2 if width > 4 else 1, fontsize=8
+            loc="upper left",
+            bbox_to_anchor=(0, -0.25),
+            ncol=2 if width > 4 else 1,
+            fontsize=profile.legend_size_pt,
         )
     else:
-        labels = {
-            "clearance": "Minimum robot-pedestrian surface clearance [m]",
-            "speed": "Recorded applied speed [m/s]",
-            "turn": "Recorded applied turn rate [rad/s]",
+        style = importlib.import_module("robot_sf.benchmark.figures.style")
+        metric_keys = {
+            "clearance": "surface_clearance",
+            "speed": "applied_linear_speed",
+            "turn": "applied_turn_rate",
         }
         values = prepared["series"][view]
         status.update(_series_status(view, values))
-        ax.set(xlabel="Absolute recorded time [s]", ylabel=labels[view])
+        ax.set(
+            xlabel=style.metric_label("recorded_time"),
+            ylabel=style.metric_label(metric_keys[view]),
+        )
         if any(math.isfinite(v) for v in values):
             ax.plot(
                 prepared["times"], values, linewidth=1.6, marker="." if len(values) < 15 else None
@@ -553,7 +591,10 @@ def render_view(
             )
         if view == "clearance":
             notes += "\nDisc-surface separation is not a recomputed benchmark collision label."
-    fig.supxlabel(textwrap.fill(notes, width=100 if width > 4 else 48), fontsize=8)
+    fig.supxlabel(
+        textwrap.fill(notes, width=100 if width > 4 else 48),
+        fontsize=profile.annotation_size_pt,
+    )
     status["caption"] = f"{view.title()}: {_case_title(case)}. {notes} {BOUNDARY}"
     return fig, status
 
@@ -564,6 +605,7 @@ def build_pack(
     *,
     config: PackConfig = PackConfig(),
     case_ids: tuple[str, ...] = (),
+    profile: FigureProfile | None = None,
 ) -> dict[str, Any]:
     """Export a transactional, bounded pack without changing source or existing output.
 
@@ -576,7 +618,9 @@ def build_pack(
     source_root, target = package.resolve(), output.resolve()
     if target == source_root or source_root in target.parents or target in source_root.parents:
         raise ValueError("source and output directories must not overlap")
+    profile = profile or FigureProfile.builtin(config.size)
     config_json = _json({"schema_version": SCHEMA, **asdict(config)})
+    profile_json = profile.canonical_json()
     before = _inventory(package)
     _verify_source(package, config.mode)
     proposal = _object(package / "proposal.json")
@@ -608,12 +652,14 @@ def build_pack(
         style = importlib.import_module("robot_sf.benchmark.figures.style")
         exporter = importlib.import_module("robot_sf.benchmark.figures.export")
         provenance = importlib.import_module("robot_sf.benchmark.figures.provenance")
+        profile_module = importlib.import_module("robot_sf.benchmark.figures.profile")
         import matplotlib
 
         producer_files = {
             module.__name__: _sha(Path(inspect.getfile(module)))
-            for module in (_owner(), style, exporter, provenance)
+            for module in (_owner(), style, exporter, provenance, profile_module)
         }
+        width, height = profile.figure_size()
         receipt: dict[str, Any] = {
             "schema_version": SCHEMA,
             "mode": config.mode,
@@ -623,6 +669,16 @@ def build_pack(
             "source_proposal_sha256": before["proposal.json"],
             "source_inventory_sha256": hashlib.sha256(_json(before).encode()).hexdigest(),
             "config_sha256": hashlib.sha256(config_json.encode()).hexdigest(),
+            "figure_profile": {
+                "schema_version": profile.payload()["schema_version"],
+                "profile_id": profile.profile_id,
+                "sha256": profile.sha256(),
+                "language": profile.language,
+                "target_width_in": width,
+                "target_height_in": height,
+                "requested_font_family": list(profile.font_family),
+                "resolved_font_family": None,
+            },
             "recorded_world_points": point_count,
             "producer_sha256": _sha(Path(__file__)),
             "producer_dependencies": producer_files,
@@ -630,6 +686,7 @@ def build_pack(
             "reproduce": {
                 "module": "robot_sf.benchmark.figures.scenario_pack",
                 "config": "config.json",
+                "figure_profile": "figure_profile.json",
                 "case_ids": list(case_ids),
                 "source": "restore the exact source_inventory_sha256 package separately",
                 "output": "choose a new, non-existing directory",
@@ -645,16 +702,19 @@ def build_pack(
             "artifacts": [],
         }
         (stage / "config.json").write_text(config_json, encoding="utf-8")
+        (stage / "figure_profile.json").write_text(profile_json, encoding="utf-8")
         with (
             style.publication_style(size=config.size),
             matplotlib.rc_context(
                 {
+                    **profile.rc_params(),
                     "text.usetex": False,
                     "text.parse_math": False,
                     "svg.hashsalt": receipt["config_sha256"],
                 }
             ),
         ):
+            receipt["figure_profile"]["resolved_font_family"] = profile.resolve_font_family()
             for item in prepared:
                 case = item["case"]
                 # Identifiers never become paths or executable TeX.
@@ -671,7 +731,7 @@ def build_pack(
                 }
                 case_record["views"] = []
                 for view in config.views:
-                    figure, view_info = render_view(item, view, config)
+                    figure, view_info = render_view(item, view, config, profile=profile)
                     view_info["stem"] = f"{stem}/{view}"
                     prov = {
                         "source_artifacts": [
@@ -681,6 +741,9 @@ def build_pack(
                         "seeds": [case["seed"]] if type(case.get("seed")) is int else [],
                         "generator_command": "python -m robot_sf.benchmark.figures.scenario_pack",
                         "figure_formats": list(config.formats),
+                        "figure_profile_id": profile.profile_id,
+                        "figure_profile_sha256": profile.sha256(),
+                        "resolved_font_family": receipt["figure_profile"]["resolved_font_family"],
                         "claim_boundary": BOUNDARY,
                         "evidence_status": EVIDENCE_STATUS,
                         "source_admission_status": receipt["source_admission_status"],
@@ -716,6 +779,7 @@ def build_pack(
             "",
             f"Evidence status: **{EVIDENCE_STATUS}**",
             f"Source admission status: **{receipt['source_admission_status']}**",
+            f"Figure profile: **{profile.profile_id}** (`{profile.sha256()}`)",
             "",
             BOUNDARY,
             "",
@@ -771,6 +835,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--figure-profile", type=Path)
     parser.add_argument("--case-id", action="append", default=[])
     args = parser.parse_args(argv)
     try:
@@ -779,6 +844,7 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             config=PackConfig.from_file(args.config),
             case_ids=tuple(args.case_id),
+            profile=(FigureProfile.from_file(args.figure_profile) if args.figure_profile else None),
         )
     except (ValueError, OSError, ImportError) as exc:
         parser.exit(2, f"scenario figure pack: {exc}\n")

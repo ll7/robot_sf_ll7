@@ -59,6 +59,26 @@ def test_parse_tracker_manifest_rejects_malformed_earlier_jsonl_shape(tmp_path: 
         parse_tracker_manifest(manifest_path)
 
 
+def test_report_loader_rejects_oversized_json_integer(tmp_path: Path, monkeypatch) -> None:
+    """Oversized JSON integers fail through the report loader boundary."""
+    from robot_sf.research.metadata import load_tracker_manifest_payload
+    from scripts.research.generate_report import load_tracker_manifest
+
+    manifest_dir = tmp_path / "output" / "run-tracker" / "run-1"
+    manifest_dir.mkdir(parents=True)
+    oversized_integer = "9" * 5000
+    manifest_path = manifest_dir / "manifest.json"
+    manifest_path.write_text(f'{{"seed": {oversized_integer}}}', encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="Failed to parse tracker manifest"):
+        load_tracker_manifest_payload(manifest_path)
+
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as exc_info:
+        load_tracker_manifest("run-1")
+    assert exc_info.value.code == 1
+
+
 def test_parse_tracker_manifest_preserves_valid_summary_and_seeds(tmp_path: Path) -> None:
     """Valid mapping-shaped manifests retain their existing normalized output."""
     manifest_path = tmp_path / "tracker.json"

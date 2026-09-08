@@ -309,7 +309,7 @@ def load_tracker_manifest_payload(manifest_path: str | Path) -> dict[str, Any]:
             )
         else:
             payload = json.loads(text)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, ValueError) as exc:
         msg = f"Failed to parse tracker manifest at {path}"
         logger.warning(msg, error=str(exc))
         raise ValidationError(msg) from exc

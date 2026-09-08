@@ -466,6 +466,9 @@ _FAST_FILES = {
     # Imitation-report provenance validation is a deterministic materialization
     # contract; keep its changed-line coverage in fast shards as well.
     "test_imitation_report.py",
+    # Lane-formation parameter-screen validation is a deterministic metric
+    # admission contract; keep its changed-line coverage in fast shards as well.
+    "test_lane_formation_parameter_screen.py",
     # Goal-belief contract tests are deterministic schema/lineage coverage for
     # the changed actor-observation producer; keep them in fast PR shards
     # (issue #8063).

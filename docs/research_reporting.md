@@ -26,6 +26,11 @@ sample counts are the effective finite counts, and analyses with too few finite 
 incomplete result rather than emitting non-finite research evidence. This is filtering, not
 imputation; the source run should still be investigated when invalid values occur.
 
+Native lane-formation parameter-screen rows use the same boundary: both primary and sampled lane
+metrics must be finite numeric values before a Stage A diagnostic summary is materialized. Missing,
+malformed, or non-finite metric payloads fail closed; they are not converted into placeholder
+values or counted as successful evidence.
+
 ### High-Level Flow
 
 ```mermaid

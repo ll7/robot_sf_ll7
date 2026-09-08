@@ -34,6 +34,7 @@ from robot_sf.benchmark.simulator_counterfactual_adapter import _SimulatorSnapsh
 SNAPSHOT_SCHEMA = "simulator_typed_snapshot.v1"
 SNAPSHOT_BOUNDARY = "pre_step"
 _DIGEST_FIELDS = ("map_sha256", "config_sha256", "code_revision")
+_MISSING = object()
 
 
 class SnapshotContractError(ValueError):
@@ -500,10 +501,249 @@ def _deserialize_global_rng(state: Any) -> tuple[Any, ...] | None:
     )
 
 
+def _group_integer(value: Any, path: str, error_type: type[SnapshotContractError]) -> int:
+    """Return one pedestrian/group identifier with an explicit integer contract."""
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+        raise error_type(f"{path} must be an integer")
+    return int(value)
+
+
+def _serialize_group_memberships(value: Any, name: str) -> list[list[Any]] | None:
+    """Serialize group membership without losing integer mapping keys in JSON.
+
+    Returns:
+        Sorted ``[group_id, pedestrian_ids]`` entries, or ``None``.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise SnapshotContractError(f"{name} must be a mapping or null")
+    entries: list[list[Any]] = []
+    seen_group_ids: set[int] = set()
+    for raw_group_id, raw_pedestrians in value.items():
+        group_id = _group_integer(raw_group_id, f"{name}.group_id", SnapshotContractError)
+        if group_id in seen_group_ids:
+            raise SnapshotContractError(f"{name} contains duplicate group id {group_id}")
+        seen_group_ids.add(group_id)
+        if not isinstance(raw_pedestrians, (set, frozenset, list, tuple)):
+            raise SnapshotContractError(f"{name}[{group_id}] must be a pedestrian-id sequence")
+        pedestrian_ids = [
+            _group_integer(pedestrian_id, f"{name}[{group_id}][]", SnapshotContractError)
+            for pedestrian_id in raw_pedestrians
+        ]
+        if len(set(pedestrian_ids)) != len(pedestrian_ids):
+            raise SnapshotContractError(f"{name}[{group_id}] contains duplicate pedestrian ids")
+        entries.append([group_id, sorted(pedestrian_ids)])
+    return sorted(entries, key=lambda entry: int(entry[0]))
+
+
+def _serialize_group_reverse_lookup(value: Any, name: str) -> list[list[int]] | None:
+    """Serialize the pedestrian-to-group lookup with integer keys and values preserved.
+
+    Returns:
+        Sorted ``[pedestrian_id, group_id]`` entries, or ``None``.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise SnapshotContractError(f"{name} must be a mapping or null")
+    entries: list[list[int]] = []
+    seen_pedestrian_ids: set[int] = set()
+    for raw_pedestrian_id, raw_group_id in value.items():
+        pedestrian_id = _group_integer(
+            raw_pedestrian_id, f"{name}.pedestrian_id", SnapshotContractError
+        )
+        if pedestrian_id in seen_pedestrian_ids:
+            raise SnapshotContractError(f"{name} contains duplicate pedestrian id {pedestrian_id}")
+        seen_pedestrian_ids.add(pedestrian_id)
+        group_id = _group_integer(raw_group_id, f"{name}[{pedestrian_id}]", SnapshotContractError)
+        entries.append([pedestrian_id, group_id])
+    return sorted(entries, key=lambda entry: int(entry[0]))
+
+
+def _deserialize_group_memberships(value: Any, name: str) -> dict[int, set[int]] | None:
+    """Decode the JSON-safe group membership sequence into native set-valued mappings.
+
+    Returns:
+        A native set-valued mapping, or ``None``.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise SnapshotPayloadError(f"{name} must be a list or null")
+    memberships: dict[int, set[int]] = {}
+    for index, entry in enumerate(value):
+        path = f"{name}[{index}]"
+        if not isinstance(entry, list) or len(entry) != 2:
+            raise SnapshotPayloadError(f"{path} must contain [group_id, pedestrian_ids]")
+        group_id = _group_integer(entry[0], f"{path}[0]", SnapshotPayloadError)
+        if group_id in memberships:
+            raise SnapshotPayloadError(f"{name} contains duplicate group id {group_id}")
+        raw_pedestrian_ids = entry[1]
+        if not isinstance(raw_pedestrian_ids, list):
+            raise SnapshotPayloadError(f"{path}[1] must be a list")
+        pedestrian_ids = {
+            _group_integer(pedestrian_id, f"{path}[1][]", SnapshotPayloadError)
+            for pedestrian_id in raw_pedestrian_ids
+        }
+        if len(pedestrian_ids) != len(raw_pedestrian_ids):
+            raise SnapshotPayloadError(f"{path}[1] contains duplicate pedestrian ids")
+        memberships[group_id] = pedestrian_ids
+    return memberships
+
+
+def _deserialize_group_reverse_lookup(value: Any, name: str) -> dict[int, int] | None:
+    """Decode the JSON-safe reverse lookup into a native integer mapping.
+
+    Returns:
+        A native pedestrian-to-group mapping, or ``None``.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise SnapshotPayloadError(f"{name} must be a list or null")
+    reverse_lookup: dict[int, int] = {}
+    for index, entry in enumerate(value):
+        path = f"{name}[{index}]"
+        if not isinstance(entry, list) or len(entry) != 2:
+            raise SnapshotPayloadError(f"{path} must contain [pedestrian_id, group_id]")
+        pedestrian_id = _group_integer(entry[0], f"{path}[0]", SnapshotPayloadError)
+        if pedestrian_id in reverse_lookup:
+            raise SnapshotPayloadError(f"{name} contains duplicate pedestrian id {pedestrian_id}")
+        reverse_lookup[pedestrian_id] = _group_integer(entry[1], f"{path}[1]", SnapshotPayloadError)
+    return reverse_lookup
+
+
+def _validate_group_memberships(
+    memberships: dict[int, set[int]], reverse_lookup: dict[int, int], ped_count: int
+) -> None:
+    """Validate membership IDs and agreement with the reverse lookup."""
+    seen_pedestrians: set[int] = set()
+    for group_id, pedestrian_ids in memberships.items():
+        for pedestrian_id in pedestrian_ids:
+            if not 0 <= pedestrian_id < ped_count:
+                raise SnapshotCompatibilityError(
+                    f"pedestrian group id {pedestrian_id} is outside destination actor count"
+                )
+            if pedestrian_id in seen_pedestrians:
+                raise SnapshotPayloadError(
+                    f"pedestrian {pedestrian_id} appears in multiple pedestrian groups"
+                )
+            seen_pedestrians.add(pedestrian_id)
+            if reverse_lookup.get(pedestrian_id) != group_id:
+                raise SnapshotPayloadError(
+                    f"pedestrian group reverse lookup disagrees for pedestrian {pedestrian_id}"
+                )
+
+
+def _validate_group_reverse_lookup(
+    memberships: dict[int, set[int]], reverse_lookup: dict[int, int], ped_count: int
+) -> None:
+    """Validate that every reverse lookup entry has a matching forward membership."""
+    for pedestrian_id, group_id in reverse_lookup.items():
+        if not 0 <= pedestrian_id < ped_count:
+            raise SnapshotCompatibilityError(
+                f"reverse lookup pedestrian id {pedestrian_id} is outside destination actor count"
+            )
+        if group_id not in memberships or pedestrian_id not in memberships[group_id]:
+            raise SnapshotPayloadError(
+                f"reverse lookup points to missing membership for pedestrian {pedestrian_id}"
+            )
+
+
+def _validate_group_state(
+    memberships: dict[int, set[int]] | None,
+    reverse_lookup: dict[int, int] | None,
+    ped_count: int,
+    destination_groups: Any,
+) -> None:
+    """Validate group completeness and destination compatibility before restore."""
+    if (memberships is None) != (reverse_lookup is None):
+        raise SnapshotPayloadError("pedestrian group membership and reverse lookup must agree")
+    if memberships is None:
+        if destination_groups is not None:
+            raise SnapshotCompatibilityError("snapshot omits group state for grouped destination")
+        return
+    if destination_groups is None:
+        raise SnapshotCompatibilityError("destination does not expose pedestrian group state")
+    assert reverse_lookup is not None
+    _validate_group_memberships(memberships, reverse_lookup, ped_count)
+    _validate_group_reverse_lookup(memberships, reverse_lookup, ped_count)
+
+
+def _restore_group_payload(
+    state: Mapping[str, Any], sim: Any, ped_count: int
+) -> tuple[dict[int, set[int]] | None, dict[int, int] | None]:
+    """Decode and validate group state before constructing a runtime snapshot.
+
+    Returns:
+        Native forward and reverse group mappings, or matching ``None`` values.
+    """
+    raw_memberships = state.get("pedestrian_groups", _MISSING)
+    raw_reverse_lookup = state.get("pedestrian_group_by_ped", _MISSING)
+    if raw_memberships is _MISSING or raw_reverse_lookup is _MISSING:
+        raise SnapshotPayloadError("snapshot pedestrian group state is incomplete")
+    memberships = _deserialize_group_memberships(raw_memberships, "pedestrian_groups")
+    reverse_lookup = _deserialize_group_reverse_lookup(
+        raw_reverse_lookup, "pedestrian_group_by_ped"
+    )
+    _validate_group_state(memberships, reverse_lookup, ped_count, getattr(sim, "groups", None))
+    return memberships, reverse_lookup
+
+
+def _destination_pedestrian_arrays(sim: Any) -> dict[str, np.ndarray]:
+    """Read the destination pedestrian arrays required by the typed adapter.
+
+    Returns:
+        Destination-owned arrays keyed by their typed snapshot field names.
+    """
+    try:
+        return {
+            "pysf_state": np.asarray(sim.pysf_state.pysf_states()),
+            "ped_headings": np.asarray(sim.ped_headings),
+            "ped_angular_velocities": np.asarray(sim.ped_angular_velocities),
+        }
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise SnapshotCompatibilityError(
+            "destination does not expose the required pedestrian state arrays"
+        ) from exc
+
+
+def _validate_pedestrian_array_shapes(
+    arrays: Mapping[str, np.ndarray], destination_arrays: Mapping[str, np.ndarray]
+) -> None:
+    """Reject any typed pedestrian array whose shape differs from the destination."""
+    for name, destination in destination_arrays.items():
+        snapshot_shape = tuple(arrays[name].shape)
+        destination_shape = tuple(destination.shape)
+        if snapshot_shape != destination_shape:
+            raise SnapshotCompatibilityError(
+                f"{name} shape mismatch: snapshot={snapshot_shape}, destination={destination_shape}"
+            )
+
+
+def _validate_max_speed_shape(arrays: Mapping[str, np.ndarray], sim: Any) -> None:
+    """Reject speed-cap shape drift, including destinations without speed caps."""
+    destination_peds = getattr(getattr(sim, "pysf_sim", None), "peds", None)
+    destination_max_speeds = getattr(destination_peds, "max_speeds", None)
+    if destination_max_speeds is None:
+        if tuple(arrays["ped_max_speeds"].shape) != (0,):
+            raise SnapshotCompatibilityError(
+                "ped_max_speeds shape mismatch: destination has no speed-cap array"
+            )
+        return
+    destination_shape = tuple(np.asarray(destination_max_speeds).shape)
+    if tuple(arrays["ped_max_speeds"].shape) != destination_shape:
+        raise SnapshotCompatibilityError(
+            f"ped_max_speeds shape mismatch: snapshot={arrays['ped_max_speeds'].shape}, "
+            f"destination={destination_shape}"
+        )
+
+
 def _validate_destination_shape(
     state: Mapping[str, Any], arrays: Mapping[str, np.ndarray], sim: Any
 ) -> None:
-    """Validate required arrays and stable actor order before restoration."""
+    """Validate destination array shapes and stable actor order before restoration."""
     required_arrays = {
         "pysf_state",
         "ped_headings",
@@ -513,6 +753,9 @@ def _validate_destination_shape(
     missing_arrays = sorted(required_arrays - set(arrays))
     if missing_arrays:
         raise SnapshotPayloadError(f"snapshot numeric payload is missing arrays: {missing_arrays}")
+    destination_arrays = _destination_pedestrian_arrays(sim)
+    _validate_pedestrian_array_shapes(arrays, destination_arrays)
+    _validate_max_speed_shape(arrays, sim)
     actor_order = state.get("actor_order")
     if not isinstance(actor_order, Mapping):
         raise SnapshotPayloadError("snapshot actor order is missing")
@@ -522,7 +765,9 @@ def _validate_destination_shape(
         raise SnapshotPayloadError("snapshot actor order must contain robot/pedestrian lists")
     if robot_order != [f"robot:{index}" for index in range(len(sim.robots))]:
         raise SnapshotCompatibilityError("snapshot robot actor identity/order does not match")
-    expected_ped_order = [f"ped:{index}" for index in range(int(arrays["ped_headings"].shape[0]))]
+    expected_ped_order = [
+        f"ped:{index}" for index in range(int(destination_arrays["ped_headings"].shape[0]))
+    ]
     if ped_order != expected_ped_order:
         raise SnapshotCompatibilityError("snapshot pedestrian actor identity/order does not match")
 
@@ -636,6 +881,12 @@ class TypedSimulatorSnapshot:
             ],
             "single_runtimes": deepcopy(snapshot.single_runtimes),
             "route_navigators": deepcopy(snapshot.route_navigators),
+            "pedestrian_groups": _serialize_group_memberships(
+                snapshot.pedestrian_groups, "pedestrian_groups"
+            ),
+            "pedestrian_group_by_ped": _serialize_group_reverse_lookup(
+                snapshot.pedestrian_group_by_ped, "pedestrian_group_by_ped"
+            ),
             "global_rng": _serialize_global_rng(snapshot.global_rng_state),
             "python_random_state": deepcopy(snapshot.python_random_state),
             "behavior_rng_states": deepcopy(snapshot.behavior_rng_states),
@@ -711,6 +962,9 @@ class TypedSimulatorSnapshot:
         state = self.state
         _validate_destination_shape(state, self.arrays, sim)
         robot_poses, robot_states, robot_navigators = _restore_robot_payload(state, sim)
+        pedestrian_groups, pedestrian_group_by_ped = _restore_group_payload(
+            state, sim, int(self.arrays["pysf_state"].shape[0])
+        )
         return _SimulatorSnapshot(
             step_index=self.boundary.step_index,
             pysf_state=self.arrays["pysf_state"].copy(),
@@ -721,6 +975,8 @@ class TypedSimulatorSnapshot:
             robot_navigators=robot_navigators,
             single_runtimes=deepcopy(state.get("single_runtimes")),
             route_navigators=deepcopy(state.get("route_navigators", {})),
+            pedestrian_groups=pedestrian_groups,
+            pedestrian_group_by_ped=pedestrian_group_by_ped,
             global_rng_state=_deserialize_global_rng(_resolve_global_rng(state, self.arrays)),
             peds_have_obstacle_forces=bool(state.get("peds_have_obstacle_forces")),
             ped_max_speeds=self.arrays.get("ped_max_speeds", np.empty((0,), dtype=float)).copy(),
@@ -756,7 +1012,26 @@ def restore_typed_snapshot(
     """Validate compatibility, then restore the destination model atomically."""
     snapshot.compatibility.assert_compatible(expected)
     runtime_snapshot = snapshot.to_adapter_snapshot(model)
-    model.restore(runtime_snapshot)
+    snapshot_method = getattr(model, "snapshot", None)
+    restore_method = getattr(model, "restore", None)
+    if not callable(snapshot_method) or not callable(restore_method):
+        raise SnapshotCompatibilityError(
+            "destination model must expose callable snapshot and restore methods"
+        )
+    before = snapshot_method()
+    try:
+        restore_method(runtime_snapshot)
+    except Exception as exc:
+        try:
+            restore_method(before)
+        except Exception as rollback_exc:
+            raise SnapshotContractError(
+                "typed snapshot restore failed and destination rollback failed; "
+                "destination state may be partial"
+            ) from rollback_exc
+        raise SnapshotContractError(
+            "typed snapshot restore failed; destination state was rolled back"
+        ) from exc
 
 
 def _sha256_file(path: Path) -> str:
@@ -1121,6 +1396,30 @@ STATE_INVENTORY: tuple[StateInventoryEntry, ...] = (
         "NPZ numeric array",
         "adapter restore",
         "test_snapshot_restore_reproduces_baseline_deterministically",
+        "supported",
+    ),
+    StateInventoryEntry(
+        "pedestrian_groups",
+        "Simulator.groups",
+        "mapping[int, set[int]]",
+        "pedestrian IDs",
+        "behavior/force update",
+        "dynamic",
+        "JSON integer-entry lists",
+        "adapter restore plus backend synchronization",
+        "test_typed_snapshot_round_trip_preserves_exact_continuation",
+        "supported",
+    ),
+    StateInventoryEntry(
+        "pedestrian_group_by_ped",
+        "Simulator.groups",
+        "mapping[int, int]",
+        "group IDs",
+        "behavior/force update",
+        "dynamic",
+        "JSON integer-entry lists",
+        "adapter restore plus backend synchronization",
+        "test_typed_snapshot_round_trip_preserves_exact_continuation",
         "supported",
     ),
     StateInventoryEntry(

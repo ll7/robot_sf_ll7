@@ -14,10 +14,14 @@ the next observation after restore using the same wrapper contract.
 
 Before a destination simulator is mutated, the snapshot checks the map, config,
 code-revision, planner, checkpoint (when present), platform, and timestep identity.
-Actor counts/order are checked as well. A mismatch raises
-`SnapshotCompatibilityError`; malformed metadata, unknown schema versions, missing
-arrays, descriptor drift, object dtypes, non-finite values, and payload digest/size
-drift raise `SnapshotPayloadError`.
+Actor counts/order and every restored numeric-array shape are checked as well.
+Pedestrian group membership and its reverse lookup are serialized as integer-entry
+lists so JSON object-key coercion cannot change force-relevant group state. A
+mismatch raises `SnapshotCompatibilityError`; malformed metadata, unknown schema
+versions, missing arrays, descriptor drift, object dtypes, non-finite values, and
+payload digest/size drift raise `SnapshotPayloadError`. If the live adapter fails
+after beginning a restore, the previous adapter snapshot is restored before the
+failure is reported.
 
 The durable pair is a JSON metadata file and a compressed `.npz` numeric payload.
 Loading uses `allow_pickle=False`. JSON values carry typed tuple and array references;
@@ -30,6 +34,8 @@ process-local object IDs.
 The first native subset is one-robot `SimulatorCounterfactualModel` state:
 
 - PySocialForce state, headings, angular velocities, and pedestrian speed caps;
+- pedestrian group membership and pedestrian-to-group reverse lookup, including
+  synchronization of the backend force model;
 - robot pose, differential-drive velocity, wheel integration fields, and route
   progress;
 - single-pedestrian runtime fields and route-group waypoint state;

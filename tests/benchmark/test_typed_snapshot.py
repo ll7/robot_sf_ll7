@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
@@ -108,6 +109,8 @@ def test_typed_snapshot_round_trip_preserves_exact_continuation(tmp_path: Path) 
     model = _build_model()
     compatibility = _compatibility(model)
     typed = capture_typed_snapshot(model, compatibility)
+    expected_groups = deepcopy(model.sim.groups.groups)
+    expected_group_by_ped = deepcopy(model.sim.groups.group_by_ped_id)
     route_behavior = next(
         behavior for behavior in model.sim.peds_behaviors if hasattr(behavior, "navigators")
     )
@@ -123,8 +126,15 @@ def test_typed_snapshot_round_trip_preserves_exact_continuation(tmp_path: Path) 
     baseline = _rollout(model, 4)
     model.sim.robot_navs[0].waypoint_id = len(model.sim.robot_navs[0].waypoints) - 1
     route_behavior.navigators[0].waypoint_id = 0
+    model.sim.groups.groups = {}
+    model.sim.groups.group_by_ped_id = {}
+    model.sim.groups._invalidate_groups_as_lists_cache()
+    model.sim.pysf_sim.peds.groups = []
     restore_typed_snapshot(model, loaded, compatibility)
     assert route_behavior.navigators[0].waypoint_id == original_route_id
+    assert model.sim.groups.groups == expected_groups
+    assert model.sim.groups.group_by_ped_id == expected_group_by_ped
+    assert model.sim.pysf_sim.peds.groups == model.sim.groups.groups_as_lists
     replay = _rollout(model, 4)
 
     for expected, actual in zip(baseline, replay, strict=True):
@@ -148,6 +158,70 @@ def test_incompatible_snapshot_is_rejected_before_destination_mutation() -> None
     with pytest.raises(SnapshotCompatibilityError):
         restore_typed_snapshot(model, typed, destination)
     assert model.sim.robots[0].pose == before
+
+
+@pytest.mark.parametrize(
+    "array_name",
+    ("pysf_state", "ped_headings", "ped_angular_velocities", "ped_max_speeds"),
+)
+def test_array_shape_drift_is_rejected_before_destination_mutation(array_name: str) -> None:
+    """Every restored numeric array must match the live destination before mutation."""
+    model = _build_model()
+    compatibility = _compatibility(model)
+    typed = capture_typed_snapshot(model, compatibility)
+    source = typed.arrays[array_name]
+    wrong_shape = (
+        (*source.shape[:-1], source.shape[-1] + 1) if source.ndim > 1 else (source.size + 1,)
+    )
+    arrays = dict(typed.arrays)
+    arrays[array_name] = np.zeros(wrong_shape, dtype=source.dtype)
+    malformed = TypedSimulatorSnapshot(
+        compatibility=typed.compatibility,
+        boundary=typed.boundary,
+        state=typed.state,
+        arrays=arrays,
+    )
+    before_step = model._step_index
+    before_state = model.sim.pysf_state.pysf_states().copy()
+    with pytest.raises(SnapshotCompatibilityError, match=f"{array_name} shape mismatch"):
+        restore_typed_snapshot(model, malformed, compatibility)
+    assert model._step_index == before_step
+    np.testing.assert_array_equal(model.sim.pysf_state.pysf_states(), before_state)
+
+
+def test_restore_failure_rolls_back_partial_adapter_mutation() -> None:
+    """A restore failure cannot leave the destination at an intermediate state."""
+    model = _build_model()
+    compatibility = _compatibility(model)
+    typed = capture_typed_snapshot(model, compatibility)
+    before = model.snapshot()
+
+    class _FailOnceModel:
+        """Delegate the adapter while injecting one post-mutation failure."""
+
+        def __init__(self, delegate: SimulatorCounterfactualModel) -> None:
+            self.delegate = delegate
+            self.sim = delegate.sim
+            self.calls = 0
+
+        def snapshot(self):
+            return self.delegate.snapshot()
+
+        def restore(self, snapshot):
+            self.calls += 1
+            if self.calls == 1:
+                self.delegate._step_index = 999
+                self.sim.pysf_state.pysf_states()[0, 0] = 123.0
+                raise RuntimeError("synthetic restore failure")
+            self.delegate.restore(snapshot)
+
+    failing_model = _FailOnceModel(model)
+    with pytest.raises(SnapshotContractError, match="destination state was rolled back"):
+        restore_typed_snapshot(failing_model, typed, compatibility)
+
+    assert failing_model.calls == 2
+    assert model._step_index == before.step_index
+    np.testing.assert_array_equal(model.sim.pysf_state.pysf_states(), before.pysf_state)
 
 
 def test_corrupt_or_unknown_snapshot_metadata_fails_closed(tmp_path: Path) -> None:

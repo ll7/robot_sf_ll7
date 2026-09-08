@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -2536,6 +2537,55 @@ def test_worktree_isolated_ruff_interruption_cleans_task_cache(tmp_path: Path, s
     assert not timed_out, "wrapper failed to bound interruption cleanup"
     assert process.returncode == 128 + signum
     assert calls and all(not Path(call["tmp"]).exists() for call in calls)
+
+
+@pytest.mark.parametrize("phase", ["during-cleanup", "return-boundary"])
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP])
+def test_worktree_isolated_ruff_signal_during_successful_cleanup_preserves_status(
+    tmp_path: Path, phase: str, signum: int
+) -> None:
+    """Inject signals at deterministic cleanup/return boundaries in the real embedded program."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    match = re.search(
+        r"exec \"\$host_python\"[^\n]*<<'PY'\n(.*?)\nPY\nfi",
+        RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8"),
+        re.DOTALL,
+    )
+    assert match is not None, "isolated runner must remain an inspectable host-Python program"
+    if phase == "during-cleanup":
+        probe = (
+            "import os, shutil, signal\n"
+            "original_rmtree = shutil.rmtree\n"
+            "def interrupt_cleanup(path):\n"
+            "    original_rmtree(path)\n"
+            f"    os.kill(os.getpid(), {signum})\n"
+            "shutil.rmtree = interrupt_cleanup\n"
+        )
+    else:
+        probe = (
+            "import os, signal, sys\n"
+            "def interrupt_return(frame, event, arg):\n"
+            "    if (event == 'return' and frame.f_code.co_name == 'run'\n"
+            "            and frame.f_code.co_filename == '<stdin>'):\n"
+            "        sys.settrace(None)\n"
+            f"        os.kill(os.getpid(), {signum})\n"
+            "    return interrupt_return\n"
+            "sys.settrace(interrupt_return)\n"
+        )
+    result = subprocess.run(
+        ["/usr/bin/python3", "-I", "-S", "-B", "-", str(worktree), "ruff", "check", "."],
+        input=probe + match.group(1),
+        cwd=worktree,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 128 + signum, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    assert len(calls) == 2
+    assert all(not Path(call["tmp"]).exists() for call in calls)
 
 
 def _run_isolated_ruff(

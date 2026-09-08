@@ -376,10 +376,14 @@ def run():
     child = None
     interrupted = 0
     task_dir = None
+    cleanup_complete = False
 
     def on_signal(signum, _frame):
         nonlocal interrupted
         interrupted = signum
+        if cleanup_complete:
+            # Keep the exit boundary signal-aware even after run() computes its return value.
+            raise SystemExit(128 + signum)
         if child is not None:
             try:
                 os.killpg(child.pid, signum)
@@ -455,6 +459,10 @@ def run():
             child.wait()
         if task_dir is not None:
             shutil.rmtree(task_dir)
+        cleanup_complete = True
+        if interrupted:
+            # A signal during successful cleanup must override an already evaluated Ruff status.
+            raise SystemExit(128 + interrupted)
 
 
 try:

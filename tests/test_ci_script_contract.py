@@ -2359,6 +2359,238 @@ def _make_pinned_tool_fixture_repo(
     return repo, venv, env
 
 
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("multiline", [False, True])
+@pytest.mark.parametrize("standalone", [False, True])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("resolved", ["0.16.4", "0.16.5"])
+def test_worktree_shared_venv_pin_layout_equivalence(
+    tmp_path: Path, quote: str, multiline: bool, standalone: bool, nested: bool, resolved: str
+) -> None:
+    """Valid TOML layout cannot bypass stale-tool refusal or reject a matching tool."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version=resolved)
+    entry = f"{quote}ruff==0.16.5{quote}"
+    array = f"[\n    {entry}, # exact development pin\n]" if multiline else f"[{entry}]"
+    manifest = repo / "pyproject.toml"
+    manifest.write_text(f"[dependency-groups]\ndev = {array}\n", encoding="utf-8")
+    before = {path: path.read_bytes() for path in venv.rglob("*") if path.is_file()}
+    manifest_before = manifest.read_bytes()
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            *(["--standalone"] if standalone else []),
+            "--",
+            *(["uv", "run"] if nested else []),
+            "ruff",
+            "check",
+            "path with spaces.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    if resolved == "0.16.4":
+        assert result.returncode == 2, result.stderr
+        assert "uv-reached" not in result.stderr
+        assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+    else:
+        assert result.returncode == 7, result.stderr
+        assert "uv-reached" in result.stderr
+        assert "preflight passed: tool=ruff resolved=0.16.5 pin==0.16.5" in result.stderr
+    assert manifest.read_bytes() == manifest_before
+    assert {path: path.read_bytes() for path in venv.rglob("*") if path.is_file()} == before
+
+
+@pytest.mark.parametrize(
+    ("manifest", "disposition"),
+    [
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff==0.16.4"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff==0.16.5"]', "passed"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff>=0.16"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff==0.16.*"]', "error"),
+        (
+            '[dependency-groups]\ndev = ["ruff==0.16.5", "ruff==0.16.4; os_name == \'nt\'"]',
+            "error",
+        ),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff @ https://invalid/ruff"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff[extra]==0.16.5"]', "error"),
+        ('[dependency-groups]\ndev = [{include-group = "other"}]', "error"),
+        ("[dependency-groups]\ndev = [123]", "error"),
+        ('[dependency-groups]\ndev = "ruff==0.16.5"', "error"),
+        ("dependency-groups = []", "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5"', "error"),
+        ("", "unpinned"),
+        ("[dependency-groups]\nother = ['ruff==0.16.4']", "unpinned"),
+        ("[dependency-groups]\ndev = ['ruff>=0.16']", "unpinned"),
+        ("[dependency-groups]\ndev = ['ruff==0.16.*']", "unpinned"),
+        (
+            '# "ruff==0.16.4"\n[project]\ndescription = """\n"ruff==0.16.4"\n"""\n'
+            '[dependency-groups]\ndev = ["ruff-extra==0.16.4"]\nother = ["ruff==0.16.4"]',
+            "unpinned",
+        ),
+        (
+            '[project]\ndependencies = ["ruff==0.16.4"]\n'
+            '[dependency-groups]\ndev = ["ruff==0.16.5"]\nother = ["ruff==0.16.4"]',
+            "passed",
+        ),
+    ],
+)
+def test_worktree_shared_venv_pin_manifest_policy(
+    tmp_path: Path, manifest: str, disposition: str
+) -> None:
+    """Only actual dev declarations select a pin; ambiguous or malformed input fails closed."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path)
+    (repo / "pyproject.toml").write_text(manifest, encoding="utf-8")
+    before = {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()}
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "ruff", "check", "."],
+        cwd=repo,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    if disposition == "error":
+        assert result.returncode == 2, result.stderr
+        assert "reason=pin-parser-error" in result.stderr
+        assert "reason=unpinned" not in result.stderr
+        assert "uv-reached" not in result.stderr
+    else:
+        assert result.returncode == 7, result.stderr
+        assert "uv-reached" in result.stderr
+        expected = "reason=unpinned" if disposition == "unpinned" else "pin==0.16.5"
+        assert expected in result.stderr
+    assert {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()} == before
+
+
+@pytest.mark.parametrize("failure", ["encoding", "permission"])
+def test_worktree_shared_venv_pin_manifest_read_error(tmp_path: Path, failure: str) -> None:
+    """Unreadable/undecodable manifests are parser errors, not compatibility skips."""
+    if failure == "permission" and os.geteuid() == 0:
+        pytest.skip("root bypasses the fixture's file permissions")
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path)
+    manifest = repo / "pyproject.toml"
+    if failure == "encoding":
+        manifest.write_bytes(b"\xff")
+    else:
+        manifest.chmod(0)
+    try:
+        result = subprocess.run(
+            [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "ruff", "check", "."],
+            cwd=repo,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    finally:
+        manifest.chmod(0o644)
+    assert result.returncode == 2, result.stderr
+    assert "Shared-venv pin parser failed:" in result.stderr
+    assert "reason=pin-parser-error" in result.stderr
+    assert "reason=unpinned" not in result.stderr
+    assert "uv-reached" not in result.stderr
+
+
+def test_worktree_shared_venv_pin_parser_ignores_hostile_imports(tmp_path: Path) -> None:
+    """A generic dotted tool pin is parsed by host stdlib, never checkout/site or fake venv Python."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(
+        tmp_path, tool="my.tool", pin="my.tool==1.2.3", resolved_version="1.2.3"
+    )
+    for module in ("tomllib.py", "sitecustomize.py", "usercustomize.py"):
+        (repo / module).write_text('raise RuntimeError("untrusted import executed")\n')
+    for executable in ("python", "python3"):
+        path = repo / "fake-bin" / executable
+        path.write_text("#!/bin/sh\necho untrusted-python >&2\nexit 99\n")
+        path.chmod(0o755)
+    env.update(PYTHONPATH=str(repo), PYTHONHOME=str(repo), PYTHONUSERBASE=str(repo))
+    before = {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()}
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "my.tool", "check", "."],
+        cwd=repo,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 7, result.stderr
+    assert "preflight passed: tool=my.tool resolved=1.2.3 pin==1.2.3" in result.stderr
+    assert "untrusted" not in result.stderr
+    assert {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()} == before
+
+
+@pytest.mark.parametrize("failure", ["unavailable", "runtime"])
+@pytest.mark.parametrize("command", ["ruff", "python", "./ruff", "no-manifest"])
+def test_worktree_shared_venv_pin_parser_runtime_failure_is_lazy_and_closed(
+    tmp_path: Path, failure: str, command: str
+) -> None:
+    """Inject only host availability: required parsing fails closed, existing skips stay lazy."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(
+        tmp_path, with_pyproject=command != "no-manifest"
+    )
+    checker = repo / "scripts" / "dev" / "check_fast_pysf_runtime.py"
+    checker.parent.mkdir(parents=True)
+    checker.write_text("# The fixture interpreter supplies the successful package probe.\n")
+    host = tmp_path / "host-python"
+    log = tmp_path / "host-called"
+    host.write_text(
+        f'#!/bin/sh\necho called >> "{log}"\n'
+        + ('if [ "$4" = -c ]; then exit 0; fi\n' if failure == "runtime" else "")
+        + "exit 17\n"
+    )
+    host.chmod(0o755)
+    script = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
+    prefix, default = script.split("read_default_dev_tool_pin() {", 1)
+    selector = "for candidate in /usr/bin/python3 /usr/local/bin/python3; do"
+    assert default.count(selector) == 1
+    # Immutable in-memory wrapper probe; do not change system Python or add a product override.
+    script = (
+        prefix
+        + "read_default_dev_tool_pin() {"
+        + default.replace(selector, f'for candidate in "{host}"; do', 1)
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            script,
+            "wrapper-probe",
+            "--venv",
+            str(venv),
+            "--",
+            "ruff" if command == "no-manifest" else command,
+            "check",
+            ".",
+        ],
+        cwd=repo,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    if command == "ruff":
+        assert result.returncode == 2, result.stderr
+        assert "reason=pin-parser-error" in result.stderr
+        assert "reason=unpinned" not in result.stderr
+        assert "uv-reached" not in result.stderr
+        assert log.exists()
+    else:
+        assert result.returncode == 7, result.stderr
+        assert "uv-reached" in result.stderr
+        assert not log.exists()
+
+
 def _make_isolated_ruff_worktree(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
     """Model an older owning manifest/environment and a newer real linked checkout."""
     owner, _, env = _make_pinned_tool_fixture_repo(tmp_path)

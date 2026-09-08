@@ -8,9 +8,9 @@
   "benchmark_evidence": false,
   "campaign_submission_authorized": false,
   "source_revisions": {
-    "base_commit": "9f0915112155df3f6094b98a1b372be63ad44b5b",
-    "implementation_head_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
-    "smoke_rows_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
+    "base_commit": "8efa8a8e8aa2a51e520a2781c8b4be33fefe74d7",
+    "implementation_head_commit": "4580b07eeb57e587354fb7c1530d26194c368ba4",
+    "smoke_rows_commit": "4580b07eeb57e587354fb7c1530d26194c368ba4",
     "smoke_worktree": "/home/luttkule/git/robot_sf_ll7.worktrees/issue-8567-native-counterfactual-fields-20260908",
     "head_scope": "The implementation_head_commit is the exact clean source commit recorded by every smoke row. This receipt is a subsequent documentation commit; the PR exact-head gate binds the final documentation tip separately."
   },
@@ -63,8 +63,8 @@
   "smoke": {
     "config": "configs/benchmarks/paired_effect_native_smoke_v1.yaml",
     "config_sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b",
-    "campaign_id": "paired_effect_native_smoke_v1_20260908_235317",
-    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260908_235317",
+    "campaign_id": "paired_effect_native_smoke_v1_20260909_001527",
+    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260909_001527",
     "scenario_matrix": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
     "scenario_matrix_sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
     "scenario_matrix_internal_hash": "fbed5c9e0876",
@@ -81,14 +81,14 @@
     "fallback_or_degraded_rows": 0,
     "total_arms": 2,
     "total_episodes": 2,
-    "runtime_s": 25.268730096984655,
+    "runtime_s": 25.348174434853718,
     "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paired_effect_native_smoke_v1.yaml --output-root output/validation/paired_effect_native_smoke --mode run --arm-isolation subprocess --skip-publication-bundle"
   },
   "arms": {
     "wrapper_off": {
-      "row_jsonl_sha256": "478bd423db092921c0e417fbca9878d861881f12d94a2121da5751ce94e0fb8b",
+      "row_jsonl_sha256": "5a27975a9d3225a2a9c47a96d973dbca38a017a0bda264ec11629f7edaac77c2",
       "pair_config_hash": "fba9cf7b51b248a5",
-      "source_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
+      "source_commit": "4580b07eeb57e587354fb7c1530d26194c368ba4",
       "wrapper_trace_sha256": "9d70a670cb5ca68780825254dbe20e423994a1bf88c1e5cdfd407408b1e71443",
       "simulation_trace_sha256": "0389e037539c4a7d5a6f74152aecc984a513efcff91b0b69e309e48229cf4bca",
       "trace_steps": 100,
@@ -102,9 +102,9 @@
       }
     },
     "wrapper_on": {
-      "row_jsonl_sha256": "14a4418978202773a7c678d1c8d0cefa8c1d43940d5d533e296e6f0e13528cdb",
+      "row_jsonl_sha256": "249b56445c9402c5ec00f79162f6b0ae2baab8e0e1c18b7171ae26ce925751be",
       "pair_config_hash": "fba9cf7b51b248a5",
-      "source_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
+      "source_commit": "4580b07eeb57e587354fb7c1530d26194c368ba4",
       "wrapper_trace_sha256": "c4f833fac60b0932699546f46942752a274337f8290c9d3c639a2f94c4d39325",
       "simulation_trace_sha256": "86d856ff0eaa7c046b3c252f689b5abda1747fcc1659981e20ea8541d50b0cfc",
       "trace_steps": 100,
@@ -127,7 +127,7 @@
       "seed": 111
     },
     "pair_config_hash": "fba9cf7b51b248a5",
-    "source_commit": "c4f21fa94c12d67cc808bfc496d4b915f7146af6",
+    "source_commit": "4580b07eeb57e587354fb7c1530d26194c368ba4",
     "values": {
       "false_positive_stop_rate": 1.0,
       "stop_yield_latency_s": 9.5,

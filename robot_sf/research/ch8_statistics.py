@@ -360,8 +360,8 @@ def _check_eta_squared(
 def _parse_float(raw: Any) -> float | None:
     """Return ``raw`` coerced to ``float``, or ``None`` when it is unparseable.
 
-    Blank strings, the literal ``nan`` (case-insensitive), and surrounding quotes are
-    treated as missing rather than raising.
+    Blank strings, non-finite values, and surrounding quotes are treated as missing rather
+    than raising.
     """
     if raw is None:
         return None
@@ -369,9 +369,10 @@ def _parse_float(raw: Any) -> float | None:
     if s == "" or s.lower() == "nan":
         return None
     try:
-        return float(s)
+        value = float(s)
     except ValueError:
         return None
+    return value if math.isfinite(value) else None
 
 
 def _mean_ch8(xs: list[float | None]) -> float:
@@ -493,6 +494,15 @@ def _rank_stability_bootstrap_ch8(
         v = _parse_float(r.get(metric))
         if v is not None:
             cell[r["planner_key"]][r["scenario_family"]] = v
+
+    # Do not rank planners or resample families that have no finite source cell.
+    # Otherwise an all-invalid table can silently become a synthetic all-zero rank.
+    planners = [planner for planner in planners if cell[planner]]
+    families = [
+        family for family in families if any(family in cell[planner] for planner in planners)
+    ]
+    if not planners or not families:
+        raise ValueError("rows contain no finite metric values for rank-stability bootstrap")
 
     def rank_by_mean(sampled_families: list[str]) -> dict[str, int]:
         """Return planner ranks (1 = highest mean metric) over the given scenario families."""

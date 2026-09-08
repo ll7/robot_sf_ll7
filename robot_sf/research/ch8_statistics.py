@@ -478,6 +478,16 @@ def _spearman_ch8(rows: list[dict[str, Any]], x_field: str, y_field: str) -> dic
     return {"value": float(val)}
 
 
+def _bootstrap_planner_values_ch8(
+    cell: dict[str, dict[str, float]], planner: str, sampled_families: list[str]
+) -> list[float]:
+    """Return finite values for one planner in a bootstrap draw."""
+    values = [cell[planner][family] for family in sampled_families if family in cell[planner]]
+    if not values:
+        raise ValueError(f"planner {planner} has no finite metric values in bootstrap draw")
+    return values
+
+
 def _rank_stability_bootstrap_ch8(
     rows: list[dict[str, Any]], metric: str, n_boot: int, seed: int
 ) -> dict[str, dict[str, Any]]:
@@ -508,8 +518,8 @@ def _rank_stability_bootstrap_ch8(
         """Return planner ranks (1 = highest mean metric) over the given scenario families."""
         means = {}
         for p in planners:
-            vals = [cell[p][f] for f in sampled_families if f in cell[p]]
-            means[p] = _mean_ch8(vals) if vals else 0.0
+            vals = _bootstrap_planner_values_ch8(cell, p, sampled_families)
+            means[p] = _mean_ch8(vals)
         order = sorted(planners, key=lambda p: -means[p])
         return {p: order.index(p) + 1 for p in planners}
 

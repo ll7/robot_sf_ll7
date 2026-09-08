@@ -9,8 +9,8 @@
   "campaign_submission_authorized": false,
   "source_revisions": {
     "base_commit": "9557d3aba9910bd039c1e689973fd51e9713603",
-    "implementation_head_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
-    "smoke_rows_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
+    "implementation_head_commit": "5a09d7dd08e72bf7d337ac2de178a7290892ed3b",
+    "smoke_rows_commit": "5a09d7dd08e72bf7d337ac2de178a7290892ed3b",
     "smoke_worktree": ".",
     "head_scope": "The implementation_head_commit is the exact clean source commit recorded by every smoke row. This receipt is a subsequent documentation commit; the PR exact-head gate binds the final documentation tip separately."
   },
@@ -49,7 +49,7 @@
   "new_contract_and_smoke_inputs": [
     {
       "path": "configs/benchmarks/paired_effect_metric_contract_v1_clarification.yaml",
-      "config_sha256": "5d8fa955d78f6e639174bf582e1da6fbedecad4016dabd8c1196c5d6aff138e9"
+      "config_sha256": "a62d08169bfd2c0f16eb7b5e825ea390a4ab9ef5e83b35e490436fcbfb9546a1"
     },
     {
       "path": "configs/benchmarks/paired_effect_native_smoke_v1.yaml",
@@ -63,8 +63,8 @@
   "smoke": {
     "config": "configs/benchmarks/paired_effect_native_smoke_v1.yaml",
     "config_sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b",
-    "campaign_id": "paired_effect_native_smoke_v1_20260909_005337",
-    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260909_005337",
+    "campaign_id": "paired_effect_native_smoke_v1_20260909_012819",
+    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260909_012819",
     "scenario_matrix": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
     "scenario_matrix_sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
     "scenario_matrix_internal_hash": "fbed5c9e0876",
@@ -81,14 +81,14 @@
     "fallback_or_degraded_rows": 0,
     "total_arms": 2,
     "total_episodes": 2,
-    "runtime_s": 25.565905549097806,
+    "runtime_s": 25.153906627791002,
     "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paired_effect_native_smoke_v1.yaml --output-root output/validation/paired_effect_native_smoke --mode run --arm-isolation subprocess --skip-publication-bundle"
   },
   "arms": {
     "wrapper_off": {
-      "row_jsonl_sha256": "82ee4982457b172613871042423fca78dba3adda5864fe1a1074b22faa459921",
+      "row_jsonl_sha256": "be4965a7bc19a28aaf38a80c0138fa4ac869e184ec5920c037e2d40a94ba83ee",
       "pair_config_hash": "fba9cf7b51b248a5",
-      "source_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
+      "source_commit": "5a09d7dd08e72bf7d337ac2de178a7290892ed3b",
       "wrapper_trace_sha256": "9d70a670cb5ca68780825254dbe20e423994a1bf88c1e5cdfd407408b1e71443",
       "simulation_trace_sha256": "0389e037539c4a7d5a6f74152aecc984a513efcff91b0b69e309e48229cf4bca",
       "trace_steps": 100,
@@ -102,9 +102,9 @@
       }
     },
     "wrapper_on": {
-      "row_jsonl_sha256": "c26812527adbf728d9294c499d36cc42665c3b647c968feaabdf3a0c75c00ba7",
+      "row_jsonl_sha256": "d04ae682c5e21b2e66eace8d6dba21f250efcab694f60c51fb47cb0beff5c5ce",
       "pair_config_hash": "fba9cf7b51b248a5",
-      "source_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
+      "source_commit": "5a09d7dd08e72bf7d337ac2de178a7290892ed3b",
       "wrapper_trace_sha256": "c4f833fac60b0932699546f46942752a274337f8290c9d3c639a2f94c4d39325",
       "simulation_trace_sha256": "86d856ff0eaa7c046b3c252f689b5abda1747fcc1659981e20ea8541d50b0cfc",
       "trace_steps": 100,
@@ -127,7 +127,7 @@
       "seed": 111
     },
     "pair_config_hash": "fba9cf7b51b248a5",
-    "source_commit": "0126046cea8f8d7db17eb02a45f58cd31b94d182",
+    "source_commit": "5a09d7dd08e72bf7d337ac2de178a7290892ed3b",
     "values": {
       "false_positive_stop_rate": 1.0,
       "stop_yield_latency_s": 9.5,
@@ -180,7 +180,7 @@
   "validation": [
     {
       "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q tests/benchmark/test_paired_effect_metric_contract.py tests/benchmark/test_safety_wrapper_runtime.py tests/validation/test_issue_6971_safety_wrapper_preregistration.py",
-      "result": "88 passed in 6.22s"
+      "result": "95 passed in 6.26s"
     },
     {
       "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/check_issue_6971_safety_wrapper_preregistration.py --json",
@@ -203,7 +203,7 @@
       "result": "passed"
     },
     {
-      "command": "git diff --exit-code 9f0915112155df3f6094b98a1b372be63ad44b5 -- <frozen inputs>",
+      "command": "git diff --exit-code 9557d3aba9910bd039c1e689973fd51e9713603 -- configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml configs/research/safety_wrapper_ablation_v1.yaml configs/benchmarks/paired_effect_metric_contract_v1.yaml configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml configs/scenarios/classic_interactions_francis2023.yaml configs/benchmarks/seed_sets_v1.yaml",
       "result": "passed; frozen input bytes unchanged"
     }
   ],

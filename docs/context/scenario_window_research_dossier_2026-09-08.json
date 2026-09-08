@@ -17,9 +17,9 @@
   ],
   "repository_heads": {
     "origin_main_at_start": "a918124a21da2e801434ef1b99c60467af673157",
-    "rw01_rw02_pr_8612_head": "0f891fa2a09643c798fa07c173bc213dd06c8f41",
-    "rw03_rw04_pr_8620_head": "0e802653a2071adbbb341258ff427967f852cf3b",
-    "rw05_rw06_rw07_pr_8622_head": "efe822afa4bf30e4ba13497fc6a6259ae52ac6c9"
+    "rw01_rw02_pr_8612_head": "a9cf6dcd7a3eef1a314319844317f30d9cb76b38",
+    "rw03_rw04_pr_8620_head": "73bbcd29f2b379ff39cce8a7d4e5f842ec2b35ce",
+    "rw05_rw06_rw07_pr_8622_head": "78573105228bd3ab339de0262c6eb7f87061678f"
   },
   "pull_requests": [
     {
@@ -243,12 +243,12 @@
     {"id": "H9", "statement": "PELT or a learned selector is needed for v1", "status": "blocked", "evidence": "Option A selected for preparation; alternatives deferred", "limitation": "reopen only after measured baseline shortcomings"}
   ],
   "command_receipts": [
-    {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_last_avoidable_replay_issue_5442.py tests/benchmark/test_typed_snapshot.py tests/benchmark/test_relevance_windows.py tests/benchmark/test_continuation_experiment_plan.py tests/benchmark/test_scenario_window_research_dossier.py -q", "exit_code": 0, "result": "62 passed"},
+    {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_last_avoidable_replay_issue_5442.py tests/benchmark/test_typed_snapshot.py tests/benchmark/test_relevance_windows.py tests/benchmark/test_continuation_experiment_plan.py tests/benchmark/test_scenario_window_research_dossier.py -q", "exit_code": 0, "result": "67 passed on final stacked checkout before receipt refresh"},
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_typed_snapshot.py -q", "exit_code": 0, "result": "5 passed"},
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_relevance_windows.py tests/benchmark/test_continuation_experiment_plan.py -q", "exit_code": 0, "result": "10 passed"},
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/dev/test_issue_7331_benchmark_namespace_inventory.py -q", "exit_code": 0, "result": "7 passed"},
     {"command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check <changed files>", "exit_code": 0, "result": "passed on focused changed files"},
-    {"command": "isolated supplied replay contract probe at exact top checkout head 353788e79b21f357d935d81593acf14ccb8f602b", "exit_code": 0, "result": "route_restore and complete_horizon contract_holds=true"}
+    {"command": "isolated supplied replay contract probe at exact top checkout head 378726b6c946ac0e4ab20c75c129f2ea4486d2b8", "exit_code": 0, "result": "route_restore and complete_horizon contract_holds=true"}
   ],
   "submission_boundary": {
     "new_mainline_evidence": false,

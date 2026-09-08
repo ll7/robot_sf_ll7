@@ -9,9 +9,10 @@ the danger window and decide whether — and how early — the collision was avo
 The engine is intentionally decoupled from any concrete simulator. A caller
 supplies a :class:`CounterfactualModel` — the *smallest snapshot/restore seam* —
 and this module drives it. The controlled kinematic fixture used to validate the
-contract lives in :mod:`robot_sf.benchmark.last_avoidable_fixtures`; a real-
-simulator adapter can implement the same protocol later (see the docs note for
-issue #5442).
+contract lives in :mod:`robot_sf.benchmark.last_avoidable_fixtures`; the
+diagnostic production-simulator implementation lives in
+:mod:`robot_sf.benchmark.simulator_counterfactual_adapter`. Both paths preserve
+the engine's fail-closed, offline-only boundary.
 
 Determinations (fail-closed):
 

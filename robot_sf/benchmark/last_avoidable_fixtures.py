@@ -2,13 +2,15 @@
 
 These fixtures implement :class:`~robot_sf.benchmark.last_avoidable_replay.CounterfactualModel`
 with a minimal 2D kinematic robot/pedestrian interaction. They are *controlled
-fixtures*, not the production simulator: the full robot_sf simulator draws
-pedestrian goals/zones from the **global** numpy RNG and exposes no snapshot API,
-so a faithful mid-episode snapshot/restore seam there would require a broad
-simulator change (out of scope for #5442; see
-``docs/context/issue_5442_last_avoidable_replay.md``). This kinematic model gives
-a fully deterministic, snapshot-restorable state — including its own RNG — so the
-counterfactual-replay engine can be validated end to end on CPU.
+fixtures*, not the production simulator. They keep engine validation
+deterministic and isolated; the diagnostic production-simulator adapter is
+implemented separately in
+:mod:`robot_sf.benchmark.simulator_counterfactual_adapter`. A broader general
+snapshot API may still require more simulator work, but it is not a prerequisite
+for this controlled fixture or the adapter's narrow diagnostic seam. This
+kinematic model gives a fully deterministic, snapshot-restorable state —
+including its own RNG — so the counterfactual-replay engine can be validated end
+to end on CPU.
 
 The robot travels along ``+x`` toward a crossing pedestrian and may command a
 deceleration each tick. In ``replayed`` pedestrian mode the pedestrian follows a

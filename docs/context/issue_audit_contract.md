@@ -146,6 +146,18 @@ qualifier, but the classifier must not promote an issue carrying it to
 verified. The receipt is a delivery-integrity prerequisite, not scientific,
 benchmark, release, licensing, or domain approval.
 
+A current `goal-autopilot-preparation:v1` body marker is a negative readiness
+fence applied after issue-local readiness evidence is collected and before
+state repair mutations are planned. The core accepts it only when the marker
+is unique, structurally valid, bound to the containing issue and repository,
+and its `source_body_sha256` still matches the bytes outside the marker. If
+either `implementation_admitted` or `state_ready_change_proposed` is false,
+the audit retains a non-ready classification, exposes the packet's
+`next_action`, and never proposes `state:ready`. Malformed, stale, duplicate,
+or internally conflicting markers likewise suppress readiness. A missing
+marker leaves the rules above unchanged. The packet cannot override live
+labels, active records, or any stronger blocker or decision gate.
+
 Before the autonomous core adds either dispatch-suppressing blocker label
 (`state:blocked` or `state:blocked-external-input`), the issue body or complete
 comment inventory must contain an explicit `blocked-triage-v1` reason block or

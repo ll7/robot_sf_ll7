@@ -40,6 +40,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import yaml
+
+from scripts.dev import prepare_open_issue_contracts
 from scripts.dev.github_quota import (
     DEFAULT_CORE_SAFETY_THRESHOLD,
     RateLimitSnapshot,
@@ -74,6 +77,84 @@ PLAN_SCHEMA = "issue_audit_plan.v1"
 PROVENANCE_SCHEMA = "issue_audit_provenance.v1"
 ENVELOPE_SCHEMA = "issue_decision_envelope.v1"
 MAX_SOURCE_EXCERPT = 280
+
+_PREPARATION_AUDIT_SCHEMA = "open_issue_contract_audit.v1"
+PREPARATION_MARKER_END = prepare_open_issue_contracts.MARKER_END
+PREPARATION_MARKER_START = prepare_open_issue_contracts.MARKER_START
+PREPARATION_PACKET_SCHEMA = prepare_open_issue_contracts.PACKET_SCHEMA
+_PREPARATION_MARKER_RE = re.compile(
+    rf"{re.escape(PREPARATION_MARKER_START)}.*?{re.escape(PREPARATION_MARKER_END)}",
+    re.DOTALL,
+)
+_PREPARATION_YAML_RE = re.compile(
+    r"```ya?ml[ \t]*\r?\n(?P<content>.*?)\r?\n[ \t]*```",
+    re.IGNORECASE | re.DOTALL,
+)
+_PREPARATION_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_PREPARATION_REQUIRED_FIELDS = (
+    "schema",
+    "repository",
+    "issue",
+    "source_body_sha256",
+    "source_comments_sha256",
+    "audit_schema",
+    "audit_digest",
+    "audit_classification",
+    "next_action",
+    "authority",
+    "execution_mode",
+    "preferred_worker",
+    "expected_pr_runner_label",
+    "implementation_admitted",
+    "state_ready_change_proposed",
+    "readiness_gate",
+    "mutation_batch",
+)
+_PREPARATION_STRING_FIELDS = (
+    "audit_classification",
+    "next_action",
+    "authority",
+    "execution_mode",
+    "preferred_worker",
+    "expected_pr_runner_label",
+    "mutation_batch",
+)
+
+
+class _UniquePreparationLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate keys and ambiguous booleans."""
+
+
+def _construct_unique_preparation_mapping(
+    loader: yaml.SafeLoader, node: Any, deep: bool = False
+) -> dict[Any, Any]:
+    """Construct a mapping without silently accepting duplicate keys."""
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        try:
+            if key in mapping:
+                raise ValueError(f"duplicate key {key!r}")
+            mapping[key] = loader.construct_object(value_node, deep=deep)
+        except TypeError as exc:
+            raise ValueError("mapping key is not hashable") from exc
+    return mapping
+
+
+def _construct_strict_preparation_bool(loader: yaml.SafeLoader, node: Any) -> bool:
+    """Accept only YAML's true/false spellings for packet boolean fields."""
+    value = loader.construct_scalar(node)
+    if value.lower() not in {"true", "false"}:
+        raise ValueError("boolean values must be true or false")
+    return value.lower() == "true"
+
+
+_UniquePreparationLoader.add_constructor(
+    "tag:yaml.org,2002:map", _construct_unique_preparation_mapping
+)
+_UniquePreparationLoader.add_constructor(
+    "tag:yaml.org,2002:bool", _construct_strict_preparation_bool
+)
 
 RESOURCE_PREFIX = "resource:"
 TYPE_PREFIX = "type:"
@@ -2105,6 +2186,156 @@ def _ready_evidence(body: str) -> list[str]:
     return evidence
 
 
+def _invalid_preparation_packet(reason: str) -> dict[str, Any]:
+    """Return a structured fail-closed result for a preparation marker."""
+    return {
+        "status": "invalid",
+        "reason": (
+            "goal-autopilot-preparation:v1 is invalid; readiness promotion withheld: " + reason
+        ),
+        "implementation_admitted": None,
+        "state_ready_change_proposed": None,
+        "next_action": None,
+    }
+
+
+def _parse_preparation_packet(body: str, *, issue_number: int) -> dict[str, Any]:
+    """Parse the current issue preparation marker, if present.
+
+    The preparation helper writes a marker around a YAML packet whose source
+    body digest covers everything outside the marker.  A marker is therefore
+    useful only when it is unique, structurally valid, and still bound to the
+    current issue body.  The empty result deliberately preserves the audit's
+    pre-marker behavior for issues that have never been prepared.
+    """
+    start_count = body.count(PREPARATION_MARKER_START)
+    end_count = body.count(PREPARATION_MARKER_END)
+    if start_count == 0 and end_count == 0:
+        return {
+            "status": "absent",
+            "reason": "",
+            "implementation_admitted": None,
+            "state_ready_change_proposed": None,
+            "next_action": None,
+        }
+    if start_count != 1 or end_count != 1:
+        return _invalid_preparation_packet("marker is duplicated or unbalanced")
+
+    marker_match = _PREPARATION_MARKER_RE.search(body)
+    if marker_match is None:
+        return _invalid_preparation_packet("marker boundaries are malformed")
+    yaml_matches = list(_PREPARATION_YAML_RE.finditer(marker_match.group(0)))
+    if len(yaml_matches) != 1:
+        return _invalid_preparation_packet("marker must contain exactly one YAML block")
+
+    try:
+        loader = _UniquePreparationLoader(yaml_matches[0].group("content"))
+        try:
+            packet = loader.get_single_data()
+        finally:
+            loader.dispose()
+    except (TypeError, ValueError, yaml.YAMLError) as exc:
+        return _invalid_preparation_packet(f"malformed YAML ({type(exc).__name__})")
+    if not isinstance(packet, Mapping):
+        return _invalid_preparation_packet("YAML packet must decode to a mapping")
+
+    missing = [key for key in _PREPARATION_REQUIRED_FIELDS if key not in packet]
+    if missing:
+        return _invalid_preparation_packet("missing field(s): " + ", ".join(missing))
+    if packet["schema"] != PREPARATION_PACKET_SCHEMA:
+        return _invalid_preparation_packet("schema does not match the versioned packet contract")
+    if packet["audit_schema"] != _PREPARATION_AUDIT_SCHEMA:
+        return _invalid_preparation_packet("audit_schema does not match the preparation contract")
+    if packet["repository"] != DEFAULT_REPO:
+        return _invalid_preparation_packet("repository identity does not match the audit repo")
+    if type(packet["issue"]) is not int or packet["issue"] != issue_number:
+        return _invalid_preparation_packet("issue identity does not match the containing issue")
+    for field in _PREPARATION_STRING_FIELDS:
+        if not isinstance(packet[field], str):
+            return _invalid_preparation_packet(f"{field} must be a string")
+    for field in ("implementation_admitted", "state_ready_change_proposed"):
+        if type(packet[field]) is not bool:
+            return _invalid_preparation_packet(f"{field} must be a boolean")
+
+    source_body_sha = packet["source_body_sha256"]
+    if (
+        not isinstance(source_body_sha, str)
+        or _PREPARATION_SHA256_RE.fullmatch(source_body_sha) is None
+    ):
+        return _invalid_preparation_packet("source_body_sha256 is not a lowercase SHA-256 digest")
+    source_comments_sha = packet["source_comments_sha256"]
+    if source_comments_sha not in (None, ""):
+        return _invalid_preparation_packet("source_comments_sha256 must be empty")
+    audit_digest = packet["audit_digest"]
+    if not isinstance(audit_digest, str) or _PREPARATION_SHA256_RE.fullmatch(audit_digest) is None:
+        return _invalid_preparation_packet("audit_digest is not a lowercase SHA-256 digest")
+
+    body_without_marker = body[: marker_match.start()] + body[marker_match.end() :]
+    normalized_body = re.sub(r"\n{3,}", "\n\n", body_without_marker).strip("\n") + "\n"
+    source_candidates = (
+        body_without_marker,
+        body_without_marker.rstrip("\r\n"),
+        normalized_body,
+    )
+    if not any(
+        hashlib.sha256(candidate.encode("utf-8")).hexdigest() == source_body_sha
+        for candidate in source_candidates
+    ):
+        return _invalid_preparation_packet(
+            "source_body_sha256 does not match body content outside marker"
+        )
+
+    readiness_gate = packet["readiness_gate"]
+    if packet["state_ready_change_proposed"]:
+        if not isinstance(readiness_gate, Mapping):
+            return _invalid_preparation_packet(
+                "state_ready_change_proposed requires a readiness_gate mapping"
+            )
+        if readiness_gate.get("issue") not in {issue_number, str(issue_number)}:
+            return _invalid_preparation_packet("readiness_gate issue does not match the packet")
+        if readiness_gate.get("action") != "gate_readiness":
+            return _invalid_preparation_packet("readiness_gate action is not gate_readiness")
+        if readiness_gate.get("expected_body_sha256") != source_body_sha:
+            return _invalid_preparation_packet(
+                "readiness_gate expected_body_sha256 conflicts with source_body_sha256"
+            )
+        expected_labels = readiness_gate.get("expected_labels")
+        if not isinstance(expected_labels, list) or any(
+            not isinstance(label, str) for label in expected_labels
+        ):
+            return _invalid_preparation_packet(
+                "readiness_gate expected_labels must be a string list"
+            )
+        if packet["next_action"] != "gate_readiness":
+            return _invalid_preparation_packet(
+                "state_ready_change_proposed conflicts with next_action"
+            )
+    elif readiness_gate not in (None, "", "None"):
+        return _invalid_preparation_packet(
+            "readiness_gate must be empty when state_ready_change_proposed is false"
+        )
+
+    withheld_fields = [
+        field
+        for field in ("implementation_admitted", "state_ready_change_proposed")
+        if packet[field] is False
+    ]
+    reason = ""
+    if withheld_fields:
+        reason = (
+            "goal-autopilot-preparation:v1 withholds readiness because "
+            + ", ".join(f"{field}=false" for field in withheld_fields)
+            + f"; next_action={packet['next_action'] or '(empty)'}"
+        )
+    return {
+        "status": "valid",
+        "reason": reason,
+        "implementation_admitted": packet["implementation_admitted"],
+        "state_ready_change_proposed": packet["state_ready_change_proposed"],
+        "next_action": packet["next_action"],
+    }
+
+
 def _terminal_review_evidence(
     issue: Mapping[str, Any],
     *,
@@ -2382,6 +2613,7 @@ class Classification:
     decision_evidence: tuple[str, ...]
     terminal_review_evidence: tuple[str, ...]
     readiness_evidence: tuple[str, ...]
+    preparation_packet: dict[str, Any]
     closure: dict[str, Any]
     mutations: tuple[dict[str, Any], ...]
     findings: tuple[str, ...]
@@ -2405,6 +2637,7 @@ class Classification:
             "decision_evidence": list(self.decision_evidence),
             "terminal_review_evidence": list(self.terminal_review_evidence),
             "readiness_evidence": list(self.readiness_evidence),
+            "preparation_packet": dict(self.preparation_packet),
             "closure_evidence": self.closure,
             "mutations": list(self.mutations),
             "findings": list(self.findings),
@@ -2482,6 +2715,7 @@ def classify_issue(
     if len(type_labels) > 1:
         decision_evidence.append("multiple mutually-exclusive type labels present")
     readiness_evidence = _ready_evidence(body)
+    preparation_packet = _parse_preparation_packet(body, issue_number=number)
     parent_issue = bool(labels & PARENT_LABELS) or bool(PARENT_TITLE_PATTERN.search(title))
     if parent_issue:
         findings.append("parent issue cannot be promoted to state:ready")
@@ -2494,6 +2728,16 @@ def classify_issue(
         and not job_inventory_uncertain
         and not parent_issue
     )
+    preparation_withholds_readiness = preparation_packet["status"] == "invalid" or (
+        preparation_packet["status"] == "valid"
+        and (
+            preparation_packet["implementation_admitted"] is not True
+            or preparation_packet["state_ready_change_proposed"] is not True
+        )
+    )
+    if preparation_withholds_readiness:
+        ready = False
+        findings.append(str(preparation_packet["reason"]))
     closure_rows: Sequence[Mapping[str, Any]] = (
         () if merged_pr_index is not None else list(merged_prs)
     )
@@ -2834,6 +3078,7 @@ def classify_issue(
         decision_evidence=tuple(decision_evidence),
         terminal_review_evidence=tuple(terminal_review_evidence),
         readiness_evidence=tuple(readiness_evidence),
+        preparation_packet=preparation_packet,
         closure=closure,
         mutations=tuple(unique_mutations),
         findings=tuple(findings),

@@ -559,12 +559,8 @@ def _render_view(
         values = prepared["series"][view]
         status.update(_series_status(view, values))
         ax.set(
-            xlabel=style.metric_label(
-                "recorded_time", language=profile.language, strict=True
-            ),
-            ylabel=style.metric_label(
-                metric_keys[view], language=profile.language, strict=True
-            ),
+            xlabel=style.metric_label("recorded_time", language=profile.language, strict=True),
+            ylabel=style.metric_label(metric_keys[view], language=profile.language, strict=True),
         )
         if any(math.isfinite(v) for v in values):
             ax.plot(

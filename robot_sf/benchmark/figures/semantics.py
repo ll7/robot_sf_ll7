@@ -6,7 +6,7 @@ workflows can emit a reviewable proposal without changing repository state.
 """
 
 # Registry validation intentionally concentrates the complete fail-closed contract.
-# ruff: noqa: DOC201, C901, PLR0912
+# ruff: noqa: DOC201
 
 from __future__ import annotations
 
@@ -117,11 +117,7 @@ class MetricSemantics:
         if set(value) != expected:
             raise ValueError(f"metric {key} has missing or unknown fields")
         unit = value["unit"]
-        if (
-            not isinstance(unit, str)
-            or len(unit) > 32
-            or any(ord(char) < 32 for char in unit)
-        ):
+        if not isinstance(unit, str) or len(unit) > 32 or any(ord(char) < 32 for char in unit):
             raise ValueError(f"metric {key} unit must be short printable text")
         number_format = value["number_format"]
         if not isinstance(number_format, str) or len(number_format) > 20:
@@ -215,12 +211,10 @@ class SemanticsRegistry:
         if not isinstance(raw_planners, dict) or not raw_planners:
             raise ValueError("figure semantics planners must be a nonempty object")
         metrics = {
-            key: MetricSemantics.from_payload(key, value)
-            for key, value in raw_metrics.items()
+            key: MetricSemantics.from_payload(key, value) for key, value in raw_metrics.items()
         }
         planners = {
-            key: PlannerSemantics.from_payload(key, value)
-            for key, value in raw_planners.items()
+            key: PlannerSemantics.from_payload(key, value) for key, value in raw_planners.items()
         }
         metric_aliases = cls._alias_map(metrics, "metric")
         planner_aliases = cls._alias_map(planners, "planner")

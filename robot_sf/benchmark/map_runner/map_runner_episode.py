@@ -4624,7 +4624,7 @@ def _finalize_episode_record(  # noqa: PLR0913
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
-    paired_wrapper_off_record: Mapping[str, Any] | None,
+    paired_wrapper_off_record: Mapping[str, Any] | None = None,
 ) -> EpisodeRecordDict:
     """Assemble the benchmark JSONL record from the step-loop and post-loop results.
 

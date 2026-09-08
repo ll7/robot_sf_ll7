@@ -28,6 +28,28 @@ def _number(value: Any) -> bool:
     return type(value) in (int, float) and math.isfinite(value)
 
 
+def _validate_font_family(value: Any) -> None:
+    """Validate the ordered font fallback names in a rendering profile."""
+    if (
+        not isinstance(value, tuple)
+        or not 1 <= len(value) <= 8
+        or any(
+            not isinstance(name, str)
+            or not name.strip()
+            or len(name) > 128
+            or any(ord(char) < 32 for char in name)
+            for name in value
+        )
+    ):
+        raise ValueError("font_family must contain 1-8 nonempty font family names")
+
+
+def _validate_font_size(value: Any, name: str) -> None:
+    """Validate one point-size field in a rendering profile."""
+    if not _number(value) or not 4.0 <= value <= 36.0:
+        raise ValueError(f"{name} must be finite and in [4, 36]")
+
+
 def _object(path: Path) -> dict[str, Any]:
     """Read one strict JSON object, rejecting duplicate keys and non-finite values."""
 
@@ -81,18 +103,7 @@ class FigureProfile:
             raise ValueError("target_width_in must be finite and in [1, 20]")
         if not _number(self.height_ratio) or not 0.3 <= self.height_ratio <= 2.5:
             raise ValueError("height_ratio must be finite and in [0.3, 2.5]")
-        if (
-            not isinstance(self.font_family, tuple)
-            or not 1 <= len(self.font_family) <= 8
-            or any(
-                not isinstance(name, str)
-                or not name.strip()
-                or len(name) > 128
-                or any(ord(char) < 32 for char in name)
-                for name in self.font_family
-            )
-        ):
-            raise ValueError("font_family must contain 1-8 nonempty font family names")
+        _validate_font_family(self.font_family)
         for name in (
             "font_size_pt",
             "axes_label_size_pt",
@@ -101,9 +112,7 @@ class FigureProfile:
             "tick_label_size_pt",
             "annotation_size_pt",
         ):
-            value = getattr(self, name)
-            if not _number(value) or not 4.0 <= value <= 36.0:
-                raise ValueError(f"{name} must be finite and in [4, 36]")
+            _validate_font_size(getattr(self, name), name)
         if not _number(self.line_width_pt) or not 0.1 <= self.line_width_pt <= 10.0:
             raise ValueError("line_width_pt must be finite and in [0.1, 10]")
         if not _number(self.marker_size_pt) or not 0.1 <= self.marker_size_pt <= 30.0:

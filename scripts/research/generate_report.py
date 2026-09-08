@@ -101,11 +101,15 @@ def _comparison_metric_records(metrics_comp: object) -> tuple[list[dict], list[i
     for metric_name, values in metrics_comp.items():
         if not isinstance(values, dict):
             raise ValidationError("Tracker manifest comparison metric values must be objects")
+        if "baseline" not in values or "pretrained" not in values:
+            raise ValidationError(
+                "Tracker manifest comparison metrics require baseline and pretrained values"
+            )
         baseline_value = coerce_tracker_float(
-            values.get("baseline", 0.0), f"comparison.metrics.{metric_name}.baseline"
+            values["baseline"], f"comparison.metrics.{metric_name}.baseline"
         )
         pretrained_value = coerce_tracker_float(
-            values.get("pretrained", 0.0), f"comparison.metrics.{metric_name}.pretrained"
+            values["pretrained"], f"comparison.metrics.{metric_name}.pretrained"
         )
         records.extend(
             [

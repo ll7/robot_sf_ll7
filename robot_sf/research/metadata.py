@@ -36,7 +36,10 @@ import psutil
 from robot_sf.common.logging import get_logger
 from robot_sf.research.aggregation import compute_completeness_score
 from robot_sf.research.exceptions import ValidationError
-from robot_sf.research.tracker_manifest import validate_tracker_payload
+from robot_sf.research.tracker_manifest import (
+    validate_tracker_payload,
+    validate_tracker_payload_records,
+)
 
 logger = get_logger(__name__)
 
@@ -301,10 +304,9 @@ def load_tracker_manifest_payload(manifest_path: str | Path) -> dict[str, Any]:
     try:
         text = path.read_text(encoding="utf-8")
         if path.suffix == ".jsonl":
-            lines = [json.loads(line) for line in text.splitlines() if line.strip()]
-            if not lines:
-                raise ValidationError(f"Tracker manifest empty: {path}")
-            payload = lines[-1]
+            payload = validate_tracker_payload_records(
+                [json.loads(line) for line in text.splitlines() if line.strip()], path
+            )
         else:
             payload = json.loads(text)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
@@ -312,7 +314,8 @@ def load_tracker_manifest_payload(manifest_path: str | Path) -> dict[str, Any]:
         logger.warning(msg, error=str(exc))
         raise ValidationError(msg) from exc
 
-    validate_tracker_payload(payload, path)
+    if path.suffix != ".jsonl":
+        validate_tracker_payload(payload, path)
     return payload
 
 

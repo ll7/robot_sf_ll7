@@ -463,6 +463,9 @@ _FAST_FILES = {
     # Statistical report helpers use deterministic finite-value admission
     # contracts; keep their changed-line coverage in fast shards as well.
     "test_statistics.py",
+    # Imitation-report provenance validation is a deterministic materialization
+    # contract; keep its changed-line coverage in fast shards as well.
+    "test_imitation_report.py",
     # Goal-belief contract tests are deterministic schema/lineage coverage for
     # the changed actor-observation producer; keep them in fast PR shards
     # (issue #8063).

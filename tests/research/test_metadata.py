@@ -47,6 +47,18 @@ def test_parse_tracker_manifest_rejects_invalid_utf8(tmp_path: Path) -> None:
         parse_tracker_manifest(manifest_path)
 
 
+def test_parse_tracker_manifest_rejects_malformed_earlier_jsonl_shape(tmp_path: Path) -> None:
+    """A valid final JSONL record cannot hide an invalid earlier record."""
+    manifest_path = tmp_path / "tracker.jsonl"
+    manifest_path.write_text(
+        '{"summary": {"seeds": "not-a-list"}}\n{"summary": {"seeds": [4]}}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="summary seeds must be a list"):
+        parse_tracker_manifest(manifest_path)
+
+
 def test_parse_tracker_manifest_preserves_valid_summary_and_seeds(tmp_path: Path) -> None:
     """Valid mapping-shaped manifests retain their existing normalized output."""
     manifest_path = tmp_path / "tracker.json"
@@ -114,3 +126,29 @@ def test_tracker_float_coercion_rejects_nonfinite_values() -> None:
 
     with pytest.raises(ValidationError, match="finite number"):
         coerce_tracker_float(float("nan"), "metrics.success_rate")
+    with pytest.raises(ValidationError, match="finite number"):
+        coerce_tracker_float(True, "metrics.success_rate")
+
+
+def test_tracker_numeric_coercion_rejects_lossy_types() -> None:
+    """Shared coercion rejects fractional seeds, booleans, and incomplete comparisons."""
+    from robot_sf.research.tracker_manifest import coerce_tracker_float, coerce_tracker_int
+    from scripts.research.generate_report import _comparison_metric_records
+
+    with pytest.raises(ValidationError, match="must contain an integer"):
+        coerce_tracker_int(42.5, "summary.seeds")
+    with pytest.raises(ValidationError, match="must contain an integer"):
+        coerce_tracker_int(True, "summary.seeds")
+    with pytest.raises(ValidationError, match="must contain an integer"):
+        coerce_tracker_int("not-an-integer", "summary.seeds")
+
+    with pytest.raises(ValidationError, match="finite number"):
+        coerce_tracker_float("not-a-number", "metrics.success_rate")
+
+    records, seeds = _comparison_metric_records(
+        {"success_rate": {"baseline": 0.5, "pretrained": 0.7}}
+    )
+    assert len(records) == 2
+    assert seeds == [0, 1]
+    with pytest.raises(ValidationError, match="require baseline and pretrained"):
+        _comparison_metric_records({"success_rate": {"baseline": 0.5}})

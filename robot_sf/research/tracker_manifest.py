@@ -17,6 +17,12 @@ def coerce_tracker_int(value: object, field: str) -> int:
     Returns:
         The coerced integer value.
     """
+    if (
+        value is None
+        or isinstance(value, bool)
+        or (isinstance(value, float) and not value.is_integer())
+    ):
+        raise ValidationError(f"Tracker manifest {field} must contain an integer")
     try:
         return int(value)
     except (OverflowError, TypeError, ValueError) as exc:
@@ -29,6 +35,8 @@ def coerce_tracker_float(value: object, field: str) -> float:
     Returns:
         The coerced finite float value.
     """
+    if isinstance(value, bool):
+        raise ValidationError(f"Tracker manifest {field} must contain a finite number")
     try:
         converted = float(value)
     except (OverflowError, TypeError, ValueError) as exc:
@@ -84,3 +92,19 @@ def validate_tracker_payload(
         raise ValidationError(f"Tracker manifest seeds must be a list: {path}")
     raw_seeds = raw_seeds or summary.get("seeds", [])
     return payload, steps, enabled_steps, summary, raw_seeds
+
+
+def validate_tracker_payload_records(payloads: list[object], path: Path) -> dict[str, Any]:
+    """Validate every JSONL record and return the most recent payload.
+
+    JSONL consumers use the final record as the current tracker state, but an
+    invalid earlier record must not be hidden by a later valid record.
+
+    Returns:
+        The most recent validated tracker payload.
+    """
+    if not payloads:
+        raise ValidationError(f"Tracker manifest empty: {path}")
+    for payload in payloads:
+        validated_payload, *_ = validate_tracker_payload(payload, path)
+    return validated_payload

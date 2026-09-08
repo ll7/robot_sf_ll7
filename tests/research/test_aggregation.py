@@ -15,6 +15,7 @@ from robot_sf.research.aggregation import (
     export_metrics_json,
     extract_seed_metrics,
 )
+from robot_sf.research.exceptions import ValidationError
 
 
 def test_aggregate_metrics_basic():
@@ -397,6 +398,15 @@ def test_load_manifest_payload_jsonl_rejects_malformed_earlier_line(tmp_path: Pa
     path.write_text('{"seed": 1}\nnot-json\n{"seed": 2}\n', encoding="utf-8")
 
     with pytest.raises(json.JSONDecodeError):
+        _load_manifest_payload(path)
+
+
+def test_load_manifest_payload_jsonl_rejects_malformed_earlier_shape(tmp_path: Path):
+    """A valid final JSONL record cannot hide an invalid earlier record."""
+    path = tmp_path / "m.jsonl"
+    path.write_text('{"metrics": []}\n{"seed": 2, "policy_type": "x"}\n', encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="metrics must be an object"):
         _load_manifest_payload(path)
 
 

@@ -32,6 +32,7 @@ from robot_sf.research.tracker_manifest import (
     coerce_tracker_float,
     coerce_tracker_int,
     validate_tracker_payload,
+    validate_tracker_payload_records,
 )
 
 logger = get_logger(__name__)
@@ -193,11 +194,14 @@ def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
         lines = [line for line in text.splitlines() if line.strip()]
         if not lines:
             raise ValueError(f"Empty manifest file: {manifest_path}")
-        payload = [json.loads(line) for line in lines][-1]
+        payload = validate_tracker_payload_records(
+            [json.loads(line) for line in lines], manifest_path
+        )
     else:
         payload = json.loads(text)
 
-    validate_tracker_payload(payload, manifest_path)
+    if manifest_path.suffix != ".jsonl":
+        validate_tracker_payload(payload, manifest_path)
     return payload
 
 

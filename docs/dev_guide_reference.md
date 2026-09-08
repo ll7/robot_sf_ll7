@@ -1100,8 +1100,35 @@ the job from the log archive), recover its retained check-run annotations with:
 uv run python scripts/dev/diagnose_actions_job.py <job-id>
 ```
 
-The helper prints normal logs when they are available and otherwise prints the annotations linked
-from the job metadata. It exits nonzero if neither source provides diagnostics.
+The helper verifies the requested job's metadata and prints its exact REST job logs when available;
+otherwise it prints the linked check-run annotations. It never substitutes a later run attempt's
+logs through `gh run view`. Missing or mismatched job identity, unusable evidence, and incomplete
+annotation pagination fail closed.
+
+For machine-readable classification without changing the job or rerunning anything:
+
+```bash
+uv run python scripts/dev/diagnose_actions_job.py <job-id> --repo ll7/robot_sf_ll7 --json
+```
+
+The `actions_job_diagnostic.v1` envelope preserves repository, job ID, run ID, run attempt, head SHA
+(commit identifier), and the original `job_status` / `job_conclusion`. Its separate
+`diagnostic_status` is `matched`, `unmatched`, or `unavailable`. Only the observed
+`Failed to FinalizeArtifact: ... (403) Forbidden: Error from intermediary ...` error signature within
+one log line or annotation message line yields `artifact_finalization_403`; separate records are
+never joined. Other failures remain unmatched, and the external cause remains unknown.
+
+`evidence` identifies the source endpoint, one-based log-line or annotation record number, and an
+excerpt capped at 2,000 characters with a truncation flag. Annotation requests are limited to 100
+pages and must remain on the same check run. `artifact_publication` is always `unconfirmed`:
+neither successful tests nor this error proves an artifact is present or absent. No classification
+makes a retry decision, changes required checks, or establishes that other work passed.
+
+Without `--json`, output remains log text or an annotation JSON array. In either mode, exit 0 means
+diagnostic evidence was retrieved, **not that continuous integration (CI) passed**; exit 1 means
+diagnostics are unavailable, and invalid CLI syntax retains argparse's exit 2. JSON-mode failures
+include an explicit `reason`; additional retrieval details go to stderr. Logs and excerpts can
+contain repository-sensitive material: sanitize them before sharing publicly.
 
 For routine goal-autopilot orientation, prefer the compact state snapshot helper before broad parent
 thread reads:

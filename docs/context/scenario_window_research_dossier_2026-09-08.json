@@ -211,9 +211,9 @@
   ],
   "cost_and_sample_size": {
     "measured_snapshot_fixture": {
-      "metadata_bytes": 18903,
+      "metadata_bytes": 19657,
       "payload_bytes": 3893,
-      "total_bytes": 22796,
+      "total_bytes": 23550,
       "environment": "local headless native doorway fixture; 7 pedestrians"
     },
     "wall_time": {

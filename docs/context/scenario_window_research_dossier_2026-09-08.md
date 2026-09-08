@@ -91,8 +91,8 @@ assumed valid.
 
 ## Cost and sample-size boundary
 
-The native doorway fixture measured 18,903 bytes of JSON metadata plus 3,893 bytes
-of compressed numeric payload (22,796 bytes total; seven pedestrians). This is an
+The native doorway fixture measured 19,657 bytes of JSON metadata plus 3,893 bytes
+of compressed numeric payload (23,550 bytes total; seven pedestrians). This is an
 engineering receipt only. The accounting used by the plan is:
 
 ```text

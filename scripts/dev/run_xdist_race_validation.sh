@@ -172,7 +172,13 @@ matches = [
     mode
     for line in log_text.splitlines()
     for mode, marker in mode_markers.items()
-    if line == marker or (mode == "xdist" and line.startswith(marker) and line.endswith(")."))
+    if (mode == "no-xdist" and line == marker)
+    or (
+        mode == "xdist"
+        and line.startswith(marker)
+        and line.endswith(").")
+        and line[len(marker):-2].strip()
+    )
 ]
 print(matches[0] if len(matches) == 1 else "unknown")
 PY

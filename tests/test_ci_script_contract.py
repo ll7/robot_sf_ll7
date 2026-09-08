@@ -1046,6 +1046,9 @@ def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
         (True, "both", None),
         (True, "duplicate", None),
         (True, "spoofed", None),
+        (True, "truncated-prefix", None),
+        (True, "truncated-suffix", None),
+        (True, "empty-dist", None),
         (False, "serial", None),
     ],
 )
@@ -1089,6 +1092,15 @@ case "$*" in
         ;;
       spoofed)
         printf '%s\\n' 'test output: Resolved pytest execution mode: pytest-xdist (dist=worksteal).' > "$log_path"
+        ;;
+      truncated-prefix)
+        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=' > "$log_path"
+        ;;
+      truncated-suffix)
+        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal)' > "$log_path"
+        ;;
+      empty-dist)
+        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=).' > "$log_path"
         ;;
       missing-path)
         summary_log_path=""

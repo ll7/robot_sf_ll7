@@ -51,6 +51,9 @@ CHECK_NAMES: tuple[str, ...] = (
     "simulator_validity",
 )
 CHECK_STATUSES = {"pass", "fail", "unavailable"}
+SCENARIO_FEASIBILITY_CONTRACT_VERSION = "scenario_feasibility_contract.v1"
+SCENARIO_FEASIBILITY_PREDICATE_NAMES = CHECK_NAMES
+SCENARIO_FEASIBILITY_VERDICTS = frozenset({"valid", "invalid", "missing", "contradictory"})
 _REPORT_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1]
     / "benchmark"
@@ -312,6 +315,446 @@ class FeasibilityCandidate:
             "feasible": self.feasible,
             "rejection_reasons": list(self.rejection_reasons),
         }
+
+
+ScenarioFeasibilityVerdict = Literal["valid", "invalid", "missing", "contradictory"]
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioFeasibilityPredicate:
+    """One versioned, planner-free scenario-feasibility predicate verdict."""
+
+    name: str
+    verdict: ScenarioFeasibilityVerdict
+    reason: str
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Require one canonical dimension and a reason for every verdict."""
+        if self.name not in SCENARIO_FEASIBILITY_PREDICATE_NAMES:
+            raise FeasibilityFirstError(
+                "predicate name must be one of "
+                f"{SCENARIO_FEASIBILITY_PREDICATE_NAMES!r}, got {self.name!r}"
+            )
+        if not isinstance(self.verdict, str) or self.verdict not in SCENARIO_FEASIBILITY_VERDICTS:
+            raise FeasibilityFirstError(
+                f"predicate {self.name!r} has unsupported verdict {self.verdict!r}"
+            )
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise FeasibilityFirstError(f"predicate {self.name!r} requires a non-empty reason")
+        if self.verdict == "valid" and not self.evidence:
+            raise FeasibilityFirstError(f"predicate {self.name!r} requires evidence when valid")
+        _validate_evidence_mapping(self.evidence, path=f"predicates.{self.name}.evidence")
+
+    @classmethod
+    def from_check(cls, check: FeasibilityCheck) -> ScenarioFeasibilityPredicate:
+        """Adapt an existing check without changing its caller-facing schema."""
+        verdict = {
+            "pass": "valid",
+            "fail": "invalid",
+            "unavailable": "missing",
+        }[check.status]
+        return cls(check.name, verdict, check.reason, dict(check.evidence))
+
+    @classmethod
+    def from_mapping(
+        cls,
+        payload: Mapping[str, Any],
+        *,
+        expected_name: str,
+    ) -> ScenarioFeasibilityPredicate:
+        """Parse a strict predicate, accepting legacy check status aliases."""
+        if not isinstance(payload, Mapping):
+            raise FeasibilityFirstError(f"predicates.{expected_name} must be a mapping")
+        allowed = {"name", "verdict", "status", "reason", "evidence"}
+        unknown = set(payload) - allowed
+        if unknown:
+            raise FeasibilityFirstError(
+                f"predicates.{expected_name} has unknown fields: {sorted(unknown)}"
+            )
+        name = payload.get("name", expected_name)
+        if name != expected_name:
+            raise FeasibilityFirstError(
+                f"predicates.{expected_name}.name must be {expected_name!r}, got {name!r}"
+            )
+        if "verdict" not in payload and "status" not in payload:
+            raise FeasibilityFirstError(f"predicates.{expected_name} requires a verdict")
+        verdict = _normalize_scenario_verdict(
+            payload.get("verdict", payload.get("status")),
+            path=f"predicates.{expected_name}",
+        )
+        if (
+            "verdict" in payload
+            and "status" in payload
+            and verdict
+            != _normalize_scenario_verdict(payload["status"], path=f"predicates.{expected_name}")
+        ):
+            raise FeasibilityFirstError(
+                f"predicates.{expected_name} verdict and status are contradictory"
+            )
+        if "reason" not in payload or not isinstance(payload["reason"], str):
+            raise FeasibilityFirstError(f"predicates.{expected_name} requires a string reason")
+        if "evidence" not in payload:
+            raise FeasibilityFirstError(f"predicates.{expected_name} requires an evidence mapping")
+        evidence = payload["evidence"]
+        if not isinstance(evidence, Mapping):
+            raise FeasibilityFirstError(f"predicates.{expected_name}.evidence must be a mapping")
+        return cls(
+            name=expected_name,
+            verdict=verdict,
+            reason=payload["reason"],
+            evidence=dict(evidence),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the canonical versioned predicate representation."""
+        return {
+            "name": self.name,
+            "verdict": self.verdict,
+            "reason": self.reason,
+            "evidence": dict(self.evidence),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioFeasibilityContract:
+    """Four-predicate contract for one candidate, with no execution side effects."""
+
+    candidate_id: str
+    predicates: tuple[ScenarioFeasibilityPredicate, ...]
+    contract_version: str = SCENARIO_FEASIBILITY_CONTRACT_VERSION
+
+    def __post_init__(self) -> None:
+        """Enforce exact version, coverage, order, and typed predicate records."""
+        if self.contract_version != SCENARIO_FEASIBILITY_CONTRACT_VERSION:
+            raise FeasibilityFirstError(
+                "contract_version must be "
+                f"{SCENARIO_FEASIBILITY_CONTRACT_VERSION!r}, got {self.contract_version!r}"
+            )
+        if not isinstance(self.candidate_id, str) or not self.candidate_id.strip():
+            raise FeasibilityFirstError("candidate_id must be non-empty")
+        if not isinstance(self.predicates, tuple) or len(self.predicates) != len(CHECK_NAMES):
+            raise FeasibilityFirstError(
+                f"{self.candidate_id}: predicates must contain {len(CHECK_NAMES)} entries"
+            )
+        if any(
+            not isinstance(predicate, ScenarioFeasibilityPredicate) for predicate in self.predicates
+        ):
+            raise FeasibilityFirstError(
+                f"{self.candidate_id}: predicates have invalid record types"
+            )
+        names = tuple(predicate.name for predicate in self.predicates)
+        if names != SCENARIO_FEASIBILITY_PREDICATE_NAMES:
+            raise FeasibilityFirstError(
+                f"{self.candidate_id}: predicates must contain "
+                f"{SCENARIO_FEASIBILITY_PREDICATE_NAMES!r} in canonical order"
+            )
+
+    @classmethod
+    def from_candidate(cls, candidate: FeasibilityCandidate) -> ScenarioFeasibilityContract:
+        """Project a canonical candidate into the four-predicate contract."""
+        return cls(
+            candidate_id=candidate.candidate_id,
+            predicates=tuple(
+                ScenarioFeasibilityPredicate.from_check(check) for check in candidate.checks
+            ),
+        )
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> ScenarioFeasibilityContract:
+        """Parse a strict contract and reject contradictory derived fields."""
+        if not isinstance(payload, Mapping):
+            raise FeasibilityFirstError("scenario-feasibility contract must be a mapping")
+        required = {"contract_version", "candidate_id", "predicates"}
+        derived = {"feasible", "rejection_reasons", "safety_denominator_eligible"}
+        missing = required - set(payload)
+        unknown = set(payload) - required - derived
+        if missing or unknown:
+            details: list[str] = []
+            if missing:
+                details.append(f"missing {sorted(missing)}")
+            if unknown:
+                details.append(f"unknown {sorted(unknown)}")
+            raise FeasibilityFirstError(
+                "scenario-feasibility contract fields: " + "; ".join(details)
+            )
+        contract = cls(
+            candidate_id=_required_text(payload["candidate_id"], "candidate_id"),
+            predicates=_parse_scenario_predicates(payload["predicates"]),
+            contract_version=_required_text(payload["contract_version"], "contract_version"),
+        )
+        _validate_contract_derived_fields(contract, payload)
+        return contract
+
+    @property
+    def feasible(self) -> bool:
+        """Return true only when all four predicates are explicitly valid."""
+        return all(predicate.verdict == "valid" for predicate in self.predicates)
+
+    @property
+    def rejection_reasons(self) -> tuple[str, ...]:
+        """Return stable, dimension-qualified reasons for every rejected predicate."""
+        return tuple(
+            f"{predicate.name}:{predicate.verdict}:{predicate.reason}"
+            for predicate in self.predicates
+            if predicate.verdict != "valid"
+        )
+
+    @property
+    def safety_denominator_eligible(self) -> bool:
+        """Return whether this record may contribute to the contract denominator."""
+        return self.feasible
+
+    @property
+    def predicate_verdicts(self) -> tuple[ScenarioFeasibilityPredicate, ...]:
+        """Return the four predicates under an explicit verdict-oriented alias."""
+        return self.predicates
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the strict versioned contract record."""
+        return {
+            "contract_version": self.contract_version,
+            "candidate_id": self.candidate_id,
+            "predicates": [predicate.to_dict() for predicate in self.predicates],
+            "feasible": self.feasible,
+            "rejection_reasons": list(self.rejection_reasons),
+            "safety_denominator_eligible": self.safety_denominator_eligible,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioFeasibilityRejectionLedger:
+    """Deterministic accounting that keeps rejected records out of the denominator."""
+
+    contracts: tuple[ScenarioFeasibilityContract, ...]
+    contract_version: str = SCENARIO_FEASIBILITY_CONTRACT_VERSION
+
+    def __post_init__(self) -> None:
+        """Reject mixed versions, duplicate identities, and malformed ledger records."""
+        if self.contract_version != SCENARIO_FEASIBILITY_CONTRACT_VERSION:
+            raise FeasibilityFirstError(
+                "ledger contract_version must be "
+                f"{SCENARIO_FEASIBILITY_CONTRACT_VERSION!r}, got {self.contract_version!r}"
+            )
+        if not isinstance(self.contracts, tuple):
+            object.__setattr__(self, "contracts", tuple(self.contracts))
+        if any(
+            not isinstance(contract, ScenarioFeasibilityContract) for contract in self.contracts
+        ):
+            raise FeasibilityFirstError("ledger contracts have invalid record types")
+        if any(contract.contract_version != self.contract_version for contract in self.contracts):
+            raise FeasibilityFirstError("ledger contains mixed contract versions")
+        ids = [contract.candidate_id for contract in self.contracts]
+        if len(ids) != len(set(ids)):
+            raise FeasibilityFirstError("ledger candidate_id values must be unique")
+
+    @property
+    def accepted_contracts(self) -> tuple[ScenarioFeasibilityContract, ...]:
+        """Return only fully valid contract records."""
+        return tuple(contract for contract in self.contracts if contract.feasible)
+
+    @property
+    def rejected_contracts(self) -> tuple[ScenarioFeasibilityContract, ...]:
+        """Return every contract with at least one named rejection reason."""
+        return tuple(contract for contract in self.contracts if not contract.feasible)
+
+    @property
+    def accepted_candidate_ids(self) -> tuple[str, ...]:
+        """Return candidate identities eligible for the contract denominator."""
+        return tuple(contract.candidate_id for contract in self.accepted_contracts)
+
+    @property
+    def rejected_candidate_ids(self) -> tuple[str, ...]:
+        """Return candidate identities excluded from the contract denominator."""
+        return tuple(contract.candidate_id for contract in self.rejected_contracts)
+
+    @property
+    def safety_denominator_candidate_ids(self) -> tuple[str, ...]:
+        """Return the denominator identities, which are exactly the accepted records."""
+        return self.accepted_candidate_ids
+
+    @property
+    def rejection_counts(self) -> dict[str, int]:
+        """Count rejected predicates by canonical dimension."""
+        counts = Counter(
+            predicate.name
+            for contract in self.rejected_contracts
+            for predicate in contract.predicates
+            if predicate.verdict != "valid"
+        )
+        return dict(sorted(counts.items()))
+
+    @property
+    def rejection_reason_counts(self) -> dict[str, int]:
+        """Count complete rejection reasons for deterministic audit output."""
+        counts = Counter(
+            reason for contract in self.rejected_contracts for reason in contract.rejection_reasons
+        )
+        return dict(sorted(counts.items()))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return deterministic contract records and denominator accounting."""
+        return {
+            "contract_version": self.contract_version,
+            "predicate_names": list(SCENARIO_FEASIBILITY_PREDICATE_NAMES),
+            "candidates": [contract.to_dict() for contract in self.contracts],
+            "rejection_ledger": [
+                {
+                    "candidate_id": contract.candidate_id,
+                    "reasons": list(contract.rejection_reasons),
+                }
+                for contract in self.rejected_contracts
+            ],
+            "rejection_counts": self.rejection_counts,
+            "rejection_reason_counts": self.rejection_reason_counts,
+            "safety_denominator_candidate_ids": list(self.safety_denominator_candidate_ids),
+            "safety_denominator_count": len(self.safety_denominator_candidate_ids),
+            "excluded_candidate_ids": list(self.rejected_candidate_ids),
+            "invalid_candidates_excluded_from_safety_denominators": True,
+        }
+
+
+def _parse_scenario_predicates(
+    payload: object,
+) -> tuple[ScenarioFeasibilityPredicate, ...]:
+    """Parse exactly the four ordered predicate mappings."""
+    if not isinstance(payload, Sequence) or isinstance(payload, str | bytes):
+        raise FeasibilityFirstError("scenario-feasibility predicates must be a sequence")
+    if len(payload) != len(CHECK_NAMES):
+        raise FeasibilityFirstError(
+            f"scenario-feasibility predicates must contain {len(CHECK_NAMES)} entries"
+        )
+    return tuple(
+        ScenarioFeasibilityPredicate.from_mapping(item, expected_name=name)
+        for name, item in zip(CHECK_NAMES, payload, strict=True)
+    )
+
+
+def _validate_contract_derived_fields(
+    contract: ScenarioFeasibilityContract,
+    payload: Mapping[str, Any],
+) -> None:
+    """Reject serialized fields that disagree with predicate-derived values."""
+    _validate_derived_bool(payload, "feasible", contract.feasible, contract.candidate_id)
+    _validate_derived_bool(
+        payload,
+        "safety_denominator_eligible",
+        contract.safety_denominator_eligible,
+        contract.candidate_id,
+    )
+    _validate_derived_reasons(contract, payload)
+
+
+def _validate_derived_bool(
+    payload: Mapping[str, Any],
+    field: str,
+    expected: bool,
+    candidate_id: str,
+) -> None:
+    """Validate one optional boolean derived from the predicate verdicts."""
+    if field not in payload:
+        return
+    value = payload[field]
+    if not isinstance(value, bool):
+        raise FeasibilityFirstError(f"{candidate_id}: {field} must be boolean")
+    if value != expected:
+        raise FeasibilityFirstError(f"{candidate_id}: {field} contradicts predicates")
+
+
+def _validate_derived_reasons(
+    contract: ScenarioFeasibilityContract,
+    payload: Mapping[str, Any],
+) -> None:
+    """Validate optional rejection reasons against the canonical ordered reasons."""
+    if "rejection_reasons" in payload:
+        reasons = payload["rejection_reasons"]
+        if not isinstance(reasons, Sequence) or isinstance(reasons, str | bytes):
+            raise FeasibilityFirstError(
+                f"{contract.candidate_id}: rejection_reasons must be a sequence"
+            )
+        if any(not isinstance(reason, str) for reason in reasons):
+            raise FeasibilityFirstError(
+                f"{contract.candidate_id}: rejection_reasons must contain strings"
+            )
+        if list(reasons) != list(contract.rejection_reasons):
+            raise FeasibilityFirstError(
+                f"{contract.candidate_id}: rejection_reasons contradict predicates"
+            )
+
+
+def evaluate_scenario_feasibility(
+    candidate_id: str,
+    predicates: Sequence[FeasibilityCheck | ScenarioFeasibilityPredicate | Mapping[str, Any]],
+) -> ScenarioFeasibilityContract:
+    """Evaluate exactly four supplied predicate records without running a system."""
+    if not isinstance(predicates, Sequence) or isinstance(predicates, str | bytes):
+        raise FeasibilityFirstError("predicates must be a sequence")
+    if len(predicates) != len(SCENARIO_FEASIBILITY_PREDICATE_NAMES):
+        raise FeasibilityFirstError(
+            f"predicates must contain {len(SCENARIO_FEASIBILITY_PREDICATE_NAMES)} entries"
+        )
+    normalized: list[ScenarioFeasibilityPredicate] = []
+    for expected_name, predicate in zip(
+        SCENARIO_FEASIBILITY_PREDICATE_NAMES, predicates, strict=True
+    ):
+        if isinstance(predicate, FeasibilityCheck):
+            if predicate.name != expected_name:
+                raise FeasibilityFirstError(
+                    f"predicates.{expected_name}.name must be {expected_name!r}"
+                )
+            normalized.append(ScenarioFeasibilityPredicate.from_check(predicate))
+        elif isinstance(predicate, ScenarioFeasibilityPredicate):
+            if predicate.name != expected_name:
+                raise FeasibilityFirstError(
+                    f"predicates.{expected_name}.name must be {expected_name!r}"
+                )
+            normalized.append(predicate)
+        elif isinstance(predicate, Mapping):
+            normalized.append(
+                ScenarioFeasibilityPredicate.from_mapping(predicate, expected_name=expected_name)
+            )
+        else:
+            raise FeasibilityFirstError(
+                f"predicates.{expected_name} must be a check, predicate, or mapping"
+            )
+    return ScenarioFeasibilityContract(
+        candidate_id=_required_text(candidate_id, "candidate_id"),
+        predicates=tuple(normalized),
+    )
+
+
+def build_scenario_feasibility_ledger(
+    records: Sequence[FeasibilityCandidate | ScenarioFeasibilityContract | Mapping[str, Any]],
+) -> ScenarioFeasibilityRejectionLedger:
+    """Build deterministic four-predicate accounting from canonical records."""
+    if not isinstance(records, Sequence) or isinstance(records, str | bytes):
+        raise FeasibilityFirstError("scenario-feasibility records must be a sequence")
+    contracts: list[ScenarioFeasibilityContract] = []
+    for record in records:
+        if isinstance(record, FeasibilityCandidate):
+            contracts.append(ScenarioFeasibilityContract.from_candidate(record))
+        elif isinstance(record, ScenarioFeasibilityContract):
+            contracts.append(record)
+        elif isinstance(record, Mapping):
+            if "predicates" in record:
+                contracts.append(ScenarioFeasibilityContract.from_mapping(record))
+            else:
+                contracts.append(
+                    ScenarioFeasibilityContract.from_candidate(
+                        FeasibilityCandidate.from_mapping(record)
+                    )
+                )
+        else:
+            raise FeasibilityFirstError(
+                "scenario-feasibility records must contain candidates, contracts, or mappings"
+            )
+    contracts.sort(key=lambda contract: contract.candidate_id)
+    return ScenarioFeasibilityRejectionLedger(tuple(contracts))
+
+
+def validate_scenario_feasibility_contract(payload: Mapping[str, Any]) -> None:
+    """Validate one serialized contract, including all derived accounting fields."""
+    ScenarioFeasibilityContract.from_mapping(payload)
 
 
 def rank_feasible_candidates(
@@ -752,6 +1195,24 @@ def _validate_evidence_mapping(evidence: Mapping[str, Any], *, path: str) -> Non
         raise FeasibilityFirstError(f"{path}.{key} must be a JSON scalar")
 
 
+def _normalize_scenario_verdict(value: object, *, path: str) -> ScenarioFeasibilityVerdict:
+    """Normalize canonical verdicts and the existing check-status vocabulary."""
+    aliases: dict[str, ScenarioFeasibilityVerdict] = {
+        "valid": "valid",
+        "invalid": "invalid",
+        "missing": "missing",
+        "contradictory": "contradictory",
+        "pass": "valid",
+        "fail": "invalid",
+        "unavailable": "missing",
+    }
+    if not isinstance(value, str) or value not in aliases:
+        raise FeasibilityFirstError(
+            f"{path} has unsupported verdict/status {value!r}; expected one of {sorted(aliases)}"
+        )
+    return aliases[value]
+
+
 def _mean_or_none(values: Sequence[float] | Any) -> float | None:
     """Return a finite mean or ``None`` when the evidence set is empty."""
     values_list = [float(value) for value in values]
@@ -800,17 +1261,26 @@ __all__ = [
     "CLAIM_BOUNDARY",
     "EVIDENCE_TIER",
     "EXISTING_BASELINE_ID",
+    "SCENARIO_FEASIBILITY_CONTRACT_VERSION",
+    "SCENARIO_FEASIBILITY_PREDICATE_NAMES",
+    "SCENARIO_FEASIBILITY_VERDICTS",
     "SCHEMA_VERSION",
     "FeasibilityCandidate",
     "FeasibilityCheck",
     "FeasibilityFirstError",
     "HierarchicalScenarioValue",
+    "ScenarioFeasibilityContract",
+    "ScenarioFeasibilityPredicate",
+    "ScenarioFeasibilityRejectionLedger",
     "build_comparison_report",
     "build_fixture_candidates",
+    "build_scenario_feasibility_ledger",
+    "evaluate_scenario_feasibility",
     "load_report_schema",
     "rank_feasible_candidates",
     "run_fixture_diagnostic",
     "sample_risk_feedback",
     "sample_seeded_uniform",
     "validate_report",
+    "validate_scenario_feasibility_contract",
 ]

@@ -95,6 +95,32 @@ def test_metrics_schema(report_dir: Path):
     assert data["metrics"], "metrics list empty"
 
 
+def test_metrics_schema_accepts_zero_convergence_summary() -> None:
+    """The aggregate schema admits zero-valued convergence summaries."""
+    schema = load_schema("aggregated_metrics.schema.json")
+    validate_data(
+        {
+            "schema_version": "1.0.0",
+            "metrics": [
+                {
+                    "metric_name": "timesteps_to_convergence",
+                    "condition": "baseline",
+                    "mean": 0,
+                    "median": 0,
+                    "p95": 0,
+                    "std": 0,
+                    "ci_low": None,
+                    "ci_high": None,
+                    "ci_confidence": 0.95,
+                    "sample_size": 1,
+                    "effect_size": None,
+                }
+            ],
+        },
+        schema,
+    )
+
+
 def test_metadata_schema(report_dir: Path):
     """TODO docstring. Document this function.
 

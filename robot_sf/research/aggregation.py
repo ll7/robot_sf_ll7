@@ -206,7 +206,16 @@ def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
 
 
 def _first_timestep_metric(metrics: dict[str, Any]) -> object | None:
-    """Return a timestep alias while preserving legacy fallback and validation behavior."""
+    """Select the first timestep alias while preserving the zero/fallback contract.
+
+    The aliases are considered in priority order: ``timesteps_to_convergence``,
+    ``avg_timesteps``, then ``total_timesteps``. Numeric zero is a valid value;
+    null or malformed falsy values in earlier aliases retain legacy fall-through,
+    while values that reach coercion retain the existing validation behavior.
+
+    Returns:
+        The selected alias value, or ``None`` when no alias is present.
+    """
     for field in ("timesteps_to_convergence", "avg_timesteps"):
         candidate = metrics.get(field)
         # Keep the legacy fallback for malformed falsy values while treating

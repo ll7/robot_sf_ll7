@@ -140,6 +140,18 @@ def test_report_summary_numeric_coercion_fails_closed() -> None:
     assert pretrained == []
 
 
+def test_report_summary_numeric_coercion_preserves_zero_and_ignores_null() -> None:
+    """Provenance summary lists retain zero and omit unavailable null entries."""
+    from scripts.research.generate_report import _coerce_summary_float_list
+
+    assert _coerce_summary_float_list({"baseline_timesteps": [0, None]}, "baseline_timesteps") == [
+        0.0
+    ]
+    assert _coerce_summary_float_list({"pretrained_timesteps": [0.0]}, "pretrained_timesteps") == [
+        0.0
+    ]
+
+
 def test_tracker_float_coercion_rejects_nonfinite_values() -> None:
     """Shared metric coercion rejects NaN before report aggregation."""
     from robot_sf.research.tracker_manifest import coerce_tracker_float

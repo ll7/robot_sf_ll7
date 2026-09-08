@@ -595,6 +595,34 @@ def test_extract_seed_metrics_avg_timesteps_alias(tmp_path: Path):
     )
 
 
+@pytest.mark.parametrize(
+    "metrics",
+    [
+        pytest.param(
+            {
+                "timesteps_to_convergence": 0,
+                "avg_timesteps": 12000.0,
+                "total_timesteps": 99000.0,
+            },
+            id="timesteps-to-convergence",
+        ),
+        pytest.param(
+            {"avg_timesteps": 0.0, "total_timesteps": 99000.0},
+            id="avg-timesteps",
+        ),
+        pytest.param({"total_timesteps": 0}, id="total-timesteps"),
+    ],
+)
+def test_extract_seed_metrics_preserves_zero_for_each_timestep_alias(
+    tmp_path: Path, metrics: dict[str, object]
+):
+    """Numeric zero remains present for each supported timestep alias."""
+    path = _write_manifest(tmp_path, "zero.json", {"success_rate": 0.8, **metrics})
+    records, failures = extract_seed_metrics([str(path)])
+    assert failures == []
+    assert records[0]["timesteps_to_convergence"] == 0.0
+
+
 def test_extract_seed_metrics_total_timesteps_alias(tmp_path: Path):
     """The ``total_timesteps`` alias is used when no earlier timestep key is present.
 
@@ -610,8 +638,9 @@ def test_extract_seed_metrics_total_timesteps_alias(tmp_path: Path):
 
 
 @pytest.mark.parametrize(
-    "malformed_value",
+    "fallback_value",
     [
+        pytest.param(None, id="null"),
         pytest.param(False, id="false"),
         pytest.param("", id="empty-string"),
         pytest.param([], id="empty-list"),
@@ -620,13 +649,13 @@ def test_extract_seed_metrics_total_timesteps_alias(tmp_path: Path):
 )
 @pytest.mark.parametrize("field", ["timesteps_to_convergence", "avg_timesteps"])
 def test_extract_seed_metrics_skips_falsy_malformed_timestep_alias(
-    tmp_path: Path, field: str, malformed_value: object
+    tmp_path: Path, field: str, fallback_value: object
 ):
-    """Malformed falsy aliases retain legacy fallback behavior."""
+    """Null and malformed falsy earlier aliases retain legacy fallback behavior."""
     path = _write_manifest(
         tmp_path,
         "a.json",
-        {field: malformed_value, "total_timesteps": 99000.0},
+        {field: fallback_value, "total_timesteps": 99000.0},
     )
     records, failures = extract_seed_metrics([str(path)])
     assert failures == []
@@ -656,6 +685,14 @@ def test_extract_seed_metrics_rejects_falsy_final_timestep_alias(
     assert (
         failures[0]["reason"] == "Tracker manifest metrics.timesteps must contain a finite number"
     )
+
+
+def test_extract_seed_metrics_omits_null_final_timestep_alias(tmp_path: Path):
+    """A null final alias remains missing when another numeric metric is present."""
+    path = _write_manifest(tmp_path, "a.json", {"success_rate": 0.8, "total_timesteps": None})
+    records, failures = extract_seed_metrics([str(path)])
+    assert failures == []
+    assert "timesteps_to_convergence" not in records[0]
 
 
 def test_extract_seed_metrics_final_reward_mean_field(tmp_path: Path):

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://robot-sf.dev/specs/270-imitation-report/aggregated-metrics.schema.v1.json",
   "title": "AggregatedMetrics",
-  "description": "Statistical summaries with bootstrap confidence intervals for multi-seed metrics",
+  "description": "Statistical summaries with bootstrap confidence intervals for multi-seed metrics. A timesteps_to_convergence summary may be zero for instantaneous or diagnostic convergence.",
   "type": "object",
   "required": [
     "schema_version",

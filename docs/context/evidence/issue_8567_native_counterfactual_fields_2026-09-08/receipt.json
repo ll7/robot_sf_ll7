@@ -8,7 +8,7 @@
   "benchmark_evidence": false,
   "campaign_submission_authorized": false,
   "source_revisions": {
-    "base_commit": "9557d3aba9910bd039c1e689973fd51e9713603",
+    "base_commit": "9557d3abaa9910bd039c1e689973fd51e9713603",
     "implementation_head_commit": "5a09d7dd08e72bf7d337ac2de178a7290892ed3b",
     "smoke_rows_commit": "5a09d7dd08e72bf7d337ac2de178a7290892ed3b",
     "smoke_worktree": ".",
@@ -179,6 +179,10 @@
   },
   "validation": [
     {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q tests/benchmark/test_paired_effect_metric_contract.py tests/benchmark/test_safety_wrapper_runtime.py tests/validation/test_issue_6971_safety_wrapper_preregistration.py tests/benchmark/test_map_runner_utils.py",
+      "result": "240 passed in 13.77s"
+    },
+    {
       "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q tests/benchmark/test_paired_effect_metric_contract.py tests/benchmark/test_safety_wrapper_runtime.py tests/validation/test_issue_6971_safety_wrapper_preregistration.py",
       "result": "95 passed in 6.26s"
     },
@@ -203,7 +207,7 @@
       "result": "passed"
     },
     {
-      "command": "git diff --exit-code 9557d3aba9910bd039c1e689973fd51e9713603 -- configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml configs/research/safety_wrapper_ablation_v1.yaml configs/benchmarks/paired_effect_metric_contract_v1.yaml configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml configs/scenarios/classic_interactions_francis2023.yaml configs/benchmarks/seed_sets_v1.yaml",
+      "command": "git diff --exit-code 9557d3abaa9910bd039c1e689973fd51e9713603 -- configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml configs/research/safety_wrapper_ablation_v1.yaml configs/benchmarks/paired_effect_metric_contract_v1.yaml configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml configs/scenarios/classic_interactions_francis2023.yaml configs/benchmarks/seed_sets_v1.yaml",
       "result": "passed; frozen input bytes unchanged"
     }
   ],

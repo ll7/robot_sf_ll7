@@ -51,10 +51,12 @@ source_contracts:
 
 source_sha256:
   stage_a_summary: ee35513b0c04eea0e438ce2c163bd78be5cb2a48881a2f20b6788226cfaf1151
-  stage_a_parameter_screen: 0d7bac6cdf35c5a4d3c17f8f865426fd794dc036048f6a8cada7df8f8d253482
+  # Refresh the source/test pins for #8597's fail-closed metric validation (142da15a).
+  # Historical summary bytes and implementation_commits below retain their original provenance.
+  stage_a_parameter_screen: 21bf9edaa7e34487f0a96c1a72969d98a6d14719c8c97c951fb83639227987ca
   stage_a_reference_contract: 28d81a4f820aceef8e0b8f388ad81ce06c260adb8ac9d838ccad2ae556f01e5c
   stage_a_runner: 52d7aee8833c56bb30b869edbd89d2b29b65927398d3e5f0af6818f0e8093768
-  stage_a_tests: 0484d1a7bacaed75c668c53f110c43c990690a040a18784a67dfa95be73c6f2f
+  stage_a_tests: 6c4a5e6ee4e203782b5abafe4b86fd72211d44d57ee4106706e339010223a833
 
 stage_a_snapshot:
   implementation_commits:

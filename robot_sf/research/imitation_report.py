@@ -471,20 +471,38 @@ def _copy_figures(figures: dict[str, Path], destination: Path) -> dict[str, Path
 
 
 def _extract_seeds(summary: dict[str, Any]) -> list[int]:
-    """Extract seed values from summary if present.
+    """Extract and validate seed values from a summary if the field is present.
 
     Returns:
         List of integer seed values.
+
+    Raises:
+        ValueError: If ``summary.seeds`` is present but is not a list of integers.
     """
 
-    seeds_raw = summary.get("seeds")
+    if "seeds" not in summary:
+        return []
+
+    seeds_raw = summary["seeds"]
+    if not isinstance(seeds_raw, list):
+        raise ValueError("summary.seeds must be a list of integer values when present")
+
     seeds: list[int] = []
-    if isinstance(seeds_raw, list):
-        for val in seeds_raw:
-            try:
-                seeds.append(int(val))
-            except (TypeError, ValueError):
+    for index, value in enumerate(seeds_raw):
+        if isinstance(value, bool):
+            raise ValueError(f"summary.seeds[{index}] must be an integer, got {value!r}")
+        if isinstance(value, int):
+            seeds.append(value)
+            continue
+        if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+            seeds.append(int(value))
+            continue
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped and stripped.lstrip("+-").isdigit():
+                seeds.append(int(stripped))
                 continue
+        raise ValueError(f"summary.seeds[{index}] must be an integer, got {value!r}")
     return seeds
 
 
@@ -521,6 +539,8 @@ def generate_imitation_report(
     """
 
     summary = _load_summary(summary_path)
+    # Validate provenance before creating any report directories or copying inputs.
+    seeds = _extract_seeds(summary)
     baseline_rec, pretrained_rec = _select_records(
         summary, config.baseline_run_id, config.pretrained_run_id
     )
@@ -574,7 +594,6 @@ def generate_imitation_report(
     # Copy summary for traceability
     shutil.copy2(summary_path, data_dir / "summary.json")
 
-    seeds = _extract_seeds(summary)
     metadata = collect_reproducibility_metadata(
         seeds=seeds,
         config_paths=config.config_paths,

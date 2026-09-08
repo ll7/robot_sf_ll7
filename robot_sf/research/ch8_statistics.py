@@ -360,8 +360,8 @@ def _check_eta_squared(
 def _parse_float(raw: Any) -> float | None:
     """Return ``raw`` coerced to ``float``, or ``None`` when it is unparseable.
 
-    Blank strings, the literal ``nan`` (case-insensitive), and surrounding quotes are
-    treated as missing rather than raising.
+    Blank strings, non-finite values, and surrounding quotes are treated as missing rather
+    than raising.
     """
     if raw is None:
         return None
@@ -369,9 +369,10 @@ def _parse_float(raw: Any) -> float | None:
     if s == "" or s.lower() == "nan":
         return None
     try:
-        return float(s)
+        value = float(s)
     except ValueError:
         return None
+    return value if math.isfinite(value) else None
 
 
 def _mean_ch8(xs: list[float | None]) -> float:
@@ -477,6 +478,16 @@ def _spearman_ch8(rows: list[dict[str, Any]], x_field: str, y_field: str) -> dic
     return {"value": float(val)}
 
 
+def _bootstrap_planner_values_ch8(
+    cell: dict[str, dict[str, float]], planner: str, sampled_families: list[str]
+) -> list[float]:
+    """Return finite values for one planner in a bootstrap draw."""
+    values = [cell[planner][family] for family in sampled_families if family in cell[planner]]
+    if not values:
+        raise ValueError(f"planner {planner} has no finite metric values in bootstrap draw")
+    return values
+
+
 def _rank_stability_bootstrap_ch8(
     rows: list[dict[str, Any]], metric: str, n_boot: int, seed: int
 ) -> dict[str, dict[str, Any]]:
@@ -494,12 +505,21 @@ def _rank_stability_bootstrap_ch8(
         if v is not None:
             cell[r["planner_key"]][r["scenario_family"]] = v
 
+    # Do not rank planners or resample families that have no finite source cell.
+    # Otherwise an all-invalid table can silently become a synthetic all-zero rank.
+    planners = [planner for planner in planners if cell[planner]]
+    families = [
+        family for family in families if any(family in cell[planner] for planner in planners)
+    ]
+    if not planners or not families:
+        raise ValueError("rows contain no finite metric values for rank-stability bootstrap")
+
     def rank_by_mean(sampled_families: list[str]) -> dict[str, int]:
         """Return planner ranks (1 = highest mean metric) over the given scenario families."""
         means = {}
         for p in planners:
-            vals = [cell[p][f] for f in sampled_families if f in cell[p]]
-            means[p] = _mean_ch8(vals) if vals else 0.0
+            vals = _bootstrap_planner_values_ch8(cell, p, sampled_families)
+            means[p] = _mean_ch8(vals)
         order = sorted(planners, key=lambda p: -means[p])
         return {p: order.index(p) + 1 for p in planners}
 

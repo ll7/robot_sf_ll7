@@ -13,6 +13,7 @@ import pytest
 
 from scripts.dev import gate_worktree_guard as guard
 from scripts.dev import stale_worktree_reaper as reaper
+from scripts.dev import worktree_receipt
 from scripts.dev.pr_gate_lease import PRGateLease, create_lease, lease_path, save_lease, status
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -71,10 +72,11 @@ def _clean_candidate_plan(
 
 
 @pytest.mark.parametrize("force_python", (False, True), ids=("flock-cli", "portable-python"))
+@pytest.mark.parametrize("with_receipt", (False, True), ids=("no-receipt", "receipt"))
 def test_creator_task_id_acquires_path_lease_before_return(
-    tmp_path: Path, monkeypatch, force_python: bool
+    tmp_path: Path, monkeypatch, force_python: bool, with_receipt: bool
 ) -> None:
-    """The canonical shell creator publishes ownership even when no receipt is requested."""
+    """The canonical creator hands off an active lease and any requested receipt."""
     repo = tmp_path / "creator-repo"
     repo.mkdir()
     subprocess.run(
@@ -89,6 +91,8 @@ def test_creator_task_id_acquires_path_lease_before_return(
     _git(repo, "add", "README.md")
     _git(repo, "commit", "-m", "fixture")
     worktree = tmp_path / "creator-worktree"
+    receipt_path = tmp_path / "creator-receipt.json"
+    receipt_args = ["--receipt", str(receipt_path)] if with_receipt else []
 
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
@@ -110,12 +114,14 @@ def test_creator_task_id_acquires_path_lease_before_return(
             "0",
             "--task-id",
             "cycle-180-created",
+            *receipt_args,
         ],
         cwd=repo,
         capture_output=True,
         text=True,
         check=False,
         env=environment,
+        timeout=30,
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
@@ -126,6 +132,12 @@ def test_creator_task_id_acquires_path_lease_before_return(
     assert lease_status["lease"]["gate_id"] == "cycle-180-created"
     assert lease_status["lease"]["owner"] == "cycle-180-created"
     assert lease_status["lease"]["worktree_path"] == str(worktree.resolve())
+
+    if with_receipt:
+        monkeypatch.chdir(worktree)
+        receipt_check = worktree_receipt.check_receipt(receipt_path)
+        assert receipt_check.ok, receipt_check.failure
+        assert receipt_check.task_id == lease_status["lease"]["gate_id"]
 
 
 @pytest.mark.parametrize("force_python", (False, True), ids=("flock-cli", "portable-python"))

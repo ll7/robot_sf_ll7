@@ -6,6 +6,8 @@ import base64
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -14,6 +16,7 @@ from robot_sf.research.imitation_report import (
     ImitationReportConfig,
     _ci_from_samples,
     _copy_figures,
+    _extract_seeds,
     _fmt_ci,
     generate_imitation_report,
 )
@@ -132,6 +135,43 @@ def test_fmt_ci_formats_tuple_and_na():
     assert _fmt_ci((1.23456, 2.34567)) == "(1.2346, 2.3457)"
     assert _fmt_ci(None) == "n/a"
     assert _fmt_ci("n/a") == "n/a"
+
+
+@pytest.mark.parametrize("seeds", [None, {"seed": 42}, [42.5], [True], ["not-a-seed"]])
+def test_extract_seeds_rejects_malformed_metadata(seeds):
+    """Malformed seed metadata fails closed instead of being silently omitted."""
+
+    with pytest.raises(ValueError, match=r"summary\.seeds"):
+        _extract_seeds({"seeds": seeds})
+
+
+def test_extract_seeds_preserves_valid_integer_values():
+    """Valid integer and lossless textual seed values remain reproducible metadata."""
+
+    assert _extract_seeds({"seeds": [42, " 43 ", 44.0]}) == [42, 43, 44]
+
+
+def test_generate_imitation_report_rejects_invalid_seeds_before_writing(tmp_path: Path):
+    """Invalid seed provenance cannot leave a partial report that looks reproducible."""
+
+    summary = {
+        "seeds": [42.5],
+        "extractor_results": [
+            _minimal_record("baseline_run", 1000.0, 0.6, 0.2, 0.5),
+            _minimal_record("pretrained_run", 600.0, 0.8, 0.1, 0.7),
+        ],
+    }
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"summary\.seeds"):
+        generate_imitation_report(
+            summary_path=summary_path,
+            output_root=tmp_path,
+            config=ImitationReportConfig(experiment_name="invalid-seeds"),
+        )
+
+    assert not list(tmp_path.glob("imitation_*"))
 
 
 def test_parse_hparams_handles_valid_and_invalid(monkeypatch):

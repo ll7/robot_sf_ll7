@@ -36,11 +36,14 @@ from robot_sf.benchmark.last_avoidable_replay import (
 from robot_sf.benchmark.simulator_counterfactual_adapter import (
     SimulatorCounterfactualModel,
     _capture_route_navigators,
+    _capture_single_runtimes,
     _restore_route_navigators,
+    _restore_single_runtimes,
 )
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.navigation import RouteNavigator
 from robot_sf.nav.svg_map_parser import convert_map
+from robot_sf.ped_npc.ped_behavior import SinglePedestrianRuntime
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import init_simulators
 
@@ -184,6 +187,26 @@ def test_snapshot_restores_groups_behavior_rng_and_residual_state() -> None:
     assert sim._residual_adversary.counter == 1
 
 
+def test_single_runtime_snapshot_round_trip_restores_dataclass_fields() -> None:
+    """Single-pedestrian runtime fields are deep-copied and reconstructed."""
+    runtime = SinglePedestrianRuntime(
+        ped_id=3,
+        definition=SimpleNamespace(id="ped-3"),
+        trajectory=[(1.0, 2.0)],
+        waypoint_index=1,
+        pending_waits={1: 0.5},
+    )
+    behavior = SimpleNamespace(_runtimes=[runtime])
+    saved = _capture_single_runtimes([behavior])
+
+    runtime.waypoint_index = 9
+    runtime.pending_waits.clear()
+    _restore_single_runtimes([behavior], saved)
+
+    assert behavior._runtimes[0].waypoint_index == 1
+    assert behavior._runtimes[0].pending_waits == {1: 0.5}
+
+
 def test_rng_capture_seam_prevents_divergence() -> None:
     """Without the global-RNG capture seam, a mid-episode respawn replay diverges.
 
@@ -295,6 +318,141 @@ def test_robot_relative_behavior_is_closed_loop_provenance() -> None:
     assert model.pedestrian_response == "closed_loop"
 
 
+@pytest.mark.parametrize(
+    ("definition", "expected"),
+    (
+        (
+            SimpleNamespace(
+                role="lead", goal=None, trajectory=None, hold_until_robot_within_m=None
+            ),
+            "closed_loop",
+        ),
+        (
+            SimpleNamespace(
+                role="lead", goal=(2.0, 0.0), trajectory=None, hold_until_robot_within_m=None
+            ),
+            "replayed",
+        ),
+        (
+            SimpleNamespace(role="wait", goal=None, trajectory=None, hold_until_robot_within_m=1.0),
+            "closed_loop",
+        ),
+    ),
+)
+def test_pedestrian_response_covers_robot_relative_lead_and_hold(definition, expected) -> None:
+    """Lead and proximity-hold definitions bind robot pose provenance correctly."""
+    robot = SimpleNamespace(pos=(0.0, 0.0), config=SimpleNamespace(radius=0.5))
+    sim = SimpleNamespace(
+        robots=[robot],
+        config=SimpleNamespace(
+            prf_config=SimpleNamespace(is_active=False),
+            apf_config=SimpleNamespace(is_active=False),
+            residual_adversary=SimpleNamespace(is_active=False),
+        ),
+        peds_behaviors=[SimpleNamespace(single_pedestrians=[definition])],
+    )
+
+    assert SimulatorCounterfactualModel(sim).pedestrian_response == expected
+
+
+@pytest.mark.parametrize(
+    ("config", "state", "label_fragment"),
+    (
+        (
+            SimpleNamespace(max_linear_decel=4.0, max_angular_accel=2.0),
+            SimpleNamespace(),
+            "angular_radps2=2",
+        ),
+        (
+            SimpleNamespace(max_decel=3.0, max_steer=0.4),
+            SimpleNamespace(),
+            "steering_angle_rad=0.4",
+        ),
+        (
+            SimpleNamespace(command_mode="vx_vy", max_speed=2.0),
+            SimpleNamespace(velocity_xy=(0.5, -0.25)),
+            "vy_mps=2",
+        ),
+        (
+            SimpleNamespace(command_mode="unicycle_vw", max_angular_speed=1.2),
+            SimpleNamespace(velocity_vw=(0.7, -0.1)),
+            "angular_radps=1.2",
+        ),
+    ),
+)
+def test_native_action_lattices_and_labels_follow_robot_contracts(
+    config, state, label_fragment
+) -> None:
+    """Every supported native command mode exposes labeled feasible actions."""
+    robot = SimpleNamespace(config=config, state=state)
+    model = SimulatorCounterfactualModel(SimpleNamespace(robots=[robot]))
+
+    actions = model.feasible_actions()
+
+    assert actions
+    assert label_fragment in model.action_label(actions[-1])
+
+
+def test_unknown_action_contract_fails_closed_and_uses_generic_label() -> None:
+    """Unknown command semantics expose no feasible substitutions."""
+    robot = SimpleNamespace(config=SimpleNamespace(command_mode="unknown"), state=SimpleNamespace())
+    model = SimulatorCounterfactualModel(SimpleNamespace(robots=[robot]))
+
+    assert model.feasible_actions() == ()
+    assert model.action_label((1.0, 2.0)) == "robot_cmd=(first=1,second=2)"
+
+
+def test_adapter_rejects_invalid_robot_count_and_collision_scope() -> None:
+    """The production adapter fails closed for unsupported construction contracts."""
+    with pytest.raises(ValueError, match="exactly one robot"):
+        SimulatorCounterfactualModel(SimpleNamespace(robots=[]))
+
+    robot = SimpleNamespace(config=SimpleNamespace(radius=0.5))
+    with pytest.raises(ValueError, match="collision_scope"):
+        SimulatorCounterfactualModel(SimpleNamespace(robots=[robot]), collision_scope="invalid")
+
+
+@pytest.mark.parametrize(
+    ("robot_pos", "ped_pos", "expected"),
+    (
+        ((-0.1, 1.0), np.empty((0, 2)), True),
+        ((1.0, 1.0), np.empty((0, 2)), False),
+        ((1.0, 1.0), np.asarray([[1.8, 1.0]]), True),
+    ),
+)
+def test_all_collision_scope_covers_bounds_empty_and_pedestrian_contacts(
+    robot_pos, ped_pos, expected
+) -> None:
+    """The opt-in all-collision predicate covers each native contact class."""
+    robot = SimpleNamespace(
+        pos=robot_pos,
+        config=SimpleNamespace(radius=0.5),
+        state=SimpleNamespace(),
+    )
+    sim = SimpleNamespace(
+        robots=[robot],
+        map_def=SimpleNamespace(width=10.0, height=10.0),
+        ped_pos=ped_pos,
+        config=SimpleNamespace(ped_radius=0.4),
+        get_obstacle_lines=lambda: (),
+    )
+
+    model = SimulatorCounterfactualModel(sim, collision_scope="all")
+
+    assert model.collision() is expected
+
+
+def test_custom_collision_predicate_is_used_and_labeled() -> None:
+    """A caller-supplied collision predicate takes precedence over native scope."""
+    robot = SimpleNamespace(config=SimpleNamespace(radius=0.5))
+    model = SimulatorCounterfactualModel(
+        SimpleNamespace(robots=[robot]), collision_fn=lambda _: True
+    )
+
+    assert model.collision() is True
+    assert model.collision_predicate == "custom_collision_fn"
+
+
 def test_all_collision_scope_detects_wall_without_pedestrian() -> None:
     """The explicit all-collisions mode cannot call a wall state safe."""
     robot = SimpleNamespace(
@@ -395,6 +553,20 @@ def test_route_group_navigator_progress_restores() -> None:
 
     assert navigator.waypoint_id == 1
     assert navigator.reached_waypoint is False
+    _restore_route_navigators([behavior], {})
+    _restore_route_navigators([behavior], {id(behavior): {8: {}}})
+
+
+def test_pedestrian_only_collision_is_false_for_empty_crowd() -> None:
+    """The historical pedestrian-only predicate ignores an empty crowd."""
+    robot = SimpleNamespace(pos=(0.0, 0.0), config=SimpleNamespace(radius=0.5))
+    sim = SimpleNamespace(
+        robots=[robot],
+        robot_pos=np.asarray([[0.0, 0.0]]),
+        ped_pos=np.empty((0, 2)),
+    )
+
+    assert SimulatorCounterfactualModel(sim).collision() is False
 
 
 def test_no_contact_baseline_abstains() -> None:

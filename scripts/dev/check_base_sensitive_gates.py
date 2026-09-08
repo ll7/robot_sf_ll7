@@ -30,13 +30,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from scripts.dev.base_sensitive_selector import (
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if __package__ in {None, ""}:
+    # Direct execution may have no source root on sys.path.  Put this checkout
+    # first so another checkout or editable installation cannot provide the
+    # selector used by this entrypoint.
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.dev.base_sensitive_selector import (  # noqa: E402
     SELECTOR_VERSION,
     classify_changed_files,
     find_base_sensitive_test_files,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _GUARD_HELPER = REPO_ROOT / "scripts" / "dev" / "gate_worktree_guard.py"
 DEFAULT_REPO = "ll7/robot_sf_ll7"

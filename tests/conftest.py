@@ -426,6 +426,9 @@ _FAST_FILES = {
     # deterministic schema/provenance surfaces; keep their proof in fast PR
     # shards.
     "test_feasibility_first.py",
+    # The versioned scenario-feasibility facade is deterministic contract
+    # coverage for the changed feasibility module; keep it in fast shards too.
+    "test_scenario_feasibility_contract.py",
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",

@@ -2658,10 +2658,11 @@ def _validate_manifest(payload: Any) -> dict[str, Any]:
     return payload
 
 
-def _provenance_payload(
+def _provenance_payload(  # noqa: PLR0913 - explicit provenance subjects stay visible
     *,
     repository: str,
     source_sha: str,
+    requested_source_sha: str | None = None,
     workflow: dict[str, Any],
     package: dict[str, str],
     wheel: dict[str, Any],
@@ -2686,6 +2687,19 @@ def _provenance_payload(
     }
     if materialization is not None:
         payload["materialization"] = materialization
+    if requested_source_sha is not None:
+        if not SHA_PATTERN.fullmatch(requested_source_sha):
+            raise CandidateError(
+                "requested source SHA must be one exact lowercase 40-hex commit identity"
+            )
+        if requested_source_sha != source_sha:
+            raise CandidateError(
+                "requested source SHA does not match the observed workflow source SHA"
+            )
+        payload["source_identity"] = {
+            "observed_source_sha": source_sha,
+            "requested_source_sha": requested_source_sha,
+        }
     return payload
 
 
@@ -3474,6 +3488,13 @@ def _assemble(args: argparse.Namespace) -> None:
         raise CandidateError("workflow run ID must be a positive decimal identity")
     if args.workflow_run_attempt < 1:
         raise CandidateError("workflow run attempt must be positive")
+    requested_source_sha = args.requested_source_sha
+    if requested_source_sha is not None and not SHA_PATTERN.fullmatch(requested_source_sha):
+        raise CandidateError(
+            "requested source SHA must be one exact lowercase 40-hex commit identity"
+        )
+    if requested_source_sha is not None and requested_source_sha != args.source_sha:
+        raise CandidateError("requested source SHA does not match the observed workflow source SHA")
 
     wheel_input, sdist_input, version = _distribution_inputs(args.dist_dir)
     materialization = _materialization_identity(
@@ -3506,6 +3527,7 @@ def _assemble(args: argparse.Namespace) -> None:
             _provenance_payload(
                 repository=args.repository,
                 source_sha=args.source_sha,
+                requested_source_sha=requested_source_sha,
                 workflow=workflow,
                 package=package,
                 wheel=wheel_member,
@@ -3596,9 +3618,24 @@ def _verify_provenance(bundle_dir: Path, manifest: dict[str, Any]) -> None:
     provenance = _load_json(
         bundle_dir / provenance_member["filename"], label="candidate provenance"
     )
+    source_identity = provenance.get("source_identity")
+    requested_source_sha: str | None = None
+    if source_identity is not None:
+        if not isinstance(source_identity, dict) or set(source_identity) != {
+            "observed_source_sha",
+            "requested_source_sha",
+        }:
+            raise CandidateError("candidate provenance source identity is invalid")
+        observed_source_sha = source_identity["observed_source_sha"]
+        requested_source_sha = source_identity["requested_source_sha"]
+        if observed_source_sha != manifest["source_sha"]:
+            raise CandidateError("candidate provenance observed source SHA differs from manifest")
+        if not isinstance(requested_source_sha, str):
+            raise CandidateError("candidate provenance requested source SHA is invalid")
     expected_provenance = _provenance_payload(
         repository=manifest["repository"],
         source_sha=manifest["source_sha"],
+        requested_source_sha=requested_source_sha,
         workflow=manifest["workflow"],
         package=manifest["package"],
         wheel=wheel_member,
@@ -4400,6 +4437,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:  # noqa: P
     assemble.add_argument("--raw-sbom", type=Path, required=True)
     assemble.add_argument("--bundle-dir", type=Path, required=True)
     assemble.add_argument("--source-sha", required=True)
+    assemble.add_argument(
+        "--requested-source-sha",
+        default=None,
+        help="SHA requested by the workflow dispatch; must equal the observed source SHA.",
+    )
     assemble.add_argument("--repository", required=True)
     assemble.add_argument("--workflow-run-id", required=True)
     assemble.add_argument("--workflow-run-attempt", type=int, required=True)

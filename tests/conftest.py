@@ -429,6 +429,13 @@ _FAST_FILES = {
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.
     "test_feasibility_first_real.py",
+    # The feasibility-first predicates and planner-free contract are
+    # deterministic schema/provenance surfaces; keep their proof in fast PR
+    # shards.
+    "test_feasibility_first.py",
+    # The versioned scenario-feasibility facade is deterministic contract
+    # coverage for the changed feasibility module; keep it in fast shards too.
+    "test_scenario_feasibility_contract.py",
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
@@ -453,6 +460,12 @@ _FAST_FILES = {
     # for the changed release identity module; keep them in fast shards for the
     # exact-head changed-coverage gate (issue #7938).
     "test_release_tag_identity.py",
+    # Finite-float helper migration touches these deterministic benchmark
+    # producers; their focused contract suites provide exact-head coverage.
+    "test_collision_scenario_similarity.py",
+    "test_event_ledger.py",
+    "test_scenario_coverage.py",
+    "test_seed_distribution_report.py",
     # ORCA preflight tests are deterministic contract coverage for the changed
     # benchmark preflight module; keep them in fast PR shards (issue #8021).
     "test_orca_preflight.py",

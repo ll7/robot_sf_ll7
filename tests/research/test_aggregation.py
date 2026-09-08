@@ -633,6 +633,31 @@ def test_extract_seed_metrics_skips_falsy_malformed_timestep_alias(
     assert records[0]["timesteps_to_convergence"] == 99000.0
 
 
+@pytest.mark.parametrize(
+    "malformed_value",
+    [
+        pytest.param(False, id="false"),
+        pytest.param("", id="empty-string"),
+        pytest.param([], id="empty-list"),
+        pytest.param({}, id="empty-object"),
+    ],
+)
+def test_extract_seed_metrics_rejects_falsy_final_timestep_alias(
+    tmp_path: Path, malformed_value: object
+):
+    """Malformed final aliases retain their existing coercion failure."""
+    path = _write_manifest(
+        tmp_path,
+        "a.json",
+        {"success_rate": 0.8, "total_timesteps": malformed_value},
+    )
+    records, failures = extract_seed_metrics([str(path)])
+    assert records == []
+    assert (
+        failures[0]["reason"] == "Tracker manifest metrics.timesteps must contain a finite number"
+    )
+
+
 def test_extract_seed_metrics_final_reward_mean_field(tmp_path: Path):
     """``final_reward_mean`` is carried through as an exact float value."""
     path = _write_manifest(tmp_path, "a.json", {"success_rate": 0.8, "final_reward_mean": 12.5})

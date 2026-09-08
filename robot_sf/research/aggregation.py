@@ -206,14 +206,21 @@ def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
 
 
 def _first_timestep_metric(metrics: dict[str, Any]) -> object | None:
-    """Return the first usable timestep alias while preserving legacy fallbacks."""
-    for field in ("timesteps_to_convergence", "avg_timesteps", "total_timesteps"):
+    """Return a timestep alias while preserving legacy fallback and validation behavior."""
+    for field in ("timesteps_to_convergence", "avg_timesteps"):
         candidate = metrics.get(field)
         # Keep the legacy fallback for malformed falsy values while treating
         # numeric zero as a real metric rather than an absent value.
-        if candidate or (not isinstance(candidate, bool) and candidate == 0):
+        if candidate or _is_numeric_zero(candidate):
             return candidate
-    return None
+    # The old ``or`` chain leaves the final alias intact, even when it is a
+    # malformed falsy value, so let the existing coercion report that error.
+    return metrics.get("total_timesteps")
+
+
+def _is_numeric_zero(value: object) -> bool:
+    """Return whether a value is a non-boolean numeric zero."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
 
 
 def extract_seed_metrics(

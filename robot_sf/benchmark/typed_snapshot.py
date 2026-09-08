@@ -31,7 +31,7 @@ import numpy as np
 
 from robot_sf.benchmark.simulator_counterfactual_adapter import _SimulatorSnapshot
 
-SNAPSHOT_SCHEMA = "simulator_typed_snapshot.v1"
+SNAPSHOT_SCHEMA = "simulator_typed_snapshot.v2"
 SNAPSHOT_BOUNDARY = "pre_step"
 _DIGEST_FIELDS = ("map_sha256", "config_sha256", "code_revision")
 _MISSING = object()
@@ -732,6 +732,19 @@ def _validate_pedestrian_array_shapes(
             )
 
 
+def _validate_pedestrian_array_dtypes(
+    arrays: Mapping[str, np.ndarray], destination_arrays: Mapping[str, np.ndarray]
+) -> None:
+    """Reject numeric dtype drift that could silently round restored values."""
+    for name, destination in destination_arrays.items():
+        snapshot_dtype = np.dtype(arrays[name].dtype)
+        destination_dtype = np.dtype(destination.dtype)
+        if snapshot_dtype != destination_dtype:
+            raise SnapshotCompatibilityError(
+                f"{name} dtype mismatch: snapshot={snapshot_dtype}, destination={destination_dtype}"
+            )
+
+
 def _validate_max_speed_shape(arrays: Mapping[str, np.ndarray], sim: Any) -> None:
     """Reject speed-cap shape drift, including destinations without speed caps."""
     destination_peds = getattr(getattr(sim, "pysf_sim", None), "peds", None)
@@ -750,6 +763,21 @@ def _validate_max_speed_shape(arrays: Mapping[str, np.ndarray], sim: Any) -> Non
         )
 
 
+def _validate_max_speed_dtype(arrays: Mapping[str, np.ndarray], sim: Any) -> None:
+    """Reject speed-cap dtype drift when the destination exposes speed caps."""
+    destination_peds = getattr(getattr(sim, "pysf_sim", None), "peds", None)
+    destination_max_speeds = getattr(destination_peds, "max_speeds", None)
+    if destination_max_speeds is None:
+        return
+    snapshot_dtype = np.dtype(arrays["ped_max_speeds"].dtype)
+    destination_dtype = np.dtype(np.asarray(destination_max_speeds).dtype)
+    if snapshot_dtype != destination_dtype:
+        raise SnapshotCompatibilityError(
+            f"ped_max_speeds dtype mismatch: snapshot={snapshot_dtype}, "
+            f"destination={destination_dtype}"
+        )
+
+
 def _validate_destination_shape(
     state: Mapping[str, Any], arrays: Mapping[str, np.ndarray], sim: Any
 ) -> None:
@@ -765,7 +793,9 @@ def _validate_destination_shape(
         raise SnapshotPayloadError(f"snapshot numeric payload is missing arrays: {missing_arrays}")
     destination_arrays = _destination_pedestrian_arrays(sim)
     _validate_pedestrian_array_shapes(arrays, destination_arrays)
+    _validate_pedestrian_array_dtypes(arrays, destination_arrays)
     _validate_max_speed_shape(arrays, sim)
+    _validate_max_speed_dtype(arrays, sim)
     actor_order = state.get("actor_order")
     if not isinstance(actor_order, Mapping):
         raise SnapshotPayloadError("snapshot actor order is missing")
@@ -833,6 +863,21 @@ def _resolve_global_rng(state: Mapping[str, Any], arrays: Mapping[str, np.ndarra
     return global_rng
 
 
+def _validate_rng_capture_state(state: Mapping[str, Any], model: Any) -> None:
+    """Require complete RNG state and a rollback-capable destination."""
+    if state.get("rng_capture_complete") is not True:
+        raise SnapshotCompatibilityError(
+            "typed snapshot does not contain complete RNG state; "
+            "nondeterministic continuation is not restorable"
+        )
+    if getattr(model, "capture_rng", True) is not True:
+        raise SnapshotCompatibilityError(
+            "destination model must capture RNG state for atomic typed restore"
+        )
+    if state.get("global_rng") is None or state.get("python_random_state") is None:
+        raise SnapshotPayloadError("typed snapshot RNG state is incomplete")
+
+
 @dataclass(frozen=True, slots=True)
 class TypedSimulatorSnapshot:
     """In-memory typed snapshot, independent of process-local object identity."""
@@ -896,6 +941,9 @@ class TypedSimulatorSnapshot:
             ),
             "pedestrian_group_by_ped": _serialize_group_reverse_lookup(
                 snapshot.pedestrian_group_by_ped, "pedestrian_group_by_ped"
+            ),
+            "rng_capture_complete": (
+                snapshot.global_rng_state is not None and snapshot.python_random_state is not None
             ),
             "global_rng": _serialize_global_rng(snapshot.global_rng_state),
             "python_random_state": deepcopy(snapshot.python_random_state),
@@ -970,6 +1018,7 @@ class TypedSimulatorSnapshot:
                 "destination model is not a supported one-robot adapter"
             )
         state = self.state
+        _validate_rng_capture_state(state, model)
         _validate_destination_shape(state, self.arrays, sim)
         robot_poses, robot_states, robot_navigators = _restore_robot_payload(state, sim)
         pedestrian_groups, pedestrian_group_by_ped = _restore_group_payload(

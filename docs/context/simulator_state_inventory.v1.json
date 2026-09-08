@@ -249,5 +249,5 @@
   ],
   "platform": "linux",
   "schema_version": "simulator_state_inventory.v1",
-  "snapshot_schema": "simulator_typed_snapshot.v1"
+  "snapshot_schema": "simulator_typed_snapshot.v2"
 }

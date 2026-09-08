@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 from copy import deepcopy
 from pathlib import Path
 
@@ -44,7 +45,7 @@ def _preserve_global_rng():
     np.random.set_state(state)
 
 
-def _build_model() -> SimulatorCounterfactualModel:
+def _build_model(*, capture_rng: bool = True) -> SimulatorCounterfactualModel:
     """Build the small native doorway simulator used by adapter seam tests."""
     np.random.seed(25)
     map_def = convert_map(str(_FIXTURE_MAP))
@@ -55,7 +56,7 @@ def _build_model() -> SimulatorCounterfactualModel:
     )
     config = RobotSimulationConfig(sim_config=sim_config)
     simulator = init_simulators(config, map_def, num_robots=1, random_start_pos=False)[0]
-    return SimulatorCounterfactualModel(simulator, collision_radius=0.5)
+    return SimulatorCounterfactualModel(simulator, collision_radius=0.5, capture_rng=capture_rng)
 
 
 def _compatibility(model: SimulatorCounterfactualModel) -> SnapshotCompatibility:
@@ -189,6 +190,91 @@ def test_array_shape_drift_is_rejected_before_destination_mutation(array_name: s
     np.testing.assert_array_equal(model.sim.pysf_state.pysf_states(), before_state)
 
 
+@pytest.mark.parametrize(
+    "array_name",
+    ("pysf_state", "ped_headings", "ped_angular_velocities", "ped_max_speeds"),
+)
+def test_array_dtype_drift_is_rejected_before_destination_mutation(array_name: str) -> None:
+    """Every restored numeric array must preserve the destination dtype exactly."""
+    model = _build_model()
+    compatibility = _compatibility(model)
+    typed = capture_typed_snapshot(model, compatibility)
+    source = typed.arrays[array_name]
+    wrong_dtype = np.float32 if source.dtype != np.dtype(np.float32) else np.float64
+    arrays = dict(typed.arrays)
+    arrays[array_name] = np.asarray(source, dtype=wrong_dtype)
+    malformed = TypedSimulatorSnapshot(
+        compatibility=typed.compatibility,
+        boundary=typed.boundary,
+        state=typed.state,
+        arrays=arrays,
+    )
+    before_step = model._step_index
+    before_state = model.sim.pysf_state.pysf_states().copy()
+    with pytest.raises(SnapshotCompatibilityError, match=f"{array_name} dtype mismatch"):
+        restore_typed_snapshot(model, malformed, compatibility)
+    assert model._step_index == before_step
+    np.testing.assert_array_equal(model.sim.pysf_state.pysf_states(), before_state)
+
+
+def test_rng_incomplete_snapshot_fails_closed_before_destination_mutation() -> None:
+    """A capture without both RNG streams cannot claim an exact continuation."""
+    model = _build_model(capture_rng=False)
+    compatibility = _compatibility(model)
+    typed = capture_typed_snapshot(model, compatibility)
+    assert typed.state["rng_capture_complete"] is False
+    before_step = model._step_index
+    before_state = model.sim.pysf_state.pysf_states().copy()
+    with pytest.raises(SnapshotCompatibilityError, match="complete RNG state"):
+        restore_typed_snapshot(model, typed, compatibility)
+    assert model._step_index == before_step
+    np.testing.assert_array_equal(model.sim.pysf_state.pysf_states(), before_state)
+
+
+def test_rng_disabled_destination_is_rejected_before_destination_mutation() -> None:
+    """Atomic rollback requires a destination that snapshots both RNG streams."""
+    source_model = _build_model()
+    typed = capture_typed_snapshot(source_model, _compatibility(source_model))
+    destination = _build_model(capture_rng=False)
+    compatibility = _compatibility(destination)
+    before_step = destination._step_index
+    before_state = destination.sim.pysf_state.pysf_states().copy()
+    with pytest.raises(SnapshotCompatibilityError, match="must capture RNG"):
+        restore_typed_snapshot(destination, typed, compatibility)
+    assert destination._step_index == before_step
+    np.testing.assert_array_equal(destination.sim.pysf_state.pysf_states(), before_state)
+
+
+def _assert_numpy_rng_state_equal(expected: tuple[object, ...], actual: tuple[object, ...]) -> None:
+    """Compare legacy NumPy RNG state tuples without relying on array equality semantics."""
+    assert expected[0] == actual[0]
+    np.testing.assert_array_equal(expected[1], actual[1])
+    assert expected[2:] == actual[2:]
+
+
+def test_failed_python_rng_restore_rolls_back_numpy_and_python_streams() -> None:
+    """A post-mutation RNG failure restores both streams from the rollback snapshot."""
+    model = _build_model()
+    compatibility = _compatibility(model)
+    typed = capture_typed_snapshot(model, compatibility)
+    state = deepcopy(typed.state)
+    state["python_random_state"] = ("invalid-python-random-state",)
+    malformed = TypedSimulatorSnapshot(
+        compatibility=typed.compatibility,
+        boundary=typed.boundary,
+        state=state,
+        arrays=typed.arrays,
+    )
+    np.random.random()
+    random.random()
+    before_numpy = np.random.get_state()
+    before_python = random.getstate()
+    with pytest.raises(SnapshotContractError, match="destination state was rolled back"):
+        restore_typed_snapshot(model, malformed, compatibility)
+    _assert_numpy_rng_state_equal(before_numpy, np.random.get_state())
+    assert random.getstate() == before_python
+
+
 def test_restore_failure_rolls_back_partial_adapter_mutation() -> None:
     """A restore failure cannot leave the destination at an intermediate state."""
     model = _build_model()
@@ -236,6 +322,11 @@ def test_corrupt_or_unknown_snapshot_metadata_fails_closed(tmp_path: Path) -> No
         read_typed_snapshot(path)
 
     metadata["schema_version"] = "simulator_typed_snapshot.v1"
+    path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(SnapshotPayloadError, match="unsupported snapshot schema"):
+        read_typed_snapshot(path)
+
+    metadata["schema_version"] = "simulator_typed_snapshot.v2"
     metadata["payload_sha256"] = "0" * 64
     path.write_text(json.dumps(metadata), encoding="utf-8")
     with pytest.raises(SnapshotPayloadError, match="payload digest"):

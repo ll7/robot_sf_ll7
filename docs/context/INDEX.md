@@ -70,6 +70,14 @@ canonical analytic scenarios. Smoke-only implementation-integrity evidence; not 
 ranking, release-roster change, or social-compliance certification:
 [issue_8015_force_coupled_comparator.md](issue_8015_force_coupled_comparator.md).
 
+Issue #8619 constrained-MPC baseline specification (lane 2 of #7319): a design-only contract for
+composing the existing constant-velocity prediction-MPC planner, current-state CBF filter, SocNav
+observation, unicycle action, resolved configuration digest, deterministic single-observation
+smoke, unavailable behavior, and explicit integration gaps. It coordinates #5307 chance-constrained
+MPC preregistration and #6487 unified planner interface without duplicating either; it establishes
+no implementation, safety, comparison, benchmark, ranking, or source-paper claim:
+[issue_8619_constrained_mpc_baseline_spec.md](issue_8619_constrained_mpc_baseline_spec.md).
+
 Issue #7890 route-choice observability contract: frame-explicit route-side labels,
 canonical grid-corridor identities, denominator-separated temporal consistency, and a versioned
 analysis-only diagnostic receipt. The contract observes planner routes and does not establish

@@ -134,6 +134,35 @@ def _sha256_text(payload: str) -> str:
     return _sha256_bytes(payload.encode("utf-8"))
 
 
+def preparation_source_body(body: str) -> str:
+    """Return the exact source bytes represented outside a preparation marker.
+
+    ``_compose_body`` inserts one separator newline when the source body already
+    ends in a newline.  Remove only that known insertion boundary when replacing
+    an existing marker; all other outside-marker bytes remain byte-exact.
+    """
+    if not isinstance(body, str):
+        raise TypeError("preparation source body must be a string")
+    start_count = body.count(MARKER_START)
+    end_count = body.count(MARKER_END)
+    if start_count == 0 and end_count == 0:
+        return body
+    if start_count != 1 or end_count != 1:
+        raise ValueError("preparation marker is duplicated or unbalanced")
+    match = _MARKER_BLOCK_RE.search(body)
+    if match is None:
+        raise ValueError("preparation marker boundaries are malformed")
+    prefix = body[: match.start()]
+    if prefix.endswith("\n\n"):
+        prefix = prefix[:-1]
+    return prefix + body[match.end() :]
+
+
+def preparation_source_body_sha256(body: str) -> str:
+    """Return the SHA-256 digest of the exact preparation source body."""
+    return _sha256_text(preparation_source_body(body))
+
+
 def _stable_json(payload: object) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
@@ -412,11 +441,19 @@ def _worker_route(item: Mapping[str, Any]) -> str:
 
 
 def _render_envelope(
-    item: Mapping[str, Any], *, audit_digest: str, batch_id: str
+    item: Mapping[str, Any],
+    *,
+    audit_digest: str,
+    batch_id: str,
+    source_body: str | None = None,
 ) -> dict[str, Any]:
     """Build the machine-readable envelope for one issue packet."""
     classification = item.get("classification", "error")
-    source_body_sha = item.get("body_sha256")
+    source_body_sha = (
+        preparation_source_body_sha256(source_body)
+        if source_body is not None
+        else item.get("source_body_sha256") or item.get("body_sha256")
+    )
     return {
         "schema": PACKET_SCHEMA,
         "repository": "ll7/robot_sf_ll7",
@@ -448,9 +485,20 @@ def _state_ready_proposed(item: Mapping[str, Any]) -> bool:
     return _readiness_gate_operation(item) is not None
 
 
-def _render_marker_block(item: Mapping[str, Any], *, audit_digest: str, batch_id: str) -> str:
+def _render_marker_block(
+    item: Mapping[str, Any],
+    *,
+    audit_digest: str,
+    batch_id: str,
+    source_body: str | None = None,
+) -> str:
     """Render the full packet marker block for one issue."""
-    envelope = _render_envelope(item, audit_digest=audit_digest, batch_id=batch_id)
+    envelope = _render_envelope(
+        item,
+        audit_digest=audit_digest,
+        batch_id=batch_id,
+        source_body=source_body,
+    )
     body = ["<!-- goal-autopilot-preparation:v1:start -->", ""]
     body.append("```yaml")
     for key, value in envelope.items():
@@ -513,6 +561,7 @@ def build_plan(audit: Mapping[str, Any], *, batch_id: str) -> dict[str, Any]:
                 "assignees": item.get("assignees", []),
                 "state": str(item.get("state") or "open").lower(),
                 "body_sha256": item.get("body_sha256"),
+                "source_body_sha256": item.get("source_body_sha256"),
                 "claim_state": item.get("claim"),
                 "classification_before": item.get("observed_classification"),
                 "classification_after": item.get("classification"),
@@ -662,15 +711,27 @@ def _verify_batch(plan: Mapping[str, Any], bodies: Mapping[str, str]) -> list[di
         if markers > 1:
             findings.append({"issue": issue, "ok": False, "reason": "duplicate marker"})
             continue
-        stripped = _MARKER_BLOCK_RE.sub("", body)
-        # The apply path concatenates the original body with "\n\n" before the
-        # marker block; normalize the resulting boundary blank lines before
-        # comparing against the source digest.
-        normalized = re.sub(r"\n{3,}", "\n\n", stripped).strip("\n") + "\n"
-        candidates = (stripped, stripped.rstrip("\n"), normalized)
-        if original_sha and not any(
-            _sha256_text(candidate) == original_sha for candidate in candidates
-        ):
+        try:
+            source_sha = preparation_source_body_sha256(body)
+        except (TypeError, ValueError) as exc:
+            findings.append({"issue": issue, "ok": False, "reason": str(exc)})
+            continue
+        marker_match = _MARKER_BLOCK_RE.search(body)
+        if marker_match is not None:
+            packet_sha_match = re.search(
+                r"(?m)^source_body_sha256:[ \t]*(?P<sha>[0-9a-f]{64})[ \t]*$",
+                marker_match.group(0),
+            )
+            packet_sha = packet_sha_match.group("sha") if packet_sha_match else None
+            expected_packet_sha = entry.get("source_body_sha256") or packet_sha
+            if packet_sha != source_sha or (
+                expected_packet_sha is not None and expected_packet_sha != source_sha
+            ):
+                findings.append(
+                    {"issue": issue, "ok": False, "reason": "content drift outside marker"}
+                )
+                continue
+        elif original_sha and source_sha != original_sha:
             findings.append({"issue": issue, "ok": False, "reason": "content drift outside marker"})
             continue
         findings.append({"issue": issue, "ok": True, "reason": ""})
@@ -1254,6 +1315,8 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
             continue
 
         issue_number = int(issue)
+        current_snapshot = snapshots.get(issue_number)
+        current_body = current_snapshot.get("body") if current_snapshot else None
         block = _render_marker_block(
             {
                 "number": issue,
@@ -1266,6 +1329,7 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
             },
             audit_digest=plan.get("audit_digest", ""),
             batch_id=batch_id,
+            source_body=current_body,
         )
         if issue_number in snapshots:
             local_labels = set(snapshots[issue_number]["labels"])
@@ -1483,8 +1547,6 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
                 )
             else:
                 body_count += 1
-                current_snapshot = snapshots.get(issue_number)
-                current_body = current_snapshot.get("body") if current_snapshot else None
                 if dry_run:
                     add_operation(
                         {

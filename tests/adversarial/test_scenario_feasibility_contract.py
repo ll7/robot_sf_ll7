@@ -9,11 +9,15 @@ import pytest
 from robot_sf.adversarial.feasibility_first import (
     CHECK_NAMES,
     SCENARIO_FEASIBILITY_CONTRACT_VERSION,
+    FeasibilityCheck,
     FeasibilityFirstError,
     ScenarioFeasibilityContract,
+    ScenarioFeasibilityPredicate,
+    ScenarioFeasibilityRejectionLedger,
     build_fixture_candidates,
     build_scenario_feasibility_ledger,
     evaluate_scenario_feasibility,
+    validate_scenario_feasibility_contract,
 )
 
 
@@ -134,3 +138,136 @@ def test_rejection_reason_is_required() -> None:
 
     with pytest.raises(FeasibilityFirstError, match="non-empty reason"):
         ScenarioFeasibilityContract.from_mapping(payload)
+
+
+def test_predicate_parser_rejects_shape_and_identity_drift() -> None:
+    """Predicate parsing fails closed for malformed records and renamed dimensions."""
+    expected = CHECK_NAMES[0]
+    cases = [
+        (None, "must be a mapping"),
+        ({"verdict": "valid", "reason": "ok", "evidence": {}, "extra": True}, "unknown"),
+        (
+            {"name": CHECK_NAMES[1], "verdict": "valid", "reason": "ok", "evidence": {}},
+            "must be",
+        ),
+        ({"reason": "ok", "evidence": {}}, "requires a verdict"),
+        ({"verdict": "valid", "reason": 1, "evidence": {}}, "string reason"),
+        ({"verdict": "valid", "reason": "ok", "evidence": []}, "evidence must be"),
+    ]
+    for payload, message in cases:
+        with pytest.raises(FeasibilityFirstError, match=message):
+            ScenarioFeasibilityPredicate.from_mapping(payload, expected_name=expected)
+
+    with pytest.raises(FeasibilityFirstError, match="predicate name"):
+        ScenarioFeasibilityPredicate("not-a-dimension", "valid", "ok", {"fixture": "direct"})
+    with pytest.raises(FeasibilityFirstError, match="unsupported verdict"):
+        ScenarioFeasibilityPredicate(expected, "unknown", "ok", {})
+    with pytest.raises(FeasibilityFirstError, match="requires evidence"):
+        ScenarioFeasibilityPredicate(expected, "valid", "ok", {})
+
+
+def test_contract_constructor_and_parser_reject_invariants() -> None:
+    """Direct construction and deserialization enforce version, type, and order invariants."""
+    predicates = tuple(
+        ScenarioFeasibilityPredicate(name, "valid", "ok", {"fixture": "direct"})
+        for name in CHECK_NAMES
+    )
+    assert ScenarioFeasibilityContract("candidate", predicates).predicate_verdicts == predicates
+    with pytest.raises(FeasibilityFirstError, match="contract_version"):
+        ScenarioFeasibilityContract("candidate", predicates, contract_version="old")
+    with pytest.raises(FeasibilityFirstError, match="candidate_id"):
+        ScenarioFeasibilityContract("", predicates)
+    with pytest.raises(FeasibilityFirstError, match="4 entries"):
+        ScenarioFeasibilityContract("candidate", ())
+    with pytest.raises(FeasibilityFirstError, match="invalid record types"):
+        ScenarioFeasibilityContract("candidate", (object(),) * len(CHECK_NAMES))
+    with pytest.raises(FeasibilityFirstError, match="canonical order"):
+        ScenarioFeasibilityContract("candidate", (predicates[1], predicates[0], *predicates[2:]))
+
+    with pytest.raises(FeasibilityFirstError, match="must be a mapping"):
+        ScenarioFeasibilityContract.from_mapping(None)
+    payload = _contract("drift")
+    payload.pop("contract_version")
+    payload["unexpected"] = True
+    with pytest.raises(FeasibilityFirstError, match="unknown"):
+        ScenarioFeasibilityContract.from_mapping(payload)
+
+    for predicates_payload, message in (
+        ("not-a-sequence", "must be a sequence"),
+        ([], "4 entries"),
+    ):
+        malformed = _contract("predicate-shape")
+        malformed["predicates"] = predicates_payload
+        with pytest.raises(FeasibilityFirstError, match=message):
+            ScenarioFeasibilityContract.from_mapping(malformed)
+
+
+def test_contract_derived_fields_and_validation_round_trip() -> None:
+    """Derived booleans and rejection reasons are validated against predicates."""
+    valid = ScenarioFeasibilityContract.from_mapping(_contract("valid"))
+    validate_scenario_feasibility_contract(valid.to_dict())
+
+    rejected = ScenarioFeasibilityContract.from_mapping(_contract("rejected", "invalid"))
+    serialized = rejected.to_dict()
+    validate_scenario_feasibility_contract(serialized)
+
+    for field in ("feasible", "safety_denominator_eligible"):
+        invalid_type = dict(serialized)
+        invalid_type[field] = 1
+        with pytest.raises(FeasibilityFirstError, match="must be boolean"):
+            ScenarioFeasibilityContract.from_mapping(invalid_type)
+
+    for reasons, message in (
+        ("not-a-sequence", "must be a sequence"),
+        ([1], "must contain"),
+        (["wrong"], "contradict"),
+    ):
+        invalid_reasons = dict(serialized)
+        invalid_reasons["rejection_reasons"] = reasons
+        with pytest.raises(FeasibilityFirstError, match=message):
+            ScenarioFeasibilityContract.from_mapping(invalid_reasons)
+
+
+def test_evaluator_accepts_all_record_forms_and_rejects_drift() -> None:
+    """The evaluator accepts checks, predicate objects, and mappings with strict names."""
+    candidate = build_fixture_candidates()[0]
+    direct = tuple(
+        ScenarioFeasibilityPredicate(name, "valid", "ok", {"fixture": "direct"})
+        for name in CHECK_NAMES
+    )
+    assert evaluate_scenario_feasibility(candidate.candidate_id, direct).feasible
+    assert evaluate_scenario_feasibility(
+        candidate.candidate_id, [_predicate(name, "valid", "ok") for name in CHECK_NAMES]
+    ).feasible
+
+    wrong_check = list(candidate.checks)
+    wrong_check[0] = FeasibilityCheck(CHECK_NAMES[1], "pass", "ok", {"fixture": "check"})
+    with pytest.raises(FeasibilityFirstError, match="must be"):
+        evaluate_scenario_feasibility(candidate.candidate_id, wrong_check)
+    with pytest.raises(FeasibilityFirstError, match="must be"):
+        evaluate_scenario_feasibility(candidate.candidate_id, (direct[1], direct[0], *direct[2:]))
+    with pytest.raises(FeasibilityFirstError, match="must be a check"):
+        evaluate_scenario_feasibility(candidate.candidate_id, [object()] * len(CHECK_NAMES))
+    with pytest.raises(FeasibilityFirstError, match="must be a sequence"):
+        evaluate_scenario_feasibility(candidate.candidate_id, "not-a-sequence")
+
+
+def test_ledger_constructor_and_builder_reject_mixed_or_unsupported_records() -> None:
+    """Ledger construction rejects duplicates and mixed record families."""
+    contract = ScenarioFeasibilityContract.from_mapping(_contract("one"))
+    assert isinstance(ScenarioFeasibilityRejectionLedger([contract]).contracts, tuple)
+    assert build_scenario_feasibility_ledger([contract]).accepted_candidate_ids == ("one",)
+    with pytest.raises(FeasibilityFirstError, match="ledger contract_version"):
+        ScenarioFeasibilityRejectionLedger((contract,), contract_version="old")
+    with pytest.raises(FeasibilityFirstError, match="invalid record types"):
+        ScenarioFeasibilityRejectionLedger((object(),))
+    mixed = ScenarioFeasibilityContract.from_mapping(_contract("mixed"))
+    object.__setattr__(mixed, "contract_version", "old")
+    with pytest.raises(FeasibilityFirstError, match="mixed"):
+        ScenarioFeasibilityRejectionLedger((mixed,))
+    with pytest.raises(FeasibilityFirstError, match="unique"):
+        ScenarioFeasibilityRejectionLedger((contract, contract))
+    with pytest.raises(FeasibilityFirstError, match="must be a sequence"):
+        build_scenario_feasibility_ledger(None)
+    with pytest.raises(FeasibilityFirstError, match="candidates, contracts"):
+        build_scenario_feasibility_ledger([object()])

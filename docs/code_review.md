@@ -290,6 +290,26 @@ or path-filtered in a way that may skip small durable evidence files such as CSV
 - If an evidence CSV or other small table is path-filtered out of automated review, state in the PR
   review or merge note that this manual fallback checklist covered it.
 
+## Review-Worktree Isolation Review
+
+The configured review guard is a Git-level defense-in-depth control, not adversarial isolation. A
+review claim against deliberate `-c`, alternate `--receive-pack`, or `--no-verify` overrides is
+valid only when the command was launched through the explicit process boundary:
+
+```bash
+python scripts/dev/review_worktree_guard.py run \
+  --worktree <review-worktree> -- <command> [args...]
+```
+
+The boundary must be tested on the exact operating system and kernel contract that supports it. The
+current implementation requires Linux Landlock application binary interface (ABI) 4+, denies
+TCP bind/connect, closes inherited file descriptors, and grants filesystem mutation only to the
+review worktree and linked Git admin directory. Focused subprocess proof should include the #8321
+URL-rewrite plus `--no-verify` push, a direct alternate receive-pack descendant, and a positive
+implementation-worktree publication.
+Record unsupported hosts or policy-installation failures as blocked/diagnostic; do not silently
+fall back to Git configuration and do not treat raw Git commands outside the wrapper as covered.
+
 ## Documentation Review
 
 Docs changes should be rejected if they:

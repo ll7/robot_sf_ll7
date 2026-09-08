@@ -43,6 +43,11 @@ When --exec is supplied, the command is launched in the created worktree even
 though this script itself may have been invoked from another checkout.  The
 worktree is left in place when the command fails so its diagnostics remain
 available for inspection.
+
+For --mode review, --exec is launched through the review guard's Linux
+Landlock process boundary and fails closed when that boundary is unavailable.
+Commands started later must remain descendants of that process to retain the
+boundary; use the guard's `run -- ... bash` form for a bounded session.
 EOF
 }
 
@@ -216,6 +221,12 @@ report_and_exec() {
       if [[ -n "$receipt_path" ]]; then
         python3 "$SCRIPT_DIR/worktree_receipt.py" check --receipt "$receipt_path" --worktree . --json
       fi
+      if [[ "$worktree_mode" == "review" ]]; then
+        # Bind the optional first command to the real process boundary. Later
+        # commands must remain descendants of this process to retain it.
+        exec python3 "$SCRIPT_DIR/review_worktree_guard.py" run \
+          --worktree "$worktree_path" -- "${command_args[@]}"
+      fi
       exec "${command_args[@]}"
     )
   fi
@@ -298,6 +309,30 @@ cleanup_failed_creation() {
   return "$failure_rc"
 }
 
+clear_inherited_worktree_config() {
+  # ``git worktree add`` copies the invoking worktree's config.worktree when
+  # worktreeConfig is enabled. Never let review-only push barriers or arbitrary
+  # per-worktree settings leak into a newly created target. The path check keeps
+  # this cleanup scoped to the newly registered linked-worktree admin directory.
+  local target_git_dir
+  if ! target_git_dir="$(git -C "$worktree_path" rev-parse --path-format=absolute --git-dir)"; then
+    echo "create_worktree: could not resolve the target linked Git directory" >&2
+    return 1
+  fi
+  if [[ "$target_git_dir" != "$git_common_dir"/worktrees/* ]]; then
+    echo "create_worktree: refusing to clear an unexpected target Git directory: $target_git_dir" >&2
+    return 1
+  fi
+  local target_config="$target_git_dir/config.worktree"
+  if [[ -L "$target_config" ]]; then
+    echo "create_worktree: refusing to follow a symlinked target worktree config: $target_config" >&2
+    return 1
+  fi
+  if [[ -e "$target_config" ]]; then
+    rm -f -- "$target_config"
+  fi
+}
+
 run_locked_transaction() {
   # Capacity and parent checks must share the same lock as branch cleanup and
   # worktree registration. This applies to both the flock CLI and portable
@@ -338,6 +373,15 @@ run_locked_transaction() {
   if git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"; then
     created_worktree=1
     created_branch_sha="$(git rev-parse --verify "$branch_name^{commit}")"
+    if clear_inherited_worktree_config; then
+      :
+    else
+      local config_cleanup_rc=$?
+      if ! cleanup_failed_creation "$config_cleanup_rc"; then
+        :
+      fi
+      return "$config_cleanup_rc"
+    fi
   else
     local worktree_add_rc=$?
     if ! cleanup_failed_creation "$worktree_add_rc"; then

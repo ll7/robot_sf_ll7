@@ -345,7 +345,9 @@ helper is route evidence only and does not perform GitHub-visible writes.
    Review-only worktrees are not writable publication lanes: create them with
    `scripts/dev/create_worktree.sh --mode review`, and use the guarded
    `review_worktree_guard.py integrate` command for any synthetic merge. Do not push an explicit
-   refspec from a review worktree.
+   refspec from a review worktree. Deliberate `-c`, alternate `--receive-pack`, or `--no-verify`
+   probes must run as descendants of `review_worktree_guard.py run`; raw Git commands outside that
+   Linux Landlock process boundary are not adversarially isolated.
 5. Validate per required tier, including the PR title/body contract after reconciliation.
    For any PR whose declared base is older than current `main`, run
    `uv run python scripts/dev/check_base_sensitive_gates.py --pr <number> --json` against the exact

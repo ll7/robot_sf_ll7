@@ -36,6 +36,7 @@ import psutil
 from robot_sf.common.logging import get_logger
 from robot_sf.research.aggregation import compute_completeness_score
 from robot_sf.research.exceptions import ValidationError
+from robot_sf.research.tracker_manifest import validate_tracker_payload
 
 logger = get_logger(__name__)
 
@@ -285,55 +286,12 @@ def collect_reproducibility_metadata(
     return metadata
 
 
-def _validate_tracker_payload(
-    payload: object, path: Path
-) -> tuple[dict[str, Any], list[dict[str, Any]], list[Any], dict[str, Any], list[Any]]:
-    """Validate and normalize the JSON shapes consumed by the tracker parser.
+def load_tracker_manifest_payload(manifest_path: str | Path) -> dict[str, Any]:
+    """Load and validate the raw tracker payload used by report consumers.
 
     Returns:
-        Tuple of the validated payload, step records, enabled-step identifiers,
-        summary mapping, and seed values.
+        The most recent JSON object for JSONL inputs, after shape validation.
     """
-    if not isinstance(payload, dict):
-        raise ValidationError(f"Tracker manifest must contain a JSON object: {path}")
-
-    raw_steps = payload.get("steps")
-    if raw_steps is not None and not isinstance(raw_steps, list):
-        raise ValidationError(f"Tracker manifest steps must be a list: {path}")
-    steps = raw_steps or []
-    if any(not isinstance(step, dict) for step in steps):
-        raise ValidationError(f"Tracker manifest steps must contain objects: {path}")
-
-    raw_enabled_steps = payload.get("enabled_steps")
-    if raw_enabled_steps is not None and not isinstance(raw_enabled_steps, list):
-        raise ValidationError(f"Tracker manifest enabled_steps must be a list: {path}")
-    enabled_steps = raw_enabled_steps or [
-        step.get("step_id") for step in steps if step.get("step_id")
-    ]
-
-    raw_summary = payload.get("summary")
-    if raw_summary is not None and not isinstance(raw_summary, dict):
-        raise ValidationError(f"Tracker manifest summary must be an object: {path}")
-    summary = raw_summary or {}
-    raw_seeds = payload.get("seeds")
-    raw_seeds = raw_seeds or summary.get("seeds", [])
-    if not isinstance(raw_seeds, list):
-        raise ValidationError(f"Tracker manifest seeds must be a list: {path}")
-    return payload, steps, enabled_steps, summary, raw_seeds
-
-
-def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
-    """Parse a run-tracker manifest (JSON or JSONL) into a structured dict.
-
-    The parser is intentionally tolerant: it accepts both JSON and JSONL files,
-    returning the most recent record for JSONL inputs. Steps are summarized so
-    completeness can be calculated for the execution flow.
-
-    Returns:
-        Dictionary containing parsed manifest fields (run_id, status, steps, seeds,
-        summary) and a computed completeness score if enabled steps are present.
-    """
-
     path = Path(manifest_path)
     if not path.exists():
         msg = f"Tracker manifest does not exist: {path}"
@@ -354,7 +312,25 @@ def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
         logger.warning(msg, error=str(exc))
         raise ValidationError(msg) from exc
 
-    payload, steps, enabled_steps, summary, raw_seeds = _validate_tracker_payload(payload, path)
+    validate_tracker_payload(payload, path)
+    return payload
+
+
+def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
+    """Parse a run-tracker manifest (JSON or JSONL) into a structured dict.
+
+    The parser is intentionally tolerant: it accepts both JSON and JSONL files,
+    returning the most recent record for JSONL inputs. Steps are summarized so
+    completeness can be calculated for the execution flow.
+
+    Returns:
+        Dictionary containing parsed manifest fields (run_id, status, steps, seeds,
+        summary) and a computed completeness score if enabled steps are present.
+    """
+
+    path = Path(manifest_path)
+    payload = load_tracker_manifest_payload(path)
+    payload, steps, enabled_steps, summary, raw_seeds = validate_tracker_payload(payload, path)
     completed_steps = [
         s.get("step_id")
         for s in steps

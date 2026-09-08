@@ -399,6 +399,49 @@ def test_load_manifest_payload_empty_jsonl_raises(tmp_path: Path):
         _load_manifest_payload(path)
 
 
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"steps": "not-a-list", "metrics": {"success_rate": 0.8}}, "steps must be a list"),
+        ({"metrics": "not-an-object"}, "metrics must be an object"),
+        ({"summary": {"metrics": []}}, "summary metrics must be an object"),
+    ],
+)
+def test_extract_seed_metrics_rejects_malformed_manifest_shapes(
+    tmp_path: Path, payload: dict, message: str
+):
+    """Metric extraction records malformed tracker shapes as failures."""
+    path = tmp_path / "malformed.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    records, failures = extract_seed_metrics([path])
+
+    assert records == []
+    assert len(failures) == 1
+    assert message in failures[0]["reason"]
+
+
+def test_extract_seed_metrics_records_numeric_overflow_as_failure(tmp_path: Path):
+    """Unrepresentable numeric values are skipped instead of escaping extraction."""
+    path = tmp_path / "overflow.json"
+    path.write_text(
+        json.dumps(
+            {
+                "seed": 5,
+                "policy_type": "baseline",
+                "metrics": {"success_rate": int("9" * 1000)},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    records, failures = extract_seed_metrics([path])
+
+    assert records == []
+    assert len(failures) == 1
+    assert "int too large to convert to float" in failures[0]["reason"]
+
+
 def test_extract_seed_metrics_basic(tmp_path: Path):
     """extract_seed_metrics reads per-seed metrics and summary aliases."""
     m1 = tmp_path / "a.json"

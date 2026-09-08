@@ -27,6 +27,8 @@ import numpy as np
 import pandas as pd
 
 from robot_sf.common.logging import get_logger
+from robot_sf.research.exceptions import ValidationError
+from robot_sf.research.tracker_manifest import validate_tracker_payload
 
 logger = get_logger(__name__)
 
@@ -187,8 +189,12 @@ def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
         lines = [line for line in text.splitlines() if line.strip()]
         if not lines:
             raise ValueError(f"Empty manifest file: {manifest_path}")
-        return json.loads(lines[-1])
-    return json.loads(text)
+        payload = json.loads(lines[-1])
+    else:
+        payload = json.loads(text)
+
+    validate_tracker_payload(payload, manifest_path)
+    return payload
 
 
 def extract_seed_metrics(
@@ -209,6 +215,7 @@ def extract_seed_metrics(
 
     for raw_path in manifest_paths:
         manifest_path = Path(raw_path)
+        payload: dict[str, Any] | None = None
         try:
             payload = _load_manifest_payload(manifest_path)
             seed = int(payload.get("seed")) if payload.get("seed") is not None else None
@@ -243,10 +250,18 @@ def extract_seed_metrics(
                 raise ValueError("no numeric metrics found")
 
             records.append(record)
-        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        except (
+            OSError,
+            OverflowError,
+            TypeError,
+            ValueError,
+            KeyError,
+            ValidationError,
+            json.JSONDecodeError,
+        ) as exc:
             failure = {
-                "seed": payload.get("seed") if "payload" in locals() else None,
-                "policy_type": payload.get("policy_type") if "payload" in locals() else None,
+                "seed": payload.get("seed") if payload is not None else None,
+                "policy_type": payload.get("policy_type") if payload is not None else None,
                 "path": str(manifest_path),
                 "reason": str(exc),
             }

@@ -5,7 +5,6 @@ Usage: scripts/research/generate_report.py --tracker-run <run_id> --experiment-n
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -15,20 +14,20 @@ from loguru import logger
 def load_tracker_manifest(tracker_run_id: str) -> dict:
     """Load tracker manifest from run ID (supports jsonl + json)."""
 
+    from robot_sf.research.exceptions import ValidationError
+    from robot_sf.research.metadata import load_tracker_manifest_payload
+
     base_dir = Path("output/run-tracker") / tracker_run_id
     json_path = base_dir / "manifest.json"
     jsonl_path = base_dir / "manifest.jsonl"
 
-    if jsonl_path.exists():
-        lines = [line for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line]
-        if not lines:
-            logger.error(f"Tracker manifest is empty: {jsonl_path}")
-            sys.exit(1)
-        return json.loads(lines[-1])
-
-    if json_path.exists():
-        with json_path.open(encoding="utf-8") as f:
-            return json.load(f)
+    manifest_path = jsonl_path if jsonl_path.exists() else json_path
+    if manifest_path.exists():
+        try:
+            return load_tracker_manifest_payload(manifest_path)
+        except ValidationError as exc:
+            logger.error(f"Tracker manifest validation failed: {exc}")
+            raise SystemExit(1) from exc
 
     logger.error(f"Tracker manifest not found: {jsonl_path} or {json_path}")
     sys.exit(1)

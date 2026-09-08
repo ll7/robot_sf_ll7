@@ -1,5 +1,7 @@
 """Integration test for end-to-end report generation."""
 
+import json
+
 import pytest
 
 from robot_sf.research.orchestrator import ReportOrchestrator
@@ -235,6 +237,50 @@ def test_multi_seed_report(tmp_path):
 
     data_dir = report_path.parent / "data"
     assert (data_dir / "completeness.json").exists()
+
+
+@pytest.mark.parametrize(
+    "invalid_metrics",
+    [[], {"avg_timesteps": int("9" * 1000)}],
+)
+def test_run_full_skips_invalid_manifest_metrics(tmp_path, invalid_metrics):
+    """End-to-end reports skip malformed metrics without leaking conversion errors."""
+    baseline_dir = tmp_path / "baseline"
+    pretrained_dir = tmp_path / "pretrained"
+    baseline_dir.mkdir()
+    pretrained_dir.mkdir()
+    (baseline_dir / "baseline.json").write_text(
+        json.dumps(
+            {
+                "seed": 1,
+                "policy_type": "baseline",
+                "metrics": invalid_metrics,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (pretrained_dir / "pretrained.json").write_text(
+        json.dumps(
+            {
+                "seed": 1,
+                "policy_type": "pretrained",
+                "metrics": {"avg_timesteps": 100.0, "success_rate": 0.8},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report_path = ReportOrchestrator(output_dir=tmp_path / "report").run_full(
+        experiment_name="Malformed Manifest Report",
+        baseline_manifests=[baseline_dir / "baseline.json"],
+        pretrained_manifests=[pretrained_dir / "pretrained.json"],
+        expected_seeds=[1],
+        run_id="malformed_manifest_run",
+    )
+
+    assert report_path.exists()
+    hypothesis = json.loads((report_path.parent / "data" / "hypothesis.json").read_text())
+    assert hypothesis["hypotheses"][0]["decision"] == "INCOMPLETE"
 
 
 def test_metadata_collection(output_dir):

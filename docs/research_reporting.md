@@ -317,9 +317,12 @@ ls output/run-tracker/<run_id>/manifest.json
 ```
 
 Tracker manifests must contain a JSON object with list-shaped `steps`,
-`enabled_steps`, and `seeds` fields when present, plus an object-shaped `summary` when present.
+`enabled_steps`, and `seeds` fields when present, plus object-shaped `summary` and `metrics`
+fields when present (including `summary.metrics`).
 Malformed JSON, invalid UTF-8, and schema-drifted shapes are rejected as validation failures so
-the report pipeline does not treat incomplete reproducibility metadata as valid evidence.
+the report and aggregation pipelines do not treat incomplete reproducibility metadata as valid
+evidence. The report CLI, multi-seed orchestrator, and per-seed metric extraction share this
+validation and numeric-coercion boundary; unrepresentable numeric values are skipped as failures.
 
 ### Issue: LaTeX export fails
 

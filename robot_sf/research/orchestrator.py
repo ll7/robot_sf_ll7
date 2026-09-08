@@ -44,6 +44,7 @@ from robot_sf.research.aggregation import (
     compute_completeness_score,
     export_metrics_csv,
     export_metrics_json,
+    extract_seed_metrics,
 )
 from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.report_template import MarkdownReportRenderer
@@ -352,47 +353,28 @@ class ReportOrchestrator:
     def _load_manifest_map(
         self, manifests: Sequence[Path], label: str
     ) -> dict[int, dict[str, Any]]:
-        """Load manifests into a seed→payload map, skipping invalid entries.
+        """Load validated metric records into a seed→record map.
 
         Returns:
-            dict[int, dict[str, Any]]: Mapping from seed to parsed manifest payload.
+            dict[int, dict[str, Any]]: Mapping from seed to normalized metric record.
         """
-
-        def _load(path: Path) -> dict[str, Any] | None:
-            """Load a single manifest JSON file.
-
-            Args:
-                path: Path to JSON manifest file.
-
-            Returns:
-                dict[str, Any] | None: Parsed JSON dict or None on error.
-            """
-            try:
-                with path.open(encoding="utf-8") as f:
-                    return json.load(f)
-            except (
-                OSError,
-                json.JSONDecodeError,
-                ValueError,
-            ) as exc:  # pragma: no cover (defensive)
-                logger.warning(f"{label} manifest parse failed: {path} error={exc}")
-                return None
-
-        loaded = [(_load(p), p) for p in manifests]
         manifest_map: dict[int, dict[str, Any]] = {}
-        for manifest, _ in loaded:
-            if manifest is None or "seed" not in manifest:
+        records, _ = extract_seed_metrics(manifests)
+        for record in records:
+            if record.get("seed") is None:
                 continue
             try:
-                seed_val = int(manifest["seed"])
-            except (ValueError, TypeError):  # pragma: no cover - malformed manifest diagnostic
-                # Surface the caught exception's traceback: the label and seed value
-                # were previously discarded by the printf-% template (#6837).
-                logger.opt(exception=True).warning(
-                    "Skipping {} manifest with non-integer seed: {}", label, manifest.get("seed")
+                seed_val = int(record["seed"])
+            except (OverflowError, TypeError, ValueError):
+                logger.warning(
+                    "Skipping {} manifest record with non-integer seed",
+                    label=label,
+                    seed=record.get("seed"),
                 )
                 continue
-            manifest_map[seed_val] = manifest
+            normalized = dict(record)
+            normalized["policy_type"] = label
+            manifest_map[seed_val] = normalized
         return manifest_map
 
     def orchestrate_multi_seed(
@@ -422,25 +404,23 @@ class ReportOrchestrator:
             note: str | None = None
 
             if b_payload:
-                m = b_payload.get("metrics") or {}
                 records.append(
                     {
                         "policy_type": "baseline",
                         "seed": seed,
-                        "timesteps_to_convergence": m.get("avg_timesteps"),
-                        "success_rate": m.get("success_rate"),
-                        "collision_rate": m.get("collision_rate"),
+                        "timesteps_to_convergence": b_payload.get("timesteps_to_convergence"),
+                        "success_rate": b_payload.get("success_rate"),
+                        "collision_rate": b_payload.get("collision_rate"),
                     }
                 )
             if p_payload:
-                m = p_payload.get("metrics") or {}
                 records.append(
                     {
                         "policy_type": "pretrained",
                         "seed": seed,
-                        "timesteps_to_convergence": m.get("avg_timesteps"),
-                        "success_rate": m.get("success_rate"),
-                        "collision_rate": m.get("collision_rate"),
+                        "timesteps_to_convergence": p_payload.get("timesteps_to_convergence"),
+                        "success_rate": p_payload.get("success_rate"),
+                        "collision_rate": p_payload.get("collision_rate"),
                     }
                 )
             if b_status == "missing" or p_status == "missing":

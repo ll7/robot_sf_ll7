@@ -403,6 +403,9 @@ _FAST_FILES = {
     # Generic ranking tests provide deterministic evidence-admission and finite-
     # metric coverage for the changed benchmark ranking helper.
     "test_ranking.py",
+    # Research tracker-manifest tests cover the fail-closed reproducibility
+    # metadata parser in exact-head fast shards.
+    "test_metadata.py",
     # Distribution plotting tests use Agg and deterministic fixtures; keep their
     # changed-line coverage in the exact-head fast lane.
     "test_distributions.py",

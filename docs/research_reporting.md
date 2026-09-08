@@ -316,6 +316,11 @@ Figures follow `docs/dev_guide_reference.md` guidelines:
 ls output/run-tracker/<run_id>/manifest.json
 ```
 
+Tracker manifests must contain a JSON object with list-shaped `steps`,
+`enabled_steps`, and `seeds` fields when present, plus an object-shaped `summary` when present.
+Malformed JSON, invalid UTF-8, and schema-drifted shapes are rejected as validation failures so
+the report pipeline does not treat incomplete reproducibility metadata as valid evidence.
+
 ### Issue: LaTeX export fails
 
 **Solution**: Verify pandoc installed or skip LaTeX export.

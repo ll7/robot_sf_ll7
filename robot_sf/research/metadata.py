@@ -285,6 +285,43 @@ def collect_reproducibility_metadata(
     return metadata
 
 
+def _validate_tracker_payload(
+    payload: object, path: Path
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[Any], dict[str, Any], list[Any]]:
+    """Validate and normalize the JSON shapes consumed by the tracker parser.
+
+    Returns:
+        Tuple of the validated payload, step records, enabled-step identifiers,
+        summary mapping, and seed values.
+    """
+    if not isinstance(payload, dict):
+        raise ValidationError(f"Tracker manifest must contain a JSON object: {path}")
+
+    raw_steps = payload.get("steps")
+    if raw_steps is not None and not isinstance(raw_steps, list):
+        raise ValidationError(f"Tracker manifest steps must be a list: {path}")
+    steps = raw_steps or []
+    if any(not isinstance(step, dict) for step in steps):
+        raise ValidationError(f"Tracker manifest steps must contain objects: {path}")
+
+    raw_enabled_steps = payload.get("enabled_steps")
+    if raw_enabled_steps is not None and not isinstance(raw_enabled_steps, list):
+        raise ValidationError(f"Tracker manifest enabled_steps must be a list: {path}")
+    enabled_steps = raw_enabled_steps or [
+        step.get("step_id") for step in steps if step.get("step_id")
+    ]
+
+    raw_summary = payload.get("summary")
+    if raw_summary is not None and not isinstance(raw_summary, dict):
+        raise ValidationError(f"Tracker manifest summary must be an object: {path}")
+    summary = raw_summary or {}
+    raw_seeds = payload.get("seeds")
+    raw_seeds = raw_seeds or summary.get("seeds", [])
+    if not isinstance(raw_seeds, list):
+        raise ValidationError(f"Tracker manifest seeds must be a list: {path}")
+    return payload, steps, enabled_steps, summary, raw_seeds
+
+
 def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
     """Parse a run-tracker manifest (JSON or JSONL) into a structured dict.
 
@@ -312,15 +349,12 @@ def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
             payload = lines[-1]
         else:
             payload = json.loads(text)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         msg = f"Failed to parse tracker manifest at {path}"
         logger.warning(msg, error=str(exc))
         raise ValidationError(msg) from exc
 
-    steps = payload.get("steps") or []
-    enabled_steps = payload.get("enabled_steps") or [
-        s.get("step_id") for s in steps if s.get("step_id")
-    ]
+    payload, steps, enabled_steps, summary, raw_seeds = _validate_tracker_payload(payload, path)
     completed_steps = [
         s.get("step_id")
         for s in steps
@@ -346,7 +380,7 @@ def parse_tracker_manifest(manifest_path: str | Path) -> dict[str, Any]:
         "enabled_steps": enabled_steps,
         "completed_steps": completed_steps,
         "failed_steps": failed_steps,
-        "seeds": payload.get("seeds") or payload.get("summary", {}).get("seeds", []),
-        "summary": payload.get("summary", {}),
+        "seeds": raw_seeds,
+        "summary": summary,
         "completeness": completeness,
     }

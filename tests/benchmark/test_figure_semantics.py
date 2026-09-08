@@ -54,6 +54,8 @@ def test_packaged_registry_is_complete_stable_and_alias_aware():
 
 
 def test_style_compatibility_is_explicit_while_strict_api_rejects_unknowns():
+    assert metric_label("success") == "Success rate"
+    assert metric_label("collisions") == "Collision rate"
     assert metric_label("unknown_metric") == "Unknown Metric"
     assert metric_label("") == "Metric"
     with pytest.raises(KeyError, match="unmapped metric"):

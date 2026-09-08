@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from scripts.dev import single_account_merge_receipt as receipt_module
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.stacked_prs import (
+    _check_run_identifier,
     _closing_discipline_reasons,
     _enrich_merge_queue_gate_check_runs,
     _get_paginated_list,
@@ -221,6 +222,11 @@ def test_check_summary_drops_older_cancelled_run() -> None:
     assert summary["overall"] == "success"
     assert summary["superseded_count"] == 1
     assert summary["failures"] == []
+
+
+def test_check_run_identifier_rejects_oversized_decimal_string() -> None:
+    """An oversized REST identifier must fail closed instead of escaping conversion."""
+    assert _check_run_identifier({"id": "9" * 5000}) is None
 
 
 def test_check_summary_fails_closed_for_pending_and_failed_current_runs() -> None:

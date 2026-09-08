@@ -332,7 +332,10 @@ def _check_run_identifier(item: dict[str, Any]) -> int | None:
     if isinstance(raw_identifier, int):
         identifier = raw_identifier
     elif isinstance(raw_identifier, str) and raw_identifier.strip().isdigit():
-        identifier = int(raw_identifier.strip())
+        try:
+            identifier = int(raw_identifier.strip())
+        except (OverflowError, ValueError):
+            return None
     else:
         return None
     return identifier if identifier > 0 else None

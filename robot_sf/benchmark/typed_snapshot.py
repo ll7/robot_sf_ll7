@@ -666,7 +666,8 @@ def _validate_group_state(
         return
     if destination_groups is None:
         raise SnapshotCompatibilityError("destination does not expose pedestrian group state")
-    assert reverse_lookup is not None
+    if reverse_lookup is None:
+        raise SnapshotPayloadError("pedestrian group reverse lookup is missing")
     _validate_group_memberships(memberships, reverse_lookup, ped_count)
     _validate_group_reverse_lookup(memberships, reverse_lookup, ped_count)
 

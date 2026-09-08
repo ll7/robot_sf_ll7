@@ -68,6 +68,10 @@ entries:
   status: current
   freshness: maintained
   area: benchmark_evidence
+- path: docs/context/issue_8619_constrained_mpc_baseline_spec.md
+  status: proposal
+  freshness: maintained
+  area: planner
 - path: docs/context/evidence/issue_8063_goal_belief_contract_receipt.v1.json
   status: evidence
   freshness: evidence

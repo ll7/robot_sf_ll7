@@ -266,9 +266,7 @@ def _capture_behavior_rng_states(peds_behaviors: list[Any]) -> dict[str, Any]:
     return captured
 
 
-def _restore_behavior_rng_states(
-    peds_behaviors: list[Any], saved: dict[str, Any] | None
-) -> None:
+def _restore_behavior_rng_states(peds_behaviors: list[Any], saved: dict[str, Any] | None) -> None:
     """Restore owned NumPy generator states, rejecting identity drift."""
     if not saved:
         return
@@ -292,7 +290,11 @@ def _restore_behavior_rng_states(
 
 
 def _capture_pedestrian_groups(groups: Any) -> tuple[dict[Any, Any], dict[Any, Any]]:
-    """Capture mutable pedestrian group membership and reverse lookup."""
+    """Capture mutable pedestrian group membership and reverse lookup.
+
+    Returns:
+        Deep-copied group membership and its pedestrian-to-group reverse lookup.
+    """
     return deepcopy(groups.groups), deepcopy(groups.group_by_ped_id)
 
 
@@ -424,8 +426,10 @@ def _restore_route_navigators(peds_behaviors: list[Any], navigators: dict[str, A
         else:
             global_offset = int(getattr(behavior, "global_ped_offset", 0))
             groups = ",".join(sorted(str(int(group_id)) for group_id in navs))
-            identity = f"route:{global_offset}:{groups}" if navs is not None else (
-                f"behavior:{index}:{behavior_type}"
+            identity = (
+                f"route:{global_offset}:{groups}"
+                if navs is not None
+                else (f"behavior:{index}:{behavior_type}")
             )
         captured = navigators.get(identity)
         if captured is None:

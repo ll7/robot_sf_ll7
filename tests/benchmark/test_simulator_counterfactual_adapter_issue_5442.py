@@ -321,6 +321,66 @@ def test_all_collision_scope_detects_wall_without_pedestrian() -> None:
     assert model.collision() is True
 
 
+def test_adapter_contract_edges_cover_native_action_and_collision_branches() -> None:
+    """Exercise fail-closed constructor, collision, and action-label branches."""
+    robot = SimpleNamespace(
+        pos=(1.0, 1.0),
+        config=SimpleNamespace(radius=0.5),
+        state=SimpleNamespace(),
+    )
+    with pytest.raises(ValueError, match="exactly one robot"):
+        SimulatorCounterfactualModel(SimpleNamespace(robots=[]))
+    with pytest.raises(ValueError, match="collision_scope"):
+        SimulatorCounterfactualModel(SimpleNamespace(robots=[robot]), collision_scope="unknown")
+
+    sim = SimpleNamespace(
+        robots=[robot],
+        robot_pos=np.asarray([[1.0, 1.0]]),
+        ped_pos=np.empty((0, 2)),
+        map_def=SimpleNamespace(width=10.0, height=10.0),
+        config=SimpleNamespace(ped_radius=0.4),
+        get_obstacle_lines=lambda: (),
+        peds_behaviors=[],
+    )
+    model = SimulatorCounterfactualModel(sim)
+    assert model.collision() is False
+    assert model.collision_predicate == "robot_pedestrian_center_distance_v1"
+
+    robot.pos = (-0.1, 1.0)
+    all_model = SimulatorCounterfactualModel(sim, collision_scope="all")
+    assert all_model.collision() is True
+    robot.pos = (1.0, 1.0)
+    sim.ped_pos = np.asarray([[1.2, 1.0]])
+    assert all_model.collision() is True
+
+    custom = SimulatorCounterfactualModel(sim, collision_fn=lambda _: True)
+    assert custom.collision() is True
+    assert custom.collision_predicate == "custom_collision_fn"
+
+    bicycle_config = SimpleNamespace(max_decel=2.0, max_steer=0.4)
+    robot.config = bicycle_config
+    bicycle = SimulatorCounterfactualModel(sim)
+    assert len(bicycle.feasible_actions()) == 5
+    assert bicycle.action_label((0.0, 0.0)).startswith("robot_accel=")
+
+    robot.config = SimpleNamespace(command_mode="vx_vy", max_speed=1.5)
+    robot.state = SimpleNamespace(velocity_xy=(0.2, -0.1))
+    velocity_xy = SimulatorCounterfactualModel(sim)
+    assert len(velocity_xy.feasible_actions()) == 4
+    assert velocity_xy.action_label((0.0, 0.0)).startswith("robot_velocity=(vx_mps=")
+
+    robot.config = SimpleNamespace(command_mode="unicycle_vw", max_angular_speed=2.0)
+    robot.state = SimpleNamespace(velocity_vw=(0.3, 0.1))
+    unicycle = SimulatorCounterfactualModel(sim)
+    assert len(unicycle.feasible_actions()) == 4
+    assert unicycle.action_label((0.0, 0.0)).startswith("robot_velocity=(linear_mps=")
+
+    robot.config = SimpleNamespace()
+    unknown = SimulatorCounterfactualModel(sim)
+    assert unknown.feasible_actions() == ()
+    assert unknown.action_label((0.0, 0.0)).startswith("robot_cmd=")
+
+
 def test_route_group_navigator_progress_restores() -> None:
     """Route-group waypoint progress is restored rather than left at branch state."""
     navigator = RouteNavigator([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)])

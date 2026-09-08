@@ -9,17 +9,22 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import robot_sf.benchmark.typed_snapshot as typed_snapshot_module
 from robot_sf.benchmark.simulator_counterfactual_adapter import SimulatorCounterfactualModel
 from robot_sf.benchmark.typed_snapshot import (
     NoOpStep,
+    SnapshotBoundary,
     SnapshotCompatibility,
     SnapshotCompatibilityError,
+    SnapshotContractError,
     SnapshotPayloadError,
+    TypedSimulatorSnapshot,
     capture_typed_snapshot,
     compare_continuation_traces,
     read_typed_snapshot,
     restore_typed_snapshot,
     state_inventory_payload,
+    write_state_inventory,
     write_typed_snapshot,
 )
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -61,6 +66,17 @@ def _compatibility(model: SimulatorCounterfactualModel) -> SnapshotCompatibility
         code_revision=hashlib.sha256(b"revision").hexdigest(),
         dt_s=float(model.sim.config.time_per_step_in_secs),
         planner_id="fixture.planner.stateless",
+    )
+
+
+def _synthetic_compatibility() -> SnapshotCompatibility:
+    """Return small deterministic identity metadata for pure contract tests."""
+    return SnapshotCompatibility(
+        map_sha256=hashlib.sha256(b"map").hexdigest(),
+        config_sha256=hashlib.sha256(b"config").hexdigest(),
+        code_revision=hashlib.sha256(b"revision").hexdigest(),
+        dt_s=0.1,
+        planner_id="synthetic.planner",
     )
 
 
@@ -189,3 +205,122 @@ def test_state_inventory_is_machine_readable_and_marks_gaps() -> None:
     assert {entry["status"] for entry in payload["entries"]} >= {"supported", "unsupported"}
     assert all("owner" in entry and "test" in entry for entry in payload["entries"])
     assert any(entry["path"] == "controller.planner_memory" for entry in payload["entries"])
+
+
+def test_compatibility_and_boundary_round_trip_reject_invalid_metadata() -> None:
+    """Compatibility and boundary parsers preserve valid values and reject malformed input."""
+    compatibility = _synthetic_compatibility()
+    assert SnapshotCompatibility.from_dict(compatibility.to_dict()) == compatibility
+    with pytest.raises(SnapshotPayloadError, match="missing fields"):
+        SnapshotCompatibility.from_dict({})
+    invalid_compatibility = compatibility.to_dict()
+    invalid_compatibility["dt_s"] = "not-a-number"
+    with pytest.raises(SnapshotPayloadError, match="invalid compatibility"):
+        SnapshotCompatibility.from_dict(invalid_compatibility)
+    with pytest.raises(SnapshotContractError, match="checkpoint_sha256"):
+        SnapshotCompatibility(
+            map_sha256=compatibility.map_sha256,
+            config_sha256=compatibility.config_sha256,
+            code_revision=compatibility.code_revision,
+            dt_s=compatibility.dt_s,
+            checkpoint_sha256="bad",
+        )
+
+    boundary = SnapshotBoundary(
+        step_index=2,
+        absolute_time_s=0.2,
+        remaining_budget_steps=4,
+        next_observation_ready=True,
+    )
+    assert SnapshotBoundary.from_dict(boundary.to_dict()) == boundary
+    with pytest.raises(SnapshotPayloadError, match="invalid snapshot boundary"):
+        SnapshotBoundary.from_dict({})
+    invalid_boundary = boundary.to_dict()
+    invalid_boundary["phase"] = "post_step"
+    with pytest.raises(SnapshotPayloadError, match="invalid snapshot boundary"):
+        SnapshotBoundary.from_dict(invalid_boundary)
+    invalid_boundary["phase"] = "pre_step"
+    invalid_boundary["next_observation_ready"] = "yes"
+    with pytest.raises(SnapshotPayloadError, match="next_observation_ready"):
+        SnapshotBoundary.from_dict(invalid_boundary)
+
+
+def test_typed_metadata_round_trip_encodes_nested_scalars_and_duplicate_array_names(
+    tmp_path: Path,
+) -> None:
+    """The durable representation handles nested JSON values and collision-safe array names."""
+    snapshot = TypedSimulatorSnapshot(
+        compatibility=_synthetic_compatibility(),
+        boundary=SnapshotBoundary(0, 0.0, None),
+        state={
+            "a.b": np.asarray([1.0]),
+            "a_b": np.asarray([2.0]),
+            "scalar": np.float64(3.0),
+            "tuple": (True, None),
+            "list": [1, {"nested": "value"}],
+        },
+        arrays={"seed": np.asarray([4.0])},
+    )
+    metadata = snapshot.to_metadata_dict()
+    assert {"state_a_b", "state_a_b_2", "seed"} <= set(metadata["arrays"])
+    artifact = write_typed_snapshot(snapshot, tmp_path / "synthetic.json")
+    loaded = read_typed_snapshot(artifact.metadata_path)
+    assert loaded.state["scalar"] == pytest.approx(3.0)
+    assert loaded.state["tuple"] == (True, None)
+    assert loaded.state["list"] == [1, {"nested": "value"}]
+    assert np.array_equal(loaded.state["a.b"], np.asarray([1.0]))
+    assert np.array_equal(loaded.state["a_b"], np.asarray([2.0]))
+
+
+def test_nested_encoding_and_payload_validation_fail_closed() -> None:
+    """Unsafe arrays, values, and references are rejected before durable use."""
+    with pytest.raises(SnapshotContractError, match="unsafe object dtype"):
+        typed_snapshot_module._array_copy(np.asarray([object()], dtype=object), "object")
+    with pytest.raises(SnapshotContractError, match="numeric dtype"):
+        typed_snapshot_module._array_copy(np.asarray(["text"]), "text")
+    with pytest.raises(SnapshotContractError, match="non-finite values"):
+        typed_snapshot_module._array_copy(np.asarray([np.inf]), "infinite")
+    with pytest.raises(SnapshotContractError, match="unsupported value type"):
+        typed_snapshot_module._encode_value(object(), {}, "state")
+    with pytest.raises(SnapshotContractError, match="non-finite float"):
+        typed_snapshot_module._encode_value(float("inf"), {}, "state")
+    with pytest.raises(SnapshotPayloadError, match="missing array"):
+        typed_snapshot_module._decode_value({"$array": "missing"}, {}, "state")
+    with pytest.raises(SnapshotPayloadError, match="malformed tuple"):
+        typed_snapshot_module._decode_value({"$tuple": "not-a-list"}, {}, "state")
+
+
+def test_noop_comparison_covers_equal_nested_values_lengths_and_shapes() -> None:
+    """No-op comparison distinguishes equal arrays, nested mismatches, and trace-length drift."""
+    equal = compare_continuation_traces(
+        [NoOpStep(step=0, state={"array": np.asarray([1, 2])})],
+        [NoOpStep(step=0, state={"array": np.asarray([1, 2])})],
+    )
+    assert equal.equivalent is True
+    shape_mismatch = compare_continuation_traces(
+        [NoOpStep(step=0, state={"array": np.asarray([1, 2])})],
+        [NoOpStep(step=0, state={"array": np.asarray([[1, 2]])})],
+    )
+    assert shape_mismatch.first_divergence_field == "step.state.array"
+    missing_mapping_key = compare_continuation_traces(
+        [NoOpStep(step=0, state={"present": 1})],
+        [NoOpStep(step=0, state={})],
+    )
+    assert missing_mapping_key.first_divergence_field == "step.state.present"
+    sequence_length = compare_continuation_traces(
+        [NoOpStep(step=0, state={"items": [1]})],
+        [NoOpStep(step=0, state={"items": [1, 2]})],
+    )
+    assert sequence_length.first_divergence_field == "step.state.items"
+    trace_length = compare_continuation_traces(
+        [NoOpStep(step=0, state={})],
+        [NoOpStep(step=0, state={}), NoOpStep(step=1, state={})],
+    )
+    assert trace_length.first_divergence_field == "trace_length"
+
+
+def test_state_inventory_writer_emits_deterministic_json(tmp_path: Path) -> None:
+    """The inventory writer creates a readable artifact with the public inventory payload."""
+    target = write_state_inventory(tmp_path / "inventory.json")
+    assert target.is_file()
+    assert json.loads(target.read_text(encoding="utf-8")) == state_inventory_payload()

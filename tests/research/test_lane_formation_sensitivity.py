@@ -165,6 +165,11 @@ def test_summarize_sensitivity_rows_rejects_nonfinite_metrics(bad_value):
         {"lane_segregation_index": 0.2},
         {"lane_segregation_index": "0.2", "lane_purity": 0.4},
         {"lane_segregation_index": True, "lane_purity": 0.4},
+        {
+            "lane_segregation_index": 0.2,
+            "lane_purity": 0.4,
+            "unexpected_metric": float("nan"),
+        },
     ],
 )
 def test_summarize_sensitivity_rows_rejects_malformed_metrics(metrics):

@@ -118,6 +118,8 @@ def _validate_metric_mapping(metrics: Any, *, label: str) -> None:
     """Reject malformed or non-finite lane metrics before aggregation."""
     if not isinstance(metrics, Mapping):
         raise ValueError(f"{label} must be a mapping of finite numeric metrics")
+    if set(metrics) != set(_METRIC_NAMES):
+        raise ValueError(f"{label} must contain exactly the supported finite numeric metrics")
     for metric_name in _METRIC_NAMES:
         value = metrics.get(metric_name, _MISSING)
         if (

@@ -74,6 +74,7 @@ from robot_sf.common.types import (
     Zone,
 )
 from robot_sf.common.validation import (
+    finite_float,
     require_finite,
     require_finite_array,
     require_finite_fields,
@@ -154,6 +155,7 @@ __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     # Compatibility (from .compat)
     "validate_compatibility",
     # Validation (from .validation)
+    "finite_float",
     "require_finite",
     "require_finite_array",
     "require_finite_fields",

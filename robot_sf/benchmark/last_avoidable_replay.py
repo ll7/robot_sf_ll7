@@ -34,7 +34,7 @@ episode root-cause claim.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -336,12 +336,16 @@ def _capture_window_snapshots(
     applied — i.e. the decision point at step ``t``.
     """
     model.restore(initial_snapshot)
+    if len(baseline_actions) < config.t_contact:
+        raise ValueError(
+            "baseline_actions must contain at least t_contact actions to capture "
+            f"the full decision window (got {len(baseline_actions)}, "
+            f"need {config.t_contact})"
+        )
     snapshots: dict[int, Any] = {}
     for step in range(config.t_contact):
         if config.t_danger <= step < config.t_contact:
             snapshots[step] = model.snapshot()
-        if step >= len(baseline_actions):
-            break
         model.step(baseline_actions[step])
     return snapshots
 
@@ -356,6 +360,18 @@ def _action_prevents_contact(
 ) -> bool:
     """Return whether substituting ``action`` at ``step`` prevents contact in the horizon."""
     model.restore(step_snapshot)
+    # Keep the literal here so this small contract probe can execute the
+    # function body without importing module-level constants.
+    if config.substitution_mode == "single_step":
+        # The candidate consumes action ``step``.  Every remaining horizon tick
+        # must have a recorded baseline command to resume, including the last
+        # tick at ``step + horizon - 1``.
+        required = step + config.horizon
+        if len(baseline_actions) < required:
+            raise ValueError(
+                "single_step substitution requires a recorded baseline suffix "
+                f"through action {required - 1} (got {len(baseline_actions)} actions)"
+            )
     for offset in range(config.horizon):
         if config.substitution_mode == SUBSTITUTION_HOLD:
             applied = action
@@ -363,8 +379,6 @@ def _action_prevents_contact(
             applied = action
         else:
             resume_index = step + offset
-            if resume_index >= len(baseline_actions):
-                break
             applied = baseline_actions[resume_index]
         model.step(applied)
         if model.collision():
@@ -420,6 +434,48 @@ def _branch_over_window(
     return branches, interventions
 
 
+def _model_metadata(model: CounterfactualModel, field_name: str) -> str | None:
+    """Read an optional model-declared provenance field.
+
+    The protocol intentionally remains small for existing fixture models. Native
+    adapters may expose these fields as properties (or zero-argument methods),
+    allowing the engine to bind report provenance to the contract actually used.
+
+    Returns:
+        The normalized metadata value, or ``None`` when the model does not
+        declare the requested field.
+    """
+    value = getattr(model, field_name, None)
+    if callable(value):
+        value = value()
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _bind_model_metadata(
+    model: CounterfactualModel, config: ReplayConfig
+) -> tuple[ReplayConfig, tuple[str, ...]]:
+    """Bind optional native provenance fields and report declaration conflicts.
+
+    Returns:
+        A possibly enriched config and a tuple of declaration mismatch messages.
+    """
+    bound_config = config
+    mismatches: list[str] = []
+    for field_name in ("collision_predicate", "pedestrian_response"):
+        declared = getattr(bound_config, field_name)
+        actual = _model_metadata(model, field_name)
+        if actual is None:
+            continue
+        if declared == "unspecified":
+            bound_config = replace(bound_config, **{field_name: actual})
+        elif declared != actual:
+            mismatches.append(f"{field_name}: declared={declared!r}, actual={actual!r}")
+    return bound_config, tuple(mismatches)
+
+
 def locate_last_avoidable(
     model: CounterfactualModel,
     baseline_actions: Sequence[Any],
@@ -450,6 +506,63 @@ def locate_last_avoidable(
     Returns:
         A :class:`LastAvoidableReport` preserving every branch result.
     """
+    bound_config, metadata_mismatches = _bind_model_metadata(model, config)
+    if metadata_mismatches:
+        determinism = DeterminismCheck(
+            replays=bound_config.determinism_replays,
+            collision_stable=False,
+            contact_step_stable=False,
+            observed_contact_steps=(None,) * bound_config.determinism_replays,
+        )
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=bound_config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="metadata_mismatch",
+            notes=(
+                "declared replay provenance does not match the model contract: "
+                + "; ".join(metadata_mismatches),
+            ),
+        )
+    config = bound_config
+
+    # A baseline shorter than the replay bound cannot support either the
+    # expected-contact check or a complete branch horizon.  Report this as a
+    # deterministic, fail-closed non-evaluation rather than treating an empty
+    # suffix as a successful avoidance witness.
+    required_baseline = config.t_contact + config.horizon
+    if len(baseline_actions) < required_baseline:
+        determinism = DeterminismCheck(
+            replays=config.determinism_replays,
+            collision_stable=False,
+            contact_step_stable=False,
+            observed_contact_steps=(None,) * config.determinism_replays,
+        )
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="insufficient_baseline_actions",
+            notes=(
+                "baseline action data did not cover the declared contact plus "
+                f"horizon ({len(baseline_actions)} < {required_baseline})",
+            ),
+        )
+
     initial_snapshot = model.snapshot()
 
     determinism = _verify_determinism(model, initial_snapshot, baseline_actions, config)
@@ -488,8 +601,47 @@ def locate_last_avoidable(
             ),
         )
 
+    observed_contact = determinism.observed_contact_steps[0]
+    if observed_contact is None or not (config.t_danger <= observed_contact <= config.t_contact):
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="baseline_contact_outside_declared_window",
+            notes=(
+                "baseline contact was observed outside the declared "
+                f"[{config.t_danger}, {config.t_contact}] contact bounds",
+            ),
+        )
+
     snapshots = _capture_window_snapshots(model, initial_snapshot, baseline_actions, config)
-    branches, interventions = _branch_over_window(model, snapshots, baseline_actions, config)
+    try:
+        branches, interventions = _branch_over_window(model, snapshots, baseline_actions, config)
+    except ValueError:
+        # This should be caught by the preflight above for a complete window,
+        # but retaining the guard makes the fail-closed contract robust to a
+        # model-specific horizon requirement.
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="insufficient_replay_horizon_support",
+            notes=("at least one single-step branch lacked a recorded continuation",),
+        )
 
     window_size = config.t_contact - config.t_danger
     with_feasible = sum(1 for b in branches if b.has_feasible_actions)
@@ -499,9 +651,20 @@ def locate_last_avoidable(
 
     if preventable_steps:
         t_uca = preventable_steps[0]
-        # Point of no return: after the latest step where avoidance still worked,
-        # contact is inevitable (clamped to the contact step).
-        t_inevitable = min(preventable_steps[-1] + 1, config.t_contact)
+        later_gaps = [
+            branch.step
+            for branch in branches
+            if branch.step > preventable_steps[-1] and not branch.has_feasible_actions
+        ]
+        # A finite witness establishes only that one intervention worked.  A
+        # later coverage gap prevents a certified point-of-no-return claim.
+        t_inevitable = None if later_gaps else min(preventable_steps[-1] + 1, config.t_contact)
+        notes = ()
+        if later_gaps:
+            notes = (
+                "a later decision point lacked feasible-action coverage; "
+                "the finite avoidance witness does not certify a point of no return",
+            )
         return LastAvoidableReport(
             verdict=VERDICT_AVOIDABLE,
             config=config,
@@ -512,6 +675,7 @@ def locate_last_avoidable(
             feasible_coverage=feasible_coverage,
             minimal_sufficient_interventions=tuple(interventions),
             runtime_s=runtime_s,
+            notes=notes,
         )
 
     # No admissible action prevented contact at any decision point.

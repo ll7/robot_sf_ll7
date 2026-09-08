@@ -24,6 +24,7 @@ from robot_sf.benchmark.last_avoidable_replay import (
     VERDICT_AVOIDABLE,
     VERDICT_UNKNOWN,
     ReplayConfig,
+    _action_prevents_contact,
     locate_last_avoidable,
 )
 
@@ -186,6 +187,50 @@ def test_missing_feasible_action_returns_unknown() -> None:
     assert report.abstain_reason == "incomplete_feasible_action_coverage"
     assert report.feasible_coverage < 1.0
     assert report.verdict != "unavoidable"
+
+
+def test_truncated_single_step_horizon_is_not_a_prevention() -> None:
+    """A delayed contact beyond recorded data must fail closed, not return True."""
+    scenario = fx.preventable_late_braking_scenario()
+    model = fx.KinematicCollisionModel(scenario)
+    snapshot = model.snapshot()
+    config = ReplayConfig(
+        t_danger=0,
+        t_contact=3,
+        horizon=5,
+        substitution_mode="single_step",
+    )
+    with pytest.raises(ValueError, match="recorded baseline suffix"):
+        _action_prevents_contact(model, snapshot, 0.0, 0, [0.0], config)
+
+    report = locate_last_avoidable(model, [0.0], config)
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstain_reason == "insufficient_baseline_actions"
+
+
+def test_late_coverage_gap_with_witness_does_not_certify_no_return() -> None:
+    """A finite early witness survives, but a later coverage gap clears t_inevitable."""
+    scenario = fx.preventable_late_braking_scenario()
+    contact_step = fx.find_contact_step(scenario)
+    assert contact_step is not None
+    model = fx.KinematicCollisionModel(scenario)
+    original_feasible = model.feasible_actions
+    model.feasible_actions = lambda: () if model.step_index >= 7 else original_feasible()
+    config = ReplayConfig(
+        t_danger=0,
+        t_contact=contact_step,
+        horizon=contact_step + 6,
+        substitution_mode=SUBSTITUTION_HOLD,
+    )
+    report = locate_last_avoidable(
+        model,
+        fx.maintain_baseline_actions(config.t_contact + config.horizon + 2),
+        config,
+    )
+    assert report.verdict == VERDICT_AVOIDABLE
+    assert report.t_uca is not None
+    assert report.t_inevitable is None
+    assert any("later decision point" in note for note in report.notes)
 
 
 # -- acceptance criterion: output contract ----------------------------------

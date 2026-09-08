@@ -457,6 +457,9 @@ _FAST_FILES = {
     # Research metric aggregation tests are deterministic finite-value and
     # bootstrap-boundary contracts; keep changed-line coverage in fast shards.
     "test_aggregation.py",
+    # Statistical report helpers use deterministic finite-value admission
+    # contracts; keep their changed-line coverage in fast shards as well.
+    "test_statistics.py",
     # Goal-belief contract tests are deterministic schema/lineage coverage for
     # the changed actor-observation producer; keep them in fast PR shards
     # (issue #8063).

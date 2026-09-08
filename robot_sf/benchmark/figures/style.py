@@ -52,49 +52,9 @@ _FALLBACK_PALETTE: list[str] = [
     "#A6761D",
 ]
 
-# Metric → (display_label, unit) mapping for consistent labeling across figures/tables
-# Keys are common metric names as they appear in benchmark records
-# Values are (human_readable_label, unit_string) tuples
-_METRIC_LABELS: dict[str, tuple[str, str]] = {
-    # Collision metrics
-    "collision_rate": ("Collision rate", ""),
-    "collision_mean": ("Collision rate", ""),
-    "collisions": ("Collision rate", ""),
-    "collisions_mean": ("Collision rate", ""),
-    # Success metrics
-    "success_rate": ("Success rate", ""),
-    "success_mean": ("Success rate", ""),
-    "success": ("Success rate", ""),
-    # Time/distance metrics
-    "time_to_goal": ("Time to goal", "s"),
-    "avg_time_to_goal": ("Time to goal", "s"),
-    "traveled_distance": ("Traveled distance", "m"),
-    "avg_traveled_distance": ("Traveled distance", "m"),
-    "displacement": ("Displacement", "m"),
-    "recorded_time": ("Absolute recorded time", "s"),
-    # Safety metrics
-    "min_ttc": ("Minimum TTC", "s"),
-    "min_ttc_mean": ("Minimum TTC", "s"),
-    "near_miss_count": ("Near-miss count", ""),
-    "surface_clearance": ("Minimum robot-pedestrian surface clearance", "m"),
-    # Applied-control telemetry
-    "applied_linear_speed": ("Recorded applied speed", "m/s"),
-    "applied_turn_rate": ("Recorded applied turn rate", "rad/s"),
-    # Efficiency metrics
-    "path_length": ("Path length", "m"),
-    "avg_path_length": ("Path length", "m"),
-    "efficiency": ("Efficiency", ""),
-    # Quality metrics
-    "snqi": ("SNQI score", ""),
-    "comfort": ("Comfort", ""),
-    "smoothness": ("Smoothness", ""),
-    # Throughput metrics
-    "throughput": ("Throughput", "agents/s"),
-    "flow_rate": ("Flow rate", "agents/s"),
-    # Episode count
-    "episode_count": ("Episode count", ""),
-    "total_episodes": ("Episode count", ""),
-}
+# Metric and planner display semantics live in the versioned registry loaded by
+# ``robot_sf.benchmark.figures.semantics``. Color assignment remains here because
+# it is a renderer style concern rather than a scientific/display-name contract.
 
 
 def planner_palette() -> dict[str, str]:
@@ -130,32 +90,50 @@ def planner_color(planner_key: str) -> str:
     return _FALLBACK_PALETTE[idx]
 
 
-def _humanize_metric_key(metric_key: str) -> str:
-    """Return ``metric_key`` reformatted as a human-readable title-cased label."""
+def metric_label(
+    metric_key: str,
+    *,
+    aggregation: str | None = None,
+    language: Literal["en", "de"] = "en",
+    short: bool = False,
+    strict: bool = False,
+) -> str:
+    """Resolve a metric label through the versioned semantics registry.
 
-    return metric_key.replace("_", " ").strip().title()
-
-
-def metric_label(metric_key: str, *, aggregation: str | None = None) -> str:
-    """Get the formatted label for a metric with optional unit and aggregation.
+    The default retains the historical title-case fallback for unknown metrics so
+    existing report callers remain compatible. New publication and agent workflows
+    should pass ``strict=True``; unknown identifiers then fail instead of becoming
+    an unreviewed display convention.
 
     Args:
-        metric_key: The metric name (e.g., "collision_rate", "time_to_goal").
-        aggregation: Optional aggregation suffix like "mean" or "median".
+        metric_key: Canonical metric identifier or registered alias.
+        aggregation: Optional aggregation label appended in parentheses.
+        language: Requested English or German display language.
+        short: Select the compact label intended for constrained layouts.
+        strict: Reject unmapped identifiers instead of using the compatibility fallback.
 
     Returns:
-        Formatted label string like "Collision rate" or "Time to goal (s)".
-        Includes aggregation in parentheses if provided.
+        The formatted display label, including its unit when declared.
     """
-    normalized_key = metric_key.strip() if metric_key else ""
-    fallback_label = _humanize_metric_key(normalized_key) if normalized_key else "Metric"
-    label, unit = _METRIC_LABELS.get(normalized_key, (fallback_label, ""))
-    parts = [label]
-    if unit:
-        parts.append(f"({unit})")
-    if aggregation and aggregation.strip():
-        parts.append(f"({aggregation.strip()})")
-    return " ".join(parts)
+    semantics = importlib.import_module("robot_sf.benchmark.figures.semantics")
+    return semantics.default_registry().metric_label(
+        metric_key,
+        language=language,
+        short=short,
+        aggregation=aggregation,
+        strict=strict,
+        legacy_humanize=not strict,
+    )
+
+
+def semantics_sha256() -> str:
+    """Return the normalized digest of the packaged display-semantics registry.
+
+    Returns:
+        Lowercase SHA-256 digest of the validated canonical registry payload.
+    """
+    semantics = importlib.import_module("robot_sf.benchmark.figures.semantics")
+    return semantics.default_registry().sha256()
 
 
 def figure_size(size: Literal["single", "double"]) -> tuple[float, float]:

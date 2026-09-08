@@ -233,6 +233,14 @@ When the field is present, it must be a list of integer seed values; an absent f
 allowed for legacy summaries and is rendered as unavailable metadata rather than evidence of a
 seeded run.
 
+### Extractor timing metadata validation
+
+Report generation validates each present `extractor_results[].duration_seconds` value before it
+writes a report directory. Values must be finite and non-negative; malformed, non-finite, or
+negative timing values fail through the shared research validation boundary. An absent duration
+remains allowed for legacy summaries, while valid durations are preserved in reproducibility
+metadata.
+
 ## H500 Reporting Language
 
 Use h500 as a long-horizon sensitivity/report surface, not as a replacement for the fixed-horizon

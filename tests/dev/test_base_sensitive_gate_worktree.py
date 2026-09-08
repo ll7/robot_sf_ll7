@@ -96,6 +96,103 @@ class TestVerifyGateWorktree:
         assert payload["gate_worktree_health"]["classification"] == "missing"
         assert "No module named 'scripts'" not in result.stdout + result.stderr
 
+    def test_direct_entrypoint_is_import_safe_without_site_or_implicit_paths(
+        self, tmp_path: Path
+    ) -> None:
+        """Direct selection works from both cwd locations without ambient imports."""
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in {"PYTHONPATH", "PYTHONSAFEPATH"}
+        }
+        environment["PYTHONSAFEPATH"] = "1"
+        selection_args = ("--list-files", "--json")
+
+        direct_root = subprocess.run(
+            [
+                sys.executable,
+                "-S",
+                str(gate.REPO_ROOT / "scripts/dev/check_base_sensitive_gates.py"),
+                *selection_args,
+            ],
+            cwd=gate.REPO_ROOT,
+            capture_output=True,
+            text=True,
+            env=environment,
+            check=False,
+            timeout=30,
+        )
+        direct_unrelated = subprocess.run(
+            [
+                sys.executable,
+                "-S",
+                str(gate.REPO_ROOT / "scripts/dev/check_base_sensitive_gates.py"),
+                *selection_args,
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            env=environment,
+            check=False,
+            timeout=30,
+        )
+
+        module_environment = {
+            key: value for key, value in environment.items() if key != "PYTHONSAFEPATH"
+        }
+        module = subprocess.run(
+            [sys.executable, "-S", "-m", "scripts.dev.check_base_sensitive_gates", *selection_args],
+            cwd=gate.REPO_ROOT,
+            capture_output=True,
+            text=True,
+            env=module_environment,
+            check=False,
+            timeout=30,
+        )
+
+        for label, result in (
+            ("direct from repository root", direct_root),
+            ("direct from unrelated directory", direct_unrelated),
+            ("module invocation", module),
+        ):
+            assert result.returncode == 0, f"{label} failed:\n{result.stdout}\n{result.stderr}"
+
+        root_selection = json.loads(direct_root.stdout)
+        assert root_selection == json.loads(direct_unrelated.stdout)
+        assert root_selection == json.loads(module.stdout)
+
+        shadow_root = tmp_path / "shadow-checkout"
+        (shadow_root / "scripts" / "dev").mkdir(parents=True)
+        (shadow_root / "scripts" / "__init__.py").write_text("", encoding="utf-8")
+        (shadow_root / "scripts" / "dev" / "base_sensitive_selector.py").write_text(
+            "raise RuntimeError('shadow checkout imported')\n", encoding="utf-8"
+        )
+        shadow_environment = {
+            **module_environment,
+            "PYTHONPATH": os.pathsep.join((str(shadow_root), str(gate.REPO_ROOT))),
+            "PYTHONSAFEPATH": "1",
+        }
+        shadow_result = subprocess.run(
+            [
+                sys.executable,
+                "-S",
+                str(gate.REPO_ROOT / "scripts/dev/check_base_sensitive_gates.py"),
+                *selection_args,
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            env=shadow_environment,
+            check=False,
+            timeout=30,
+        )
+
+        assert shadow_result.returncode == 0, (
+            f"direct invocation was shadowed by another checkout:\n"
+            f"{shadow_result.stdout}\n{shadow_result.stderr}"
+        )
+        assert json.loads(shadow_result.stdout) == root_selection
+
 
 class TestCheckPrGateStalenessWorktreeGuard:
     """The staleness check must fail closed on a vanished gate worktree."""

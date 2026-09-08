@@ -205,6 +205,24 @@ def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
     return payload
 
 
+def _first_timestep_metric(metrics: dict[str, Any]) -> object | None:
+    """Return a timestep alias while preserving legacy fallback and validation behavior."""
+    for field in ("timesteps_to_convergence", "avg_timesteps"):
+        candidate = metrics.get(field)
+        # Keep the legacy fallback for malformed falsy values while treating
+        # numeric zero as a real metric rather than an absent value.
+        if candidate or _is_numeric_zero(candidate):
+            return candidate
+    # The old ``or`` chain leaves the final alias intact, even when it is a
+    # malformed falsy value, so let the existing coercion report that error.
+    return metrics.get("total_timesteps")
+
+
+def _is_numeric_zero(value: object) -> bool:
+    """Return whether a value is a non-boolean numeric zero."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
+
+
 def extract_seed_metrics(
     manifest_paths: Sequence[str | Path],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -251,9 +269,7 @@ def extract_seed_metrics(
                     metrics["collision_rate"], "metrics.collision_rate"
                 )
 
-            timesteps = metrics.get("timesteps_to_convergence")
-            timesteps = timesteps or metrics.get("avg_timesteps")
-            timesteps = timesteps or metrics.get("total_timesteps")
+            timesteps = _first_timestep_metric(metrics)
             if timesteps is not None:
                 record["timesteps_to_convergence"] = coerce_tracker_float(
                     timesteps, "metrics.timesteps"

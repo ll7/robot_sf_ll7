@@ -35,6 +35,16 @@ Native lane-formation sensitivity rows apply the same boundary before cell summa
 materialized. Required lane-segregation and lane-purity values must be finite numeric values;
 malformed or non-finite rows fail closed instead of emitting `NaN` summary statistics.
 
+### Timestep metric contract
+
+Tracker manifests normalize `timesteps_to_convergence`, `avg_timesteps`, and `total_timesteps` in
+that priority order. A numeric `0` is valid for instantaneous or diagnostic convergence and is
+preserved as a present metric. Negative values fail closed at the parser and provenance boundaries.
+`null` or malformed falsy values in an earlier alias retain the legacy fall-through behavior; a
+final `null` is treated as missing, and malformed values that reach numeric coercion fail closed.
+See the [imitation-report data model](../specs/270-imitation-report/data-model.md) for the
+authoritative validation rule.
+
 ### High-Level Flow
 
 ```mermaid

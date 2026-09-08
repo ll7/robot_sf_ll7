@@ -140,6 +140,42 @@ def test_report_summary_numeric_coercion_fails_closed() -> None:
     assert pretrained == []
 
 
+def test_report_summary_numeric_coercion_preserves_zero_and_ignores_null() -> None:
+    """Provenance summary lists retain zero and omit unavailable null entries."""
+    from scripts.research.generate_report import _coerce_summary_float_list
+
+    assert _coerce_summary_float_list({"baseline_timesteps": [0, None]}, "baseline_timesteps") == [
+        0.0
+    ]
+    assert _coerce_summary_float_list({"pretrained_timesteps": [0.0]}, "pretrained_timesteps") == [
+        0.0
+    ]
+
+
+def test_report_summary_numeric_coercion_rejects_negative_timesteps() -> None:
+    """Report provenance summaries reject negative convergence values."""
+    from scripts.research.generate_report import _coerce_summary_float_list
+
+    with pytest.raises(ValidationError, match="must be non-negative"):
+        _coerce_summary_float_list({"baseline_timesteps": [-1]}, "baseline_timesteps")
+
+
+def test_comparison_fallback_preserves_zero_timesteps() -> None:
+    """Comparison-summary fallback retains scalar zero convergence values."""
+    from scripts.research.generate_report import _apply_comparison_fallback
+
+    _, _, baseline, pretrained = _apply_comparison_fallback(
+        {"comparison": {"timesteps_to_convergence": {"baseline": 0, "pretrained": 0}}},
+        [],
+        [],
+        [],
+        [],
+    )
+
+    assert baseline == [0.0]
+    assert pretrained == [0.0]
+
+
 def test_tracker_float_coercion_rejects_nonfinite_values() -> None:
     """Shared metric coercion rejects NaN before report aggregation."""
     from robot_sf.research.tracker_manifest import coerce_tracker_float

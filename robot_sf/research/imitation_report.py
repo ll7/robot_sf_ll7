@@ -19,9 +19,7 @@ import matplotlib.pyplot as plt
 from loguru import logger
 from scipy.stats import mannwhitneyu, t
 
-if TYPE_CHECKING:
-    from pathlib import Path
-from robot_sf.common.metrics_utils import metric_samples
+from robot_sf.research.exceptions import ValidationError
 from robot_sf.research.metadata import collect_reproducibility_metadata
 from robot_sf.research.statistics import (
     cohen_d,
@@ -29,6 +27,10 @@ from robot_sf.research.statistics import (
     format_test_results,
     paired_t_test,
 )
+from robot_sf.research.tracker_manifest import coerce_nonnegative_tracker_float
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass
@@ -133,6 +135,36 @@ def _metric(record: dict[str, Any], key: str) -> float:
     metrics = record.get("metrics") or {}
     val = metrics.get(key)
     return float(val) if isinstance(val, (int, float)) else 0.0
+
+
+def _validated_convergence_value(record: dict[str, Any]) -> float | None:
+    """Return a validated scalar convergence value, preserving numeric zero."""
+    metrics = record.get("metrics") or {}
+    if not isinstance(metrics, dict):
+        raise ValidationError("report metrics must be an object")
+    value = metrics.get("timesteps_to_convergence")
+    if value is None:
+        return None
+    return coerce_nonnegative_tracker_float(value, "report.metrics.timesteps_to_convergence")
+
+
+def _validated_convergence_samples(record: dict[str, Any]) -> list[float]:
+    """Return validated convergence samples, rejecting malformed or negative values."""
+    metrics = record.get("metrics") or {}
+    if not isinstance(metrics, dict):
+        raise ValidationError("report metrics must be an object")
+    raw_samples = metrics.get("timesteps_to_convergence_samples")
+    if raw_samples is None:
+        return []
+    if not isinstance(raw_samples, list):
+        raise ValidationError("report.metrics.timesteps_to_convergence_samples must be a list")
+    return [
+        coerce_nonnegative_tracker_float(
+            value, f"report.metrics.timesteps_to_convergence_samples[{index}]"
+        )
+        for index, value in enumerate(raw_samples)
+        if value is not None
+    ]
 
 
 def _ci_from_samples(samples: list[float]) -> tuple[float, float] | str:
@@ -546,10 +578,10 @@ def generate_imitation_report(
     )
     figures = _figure_paths(summary_path)
 
-    baseline_ts = _metric(baseline_rec, "timesteps_to_convergence")
-    pretrained_ts = _metric(pretrained_rec, "timesteps_to_convergence")
-    baseline_samples = metric_samples(baseline_rec, "timesteps_to_convergence")
-    pretrained_samples = metric_samples(pretrained_rec, "timesteps_to_convergence")
+    baseline_ts = _validated_convergence_value(baseline_rec)
+    pretrained_ts = _validated_convergence_value(pretrained_rec)
+    baseline_samples = _validated_convergence_samples(baseline_rec)
+    pretrained_samples = _validated_convergence_samples(pretrained_rec)
     baseline_ci = _ci_from_samples(baseline_samples)
     pretrained_ci = _ci_from_samples(pretrained_samples)
 
@@ -576,8 +608,10 @@ def generate_imitation_report(
         stats["t_stat"] = None
         stats["test"] = "mannwhitneyu"
 
-    improvement_baseline = baseline_samples or ([baseline_ts] if baseline_ts else [])
-    improvement_pretrained = pretrained_samples or ([pretrained_ts] if pretrained_ts else [])
+    improvement_baseline = baseline_samples or ([baseline_ts] if baseline_ts is not None else [])
+    improvement_pretrained = pretrained_samples or (
+        [pretrained_ts] if pretrained_ts is not None else []
+    )
     hypothesis_result = evaluate_hypothesis(
         improvement_baseline, improvement_pretrained, threshold=config.improvement_threshold_pct
     )

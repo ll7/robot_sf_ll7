@@ -453,7 +453,18 @@ def render_view(
                 )
         index = prepared["critical_index"]
         step = trace["steps"][index]
-        status["footprints"] = "available"
+        expected_actor_ids = set(prepared["actors"])
+        observed_actor_ids = {actor["actor_id"] for actor in step["pedestrians"]}
+        missing_actor_ids = sorted(expected_actor_ids - observed_actor_ids)
+        status["footprints"] = "partly_unavailable" if missing_actor_ids else "available"
+        if missing_actor_ids:
+            status.update(
+                {
+                    "status": "partly_unavailable",
+                    "missing_actor_ids": missing_actor_ids,
+                    "missing_reason": "expected pedestrian identity is absent at the selected frame",
+                }
+            )
         for actor_index, actor in enumerate([step["robot"], *step["pedestrians"]]):
             x, y = actor["position"]
             radius = actor.get("radius_m")
@@ -470,6 +481,7 @@ def render_view(
                 )
             else:
                 status["footprints"] = "partly_unavailable"
+                status["status"] = "partly_unavailable"
             ax.scatter(
                 x,
                 y,
@@ -491,6 +503,8 @@ def render_view(
             f"Map: {status['map_geometry']}. Footprints: {status['footprints'].replace('_', ' ')}. "
             "Circles use recorded radii; no perception is inferred."
         )
+        if missing_actor_ids:
+            notes += f"\nMissing expected pedestrian identities: {', '.join(missing_actor_ids)}."
         status.update(
             {
                 "snapshot_time_s": step["time_s"],

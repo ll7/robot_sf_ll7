@@ -122,6 +122,18 @@ def test_actor_disappearance_is_a_gap_not_a_join(case):
     assert result["series"]["clearance"][0] == pytest.approx(np.hypot(1.6, 1.5) - 0.55)
 
 
+def test_snapshot_marks_missing_expected_actor_footprint_unavailable(case):
+    case["trace"]["steps"][3]["pedestrians"] = []
+    case["trace"]["events"] = [{"time_s": 1.5}]
+    prepared = pack.prepare_case(case, diagnostic())
+    figure, receipt = pack.render_view(prepared, "snapshot", diagnostic())
+    assert receipt["status"] == "partly_unavailable"
+    assert receipt["footprints"] == "partly_unavailable"
+    assert receipt["missing_actor_ids"] == ["pedestrian-7"]
+    assert "expected pedestrian identity" in receipt["missing_reason"]
+    figure.clear()
+
+
 def test_clearance_requires_the_complete_expected_actor_set(case):
     for index, step in enumerate(case["trace"]["steps"]):
         step["pedestrians"].append(

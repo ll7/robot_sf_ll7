@@ -78,8 +78,8 @@ Unknown fields, invalid settings and duplicate requests are refused.
 
 | View | What it displays | Important boundary |
 | --- | --- | --- |
-| `trajectory` | Full robot and stable-identity pedestrian paths, start/end markers, recorded body footprints at the selected frame | Missing actor frames remain gaps; map loading requires matching bytes. |
-| `snapshot` | Recorded state nearest the first event, otherwise minimum fully observed clearance, otherwise first frame | Reports the actual frame time and selection rule; never interpolated or called a causal pivot. |
+| `trajectory` | Full robot and stable-identity pedestrian paths, start/end markers, recorded body footprints at the selected frame | Missing actor frames remain gaps; selected-frame footprint receipts identify missing expected actors; map loading requires matching bytes. |
+| `snapshot` | Recorded state nearest the first event, otherwise minimum fully observed clearance, otherwise first frame | Reports the actual frame time and selection rule; missing expected actors make the footprint status partly unavailable; never interpolated or called a causal pivot. |
 | `clearance` | Minimum robot-pedestrian disc-surface separation from recorded radii | Missing radii or any expected actor invalidate that sample; zero is not a recomputed benchmark collision label. |
 | `speed` | Recorded applied linear command series | Missing commands remain unavailable, not zero or estimated motion; partial coverage is labeled. |
 | `turn` | Recorded applied turn-rate series | Same absolute recorded times; no invented controls or dual axes; partial coverage is labeled. |

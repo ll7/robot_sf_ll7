@@ -377,6 +377,9 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    # Differential-drive kinematics tests are deterministic unit coverage for
+    # the changed robot motion module; keep them in the exact-head fast lane.
+    "differential_drive_test.py",
     "test_compare_coverage_cli.py",
     "test_global_route.py",
     "test_open_coverage_report.py",

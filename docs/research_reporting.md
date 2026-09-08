@@ -206,6 +206,14 @@ For issue-791 PPO reporting, the active boundary is recorded in
 policy on a broad scenario matrix, not OOD generalization. Internal engineering notes may still use
 distribution-alignment language to explain why one training recipe beat another, but manuscript,
 PR, and issue summary text should use the narrower benchmark-set wording.
+
+### Seed metadata validation
+
+Report generation rejects malformed `summary.seeds` metadata before it writes a report directory.
+When the field is present, it must be a list of integer seed values; an absent field remains
+allowed for legacy summaries and is rendered as unavailable metadata rather than evidence of a
+seeded run.
+
 ## H500 Reporting Language
 
 Use h500 as a long-horizon sensitivity/report surface, not as a replacement for the fixed-horizon

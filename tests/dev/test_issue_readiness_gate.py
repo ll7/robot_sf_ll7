@@ -38,6 +38,7 @@ def test_preflight_cli_accepts_valid_body_without_transport(tmp_path: Path, caps
         "schema": "issue_creation_preflight.v1",
         "ready": True,
         "missing_fields": [],
+        "heading_suggestions": {},
         "metadata_findings": [],
         "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
     }
@@ -139,6 +140,27 @@ def test_precreate_reports_canonical_findings_without_writes(
     for boundary in (run, fetch, admit, label):
         boundary.assert_not_called()
     assert path.read_text(encoding="utf-8") == body
+
+
+def test_preflight_cli_preserves_heading_suggestions(tmp_path: Path, capsys) -> None:
+    """The higher-level creation preflight exposes the canonical heading hint."""
+    body = (
+        CANONICAL_METADATA
+        + "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n"
+        + "## Input contract\n\n## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n"
+    )
+    path = tmp_path / "near-miss.md"
+    path.write_text(body, encoding="utf-8")
+
+    code = issue_readiness_gate.main(["preflight", "--body-file", str(path)])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 2
+    assert payload["heading_suggestions"]["input contract"] == {
+        "field": "inputs",
+        "alias": "inputs",
+        "score": 0.6667,
+    }
 
 
 @pytest.mark.parametrize(

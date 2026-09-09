@@ -939,6 +939,76 @@ def test_preflight_body_text_rejects_empty_body() -> None:
         "acceptance",
         "verification",
     ]
+    assert payload["heading_suggestions"] == {}
+
+
+def test_preflight_body_text_suggests_alias_for_parenthesized_heading() -> None:
+    """Issue #8694: a near-miss heading maps to its closest missing-field alias."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        "## Inputs (formalization appended 2026-09-08)\n\n- one file\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == ["inputs"]
+    suggestion = payload["heading_suggestions"]["inputs (formalization appended 2026 09 08)"]
+    assert suggestion["field"] == "inputs"
+    assert suggestion["alias"] == "inputs"
+
+
+def test_preflight_body_text_suggests_alias_for_input_contract_heading() -> None:
+    """A near-miss `Input contract` heading suggests the `inputs` field."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        "## Input contract\n\n- one file\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == ["inputs"]
+    suggestion = payload["heading_suggestions"]["input contract"]
+    assert suggestion["field"] == "inputs"
+    assert suggestion["alias"] == "inputs"
+
+
+def test_preflight_body_text_suggests_alias_for_empty_input_contract_heading() -> None:
+    """Empty near-miss headings remain visible to the suggestion helper."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        "## Input contract\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == ["inputs"]
+    suggestion = payload["heading_suggestions"]["input contract"]
+    assert suggestion["field"] == "inputs"
+    assert suggestion["alias"] == "inputs"
+
+
+def test_preflight_body_text_suggests_nothing_for_exact_body() -> None:
+    """Exact-heading bodies produce an empty suggestion map."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        "## Inputs\n\n- one file\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is True
+    assert payload["heading_suggestions"] == {}
 
 
 def test_preflight_body_file_reads_disk_without_network(tmp_path: Path) -> None:

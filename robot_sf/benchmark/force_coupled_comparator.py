@@ -449,6 +449,7 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     degraded = False
     degradation_reasons: list[str] = []
     status = "ok"
+    planner_id = type(planner).__name__
     col_obs_occurred = False
     col_ped_occurred = False
     plan_exception_occurred = False
@@ -517,6 +518,7 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             break
 
         diag = planner.diagnostics()
+        planner_id = str(diag.get("planner_type", planner_id))
         if diag.get("status") == "degraded":
             degraded = True
             for reason in diag.get("degradation_reasons", []):
@@ -573,7 +575,7 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     )
 
     return ComparatorRunResult(
-        planner_id=diag.get("planner_type", type(planner).__name__),
+        planner_id=planner_id,
         scenario_id=scenario.scenario_id,
         seed=scenario.seed,
         steps=step,
@@ -627,9 +629,9 @@ def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, 
         failure_class_counts: dict[str, int] = dict.fromkeys(VALID_FAILURE_CLASSES, 0)
         for r in runs:
             if r.failure_class is not None:
-                failure_class_counts[r.failure_class] = (
-                    failure_class_counts.get(r.failure_class, 0) + 1
-                )
+                if r.failure_class not in failure_class_counts:
+                    raise ValueError(f"unknown failure class: {r.failure_class!r}")
+                failure_class_counts[r.failure_class] += 1
 
         summary.append(
             {

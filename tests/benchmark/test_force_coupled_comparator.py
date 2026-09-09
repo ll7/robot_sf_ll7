@@ -21,6 +21,7 @@ from robot_sf.benchmark.force_coupled_comparator import (
     ComparatorRunResult,
     PurePursuitGoalPlanner,
     classify_failure,
+    compute_summary_table,
     execute_rollout,
     get_canonical_comparison_scenarios,
     run_force_coupled_comparator,
@@ -67,6 +68,29 @@ def test_comparator_receipt_schema_conformance() -> None:
     assert len(receipt["scenarios"]) == 4
     assert len(receipt["results"]) == 16  # 4 scenarios x 4 planners
     assert len(receipt["summary_table"]) == 4  # 4 distinct planners
+
+
+def test_first_step_planner_exception_is_classified_without_diagnostics() -> None:
+    """A planner failure before diagnostics still emits a structured path-generation result."""
+
+    class FirstStepFailurePlanner:
+        def reset(self, seed: int) -> None:
+            del seed
+
+        def plan(self, obs: dict[str, object]) -> tuple[float, float]:
+            del obs
+            raise ValueError("fixture planner failure")
+
+        def diagnostics(self) -> dict[str, object]:
+            return {"planner_type": "first_step_failure"}
+
+    result = execute_rollout(FirstStepFailurePlanner(), get_canonical_comparison_scenarios()[0])
+
+    assert result.planner_id == "FirstStepFailurePlanner"
+    assert result.status == "error"
+    assert result.degraded is True
+    assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
+    assert result.degradation_reasons == ("plan_exception: fixture planner failure",)
 
 
 def test_deterministic_receipt_invariant() -> None:
@@ -258,6 +282,71 @@ def test_summary_table_reports_failure_class_counts() -> None:
     pp_row = next(r for r in summary if r["planner_id"] == "pure_pursuit_goal")
     assert pp_row["failure_class_counts"][FAILURE_CLASS_TRACKING] >= 1
     assert pp_row["failure_class_counts"][FAILURE_CLASS_SOCIAL_COMPLIANCE] >= 1
+
+
+def test_summary_table_rejects_unknown_failure_class() -> None:
+    """Summary output cannot silently introduce a non-canonical taxonomy value."""
+    result = ComparatorRunResult(
+        planner_id="test_planner",
+        scenario_id="test_scenario",
+        seed=42,
+        steps=0,
+        completed=False,
+        collision=False,
+        near_miss=False,
+        min_clearance_obstacle_m=None,
+        min_clearance_pedestrian_m=None,
+        path_length_m=0.0,
+        mean_linear_speed_mps=0.0,
+        max_linear_speed_mps=0.0,
+        mean_angular_rate_radps=0.0,
+        max_angular_rate_radps=0.0,
+        jerk_metric=0.0,
+        mean_latency_ms=0.0,
+        status="error",
+        degraded=True,
+        degradation_reasons=("fixture",),
+        failure_class="not_canonical",
+    )
+
+    with pytest.raises(ValueError, match="unknown failure class"):
+        compute_summary_table([result])
+
+
+def test_v1_schema_accepts_receipts_without_optional_taxonomy_fields() -> None:
+    """The additive taxonomy fields do not invalidate existing v1 receipts."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    for result in receipt["results"]:
+        result.pop("failure_class", None)
+    for row in receipt["summary_table"]:
+        row.pop("failure_class_counts", None)
+
+    jsonschema.validate(instance=receipt, schema=schema)
+
+
+def test_v1_schema_rejects_noncanonical_taxonomy_alias() -> None:
+    """Schema validation rejects hyphenated aliases that runtime classification cannot emit."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    receipt["results"][0]["failure_class"] = "path-generation"
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
 
 
 def test_comparator_run_result_serialization_with_failure_class() -> None:

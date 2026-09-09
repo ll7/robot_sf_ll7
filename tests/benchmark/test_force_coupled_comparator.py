@@ -690,6 +690,30 @@ def test_v1_schema_enforces_new_taxonomy_invariants_when_present() -> None:
         jsonschema.validate(instance=inconsistent_degraded, schema=schema)
 
 
+@pytest.mark.parametrize("malformation", ["unknown", "negative", "missing"])
+def test_v1_schema_rejects_malformed_summary_taxonomy_counts(malformation: str) -> None:
+    """Present summary taxonomy counts must be complete, canonical, and non-negative."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    counts = receipt["summary_table"][0]["failure_class_counts"]
+    if malformation == "unknown":
+        counts["bogus"] = 1
+    elif malformation == "negative":
+        counts[FAILURE_CLASS_SIMULATOR] = -1
+    else:
+        counts.pop(FAILURE_CLASS_SIMULATOR)
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
+
+
 def test_comparator_run_result_serialization_with_failure_class() -> None:
     """ComparatorRunResult dataclass serializes failure_class to dictionary."""
     res = ComparatorRunResult(

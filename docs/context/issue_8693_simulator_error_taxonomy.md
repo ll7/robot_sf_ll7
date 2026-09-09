@@ -38,6 +38,11 @@ non-success status without a more specific signal, `classify_failure` preserves 
 `path_generation` fallback. Summary aggregation still rejects a missing non-success class, so a
 row cannot silently disappear from `failure_class_counts`.
 
+The rollout boundary deliberately catches broad `Exception` values so failures from the external
+planner and analytic simulator phases become structured diagnostic rows instead of escaping the
+comparator. These seven fault-isolation handlers are explicitly recorded in the repository's
+broad-exception baseline; the baseline approval does not broaden the benchmark claim.
+
 ## Diagnostic success and provenance
 
 This change does not redefine the existing `success_rate` metric: it remains based on completed,

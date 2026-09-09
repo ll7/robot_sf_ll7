@@ -217,7 +217,19 @@
           },
           "failure_class_counts": {
             "type": "object",
-            "additionalProperties": {"type": "integer"}
+            "additionalProperties": false,
+            "required": [
+              "path_generation",
+              "tracking",
+              "social_compliance",
+              "simulator"
+            ],
+            "properties": {
+              "path_generation": {"type": "integer", "minimum": 0},
+              "tracking": {"type": "integer", "minimum": 0},
+              "social_compliance": {"type": "integer", "minimum": 0},
+              "simulator": {"type": "integer", "minimum": 0}
+            }
           }
         }
       }

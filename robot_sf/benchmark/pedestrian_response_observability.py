@@ -306,6 +306,12 @@ def _resolve_route_reference(
     """
     if "route_reference" in unavailable:
         reasons.append("route_reference:explicitly_unavailable")
+        if offered_side is not None:
+            unavailable.add("offered_side")
+            offered_side = "unavailable"
+        if taken_side is not None:
+            unavailable.add("taken_side")
+            taken_side = "unavailable"
         return None, offered_side, taken_side
 
     route_references = [

@@ -172,6 +172,8 @@ knowledge, not every transient iteration detail.
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
 * Machine-readable context catalog: [catalog.yaml](catalog.yaml)
+* Issue #8683 pedestrian-response observation contract:
+  [issue_8683_pedestrian_response_observation.md](issue_8683_pedestrian_response_observation.md)
 * Issue #6272 risk-tiered stale-base merge policy:
   [issue_6272_risk_tiered_stale_base_policy.md](issue_6272_risk_tiered_stale_base_policy.md)
 * Issue #6561 pedestrian desired-speed protocol:

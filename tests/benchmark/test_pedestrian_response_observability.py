@@ -242,3 +242,29 @@ def test_invalid_unavailable_route_reference_fails_closed() -> None:
         "taken_side",
     )
     assert "route_reference:invalid_reference" in (record.unavailable_reason or "")
+
+
+def test_mixed_valid_and_unavailable_route_reference_hides_both_sides() -> None:
+    """A valid side cannot remain evidence when its paired route reference is invalid."""
+    routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
+    unavailable_route = classify_route_side([], start=(0.0, 0.0), goal=(2.0, 0.0))
+    invalid_unavailable_route = replace(unavailable_route, coordinate_frame="")
+
+    record = build_pedestrian_response_observation(
+        encounter_id="mixed-route-reference",
+        offered_route=routes["left"].side_report,
+        taken_route=invalid_unavailable_route,
+        minimum_passing_clearance_m=0.8,
+        response_present=True,
+    )
+
+    assert record.status == "not_available"
+    assert record.route_reference is None
+    assert record.offered_side == "unavailable"
+    assert record.taken_side == "unavailable"
+    assert record.unavailable_fields == (
+        "offered_side",
+        "route_reference",
+        "taken_side",
+    )
+    assert "route_reference:invalid_reference" in (record.unavailable_reason or "")

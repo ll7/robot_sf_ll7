@@ -8,11 +8,15 @@ import subprocess
 import sys
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import pytest
 
+from robot_sf.benchmark import paired_effect_metric_contract as metric_contract
 from robot_sf.benchmark import runner
 from robot_sf.benchmark.paired_effect_metric_contract import (
     CLARIFICATION_METRIC_NAMES,
@@ -21,6 +25,7 @@ from robot_sf.benchmark.paired_effect_metric_contract import (
     evaluate_paired_effect_metric_fields,
     load_paired_effect_metric_clarification,
     load_paired_effect_metric_contract,
+    validate_paired_effect_metric_clarification,
     validate_paired_effect_metric_contract,
     validate_paired_effect_metric_record,
     validate_paired_effect_metric_rows,
@@ -33,6 +38,22 @@ CLARIFICATION_PATH = (
 )
 SCHEMA_PATH = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 CHECK_SCRIPT = REPO_ROOT / "scripts/benchmark/check_paired_effect_metric_contract.py"
+
+
+def _set_path(root: dict[str, Any], path: tuple[Any, ...], value: object) -> dict[str, Any]:
+    target: Any = root
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    return root
+
+
+def _pop_path(root: dict[str, Any], path: tuple[Any, ...]) -> dict[str, Any]:
+    target: Any = root
+    for key in path[:-1]:
+        target = target[key]
+    target.pop(path[-1])
+    return root
 
 
 def _contract() -> dict[str, object]:
@@ -241,6 +262,104 @@ def test_clarification_companion_declares_only_the_three_deferred_fields() -> No
     assert clarification["no_campaign_compute"] is True
     assert tuple(clarification["required_metric_names"]) == CLARIFICATION_METRIC_NAMES
     assert [field["name"] for field in clarification["fields"]] == list(CLARIFICATION_METRIC_NAMES)
+
+
+def test_load_clarification_rejects_unreadable_and_non_mapping_payloads(tmp_path: Path) -> None:
+    """The clarification loader fails closed before schema validation."""
+
+    with pytest.raises(PairedEffectMetricContractError, match="cannot be read"):
+        load_paired_effect_metric_clarification(tmp_path / "missing.yaml")
+
+    invalid = tmp_path / "list.yaml"
+    invalid.write_text("- not a mapping\n", encoding="utf-8")
+    with pytest.raises(PairedEffectMetricContractError, match="must be a mapping"):
+        load_paired_effect_metric_clarification(invalid)
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    [
+        (("schema_version",), "wrong", "schema_version"),
+        (("claim_boundary",), "", "claim_boundary"),
+        (("pairing",), None, "pairing must be a mapping"),
+        (("pairing", "key_fields"), [], "pairing.key_fields"),
+        (("pairing", "arm_keys"), [], "pairing.arm_keys"),
+        (("pairing", "arm_field"), "", "pairing.arm_field"),
+        (("native_trace",), None, "native_trace must be a mapping"),
+        (("native_trace", "schema_version"), "wrong", "native_trace.schema_version"),
+        (("native_trace", "wrapper_trace_path"), "", "native_trace.wrapper_trace_path"),
+        (("native_trace", "required_state"), [], "native_trace.required_state"),
+        (("unavailable_status",), "wrong", "unavailable_status"),
+        (("invalid_status",), "wrong", "invalid_status"),
+        (("no_campaign_compute",), False, "no_campaign_compute"),
+        (("counterfactual_window_s",), True, "counterfactual_window_s"),
+        (("counterfactual_window_s",), object(), "counterfactual_window_s"),
+        (("counterfactual_window_s",), float("nan"), "counterfactual_window_s"),
+        (("fields",), None, "fields must be a list"),
+        (("fields",), [], "fields must contain exactly"),
+    ],
+)
+def test_clarification_rejects_invalid_declarations(
+    path: tuple[str, ...],
+    value: object,
+    message: str,
+) -> None:
+    """Every top-level clarification contract guard remains fail-closed."""
+
+    payload = load_paired_effect_metric_clarification(CLARIFICATION_PATH)
+    target: Any = payload
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+    with pytest.raises(PairedEffectMetricContractError, match=message):
+        validate_paired_effect_metric_clarification(payload, source="fixture")
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "not_mapping",
+        "missing_key",
+        "empty_name",
+        "empty_text",
+        "empty_reasons",
+        "blank_reason",
+        "wrong_order",
+    ],
+)
+def test_clarification_rejects_invalid_field_declarations(mutation: str) -> None:
+    """Each deferred-field declaration must retain its exact shape and order."""
+
+    payload = load_paired_effect_metric_clarification(CLARIFICATION_PATH)
+    fields = payload["fields"]
+    if mutation == "not_mapping":
+        fields[0] = None
+    elif mutation == "missing_key":
+        fields[0].pop("source")
+    elif mutation == "empty_name":
+        fields[0]["name"] = ""
+    elif mutation == "empty_text":
+        fields[0]["source"] = ""
+    elif mutation == "empty_reasons":
+        fields[0]["unavailable_reasons"] = []
+    elif mutation == "blank_reason":
+        fields[0]["unavailable_reasons"] = [""]
+    else:
+        fields[0], fields[1] = fields[1], fields[0]
+
+    with pytest.raises(PairedEffectMetricContractError):
+        validate_paired_effect_metric_clarification(payload, source="fixture")
+
+
+def test_clarification_rejects_blank_invalid_reason_values() -> None:
+    """Reason lists cannot hide blank entries during normalization."""
+
+    payload = load_paired_effect_metric_clarification(CLARIFICATION_PATH)
+    payload["fields"][0]["invalid_reasons"] = ["usable", ""]
+
+    with pytest.raises(PairedEffectMetricContractError, match="invalid_reasons"):
+        validate_paired_effect_metric_clarification(payload, source="fixture")
 
 
 def test_native_paired_fields_are_trace_derived_and_pair_aware() -> None:
@@ -766,6 +885,495 @@ def test_native_timeout_wrapper_trace_truncation_is_unavailable() -> None:
     assert result["fields"]["progress_at_timeout"] == {
         "status": "unavailable",
         "reason": "timeout_trace_truncated",
+    }
+
+
+def test_native_helpers_reject_non_scalar_values_and_emit_value_payloads() -> None:
+    """Low-level status helpers preserve the finite-scalar contract."""
+
+    assert metric_contract._finite_metric_scalar(True) is None
+    assert metric_contract._finite_metric_scalar(object()) is None
+    assert metric_contract._status_payload("available", "fixture", value=0.5) == {
+        "status": "available",
+        "reason": "fixture",
+        "value": 0.5,
+    }
+
+
+def test_native_pair_identity_uses_declared_fallbacks_and_rejects_missing_keys() -> None:
+    """Pair identity fallback fields are explicit and type checked."""
+
+    identity, reason = metric_contract._record_pair_identity(
+        {"planner": "planner", "scenario_id": "scenario", "seed": 1}
+    )
+    assert identity == {"planner": "planner", "scenario_id": "scenario", "seed": 1}
+    assert reason is None
+
+    planner_fallback, planner_reason = metric_contract._record_pair_identity(
+        {"planner": "planner", "scenario_params": {"id": "scenario"}, "seed": 1}
+    )
+    assert planner_fallback == identity
+    assert planner_reason is None
+
+    scenario_fallback, scenario_reason = metric_contract._record_pair_identity(
+        {"scenario_params": {"algo": "planner", "id": "scenario"}, "seed": 1}
+    )
+    assert scenario_fallback == identity
+    assert scenario_reason is None
+
+    assert metric_contract._record_pair_identity({"seed": 1})[1] == (
+        "pair_identity_missing_planner"
+    )
+    assert metric_contract._record_pair_identity({"algo": "planner", "seed": 1})[1] == (
+        "pair_identity_missing_scenario_id"
+    )
+    assert (
+        metric_contract._record_pair_identity(
+            {"algo": "planner", "scenario_id": "scenario", "seed": True}
+        )[1]
+        == "pair_identity_missing_seed"
+    )
+
+
+def test_native_pair_config_identity_rejects_missing_and_unhashable_inputs() -> None:
+    """Native pair configuration identity never falls back or hashes unsafe data."""
+
+    missing_native = _native_record("wrapper_on")
+    missing_native["algorithm_metadata"].pop("paired_effect_native_trace")
+    assert metric_contract._native_pair_config_identity(missing_native)["reason"] == (
+        "pair_config_identity_unavailable"
+    )
+
+    missing_params = _native_record("wrapper_on")
+    missing_params.pop("scenario_params")
+    assert metric_contract._native_pair_config_identity(missing_params)["reason"] == (
+        "pair_config_identity_unavailable"
+    )
+
+    unsafe_params = _native_record("wrapper_on")
+    unsafe_params["scenario_params"]["unsafe"] = object()
+    assert metric_contract._native_pair_config_identity(unsafe_params)["reason"] == (
+        "pair_config_identity_unavailable"
+    )
+
+
+def test_declared_trace_time_step_rejects_missing_zero_and_mismatched_values() -> None:
+    """Time-step provenance is required, positive, and consistent across declarations."""
+
+    missing = metric_contract._declared_trace_time_step({}, {}, {})
+    assert missing == {"status": "unavailable", "reason": "missing_trace_time_step"}
+
+    zero = metric_contract._declared_trace_time_step({}, {}, {"dt_s": 0.0})
+    assert zero == {"status": "invalid", "reason": "invalid_trace_time_step"}
+
+    mismatch = metric_contract._declared_trace_time_step(
+        {}, {"time_per_step_s": 0.2}, {"dt_s": 0.1}
+    )
+    assert mismatch == {"status": "invalid", "reason": "trace_time_step_mismatch"}
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        ("summary_schema", "invalid_safety_wrapper_summary_schema"),
+        ("arm", "invalid_wrapper_arm"),
+        ("trace_type", "missing_safety_wrapper_trace"),
+        ("empty_trace", "empty_safety_wrapper_trace"),
+        ("metadata_missing", "missing_safety_wrapper_summary"),
+        ("native_missing", "missing_paired_effect_native_trace"),
+        ("native_schema", "invalid_native_trace_schema"),
+        ("step_mapping", "invalid_trace_step"),
+        ("step_index", "invalid_trace_step_index"),
+        ("duplicate", "duplicate_trace_step"),
+        ("first_missing", "missing_trace_step"),
+        ("step_schema", "invalid_safety_wrapper_step_schema"),
+        ("step_arm", "trace_step_arm_mismatch"),
+        ("intervention_missing", "missing_intervention_state"),
+        ("intervention_invalid", "invalid_intervention_state"),
+        ("intervened_missing", "missing_intervention_flag"),
+        ("intervened_mismatch", "intervention_state_mismatch"),
+        ("time_nonfinite", "nonfinite_trace_time"),
+        ("time_mismatch", "trace_time_mismatch"),
+        ("horizon", "invalid_declared_horizon"),
+    ],
+)
+def test_trace_view_rejects_malformed_native_trace(mutation: str, reason: str) -> None:
+    """Native wrapper traces are validated before any metric is derived."""
+
+    record = _native_record("wrapper_on")
+    trace_path = ("algorithm_metadata", "safety_wrapper", "step_trace")
+    step_path = trace_path + (0,)
+    actions: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+        "summary_schema": lambda current: _set_path(
+            current, ("algorithm_metadata", "safety_wrapper", "schema_version"), "wrong"
+        ),
+        "arm": lambda current: _set_path(
+            current, ("algorithm_metadata", "safety_wrapper", "arm_key"), "wrong"
+        ),
+        "trace_type": lambda current: _set_path(current, trace_path, "missing"),
+        "empty_trace": lambda current: _set_path(current, trace_path, []),
+        "metadata_missing": lambda current: _pop_path(current, ("algorithm_metadata",)),
+        "native_missing": lambda current: _pop_path(
+            current, ("algorithm_metadata", "paired_effect_native_trace")
+        ),
+        "native_schema": lambda current: _set_path(
+            current, ("algorithm_metadata", "paired_effect_native_trace", "schema_version"), "wrong"
+        ),
+        "step_mapping": lambda current: _set_path(current, step_path, None),
+        "step_index": lambda current: _set_path(current, step_path + ("step",), -1),
+        "duplicate": lambda current: _set_path(current, trace_path + (1, "step"), 0),
+        "first_missing": lambda current: _set_path(current, step_path + ("step",), 1),
+        "step_schema": lambda current: _set_path(current, step_path + ("schema_version",), "wrong"),
+        "step_arm": lambda current: _set_path(current, step_path + ("arm_key",), "wrapper_off"),
+        "intervention_missing": lambda current: _pop_path(current, step_path + ("intervention",)),
+        "intervention_invalid": lambda current: _set_path(
+            current, step_path + ("intervention",), "wrong"
+        ),
+        "intervened_missing": lambda current: _pop_path(current, step_path + ("intervened",)),
+        "intervened_mismatch": lambda current: _set_path(
+            current, step_path + ("intervened",), True
+        ),
+        "time_nonfinite": lambda current: _set_path(current, step_path + ("time_s",), float("nan")),
+        "time_mismatch": lambda current: _set_path(current, step_path + ("time_s",), 99.0),
+        "horizon": lambda current: _set_path(
+            current, ("algorithm_metadata", "paired_effect_native_trace", "horizon_steps"), 0
+        ),
+    }
+    actions[mutation](record)
+
+    result = metric_contract._trace_view(record)
+    assert result["reason"] == reason
+
+
+def test_validate_pair_rejects_identity_trace_arm_config_and_dt_drift() -> None:
+    """Both native arms must share complete identity and compatible provenance."""
+
+    valid_off = _native_record("wrapper_off")
+    assert metric_contract._validate_pair({}, valid_off)["reason"] == (
+        "pair_identity_missing_planner"
+    )
+
+    missing_summary = _native_record("wrapper_on")
+    missing_summary["algorithm_metadata"].pop("safety_wrapper")
+    assert metric_contract._validate_pair(missing_summary, valid_off)["details"]["side"] == (
+        "wrapper_on"
+    )
+
+    both_off = _native_record("wrapper_off")
+    assert metric_contract._validate_pair(both_off, valid_off)["reason"] == ("wrapper_arm_mismatch")
+
+    config_on = _native_record("wrapper_on")
+    config_off = _native_record("wrapper_off")
+    config_on["scenario_params"]["planner_override"] = "on"
+    config_off["scenario_params"]["planner_override"] = "off"
+    config_on["algorithm_metadata"]["paired_effect_native_trace"]["pair_config_hash"] = (
+        metric_contract._canonical_digest(
+            {
+                key: value
+                for key, value in config_on["scenario_params"].items()
+                if key != "safety_wrapper"
+            }
+        )[:16]
+    )
+    config_off["algorithm_metadata"]["paired_effect_native_trace"]["pair_config_hash"] = (
+        metric_contract._canonical_digest(
+            {
+                key: value
+                for key, value in config_off["scenario_params"].items()
+                if key != "safety_wrapper"
+            }
+        )[:16]
+    )
+    assert metric_contract._validate_pair(config_on, config_off)["reason"] == (
+        "pair_config_mismatch"
+    )
+
+    dt_on = _native_record("wrapper_on")
+    dt_off = _native_record("wrapper_off")
+    dt_on["scenario_params"].pop("run_dt")
+    dt_off["scenario_params"].pop("run_dt")
+    shared_config = metric_contract._canonical_digest(
+        {key: value for key, value in dt_on["scenario_params"].items() if key != "safety_wrapper"}
+    )[:16]
+    dt_on["algorithm_metadata"]["paired_effect_native_trace"]["pair_config_hash"] = shared_config
+    dt_off["algorithm_metadata"]["paired_effect_native_trace"]["pair_config_hash"] = shared_config
+    dt_off["algorithm_metadata"]["safety_wrapper"]["time_per_step_s"] = 0.2
+    dt_off["algorithm_metadata"]["paired_effect_native_trace"]["dt_s"] = 0.2
+    for step in dt_off["algorithm_metadata"]["safety_wrapper"]["step_trace"]:
+        step["time_s"] = (step["step"] + 1) * 0.2
+    assert metric_contract._validate_pair(dt_on, dt_off)["reason"] == ("pair_time_step_mismatch")
+
+
+@pytest.mark.parametrize(
+    ("step", "reason"),
+    [
+        ({"eligible_for_wrapper": False}, "ineligible_wrapper_step"),
+        ({}, "missing_forward_progress_command"),
+        (
+            {"forward_progress_command": {"status": "valid", "linear_velocity_m_s": 0.0}},
+            "invalid_forward_progress_command",
+        ),
+        (
+            {
+                "forward_progress_command": {
+                    "status": "not_forward_progress",
+                    "linear_velocity_m_s": float("nan"),
+                }
+            },
+            "nonfinite_forward_progress_command",
+        ),
+        (
+            {
+                "forward_progress_command": {
+                    "status": "unavailable",
+                    "reason": "",
+                }
+            },
+            "forward_progress_command_unavailable",
+        ),
+        (
+            {"forward_progress_command": {"status": "wrong", "linear_velocity_m_s": 0.0}},
+            "invalid_forward_progress_status",
+        ),
+    ],
+)
+def test_forward_progress_state_rejects_ambiguous_commands(
+    step: dict[str, Any], reason: str
+) -> None:
+    """Only a declared finite command state can establish forward progress."""
+
+    assert metric_contract._forward_progress_state(step)["reason"] == reason
+
+
+@pytest.mark.parametrize(
+    ("step", "reason"),
+    [
+        ({}, "missing_post_step_outcome"),
+        (
+            {"post_step_outcome": {"status": "unavailable", "reason": ""}},
+            "post_step_outcome_unavailable",
+        ),
+        ({"post_step_outcome": {"status": "wrong"}}, "invalid_post_step_outcome_status"),
+        (
+            {"post_step_outcome": {"status": "available", "collision": 1, "near_miss": False}},
+            "invalid_post_step_outcome_flags",
+        ),
+    ],
+)
+def test_post_step_outcome_state_rejects_ambiguous_outcomes(
+    step: dict[str, Any], reason: str
+) -> None:
+    """Canonical collision outcomes cannot be inferred from malformed payloads."""
+
+    assert metric_contract._post_step_outcome_state(step)["reason"] == reason
+
+
+def test_false_positive_rate_rejects_non_step_aligned_and_missing_counterfactual_steps() -> None:
+    """Counterfactual windows must align to dt and contain every declared step."""
+
+    wrapper_on = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    wrapper_off = _native_record("wrapper_off")
+    non_aligned = metric_contract._evaluate_false_positive_stop_rate(
+        wrapper_on, wrapper_off, window_s=2.05
+    )
+    assert non_aligned == {
+        "status": "invalid",
+        "reason": "counterfactual_window_not_step_aligned",
+    }
+
+    pair = metric_contract._validate_pair(wrapper_on, wrapper_off)
+    pair["wrapper_off_trace"]["by_step"].pop(1)
+    with patch.object(metric_contract, "_validate_pair", return_value=pair):
+        missing = metric_contract._evaluate_false_positive_stop_rate(
+            wrapper_on, wrapper_off, window_s=2.0
+        )
+    assert missing["reason"] == "counterfactual_window_missing_step"
+
+
+def test_false_positive_rate_rejects_unavailable_counterfactual_outcome() -> None:
+    """An unavailable canonical off-arm outcome blocks the derived rate."""
+
+    wrapper_on = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    wrapper_off = _native_record("wrapper_off", unavailable_outcome_steps=(1,))
+    result = metric_contract._evaluate_false_positive_stop_rate(
+        wrapper_on, wrapper_off, window_s=2.0
+    )
+    assert result["reason"] == "native_outcome_missing"
+
+
+def test_stop_yield_latency_rejects_missing_invalid_and_unavailable_recovery_steps() -> None:
+    """Recovery latency is unavailable or invalid when the next command is not usable."""
+
+    wrapper_on = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    trace_view = metric_contract._trace_view(wrapper_on)
+    trace_view["by_step"].pop(2)
+    with patch.object(metric_contract, "_trace_view", return_value=trace_view):
+        missing = metric_contract._evaluate_stop_yield_latency(wrapper_on)
+    assert missing["reason"] == "missing_trace_step"
+
+    invalid = _native_record(
+        "wrapper_on", stop_steps=(1,), recovery_step=2, invalid_command_steps=(2,)
+    )
+    assert metric_contract._evaluate_stop_yield_latency(invalid)["reason"] == (
+        "nonfinite_forward_progress_command"
+    )
+
+    unavailable = _native_record("wrapper_on", stop_steps=(1,), recovery_step=2)
+    unavailable["algorithm_metadata"]["safety_wrapper"]["step_trace"][2][
+        "forward_progress_command"
+    ] = {"status": "unavailable", "reason": "recovery_not_declared"}
+    assert metric_contract._evaluate_stop_yield_latency(unavailable)["reason"] == (
+        "recovery_not_declared"
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        ("missing_metadata", "missing_algorithm_metadata"),
+        ("missing_trace", "missing_simulation_step_trace"),
+        ("schema", "invalid_simulation_trace_schema"),
+        ("steps", "missing_simulation_step_trace_steps"),
+        ("raw_dt", "invalid_simulation_trace_time_step"),
+        ("native_dt", "invalid_simulation_trace_time_step"),
+        ("no_dt", "missing_simulation_trace_time_step"),
+        ("dt_mismatch", "simulation_trace_time_step_mismatch"),
+        ("step_mapping", "invalid_simulation_trace_step"),
+        ("step_index", "invalid_simulation_trace_step_index"),
+        ("first_missing", "missing_simulation_trace_step"),
+        ("gap", "missing_simulation_trace_step"),
+        ("time_nonfinite", "nonfinite_simulation_trace_time"),
+        ("time_mismatch", "simulation_trace_time_mismatch"),
+    ],
+)
+def test_simulation_trace_view_rejects_malformed_trace(mutation: str, reason: str) -> None:
+    """Timeout progress consumes only contiguous, time-consistent simulation frames."""
+
+    record = _native_record("wrapper_on", length=3)
+    simulation_path = ("algorithm_metadata", "simulation_step_trace")
+    steps_path = simulation_path + ("steps",)
+    actions: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+        "missing_metadata": lambda current: _pop_path(current, ("algorithm_metadata",)),
+        "missing_trace": lambda current: _pop_path(current, simulation_path),
+        "schema": lambda current: _set_path(
+            current, simulation_path + ("schema_version",), "wrong"
+        ),
+        "steps": lambda current: _set_path(current, steps_path, []),
+        "raw_dt": lambda current: _set_path(current, simulation_path + ("dt",), 0.0),
+        "native_dt": lambda current: _set_path(
+            current, ("algorithm_metadata", "paired_effect_native_trace", "dt_s"), 0.0
+        ),
+        "no_dt": lambda current: _pop_path(
+            _pop_path(current, simulation_path + ("dt",)),
+            ("algorithm_metadata", "paired_effect_native_trace", "dt_s"),
+        ),
+        "dt_mismatch": lambda current: _set_path(
+            current, ("algorithm_metadata", "paired_effect_native_trace", "dt_s"), 0.2
+        ),
+        "step_mapping": lambda current: _set_path(current, steps_path + (0,), None),
+        "step_index": lambda current: _set_path(current, steps_path + (0, "step"), -1),
+        "first_missing": lambda current: _set_path(current, steps_path + (0, "step"), 1),
+        "gap": lambda current: _set_path(current, steps_path + (1, "step"), 3),
+        "time_nonfinite": lambda current: _set_path(
+            current, steps_path + (0, "time_s"), float("nan")
+        ),
+        "time_mismatch": lambda current: _set_path(current, steps_path + (0, "time_s"), 99.0),
+    }
+    actions[mutation](record)
+
+    result = metric_contract._simulation_trace_view(record)
+    assert result["reason"] == reason
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason"),
+    [
+        ("missing_native", "missing_paired_effect_native_trace"),
+        ("missing_timeout", "missing_declared_timeout"),
+        ("timeout_type", "invalid_declared_timeout"),
+        ("outcome_type", "invalid_timeout_outcome_flag"),
+        ("timeout_mismatch", "timeout_state_mismatch"),
+        ("missing_termination", "missing_declared_termination_reason"),
+        ("termination_mismatch", "termination_reason_mismatch"),
+        ("empty_termination", "invalid_timeout_termination_reason"),
+        ("invalid_termination", "invalid_timeout_termination_reason"),
+        ("missing_goal", "missing_declared_goal_position"),
+        ("invalid_goal", "nonfinite_declared_goal_position"),
+        ("missing_horizon", "missing_declared_horizon"),
+        ("invalid_horizon", "invalid_declared_horizon"),
+        ("missing_position", "missing_timeout_robot_position"),
+        ("nonfinite_progress", "nonfinite_timeout_progress"),
+        ("out_of_bounds", "timeout_progress_out_of_bounds"),
+    ],
+)
+def test_timeout_progress_rejects_ambiguous_declarations(mutation: str, reason: str) -> None:
+    """Timeout progress is emitted only from internally consistent native state."""
+
+    record = _native_record("wrapper_on", length=3)
+    native_path = ("algorithm_metadata", "paired_effect_native_trace")
+    actions: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+        "missing_native": lambda current: _pop_path(current, ("algorithm_metadata",)),
+        "missing_timeout": lambda current: _pop_path(current, native_path + ("declared_timeout",)),
+        "timeout_type": lambda current: _set_path(
+            current, native_path + ("declared_timeout",), "yes"
+        ),
+        "outcome_type": lambda current: _set_path(current, ("outcome", "timeout_event"), "yes"),
+        "timeout_mismatch": lambda current: _set_path(current, ("outcome", "timeout_event"), False),
+        "missing_termination": lambda current: _pop_path(
+            _pop_path(current, native_path + ("termination_reason",)),
+            ("termination_reason",),
+        ),
+        "termination_mismatch": lambda current: _set_path(
+            current, ("termination_reason",), "truncated"
+        ),
+        "empty_termination": lambda current: _set_path(
+            _set_path(current, native_path + ("termination_reason",), ""),
+            ("termination_reason",),
+            "",
+        ),
+        "invalid_termination": lambda current: _set_path(
+            _set_path(current, native_path + ("termination_reason",), "success"),
+            ("termination_reason",),
+            "success",
+        ),
+        "missing_goal": lambda current: _set_path(current, native_path + ("goal_position",), []),
+        "invalid_goal": lambda current: _set_path(
+            current, native_path + ("goal_position",), [float("nan"), 0.0]
+        ),
+        "missing_horizon": lambda current: _pop_path(current, native_path + ("horizon_steps",)),
+        "invalid_horizon": lambda current: _set_path(current, native_path + ("horizon_steps",), 0),
+        "missing_position": lambda current: _pop_path(
+            current,
+            (
+                "algorithm_metadata",
+                "simulation_step_trace",
+                "steps",
+                -1,
+                "robot",
+                "position",
+            ),
+        ),
+        "nonfinite_progress": lambda _current: _native_record(
+            "wrapper_on", length=3, initial_distance=1.0e-308, final_x=1.0e308
+        ),
+        "out_of_bounds": lambda _current: _native_record("wrapper_on", length=3, final_x=-1.0),
+    }
+    record = actions[mutation](record)
+
+    result = metric_contract._evaluate_progress_at_timeout(record)
+    assert result["reason"] == reason
+
+
+def test_evaluate_fields_rejects_non_mapping_native_records() -> None:
+    """The producer returns a machine-readable invalid result for malformed inputs."""
+
+    result = evaluate_paired_effect_metric_fields([])  # type: ignore[arg-type]
+    assert result == {
+        "schema_version": "paired_effect_metric_producer.v1",
+        "status": "invalid",
+        "reason": "native_record_not_mapping",
+        "metric_values": {},
+        "fields": {},
     }
 
 

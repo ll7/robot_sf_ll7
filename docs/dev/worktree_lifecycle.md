@@ -286,12 +286,14 @@ bounded stale-owner recovery path.
 Do not remove a dirty worktree, an unpushed branch, a live-leased worktree, or a durable artifact
 without an explicit preservation record.
 
-## Verified squash-merged retirement
+## Verified merged-tree retirement
 
 When a completed pull request (PR) has had its remote branch deleted, an explicitly supplied
 proof bundle can authorize retirement of that one clean worktree without recreating the remote
 reference. The default reaper remains conservative: a missing upstream is still refused unless
-all verified inputs are supplied.
+all verified inputs are supplied. GitHub's pull-request REST metadata does not provide an
+authoritative historical merge-method field, so this mode deliberately proves exact merged-tree
+identity and ancestry without claiming that the PR used squash, rebase, or regular merge.
 
 Run the verified mode from the registered `main` worktree and name the target's canonical,
 non-symlink path, surviving local branch, full head commit, and merged PR:
@@ -312,7 +314,9 @@ never-published branches and branches with a still-resolvable upstream remain re
 authoritative PR metadata must identify this repository, the exact branch and head, a merged PR
 to `main`, and a full merge commit that resolves locally. The checked-out `main`, local
 `origin/main`, target head, PR merge commit, and all three complete Git tree IDs must agree as
-required by the plan, and the merge commit must be an ancestor of current `main`.
+required by the plan, and the merge commit must be an ancestor of current `main`. The resulting
+verification evidence records `merge_method_scope=method_agnostic_exact_tree`; it is a content
+and ancestry proof, not a merge-method classifier.
 
 The command performs only bounded GitHub reads (`gh pr list` and `gh api`); it never posts, edits,
 fetches, recreates refs, changes configuration, releases leases, or removes another worktree. The

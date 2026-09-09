@@ -22,7 +22,11 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "stale_worktree_reaper.v1"
-VERIFIED_MERGE_MODE = "verified_squash_merged"
+# GitHub's pull-request REST payload does not expose an authoritative merge
+# method.  The verified path therefore proves exact merged-tree identity and
+# ancestry without classifying the historical merge as squash, rebase, or
+# regular.  Keep the scope honest in the machine-readable evidence.
+VERIFIED_MERGE_MODE = "verified_merged_tree"
 DEFAULT_GITHUB_REPO = "ll7/robot_sf_ll7"
 DEFAULT_BASE_BRANCH = "main"
 FULL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -46,7 +50,7 @@ class WorktreeCandidate:
 
 @dataclass(frozen=True, slots=True)
 class VerifiedMergeRequest:
-    """Exact inputs required by the opt-in verified squash-merge path."""
+    """Exact inputs required by the opt-in verified merged-tree path."""
 
     path: str
     branch: str
@@ -939,6 +943,7 @@ def _verified_worktree_state(  # noqa: C901, PLR0912, PLR0915 - ordered fail-clo
 
     evidence: dict[str, Any] = {
         "mode": VERIFIED_MERGE_MODE,
+        "merge_method_scope": "method_agnostic_exact_tree",
         "path": request.path,
         "current_path": str(Path(current_path).resolve()),
         "repo": request.repo,
@@ -1335,7 +1340,7 @@ def _request_from_verified_candidate(
     """Recover and validate the immutable verification inputs stored in a plan."""
     evidence = candidate.verification
     if evidence.get("mode") != VERIFIED_MERGE_MODE:
-        return None, "candidate has no verified squash-merge evidence"
+        return None, "candidate has no verified merged-tree evidence"
     path = evidence.get("path")
     branch = evidence.get("branch")
     head_sha = evidence.get("expected_head_sha")
@@ -1597,7 +1602,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         dest="verified_pr_number",
         type=int,
         help=(
-            "Opt into exact verified squash-merged cleanup for one --path; requires "
+            "Opt into exact verified merged-tree cleanup for one --path; requires "
             "--verified-branch and --verified-head-sha"
         ),
     )

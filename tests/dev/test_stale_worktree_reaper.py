@@ -71,7 +71,7 @@ def _null_lock():
 
 
 def _verified_fixture(tmp_path: Path) -> dict[str, object]:
-    """Create a clean squash-merge-shaped Git fixture with a deleted upstream ref."""
+    """Create a clean merged-tree-shaped Git fixture with a deleted upstream ref."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     repo = tmp_path / "fixture-repo"
     target = tmp_path / "worktree with spaces"
@@ -631,7 +631,7 @@ def test_classify_legacy_pr_gate_lease_risk(
     assert "active_pr_gate_lease" in candidate.risk_flags
 
 
-def test_verified_squash_merge_is_explicit_and_applies_only_after_revalidation(
+def test_verified_merged_tree_is_explicit_and_applies_only_after_revalidation(
     tmp_path: Path,
 ) -> None:
     """Exact Git/PR proof permits only the target fixture removal and preserves its branch."""
@@ -661,6 +661,7 @@ def test_verified_squash_merge_is_explicit_and_applies_only_after_revalidation(
         assert plan.deletable == [str(target)]
         evidence = plan.candidates[0].verification
         assert evidence["head_sha"] == head_sha
+        assert evidence["merge_method_scope"] == "method_agnostic_exact_tree"
         assert evidence["merge_commit_sha"] == fixture["merge_sha"]
         assert evidence["main_sha"] == fixture["merge_sha"]
         assert evidence["worktree_tree_sha"] == fixture["tree_sha"]
@@ -691,6 +692,42 @@ def test_verified_squash_merge_is_explicit_and_applies_only_after_revalidation(
     assert all(call[0:2] == ["gh", "pr"] or call[0:2] == ["gh", "api"] for call in transport.calls)
     assert all("--method" not in call for call in transport.calls)
     assert len(transport.calls) == 4
+
+
+def test_verified_merged_tree_accepts_regular_merge_shape(tmp_path: Path) -> None:
+    """The proof is intentionally merge-method agnostic when tree identity is exact."""
+    fixture = _verified_fixture(tmp_path)
+    repo = fixture["repo"]
+    target = fixture["target"]
+    base_sha = fixture["base_sha"]
+    head_sha = fixture["head_sha"]
+    tree_sha = fixture["tree_sha"]
+    assert isinstance(repo, Path)
+    assert isinstance(target, Path)
+    assert isinstance(base_sha, str)
+    assert isinstance(head_sha, str)
+    assert isinstance(tree_sha, str)
+
+    regular_merge_sha = _commit_tree(
+        repo,
+        tree_sha,
+        "regular merge shape",
+        base_sha,
+        head_sha,
+    )
+    _git(repo, "reset", "--hard", regular_merge_sha)
+    _git(repo, "update-ref", "refs/remotes/origin/main", regular_merge_sha)
+    metadata = json.loads(json.dumps(fixture["metadata"]))
+    assert isinstance(metadata, dict)
+    metadata["merge_commit_sha"] = regular_merge_sha
+    transport = _FakeGitHubTransport(metadata)
+
+    with patch.object(reaper, "_worktree_lease_state", return_value=(None, None)):
+        plan = _verified_plan(fixture, transport)
+
+    assert plan.errors == []
+    assert plan.deletable == [str(target)]
+    assert plan.candidates[0].verification["merge_method_scope"] == ("method_agnostic_exact_tree")
 
 
 @pytest.mark.parametrize(

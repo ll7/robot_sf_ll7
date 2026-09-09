@@ -572,9 +572,22 @@ preflight_check_evidence_registry() {
     return 2
   fi
   printf 'Checking evidence-registry integrity before formatting and test lanes.\n' >&2
+  candidate_head="$(git rev-parse --verify --quiet HEAD^{commit} 2>/dev/null || true)"
+  frozen_base="$(git rev-parse --verify --quiet "${BASE_REF}^{commit}" 2>/dev/null || true)"
+  if [[ ! "$candidate_head" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    printf 'Cannot resolve the exact candidate HEAD for evidence projection; refusing readiness.\n' >&2
+    return 2
+  fi
+  if [[ ! "$frozen_base" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    printf 'Cannot resolve the exact frozen base %q for evidence projection; refusing readiness.\n' \
+      "$BASE_REF" >&2
+    return 2
+  fi
   # Reuse child registration and signal cleanup; this never writes a baseline or
   # replaces the later core invariants, hosted gate, or final freshness checks.
-  run_pr_ready_lane evidence_registry uv run python "$SCRIPT_DIR/evidence_registry_ratchet.py" --check
+  run_pr_ready_lane evidence_registry uv run python "$SCRIPT_DIR/evidence_registry_ratchet.py" \
+    --check --candidate-head "$candidate_head" --frozen-base "$frozen_base" \
+    --report-output output/evidence/ratchet-report.json
 }
 
 is_optional_readiness_path() {

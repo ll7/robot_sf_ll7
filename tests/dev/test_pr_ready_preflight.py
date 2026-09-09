@@ -1,5 +1,9 @@
 """Tests for the cheap shell preflight in scripts/dev/pr_ready_check.sh."""
 
+# evidence-writer-exempt: evidence-tree paths are synthetic fixtures under pytest tmp_path;
+# raw fixture bytes and shell transports test path classification and failure diagnostics,
+# not publication. These tests never write the repository's retained evidence tree.
+
 from __future__ import annotations
 
 import hashlib

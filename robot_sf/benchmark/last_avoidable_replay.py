@@ -106,7 +106,8 @@ class ReplayConfig:
 
     Attributes:
         t_danger: First step of the danger window (inclusive) to search.
-        t_contact: Baseline contact step; the search window is
+        t_contact: Baseline contact state tick (the number of applied actions at
+            which contact is first observed); the search window is
             ``[t_danger, t_contact)`` and ``t_contact`` bounds the replay.
         horizon: Frozen horizon ``H`` (control ticks) simulated forward from each
             candidate step when testing whether an action prevents contact.
@@ -120,7 +121,8 @@ class ReplayConfig:
         collision_predicate: Provenance label for the collision predicate.
         pedestrian_response: Pedestrian response assumption for this run, e.g.
             ``replayed`` (pedestrian follows its recorded path) or ``closed_loop``
-            (pedestrian reacts to the robot).
+            (pedestrian reacts to the robot). The default ``unknown`` is schema-safe
+            and must not be interpreted as either response mode.
         source_kind: Provenance classification for the replay source. Native live
             simulator adapters bind this to ``live_episode``; legacy controlled
             fixtures leave it ``unspecified`` and the causal join treats that as
@@ -135,7 +137,7 @@ class ReplayConfig:
     action_set_id: str = "unspecified"
     feasibility_filter: str = "unspecified"
     collision_predicate: str = "unspecified"
-    pedestrian_response: str = "unspecified"
+    pedestrian_response: str = "unknown"
     source_kind: str = "unspecified"
 
     def __post_init__(self) -> None:
@@ -287,8 +289,9 @@ def _replay_to_contact(
     """Restore the initial snapshot, replay baseline actions, return the contact step.
 
     Returns:
-        The first step index (0-based, the step whose action produced contact) at
-        which :meth:`CounterfactualModel.collision` becomes true, or ``None`` if no
+        The contact state tick (the number of applied actions, so the action at
+        zero produces state tick one) at which
+        :meth:`CounterfactualModel.collision` becomes true, or ``None`` if no
         contact occurs within ``max_step`` applied actions.
     """
     model.restore(initial_snapshot)
@@ -298,7 +301,7 @@ def _replay_to_contact(
     for step in range(limit):
         model.step(baseline_actions[step])
         if model.collision():
-            return step
+            return step + 1
     return None
 
 
@@ -597,7 +600,10 @@ def locate_last_avoidable(  # noqa: C901 - explicit fail-closed verdict state ma
     # resume; hold substitutions do not consume baseline actions after the
     # decision window.  Report missing support as a fail-closed non-evaluation
     # rather than treating an empty suffix as a successful avoidance witness.
-    contact_prefix = config.t_contact + 1
+    # ``t_contact`` is a state tick / applied-action count. The action at index
+    # ``t_contact - 1`` produces the contact state, so exactly ``t_contact``
+    # recorded actions are required to replay the inclusive contact prefix.
+    contact_prefix = config.t_contact
     required_baseline = (
         max(contact_prefix, config.t_contact + config.horizon - 1)
         if config.substitution_mode == SUBSTITUTION_SINGLE_STEP

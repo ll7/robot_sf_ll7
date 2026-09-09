@@ -292,7 +292,7 @@ def test_production_fixture_is_avoidable() -> None:
     report = _run_engine(model)
     assert report.verdict == VERDICT_AVOIDABLE
     assert report.determinism.deterministic is True
-    assert report.determinism.observed_contact_steps == (_FIXTURE_CONTACT_STEP - 1,) * 5
+    assert report.determinism.observed_contact_steps == (_FIXTURE_CONTACT_STEP,) * 5
     assert report.t_uca is not None and report.t_inevitable is not None
     assert report.t_uca <= report.t_inevitable <= report.config.t_contact
     assert report.feasible_coverage == pytest.approx(1.0)
@@ -472,7 +472,7 @@ def test_native_replay_metadata_binds_action_contract_and_source() -> None:
     )
     assert native.config.source_kind == "live_episode"
     assert native.config.action_set_id.startswith("simulator_native_action_lattice_v1:")
-    assert native.config.feasibility_filter == "native_all_supported_actions_v1:n=5"
+    assert native.config.feasibility_filter == "native_declared_action_lattice_v1:n=5"
 
 
 def test_unknown_action_contract_fails_closed_and_uses_generic_label() -> None:

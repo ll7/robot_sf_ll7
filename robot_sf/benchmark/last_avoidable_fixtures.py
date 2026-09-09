@@ -240,14 +240,15 @@ def _deep_copy_state(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def find_contact_step(scenario: KinematicScenario, max_steps: int = 200) -> int | None:
-    """Roll the maintain-speed baseline forward and return the first contact step.
+    """Roll the baseline forward and return the first contact state tick.
 
     This helper derives ``t_contact`` for a scenario so fixtures need not hard-code
     it.
 
     Returns:
-        The first step index at which contact occurs, or ``None`` if no contact
-        occurs within ``max_steps``.
+        The number of applied baseline actions at which contact first occurs, or
+        ``None`` if no contact occurs within ``max_steps`` actions. Initial contact
+        is state tick zero.
     """
     model = KinematicCollisionModel(scenario)
     if model.collision():
@@ -255,7 +256,7 @@ def find_contact_step(scenario: KinematicScenario, max_steps: int = 200) -> int 
     for step in range(max_steps):
         model.step(0.0)
         if model.collision():
-            return step
+            return step + 1
     return None
 
 

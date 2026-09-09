@@ -9,6 +9,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:
+    # Direct execution must resolve this checkout's transport and write guards,
+    # ahead of any competing checkout or editable installation on sys.path.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.dev._gh_rest import gh_api_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_review_post as _gh_api_post
 from scripts.dev._gh_rest import parse_json as _parse_json

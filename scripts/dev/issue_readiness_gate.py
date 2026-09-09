@@ -21,6 +21,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:
+    # Direct execution must prefer this checkout over ambient source roots.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.dev import gh_issue_rest, gh_pr_label_rest, goal_issue_admission
 from scripts.dev.issue_implementability import READY_LABEL, preflight_body_text
 from scripts.dev.issue_state_taxonomy import state_labels

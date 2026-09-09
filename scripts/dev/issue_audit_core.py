@@ -77,6 +77,12 @@ PLAN_SCHEMA = "issue_audit_plan.v1"
 PROVENANCE_SCHEMA = "issue_audit_provenance.v1"
 ENVELOPE_SCHEMA = "issue_decision_envelope.v1"
 MAX_SOURCE_EXCERPT = 280
+ISSUE_SOURCE_STATUS_COMPLETE = "complete"
+ISSUE_SOURCE_STATUS_EMPTY = "empty"
+ISSUE_SOURCE_STATUS_UNAVAILABLE = "unavailable"
+ISSUE_SOURCE_STATUS_ANOMALOUS = "anomalous"
+ISSUE_SOURCE_EMPTY_PROOF = "successful_empty_response"
+ISSUE_SOURCE_KIND = "canonical_open_issues"
 
 _PREPARATION_AUDIT_SCHEMA = "open_issue_contract_audit.v1"
 PREPARATION_MARKER_END = prepare_open_issue_contracts.MARKER_END
@@ -891,6 +897,8 @@ def paginate_rest(
     errors: list[str] = []
     pages_read = 0
     requests_attempted = 0
+    raw_row_count = 0
+    non_object_row_count = 0
     truncated = False
     rate_limited = False
     budget_exhausted = False
@@ -925,6 +933,8 @@ def paginate_rest(
             errors.append(f"{endpoint} returned a non-list payload")
             break
         pages_read += 1
+        raw_row_count += len(payload)
+        non_object_row_count += sum(not isinstance(item, dict) for item in payload)
         rows.extend(item for item in payload if isinstance(item, dict))
         if len(payload) < per_page:
             break
@@ -939,6 +949,8 @@ def paginate_rest(
         "per_page": per_page,
         "page_budget": max_pages,
         "row_count": len(rows),
+        "raw_row_count": raw_row_count,
+        "non_object_row_count": non_object_row_count,
         "truncated": truncated,
         "errors": errors,
     }
@@ -960,8 +972,9 @@ def discover_open_issues(
     request_budget: _RestRequestBudget | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Discover canonical open issues, filtering pull requests from the issues endpoint."""
+    source = f"repos/{repo}/issues?state=open"
     rows, meta = paginate_rest(
-        f"repos/{repo}/issues?state=open",
+        source,
         max_pages=max_pages,
         runner=runner,
         request_budget=request_budget,
@@ -971,7 +984,51 @@ def discover_open_issues(
         for row in rows
         if "pull_request" not in row and "/issues/" in str(row.get("html_url") or "")
     ]
-    return sorted(issues, key=lambda item: item["number"]), {**meta, "row_count": len(issues)}
+    issues = sorted(issues, key=lambda item: item["number"])
+    raw_row_count = int(meta.get("raw_row_count", 0))
+    non_object_row_count = int(meta.get("non_object_row_count", 0))
+    errors = list(meta.get("errors", []))
+    if meta.get("truncated") or errors:
+        source_status = ISSUE_SOURCE_STATUS_UNAVAILABLE
+        source_reason = f"{source} did not provide a complete response" + (
+            f": {errors[0]}" if errors else ""
+        )
+    elif non_object_row_count:
+        source_status = ISSUE_SOURCE_STATUS_ANOMALOUS
+        source_reason = (
+            f"{source} returned {non_object_row_count} malformed non-object row(s); "
+            "the canonical issue inventory is not trustworthy"
+        )
+    elif not issues and raw_row_count:
+        source_status = ISSUE_SOURCE_STATUS_ANOMALOUS
+        source_reason = (
+            f"{source} returned {raw_row_count} row(s) but no canonical issue rows; "
+            "the empty queue is not proven"
+        )
+    elif issues:
+        source_status = ISSUE_SOURCE_STATUS_COMPLETE
+        source_reason = "canonical open-issue response is complete"
+    elif not issues and int(meta.get("pages_read", 0)) > 0:
+        source_status = ISSUE_SOURCE_STATUS_EMPTY
+        source_reason = "successful empty response from the canonical open-issue source"
+    else:
+        source_status = ISSUE_SOURCE_STATUS_UNAVAILABLE
+        source_reason = f"{source} returned no readable page"
+    source_metadata = {
+        **meta,
+        "row_count": len(issues),
+        "canonical_row_count": len(issues),
+        "source": source,
+        "source_kind": ISSUE_SOURCE_KIND,
+        "source_status": source_status,
+        "available": source_status in {ISSUE_SOURCE_STATUS_COMPLETE, ISSUE_SOURCE_STATUS_EMPTY},
+        "source_status_reason": source_reason,
+    }
+    if source_status == ISSUE_SOURCE_STATUS_EMPTY:
+        source_metadata["source_proof"] = ISSUE_SOURCE_EMPTY_PROOF
+    elif source_status == ISSUE_SOURCE_STATUS_COMPLETE:
+        source_metadata["source_proof"] = "canonical_issue_rows"
+    return issues, source_metadata
 
 
 def discover_issue_comments(
@@ -2646,6 +2703,174 @@ class Classification:
         }
 
 
+def _issue_inventory_source_assessment(
+    inventory: Mapping[str, Any], *, canonical_row_count: int
+) -> dict[str, Any]:
+    """Assess whether the canonical open-issue source can prove its row count."""
+    repository = str(inventory.get("repo") or DEFAULT_REPO)
+    source = f"repos/{repository}/issues?state=open"
+    inventory_meta = inventory.get("inventory")
+    issue_meta = inventory_meta.get("issues") if isinstance(inventory_meta, Mapping) else None
+    base = {
+        "source": source,
+        "source_kind": ISSUE_SOURCE_KIND,
+        "canonical_row_count": canonical_row_count,
+    }
+
+    def result(
+        status: str,
+        *,
+        admissible: bool,
+        reason: str | None = None,
+        error_code: str | None = None,
+        source_proof: str | None = None,
+        metadata_reported: bool = True,
+    ) -> dict[str, Any]:
+        assessed = {
+            **base,
+            "status": status,
+            "admissible": admissible,
+            "metadata_reported": metadata_reported,
+        }
+        if source_proof:
+            assessed["source_proof"] = source_proof
+        if reason:
+            assessed["reason"] = reason
+        if error_code:
+            assessed["error_code"] = error_code
+        if not admissible:
+            assessed["next_action"] = (
+                "rerun the bounded issue-audit plan and inspect the raw open-issue response"
+            )
+        return assessed
+
+    if not isinstance(issue_meta, Mapping):
+        if canonical_row_count:
+            return result(
+                ISSUE_SOURCE_STATUS_COMPLETE,
+                admissible=True,
+                source_proof="canonical_issue_rows",
+                metadata_reported=False,
+            )
+        return result(
+            ISSUE_SOURCE_STATUS_ANOMALOUS,
+            admissible=False,
+            error_code="issue_inventory_source_missing",
+            reason=(
+                f"{source} returned zero canonical rows without source-contract metadata; "
+                "the empty queue is not proven"
+            ),
+            metadata_reported=False,
+        )
+
+    source_status = issue_meta.get("source_status")
+    source_errors = issue_meta.get("errors")
+    has_errors = isinstance(source_errors, list) and bool(source_errors)
+    raw_row_count = issue_meta.get("raw_row_count")
+    reported_canonical_row_count = issue_meta.get("canonical_row_count")
+    if (
+        isinstance(reported_canonical_row_count, int)
+        and reported_canonical_row_count != canonical_row_count
+    ):
+        return result(
+            ISSUE_SOURCE_STATUS_ANOMALOUS,
+            admissible=False,
+            error_code="issue_inventory_source_inconsistent",
+            reason=(
+                f"{source} reported {reported_canonical_row_count} canonical row(s), "
+                f"but the plan contains {canonical_row_count}; the source contract is inconsistent"
+            ),
+        )
+    if issue_meta.get("available") is False or issue_meta.get("truncated") or has_errors:
+        reason = str(issue_meta.get("source_status_reason") or "")
+        if not reason and has_errors:
+            reason = str(source_errors[0])
+        return result(
+            ISSUE_SOURCE_STATUS_UNAVAILABLE,
+            admissible=False,
+            error_code="issue_inventory_source_unavailable",
+            reason=reason or f"{source} is unavailable or incomplete",
+        )
+
+    if source_status is None:
+        if canonical_row_count:
+            return result(
+                ISSUE_SOURCE_STATUS_COMPLETE,
+                admissible=True,
+                source_proof="canonical_issue_rows",
+                metadata_reported=False,
+            )
+        return result(
+            ISSUE_SOURCE_STATUS_ANOMALOUS,
+            admissible=False,
+            error_code=(
+                "issue_inventory_source_anomalous"
+                if isinstance(raw_row_count, int) and raw_row_count > 0
+                else "issue_inventory_source_missing"
+            ),
+            reason=(
+                f"{source} returned rows but no canonical issue rows or source status"
+                if isinstance(raw_row_count, int) and raw_row_count > 0
+                else f"{source} returned zero canonical rows without source status"
+            ),
+        )
+
+    contradictory_empty_counts = [
+        field
+        for field in ("row_count", "raw_row_count", "non_object_row_count")
+        if isinstance(issue_meta.get(field), int) and issue_meta.get(field) > 0
+    ]
+    if source_status == ISSUE_SOURCE_STATUS_EMPTY and canonical_row_count == 0:
+        if contradictory_empty_counts:
+            return result(
+                ISSUE_SOURCE_STATUS_ANOMALOUS,
+                admissible=False,
+                error_code="issue_inventory_source_inconsistent",
+                reason=(
+                    f"{source} reported empty status with positive counts in "
+                    f"{', '.join(contradictory_empty_counts)}; the empty queue is not proven"
+                ),
+            )
+        return result(
+            ISSUE_SOURCE_STATUS_EMPTY,
+            admissible=True,
+            source_proof=str(issue_meta.get("source_proof") or "explicit_source_contract"),
+        )
+    if source_status == ISSUE_SOURCE_STATUS_COMPLETE and canonical_row_count > 0:
+        return result(
+            ISSUE_SOURCE_STATUS_COMPLETE,
+            admissible=True,
+            source_proof=str(issue_meta.get("source_proof") or "canonical_issue_rows"),
+        )
+    if source_status in {
+        ISSUE_SOURCE_STATUS_UNAVAILABLE,
+        ISSUE_SOURCE_STATUS_ANOMALOUS,
+    }:
+        return result(
+            str(source_status),
+            admissible=False,
+            error_code=(
+                "issue_inventory_source_unavailable"
+                if source_status == ISSUE_SOURCE_STATUS_UNAVAILABLE
+                else "issue_inventory_source_anomalous"
+            ),
+            reason=str(
+                issue_meta.get("source_status_reason")
+                or f"{source} reported source status {source_status!r}"
+            ),
+        )
+
+    return result(
+        ISSUE_SOURCE_STATUS_ANOMALOUS,
+        admissible=False,
+        error_code="issue_inventory_source_inconsistent",
+        reason=(
+            f"{source} reported source status {source_status!r} for "
+            f"{canonical_row_count} canonical row(s); the empty queue is not proven"
+        ),
+    )
+
+
 def classify_issue(
     issue: Mapping[str, Any],
     *,
@@ -3130,6 +3355,10 @@ def build_audit_plan(
     worktrees = [item for item in inventory.get("worktrees", []) if isinstance(item, Mapping)]
     jobs = [item for item in inventory.get("jobs", []) if isinstance(item, Mapping)]
     available_labels = set(_label_names(inventory.get("labels")))
+    issue_inventory_status = _issue_inventory_source_assessment(
+        inventory,
+        canonical_row_count=len(issues),
+    )
     job_meta = inventory.get("inventory", {}).get("jobs", {})
     job_available = bool(job_meta.get("available", True)) if isinstance(job_meta, Mapping) else True
     open_numbers = {int(item.get("number", 0)) for item in issues}
@@ -3281,6 +3510,10 @@ def build_audit_plan(
     )
     truncated: list[str] = []
     inventory_uncertainties: list[str] = []
+    issue_inventory_incomplete = not bool(issue_inventory_status["admissible"])
+    if issue_inventory_incomplete:
+        inventory_uncertainties.append("issues")
+        truncated.append("issues")
     for name, meta in inventory_meta.items():
         if not isinstance(meta, Mapping):
             continue
@@ -3319,10 +3552,20 @@ def build_audit_plan(
         )
     elif not provenance_available and classification_timeout_reason is None:
         effective_reason = "issue-audit source provenance is unavailable; mutations suppressed"
+    elif issue_inventory_incomplete and classification_timeout_reason is None:
+        effective_reason = str(issue_inventory_status["reason"])
+    elif incomplete_inventory and classification_timeout_reason is None:
+        effective_reason = "issue-audit inventory is incomplete; mutations suppressed"
     else:
         effective_reason = classification_timeout_reason
     classification_status = {
-        "status": "timed_out" if classification_timed_out else "complete",
+        "status": (
+            "timed_out"
+            if classification_timed_out
+            else "incomplete"
+            if issue_inventory_incomplete
+            else "complete"
+        ),
         "reason": effective_reason,
         "classified_issues": len(classifications),
         "total_issues": len(ordered_issues),
@@ -3364,6 +3607,7 @@ def build_audit_plan(
             "preserve_state_qualifiers": True,
         },
         "inventory": inventory.get("inventory", {}),
+        "issue_inventory_status": issue_inventory_status,
         "classification_status": classification_status,
         "inventory_coverage": (
             dict(inventory_meta.get("closure_coverage"))
@@ -3612,9 +3856,14 @@ def apply_mutations(
             "skipped_stale_mutations": 0,
         }
 
-    def refuse(reason: str, *, failed: int = 1) -> dict[str, Any]:
+    def refuse(
+        reason: str,
+        *,
+        failed: int = 1,
+        error_code: str | None = None,
+    ) -> dict[str, Any]:
         """Return a stable structured refusal without attempting a write."""
-        return {
+        refusal = {
             "schema": "issue_audit_apply.v1",
             "ok": False,
             "reason": reason,
@@ -3632,6 +3881,9 @@ def apply_mutations(
             "readback": [],
             "counts": empty_counts(failed),
         }
+        if error_code:
+            refusal["error_code"] = error_code
+        return refusal
 
     if plan.get("schema") != PLAN_SCHEMA:
         return refuse(f"expected {PLAN_SCHEMA}")
@@ -3644,6 +3896,51 @@ def apply_mutations(
     raw_truncation_errors = plan.get("truncation_or_errors", [])
     if not isinstance(raw_truncation_errors, list):
         return refuse("plan truncation_or_errors must be a list")
+
+    plan_issue_rows = plan.get("issues")
+    canonical_row_count = len(plan_issue_rows) if isinstance(plan_issue_rows, list) else 0
+    issue_inventory_status = _issue_inventory_source_assessment(
+        {
+            "repo": plan.get("repo"),
+            "inventory": plan.get("inventory"),
+        },
+        canonical_row_count=canonical_row_count,
+    )
+    plan_inventory = plan.get("inventory")
+    plan_issue_metadata = (
+        plan_inventory.get("issues") if isinstance(plan_inventory, Mapping) else None
+    )
+    recorded_issue_inventory_status = plan.get("issue_inventory_status")
+    recorded_status_inadmissible = isinstance(recorded_issue_inventory_status, Mapping) and (
+        recorded_issue_inventory_status.get("admissible") is False
+        or recorded_issue_inventory_status.get("status")
+        in {ISSUE_SOURCE_STATUS_UNAVAILABLE, ISSUE_SOURCE_STATUS_ANOMALOUS}
+    )
+    if recorded_status_inadmissible:
+        refusal = refuse(
+            str(
+                recorded_issue_inventory_status.get("reason")
+                or "canonical open-issue source is not admissible"
+            ),
+            error_code=str(
+                recorded_issue_inventory_status.get("error_code")
+                or issue_inventory_status.get("error_code")
+                or "issue_inventory_source_unavailable"
+            ),
+        )
+        refusal["issue_inventory_status"] = dict(recorded_issue_inventory_status)
+        return refusal
+    if not issue_inventory_status["admissible"] and (
+        isinstance(plan_issue_metadata, Mapping)
+        or isinstance(recorded_issue_inventory_status, Mapping)
+        or planned_count == 0
+    ):
+        refusal = refuse(
+            str(issue_inventory_status["reason"]),
+            error_code=str(issue_inventory_status["error_code"]),
+        )
+        refusal["issue_inventory_status"] = issue_inventory_status
+        return refusal
 
     recorded_digest = str(plan.get("plan_digest") or "")
     if not recorded_digest:
@@ -4072,6 +4369,34 @@ def build_decision_envelope(
     if expected_plan_digest and expected_plan_digest != current_digest:
         raise ValueError("plan digest is stale; refresh the inventory before presenting a decision")
 
+    plan_issue_rows = plan.get("issues")
+    canonical_row_count = len(plan_issue_rows) if isinstance(plan_issue_rows, list) else 0
+    issue_inventory_status = _issue_inventory_source_assessment(
+        {
+            "repo": plan.get("repo"),
+            "inventory": plan.get("inventory"),
+        },
+        canonical_row_count=canonical_row_count,
+    )
+    recorded_issue_inventory_status = plan.get("issue_inventory_status")
+    recorded_status_inadmissible = isinstance(recorded_issue_inventory_status, Mapping) and (
+        recorded_issue_inventory_status.get("admissible") is False
+        or recorded_issue_inventory_status.get("status")
+        in {ISSUE_SOURCE_STATUS_UNAVAILABLE, ISSUE_SOURCE_STATUS_ANOMALOUS}
+    )
+    if canonical_row_count == 0 and (
+        not issue_inventory_status["admissible"] or recorded_status_inadmissible
+    ):
+        reason = str(
+            (
+                recorded_issue_inventory_status.get("reason")
+                if recorded_status_inadmissible
+                else issue_inventory_status.get("reason")
+            )
+            or "canonical open-issue source is not admissible"
+        )
+        raise ValueError(f"issue inventory is not admissible: {reason}")
+
     selected = select_next_pending_decision(
         plan,
         issue_scope=issue_scope,
@@ -4392,6 +4717,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             sys.stderr.write(
                 f"issue-audit: {headline} ({reason}). "
                 f"Reset at {retry_after}{in_seconds_str}. Next action: {cmd}\n"
+            )
+        issue_inventory_status = plan.get("issue_inventory_status")
+        if isinstance(issue_inventory_status, Mapping) and not issue_inventory_status.get(
+            "admissible", True
+        ):
+            status = str(issue_inventory_status.get("status") or "unavailable")
+            reason = str(issue_inventory_status.get("reason") or "source contract failed")
+            next_action = str(
+                issue_inventory_status.get("next_action") or "rerun the bounded issue-audit plan"
+            )
+            sys.stderr.write(
+                "issue-audit: canonical open-issue inventory "
+                f"{status}; no empty queue admitted ({reason}). "
+                f"Next action: {next_action}\n"
             )
         return 2 if plan["truncation_or_errors"] else 0
     if args.command == "envelope":

@@ -54,3 +54,5 @@ def test_docs_readme_avoids_stale_completion_and_counts() -> None:
     # Should contain durable phrasing
     assert "CLI subcommands with examples" in content
     assert "CLI subcommands covering full experiment workflows" in content
+    assert "Keep this page navigation-oriented" in content
+    assert "add live counts, dates" in content

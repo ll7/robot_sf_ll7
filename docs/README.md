@@ -12,6 +12,10 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 [`configs/benchmarks/route_clearance_certifications_v1.yaml`](../configs/benchmarks/route_clearance_certifications_v1.yaml);
 see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_clearance_certification.md).
 
+**Maintenance note**: Keep this page navigation-oriented. Do not add live counts, dates,
+percentages, completion/status labels, or command totals manually. If a factual snapshot is needed,
+cite an immutable source and add a deterministic documentation check that can detect drift.
+
 ## Documentation layers (start here by audience)
 
 Robot SF docs are organized into audience-oriented layers. Pick the one that matches your goal; each

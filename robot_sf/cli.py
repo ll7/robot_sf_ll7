@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf import cli_datasets, cli_envs, cli_models, release_cli
+from robot_sf import cli_datasets, cli_envs, cli_models, cli_scenarios, release_cli
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
 from robot_sf.examples_cli import examples_cli_main
 from robot_sf.recipes import cli as recipes_cli
@@ -76,6 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_models_subparser(subparsers)
     _add_datasets_subparser(subparsers)
     _add_envs_subparser(subparsers)
+    _add_scenarios_subparser(subparsers)
     # The ``examples`` subcommand owns its own sub-subcommand parser
     # (``list``/``run``); it is registered here only so the top-level parser
     # recognises the token. Remaining args are forwarded by the handler.
@@ -322,6 +323,11 @@ def _add_envs_subparser(sub: argparse._SubParsersAction) -> None:
         default="friendly",
         help="Output format (default: friendly).",
     )
+
+
+def _add_scenarios_subparser(sub: argparse._SubParsersAction) -> None:
+    """Register the ``robot-sf scenarios`` subcommand tree (issue #8748)."""
+    cli_scenarios._add_scenarios_subparser(sub)
 
 
 def _handle_models(args: argparse.Namespace) -> int:
@@ -603,11 +609,21 @@ def _handle_envs(args: argparse.Namespace) -> int:
     return 2
 
 
+def _handle_scenarios(args: argparse.Namespace) -> int:
+    """Dispatch the ``robot-sf scenarios`` subcommand (issue #8748).
+
+    Returns:
+        int: Process-style exit code (0 success, 2 on error/invalid).
+    """
+    return cli_scenarios._handle_scenarios(args)
+
+
 _HANDLERS = {
     "doctor": _handle_doctor,
     "models": _handle_models,
     "datasets": _handle_datasets,
     "envs": _handle_envs,
+    "scenarios": _handle_scenarios,
     "gallery": _handle_gallery,
     "recipe": recipes_cli.handle,
     "release": release_cli.handle,

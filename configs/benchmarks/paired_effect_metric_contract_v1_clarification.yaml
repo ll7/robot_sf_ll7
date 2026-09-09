@@ -1,0 +1,129 @@
+# Versioned clarification companion for the frozen #6970/#4598 retained-row contract.
+#
+# This file does not replace or edit paired_effect_metric_contract_v1.yaml.  It specifies the
+# native observations required before the three deferred fields may be added to metric_values.
+schema_version: paired_effect_metric_clarification.v1
+issue: 8567
+parent_issue: 6970
+parent_contract_schema_version: paired_effect_metric_contract.v1
+
+claim_boundary: >
+  Native producer clarification and fail-closed instrumentation only.  A field marked available
+  is trace-derived for one retained episode or validated pair; it is not benchmark evidence,
+  mitigation-effectiveness evidence, a paper claim, or authorization for a campaign.
+
+pairing:
+  key_fields: [planner, scenario_id, seed]
+  arm_field: algorithm_metadata.safety_wrapper.arm_key
+  arm_keys: [wrapper_off, wrapper_on]
+  config_identity: algorithm_metadata.paired_effect_native_trace.pair_config_hash
+  source_identity: algorithm_metadata.paired_effect_native_trace.source_commit
+
+native_trace:
+  schema_version: paired_effect_native_trace.v1
+  wrapper_trace_path: algorithm_metadata.safety_wrapper.step_trace
+  simulation_trace_path: algorithm_metadata.simulation_step_trace
+  time_basis: post-step time_s=(step+1)*dt; wrapper and counterfactual windows use integer steps
+  required_state:
+    - wrapper arm and eligible step state
+    - intervention label and declared final forward-progress command state
+    - post-step canonical collision and near-miss flags
+    - declared termination, horizon, start-to-goal denominator, and final robot position
+
+unavailable_status: unavailable
+invalid_status: invalid
+no_campaign_compute: true
+counterfactual_window_s: 2.0
+
+fields:
+  - name: false_positive_stop_rate
+    source: wrapper-on hard-stop/yield events paired to the same planner/scenario/seed wrapper-off trace
+    time_alignment: Match integer step indices and require the wrapper-off trace to cover the complete window.
+    window_or_denominator: Complete 2.0 second window from event onset, including the onset and endpoint steps; denominator is wrapper-on stop/yield event count.
+    aggregation: false-positive event count divided by wrapper-on stop/yield event count.
+    no_opportunity: No wrapper-on hard-stop/yield event is available; wrapper-on proxy diagnostics are never substituted.
+    unavailable_reasons:
+      - unpaired_counterfactual
+      - missing_safety_wrapper_trace
+      - empty_safety_wrapper_trace
+      - missing_eligible_wrapper_state
+      - missing_intervention_state
+      - missing_intervention_flag
+      - counterfactual_window_truncated
+      - counterfactual_window_missing_step
+      - missing_post_step_outcome
+      - missing_forward_progress_command
+    invalid_reasons:
+      - pair_identity_mismatch
+      - pair_config_mismatch
+      - pair_source_mismatch
+      - pair_time_step_mismatch
+      - trace_step_arm_mismatch
+      - trace_time_step_mismatch
+      - invalid_wrapper_arm
+      - invalid_intervention_state
+      - intervention_state_mismatch
+      - wrapper_off_intervention_present
+      - invalid_counterfactual_window
+      - nonfinite_forward_progress_command
+      - invalid_post_step_outcome_flags
+
+  - name: stop_yield_latency_s
+    source: wrapper-on native trace intervention onset to the next later declared valid forward-progress command
+    time_alignment: Use contiguous integer wrapper-trace steps and the declared native dt; consecutive stop/yield steps are one event.
+    window_or_denominator: No fixed lookahead window; each event must have a later recovery command before the retained trace ends.
+    aggregation: Mean elapsed seconds over wrapper-on hard-stop/yield events.
+    no_opportunity: No wrapper-on hard-stop/yield event is unavailable; a missing intervention or recovery is never zero.
+    unavailable_reasons:
+      - wrapper_on_arm_required
+      - no_stop_yield_opportunity
+      - missing_safety_wrapper_trace
+      - missing_trace_step
+      - missing_eligible_wrapper_state
+      - missing_intervention_state
+      - missing_intervention_flag
+      - intervention_recovery_missing
+      - missing_forward_progress_command
+    invalid_reasons:
+      - invalid_wrapper_arm
+      - duplicate_trace_step
+      - trace_time_mismatch
+      - trace_step_arm_mismatch
+      - trace_time_step_mismatch
+      - invalid_intervention_state
+      - intervention_state_mismatch
+      - nonfinite_forward_progress_command
+      - invalid_forward_progress_command
+
+  - name: progress_at_timeout
+    source: native simulation trace at declared timeout, using the declared initial start-to-goal distance
+    time_alignment: Use the final post-step simulation frame at the declared horizon and its finite robot position.
+    window_or_denominator: Only declared timeout termination; denominator is the finite positive start-to-goal distance, not path length or time-to-goal.
+    aggregation: (start-to-goal distance - final distance to goal) divided by start-to-goal distance, retained only in [0,1].
+    no_opportunity: Non-timeout termination is unavailable; it is not a zero-progress observation.
+    unavailable_reasons:
+      - non_timeout_termination
+      - missing_simulation_step_trace
+      - timeout_trace_truncated
+      - missing_declared_goal_position
+      - missing_timeout_robot_position
+      - missing_declared_timeout
+      - missing_declared_termination_reason
+      - missing_declared_horizon
+      - missing_simulation_trace_time_step
+    invalid_reasons:
+      - invalid_declared_timeout
+      - invalid_timeout_outcome_flag
+      - timeout_state_mismatch
+      - termination_reason_mismatch
+      - invalid_timeout_termination_reason
+      - invalid_declared_horizon
+      - invalid_simulation_trace_schema
+      - nonfinite_simulation_trace_time_step
+      - invalid_simulation_trace_time_step
+      - simulation_trace_time_step_mismatch
+      - invalid_start_to_goal_denominator
+      - nonfinite_start_to_goal_denominator
+      - nonfinite_declared_goal_position
+      - nonfinite_timeout_robot_position
+      - timeout_progress_out_of_bounds

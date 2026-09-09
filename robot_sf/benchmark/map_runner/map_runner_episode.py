@@ -25,6 +25,7 @@ from robot_sf.benchmark.analysis_trace import (
     build_analysis_trace,
     telemetry_from_scenario,
 )
+from robot_sf.benchmark.constants import NEAR_MISS_DIST
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
@@ -126,6 +127,7 @@ from robot_sf.benchmark.observation_noise import (
     observation_noise_hash,
 )
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
+from robot_sf.benchmark.paired_effect_metric_contract import evaluate_paired_effect_metric_fields
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
 from robot_sf.benchmark.ped_model_sensitivity import (
     attach_pedestrian_model_fields,
@@ -209,6 +211,7 @@ from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
 PolicyBuilder = Callable[..., tuple[Any, AlgoMeta | dict[str, Any]]]
 PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
 _OBSTACLE_FORCE_LAW_RUNTIME_RECORD_SCHEMA = "obstacle_force_law_runtime_record.v1"
+_PAIRED_EFFECT_NATIVE_TRACE_SCHEMA = "paired_effect_native_trace.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1035,6 +1038,54 @@ def _topology_guided_episode_diagnostics(
     }
 
 
+def _annotate_native_safety_wrapper_command(
+    wrapper_record: dict[str, Any],
+    command: Any,
+    *,
+    step_idx: int,
+    time_per_step_s: float,
+) -> None:
+    """Add map-runner-owned time and final-command state to one wrapper step."""
+
+    wrapper_record["time_s"] = float((step_idx + 1) * time_per_step_s)
+    source = "map_runner_native_final_command"
+    if not bool(wrapper_record.get("eligible_for_wrapper", False)):
+        wrapper_record["forward_progress_command"] = {
+            "status": "unavailable",
+            "reason": str(wrapper_record.get("ineligible_reason") or "ineligible_step"),
+            "linear_velocity_m_s": None,
+            "source": source,
+        }
+        return
+    try:
+        linear_velocity = command[0]
+        if isinstance(linear_velocity, bool):
+            raise TypeError
+        numeric = float(linear_velocity)
+    except (IndexError, TypeError, ValueError):
+        wrapper_record["forward_progress_command"] = {
+            "status": "unavailable",
+            "reason": "non_numeric_forward_progress_command",
+            "linear_velocity_m_s": None,
+            "source": source,
+        }
+        return
+    if not math.isfinite(numeric):
+        wrapper_record["forward_progress_command"] = {
+            "status": "unavailable",
+            "reason": "nonfinite_forward_progress_command",
+            "linear_velocity_m_s": None,
+            "source": source,
+        }
+        return
+    wrapper_record["forward_progress_command"] = {
+        "status": "valid" if numeric > 0.0 else "not_forward_progress",
+        "reason": None,
+        "linear_velocity_m_s": numeric,
+        "source": source,
+    }
+
+
 def _apply_safety_wrapper_step(
     command: Any,
     *,
@@ -1058,7 +1109,7 @@ def _apply_safety_wrapper_step(
         command on an ineligible path; ``record`` is appended to the wrapper trace.
     """
     if step_is_native:
-        if runtime.fail_on_native_action:
+        if runtime.enabled and runtime.fail_on_native_action:
             raise ValueError(
                 "safety_wrapper.enabled requires absolute commands; "
                 "native environment actions cannot be wrapped safely"
@@ -1069,7 +1120,7 @@ def _apply_safety_wrapper_step(
             reason="native_environment_action",
         )
     if not isinstance(command, (tuple, list, np.ndarray)) or len(command) < 2:
-        if runtime.fail_on_unsupported_command:
+        if runtime.enabled and runtime.fail_on_unsupported_command:
             raise TypeError(
                 "safety_wrapper.enabled expects commands shaped like "
                 "(linear_velocity, angular_velocity)"
@@ -1717,6 +1768,7 @@ class _EpisodeStepLoopResult:
 
     map_def: Any
     goal_vec: np.ndarray
+    initial_goal_vec: np.ndarray
     initial_robot_pos: np.ndarray
     initial_robot_heading: float
     initial_ped_positions: np.ndarray
@@ -1795,6 +1847,7 @@ class _StepLoopState:
     simulation_step_trace: list[dict[str, Any]] = field(default_factory=list)
     map_def: Any = None
     goal_vec: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
+    initial_goal_vec: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
     initial_robot_pos: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
     initial_robot_heading: float = 0.0
     initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
@@ -2047,6 +2100,7 @@ def _init_step_loop_state(
     state.previous_collision_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
     state.map_def = map_def
     state.goal_vec = goal_vec
+    state.initial_goal_vec = np.array(goal_vec, dtype=float, copy=True)
     state.initial_robot_pos = initial_robot_pos
     state.initial_ped_positions = initial_ped_positions
     state.initial_robot_velocity = initial_robot_velocity
@@ -2367,7 +2421,8 @@ def _step_safety_filters(
     Returns:
         The (possibly corrected) policy command.
     """
-    if slc.safety_wrapper_runtime.enabled:
+    wrapper_record: dict[str, Any] | None = None
+    if slc.safety_wrapper_runtime.enabled or slc.safety_wrapper_runtime.record_step_trace:
         policy_command, wrapper_record = _apply_safety_wrapper_step(
             policy_command,
             runtime=slc.safety_wrapper_runtime,
@@ -2390,6 +2445,13 @@ def _step_safety_filters(
             previous_ped_positions=state.previous_trace_ped_pos,
         )
         state.cbf_filter_trace.append(cbf_record)
+    if wrapper_record is not None:
+        _annotate_native_safety_wrapper_command(
+            wrapper_record,
+            policy_command,
+            step_idx=step_idx,
+            time_per_step_s=float(slc.config.sim_config.time_per_step_in_secs),
+        )
     return policy_command
 
 
@@ -2783,6 +2845,98 @@ def _step_planner_decision_dwa_keys(
             step_decision[dwa_key] = deepcopy(value)
 
 
+def _annotate_safety_wrapper_post_step_outcome(  # noqa: C901
+    state: _StepLoopState,
+    slc: _StepLoopConfig,
+    *,
+    step_idx: int,
+    sim: _StepSimResult,
+    step_collision: bool,
+) -> None:
+    """Attach canonical post-step collision and near-miss state to the wrapper trace."""
+
+    if not state.safety_wrapper_trace:
+        return
+    wrapper_record = state.safety_wrapper_trace[-1]
+    if wrapper_record.get("step") != step_idx:
+        return
+    try:
+        robot_position = np.asarray(sim.robot_pos, dtype=float).reshape(-1)
+        pedestrian_positions = np.asarray(sim.peds, dtype=float)
+    except (TypeError, ValueError):
+        wrapper_record["post_step_outcome"] = {
+            "status": "invalid",
+            "reason": "invalid_post_step_geometry",
+        }
+        return
+    if robot_position.size < 2 or pedestrian_positions.size == 0:
+        if robot_position.size < 2:
+            wrapper_record["post_step_outcome"] = {
+                "status": "invalid",
+                "reason": "invalid_robot_position",
+            }
+            return
+        wrapper_record["post_step_outcome"] = {
+            "status": "available",
+            "collision": bool(step_collision),
+            "near_miss": False,
+            "min_clearance_m": None,
+        }
+        return
+    if pedestrian_positions.ndim == 1:
+        if pedestrian_positions.size % 2:
+            wrapper_record["post_step_outcome"] = {
+                "status": "invalid",
+                "reason": "invalid_pedestrian_positions",
+            }
+            return
+        pedestrian_positions = pedestrian_positions.reshape(-1, 2)
+    elif pedestrian_positions.ndim == 2 and pedestrian_positions.shape[1] >= 2:
+        pedestrian_positions = pedestrian_positions[:, :2]
+    else:
+        wrapper_record["post_step_outcome"] = {
+            "status": "invalid",
+            "reason": "invalid_pedestrian_positions",
+        }
+        return
+    if not np.all(np.isfinite(robot_position[:2])) or not np.all(np.isfinite(pedestrian_positions)):
+        wrapper_record["post_step_outcome"] = {
+            "status": "invalid",
+            "reason": "nonfinite_post_step_geometry",
+        }
+        return
+    robot_radius = float(slc.collision_event_context.robot_radius)
+    pedestrian_radius = float(slc.collision_event_context.ped_radius)
+    if (
+        not math.isfinite(robot_radius)
+        or not math.isfinite(pedestrian_radius)
+        or robot_radius < 0.0
+        or pedestrian_radius < 0.0
+    ):
+        wrapper_record["post_step_outcome"] = {
+            "status": "invalid",
+            "reason": "invalid_actor_radii",
+        }
+        return
+    clearances = (
+        np.linalg.norm(
+            pedestrian_positions - robot_position[:2],
+            axis=1,
+        )
+        - robot_radius
+        - pedestrian_radius
+    )
+    min_clearance = float(np.min(clearances))
+    wrapper_record["post_step_outcome"] = {
+        "status": "available",
+        "collision": bool(step_collision),
+        "near_miss": bool(
+            not step_collision and min_clearance >= 0.0 and min_clearance < NEAR_MISS_DIST
+        ),
+        "min_clearance_m": min_clearance,
+    }
+
+
 def _step_collision_and_termination(
     state: _StepLoopState,
     slc: _StepLoopConfig,
@@ -2797,6 +2951,13 @@ def _step_collision_and_termination(
     """
     meta = sim.info.get("meta", {}) if isinstance(sim.info, dict) else {}
     step_collision = collision_event(sim.info)
+    _annotate_safety_wrapper_post_step_outcome(
+        state,
+        slc,
+        step_idx=step_idx,
+        sim=sim,
+        step_collision=step_collision,
+    )
     step_route_complete = route_complete_success(sim.info)
     step_success = step_route_complete and not step_collision
     step_timeout = bool(meta.get("is_timesteps_exceeded", False))
@@ -2885,6 +3046,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
     return _EpisodeStepLoopResult(
         map_def=state.map_def,
         goal_vec=state.goal_vec,
+        initial_goal_vec=state.initial_goal_vec,
         initial_robot_pos=state.initial_robot_pos,
         initial_robot_heading=state.initial_robot_heading,
         initial_ped_positions=state.initial_ped_positions,
@@ -3431,12 +3593,30 @@ def _finalize_safety_summaries(  # noqa: PLR0913
     )
     algo_meta["tracking_precision"] = tracking_precision_summary
     safety_wrapper_summary: dict[str, Any] | None = None
-    if safety_wrapper_runtime.enabled:
+    if safety_wrapper_runtime.enabled or safety_wrapper_runtime.record_step_trace:
         safety_wrapper_summary = summarize_safety_wrapper_trace(
             safety_wrapper_trace,
             runtime=safety_wrapper_runtime,
             time_per_step_s=float(config.sim_config.time_per_step_in_secs),
         )
+        if safety_wrapper_runtime.record_step_trace:
+            eligible_step_count = sum(
+                1
+                for record in safety_wrapper_trace
+                if bool(record.get("eligible_for_wrapper", True))
+            )
+            intervened_step_count = sum(
+                1
+                for record in safety_wrapper_trace
+                if bool(record.get("eligible_for_wrapper", True))
+                and bool(record.get("intervened", False))
+            )
+            safety_wrapper_summary["time_per_step_s"] = float(
+                config.sim_config.time_per_step_in_secs
+            )
+            safety_wrapper_summary["intervention_rate"] = (
+                float(intervened_step_count / eligible_step_count) if eligible_step_count else 0.0
+            )
         algo_meta["safety_wrapper"] = safety_wrapper_summary
     cbf_filter_summary: dict[str, Any] | None = None
     if cbf_runtime.enabled:
@@ -3526,6 +3706,8 @@ def _finalize_episode_metrics(  # noqa: PLR0913
     cbf_filter_summary: dict[str, Any] | None,
     snqi_weights: dict[str, float] | None,
     snqi_baseline: dict[str, dict[str, float]] | None,
+    native_record: Mapping[str, Any] | None = None,
+    paired_wrapper_off_record: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Post-process raw metrics and attach actuation/tracking/wrapper fields.
 
@@ -3563,10 +3745,18 @@ def _finalize_episode_metrics(  # noqa: PLR0913
         metrics["cbf_filter_intervention_rate"] = float(cbf_filter_summary["intervention_rate"])
         metrics["cbf_filter_qp_infeasible_rate"] = float(cbf_filter_summary["qp_infeasible_rate"])
         metrics["cbf_filter_fallback_rate"] = float(cbf_filter_summary["fallback_rate"])
-    metrics["metric_values"] = _paired_effect_metric_values(
+    metric_values = _paired_effect_metric_values(
         metrics_raw=metrics_raw,
         metrics=metrics,
     )
+    if native_record is not None:
+        producer_result = evaluate_paired_effect_metric_fields(
+            native_record,
+            paired_wrapper_off_record=paired_wrapper_off_record,
+        )
+        algo_meta["paired_effect_metric_producer"] = producer_result
+        metric_values.update(producer_result.get("metric_values", {}))
+    metrics["metric_values"] = metric_values
     return metrics
 
 
@@ -3577,12 +3767,11 @@ def _paired_effect_metric_values(
 ) -> dict[str, float | None]:
     """Emit the #6970 paired-effect retained-row ``metric_values`` mapping.
 
-    Derives the five fields whose source predicates exist on the map_runner
-    path today. A field whose source is unavailable is omitted from the mapping
-    (never a fabricated zero) so the existing #6970 gate fails closed. The
-    remaining three contract fields (``false_positive_stop_rate``,
-    ``stop_yield_latency_s``, ``progress_at_timeout``) await the versioned
-    counterfactual-window contract clarification and are not emitted here.
+    Derives the five fields whose source predicates exist on the map_runner path
+    today. A field whose source is unavailable is omitted from the mapping (never
+    a fabricated zero) so the existing #6970 gate fails closed. The three
+    clarification fields are added by :func:`_finalize_episode_metrics` only
+    after the native record context is available.
 
     Returns:
         The retained-row ``metric_values`` mapping with only the fields whose
@@ -3650,6 +3839,12 @@ def _build_episode_record_dict(  # noqa: PLR0913
         "planner_commit": analysis_trace.get("planner_commit"),
         "telemetry_profile": algo_meta.get("telemetry"),
     }
+    # The paired-effect report builder consumes the retained-row mapping at the
+    # episode-record root. Keep the historical nested metrics envelope intact,
+    # but expose the producer-owned mapping at its declared contract path too.
+    retained_metric_values = metrics.get("metric_values")
+    if not isinstance(retained_metric_values, Mapping):
+        retained_metric_values = {}
     return {
         "version": "v1",
         "episode_id": _compute_map_episode_id(scenario_params, seed),
@@ -3657,6 +3852,7 @@ def _build_episode_record_dict(  # noqa: PLR0913
         "seed": seed,
         "scenario_params": scenario_params,
         "metrics": metrics,
+        "metric_values": dict(retained_metric_values),
         "safety_predicates": safety_predicates,
         "public_requirement": public_requirement_events,
         "algorithm_metadata": algo_meta,
@@ -3762,6 +3958,11 @@ def _finalize_metadata_outputs(
         robot_vel_arr=post_loop.robot_vel_arr,
         ped_pos_arr=post_loop.ped_pos_arr,
     )
+    _attach_paired_effect_native_trace_metadata(
+        algo_meta,
+        ctx=ctx,
+        loop_result=loop_result,
+    )
     return (
         algo_meta,
         tp_summary,
@@ -3770,6 +3971,45 @@ def _finalize_metadata_outputs(
         actuation_summary,
         public_requirement_events,
     )
+
+
+def _attach_paired_effect_native_trace_metadata(
+    algo_meta: AlgoMeta,
+    *,
+    ctx: _EpisodeRunContext,
+    loop_result: _EpisodeStepLoopResult,
+) -> None:
+    """Record the native trace identity needed by the #8567 producer evaluator."""
+
+    if not loop_result.safety_wrapper_trace and not loop_result.simulation_step_trace:
+        return
+    outcome, _ = _episode_outcome(loop_result)
+    # Route navigation can advance ``goal_vec`` to a later waypoint during the
+    # rollout. The timeout denominator is measured from the reset-time goal, so
+    # the native trace must carry that same goal rather than the final waypoint.
+    goal = np.asarray(loop_result.initial_goal_vec, dtype=float).reshape(-1)
+    goal_position = (
+        [float(goal[0]), float(goal[1])]
+        if goal.size >= 2 and np.all(np.isfinite(goal[:2]))
+        else None
+    )
+    initial_distance = float(loop_result.initial_goal_distance)
+    if not math.isfinite(initial_distance):
+        initial_distance = None
+    algo_meta["paired_effect_native_trace"] = {
+        "schema_version": _PAIRED_EFFECT_NATIVE_TRACE_SCHEMA,
+        "arm_key": str(ctx.safety_wrapper_runtime.arm_key),
+        "dt_s": float(ctx.config.sim_config.time_per_step_in_secs),
+        "horizon_steps": int(ctx.horizon_val),
+        "initial_goal_distance_m": initial_distance,
+        "goal_position": goal_position,
+        "declared_timeout": bool(outcome["timeout_event"]),
+        "termination_reason": str(loop_result.termination_reason),
+        "source_commit": _git_hash_fallback(),
+        "wrapper_trace_path": "algorithm_metadata.safety_wrapper.step_trace",
+        "simulation_trace_path": "algorithm_metadata.simulation_step_trace.steps",
+        "time_basis": "post_step_time_s=(step+1)*dt_s",
+    }
 
 
 def _finalize_metadata_phase(
@@ -4213,6 +4453,7 @@ def _finalize_record_inner(  # noqa: PLR0913
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
+    paired_wrapper_off_record: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     """Run metadata, metrics, scenario-params, and record-assembly phases.
 
@@ -4265,6 +4506,7 @@ def _finalize_record_inner(  # noqa: PLR0913
         record_forces=record_forces,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
+        paired_wrapper_off_record=paired_wrapper_off_record,
     )
 
 
@@ -4292,24 +4534,13 @@ def _finalize_metrics_and_assemble_record(  # noqa: PLR0913
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
+    paired_wrapper_off_record: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     """Build metrics, scenario parameters, and the final episode record.
 
     Returns:
         dict[str, Any]: The finalized episode record.
     """
-    metrics = _finalize_episode_metrics(
-        post_loop.metrics_raw,
-        algo_meta=algo_meta,
-        actuation_controller=actuation_controller,
-        actuation_summary=actuation_summary,
-        tracking_precision_summary=tracking_precision_summary,
-        tracking_precision_spec=ctx.tracking_precision_spec,
-        safety_wrapper_summary=safety_wrapper_summary,
-        cbf_filter_summary=cbf_filter_summary,
-        snqi_weights=snqi_weights,
-        snqi_baseline=snqi_baseline,
-    )
     scenario_params = _build_scenario_params(
         ctx,
         horizon=horizon,
@@ -4321,6 +4552,41 @@ def _finalize_metrics_and_assemble_record(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
+    )
+    native_meta = algo_meta.get("paired_effect_native_trace")
+    if isinstance(native_meta, Mapping):
+        arm_independent_params = dict(scenario_params)
+        arm_independent_params.pop("safety_wrapper", None)
+        native_meta["pair_config_hash"] = _config_hash(arm_independent_params)
+    outcome, _ = _episode_outcome(loop_result)
+    native_record: Mapping[str, Any] | None = None
+    if isinstance(native_meta, Mapping):
+        native_record = {
+            "algo": ctx.algo,
+            "scenario_id": ctx.scenario_id,
+            "seed": int(seed),
+            "scenario_params": scenario_params,
+            "algorithm_metadata": algo_meta,
+            "config_hash": _config_hash(scenario_params),
+            "git_hash": _git_hash_fallback(),
+            "provenance": {"git_hash": _git_hash_fallback()},
+            "horizon": int(ctx.horizon_val),
+            "termination_reason": loop_result.termination_reason,
+            "outcome": outcome,
+        }
+    metrics = _finalize_episode_metrics(
+        post_loop.metrics_raw,
+        algo_meta=algo_meta,
+        actuation_controller=actuation_controller,
+        actuation_summary=actuation_summary,
+        tracking_precision_summary=tracking_precision_summary,
+        tracking_precision_spec=ctx.tracking_precision_spec,
+        safety_wrapper_summary=safety_wrapper_summary,
+        cbf_filter_summary=cbf_filter_summary,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+        native_record=native_record,
+        paired_wrapper_off_record=paired_wrapper_off_record,
     )
     return _assemble_episode_record(
         ctx=ctx,
@@ -4358,6 +4624,7 @@ def _finalize_episode_record(  # noqa: PLR0913
     record_forces: bool,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
+    paired_wrapper_off_record: Mapping[str, Any] | None = None,
 ) -> EpisodeRecordDict:
     """Assemble the benchmark JSONL record from the step-loop and post-loop results.
 
@@ -4391,6 +4658,7 @@ def _finalize_episode_record(  # noqa: PLR0913
             record_forces=record_forces,
             record_planner_decision_trace=record_planner_decision_trace,
             record_simulation_step_trace=record_simulation_step_trace,
+            paired_wrapper_off_record=paired_wrapper_off_record,
         ),
     )
 
@@ -4421,6 +4689,7 @@ def run_map_episode(  # noqa: PLR0913
     synthetic_actuation_profile: dict[str, Any] | None = None,
     latency_stress_profile: dict[str, Any] | None = None,
     safety_wrapper: dict[str, Any] | None = None,
+    paired_wrapper_off_record: Mapping[str, Any] | None = None,
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
@@ -4594,6 +4863,7 @@ def run_map_episode(  # noqa: PLR0913
         record_forces=record_forces,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
+        paired_wrapper_off_record=paired_wrapper_off_record,
     )
 
 

@@ -18,6 +18,20 @@ This metadata is a compatibility guard only. It makes mismatched observation/act
 fail before benchmark execution, but it is not performance evidence and must not be cited as proof
 that a planner is baseline-ready, paper-facing, or high quality.
 
+## Planner Discovery
+
+To inspect available planners, baselines, required extras/artifacts, and readiness tiers without starting an expensive simulation run or importing heavy dependencies:
+
+```bash
+# List all registered planners, aliases, tiers, and families
+uv run robot-sf planners list
+uv run robot-sf planners list --format json
+
+# Describe a specific planner by canonical name or alias
+uv run robot-sf planners describe orca
+uv run robot-sf planners describe sf --format json
+```
+
 ## Policy-Search Candidate Configs
 
 Policy-search candidate planner configs live under

@@ -96,6 +96,28 @@ def _finite_float(value: Any, name: str) -> float:
     return result
 
 
+def _payload_int(value: Any, name: str) -> int:
+    """Validate one JSON integer without truncating or accepting booleans.
+
+    Returns:
+        The validated integer.
+    """
+    if type(value) is not int:
+        raise SnapshotPayloadError(f"{name} must be an integer")
+    return value
+
+
+def _payload_float(value: Any, name: str) -> float:
+    """Validate one JSON numeric scalar without accepting string coercions.
+
+    Returns:
+        The validated finite float.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise SnapshotPayloadError(f"{name} must be a finite number")
+    return _finite_float(value, name)
+
+
 @dataclass(frozen=True, slots=True)
 class SnapshotCompatibility:
     """Immutable inputs that must match before a snapshot can be restored."""
@@ -259,14 +281,18 @@ class SnapshotBoundary:
             raise SnapshotPayloadError("boundary.next_observation_ready must be a boolean")
         try:
             return cls(
-                step_index=int(payload["step_index"]),
-                absolute_time_s=float(payload["absolute_time_s"]),
+                step_index=_payload_int(payload["step_index"], "boundary.step_index"),
+                absolute_time_s=_payload_float(
+                    payload["absolute_time_s"], "boundary.absolute_time_s"
+                ),
                 remaining_budget_steps=(
                     None
                     if payload.get("remaining_budget_steps") is None
-                    else int(payload["remaining_budget_steps"])
+                    else _payload_int(
+                        payload["remaining_budget_steps"], "boundary.remaining_budget_steps"
+                    )
                 ),
-                phase=str(payload.get("phase", "")),
+                phase=payload.get("phase", ""),
                 next_observation_ready=raw_ready,
             )
         except (KeyError, TypeError, ValueError, SnapshotContractError) as exc:
@@ -440,11 +466,13 @@ def _coerce_like(value: Any, template: Any) -> Any:
         item_template = template[0] if template else None
         return [_coerce_like(item, item_template) for item in value]
     if isinstance(template, bool):
-        return bool(value)
+        if not isinstance(value, bool):
+            raise SnapshotPayloadError("typed boolean field must be a boolean")
+        return value
     if isinstance(template, int) and not isinstance(template, bool):
-        return int(value)
+        return _payload_int(value, "typed integer field")
     if isinstance(template, float):
-        return float(value)
+        return _payload_float(value, "typed float field")
     return deepcopy(value)
 
 
@@ -475,11 +503,34 @@ def _deserialize_navigator(current: Any, payload: Mapping[str, Any]) -> Any:
     if set(payload) != required:
         raise SnapshotPayloadError("robot navigator field set is incomplete or unknown")
     restored = deepcopy(current)
-    restored.waypoints = [tuple(float(item) for item in point) for point in payload["waypoints"]]
-    restored.waypoint_id = int(payload["waypoint_id"])
-    restored.proximity_threshold = float(payload["proximity_threshold"])
-    restored.pos = tuple(float(item) for item in payload["pos"])
-    restored.reached_waypoint = bool(payload["reached_waypoint"])
+    raw_waypoints = payload["waypoints"]
+    if not isinstance(raw_waypoints, list):
+        raise SnapshotPayloadError("robot navigator waypoints must be a list")
+    waypoints: list[tuple[float, float]] = []
+    for index, point in enumerate(raw_waypoints):
+        if not isinstance(point, list) or len(point) != 2:
+            raise SnapshotPayloadError(f"robot navigator waypoint {index} must be a pair")
+        waypoints.append(
+            (
+                _payload_float(point[0], f"robot navigator waypoints[{index}][0]"),
+                _payload_float(point[1], f"robot navigator waypoints[{index}][1]"),
+            )
+        )
+    restored.waypoints = waypoints
+    restored.waypoint_id = _payload_int(payload["waypoint_id"], "robot navigator waypoint_id")
+    restored.proximity_threshold = _payload_float(
+        payload["proximity_threshold"], "robot navigator proximity_threshold"
+    )
+    raw_pos = payload["pos"]
+    if not isinstance(raw_pos, list) or len(raw_pos) != 2:
+        raise SnapshotPayloadError("robot navigator pos must be a pair")
+    restored.pos = (
+        _payload_float(raw_pos[0], "robot navigator pos[0]"),
+        _payload_float(raw_pos[1], "robot navigator pos[1]"),
+    )
+    if not isinstance(payload["reached_waypoint"], bool):
+        raise SnapshotPayloadError("robot navigator reached_waypoint must be a boolean")
+    restored.reached_waypoint = payload["reached_waypoint"]
     if restored.waypoints and not 0 <= restored.waypoint_id < len(restored.waypoints):
         raise SnapshotCompatibilityError("robot navigator waypoint_id is outside its route")
     return restored

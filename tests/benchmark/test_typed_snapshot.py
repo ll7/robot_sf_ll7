@@ -7,6 +7,7 @@ import json
 import random
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -473,6 +474,55 @@ def test_typed_metadata_round_trip_encodes_nested_scalars_and_duplicate_array_na
     assert loaded.state["list"] == [1, {"nested": "value"}]
     assert np.array_equal(loaded.state["a.b"], np.asarray([1.0]))
     assert np.array_equal(loaded.state["a_b"], np.asarray([2.0]))
+
+
+def test_boundary_rejects_numeric_coercion() -> None:
+    """Malformed integer and float scalars cannot be truncated or string-coerced."""
+    with pytest.raises(SnapshotPayloadError, match="step_index must be an integer"):
+        SnapshotBoundary.from_dict(
+            {
+                "step_index": 1.5,
+                "absolute_time_s": 0.1,
+                "remaining_budget_steps": 2,
+                "phase": "pre_step",
+                "next_observation_ready": False,
+            }
+        )
+    with pytest.raises(SnapshotPayloadError, match="absolute_time_s must be a finite number"):
+        SnapshotBoundary.from_dict(
+            {
+                "step_index": 1,
+                "absolute_time_s": "0.1",
+                "remaining_budget_steps": 2,
+                "phase": "pre_step",
+                "next_observation_ready": False,
+            }
+        )
+
+
+def test_typed_restore_rejects_malformed_scalar_values() -> None:
+    """Typed dataclass and navigator fields fail closed instead of coercing strings."""
+    with pytest.raises(SnapshotPayloadError, match="typed boolean field"):
+        typed_snapshot_module._coerce_like("false", False)
+    with pytest.raises(SnapshotPayloadError, match="typed integer field"):
+        typed_snapshot_module._coerce_like(1.5, 1)
+
+    navigator = SimpleNamespace(
+        waypoints=[(0.0, 0.0)],
+        waypoint_id=0,
+        proximity_threshold=0.5,
+        pos=(0.0, 0.0),
+        reached_waypoint=False,
+    )
+    payload = {
+        "waypoints": [[0.0, 0.0]],
+        "waypoint_id": 0,
+        "proximity_threshold": 0.5,
+        "pos": [0.0, 0.0],
+        "reached_waypoint": "false",
+    }
+    with pytest.raises(SnapshotPayloadError, match="reached_waypoint must be a boolean"):
+        typed_snapshot_module._deserialize_navigator(navigator, payload)
 
 
 def test_nested_encoding_and_payload_validation_fail_closed() -> None:

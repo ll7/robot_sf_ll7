@@ -24,6 +24,8 @@ Stable: `doctor`, `models list|verify|download`, `datasets list|verify|prepare`,
 
 Beta (issue #5801): `envs list`, `envs describe <env-id>`.
 
+Experimental discovery (issue #8747): `planners list`, `planners describe <key>`.
+
 ### Python package — supported modules
 
 * `robot_sf.gym_env.environment_factory` — typed `make_*` factories:
@@ -70,3 +72,15 @@ uv run robot-sf envs describe <env-id>
 
 The catalog is the declarative source of truth for which environment ids are
 public; see `robot_sf.gym_env.env_registry` for the registry implementation.
+
+## Discover the planner catalog
+
+```bash
+uv run robot-sf planners list
+uv run robot-sf planners describe <key-or-alias>
+```
+
+Planner discovery reports declared metadata, prerequisites, and readiness boundaries without
+constructing a planner or probing local optional dependencies. An `unknown` availability value is
+not a claim that the planner is runnable; diagnostic, unavailable, and metadata-incomplete rows
+remain separate from benchmark-success evidence.

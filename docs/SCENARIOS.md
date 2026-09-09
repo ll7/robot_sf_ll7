@@ -12,8 +12,9 @@ pedestrian trajectories, actor spawn rules, kinematics constraints, and observat
 visibility settings for simulation episodes.
 
 The `robot-sf scenarios` command family provides fast, read-only discovery, inspection,
-and schema validation without importing heavy simulation frameworks (such as PyTorch,
-Stable-Baselines3, or CARLA) and without creating gym environments or executing episodes.
+and schema validation without importing optional simulation dependencies (such as
+matplotlib, SciPy, PyTorch, Stable-Baselines3, or CARLA), registering sensors, creating
+gym environments, or executing episodes.
 
 ## Commands
 
@@ -48,7 +49,8 @@ uv run robot-sf scenarios list --format json
         "map_id": null,
         "route_overrides_file": null,
         "resolved_map_path": "maps/svg_maps/classic_crossing.svg",
-        "map_exists": true
+        "map_exists": true,
+        "external_asset_dependent": false
       },
       "actor_counts": {
         "ped_density": 0.02,
@@ -75,7 +77,9 @@ uv run robot-sf scenarios list --format json
       "validation_status": {
         "status": "valid",
         "valid": true,
-        "reasons": []
+        "reasons": [],
+        "errors": [],
+        "warnings": []
       }
     }
   ],
@@ -129,7 +133,8 @@ The describe payload extends the scenario summary with `requested_query` and `ra
 
 ### 3. `robot-sf scenarios validate <path>`
 
-Validates a scenario YAML file or manifest against schema rules, map existence, and path security.
+Validates a scenario YAML file or manifest with the canonical scenario schema and
+metadata validators, map/route asset checks, and repository path security.
 
 ```bash
 # Validate in human-friendly terminal format
@@ -142,7 +147,7 @@ uv run robot-sf scenarios validate configs/scenarios/single/quickstart_demo.yaml
 #### Exit Codes
 
 - `0`: Validation passed cleanly (valid scenario, all referenced map assets exist on disk).
-- `2`: Validation failed (schema violation, missing map reference, malformed YAML, unsupported scenario, or path traversal outside the repository root).
+- `2`: Validation failed (schema or metadata violation, missing map reference, malformed YAML, unsupported scenario, external asset dependency, or path traversal outside the repository root).
 
 #### Output Schema (`scenario_validate.v1`)
 
@@ -172,10 +177,12 @@ payloads:
 | `invalid` | Schema validation error, malformed YAML, empty file, path traversal, or another validation failure. |
 | `duplicate` | The scenario identity appears with conflicting definitions in the canonical source class. |
 | `unsupported` | Scenario explicitly declares `supported: false`; validation remains invalid and exits nonzero. |
+| `external_asset_dependent` | A map, route override, or manifest include/search path resolves outside the repository; validation remains invalid and exits nonzero. |
 
 Describe lookup failures use a separate error envelope with `status: "error"`;
-that value is not a scenario status. No additional external-asset status is
-emitted by these commands.
+that value is not a scenario status. External manifest includes and search paths
+are rejected before loading; external map and route assets are reported with the
+`external_asset_dependent` status and `EXTERNAL_ASSET_DEPENDENT` reason code.
 
 ## Reason Codes
 
@@ -194,6 +201,17 @@ Error and diagnostic reports carry stable reason codes:
 - `MAP_NOT_FOUND`: Referenced registry `map_id` or map file does not resolve to an existing map on disk.
 - `ROUTE_OVERRIDES_NOT_FOUND`: Referenced route overrides file does not exist on disk.
 - `UNSUPPORTED_SCENARIO`: Scenario explicitly declared with `supported: false`.
+- `EXTERNAL_ASSET_DEPENDENT`: A declared map, route override, manifest include, or map search path leaves the repository boundary.
+
+The canonical item schema permits extension keys, but this CLI's curated
+scenario contract rejects unknown top-level row fields with
+`SCHEMA_VALIDATION_ERROR`; nested values are still checked by the canonical
+validator.
+
+Friendly output is a human-readable projection of the same status and diagnostic
+codes exposed by JSON. JSON remains the machine-readable contract; friendly output
+does not promise field ordering or whitespace parity, but it includes every
+row-level error code and message when validation fails.
 
 ## Curated Roots and Exclusion Registry
 
@@ -205,8 +223,11 @@ The scenario catalog scans the following directories in precedence order:
 
 Each YAML candidate is classified and expanded by the canonical scenario
 loader, including includes, selection, overrides, and map-registry rebasing.
-Auxiliary mappings without manifest keys are skipped; malformed manifests fail
-closed instead of being silently dropped.
+Auxiliary mappings without manifest keys are skipped; malformed manifests and
+mixed mapping/non-mapping rows fail closed instead of being silently dropped.
+Manifest references outside the repository are rejected before an external file
+is loaded. A map or route asset outside the repository is explicitly classified
+as `external_asset_dependent` in summaries and validation reports.
 
 Files explicitly excluded from the runnable scenario catalog:
 - `configs/scenarios/archetype_validation_waivers.yaml`: Waiver specification registry.

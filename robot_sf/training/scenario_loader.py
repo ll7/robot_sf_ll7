@@ -10,43 +10,22 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from loguru import logger
 
-from robot_sf.gym_env.unified_config import (
-    ObservationVisibilitySettings,
-    RobotSimulationConfig,
-)
-from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import (
-    MapDefinition,
-    MapDefinitionPool,
-    PedestrianWaitRule,
-    SinglePedestrianDefinition,
-    parse_social_group_definitions,
-    serialize_map,
-)
-from robot_sf.nav.nav_types import GEOMETRY_CONTRACT_LEGACY, SUPPORTED_GEOMETRY_CONTRACTS
-from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
-from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig
-from robot_sf.robot.bicycle_drive import BicycleDriveSettings
-from robot_sf.robot.differential_drive import DifferentialDriveSettings
-from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
-from robot_sf.sim.pedestrian_model_variants import (
-    HSFM_ALIGNMENT_TORQUE_V1,
-    HSFM_ANISOTROPIC_FOV_V1,
-    HSFM_TTC_PREDICTIVE_V1,
-    HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
-)
-from robot_sf.sim.sim_config import (
-    AlignmentTorqueConfig,
-    AnisotropicFovConfig,
-    TtcPredictiveForceConfig,
-    ZanlungoCollisionPredictionConfig,
-)
+if TYPE_CHECKING:
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    from robot_sf.nav.global_route import GlobalRoute
+    from robot_sf.nav.map_config import (
+        MapDefinition,
+        PedestrianWaitRule,
+        SinglePedestrianDefinition,
+    )
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+    from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 
 _MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
 _MAP_REGISTRY_PATH = Path("maps/registry.yaml")
@@ -883,8 +862,10 @@ def _normalize_scenarios(
     normalized: list[Mapping[str, Any]] = []
     for idx, scenario in enumerate(scenarios):
         if not isinstance(scenario, Mapping):
-            logger.warning("Scenario entry {} in '{}' is not a mapping; skipping.", idx, source)
-            continue
+            raise ValueError(
+                f"Scenario entry {idx} in '{source}' must be a mapping; "
+                f"got {type(scenario).__name__}."
+            )
         _validate_scenario_entry(scenario, source=source, index=idx)
         normalized.append(
             _rebase_scenario_paths(
@@ -1269,6 +1250,13 @@ def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> Ma
         MapDefinition | None: Parsed map definition for SVG maps, else ``None``.
     """
 
+    from robot_sf.nav.map_config import serialize_map  # noqa: PLC0415
+    from robot_sf.nav.nav_types import (  # noqa: PLC0415
+        GEOMETRY_CONTRACT_LEGACY,
+        SUPPORTED_GEOMETRY_CONTRACTS,
+    )
+    from robot_sf.nav.svg_map_parser import convert_map  # noqa: PLC0415
+
     if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
         raise ValueError(
             f"Unknown geometry_contract {geometry_contract!r} for map {map_path!r}. "
@@ -1313,6 +1301,8 @@ def build_robot_config_from_scenario(
     Returns:
         RobotSimulationConfig: Config populated with overrides and map pool.
     """
+
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: PLC0415
 
     _reject_required_platform_semantic_consumers(scenario)
 
@@ -1496,6 +1486,8 @@ def _apply_observation_visibility_overrides(
     tracking_config = overrides.get("tracking_config")
     if tracking_config is not None and not isinstance(tracking_config, Mapping):
         raise ValueError("observation_visibility.tracking_config must be a mapping.")
+    from robot_sf.gym_env.unified_config import ObservationVisibilitySettings  # noqa: PLC0415
+
     config.observation_visibility = ObservationVisibilitySettings(
         enabled=enabled,
         fov_degrees=fov_degrees,
@@ -1530,6 +1522,8 @@ def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDr
     Returns:
         DifferentialDriveSettings: Parsed settings object.
     """
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings  # noqa: PLC0415
+
     kwargs: dict[str, Any] = {}
     if "radius" in overrides:
         kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
@@ -1575,6 +1569,8 @@ def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSetting
     Returns:
         BicycleDriveSettings: Parsed settings object.
     """
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings  # noqa: PLC0415
+
     kwargs: dict[str, Any] = {}
     if "radius" in overrides:
         kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
@@ -1604,6 +1600,8 @@ def _holonomic_robot_settings(overrides: Mapping[str, Any]) -> HolonomicDriveSet
     Returns:
         HolonomicDriveSettings: Parsed settings object.
     """
+    from robot_sf.robot.holonomic_drive import HolonomicDriveSettings  # noqa: PLC0415
+
     kwargs: dict[str, Any] = {}
     if "radius" in overrides:
         kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
@@ -1741,6 +1739,11 @@ def _apply_social_group_overrides(
         return
     if config.map_pool is None:
         raise ValueError("social_groups overrides provided but config has no map pool")
+
+    from robot_sf.nav.map_config import (  # noqa: PLC0415
+        MapDefinitionPool,
+        parse_social_group_definitions,
+    )
 
     cloned_maps = dict(config.map_pool.map_defs)
     for map_id, map_def in cloned_maps.items():
@@ -1924,6 +1927,8 @@ def _parse_wait_overrides(
         raise ValueError("wait_at requires a trajectory to be set")
     if not isinstance(wait_entries, list):
         raise ValueError("wait_at must be a list of wait rules")
+
+    from robot_sf.nav.map_config import PedestrianWaitRule  # noqa: PLC0415
 
     rules: list[PedestrianWaitRule] = []
     for idx, entry in enumerate(wait_entries):
@@ -2238,6 +2243,8 @@ def _apply_single_pedestrian_override(
     )
     metadata = _resolve_metadata_override(ped, entry)
 
+    from robot_sf.nav.map_config import SinglePedestrianDefinition  # noqa: PLC0415
+
     return SinglePedestrianDefinition(
         id=ped.id,
         start=start,
@@ -2257,17 +2264,17 @@ def _apply_single_pedestrian_override(
     )
 
 
-# Opt-in pedestrian-model config attribute -> (config dataclass, activating model selector).
+# Opt-in pedestrian-model config attribute -> (config dataclass name, activating model selector).
 # Each entry drives both the nested-mapping override path and the ``pedestrian_model``
 # selector path below, so adding a new opt-in force model is a single-line change here.
-_OPT_IN_PEDESTRIAN_MODEL_CONFIGS: dict[str, tuple[type, str]] = {
-    "ttc_predictive_force": (TtcPredictiveForceConfig, HSFM_TTC_PREDICTIVE_V1),
+_OPT_IN_PEDESTRIAN_MODEL_CONFIGS: dict[str, tuple[str, str]] = {
+    "ttc_predictive_force": ("TtcPredictiveForceConfig", "hsfm_ttc_predictive_v1"),
     "zanlungo_collision_prediction": (
-        ZanlungoCollisionPredictionConfig,
-        HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
+        "ZanlungoCollisionPredictionConfig",
+        "hsfm_zanlungo_collision_prediction_v1",
     ),
-    "anisotropic_fov": (AnisotropicFovConfig, HSFM_ANISOTROPIC_FOV_V1),
-    "alignment_torque": (AlignmentTorqueConfig, HSFM_ALIGNMENT_TORQUE_V1),
+    "anisotropic_fov": ("AnisotropicFovConfig", "hsfm_anisotropic_fov_v1"),
+    "alignment_torque": ("AlignmentTorqueConfig", "hsfm_alignment_torque_v1"),
 }
 # Reverse lookup: activating model selector -> its opt-in config attribute name.
 _PEDESTRIAN_MODEL_ENABLE_ATTR: dict[str, str] = {
@@ -2284,7 +2291,10 @@ def _set_simulation_override_attr(
     config_spec = _OPT_IN_PEDESTRIAN_MODEL_CONFIGS.get(attr)
     if config_spec is not None and isinstance(overrides[attr], Mapping):
         # Nested opt-in force config given directly; auto-enable when its selector is active.
-        config_cls, selector_model = config_spec
+        config_cls_name, selector_model = config_spec
+        from robot_sf.sim import sim_config  # noqa: PLC0415
+
+        config_cls = getattr(sim_config, config_cls_name)
         sub_overrides = dict(overrides[attr])
         # Auto-enable when the selector model is active either via this scenario's overrides or
         # via the already-applied base config; checking only the overrides would silently reset
@@ -2374,6 +2384,8 @@ def _apply_prf_config_override(
         kwargs["force_multiplier"] = _coerce_finite_float(
             overrides["force_multiplier"], field_name="prf_config.force_multiplier"
         )
+    from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig  # noqa: PLC0415
+
     config.sim_config.prf_config = PedRobotForceConfig(**kwargs)
 
 
@@ -2389,6 +2401,8 @@ def _apply_residual_adversary_override(
     """
     if not isinstance(overrides, Mapping):
         raise ValueError("simulation_config.residual_adversary must be a mapping.")
+    from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig  # noqa: PLC0415
+
     config.sim_config.residual_adversary = ResidualAdversaryConfig(**dict(overrides))
 
 
@@ -2467,6 +2481,12 @@ def _apply_map_pool(
             ``"Map pool is empty!"`` error much later during the first scenario
             reset (the original issue #830 failure mode on long SLURM runs).
     """
+    from robot_sf.nav.map_config import MapDefinitionPool  # noqa: PLC0415
+    from robot_sf.nav.nav_types import (  # noqa: PLC0415
+        GEOMETRY_CONTRACT_LEGACY,
+        SUPPORTED_GEOMETRY_CONTRACTS,
+    )
+
     map_file = scenario.get("map_file")
     geometry_contract = scenario.get("map_geometry_contract", "legacy")
     if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
@@ -2567,6 +2587,8 @@ def _coerce_route_payload(
     Returns:
         list[GlobalRoute]: Parsed route objects for the selected entity class.
     """
+    from robot_sf.nav.global_route import GlobalRoute  # noqa: PLC0415
+
     coerced: list[GlobalRoute] = []
     entity_name = "robot_routes" if is_robot else "ped_routes"
     for idx, entry in enumerate(route_entries):

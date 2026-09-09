@@ -130,9 +130,11 @@ decision_summary: >-
   worktree-local output statement. The new file was reviewed as non-claim instrumentation proof.
   The current-main ratchet also identifies two historical provenance findings in the receipt:
   `config_missing_at_commit` and `dangling_commit`, because its preserved implementation head is
-  not reachable after squash integration and one declared config was absent at that historical
-  commit. Those bytes and producer identities must not be rewritten; both findings are explicitly
-  baselined, increasing the reviewed machine baseline from 429 to 431 findings across 96 files.
+  not reachable after squash integration and the current-head linter has no head-reachable commit
+  through which to resolve the declared config. The producer commit and config are real and the
+  declared digest matches at that retained revision. Those bytes and producer identities must not
+  be rewritten; both findings are explicitly baselined, increasing the reviewed machine baseline
+  from 429 to 431 findings across 96 files.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No
@@ -346,11 +348,12 @@ reviewed_files:
     reason: >-
       Diagnostic-only native counterfactual instrumentation receipt. It preserves the exact
       historical implementation and smoke-row producer commit rather than substituting the later
-      squash integration commit; that producer commit is not reachable from current main and one
-      declared config was absent at that historical commit. Rewriting either identity would falsify
-      provenance. The receipt explicitly disclaims benchmark evidence and campaign authorization,
-      so these two historical provenance findings are reviewed legacy debt pending an external or
-      historical-source backfill.
+      squash integration commit. That producer commit is not reachable from current main, so the
+      current-head linter cannot resolve its declared config through a head-reachable commit even
+      though the config exists at the retained producer revision and matches its declared digest.
+      Rewriting either identity would falsify provenance. The receipt explicitly disclaims benchmark
+      evidence and campaign authorization, so these two historical provenance findings are reviewed
+      legacy debt pending an external or historical-source backfill.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

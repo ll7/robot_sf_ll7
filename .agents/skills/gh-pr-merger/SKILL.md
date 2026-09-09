@@ -55,7 +55,10 @@ resolved threads, requested-reviewer state, and separate dependency, draft, doma
 scientific/evidence, legal/release, security, and merge holds. A single-account waiver may
 only document the absence of a distinct human implementation reviewer; it cannot clear any
 other hold or replace hosted checks, domain approval, evidence, legal, release, security, or
-dependency authority. The receipt owner performs the final expected-head compare-and-swap
+dependency authority. Per issue #8677, PR contract and metadata formatting checks (such as
+`pr-contract-check`) remain standard CI evidence and cannot by themselves satisfy independent
+implementation-review authority; independent review must come from approved independent
+carriers (e.g. CodeRabbit or human reviewers). The receipt owner performs the final expected-head compare-and-swap
 merge and records GitHub's returned merge SHA. When an ordinary PR's recorded base predates
 current `main`, the receipt additionally binds the complete changed-file record inventory
 (filename, status, and prior rename path), exact

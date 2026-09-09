@@ -110,7 +110,11 @@ from scripts.dev.snapshot_pr_queue import (  # noqa: E402
 )
 
 AUDIT_SCHEMA = "merge_queue_gate.v1"
-RECEIPT_REVIEW_CHECK_NAMES = frozenset({"pr-contract-check"})
+# Check-run names automatically recognized as review authority in merge receipts.
+# Per issue #8677 (Option A ruling), contract and metadata formatting checks
+# (including 'pr-contract-check') remain ordinary CI evidence and cannot by
+# themselves satisfy independent implementation review authority.
+RECEIPT_REVIEW_CHECK_NAMES: frozenset[str] = frozenset()
 NON_REQUIRED_RECEIPT_CHECK_NAMES = frozenset({"coderabbit"})
 
 # CI rollup classification constants (mirror scripts/dev/check_pr_ci_status.py
@@ -1158,6 +1162,10 @@ def _to_receipt_check_runs(
         if name.strip().lower() in NON_REQUIRED_RECEIPT_CHECK_NAMES:
             continue
         is_receipt_review = name in RECEIPT_REVIEW_CHECK_NAMES
+        approved_source = is_receipt_review or item.get("approved_source") is True
+        metadata_digest = item.get("metadata_digest") or (
+            expected_metadata_digest if is_receipt_review else None
+        )
         checks.append(
             {
                 "name": name,
@@ -1169,14 +1177,21 @@ def _to_receipt_check_runs(
                 "details_url": item.get("detailsUrl")
                 or item.get("targetUrl")
                 or item.get("html_url"),
-                "identity": str(app.get("slug") or app.get("name") or item.get("name") or ""),
+                "identity": str(
+                    item.get("identity")
+                    or app.get("slug")
+                    or app.get("name")
+                    or item.get("name")
+                    or ""
+                ),
                 "app": {
                     "slug": str(app.get("slug") or ""),
                     "name": str(app.get("name") or ""),
                 },
                 "approved_reviewer": item.get("approved_reviewer") is True,
-                "approved_source": is_receipt_review,
-                "metadata_digest": expected_metadata_digest if is_receipt_review else None,
+                "approved_source": approved_source,
+                "metadata_digest": metadata_digest,
+                "evidence_digest": item.get("evidence_digest") or item.get("digest"),
             }
         )
     return checks

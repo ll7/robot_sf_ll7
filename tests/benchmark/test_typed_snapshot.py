@@ -320,7 +320,6 @@ def test_corrupt_or_unknown_snapshot_metadata_fails_closed(tmp_path: Path) -> No
     path.write_text(json.dumps(metadata), encoding="utf-8")
     with pytest.raises(SnapshotPayloadError, match="unsupported snapshot schema"):
         read_typed_snapshot(path)
-
     metadata["schema_version"] = "simulator_typed_snapshot.v1"
     path.write_text(json.dumps(metadata), encoding="utf-8")
     with pytest.raises(SnapshotPayloadError, match="unsupported snapshot schema"):
@@ -328,10 +327,49 @@ def test_corrupt_or_unknown_snapshot_metadata_fails_closed(tmp_path: Path) -> No
 
     metadata["schema_version"] = "simulator_typed_snapshot.v2"
     metadata["payload_sha256"] = "0" * 64
+    metadata["metadata_sha256"] = typed_snapshot_module._metadata_digest(metadata)
     path.write_text(json.dumps(metadata), encoding="utf-8")
     with pytest.raises(SnapshotPayloadError, match="payload digest"):
         read_typed_snapshot(path)
     assert artifact.payload_path.is_file()
+
+
+def test_metadata_tampering_is_rejected_even_when_payload_is_unchanged(tmp_path: Path) -> None:
+    """JSON state edits cannot pass by reusing the original numeric payload digest."""
+    model = _build_model()
+    path = tmp_path / "tampered.json"
+    write_typed_snapshot(capture_typed_snapshot(model, _compatibility(model)), path)
+    metadata = json.loads(path.read_text(encoding="utf-8"))
+    metadata["state"]["robot_navigators"][0]["waypoint_id"] += 1
+    path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    with pytest.raises(SnapshotPayloadError, match="metadata digest mismatch"):
+        read_typed_snapshot(path)
+
+
+def test_missing_supported_state_field_fails_before_destination_mutation() -> None:
+    """A missing typed field cannot fall back to the destination's mutated state."""
+    model = _build_model()
+    typed = capture_typed_snapshot(model, _compatibility(model))
+    state = deepcopy(dict(typed.state))
+    state.pop("route_navigators")
+    malformed = TypedSimulatorSnapshot(
+        compatibility=typed.compatibility,
+        boundary=typed.boundary,
+        state=state,
+        arrays=typed.arrays,
+    )
+    with pytest.raises(SnapshotPayloadError, match="missing supported fields"):
+        restore_typed_snapshot(model, malformed, typed.compatibility)
+
+
+def test_float32_speed_caps_round_trip_without_dtype_drift() -> None:
+    """Typed capture preserves a native float32 speed-cap array."""
+    model = _build_model()
+    peds = model.sim.pysf_sim.peds
+    peds.max_speeds = np.asarray(peds.max_speeds, dtype=np.float32)
+    typed = capture_typed_snapshot(model, _compatibility(model))
+    assert typed.arrays["ped_max_speeds"].dtype == np.dtype(np.float32)
+    restore_typed_snapshot(model, typed, typed.compatibility)
 
 
 def test_noop_comparator_reports_latent_state_not_collision_only() -> None:

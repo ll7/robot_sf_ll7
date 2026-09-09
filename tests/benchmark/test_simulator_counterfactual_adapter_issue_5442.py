@@ -35,8 +35,10 @@ from robot_sf.benchmark.last_avoidable_replay import (
 )
 from robot_sf.benchmark.simulator_counterfactual_adapter import (
     SimulatorCounterfactualModel,
+    _capture_behavior_rng_states,
     _capture_route_navigators,
     _capture_single_runtimes,
+    _restore_behavior_rng_states,
     _restore_route_navigators,
     _restore_single_runtimes,
 )
@@ -187,6 +189,16 @@ def test_snapshot_restores_groups_behavior_rng_and_residual_state() -> None:
     assert sim.pysf_sim.peds.groups == [[0]]
     assert behavior_rng.random() == expected_rng_draw
     assert sim._residual_adversary.counter == 1
+
+
+def test_missing_behavior_rng_identity_fails_closed() -> None:
+    """A destination-owned generator cannot keep running from branch state."""
+    behavior = SimpleNamespace(rng=np.random.default_rng(7))
+    captured = _capture_behavior_rng_states([behavior])
+    captured.clear()
+
+    with pytest.raises(ValueError, match="missing behavior RNG"):
+        _restore_behavior_rng_states([behavior], captured)
 
 
 def test_single_runtime_snapshot_round_trip_restores_dataclass_fields() -> None:
@@ -724,8 +736,22 @@ def test_route_group_navigator_progress_restores() -> None:
 
     assert navigator.waypoint_id == 1
     assert navigator.reached_waypoint is False
-    _restore_route_navigators([behavior], {})
-    _restore_route_navigators([behavior], {id(behavior): {8: {}}})
+    with pytest.raises(ValueError, match="missing route navigator identity"):
+        _restore_route_navigators([behavior], {})
+    with pytest.raises(ValueError, match="group identities"):
+        _restore_route_navigators([behavior], {id(behavior): {8: {}}})
+
+
+def test_route_group_navigator_missing_state_field_fails_closed() -> None:
+    """A route navigator cannot silently retain its branch waypoint state."""
+    navigator = RouteNavigator([(0.0, 0.0), (1.0, 0.0)])
+    behavior = SimpleNamespace(navigators={7: navigator})
+    snapshot = _capture_route_navigators([behavior])
+    identity = next(iter(snapshot))
+    snapshot[identity][7].pop("waypoint_id")
+
+    with pytest.raises(ValueError, match="state for group"):
+        _restore_route_navigators([behavior], snapshot)
 
 
 def test_pedestrian_only_collision_is_false_for_empty_crowd() -> None:

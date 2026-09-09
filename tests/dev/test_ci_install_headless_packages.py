@@ -299,19 +299,26 @@ exit 0
 """,
     )
 
+    env = _timer_test_environment(fake_bin)
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"
     result = subprocess.run(
         ["bash", str(_script_path()), "poppler-utils"],
         capture_output=True,
         text=True,
         check=False,
-        env=_timer_test_environment(fake_bin),
+        env=env,
     )
 
     assert result.returncode == 100
+    diagnostic = next(
+        line
+        for line in result.stderr.splitlines()
+        if "error=apt_update_chrome_hash_mismatch_recovery_failed" in line
+    )
     assert "warning=apt_update_chrome_hash_mismatch_recovery_failed" in result.stderr
-    assert "error=apt_update_chrome_hash_mismatch_recovery_failed" in result.stderr
-    assert "retry_count=1" in result.stderr
-    assert "failed_source=dl.google.com" in result.stderr
+    assert "timeout_seconds=1" in diagnostic
+    assert "retry_count=1" in diagnostic
+    assert "failed_source=dl.google.com" in diagnostic
     assert not install_marker.exists()
 
 
@@ -335,8 +342,7 @@ if [[ "$*" == *' update' ]]; then
   fi
   echo 'Err:1 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages'
   echo '  Hash Sum mismatch'
-  echo 'Err:2 https://archive.ubuntu.com/ubuntu noble InRelease'
-  echo '  500 Internal Server Error'
+  echo 'E: Failed to fetch https://archive.ubuntu.com/ubuntu/dists/noble/InRelease Hash Sum mismatch'
   exit 100
 fi
 touch {_shell_quote(install_marker)}

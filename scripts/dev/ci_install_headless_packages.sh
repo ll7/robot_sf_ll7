@@ -131,11 +131,12 @@ emit_apt_failure() {
   local failure_class="$5"
   local retry_count="${6:-0}"
   local failed_source="${7:-}"
+  local timeout_seconds="${8:-${phase_timeout_seconds}}"
   local sources
   sources="$(apt_source_hosts "$apt_output")"
 
-  echo "ci_install_headless_packages error=${failure_class} rc=${status} phase=${phase} timeout_seconds=${phase_timeout_seconds} elapsed_seconds=${elapsed_seconds} retry_count=${retry_count} failed_source=${failed_source:-none} packages=${missing[*]} sources=${sources}" >&2
-  echo "::error title=Headless package ${phase} failed::class=${failure_class} rc=${status} timeout_seconds=${phase_timeout_seconds} elapsed_seconds=${elapsed_seconds} retry_count=${retry_count} failed_source=${failed_source:-none} packages=${missing[*]} sources=${sources}" >&2
+  echo "ci_install_headless_packages error=${failure_class} rc=${status} phase=${phase} timeout_seconds=${timeout_seconds} elapsed_seconds=${elapsed_seconds} retry_count=${retry_count} failed_source=${failed_source:-none} packages=${missing[*]} sources=${sources}" >&2
+  echo "::error title=Headless package ${phase} failed::class=${failure_class} rc=${status} timeout_seconds=${timeout_seconds} elapsed_seconds=${elapsed_seconds} retry_count=${retry_count} failed_source=${failed_source:-none} packages=${missing[*]} sources=${sources}" >&2
 }
 
 is_apt_403_text() {
@@ -342,7 +343,7 @@ if [[ "$apt_update_rc" -ne 0 ]]; then
         )
       else
         echo "ci_install_headless_packages warning=apt_update_chrome_hash_mismatch_recovery_failed source=dl.google.com rc=${fallback_rc} retry_count=${apt_update_recovery_attempts}" >&2
-        emit_apt_failure "update" "$fallback_rc" "$fallback_elapsed_seconds" "$fallback_output" "apt_update_chrome_hash_mismatch_recovery_failed" "$apt_update_recovery_attempts" "dl.google.com"
+        emit_apt_failure "update" "$fallback_rc" "$fallback_elapsed_seconds" "$fallback_output" "apt_update_chrome_hash_mismatch_recovery_failed" "$apt_update_recovery_attempts" "dl.google.com" "$fallback_timeout_seconds"
         exit "$fallback_rc"
       fi
     fi

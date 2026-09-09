@@ -691,6 +691,8 @@ def _validate_summary_run(result: ComparatorRunResult) -> None:
         return
     if not result.degraded:
         raise ValueError(f"non-ok rollout is not marked degraded: {result.planner_id!r}")
+    if not result.degradation_reasons:
+        raise ValueError(f"missing degradation reason for non-ok rollout: {result.planner_id!r}")
     if result.failure_class is None:
         raise ValueError(f"missing failure class for non-ok rollout: {result.planner_id!r}")
     if result.failure_class not in VALID_FAILURE_CLASSES:

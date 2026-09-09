@@ -33,10 +33,11 @@ the remaining reason precedence is:
 4. `path_generation`
 
 Planner-owned diagnostic reasons carry a `planner_diagnostic` prefix, so reason text cannot
-override that ownership even when it contains a simulator keyword. Unknown rollout statuses and non-canonical classes fail closed with `ValueError`. For a recognized
-non-success status without a more specific signal, `classify_failure` preserves the established
-`path_generation` fallback. Summary aggregation still rejects a missing non-success class, so a
-row cannot silently disappear from `failure_class_counts`.
+override that ownership even when it contains a simulator keyword. Unknown rollout statuses and
+non-canonical classes fail closed with `ValueError`. For a recognized non-success status without a
+more specific signal, `classify_failure` preserves the established `path_generation` fallback.
+Summary aggregation rejects a missing non-success degradation reason or class, so a row cannot
+silently disappear from `failure_class_counts`.
 
 The rollout boundary deliberately catches broad `Exception` values so failures from the external
 planner and analytic simulator phases become structured diagnostic rows instead of escaping the
@@ -49,7 +50,7 @@ This change does not redefine the existing `success_rate` metric: it remains bas
 collision-free rows. Near misses, degraded rows, and fallback reasons remain visible in their
 separate status/diagnostic fields, but this issue does not promote a new strict-success or
 failure-rate interpretation. Summary validation does require every non-`ok` row to retain its
-emitted `degraded=true` invariant and a canonical failure class.
+emitted `degraded=true` invariant, at least one degradation reason, and a canonical failure class.
 
 The canonical registry in this module contains native analytic planners only. This change does
 not convert adapter, fallback, or degraded provenance into native evidence, and it makes no

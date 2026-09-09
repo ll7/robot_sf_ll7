@@ -619,6 +619,22 @@ def test_summary_table_rejects_missing_failure_class() -> None:
 
 
 @pytest.mark.parametrize("status", ["error", "degraded"])
+def test_summary_table_rejects_non_ok_rows_without_degradation_reason(status: str) -> None:
+    """Summary aggregation rejects non-ok rows that violate the v1 reason invariant."""
+    healthy = execute_rollout(PurePursuitGoalPlanner(), get_canonical_comparison_scenarios()[-1])
+    result = replace(
+        healthy,
+        status=status,
+        degraded=True,
+        degradation_reasons=(),
+        failure_class=FAILURE_CLASS_PATH_GENERATION,
+    )
+
+    with pytest.raises(ValueError, match="missing degradation reason"):
+        compute_summary_table([result])
+
+
+@pytest.mark.parametrize("status", ["error", "degraded"])
 def test_summary_table_rejects_non_ok_rows_without_degraded_flag(status: str) -> None:
     """Non-ok rows must carry the emitted degraded invariant before aggregation."""
     result = ComparatorRunResult(
@@ -769,6 +785,31 @@ def test_v1_schema_rejects_explicit_null_failure_class_on_non_ok_row() -> None:
             "degraded": True,
             "degradation_reasons": ["fixture_degraded"],
             "failure_class": None,
+        }
+    )
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
+
+
+@pytest.mark.parametrize("status", ["error", "degraded"])
+def test_v1_schema_rejects_empty_degradation_reasons_on_non_ok_row(status: str) -> None:
+    """The v1 schema requires at least one reason for every non-ok row."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    receipt["results"][0].update(
+        {
+            "status": status,
+            "degraded": True,
+            "degradation_reasons": [],
+            "failure_class": FAILURE_CLASS_PATH_GENERATION,
         }
     )
 

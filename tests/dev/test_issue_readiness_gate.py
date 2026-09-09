@@ -163,6 +163,36 @@ def test_preflight_cli_preserves_heading_suggestions(tmp_path: Path, capsys) -> 
     }
 
 
+def test_create_rejection_preserves_heading_suggestions(tmp_path: Path) -> None:
+    """A rejected create preflight retains the repair hint returned by the body check."""
+    body = (
+        CANONICAL_METADATA
+        + "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n"
+        + "## Input contract\n\n- one file\n\n"
+        + "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n"
+    )
+    path = tmp_path / "near-miss.md"
+    path.write_text(body, encoding="utf-8")
+
+    with patch.object(issue_readiness_gate.subprocess, "run") as run:
+        payload = issue_readiness_gate.create_issue(
+            title="t",
+            body_file=str(path),
+            labels=[],
+            repo="ll7/robot_sf_ll7",
+        )
+
+    assert payload["outcome"] == "preflight_rejected"
+    assert payload["heading_suggestions"] == {
+        "input contract": {
+            "field": "inputs",
+            "alias": "inputs",
+            "score": 0.6667,
+        }
+    }
+    run.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "archetype,tier,policy", [("workflow", "smoke", "[]"), ("agent_task", "proposal", "null")]
 )

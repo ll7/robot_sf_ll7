@@ -745,6 +745,16 @@ def test_decision_heading_is_ignored_after_ruling() -> None:
     assert ruled["classification"] == "ready"
 
 
+def test_empty_decision_heading_is_admission_neutral() -> None:
+    """An empty decision heading is an offline hint candidate, not an admission blocker."""
+    body = COMPLETE_BODY + "\n## Decision required\n"
+
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["classification"] == "ready"
+    assert "decision required" not in report["contract"]["headings"]
+
+
 def test_contract_and_report_are_deterministic() -> None:
     issue = _issue(labels=["type:workflow", "state:ready", "state:ready"])
 
@@ -994,6 +1004,24 @@ def test_preflight_body_text_suggests_alias_for_empty_input_contract_heading() -
     suggestion = payload["heading_suggestions"]["input contract"]
     assert suggestion["field"] == "inputs"
     assert suggestion["alias"] == "inputs"
+
+
+@pytest.mark.parametrize("heading", ["Outputs", "Implementation"])
+def test_preflight_body_text_omits_misleading_heading_suggestions(heading: str) -> None:
+    """Sequence-only similarity must not suggest unrelated missing-field aliases."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        f"## {heading}\n\n- described content\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == ["inputs"]
+    assert payload["heading_suggestions"] == {}
 
 
 def test_preflight_body_text_suggests_nothing_for_exact_body() -> None:

@@ -1,9 +1,9 @@
 Robot SF API Reference
 ======================
 
-This reference uses Sphinx autodoc for selected lightweight public package surfaces. Planner,
-training, and simulator internals remain covered by the topic guides until their optional
-dependencies are isolated enough for broad API generation.
+This reference uses Sphinx autodoc for selected lightweight public package surfaces.
+For the canonical top-level facade functions, stability levels, and lifecycle guarantees,
+see :doc:`Robot SF Public API </public_api>`.
 
 .. toctree::
    :maxdepth: 1
@@ -13,3 +13,4 @@ dependencies are isolated enough for broad API generation.
    robot_sf.research
    robot_sf.telemetry
    stable_public_api
+

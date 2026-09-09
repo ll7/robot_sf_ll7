@@ -187,6 +187,7 @@
     "passing_clearance.py",
     "path_utils.py",
     "ped_model_sensitivity.py",
+    "pedestrian_response_observability.py",
     "ped_trajectory_quality.py",
     "pedestrian_control_trace.py",
     "pedestrian_flow_validation.py",

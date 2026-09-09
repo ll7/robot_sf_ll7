@@ -532,6 +532,10 @@ _FAST_FILES = {
     # contracts with numpy fixtures; keep them in fast pull-request shards for
     # the exact-head changed-coverage gate (issue #7890).
     "test_route_choice_observability.py",
+    # Pedestrian-response observations compose route-side reports over
+    # deterministic indoor fixtures; keep their diagnostic contract in fast
+    # shards for the exact-head changed-coverage gate (issue #8683).
+    "test_pedestrian_response_observability.py",
     # Anisotropic Gaussian cost tests are deterministic planner-contract
     # coverage; keep them in PR fast shards for the changed-coverage gate (issue #7603).
     "test_anisotropic_gaussian_cost.py",

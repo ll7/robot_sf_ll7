@@ -84,6 +84,12 @@ analysis-only diagnostic receipt. The contract observes planner routes and does 
 pedestrian preference, response, comfort, or human predictability:
 [issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md).
 
+Issue #8683 pedestrian-response observation (`pedestrian_response_observation.v1`): a typed,
+per-encounter diagnostic record that composes the existing route-side reports with observed
+clearance and response-presence fields. It is limited to structured-indoor fixtures, has no AMV
+evidence, and makes no planner, metric, social-compliance, or human-predictability claim:
+[issue_8683_pedestrian_response_observation.md](issue_8683_pedestrian_response_observation.md).
+
 Issue #7888 incident-to-scenario provenance contract (`incident_scenario_provenance.v1`):
 separate source facts, extracted hypotheses, simulator assumptions, parameter mappings, generated
 configuration, execution identity, and observed outcomes without legal fault attribution

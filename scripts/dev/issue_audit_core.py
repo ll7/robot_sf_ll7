@@ -2936,6 +2936,74 @@ def _empty_issue_source_contract_failures(
     return failures
 
 
+def _complete_issue_source_contract_failures(
+    issue_meta: Mapping[str, Any], *, source: str, canonical_row_count: int
+) -> list[str]:
+    """Return missing or contradictory fields in a successful non-empty source contract."""
+    failures: list[str] = []
+    exact_fields = {
+        "source": source,
+        "source_kind": ISSUE_SOURCE_KIND,
+        "source_status": ISSUE_SOURCE_STATUS_COMPLETE,
+        "source_proof": "canonical_issue_rows",
+        "available": True,
+        "truncated": False,
+        "errors": [],
+        "row_count": canonical_row_count,
+        "canonical_row_count": canonical_row_count,
+        "non_object_row_count": 0,
+        "malformed_object_row_count": 0,
+    }
+    for field, expected in exact_fields.items():
+        if type(issue_meta.get(field)) is not type(expected) or issue_meta.get(field) != expected:
+            failures.append(f"{field} must be {expected!r}")
+
+    raw_row_count = issue_meta.get("raw_row_count")
+    if isinstance(raw_row_count, bool) or not isinstance(raw_row_count, int) or raw_row_count < 0:
+        failures.append("raw_row_count must be a non-negative integer")
+    elif raw_row_count < canonical_row_count:
+        failures.append("raw_row_count must be at least canonical_row_count")
+
+    for field in ("pages_read", "requests_attempted", "per_page", "page_budget"):
+        value = issue_meta.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            failures.append(f"{field} must be a positive integer")
+    pages_read = issue_meta.get("pages_read")
+    requests_attempted = issue_meta.get("requests_attempted")
+    page_budget = issue_meta.get("page_budget")
+    if (
+        isinstance(pages_read, int)
+        and not isinstance(pages_read, bool)
+        and isinstance(page_budget, int)
+        and not isinstance(page_budget, bool)
+        and pages_read > page_budget
+    ):
+        failures.append("pages_read must not exceed page_budget")
+    if (
+        isinstance(requests_attempted, int)
+        and not isinstance(requests_attempted, bool)
+        and isinstance(page_budget, int)
+        and not isinstance(page_budget, bool)
+        and requests_attempted > page_budget
+    ):
+        failures.append("requests_attempted must not exceed page_budget")
+    if (
+        isinstance(pages_read, int)
+        and not isinstance(pages_read, bool)
+        and isinstance(requests_attempted, int)
+        and not isinstance(requests_attempted, bool)
+        and requests_attempted < pages_read
+    ):
+        failures.append("requests_attempted must be at least pages_read")
+    reason = issue_meta.get("source_status_reason")
+    if not isinstance(reason, str) or not reason.strip():
+        failures.append("source_status_reason must be a non-empty string")
+    for field in ("rate_limited", "quota_exhausted", "budget_exhausted", "request_limit_exhausted"):
+        if issue_meta.get(field) is True:
+            failures.append(f"{field} must not be true")
+    return failures
+
+
 def _issue_inventory_source_assessment(
     inventory: Mapping[str, Any], *, canonical_row_count: int
 ) -> dict[str, Any]:
@@ -3028,6 +3096,22 @@ def _issue_inventory_source_assessment(
                 or f"{source} reported an anomalous source response"
             ),
         )
+    if source_status == ISSUE_SOURCE_STATUS_COMPLETE and canonical_row_count > 0:
+        contract_failures = _complete_issue_source_contract_failures(
+            issue_meta,
+            source=source,
+            canonical_row_count=canonical_row_count,
+        )
+        if contract_failures:
+            return result(
+                ISSUE_SOURCE_STATUS_ANOMALOUS,
+                admissible=False,
+                error_code="issue_inventory_source_complete_unproven",
+                reason=(
+                    f"{source} reported complete status without a complete successful-source "
+                    f"contract: {'; '.join(contract_failures)}"
+                ),
+            )
     if issue_meta.get("available") is False or issue_meta.get("truncated") or has_errors:
         reason = str(issue_meta.get("source_status_reason") or "")
         if not reason and has_errors:

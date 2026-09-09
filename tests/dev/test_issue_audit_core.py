@@ -1421,6 +1421,44 @@ def test_anomalous_issue_source_status_is_preserved_when_unavailable() -> None:
     assert plan["issue_inventory_status"]["admissible"] is False
 
 
+def test_complete_issue_source_requires_typed_success_metadata() -> None:
+    """A complete marker with malformed availability/errors cannot authorize a plan."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata.update(
+        {
+            "available": "false",
+            "row_count": 1,
+            "canonical_row_count": 1,
+            "raw_row_count": 1,
+            "source_status": issue_audit_core.ISSUE_SOURCE_STATUS_COMPLETE,
+            "source_proof": "canonical_issue_rows",
+            "source_status_reason": "canonical open-issue response is complete",
+            "errors": "read failed",
+        }
+    )
+    inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [_issue(110)],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {"issues": source_metadata},
+    }
+
+    plan = build_audit_plan(inventory)
+
+    assert plan["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    )
+    assert plan["issue_inventory_status"]["error_code"] == (
+        "issue_inventory_source_complete_unproven"
+    )
+    assert plan["classification_status"]["mutations_suppressed"] is True
+
+
 def test_comment_inventory_bails_out_after_actual_rate_limit() -> None:
     """A rate-limited comment thread stops optional comment reads immediately."""
     queried: list[int] = []

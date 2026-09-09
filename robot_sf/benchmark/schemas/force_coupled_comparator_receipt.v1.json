@@ -142,7 +142,48 @@
               null
             ]
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {"required": ["failure_class"]},
+            "then": {
+              "properties": {
+                "status": {"enum": ["ok", "error", "degraded"]}
+              },
+              "allOf": [
+                {
+                  "if": {"properties": {"status": {"const": "ok"}}},
+                  "then": {
+                    "properties": {
+                      "degraded": {"const": false},
+                      "failure_class": {"const": null}
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "status": {"enum": ["error", "degraded"]}
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "degraded": {"const": true},
+                      "failure_class": {
+                        "enum": [
+                          "path_generation",
+                          "tracking",
+                          "social_compliance",
+                          "simulator"
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
       }
     },
     "summary_table": {
@@ -176,7 +217,19 @@
           },
           "failure_class_counts": {
             "type": "object",
-            "additionalProperties": {"type": "integer"}
+            "additionalProperties": false,
+            "required": [
+              "path_generation",
+              "tracking",
+              "social_compliance",
+              "simulator"
+            ],
+            "properties": {
+              "path_generation": {"type": "integer", "minimum": 0},
+              "tracking": {"type": "integer", "minimum": 0},
+              "social_compliance": {"type": "integer", "minimum": 0},
+              "simulator": {"type": "integer", "minimum": 0}
+            }
           }
         }
       }

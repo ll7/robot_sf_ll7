@@ -8,6 +8,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -28,7 +29,7 @@ def _shell_quote(path: Path) -> str:
 
 def _timer_test_environment(fake_bin: Path) -> dict[str, str]:
     """Provide only the runtime tools needed by the shell helper and its timer."""
-    for command_name in ("bash", "date", "dirname", "grep", "mktemp", "rm", "sleep"):
+    for command_name in ("bash", "cat", "date", "dirname", "grep", "mktemp", "rm", "sleep"):
         command_path = shutil.which(command_name)
         assert command_path, f"{command_name} is required for this test"
         os.symlink(command_path, fake_bin / command_name)
@@ -238,6 +239,8 @@ if [[ "$*" == *' update' ]]; then
   if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
     echo 'Err:1 https://archive.ubuntu.com/ubuntu noble InRelease'
     echo '  500 Internal Server Error'
+    sleep 5
+    exit 0
   fi
   exit 124
 fi
@@ -249,6 +252,7 @@ exit 0
     env = _timer_test_environment(fake_bin)
     env["CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS"] = "2"
     env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"
+    started = time.monotonic()
     result = subprocess.run(
         ["bash", str(_script_path()), "poppler-utils"],
         capture_output=True,
@@ -257,8 +261,10 @@ exit 0
         env=env,
         timeout=10,
     )
+    elapsed = time.monotonic() - started
 
     assert result.returncode == 124
+    assert 0.8 <= elapsed < 4
     assert "warning=apt_update_official_mirror_fallback_failed" in result.stderr
     diagnostic = next(
         line
@@ -270,6 +276,69 @@ exit 0
     assert "elapsed_seconds=" in diagnostic
     assert "sources=archive.ubuntu.com" in diagnostic
     assert not install_marker.exists()
+
+
+def test_ci_install_headless_packages_reports_fallback_preparation_failure(
+    tmp_path: Path,
+) -> None:
+    """An unsupported runner reports fallback preparation failure, not apt failure."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    os_release = tmp_path / "os-release"
+    os_release.write_text("ID=debian\nVERSION_CODENAME=bookworm\n", encoding="utf-8")
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        "#!/usr/bin/env bash\nif [[ \"$*\" == *' update' ]]; then exit 124; fi\nexit 0\n",
+    )
+
+    env = _timer_test_environment(fake_bin)
+    env["CI_HEADLESS_APT_OS_RELEASE_FILE"] = str(os_release)
+    env["CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS"] = "2"
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        timeout=10,
+    )
+
+    assert result.returncode == 1
+    assert "warning=apt_update_official_mirror_fallback_unavailable" in result.stderr
+    diagnostic = next(
+        line
+        for line in result.stderr.splitlines()
+        if "error=apt_update_official_mirror_fallback_unavailable" in line
+    )
+    assert "rc=1" in diagnostic
+    assert "failed_source=none" in diagnostic
+    assert "unsupported_os_or_missing_ubuntu_codename" in result.stderr
+
+
+def test_ci_install_headless_packages_rejects_timeout_budget_over_outer_step() -> None:
+    """Custom phase and fallback budgets cannot exceed the enclosing CI timer."""
+    env = os.environ.copy()
+    env.pop("CI_STEP_TIMEOUT_SECONDS", None)
+    env["CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS"] = "600"
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "600"
+
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 2
+    assert "error=invalid_timeout_budget" in result.stderr
+    assert "phase_timeout_seconds=600" in result.stderr
+    assert "fallback_timeout_seconds=600" in result.stderr
+    assert "outer_timeout_seconds=1200" in result.stderr
 
 
 def test_ci_install_headless_packages_isolates_chrome_hash_mismatch(

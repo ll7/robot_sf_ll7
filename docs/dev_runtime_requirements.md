@@ -122,8 +122,12 @@ on the runner and bounds the primary apt-update and apt-install phases to 300 se
 `CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS`, which defaults to 60 seconds and is clamped to
 the primary phase timeout. The normal two-phase default budget is 600 seconds; an initial update
 timeout followed by a fallback and install can consume at most 660 seconds (`300 + 60 + 300`),
-inside the outer 1,200-second CI step budget. Set either timeout variable only when diagnosing a
-runner-specific problem; values must be integer seconds from 1 through 600.
+inside the outer 1,200-second CI step budget. The helper rejects custom values when the worst-case
+recovery budget (`2 * phase timeout + fallback timeout`) would exceed the enclosing
+`CI_STEP_TIMEOUT_SECONDS` budget (1,200 seconds in this action). Set either timeout variable only
+when diagnosing a runner-specific problem; values must be integer seconds from 1 through 600 and
+must fit that combined budget. Unsupported fallback-source preparation is reported explicitly as
+unavailable with its preparation status and output; it is not relabeled as an apt command failure.
 
 When a phase times out or fails, the helper exits nonzero and reports the phase, required package
 set, observed apt source hosts, timeout budget, and elapsed seconds. A third-party apt 403 remains

@@ -83,6 +83,7 @@ ISSUE_SOURCE_STATUS_UNAVAILABLE = "unavailable"
 ISSUE_SOURCE_STATUS_ANOMALOUS = "anomalous"
 ISSUE_SOURCE_EMPTY_PROOF = "successful_empty_response"
 ISSUE_SOURCE_KIND = "canonical_open_issues"
+LEGACY_ISSUE_INVENTORY_MARKER = "legacy_issue_inventory"
 
 _PREPARATION_AUDIT_SCHEMA = "open_issue_contract_audit.v1"
 PREPARATION_MARKER_END = prepare_open_issue_contracts.MARKER_END
@@ -861,6 +862,24 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_canonical_issue_row(raw: Mapping[str, Any]) -> bool:
+    """Return whether a REST object has the minimum trustworthy issue identity."""
+    number = raw.get("number")
+    if isinstance(number, bool) or not isinstance(number, int) or number <= 0:
+        return False
+    title = raw.get("title")
+    if not isinstance(title, str):
+        return False
+    state = raw.get("state")
+    if not isinstance(state, str) or state.lower() != "open":
+        return False
+    url = raw.get("html_url") or raw.get("url")
+    if not isinstance(url, str):
+        return False
+    match = re.search(r"/issues/([1-9][0-9]*)(?:[/?#]|$)", url)
+    return match is not None and int(match.group(1)) == number
+
+
 def _normalize_pr(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Project a GitHub pull request row onto the stable correlation shape."""
     head = raw.get("head") if isinstance(raw.get("head"), Mapping) else {}
@@ -979,11 +998,15 @@ def discover_open_issues(
         runner=runner,
         request_budget=request_budget,
     )
-    issues = [
-        _normalize_issue(row)
-        for row in rows
-        if "pull_request" not in row and "/issues/" in str(row.get("html_url") or "")
-    ]
+    malformed_object_row_count = 0
+    issues: list[dict[str, Any]] = []
+    for row in rows:
+        if "pull_request" in row:
+            continue
+        if not _is_canonical_issue_row(row):
+            malformed_object_row_count += 1
+            continue
+        issues.append(_normalize_issue(row))
     issues = sorted(issues, key=lambda item: item["number"])
     raw_row_count = int(meta.get("raw_row_count", 0))
     non_object_row_count = int(meta.get("non_object_row_count", 0))
@@ -997,6 +1020,12 @@ def discover_open_issues(
         source_status = ISSUE_SOURCE_STATUS_ANOMALOUS
         source_reason = (
             f"{source} returned {non_object_row_count} malformed non-object row(s); "
+            "the canonical issue inventory is not trustworthy"
+        )
+    elif malformed_object_row_count:
+        source_status = ISSUE_SOURCE_STATUS_ANOMALOUS
+        source_reason = (
+            f"{source} returned {malformed_object_row_count} malformed issue object row(s); "
             "the canonical issue inventory is not trustworthy"
         )
     elif not issues and raw_row_count:
@@ -1023,6 +1052,7 @@ def discover_open_issues(
         "source_status": source_status,
         "available": source_status in {ISSUE_SOURCE_STATUS_COMPLETE, ISSUE_SOURCE_STATUS_EMPTY},
         "source_status_reason": source_reason,
+        "malformed_object_row_count": malformed_object_row_count,
     }
     if source_status == ISSUE_SOURCE_STATUS_EMPTY:
         source_metadata["source_proof"] = ISSUE_SOURCE_EMPTY_PROOF
@@ -2703,6 +2733,62 @@ class Classification:
         }
 
 
+def _empty_issue_source_contract_failures(
+    issue_meta: Mapping[str, Any], *, source: str, canonical_row_count: int
+) -> list[str]:
+    """Return missing or contradictory fields in a successful-empty source contract."""
+    failures: list[str] = []
+    exact_fields = {
+        "source": source,
+        "source_kind": ISSUE_SOURCE_KIND,
+        "source_status": ISSUE_SOURCE_STATUS_EMPTY,
+        "source_proof": ISSUE_SOURCE_EMPTY_PROOF,
+        "available": True,
+        "truncated": False,
+        "errors": [],
+        "row_count": 0,
+        "canonical_row_count": 0,
+        "raw_row_count": 0,
+        "non_object_row_count": 0,
+    }
+    if canonical_row_count != 0:
+        failures.append(f"plan contains {canonical_row_count} canonical issue row(s)")
+    for field, expected in exact_fields.items():
+        if type(issue_meta.get(field)) is not type(expected) or issue_meta.get(field) != expected:
+            failures.append(f"{field} must be {expected!r}")
+
+    for field in ("pages_read", "requests_attempted", "per_page", "page_budget"):
+        value = issue_meta.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            failures.append(f"{field} must be a positive integer")
+    pages_read = issue_meta.get("pages_read")
+    requests_attempted = issue_meta.get("requests_attempted")
+    page_budget = issue_meta.get("page_budget")
+    if (
+        isinstance(pages_read, int)
+        and not isinstance(pages_read, bool)
+        and isinstance(page_budget, int)
+        and not isinstance(page_budget, bool)
+        and pages_read > page_budget
+    ):
+        failures.append("pages_read must not exceed page_budget")
+    if (
+        isinstance(pages_read, int)
+        and not isinstance(pages_read, bool)
+        and isinstance(requests_attempted, int)
+        and not isinstance(requests_attempted, bool)
+        and requests_attempted < pages_read
+    ):
+        failures.append("requests_attempted must be at least pages_read")
+    reason = issue_meta.get("source_status_reason")
+    if not isinstance(reason, str) or not reason.strip():
+        failures.append("source_status_reason must be a non-empty string")
+    for field in ("rate_limited", "quota_exhausted", "budget_exhausted", "request_limit_exhausted"):
+        if issue_meta.get(field) is True:
+            failures.append(f"{field} must not be true")
+    return failures
+
+
 def _issue_inventory_source_assessment(
     inventory: Mapping[str, Any], *, canonical_row_count: int
 ) -> dict[str, Any]:
@@ -2781,6 +2867,20 @@ def _issue_inventory_source_assessment(
                 f"but the plan contains {canonical_row_count}; the source contract is inconsistent"
             ),
         )
+    if (
+        source_status == ISSUE_SOURCE_STATUS_ANOMALOUS
+        and not issue_meta.get("truncated")
+        and not has_errors
+    ):
+        return result(
+            ISSUE_SOURCE_STATUS_ANOMALOUS,
+            admissible=False,
+            error_code="issue_inventory_source_anomalous",
+            reason=str(
+                issue_meta.get("source_status_reason")
+                or f"{source} reported an anomalous source response"
+            ),
+        )
     if issue_meta.get("available") is False or issue_meta.get("truncated") or has_errors:
         reason = str(issue_meta.get("source_status_reason") or "")
         if not reason and has_errors:
@@ -2815,20 +2915,33 @@ def _issue_inventory_source_assessment(
             ),
         )
 
-    contradictory_empty_counts = [
-        field
-        for field in ("row_count", "raw_row_count", "non_object_row_count")
-        if isinstance(issue_meta.get(field), int) and issue_meta.get(field) > 0
-    ]
     if source_status == ISSUE_SOURCE_STATUS_EMPTY and canonical_row_count == 0:
-        if contradictory_empty_counts:
+        contract_failures = _empty_issue_source_contract_failures(
+            issue_meta,
+            source=source,
+            canonical_row_count=canonical_row_count,
+        )
+        if contract_failures:
+            count_conflict = any(
+                field in issue_meta and issue_meta.get(field) != 0
+                for field in (
+                    "row_count",
+                    "canonical_row_count",
+                    "raw_row_count",
+                    "non_object_row_count",
+                )
+            )
             return result(
                 ISSUE_SOURCE_STATUS_ANOMALOUS,
                 admissible=False,
-                error_code="issue_inventory_source_inconsistent",
+                error_code=(
+                    "issue_inventory_source_inconsistent"
+                    if count_conflict
+                    else "issue_inventory_source_empty_unproven"
+                ),
                 reason=(
-                    f"{source} reported empty status with positive counts in "
-                    f"{', '.join(contradictory_empty_counts)}; the empty queue is not proven"
+                    f"{source} reported empty status without a complete successful-empty "
+                    f"contract: {'; '.join(contract_failures)}"
                 ),
             )
         return result(
@@ -3906,10 +4019,6 @@ def apply_mutations(
         },
         canonical_row_count=canonical_row_count,
     )
-    plan_inventory = plan.get("inventory")
-    plan_issue_metadata = (
-        plan_inventory.get("issues") if isinstance(plan_inventory, Mapping) else None
-    )
     recorded_issue_inventory_status = plan.get("issue_inventory_status")
     recorded_status_inadmissible = isinstance(recorded_issue_inventory_status, Mapping) and (
         recorded_issue_inventory_status.get("admissible") is False
@@ -3930,17 +4039,35 @@ def apply_mutations(
         )
         refusal["issue_inventory_status"] = dict(recorded_issue_inventory_status)
         return refusal
-    if not issue_inventory_status["admissible"] and (
-        isinstance(plan_issue_metadata, Mapping)
-        or isinstance(recorded_issue_inventory_status, Mapping)
-        or planned_count == 0
-    ):
+    legacy_source_missing = (
+        plan.get(LEGACY_ISSUE_INVENTORY_MARKER) is True
+        and canonical_row_count == 0
+        and issue_inventory_status.get("status") == ISSUE_SOURCE_STATUS_ANOMALOUS
+        and issue_inventory_status.get("error_code") == "issue_inventory_source_missing"
+    )
+    if not issue_inventory_status["admissible"] and not legacy_source_missing:
         refusal = refuse(
             str(issue_inventory_status["reason"]),
             error_code=str(issue_inventory_status["error_code"]),
         )
         refusal["issue_inventory_status"] = issue_inventory_status
         return refusal
+    pending_decisions = plan.get("pending_decisions")
+    if (
+        canonical_row_count == 0
+        and (
+            planned_count > 0
+            or (
+                pending_decisions is not None
+                and (not isinstance(pending_decisions, list) or bool(pending_decisions))
+            )
+        )
+        and not legacy_source_missing
+    ):
+        return refuse(
+            "an empty canonical issue inventory cannot carry mutations or pending decisions",
+            error_code="issue_inventory_empty_with_work",
+        )
 
     recorded_digest = str(plan.get("plan_digest") or "")
     if not recorded_digest:
@@ -4384,8 +4511,14 @@ def build_decision_envelope(
         or recorded_issue_inventory_status.get("status")
         in {ISSUE_SOURCE_STATUS_UNAVAILABLE, ISSUE_SOURCE_STATUS_ANOMALOUS}
     )
-    if canonical_row_count == 0 and (
-        not issue_inventory_status["admissible"] or recorded_status_inadmissible
+    legacy_source_missing = (
+        plan.get(LEGACY_ISSUE_INVENTORY_MARKER) is True
+        and canonical_row_count == 0
+        and issue_inventory_status.get("status") == ISSUE_SOURCE_STATUS_ANOMALOUS
+        and issue_inventory_status.get("error_code") == "issue_inventory_source_missing"
+    )
+    if (not issue_inventory_status["admissible"] and not legacy_source_missing) or (
+        recorded_status_inadmissible
     ):
         reason = str(
             (
@@ -4396,6 +4529,18 @@ def build_decision_envelope(
             or "canonical open-issue source is not admissible"
         )
         raise ValueError(f"issue inventory is not admissible: {reason}")
+    pending_decisions = plan.get("pending_decisions")
+    if (
+        canonical_row_count == 0
+        and (
+            pending_decisions is not None
+            and (not isinstance(pending_decisions, list) or bool(pending_decisions))
+        )
+        and not legacy_source_missing
+    ):
+        raise ValueError(
+            "issue inventory is empty but the plan contains pending decisions; regenerate it"
+        )
 
     selected = select_next_pending_decision(
         plan,

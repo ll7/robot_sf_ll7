@@ -54,14 +54,24 @@ The core inventories, with bounded pagination:
 
 The canonical open-issue source reports a machine-readable `source_status`:
 `complete` when canonical issue rows are present, `empty` only when a
-successful REST response explicitly contains no rows, `unavailable` when the
-read is failed or partial, and `anomalous` when a successful response contains
-only non-canonical or malformed rows. A zero-row source without this contract
-is also anomalous. The plan copies this result to `issue_inventory_status`;
-`unavailable` and `anomalous` add `issues` to `truncation_or_errors`, suppress
-mutations, and make the plan command return non-zero. Apply refuses those
-plans before any REST mutation. An explicit `--max-wall-seconds 0` remains the
-separate no-budget timeout path and is not treated as a proven empty source.
+successful REST response explicitly contains no rows and proves the complete
+successful-empty contract, `unavailable` when the read is failed or partial,
+and `anomalous` when a successful response contains only non-canonical or
+malformed rows. The successful-empty contract includes the exact canonical
+source and source kind, `source_proof: successful_empty_response`,
+`available: true`, `truncated: false`, an empty `errors` list, positive page
+and request counts, and zero raw, canonical, non-object, and normalized row
+counts. A zero-row source without this contract is also anomalous. The plan
+copies this result to `issue_inventory_status`; `unavailable` and `anomalous`
+add `issues` to `truncation_or_errors`, suppress mutations, and make the plan
+command return non-zero. Apply and decision-envelope admission refuse an
+inadmissible source regardless of the number of rows or mutations in a forged
+plan. An empty canonical inventory cannot carry mutations or pending decisions.
+The top-level `legacy_issue_inventory: true` marker is retained only for
+pre-contract callers that cannot provide source metadata; it applies only to
+the missing-metadata compatibility case and is never emitted by the current
+planner. An explicit `--max-wall-seconds 0` remains the separate no-budget
+timeout path and is not treated as a proven empty source.
 
 An inventory page cap, failed read, unavailable SLURM query for a
 resource:slurm issue, or failed readback is an uncertainty. The plan records it
@@ -304,11 +314,28 @@ Every plan has schema issue_audit_plan.v1 and contains:
       "project5": {"writes": false, "owner": "gh-issue-sequencer"},
       "inventory": {
         "issues": {
+          "available": true,
+          "pages_read": 1,
+          "requests_attempted": 1,
+          "per_page": 100,
+          "page_budget": 10,
+          "row_count": 0,
+          "canonical_row_count": 0,
+          "raw_row_count": 0,
+          "non_object_row_count": 0,
+          "truncated": false,
+          "errors": [],
+          "source": "repos/ll7/robot_sf_ll7/issues?state=open",
+          "source_kind": "canonical_open_issues",
           "source_status": "empty",
-          "source_proof": "successful_empty_response"
+          "source_proof": "successful_empty_response",
+          "source_status_reason": "successful empty response from the canonical open-issue source"
         }
       },
       "issue_inventory_status": {
+        "source": "repos/ll7/robot_sf_ll7/issues?state=open",
+        "source_kind": "canonical_open_issues",
+        "canonical_row_count": 0,
         "status": "empty",
         "admissible": true,
         "source_proof": "successful_empty_response"

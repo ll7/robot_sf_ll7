@@ -45,6 +45,7 @@ def _expected_issue(state: str = "open") -> dict[str, str]:
 
 def _attach_valid_provenance(plan: dict[str, Any]) -> dict[str, Any]:
     """Populate valid commit/classifier provenance and compute plan_digest for test plans."""
+    plan.setdefault(issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER, True)
     plan["source_sha"] = issue_audit_core.resolve_source_sha()
     plan["classifier_digest"] = issue_audit_core.resolve_classifier_digest()
     plan["producer"] = issue_audit_core.resolve_producer_identity()
@@ -1266,6 +1267,117 @@ def test_open_issue_source_contract_distinguishes_empty_and_bad_responses(
         assert metadata["source_status_reason"]
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [{"number": "110", "title": "Bad number", "state": "open"}],
+        [{"number": 110, "title": "Missing URL", "state": "open"}],
+        [
+            {
+                "number": 110,
+                "title": "Bad URL identity",
+                "state": "open",
+                "html_url": "https://github.com/ll7/robot_sf_ll7/issues/111",
+            }
+        ],
+    ],
+)
+def test_open_issue_source_rejects_malformed_object_rows_without_raising(
+    payload: list[dict[str, object]],
+) -> None:
+    """Malformed issue objects become structured anomalies instead of crashing discovery."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+    rows, metadata = discover_open_issues("ll7/robot_sf_ll7", runner=runner)
+
+    assert rows == []
+    assert metadata["source_status"] == issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    assert metadata["available"] is False
+    assert metadata["malformed_object_row_count"] == 1
+
+
+def test_open_issue_source_rejects_mixed_valid_and_malformed_objects() -> None:
+    """A malformed object cannot be hidden by a valid issue in the same response."""
+    payload = [
+        {
+            "number": 110,
+            "title": "Bounded issue",
+            "state": "open",
+            "html_url": "https://github.com/ll7/robot_sf_ll7/issues/110",
+        },
+        {"number": 111, "title": "Missing canonical URL", "state": "open"},
+    ]
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+    rows, metadata = discover_open_issues("ll7/robot_sf_ll7", runner=runner)
+
+    assert [row["number"] for row in rows] == [110]
+    assert metadata["source_status"] == issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    assert metadata["available"] is False
+    assert metadata["malformed_object_row_count"] == 1
+
+
+def test_empty_issue_source_requires_complete_success_contract() -> None:
+    """An empty marker without source identity and read proof cannot admit a plan."""
+    inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {"issues": {"source_status": issue_audit_core.ISSUE_SOURCE_STATUS_EMPTY}},
+    }
+
+    plan = build_audit_plan(inventory)
+
+    assert plan["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    )
+    assert plan["issue_inventory_status"]["error_code"] == ("issue_inventory_source_empty_unproven")
+    assert plan["classification_status"]["mutations_suppressed"] is True
+    assert plan["mutations"] == []
+
+
+def test_anomalous_issue_source_status_is_preserved_when_unavailable() -> None:
+    """An explicit anomaly remains distinguishable from an unavailable read."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata.update(
+        {
+            "source_status": issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS,
+            "available": False,
+            "raw_row_count": 1,
+            "source_status_reason": "malformed object row",
+        }
+    )
+    inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {"issues": source_metadata},
+    }
+
+    plan = build_audit_plan(inventory)
+
+    assert plan["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    )
+    assert plan["issue_inventory_status"]["admissible"] is False
+
+
 def test_comment_inventory_bails_out_after_actual_rate_limit() -> None:
     """A rate-limited comment thread stops optional comment reads immediately."""
     queried: list[int] = []
@@ -2065,6 +2177,97 @@ def test_successful_empty_issue_source_remains_an_admissible_noop() -> None:
     assert result["counts"]["planned"] == 0
 
 
+def test_apply_rejects_work_from_an_admissible_empty_issue_source() -> None:
+    """Even a proven empty source cannot authorize a mutation for an absent issue."""
+    plan: dict[str, Any] = {
+        "schema": issue_audit_core.PLAN_SCHEMA,
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "mutations": [{"issue": 110, "operation": "close_issue", "value": None}],
+        "pending_decisions": [],
+        "inventory": {"issues": _empty_issue_source_metadata()},
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        raise AssertionError(f"empty-source work must not reach REST: {args} {input_text}")
+
+    result = apply_mutations(
+        plan,
+        runner=runner,
+        apply_source_sha=plan["source_sha"],
+        apply_classifier_digest=plan["classifier_digest"],
+        apply_producer=plan["producer"],
+    )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "issue_inventory_empty_with_work"
+    assert result["counts"]["planned"] == 1
+
+
+def test_apply_rejects_nonzero_work_without_issue_inventory_metadata() -> None:
+    """A malformed zero-row plan cannot bypass source admission through its mutation count."""
+    plan: dict[str, Any] = {
+        "schema": issue_audit_core.PLAN_SCHEMA,
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [{"issue": 110, "operation": "close_issue", "value": None}],
+        "inventory": {},
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+    plan.pop(issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER)
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        raise AssertionError(f"unproven source must not reach REST: {args} {input_text}")
+
+    result = apply_mutations(
+        plan,
+        runner=runner,
+        apply_source_sha=plan["source_sha"],
+        apply_classifier_digest=plan["classifier_digest"],
+        apply_producer=plan["producer"],
+    )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "issue_inventory_source_missing"
+    assert result["counts"]["planned"] == 1
+
+
+def test_envelope_rejects_pending_decisions_from_an_empty_issue_source() -> None:
+    """An empty source cannot produce a decision envelope for a nonexistent issue."""
+    plan: dict[str, Any] = {
+        "schema": issue_audit_core.PLAN_SCHEMA,
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "mutations": [],
+        "pending_decisions": [{"issue": "#110", "status": "ready"}],
+        "inventory": {"issues": _empty_issue_source_metadata()},
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+
+    with pytest.raises(ValueError, match="pending decisions"):
+        build_decision_envelope(plan)
+
+
+def test_envelope_rejects_inadmissible_source_with_nonzero_issue_rows() -> None:
+    """Source-integrity refusal applies even when a forged plan contains issue rows."""
+    plan: dict[str, Any] = {
+        "schema": issue_audit_core.PLAN_SCHEMA,
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [_issue(110)],
+        "mutations": [],
+        "pending_decisions": [{"issue": "#110", "status": "ready"}],
+        "inventory": {"issues": _empty_issue_source_metadata()},
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+
+    with pytest.raises(ValueError, match="issue inventory is not admissible"):
+        build_decision_envelope(plan)
+
+
 def test_apply_rejects_the_old_permissive_zero_row_shape() -> None:
     """Apply rejects a legacy zero-row plan that lacks source-contract proof."""
 
@@ -2084,6 +2287,7 @@ def test_apply_rejects_the_old_permissive_zero_row_shape() -> None:
         "truncation_or_errors": [],
     }
     _attach_valid_provenance(plan)
+    plan.pop(issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER)
 
     result = apply_mutations(
         plan,
@@ -2655,7 +2859,7 @@ def test_decision_envelope_rejects_stale_plan_and_live_issue_state() -> None:
 
 
 def test_decision_envelope_marks_undocumented_choices_and_incomplete_inventory() -> None:
-    """Missing choices or inventory evidence fail closed instead of yielding policy."""
+    """Missing inventory evidence blocks envelope construction before policy selection."""
     plan = build_audit_plan(
         {
             "repo": "ll7/robot_sf_ll7",
@@ -2671,11 +2875,8 @@ def test_decision_envelope_marks_undocumented_choices_and_incomplete_inventory()
             "inventory": {"issues": {"errors": ["partial page"]}},
         }
     )
-    envelope = build_decision_envelope(plan)
-    assert envelope is not None
-    assert envelope["status"] == "blocked_incomplete_inventory"
-    assert envelope["answer_contract"]["allowed_tokens"] == []
-    assert envelope["inventory_errors"]
+    with pytest.raises(ValueError, match="issue inventory is not admissible"):
+        build_decision_envelope(plan)
 
 
 def test_envelope_cli_emits_machine_readable_payload(
@@ -2771,6 +2972,7 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
     plan = {
         "schema": "issue_audit_plan.v1",
         "repo": "ll7/robot_sf_ll7",
+        issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
         "mutations": [
             {
                 "operation": "remove_label",
@@ -3157,6 +3359,7 @@ def test_apply_rejects_malformed_expected_labels_before_reads() -> None:
     plan = {
         "schema": "issue_audit_plan.v1",
         "repo": "ll7/robot_sf_ll7",
+        issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
         "mutations": [
             {
                 "operation": "add_label",
@@ -3188,6 +3391,7 @@ def test_apply_rejects_missing_state_version_precondition_before_reads() -> None
     plan = {
         "schema": "issue_audit_plan.v1",
         "repo": "ll7/robot_sf_ll7",
+        issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
         "mutations": [{"operation": "add_label", "issue": 109, "value": "state:running"}],
         "truncation_or_errors": [],
     }
@@ -3264,6 +3468,7 @@ def test_apply_rejects_mixed_invalid_and_valid_plan_before_any_rest_call(
     plan = {
         "schema": "issue_audit_plan.v1",
         "repo": "ll7/robot_sf_ll7",
+        issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
         "mutations": [
             bad_mutation,
             {
@@ -3399,6 +3604,7 @@ def test_incomplete_plan_fails_closed_before_mutation() -> None:
     plan = {
         "schema": "issue_audit_plan.v1",
         "repo": "ll7/robot_sf_ll7",
+        issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
         "mutations": [],
         "truncation_or_errors": ["issues"],
     }
@@ -3420,6 +3626,7 @@ def test_apply_rejects_stale_plan_digest_before_mutation() -> None:
     plan = {
         "schema": "issue_audit_plan.v1",
         "repo": "ll7/robot_sf_ll7",
+        issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
         "mutations": [],
         "truncation_or_errors": [],
     }
@@ -3451,6 +3658,7 @@ def test_apply_rejects_unreasoned_blocked_label_before_mutation() -> None:
     plan = {
         "schema": "issue_audit_plan.v1",
         "repo": "ll7/robot_sf_ll7",
+        issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
         "mutations": [
             {
                 "operation": "add_label",
@@ -3498,6 +3706,7 @@ def test_apply_accepts_reasoned_blocked_label() -> None:
     plan = {
         "schema": "issue_audit_plan.v1",
         "repo": "ll7/robot_sf_ll7",
+        issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
         "mutations": [
             {
                 "operation": "add_label",
@@ -4343,6 +4552,7 @@ def test_apply_rejects_missing_source_sha() -> None:
     plan = {
         "schema": "issue_audit_plan.v1",
         "repo": "ll7/robot_sf_ll7",
+        issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
         "mutations": [
             {
                 "operation": "add_label",

@@ -154,8 +154,11 @@ The issue-audit plan distinguishes a proven empty queue from a source failure. I
 open-issue metadata reports `source_status: complete` when issue rows are present, `empty` only
 for a successful empty REST response, and `unavailable` or `anomalous` for failed, partial,
 malformed, or unexplained zero-row responses. The plan repeats this as `issue_inventory_status`;
-an unavailable or anomalous source adds `issues` to `truncation_or_errors`, suppresses mutations,
-returns a nonzero exit, and must be rerun before an apply step. The explicit
+an empty status is admissible only with the complete source identity, proof, count, and successful
+read metadata; otherwise it is anomalous. An unavailable or anomalous source adds `issues` to
+`truncation_or_errors`, suppresses mutations, returns a nonzero exit, and must be rerun before an
+apply step. Apply and decision-envelope boundaries also reject forged work attached to an
+inadmissible or empty source. The explicit
 `--max-wall-seconds 0` no-budget timeout remains a separate fail-closed status.
 
 Project #5 score synchronization uses the same fail-closed preflight. If its estimated field,

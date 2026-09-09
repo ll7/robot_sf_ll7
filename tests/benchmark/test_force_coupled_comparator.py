@@ -55,6 +55,8 @@ class _SimulatorBoundaryFailurePlanner:
             raise RuntimeError("simulator backend unavailable")
         if self.failure_phase == "command":
             return (float("nan"), 0.0)
+        if self.failure_phase == "degraded_without_reason":
+            return (1.0, 0.0)
         return (0.1, 0.0)
 
     def diagnostics(self) -> dict[str, object]:
@@ -67,6 +69,11 @@ class _SimulatorBoundaryFailurePlanner:
                 "planner_type": "simulator_boundary_fixture",
                 "status": "degraded",
                 "degradation_reasons": ["fixture_degraded"],
+            }
+        if self.failure_phase == "degraded_without_reason":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "degraded",
             }
         if self.failure_phase == "degraded_simulator_text":
             return {
@@ -219,6 +226,24 @@ def test_execute_rollout_records_diagnostic_degradation(
     assert result.degraded is True
     assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
     assert f"planner_diagnostic: {expected_reason}" in result.degradation_reasons
+
+
+def test_execute_rollout_emits_reason_for_degraded_diagnostic_without_reason() -> None:
+    """A bare degraded diagnostic gets a schema-compatible reason instead of an empty list."""
+    scenario = replace(
+        get_canonical_comparison_scenarios()[0],
+        goal=(0.3, 0.0),
+        max_steps=2,
+    )
+
+    result = execute_rollout(_SimulatorBoundaryFailurePlanner("degraded_without_reason"), scenario)
+
+    assert result.status == "degraded"
+    assert result.degraded is True
+    assert result.completed is True
+    assert result.degradation_reasons == ("planner_diagnostic: degraded_without_reason",)
+    assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
+    assert len(result.to_dict()["degradation_reasons"]) == 1
 
 
 def test_execute_rollout_captures_simulator_state_failure(monkeypatch: pytest.MonkeyPatch) -> None:

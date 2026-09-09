@@ -574,7 +574,10 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             planner_id = str(diag.get("planner_type", planner_id))
             if diag_status == "degraded" or diag.get("degraded") is True:
                 degraded = True
-                for reason in diag.get("degradation_reasons", []):
+                diagnostic_reasons = diag.get("degradation_reasons", [])
+                if not diagnostic_reasons:
+                    diagnostic_reasons = ["degraded_without_reason"]
+                for reason in diagnostic_reasons:
                     planner_reason = f"planner_diagnostic: {reason}"
                     if planner_reason not in degradation_reasons:
                         degradation_reasons.append(planner_reason)

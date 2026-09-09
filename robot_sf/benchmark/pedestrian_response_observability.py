@@ -38,11 +38,79 @@ ResponseStatus = Literal["available", "not_available"]
 _REQUIRED_FIELDS = (
     "minimum_passing_clearance_m",
     "offered_side",
+    "route_reference",
     "taken_side",
     "response_present",
 )
 _REQUIRED_FIELD_SET = frozenset(_REQUIRED_FIELDS)
 _RESPONSE_STATUSES = frozenset({"available", "not_available"})
+
+
+@dataclass(frozen=True)
+class RouteReference:
+    """Reference metadata carried by a route-side observation."""
+
+    coordinate_frame: str
+    start: tuple[float, float]
+    goal: tuple[float, float]
+    units: str
+    tolerance_m: float
+    neutral_band_m: float
+    progress_interval: tuple[float, float]
+
+    def __post_init__(self) -> None:
+        """Normalize and validate the declared route reference."""
+        for field_name in ("coordinate_frame", "units"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+            object.__setattr__(self, field_name, value.strip())
+        object.__setattr__(self, "start", _normalize_reference_point(self.start, "start"))
+        object.__setattr__(self, "goal", _normalize_reference_point(self.goal, "goal"))
+        object.__setattr__(
+            self,
+            "tolerance_m",
+            _normalize_reference_scalar(self.tolerance_m, "tolerance_m"),
+        )
+        object.__setattr__(
+            self,
+            "neutral_band_m",
+            _normalize_reference_scalar(self.neutral_band_m, "neutral_band_m"),
+        )
+        object.__setattr__(
+            self,
+            "progress_interval",
+            _normalize_reference_interval(self.progress_interval),
+        )
+
+    @classmethod
+    def from_report(cls, report: RouteSideReport) -> RouteReference:
+        """Extract the canonical reference metadata from a route-side report.
+
+        Returns:
+            The normalized reference metadata declared by ``report``.
+        """
+        return cls(
+            coordinate_frame=report.coordinate_frame,
+            start=report.start,
+            goal=report.goal,
+            units=report.units,
+            tolerance_m=report.tolerance_m,
+            neutral_band_m=report.neutral_band_m,
+            progress_interval=report.progress_interval,
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return JSON-ready reference metadata without duplicating the side label."""
+        return {
+            "coordinate_frame": self.coordinate_frame,
+            "start": list(self.start),
+            "goal": list(self.goal),
+            "units": self.units,
+            "tolerance_m": self.tolerance_m,
+            "neutral_band_m": self.neutral_band_m,
+            "progress_interval": list(self.progress_interval),
+        }
 
 
 @dataclass(frozen=True)
@@ -65,6 +133,7 @@ class PedestrianResponseObservation:
     offered_side: str | None = None
     taken_side: str | None = None
     response_present: bool | None = None
+    route_reference: RouteReference | None = None
     status: ResponseStatus | None = None
     missing_fields: tuple[str, ...] = field(default_factory=tuple)
     unavailable_fields: tuple[str, ...] = field(default_factory=tuple)
@@ -78,8 +147,7 @@ class PedestrianResponseObservation:
         if overlap := sorted(missing & unavailable):
             raise ValueError(f"fields cannot be both missing and unavailable: {overlap}")
         _validate_sides(self, unavailable)
-        if overlap := sorted(missing & unavailable):
-            raise ValueError(f"fields cannot be both missing and unavailable: {overlap}")
+        _validate_route_reference(self)
         _normalize_clearance(self)
         _validate_response_flag(self)
         _complete_field_state(self, missing, unavailable)
@@ -108,6 +176,9 @@ class PedestrianResponseObservation:
             "offered_side": self.offered_side,
             "taken_side": self.taken_side,
             "response_present": self.response_present,
+            "route_reference": (
+                self.route_reference.as_dict() if self.route_reference is not None else None
+            ),
             "missing_fields": list(self.missing_fields),
             "unavailable_fields": list(self.unavailable_fields),
             "unavailable_reason": self.unavailable_reason,
@@ -141,49 +212,38 @@ def build_pedestrian_response_observation(
     unavailable = set(_field_names(unavailable_fields, "unavailable_fields"))
     reasons: list[str] = []
 
-    offered_side, offered_reason = _extract_route_side(
-        offered_route, field_name="offered_side", missing=missing, unavailable=unavailable
+    (
+        offered_side,
+        taken_side,
+        offered_reference,
+        taken_reference,
+    ) = _extract_route_inputs(
+        offered_route,
+        taken_route,
+        missing=missing,
+        unavailable=unavailable,
+        reasons=reasons,
     )
-    if offered_reason is not None:
-        reasons.append(offered_reason)
-    taken_side, taken_reason = _extract_route_side(
-        taken_route, field_name="taken_side", missing=missing, unavailable=unavailable
+    route_reference, offered_side, taken_side = _resolve_route_reference(
+        offered_reference,
+        taken_reference,
+        offered_side=offered_side,
+        taken_side=taken_side,
+        unavailable=unavailable,
+        reasons=reasons,
     )
-    if taken_reason is not None:
-        reasons.append(taken_reason)
-
-    normalized_clearance: float | None
-    if "minimum_passing_clearance_m" in unavailable:
-        normalized_clearance = None
-    elif minimum_passing_clearance_m is None:
-        normalized_clearance = None
-        missing.add("minimum_passing_clearance_m")
-    else:
-        try:
-            normalized_clearance = float(minimum_passing_clearance_m)
-        except (TypeError, ValueError):
-            normalized_clearance = None
-        if (
-            normalized_clearance is None
-            or not math.isfinite(normalized_clearance)
-            or normalized_clearance < 0.0
-        ):
-            normalized_clearance = None
-            unavailable.add("minimum_passing_clearance_m")
-            reasons.append("minimum_passing_clearance_m:invalid_value")
-
-    normalized_response: bool | None
-    if "response_present" in unavailable:
-        normalized_response = None
-    elif response_present is None:
-        normalized_response = None
-        missing.add("response_present")
-    elif type(response_present) is bool:
-        normalized_response = response_present
-    else:
-        normalized_response = None
-        unavailable.add("response_present")
-        reasons.append("response_present:invalid_value")
+    normalized_clearance = _normalize_builder_clearance(
+        minimum_passing_clearance_m,
+        missing=missing,
+        unavailable=unavailable,
+        reasons=reasons,
+    )
+    normalized_response = _normalize_builder_response(
+        response_present,
+        missing=missing,
+        unavailable=unavailable,
+        reasons=reasons,
+    )
 
     reason = ";".join(sorted(set(reasons))) or None
     return PedestrianResponseObservation(
@@ -192,10 +252,130 @@ def build_pedestrian_response_observation(
         offered_side=offered_side,
         taken_side=taken_side,
         response_present=normalized_response,
+        route_reference=route_reference,
         missing_fields=tuple(sorted(missing)),
         unavailable_fields=tuple(sorted(unavailable)),
         unavailable_reason=reason,
     )
+
+
+def _extract_route_inputs(
+    offered_route: RouteSideReport | None,
+    taken_route: RouteSideReport | None,
+    *,
+    missing: set[str],
+    unavailable: set[str],
+    reasons: list[str],
+) -> tuple[
+    str | None,
+    str | None,
+    RouteReference | None,
+    RouteReference | None,
+]:
+    """Extract both route sides and their provenance metadata.
+
+    Returns:
+        Offered side, taken side, and each report's route reference.
+    """
+    offered_side, offered_reference, offered_reason = _extract_route_side(
+        offered_route, field_name="offered_side", missing=missing, unavailable=unavailable
+    )
+    if offered_reason is not None:
+        reasons.append(offered_reason)
+    taken_side, taken_reference, taken_reason = _extract_route_side(
+        taken_route, field_name="taken_side", missing=missing, unavailable=unavailable
+    )
+    if taken_reason is not None:
+        reasons.append(taken_reason)
+    return offered_side, taken_side, offered_reference, taken_reference
+
+
+def _resolve_route_reference(
+    offered_reference: RouteReference | None,
+    taken_reference: RouteReference | None,
+    *,
+    offered_side: str | None,
+    taken_side: str | None,
+    unavailable: set[str],
+    reasons: list[str],
+) -> tuple[RouteReference | None, str | None, str | None]:
+    """Retain shared route provenance or fail closed on a mismatch.
+
+    Returns:
+        Shared route reference and possibly updated route-side values.
+    """
+    if "route_reference" in unavailable:
+        reasons.append("route_reference:explicitly_unavailable")
+        return None, offered_side, taken_side
+
+    route_references = [
+        reference for reference in (offered_reference, taken_reference) if reference is not None
+    ]
+    if not route_references:
+        return None, offered_side, taken_side
+    route_reference = route_references[0]
+    if all(reference == route_reference for reference in route_references[1:]):
+        return route_reference, offered_side, taken_side
+
+    unavailable.update({"offered_side", "route_reference", "taken_side"})
+    reasons.append("route_reference:mismatch")
+    return None, "unavailable", "unavailable"
+
+
+def _normalize_builder_clearance(
+    clearance: float | None,
+    *,
+    missing: set[str],
+    unavailable: set[str],
+    reasons: list[str],
+) -> float | None:
+    """Normalize builder clearance while preserving invalid-value provenance.
+
+    Returns:
+        A finite non-negative clearance, or ``None`` when unavailable/missing.
+    """
+    field_name = "minimum_passing_clearance_m"
+    if field_name in unavailable:
+        return None
+    if clearance is None:
+        missing.add(field_name)
+        return None
+    try:
+        if isinstance(clearance, bool):
+            raise TypeError("boolean clearance is not a distance")
+        normalized = float(clearance)
+    except (OverflowError, TypeError, ValueError):
+        normalized = None
+    if normalized is None or not math.isfinite(normalized) or normalized < 0.0:
+        unavailable.add(field_name)
+        reasons.append(f"{field_name}:invalid_value")
+        return None
+    return normalized
+
+
+def _normalize_builder_response(
+    response_present: bool | None,
+    *,
+    missing: set[str],
+    unavailable: set[str],
+    reasons: list[str],
+) -> bool | None:
+    """Normalize the builder response flag while preserving its state.
+
+    Returns:
+        The observed boolean, or ``None`` when the value is missing/unavailable.
+    """
+    field_name = "response_present"
+    if field_name in unavailable:
+        return None
+    if response_present is None:
+        missing.add(field_name)
+        return None
+    if type(response_present) is bool:
+        return response_present
+    unavailable.add(field_name)
+    reasons.append(f"{field_name}:invalid_value")
+    return None
 
 
 def _extract_route_side(
@@ -204,26 +384,28 @@ def _extract_route_side(
     field_name: str,
     missing: set[str],
     unavailable: set[str],
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, RouteReference | None, str | None]:
     """Extract one route side while retaining route-contract availability.
 
     Returns:
-        The side value and an optional field-level unavailability reason.
+        The side value, its reference metadata, and an optional field-level
+        unavailability reason.
     """
     if report is None:
         if field_name not in unavailable:
             missing.add(field_name)
-        return None, None
+        return None, None, None
     if not isinstance(report, RouteSideReport):
         raise TypeError(f"{field_name} must be a RouteSideReport or None")
     if report.side not in ROUTE_SIDES:
         raise ValueError(f"{field_name} report uses an unknown route-side value")
+    reference = RouteReference.from_report(report)
     if report.side == "unavailable":
         unavailable.add(field_name)
-        return "unavailable", f"{field_name}:{report.reason or 'unknown'}"
+        return "unavailable", reference, f"{field_name}:{report.reason or 'unknown'}"
     if field_name in unavailable:
-        return None, f"{field_name}:explicitly_unavailable"
-    return report.side, None
+        return None, reference, f"{field_name}:explicitly_unavailable"
+    return report.side, reference, None
 
 
 def _field_names(value: Iterable[str], field_name: str) -> tuple[str, ...]:
@@ -256,6 +438,14 @@ def _validate_sides(observation: PedestrianResponseObservation, unavailable: set
             raise ValueError(f"{field_name} must use the route-side vocabulary")
         if value == "unavailable":
             unavailable.add(field_name)
+
+
+def _validate_route_reference(observation: PedestrianResponseObservation) -> None:
+    """Validate the typed route-reference provenance field."""
+    if observation.route_reference is not None and not isinstance(
+        observation.route_reference, RouteReference
+    ):
+        raise ValueError("route_reference must be a RouteReference or None")
 
 
 def _normalize_clearance(observation: PedestrianResponseObservation) -> None:
@@ -291,7 +481,13 @@ def _complete_field_state(
         if value is None:
             if field_name not in unavailable:
                 missing.add(field_name)
-        elif field_name in missing or (field_name in unavailable and value != "unavailable"):
+        elif field_name in missing or field_name in unavailable:
+            if (
+                field_name in {"offered_side", "taken_side"}
+                and value == "unavailable"
+                and field_name in unavailable
+            ):
+                continue
             raise ValueError(f"{field_name} cannot be present and unavailable")
 
 
@@ -338,5 +534,57 @@ __all__ = [
     "PEDESTRIAN_RESPONSE_SCHEMA_VERSION",
     "PedestrianResponseObservation",
     "ResponseStatus",
+    "RouteReference",
     "build_pedestrian_response_observation",
 ]
+
+
+def _normalize_reference_point(value: Any, field_name: str) -> tuple[float, float]:
+    """Normalize one finite two-dimensional route-reference point.
+
+    Returns:
+        A finite two-dimensional point.
+    """
+    try:
+        x, y = value
+        point = (float(x), float(y))
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a finite two-dimensional point") from exc
+    if not all(math.isfinite(item) for item in point):
+        raise ValueError(f"{field_name} must be a finite two-dimensional point")
+    return point
+
+
+def _normalize_reference_scalar(value: Any, field_name: str) -> float:
+    """Normalize one finite non-negative route-reference scalar.
+
+    Returns:
+        A finite non-negative scalar.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be finite and non-negative")
+    try:
+        normalized = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be finite and non-negative") from exc
+    if not math.isfinite(normalized) or normalized < 0.0:
+        raise ValueError(f"{field_name} must be finite and non-negative")
+    return normalized
+
+
+def _normalize_reference_interval(value: Any) -> tuple[float, float]:
+    """Normalize one finite strictly increasing progress interval.
+
+    Returns:
+        A finite interval bounded by zero and one.
+    """
+    try:
+        lo, hi = value
+        interval = (float(lo), float(hi))
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError("progress_interval must be finite and strictly increasing") from exc
+    if not (
+        all(math.isfinite(item) for item in interval) and 0.0 <= interval[0] < interval[1] <= 1.0
+    ):
+        raise ValueError("progress_interval must be finite and strictly increasing")
+    return interval

@@ -24,6 +24,7 @@ not create a second route-side schema or infer a pedestrian preference.
 | `encounter_id` | Stable caller-supplied identity for one encounter. |
 | `minimum_passing_clearance_m` | Caller-supplied observed minimum surface clearance in metres; no threshold is introduced. |
 | `offered_side` | Side classified for the biased/offered route using `route_choice_observability.v1`. |
+| `route_reference` | Typed coordinate-frame, endpoint, units, tolerance, neutral-band, and progress metadata copied from the route-side reports. |
 | `taken_side` | Side classified for the observed taken route using the same existing contract. |
 | `response_present` | `True` or `False` when presence or absence was observed; `None` is unavailable. |
 | `status` | `available` only when all required fields are available; otherwise `not_available`. |
@@ -32,7 +33,9 @@ not create a second route-side schema or infer a pedestrian preference.
 
 `False` is a valid response-presence observation and is not treated as missing. A missing field is
 never filled with a default. An unavailable route side retains the predecessor value
-`unavailable` and its reason in the record-level `unavailable_reason`.
+`unavailable` and its reason in the record-level `unavailable_reason`. The builder carries the
+nested route reference and fails closed when the offered and taken reports use incompatible
+reference metadata; it never treats an unreferenced side label as available evidence.
 
 ## Deterministic proof and boundaries
 

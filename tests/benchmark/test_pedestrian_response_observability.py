@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 
 import pytest
 
 from robot_sf.benchmark.pedestrian_response_observability import (
     PEDESTRIAN_RESPONSE_SCHEMA_VERSION,
     PedestrianResponseObservation,
+    RouteReference,
     build_pedestrian_response_observation,
 )
 from robot_sf.benchmark.route_choice_observability import classify_route_side
@@ -63,6 +65,8 @@ def test_structured_indoor_fixture_replays_identically(
     assert first.offered_side == "left"
     assert first.taken_side == "right"
     assert first.minimum_passing_clearance_m == pytest.approx(0.62)
+    assert first.route_reference == RouteReference.from_report(routes["left"].side_report)
+    assert first.as_dict()["route_reference"] == first.route_reference.as_dict()
     assert first.missing_fields == ()
     assert first.unavailable_fields == ()
     assert json.dumps(first.as_dict(), sort_keys=True) == json.dumps(
@@ -98,6 +102,69 @@ def test_missing_fields_are_distinct_from_an_observed_false_response() -> None:
     )
     assert unavailable.unavailable_fields == ()
     assert unavailable.unavailable_reason == "missing_fields"
+
+
+@pytest.mark.parametrize("invalid_clearance", [True, 10**1000])
+def test_builder_marks_invalid_clearance_unavailable(invalid_clearance: object) -> None:
+    """Builder normalization rejects booleans and overflowing numeric values."""
+    routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
+    record = build_pedestrian_response_observation(
+        encounter_id="invalid-clearance",
+        offered_route=routes["left"].side_report,
+        taken_route=routes["right"].side_report,
+        minimum_passing_clearance_m=invalid_clearance,  # type: ignore[arg-type]
+        response_present=True,
+    )
+
+    assert record.status == "not_available"
+    assert record.missing_fields == ()
+    assert record.unavailable_fields == ("minimum_passing_clearance_m",)
+    assert record.unavailable_reason == "minimum_passing_clearance_m:invalid_value"
+
+
+def test_mismatched_route_references_fail_closed() -> None:
+    """Reports from incompatible route frames cannot produce side evidence."""
+    routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
+    incompatible_taken_route = replace(
+        routes["right"].side_report,
+        coordinate_frame="ego_xy",
+    )
+    record = build_pedestrian_response_observation(
+        encounter_id="mismatched-reference",
+        offered_route=routes["left"].side_report,
+        taken_route=incompatible_taken_route,
+        minimum_passing_clearance_m=0.8,
+        response_present=True,
+    )
+
+    assert record.status == "not_available"
+    assert record.route_reference is None
+    assert record.offered_side == "unavailable"
+    assert record.taken_side == "unavailable"
+    assert record.missing_fields == ()
+    assert record.unavailable_fields == (
+        "offered_side",
+        "route_reference",
+        "taken_side",
+    )
+    assert record.unavailable_reason == "route_reference:mismatch"
+    assert record.as_dict()["route_reference"] is None
+
+
+def test_direct_record_requires_route_reference_for_available_status() -> None:
+    """Direct records without provenance are explicitly not available."""
+    record = PedestrianResponseObservation(
+        encounter_id="unreferenced",
+        minimum_passing_clearance_m=0.5,
+        offered_side="left",
+        taken_side="right",
+        response_present=True,
+    )
+
+    assert record.status == "not_available"
+    assert record.missing_fields == ("route_reference",)
+    assert record.unavailable_fields == ()
+    assert record.unavailable_reason == "missing_fields"
 
 
 def test_unavailable_route_side_preserves_route_observability_reason() -> None:

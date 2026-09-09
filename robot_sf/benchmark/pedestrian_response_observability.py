@@ -144,9 +144,9 @@ class PedestrianResponseObservation:
         _normalize_encounter_id(self)
         missing = set(_field_names(self.missing_fields, "missing_fields"))
         unavailable = set(_field_names(self.unavailable_fields, "unavailable_fields"))
+        _validate_sides(self, unavailable)
         if overlap := sorted(missing & unavailable):
             raise ValueError(f"fields cannot be both missing and unavailable: {overlap}")
-        _validate_sides(self, unavailable)
         _validate_route_reference(self)
         _normalize_clearance(self)
         _validate_response_flag(self)
@@ -399,7 +399,17 @@ def _extract_route_side(
         raise TypeError(f"{field_name} must be a RouteSideReport or None")
     if report.side not in ROUTE_SIDES:
         raise ValueError(f"{field_name} report uses an unknown route-side value")
-    reference = RouteReference.from_report(report)
+    try:
+        reference = RouteReference.from_report(report)
+    except (OverflowError, TypeError, ValueError):
+        if report.side != "unavailable":
+            raise
+        unavailable.add("route_reference")
+        return (
+            "unavailable",
+            None,
+            f"{field_name}:{report.reason or 'unknown'};route_reference:invalid_reference",
+        )
     if report.side == "unavailable":
         unavailable.add(field_name)
         return "unavailable", reference, f"{field_name}:{report.reason or 'unknown'}"
@@ -457,7 +467,7 @@ def _normalize_clearance(observation: PedestrianResponseObservation) -> None:
         raise ValueError("minimum_passing_clearance_m must be finite and non-negative")
     try:
         normalized = float(clearance)
-    except (TypeError, ValueError) as exc:
+    except (OverflowError, TypeError, ValueError) as exc:
         raise ValueError("minimum_passing_clearance_m must be finite and non-negative") from exc
     if not math.isfinite(normalized) or normalized < 0.0:
         raise ValueError("minimum_passing_clearance_m must be finite and non-negative")

@@ -191,6 +191,7 @@ def test_unavailable_route_side_preserves_route_observability_reason() -> None:
     [
         {"offered_side": "diagonal"},
         {"minimum_passing_clearance_m": float("nan")},
+        {"minimum_passing_clearance_m": 10**1000},
         {"response_present": 1},
     ],
 )
@@ -206,3 +207,38 @@ def test_typed_record_rejects_invalid_direct_values(kwargs: dict[str, object]) -
     values.update(kwargs)
     with pytest.raises(ValueError):
         PedestrianResponseObservation(**values)
+
+
+def test_direct_record_rejects_missing_and_unavailable_side_overlap() -> None:
+    """A side normalized as unavailable cannot also be declared missing."""
+    with pytest.raises(ValueError, match="both missing and unavailable"):
+        PedestrianResponseObservation(
+            encounter_id="contradictory-side-state",
+            offered_side="unavailable",
+            missing_fields=("offered_side",),
+        )
+
+
+def test_invalid_unavailable_route_reference_fails_closed() -> None:
+    """An unavailable predecessor with invalid metadata remains explicit unavailable data."""
+    unavailable_route = classify_route_side([], start=(0.0, 0.0), goal=(2.0, 0.0))
+    invalid_route = replace(unavailable_route, coordinate_frame="")
+
+    record = build_pedestrian_response_observation(
+        encounter_id="invalid-unavailable-reference",
+        offered_route=invalid_route,
+        taken_route=invalid_route,
+        minimum_passing_clearance_m=0.8,
+        response_present=True,
+    )
+
+    assert record.status == "not_available"
+    assert record.route_reference is None
+    assert record.offered_side == "unavailable"
+    assert record.taken_side == "unavailable"
+    assert record.unavailable_fields == (
+        "offered_side",
+        "route_reference",
+        "taken_side",
+    )
+    assert "route_reference:invalid_reference" in (record.unavailable_reason or "")

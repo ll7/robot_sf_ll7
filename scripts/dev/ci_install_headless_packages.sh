@@ -316,8 +316,8 @@ if [[ "$apt_update_rc" -ne 0 ]]; then
     else
       apt_update_recovery_attempts=1
       echo "ci_install_headless_packages warning=apt_update_official_mirror_fallback_failed rc=${fallback_rc} timeout_seconds=${fallback_timeout_seconds} retry_count=${apt_update_recovery_attempts}" >&2
-      emit_apt_failure "update" "$apt_update_rc" "$apt_update_elapsed_seconds" "$apt_update_output" "apt_update_timeout" "$apt_update_recovery_attempts"
-      exit "$apt_update_rc"
+      emit_apt_failure "update" "$fallback_rc" "$fallback_elapsed_seconds" "$fallback_output" "apt_update_official_mirror_fallback_failed" "$apt_update_recovery_attempts" "archive.ubuntu.com" "$fallback_timeout_seconds"
+      exit "$fallback_rc"
     fi
   fi
 

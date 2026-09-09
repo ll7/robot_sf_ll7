@@ -100,6 +100,21 @@ def test_registry_rejects_alias_collisions_and_unknown_fields(tmp_path):
         SemanticsRegistry.from_file(path)
 
 
+@pytest.mark.parametrize(
+    ("section", "field"),
+    [("metrics", "direction"), ("metrics", "scale"), ("planners", "line_style")],
+)
+def test_registry_rejects_non_scalar_enum_values(tmp_path, section, field):
+    payload = default_registry().payload()
+    row = next(iter(payload[section].values()))
+    row[field] = ["malformed"]
+    path = tmp_path / f"invalid-{section}-{field}.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=field):
+        SemanticsRegistry.from_file(path)
+
+
 def test_suggestion_is_review_only_and_does_not_mutate_registry():
     registry = default_registry()
     before = registry.sha256()
@@ -119,7 +134,7 @@ def test_suggestion_is_review_only_and_does_not_mutate_registry():
         registry.suggest_metric("success")
 
 
-def test_registry_cli_covers_query_summary_and_review_proposal_paths(capsys):
+def test_registry_cli_covers_query_summary_and_review_proposal_paths(capsys, tmp_path):
     assert main([]) == 0
     summary = json.loads(capsys.readouterr().out)
     assert summary["schema_version"] == SCHEMA
@@ -151,6 +166,14 @@ def test_registry_cli_covers_query_summary_and_review_proposal_paths(capsys):
     with pytest.raises(SystemExit, match="2"):
         main(["--metric", "unregistered_metric"])
     assert "unmapped metric" in capsys.readouterr().err
+
+    payload = default_registry().payload()
+    payload["metrics"]["success"]["direction"] = ["malformed"]
+    path = tmp_path / "invalid-registry.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(SystemExit, match="2"):
+        main(["--registry", str(path)])
+    assert "direction is invalid" in capsys.readouterr().err
 
 
 def test_planner_rows_always_include_non_color_distinction():

@@ -127,10 +127,10 @@ class MetricSemantics:
         except (ValueError, TypeError) as exc:
             raise ValueError(f"metric {key} number_format is invalid") from exc
         direction = value["direction"]
-        if direction not in {"higher", "lower", "context"}:
+        if not isinstance(direction, str) or direction not in {"higher", "lower", "context"}:
             raise ValueError(f"metric {key} direction is invalid")
         scale = value["scale"]
-        if scale not in {"linear", "log"}:
+        if not isinstance(scale, str) or scale not in {"linear", "log"}:
             raise ValueError(f"metric {key} scale is invalid")
         order = value["order"]
         if type(order) is not int or not 0 <= order <= 10000:
@@ -175,7 +175,7 @@ class PlannerSemantics:
         line_style = value["line_style"]
         if not isinstance(marker, str) or not marker or len(marker) > 12:
             raise ValueError(f"planner {key} marker is invalid")
-        if line_style not in {"-", "--", "-.", ":"}:
+        if not isinstance(line_style, str) or line_style not in {"-", "--", "-.", ":"}:
             raise ValueError(f"planner {key} line_style is invalid")
         return cls(
             key=key,

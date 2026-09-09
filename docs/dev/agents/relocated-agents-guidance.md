@@ -186,8 +186,10 @@ artifact classification as blockers; the report is read-only and never grants de
 - For routine validation leftovers such as `output/coverage/`, `output/validation/pr_ready/`, and
   hydrated model caches, record only the category and count unless a file is being promoted or used
   as durable evidence.
-- Prefer `git worktree remove <path>` for clean worktrees and `git worktree prune` only after
-  verifying stale administrative entries no longer point at useful local state.
+- For repository-owned automation, route cleanup through
+  `scripts/dev/stale_worktree_reaper.py --apply --json`; a direct `git worktree remove <path>` is
+  operator-only after independently verifying a clean, pushed worktree, and `git worktree prune`
+  is allowed only after verifying stale administrative entries no longer point at useful local state.
 - If a registered worktree is already missing, `scripts/dev/gate_worktree_guard.py ensure --json`
   may recreate its branch checkout from lease metadata, but its recovery record must retain
   `loss_boundary=dirty_untracked_ignored_state_not_recoverable` and

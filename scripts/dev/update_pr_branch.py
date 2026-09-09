@@ -120,6 +120,7 @@ def update_pr_branch(
             "pr": pr_number,
             "repo": repo,
             "expected_head_sha": expected_head_sha,
+            "gate_worktree_health": gate_worktree_health,
             "updated": False,
         }
     if live_head_sha != expected_head_sha:
@@ -130,6 +131,7 @@ def update_pr_branch(
             "repo": repo,
             "expected_head_sha": expected_head_sha,
             "live_head_sha": live_head_sha,
+            "gate_worktree_health": gate_worktree_health,
             "updated": False,
         }
 
@@ -151,6 +153,7 @@ def update_pr_branch(
             "repo": repo,
             "expected_head_sha": expected_head_sha,
             "live_head_sha": live_head_sha,
+            "gate_worktree_health": gate_worktree_health,
             "updated": False,
         }
 
@@ -163,6 +166,7 @@ def update_pr_branch(
             "repo": repo,
             "expected_head_sha": expected_head_sha,
             "live_head_sha": live_head_sha,
+            "gate_worktree_health": gate_worktree_health,
             "updated": False,
         }
     response = {

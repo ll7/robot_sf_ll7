@@ -1792,7 +1792,6 @@ def _attempt_candidate_removal(  # noqa: C901, PLR0912 - ordered refusal gates s
             "error",
             f"refused lifecycle-lock failure {candidate.path}",
             f"failed lifecycle guard for {candidate.path}: {exc}",
-            None,
             _build_refusal_metadata(
                 path=candidate.path,
                 branch=candidate.branch,
@@ -1807,7 +1806,6 @@ def _attempt_candidate_removal(  # noqa: C901, PLR0912 - ordered refusal gates s
             "error",
             f"failed to remove {candidate.path}",
             f"failed to remove {candidate.path}: {result.stderr.strip()}",
-            None,
             _build_refusal_metadata(
                 path=candidate.path,
                 branch=candidate.branch,

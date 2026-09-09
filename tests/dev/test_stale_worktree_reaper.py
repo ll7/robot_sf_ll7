@@ -490,6 +490,85 @@ def test_apply_refuses_risky_candidates(tmp_path: Path) -> None:
     assert any("refused risky candidate" in event for event in result.audit_log)
 
 
+def test_apply_reports_lifecycle_lock_failure_without_unpacking_crash(tmp_path: Path) -> None:
+    """Lifecycle-lock refusal remains a structured apply result rather than a tuple crash."""
+    candidate = reaper.WorktreeCandidate(
+        path=str(tmp_path / "stale-wt"),
+        branch="stale-branch",
+        head_sha="abc",
+        is_current=False,
+        classification="clean_stale",
+    )
+    plan = reaper.ReaperPlan(
+        schema=reaper.SCHEMA_VERSION,
+        mode="dry_run",
+        total_worktrees=1,
+        current_worktree=None,
+        candidates=[candidate],
+        deletable=[candidate.path],
+        refused=[],
+        errors=[],
+        audit_log=[],
+    )
+
+    with patch(
+        "scripts.dev.pr_gate_lease.worktree_lifecycle_lock",
+        side_effect=RuntimeError("lock unavailable"),
+    ):
+        result = reaper.apply_deletions(plan)
+
+    assert result.errors == [f"failed lifecycle guard for {candidate.path}: lock unavailable"]
+    assert result.refused == [candidate.path]
+    assert result.candidates[0].refusal["reason_codes"] == ["lifecycle_lock_failure"]
+
+
+def test_apply_reports_removal_failure_without_unpacking_crash(
+    tmp_path: Path,
+) -> None:
+    """A failed git removal remains an auditable refusal with no deletion claim."""
+    candidate = reaper.WorktreeCandidate(
+        path=str(tmp_path / "stale-wt"),
+        branch="stale-branch",
+        head_sha="abc",
+        is_current=False,
+        classification="clean_stale",
+    )
+    plan = reaper.ReaperPlan(
+        schema=reaper.SCHEMA_VERSION,
+        mode="dry_run",
+        total_worktrees=1,
+        current_worktree=None,
+        candidates=[candidate],
+        deletable=[candidate.path],
+        refused=[],
+        errors=[],
+        audit_log=[],
+    )
+
+    with (
+        patch.object(reaper, "_worktree_lease_state", return_value=(None, None)),
+        patch.object(
+            reaper,
+            "_read_worktree_identity",
+            return_value=(candidate.branch, candidate.head_sha, None),
+        ),
+        patch.object(reaper, "_read_strict_cleanliness", return_value=([], [])),
+        patch.object(reaper, "_read_unpushed_state", return_value=(False, None)),
+        patch.object(reaper, "_read_strict_open_pr_state", return_value=(False, None, [])),
+        patch.object(
+            reaper,
+            "_run_command",
+            return_value=_result(stderr="worktree is locked", returncode=1),
+        ),
+        patch("scripts.dev.pr_gate_lease.worktree_lifecycle_lock", _null_lock),
+    ):
+        result = reaper.apply_deletions(plan)
+
+    assert result.errors == [f"failed to remove {candidate.path}: worktree is locked"]
+    assert result.refused == [candidate.path]
+    assert result.candidates[0].refusal["reason_codes"] == ["removal_failed"]
+
+
 def test_apply_rechecks_dirty_and_ignored_linked_worktree(tmp_path: Path) -> None:
     """A clean plan cannot remove tracked or ignored state added before apply."""
     repo = tmp_path / "repo"

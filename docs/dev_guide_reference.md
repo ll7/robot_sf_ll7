@@ -297,16 +297,24 @@ For a compact first pass, run
 `uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retirement-plan --json`.
 The retirement projection is a read-only review aid: it can classify rows as `preserve`, `review`,
 or `removable`, but it never deletes worktrees and does not replace human approval before any later
-`git worktree remove` command.
+cleanup action. Automatic or agent-driven cleanup must use the guarded repository reaper so
+protected worktrees are refused and the refusal is recorded:
+
+```bash
+scripts/dev/stale_worktree_reaper.py --apply --json
+```
+
+Treat a direct `git worktree remove <path>` as an operator-only final action for a separately
+verified clean, pushed, closed-PR candidate; it is not an automation integration point and must not
+replace the guarded reaper.
 
 Only remove a worktree after preserving relevant tracked, untracked, and ignored-but-important
 changes through a commit, stash, patch, durable artifact promotion, or explicit handoff note. Do not
 delete dirty or unpushed worktrees unless the cleanup record states what was preserved or why nothing
 needed preservation. Classify large ignored directories such as `output/` before removal as
 disposable, ignored cache, tracked manifest/evidence, durable-required, or handoff-needed; do not let
-worktree-local `output/` become durable artifact storage. Use `git worktree remove <path>` for clean
-worktrees; reserve `git worktree prune` for stale administrative entries after local state is
-checked.
+worktree-local `output/` become durable artifact storage. Use the guarded reaper for supported
+cleanup; reserve `git worktree prune` for stale administrative entries after local state is checked.
 
 ### Targeted shared-venv worktree validation
 

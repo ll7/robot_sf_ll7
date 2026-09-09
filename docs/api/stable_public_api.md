@@ -8,4 +8,3 @@ Please refer to [Robot SF Public API](../public_api.md) for:
 - Public CLI commands (`robot-sf`) and supported Python modules catalog
 - Internal architecture boundaries
 - Environment lifecycle guarantees and deprecation window policies
-

@@ -13,4 +13,3 @@ see :doc:`Robot SF Public API </public_api>`.
    robot_sf.research
    robot_sf.telemetry
    stable_public_api
-

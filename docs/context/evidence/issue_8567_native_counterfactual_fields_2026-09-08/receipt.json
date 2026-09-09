@@ -8,7 +8,7 @@
   "benchmark_evidence": false,
   "campaign_submission_authorized": false,
   "source_revisions": {
-    "base_commit": "807606a35ffb23f5d5749316fd75387e2ca30cd5",
+    "base_commit": "ee078da20425f25620b73e3590667394d685f6b2",
     "implementation_head_commit": "d28db0e06caf34a3a963be330e6ccfe845cbc090",
     "smoke_rows_commit": "d28db0e06caf34a3a963be330e6ccfe845cbc090",
     "smoke_worktree": ".",
@@ -207,7 +207,7 @@
       "result": "passed"
     },
     {
-      "command": "git diff --exit-code 807606a35ffb23f5d5749316fd75387e2ca30cd5 -- configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml configs/research/safety_wrapper_ablation_v1.yaml configs/benchmarks/paired_effect_metric_contract_v1.yaml configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml configs/scenarios/classic_interactions_francis2023.yaml configs/benchmarks/seed_sets_v1.yaml",
+      "command": "git diff --exit-code ee078da20425f25620b73e3590667394d685f6b2 -- configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml configs/research/safety_wrapper_ablation_v1.yaml configs/benchmarks/paired_effect_metric_contract_v1.yaml configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml configs/scenarios/classic_interactions_francis2023.yaml configs/benchmarks/seed_sets_v1.yaml",
       "result": "passed; frozen input bytes unchanged"
     }
   ],

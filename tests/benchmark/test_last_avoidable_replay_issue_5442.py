@@ -169,7 +169,7 @@ def test_initial_contact_abstains_before_branching() -> None:
 
 @pytest.mark.parametrize(
     ("substitution_mode", "extra_actions"),
-    ((SUBSTITUTION_HOLD, 1), (SUBSTITUTION_SINGLE_STEP, 5 - 1)),
+    ((SUBSTITUTION_HOLD, 0), (SUBSTITUTION_SINGLE_STEP, 5 - 1)),
 )
 def test_minimal_recorded_continuation_is_accepted(substitution_mode, extra_actions) -> None:
     """The engine accepts the shortest suffix required by each substitution mode."""
@@ -198,7 +198,7 @@ def test_hold_requires_inclusive_contact_prefix() -> None:
     assert contact_step is not None
     report = locate_last_avoidable(
         fx.KinematicCollisionModel(scenario),
-        fx.maintain_baseline_actions(contact_step),
+        fx.maintain_baseline_actions(contact_step - 1),
         ReplayConfig(
             t_danger=0,
             t_contact=contact_step,
@@ -209,6 +209,25 @@ def test_hold_requires_inclusive_contact_prefix() -> None:
 
     assert report.verdict == VERDICT_UNKNOWN
     assert report.abstain_reason == "insufficient_baseline_actions"
+
+
+def test_contact_tick_matches_applied_action_count_at_boundary() -> None:
+    """The observed contact state tick matches the inclusive contact config tick."""
+    scenario = fx.preventable_late_braking_scenario()
+    contact_tick = fx.find_contact_step(scenario)
+    assert contact_tick is not None
+    report = locate_last_avoidable(
+        fx.KinematicCollisionModel(scenario),
+        fx.maintain_baseline_actions(contact_tick),
+        ReplayConfig(
+            t_danger=0,
+            t_contact=contact_tick,
+            horizon=1,
+            substitution_mode=SUBSTITUTION_HOLD,
+        ),
+    )
+
+    assert report.determinism.observed_contact_steps == (contact_tick,) * 5
 
 
 # -- acceptance criterion: already-unavoidable contact ----------------------

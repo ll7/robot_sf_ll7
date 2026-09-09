@@ -196,6 +196,36 @@ def test_two_action_interaction_joins_as_avoidable() -> None:
     assert report["causal_contribution"]["pedestrian_response_assumption"] == "closed_loop"
 
 
+def test_default_pedestrian_response_is_schema_safe() -> None:
+    """An omitted response assumption joins as explicit ``unknown``."""
+    scenario = fx.preventable_late_braking_scenario()
+    contact_step = fx.find_contact_step(scenario)
+    assert contact_step is not None
+    replay = locate_last_avoidable(
+        fx.KinematicCollisionModel(scenario),
+        fx.maintain_baseline_actions(contact_step + 6),
+        ReplayConfig(
+            t_danger=0,
+            t_contact=contact_step,
+            horizon=6,
+            substitution_mode=SUBSTITUTION_HOLD,
+            action_set_id="decel_lattice",
+            feasibility_filter="all_admissible_decel",
+            collision_predicate="euclidean_distance<=collision_radius",
+        ),
+    )
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id="default-response",
+        case_id="fixture",
+        replay=replay,
+        metadata=_METADATA,
+    )
+
+    assert report["causal_contribution"]["pedestrian_response_assumption"] == "unknown"
+    validate_collision_causal_report(report)
+
+
 def test_join_rejects_unknown_mechanism_label() -> None:
     """The join rejects a mechanism_label outside the shared taxonomy."""
     from dataclasses import replace

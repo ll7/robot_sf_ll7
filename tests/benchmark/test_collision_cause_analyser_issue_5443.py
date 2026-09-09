@@ -259,7 +259,7 @@ def test_causal_attribution_already_unavoidable_from_pure_replay() -> None:
     assert replay.verdict == VERDICT_AVOIDABLE
     assert replay.t_inevitable == 18
     assert [branch.step for branch in replay.branches if branch.any_prevented] == list(range(18))
-    assert [branch.step for branch in replay.branches if not branch.any_prevented] == [18, 19]
+    assert [branch.step for branch in replay.branches if not branch.any_prevented] == [18, 19, 20]
 
     verdict = analyse_cause(fixture)
     assert verdict.predicted_cause == "already_unavoidable_contact"

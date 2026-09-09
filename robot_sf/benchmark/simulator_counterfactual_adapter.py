@@ -653,8 +653,14 @@ class SimulatorCounterfactualModel:
 
     @property
     def feasibility_filter(self) -> str:
-        """Return the native feasible-action rule and its current cardinality."""
-        return f"native_all_supported_actions_v1:n={len(self.feasible_actions())}"
+        """Return the declared finite action lattice and its current cardinality.
+
+        The production robot command space is generally continuous. This adapter
+        evaluates only the explicit finite lattice returned by
+        :meth:`feasible_actions`; the label must not claim exhaustive coverage of
+        the underlying continuous space.
+        """
+        return f"native_declared_action_lattice_v1:n={len(self.feasible_actions())}"
 
     @property
     def collision_predicate(self) -> str:

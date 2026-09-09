@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 8567
+latest_reconciliation_issue: 8666
 latest_reviewed_date: 2026-09-09
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 429
-refreshed_baseline_files_with_findings: 95
+refreshed_baseline_total_findings: 431
+refreshed_baseline_files_with_findings: 96
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -131,6 +131,14 @@ decision_summary: >-
   file was reviewed as non-claim instrumentation proof; refreshing the machine baseline updates
   only the filesystem-derived evidence-tree manifest from 2378 to 2379 files and leaves the
   429-finding disposition set unchanged after the current-main #8658 refresh.
+  Post-merge reconciliation addendum (issue #8666; 2026-09-09): the #8657 GitHub squash merge
+  removed the pre-squash smoke producer commit d28db0e06caf34a3a963be330e6ccfe845cbc090 from
+  main's reachable history. The receipt intentionally preserves that exact producer provenance,
+  so the current-head linter reports one `dangling_commit` and one derived
+  `config_missing_at_commit` finding for the receipt. These are historical provenance debt on a
+  diagnostic-only, non-benchmark receipt; the receipt bytes and strict-CI exclusion policy are
+  unchanged. The two findings are explicitly baselined below, increasing the reviewed machine
+  baseline from 429 findings across 95 files to 431 findings across 96 files.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No
@@ -338,6 +346,17 @@ reviewed_files:
       and worktree-local dataset identities have the same four generic-linter findings; the atlas
       validator and review-marker sidecar provide the stronger path/digest checks. This remains
       diagnostic-only and is not benchmark, paper, or dissertation evidence.
+  - path: docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json
+    codes: [config_missing_at_commit, dangling_commit]
+    disposition: baseline
+    reason: >-
+      The compact #8567 receipt is diagnostic-only and explicitly preserves the exact pre-squash
+      smoke producer commit d28db0e06caf34a3a963be330e6ccfe845cbc090. That commit is no longer
+      reachable from main after the #8657 GitHub squash merge, so the linter emits
+      dangling_commit and the corresponding current-head config_missing_at_commit finding even
+      though the receipt's frozen config and producer bytes were valid at the smoke producer
+      revision. Rewriting the receipt would falsify its historical source provenance; no
+      benchmark, paper, or deployment claim is carried by this file.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

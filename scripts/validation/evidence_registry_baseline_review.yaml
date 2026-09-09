@@ -19,8 +19,8 @@ latest_reviewed_date: 2026-09-09
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 429
-refreshed_baseline_files_with_findings: 95
+refreshed_baseline_total_findings: 431
+refreshed_baseline_files_with_findings: 96
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -125,12 +125,16 @@ decision_summary: >-
   verifier hash against the current source after a later builder refresh. Restore the explicit
   baseline disposition without rewriting the frozen receipt or promoting any evidence claim.
   Receipt addendum (issue #8567; 2026-09-08): the compact diagnostic-only native counterfactual
-  producer receipt adds one tracked evidence file and introduces no evidence-registry findings.
-  Its configuration identities use the registry's explicit `config_sha256` field, while raw smoke
-  row and trace digests remain bound by the receipt's worktree-local output statement. The new
-  file was reviewed as non-claim instrumentation proof; refreshing the machine baseline updates
-  only the filesystem-derived evidence-tree manifest from 2378 to 2379 files and leaves the
-  429-finding disposition set unchanged after the current-main #8658 refresh.
+  producer receipt adds one tracked evidence file. Its configuration identities use the registry's
+  explicit `config_sha256` field, while raw smoke row and trace digests remain bound by the receipt's
+  worktree-local output statement. The new file was reviewed as non-claim instrumentation proof.
+  The current-main ratchet also identifies two historical provenance findings in the receipt:
+  `config_missing_at_commit` and `dangling_commit`, because its preserved implementation head is
+  not reachable after squash integration and the current-head linter has no head-reachable commit
+  through which to resolve the declared config. The producer commit and config are real and the
+  declared digest matches at that retained revision. Those bytes and producer identities must not
+  be rewritten; both findings are explicitly baselined, increasing the reviewed machine baseline
+  from 429 to 431 findings across 96 files.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No
@@ -338,6 +342,18 @@ reviewed_files:
       and worktree-local dataset identities have the same four generic-linter findings; the atlas
       validator and review-marker sidecar provide the stronger path/digest checks. This remains
       diagnostic-only and is not benchmark, paper, or dissertation evidence.
+  - path: docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json
+    codes: [config_missing_at_commit, dangling_commit]
+    disposition: baseline
+    reason: >-
+      Diagnostic-only native counterfactual instrumentation receipt. It preserves the exact
+      historical implementation and smoke-row producer commit rather than substituting the later
+      squash integration commit. That producer commit is not reachable from current main, so the
+      current-head linter cannot resolve its declared config through a head-reachable commit even
+      though the config exists at the retained producer revision and matches its declared digest.
+      Rewriting either identity would falsify provenance. The receipt explicitly disclaims benchmark
+      evidence and campaign authorization, so these two historical provenance findings are reviewed
+      legacy debt pending an external or historical-source backfill.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

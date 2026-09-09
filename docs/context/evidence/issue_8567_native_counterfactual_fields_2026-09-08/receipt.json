@@ -207,7 +207,7 @@
       "result": "passed"
     },
     {
-      "command": "git diff --exit-code 9557d3abaa9910bd039c1e689973fd51e9713603 -- configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml configs/research/safety_wrapper_ablation_v1.yaml configs/benchmarks/paired_effect_metric_contract_v1.yaml configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml configs/scenarios/classic_interactions_francis2023.yaml configs/benchmarks/seed_sets_v1.yaml",
+      "command": "git diff --exit-code 807606a35ffb23f5d5749316fd75387e2ca30cd5 -- configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml configs/research/safety_wrapper_ablation_v1.yaml configs/benchmarks/paired_effect_metric_contract_v1.yaml configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml configs/scenarios/classic_interactions_francis2023.yaml configs/benchmarks/seed_sets_v1.yaml",
       "result": "passed; frozen input bytes unchanged"
     }
   ],

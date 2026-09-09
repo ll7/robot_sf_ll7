@@ -7,7 +7,7 @@ and #7384; the attached packet is guidance/evidence, not a replacement authority
 
 Refresh provenance for this repair: current `origin/main` is
 `3496e30878ec0bffbba6b3c9f79ce33ecdada94d`; the live #8620 parent tip is
-`ac6a9178e590c3cef05a4b12b85569e2bf8ae794`; and the relevance-window validation
+`39a6311d4fef80f4ed9f977115b2a0f5781cfe02`; and the relevance-window validation
 repair is `491b8e39e799bc6255edfa2205793f88bcfefd00`. The stack is refreshed for
 inspection, but live domain authority and native campaign admission remain blocked.
 

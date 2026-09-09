@@ -62,8 +62,17 @@ Robot SF grades every claim by how strong its evidence is. Always label results 
 | **fallback** | A required input was missing, so the run dropped to a weaker substitute path (a caveat, not success). |
 | **degraded** | The run completed but under reduced fidelity or partial inputs (a caveat, not success). |
 
+## Workflow and review
+
+| Term | Plain-language meaning |
+| --- | --- |
+| **Fast lane** | The small set of deterministic, quick checks a pull request must pass for its exact changed lines (fast unit/contract tests plus lint), so review feedback arrives in minutes instead of after the full suite. A file joins the lane by registering its covering test in `tests/conftest.py`. |
+| **Merge-ready** | A pull-request label meaning an exact-head review found the full proof bar met (linked contract satisfied, current tests and checks green, threads resolved) and the change is cleared for the guarded merger to merge. Applied only with fresh exact-head evidence, never in advance. |
+| **Residual** | Work a completed change deliberately leaves behind: accepted follow-ups, known limitations, or the next nominated slice — recorded explicitly so nothing silently drops. A residual audit verifies which acceptance bullets remain open and nominates at most one next child. |
+| **Provenance** | The recorded lineage of a result or artifact: which code, config, seed, checkpoint, and input produced it, pinned so someone else can reproduce or audit it. Benchmark and paper-facing claims require it; its absence fails closed. |
+
 ---
 
-**Last updated**: 2026-09-03
+**Last updated**: 2026-09-09
 **Source of truth for**: acronyms and project-specific terms on human-facing surfaces (see the
 `## Clarity` rule in [`maintainer_values.md`](./maintainer_values.md#clarity)).

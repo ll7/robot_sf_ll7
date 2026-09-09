@@ -90,11 +90,13 @@ def update_pr_branch(
     recovered, the call fails closed with the lease cleanup owner reported and
     issues no remote branch update.
     """
+    gate_worktree_health: dict[str, Any] | None = None
     if gate_worktree_path:
-        health = _ensure_gate_worktree(
+        gate_worktree_health = _ensure_gate_worktree(
             gate_worktree_path,
             ttl_hours=gate_worktree_ttl_hours,
         )
+        health = gate_worktree_health
         if not health.get("exists", False):
             return {
                 "status": "gate_worktree_missing",
@@ -163,7 +165,7 @@ def update_pr_branch(
             "live_head_sha": live_head_sha,
             "updated": False,
         }
-    return {
+    response = {
         "status": "update_requested",
         "pr": pr_number,
         "repo": repo,
@@ -172,6 +174,9 @@ def update_pr_branch(
         "updated": True,
         "response": response,
     }
+    if gate_worktree_health is not None:
+        response["gate_worktree_health"] = gate_worktree_health
+    return response
 
 
 def _ensure_gate_worktree(
@@ -192,15 +197,25 @@ def _ensure_gate_worktree(
         from scripts.dev.gate_worktree_guard import ensure_gate_worktree
 
         health, recreate = ensure_gate_worktree(Path(gate_worktree_path), ttl_hours=ttl_hours)
+        branch = health.branch
+        head_sha = health.head_sha
+        recovery = dict(health.recovery)
+        if recreate is not None:
+            branch = recreate.branch or branch
+            head_sha = recreate.head_sha or head_sha
+            recovery = dict(recreate.recovery) or recovery
         result = {
             "exists": health.exists or bool(recreate and recreate.recreated),
             "classification": (
                 "healthy" if recreate is not None and recreate.recreated else health.classification
             ),
+            "branch": branch,
+            "head_sha": head_sha,
             "cleanup_owner": health.cleanup_owner,
             "lease_owner": health.lease_owner,
             "lease_pr_number": health.lease_pr_number,
             "lease_gate_id": health.lease_gate_id,
+            "recovery": recovery,
         }
         if recreate is not None:
             result["recreated"] = recreate.recreated

@@ -162,6 +162,12 @@ def test_gate_worktree_recreated_then_updates(capsys) -> None:  # type: ignore[n
         path="/abs/recreated-wt",
         recreated=True,
         branch="feature",
+        head_sha="a" * 40,
+        recovery={
+            "status": "partial",
+            "local_state_restored": False,
+            "loss_boundary": "dirty_untracked_ignored_state_not_recoverable",
+        },
     )
     with (
         patch(
@@ -194,6 +200,56 @@ def test_gate_worktree_recreated_then_updates(capsys) -> None:  # type: ignore[n
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "update_requested"
     assert payload["updated"] is True
+    health = payload["gate_worktree_health"]
+    assert health["branch"] == "feature"
+    assert health["head_sha"] == "a" * 40
+    assert health["recovery"]["local_state_restored"] is False
+    assert health["recovery"]["loss_boundary"] == ("dirty_untracked_ignored_state_not_recoverable")
+
+
+def test_gate_worktree_recovery_metadata_survives_missing_guard(capsys) -> None:  # type: ignore[no-untyped-def]
+    """A failed recreation keeps the dirty-state loss boundary in caller output."""
+    recovery = {
+        "status": "partial",
+        "local_state_restored": False,
+        "loss_boundary": "dirty_untracked_ignored_state_not_recoverable",
+    }
+    with patch(
+        "scripts.dev.update_pr_branch._ensure_gate_worktree",
+        return_value={
+            "exists": False,
+            "classification": "missing",
+            "branch": "feature",
+            "head_sha": "b" * 40,
+            "cleanup_owner": None,
+            "lease_owner": None,
+            "lease_pr_number": None,
+            "lease_gate_id": None,
+            "recovery": recovery,
+            "recreated": False,
+            "recreate_error": "worktree missing and no live lease on record; cannot recreate safely",
+        },
+    ):
+        rc = main(
+            [
+                "5819",
+                "--repo",
+                "owner/repo",
+                "--expected-head-sha",
+                "head_sha",
+                "--gate-worktree-path",
+                "/abs/missing-wt",
+                "--json",
+            ]
+        )
+
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out)
+    health = payload["gate_worktree_health"]
+    assert health["branch"] == "feature"
+    assert health["head_sha"] == "b" * 40
+    assert health["recovery"]["local_state_restored"] is False
+    assert health["recovery"]["loss_boundary"] == ("dirty_untracked_ignored_state_not_recoverable")
 
 
 def test_gate_worktree_present_allows_update(capsys) -> None:  # type: ignore[no-untyped-def]

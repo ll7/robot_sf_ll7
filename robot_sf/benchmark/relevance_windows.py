@@ -165,12 +165,19 @@ class RelevanceThresholds:
             value = getattr(self, name)
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 raise RelevanceContractError(f"{name} must be a non-negative integer")
-        if self.approval_status not in {"proposed", "approved"}:
+        if not isinstance(self.approval_status, str) or self.approval_status not in {
+            "proposed",
+            "approved",
+        }:
             raise RelevanceContractError("approval_status must be proposed or approved")
         if self.approved_thresholds is not None and not isinstance(
             self.approved_thresholds, Mapping
         ):
             raise RelevanceContractError("approved_thresholds must be an object or null")
+        if self.approval_status == "approved" and not self.approved_thresholds:
+            raise RelevanceContractError(
+                "approved approval_status requires a nonempty approved_thresholds object"
+            )
 
     def numeric_proposed(self) -> dict[str, float]:
         """Return only the proposed numeric signal thresholds."""
@@ -453,9 +460,13 @@ def _signal_from_row(row: Mapping[str, Any], name: str) -> RelevanceSignal:
     if raw is None:
         missingness = "not_available"
         value: float | bool | None = None
-    elif isinstance(raw, bool) and unit == "bool":
-        missingness = "observed"
-        value = raw
+    elif unit == "bool":
+        if not isinstance(raw, bool):
+            missingness = "invalid"
+            value = None
+        else:
+            missingness = "observed"
+            value = raw
     else:
         try:
             value = _finite(raw, f"signals.{name}")

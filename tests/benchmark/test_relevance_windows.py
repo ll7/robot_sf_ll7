@@ -157,6 +157,32 @@ def test_missing_signal_is_unknown_not_a_safe_zero() -> None:
     assert "ttc_s" not in vector.active_reasons
 
 
+def test_boolean_signal_rejects_numeric_truthy_values() -> None:
+    """Numeric values for typed boolean signals remain invalid and non-triggering."""
+    rows = _parent_rows(1)
+    rows[0]["path_conflict"] = 1
+
+    selection = select_relevance_windows(rows, parent_digest=_parent_digest())
+    signal = next(
+        signal for signal in selection.vectors[0].signals if signal.name == "path_conflict"
+    )
+
+    assert signal.value is None
+    assert signal.missingness == "invalid"
+    assert "path_conflict" in selection.vectors[0].unknown_signals
+    assert "path_conflict" not in selection.vectors[0].active_reasons
+
+
+@pytest.mark.parametrize("approved_thresholds", [None, {}])
+def test_approved_status_requires_nonempty_thresholds(approved_thresholds) -> None:
+    """Approved status cannot be serialized without an approved rule set."""
+    with pytest.raises(RelevanceContractError, match="nonempty approved_thresholds"):
+        RelevanceThresholds(
+            approval_status="approved",
+            approved_thresholds=approved_thresholds,
+        )
+
+
 def test_fractional_signal_availability_is_rejected() -> None:
     """Timing provenance must not silently truncate a fractional step."""
     rows = _parent_rows(1)

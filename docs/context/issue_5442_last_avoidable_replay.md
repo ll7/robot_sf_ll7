@@ -42,7 +42,10 @@ remaining (the global-RNG snapshot seam was the gated dependency):
   omitting it lets a mid-episode pedestrian respawn (`sample_zone` draws from the
   global RNG) diverge a replay by meters, which the engine's fail-closed `unknown`
   guard would catch. The default action lattice follows the native drivetrain
-  control semantics and returns an empty set for unknown action contracts.
+  control semantics and returns an empty set for unknown action contracts. Its
+  `source_kind`, action-set ID (including native limits), and feasible-action
+  filter are bound by the replay engine; caller-declared mismatches abstain to
+  `unknown`.
 - `tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py` — headless
   (no-display) `Simulator` construction, snapshot/restore determinism, the RNG-capture
   seam, and a full `locate_last_avoidable` run on a genuine production fixture
@@ -138,6 +141,12 @@ the engine. The fail-closed failure semantics survive the join:
 The replay summary has no per-element canonical trace, so planner-internal
 reconstruction elements are unavailable for every joined verdict; only the
 replay-derived critical timestamps can be marked available.
+
+Native live-simulator replays are additionally rejected by the causal join until
+the adapter carries a verified episode/map/seed/software provenance receipt. They
+remain valid diagnostic replay evidence, but the join emits an explicit
+`native_simulator_causal_join_unsupported` abstention rather than relabelling the
+result as `synthetic_fixture`.
 
 `normative_fault` is always `not_assessed`. The join is exercised by
 `tests/benchmark/test_collision_causal_report_join_5442.py`.

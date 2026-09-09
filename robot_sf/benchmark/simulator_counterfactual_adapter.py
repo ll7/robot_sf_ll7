@@ -614,6 +614,49 @@ class SimulatorCounterfactualModel:
         return bool(np.any(distances <= robot_radius + ped_radius))
 
     @property
+    def replay_source_kind(self) -> str:
+        """Identify this adapter as a live-episode replay source.
+
+        The adapter does not yet carry the map, scenario, seed, episode, and
+        software-commit receipt needed by the causal-report join. The replay
+        engine records this source kind so that the join can abstain instead of
+        relabelling a native result as a synthetic fixture.
+        """
+        return "live_episode"
+
+    @property
+    def action_set_id(self) -> str:
+        """Return an ID bound to the native drivetrain and its limits."""
+        config = self.sim.robots[0].config
+        if hasattr(config, "max_linear_decel"):
+            return (
+                "simulator_native_action_lattice_v1:diff_drive_acceleration:"
+                f"max_linear_decel={float(config.max_linear_decel):g}:"
+                f"max_angular_accel={float(config.max_angular_accel):g}"
+            )
+        if hasattr(config, "max_decel") and hasattr(config, "max_steer"):
+            return (
+                "simulator_native_action_lattice_v1:bicycle_acceleration:"
+                f"max_decel={float(config.max_decel):g}:max_steer={float(config.max_steer):g}"
+            )
+        if getattr(config, "command_mode", None) == "vx_vy":
+            return (
+                "simulator_native_action_lattice_v1:holonomic_velocity:"
+                f"max_speed={float(config.max_speed):g}"
+            )
+        if getattr(config, "command_mode", None) == "unicycle_vw":
+            return (
+                "simulator_native_action_lattice_v1:unicycle_velocity:"
+                f"max_angular_speed={float(config.max_angular_speed):g}"
+            )
+        return "simulator_native_action_lattice_v1:unsupported"
+
+    @property
+    def feasibility_filter(self) -> str:
+        """Return the native feasible-action rule and its current cardinality."""
+        return f"native_all_supported_actions_v1:n={len(self.feasible_actions())}"
+
+    @property
     def collision_predicate(self) -> str:
         """Return a stable provenance identifier for the executed predicate."""
         if self._collision_fn is not None:
@@ -650,6 +693,11 @@ class SimulatorCounterfactualModel:
                 if getattr(definition, "hold_until_robot_within_m", None) is not None:
                     return PED_RESPONSE_CLOSED_LOOP
         return PED_RESPONSE_REPLAYED
+
+    @property
+    def replay_state_complete(self) -> str:
+        """Report whether the adapter captured every declared RNG stream."""
+        return "true" if self.capture_rng else "false"
 
     def snapshot(self) -> _SimulatorSnapshot:
         """Capture the full live simulator state including the global RNG.

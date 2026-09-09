@@ -21,11 +21,6 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf import cli_datasets, cli_envs, cli_models, cli_scenarios, release_cli
-from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
-from robot_sf.examples_cli import examples_cli_main
-from robot_sf.recipes import cli as recipes_cli
-
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -153,6 +148,9 @@ def _build_parser() -> argparse.ArgumentParser:
     g_build.set_defaults(gallery_cmd="build")
 
     # Curated recipe catalog (issue #5795): list / run / explain blessed workflows.
+    from robot_sf import release_cli  # noqa: PLC0415
+    from robot_sf.recipes import cli as recipes_cli  # noqa: PLC0415
+
     recipes_cli.build_subparser(subparsers)
     release_cli.build_subparser(subparsers)
     return parser
@@ -164,6 +162,11 @@ def _handle_doctor(args: argparse.Namespace) -> int:
     Returns:
         int: Process-style doctor exit code.
     """
+    from robot_sf.benchmark.doctor import (  # noqa: PLC0415
+        collect_doctor_report,
+        doctor_exit_code,
+    )
+
     report = collect_doctor_report(
         artifact_root=args.artifact_root,
         run_env_smoke=not args.skip_env_smoke,
@@ -327,7 +330,24 @@ def _add_envs_subparser(sub: argparse._SubParsersAction) -> None:
 
 def _add_scenarios_subparser(sub: argparse._SubParsersAction) -> None:
     """Register the ``robot-sf scenarios`` subcommand tree (issue #8748)."""
+    from robot_sf import cli_scenarios  # noqa: PLC0415
+
     cli_scenarios._add_scenarios_subparser(sub)
+
+
+def _build_scenarios_parser() -> argparse.ArgumentParser:
+    """Construct the scenario-only parser without importing other CLI commands.
+
+    Returns:
+        argparse.ArgumentParser: Parser containing only the scenarios command.
+    """
+    parser = argparse.ArgumentParser(
+        prog="robot-sf",
+        description="Robot SF top-level command line interface.",
+    )
+    subparsers = parser.add_subparsers(dest="cmd")
+    _add_scenarios_subparser(subparsers)
+    return parser
 
 
 def _handle_models(args: argparse.Namespace) -> int:
@@ -336,6 +356,8 @@ def _handle_models(args: argparse.Namespace) -> int:
     Returns:
         int: Process-style exit code (0 success, 2 verify failure, 1 download error).
     """
+    from robot_sf import cli_models  # noqa: PLC0415
+
     cmd = args.models_cmd
     if cmd == "list":
         rows = cli_models.list_models(registry_path=args.registry)
@@ -425,6 +447,8 @@ def _handle_datasets(args: argparse.Namespace) -> int:
     Returns:
         int: Process-style exit code (0 success, 2 verify/layout failure).
     """
+    from robot_sf import cli_datasets  # noqa: PLC0415
+
     cmd = args.datasets_cmd
     if cmd == "list":
         rows = cli_datasets.list_datasets()
@@ -590,6 +614,8 @@ def _handle_examples(extra_args: Sequence[str]) -> int:
     Returns:
         int: Process-style exit code from the examples CLI.
     """
+    from robot_sf.examples_cli import examples_cli_main  # noqa: PLC0415
+
     return examples_cli_main(list(extra_args))
 
 
@@ -599,6 +625,8 @@ def _handle_envs(args: argparse.Namespace) -> int:
     Returns:
         int: Process-style exit code (0 success, 2 unknown env id).
     """
+    from robot_sf import cli_envs  # noqa: PLC0415
+
     cmd = args.envs_cmd
     if cmd == "list":
         return cli_envs._handle_envs_list(args)
@@ -615,7 +643,31 @@ def _handle_scenarios(args: argparse.Namespace) -> int:
     Returns:
         int: Process-style exit code (0 success, 2 on error/invalid).
     """
+    from robot_sf import cli_scenarios  # noqa: PLC0415
+
     return cli_scenarios._handle_scenarios(args)
+
+
+def _handle_recipe(args: argparse.Namespace) -> int:
+    """Dispatch the recipe command after its parser has been selected.
+
+    Returns:
+        int: Process-style recipe exit code.
+    """
+    from robot_sf.recipes import cli as recipes_cli  # noqa: PLC0415
+
+    return recipes_cli.handle(args)
+
+
+def _handle_release(args: argparse.Namespace) -> int:
+    """Dispatch the release command after its parser has been selected.
+
+    Returns:
+        int: Process-style release exit code.
+    """
+    from robot_sf import release_cli  # noqa: PLC0415
+
+    return release_cli.handle(args)
 
 
 _HANDLERS = {
@@ -625,8 +677,8 @@ _HANDLERS = {
     "envs": _handle_envs,
     "scenarios": _handle_scenarios,
     "gallery": _handle_gallery,
-    "recipe": recipes_cli.handle,
-    "release": release_cli.handle,
+    "recipe": _handle_recipe,
+    "release": _handle_release,
 }
 
 
@@ -642,6 +694,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     # top-level parser consume example-specific options.
     if args_list and args_list[0] == "examples":
         return _handle_examples(args_list[1:])
+    if args_list and args_list[0] == "scenarios":
+        parser = _build_scenarios_parser()
+        args = parser.parse_args(args_list)
+        return _handle_scenarios(args)
 
     parser = _build_parser()
     args = parser.parse_args(args_list)

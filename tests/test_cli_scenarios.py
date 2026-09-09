@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
+import yaml
 
+from robot_sf import cli_scenarios as cli_scenarios_module
 from robot_sf.cli import main
 from robot_sf.cli_scenarios import (
     REASON_DUPLICATE_SCENARIO_ID,
@@ -164,9 +167,9 @@ def test_validate_scenario_malformed_yaml() -> None:
 def test_validate_scenario_unsupported_status() -> None:
     """``validate_scenario_payload`` reports unsupported scenario status."""
     payload = validate_scenario_payload("tests/fixtures/cli_scenarios/unsupported.yaml")
-    assert payload["valid"] is True
+    assert payload["valid"] is False
     assert payload["status"] == STATUS_UNSUPPORTED
-    assert any(w["code"] == REASON_UNSUPPORTED_SCENARIO for w in payload["warnings"])
+    assert any(e["code"] == REASON_UNSUPPORTED_SCENARIO for e in payload["errors"])
 
 
 def test_validate_scenario_file_not_found() -> None:
@@ -273,6 +276,176 @@ def test_cli_scenarios_validate_friendly_and_json(capsys) -> None:
     assert (
         main(["scenarios", "validate", "tests/fixtures/cli_scenarios/malformed.yaml.invalid"]) == 2
     )
+
+
+def test_cli_scenarios_unsupported_is_nonzero(capsys) -> None:
+    """The CLI rejects a scenario explicitly marked ``supported: false``."""
+    assert (
+        main(
+            [
+                "scenarios",
+                "validate",
+                "tests/fixtures/cli_scenarios/unsupported.yaml",
+                "--format",
+                "json",
+            ]
+        )
+        == 2
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["valid"] is False
+    assert payload["status"] == STATUS_UNSUPPORTED
+    assert any(error["code"] == REASON_UNSUPPORTED_SCENARIO for error in payload["errors"])
+
+
+def test_cli_scenarios_import_light_includes_public_cli_subparser() -> None:
+    """Importing and registering the public scenario command stays import-light."""
+    cmd = [
+        sys.executable,
+        "-c",
+        (
+            "import sys; "
+            "from robot_sf.cli import _build_scenarios_parser; "
+            "_build_scenarios_parser(); "
+            "forbidden = {'torch', 'stable_baselines3', 'carla'}; "
+            "loaded = forbidden.intersection(sys.modules.keys()); "
+            "assert not loaded, f'Forbidden modules imported: {loaded}'"
+        ),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, f"Import test failed: {result.stderr}"
+
+
+def test_catalog_uses_canonical_loader_for_includes_selection_and_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Discovery honors canonical include expansion, selection, and overrides."""
+    scenarios_root = tmp_path / "configs" / "scenarios"
+    input_root = tmp_path / "configs" / "scenario_inputs"
+    scenarios_root.mkdir(parents=True)
+    input_root.mkdir(parents=True)
+    (input_root / "included.yaml").write_text(
+        "scenarios:\n"
+        "  - name: selected_from_include\n"
+        "    simulation_config:\n"
+        "      max_episode_steps: 10\n"
+        "  - name: intentionally_not_selected\n"
+        "    simulation_config:\n"
+        "      max_episode_steps: 20\n",
+        encoding="utf-8",
+    )
+    (scenarios_root / "composed.yaml").write_text(
+        "includes:\n"
+        "  - ../scenario_inputs/included.yaml\n"
+        "select_scenarios:\n"
+        "  - selected_from_include\n"
+        "scenario_overrides:\n"
+        "  simulation_config:\n"
+        "    max_episode_steps: 42\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_scenarios_module, "_find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(cli_scenarios_module, "_CACHED_CATALOG", None)
+    monkeypatch.setattr(cli_scenarios_module, "_CACHED_EXCLUSIONS", None)
+
+    payload = cli_scenarios_module.list_scenarios_payload()
+
+    assert payload["count"] == 1
+    scenario = payload["scenarios"][0]
+    assert scenario["identity"] == "selected_from_include"
+    assert scenario["source_file"] == "configs/scenarios/composed.yaml"
+    assert scenario["horizon_and_dt"]["max_episode_steps"] == 42
+
+
+def test_catalog_fails_closed_on_malformed_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Malformed YAML is not silently dropped from catalog discovery."""
+    scenarios_root = tmp_path / "configs" / "scenarios"
+    scenarios_root.mkdir(parents=True)
+    malformed = scenarios_root / "malformed.yaml"
+    malformed.write_text("scenarios:\n  - name: [\n", encoding="utf-8")
+    monkeypatch.setattr(cli_scenarios_module, "_find_repo_root", lambda: tmp_path)
+
+    with pytest.raises(yaml.YAMLError):
+        cli_scenarios_module._build_catalog()
+
+
+def test_map_resolution_uses_registry_and_never_basename_fallback() -> None:
+    """Map lookup rejects basename guesses and gives ``map_id`` precedence."""
+    repo_root = cli_scenarios_module._find_repo_root()
+    source_file = repo_root / "configs" / "scenarios" / "single" / "example.yaml"
+
+    missing_path = cli_scenarios_module._resolve_map_reference(
+        {"map_file": "missing/classic_crossing.svg"},
+        source_file=source_file,
+        repo_root=repo_root,
+    )
+    assert missing_path["map_exists"] is False
+    assert missing_path["resolved_map_path"].endswith("missing/classic_crossing.svg")
+
+    known_id = cli_scenarios_module._resolve_map_reference(
+        {"map_id": "classic_crossing"},
+        source_file=source_file,
+        repo_root=repo_root,
+    )
+    assert known_id["map_exists"] is True
+    assert known_id["resolved_map_path"] == "maps/svg_maps/classic_crossing.svg"
+
+    unknown_id = cli_scenarios_module._resolve_map_reference(
+        {
+            "map_id": "not_in_canonical_registry",
+            "map_file": "../../../maps/svg_maps/classic_crossing.svg",
+        },
+        source_file=source_file,
+        repo_root=repo_root,
+    )
+    assert unknown_id["map_exists"] is False
+    assert unknown_id["resolved_map_path"] is None
+
+
+def test_validate_scenario_manifest_schema_version_uses_canonical_validator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """Unsupported manifest metadata produces a schema error and CLI failure."""
+    manifest = tmp_path / "manifest.yaml"
+    map_file = tmp_path / "map.svg"
+    map_file.write_text("<svg/>\n", encoding="utf-8")
+    manifest.write_text(
+        "schema_version: robot_sf.scenario_matrix.v0\n"
+        "scenarios:\n"
+        "  - name: metadata_version_mismatch\n"
+        "    map_file: map.svg\n"
+        "    simulation_config:\n"
+        "      max_episode_steps: 10\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_scenarios_module, "_find_repo_root", lambda: tmp_path)
+
+    payload = validate_scenario_payload(str(manifest))
+    assert payload["valid"] is False
+    assert payload["status"] == STATUS_INVALID
+    metadata_errors = [
+        error
+        for error in payload["errors"]
+        if error["code"] == REASON_SCHEMA_VALIDATION_ERROR and error["path"] == "/schema_version"
+    ]
+    assert len(metadata_errors) == 1
+
+    assert main(["scenarios", "validate", str(manifest), "--format", "json"]) == 2
+    cli_payload = json.loads(capsys.readouterr().out)
+    assert any(error["path"] == "/schema_version" for error in cli_payload["errors"])
+
+
+def test_scenario_docs_match_canonical_schema_and_status_contract() -> None:
+    """The scenario guide names the canonical schema and only emitted statuses."""
+    docs = Path("docs/SCENARIOS.md").read_text(encoding="utf-8")
+
+    assert "robot_sf/benchmark/schemas/scenarios.schema.json" in docs
+    assert "`schemas/scenarios.schema.json`" not in docs
+    assert "`external_asset_dependent`" not in docs
+    for status in ("valid", "missing", "invalid", "duplicate", "unsupported"):
+        assert f"`{status}`" in docs
 
 
 def test_cli_scenarios_import_light_isolated_subprocess() -> None:

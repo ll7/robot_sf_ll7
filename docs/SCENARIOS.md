@@ -142,7 +142,7 @@ uv run robot-sf scenarios validate configs/scenarios/single/quickstart_demo.yaml
 #### Exit Codes
 
 - `0`: Validation passed cleanly (valid scenario, all referenced map assets exist on disk).
-- `2`: Validation failed (schema violation, missing map reference, malformed YAML, path traversal outside repository root).
+- `2`: Validation failed (schema violation, missing map reference, malformed YAML, unsupported scenario, or path traversal outside the repository root).
 
 #### Output Schema (`scenario_validate.v1`)
 
@@ -162,14 +162,20 @@ uv run robot-sf scenarios validate configs/scenarios/single/quickstart_demo.yaml
 
 ## Status Values
 
+These are the scenario statuses emitted by the list, describe, and validation
+payloads:
+
 | Status | Meaning |
 |---|---|
-| `valid` | Schema valid, all referenced maps and assets exist on disk, no conflicts. |
+| `valid` | Schema valid, all referenced maps and assets exist on disk, and no conflicts are present. |
 | `missing` | The scenario file or a referenced map/route override file is missing on disk. |
-| `invalid` | Schema validation error, malformed YAML, empty file, or path traversal. |
-| `duplicate` | The scenario identity appears with conflicting definitions across source files. |
-| `unsupported` | Scenario explicitly declares `supported: false`. |
-| `external_asset_dependent` | Requires external datasets or assets that must be downloaded separately. |
+| `invalid` | Schema validation error, malformed YAML, empty file, path traversal, or another validation failure. |
+| `duplicate` | The scenario identity appears with conflicting definitions in the canonical source class. |
+| `unsupported` | Scenario explicitly declares `supported: false`; validation remains invalid and exits nonzero. |
+
+Describe lookup failures use a separate error envelope with `status: "error"`;
+that value is not a scenario status. No additional external-asset status is
+emitted by these commands.
 
 ## Reason Codes
 
@@ -182,13 +188,12 @@ Error and diagnostic reports carry stable reason codes:
 - `EMPTY_FILE`: Scenario file is empty.
 - `MALFORMED_YAML`: YAML syntax parsing failure.
 - `LOAD_FAILURE`: Manifest include cycle, unresolvable includes, or invalid manifest structure.
-- `SCHEMA_VALIDATION_ERROR`: Field validation failed against `schemas/scenarios.schema.json`.
+- `SCHEMA_VALIDATION_ERROR`: Field or manifest-metadata validation failed against the [canonical scenario schema](../robot_sf/benchmark/schemas/scenarios.schema.json) or its validator.
 - `DUPLICATE_SCENARIO_ID`: Duplicate scenario identifier declared within the file.
 - `MAP_REFERENCE_MISSING`: Scenario declares neither `map_file` nor `map_id`.
-- `MAP_NOT_FOUND`: Referenced map file does not exist on disk.
+- `MAP_NOT_FOUND`: Referenced registry `map_id` or map file does not resolve to an existing map on disk.
 - `ROUTE_OVERRIDES_NOT_FOUND`: Referenced route overrides file does not exist on disk.
 - `UNSUPPORTED_SCENARIO`: Scenario explicitly declared with `supported: false`.
-- `EXTERNAL_ASSET_DEPENDENT`: Scenario depends on external non-bundled assets.
 
 ## Curated Roots and Exclusion Registry
 
@@ -197,6 +202,11 @@ The scenario catalog scans the following directories in precedence order:
 2. `configs/scenarios/archetypes/`: Canonical archetype interaction definitions.
 3. `configs/scenarios/*.yaml`: Top-level curated matrices and manifests.
 4. `configs/scenarios/sets/`: Curated scenario sets and evaluation slices.
+
+Each YAML candidate is classified and expanded by the canonical scenario
+loader, including includes, selection, overrides, and map-registry rebasing.
+Auxiliary mappings without manifest keys are skipped; malformed manifests fail
+closed instead of being silently dropped.
 
 Files explicitly excluded from the runnable scenario catalog:
 - `configs/scenarios/archetype_validation_waivers.yaml`: Waiver specification registry.

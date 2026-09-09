@@ -129,6 +129,54 @@ def _load_scenario_manifest(
     return scenarios, includes, local_map_search_paths
 
 
+_SCENARIO_MANIFEST_KEYS = frozenset(
+    {
+        "scenarios",
+        "includes",
+        "include",
+        "scenario_files",
+        "map_search_paths",
+        "select_scenarios",
+        "scenario_overrides",
+        "scenario_overrides_by_name",
+    }
+)
+
+
+def load_scenarios_for_discovery(
+    path: str | Path,
+    *,
+    base_dir: Path | None = None,
+) -> list[Mapping[str, Any]] | None:
+    """Load a YAML candidate through the canonical scenario loader.
+
+    YAML files under ``configs/scenarios`` also include auxiliary metadata. A
+    mapping without scenario-manifest keys is therefore ignored by discovery,
+    while an empty, malformed, or structurally invalid manifest fails closed.
+    Scenario includes, selection, overrides, path rebasing, and map registry
+    resolution remain owned by :func:`load_scenarios`.
+
+    Returns:
+        list[Mapping[str, Any]] | None: Loaded scenarios, or ``None`` for a
+        valid auxiliary YAML mapping that is not a scenario manifest.
+
+    Raises:
+        OSError: If the candidate cannot be read.
+        ValueError: If the candidate is empty or is a malformed manifest.
+        yaml.YAMLError: If the candidate contains malformed YAML syntax.
+    """
+    resolved = Path(path).resolve()
+    data = _load_yaml_documents(resolved)
+    if data is None:
+        raise ValueError(f"Scenario discovery candidate is empty: {resolved}")
+    if isinstance(data, Mapping):
+        if not _SCENARIO_MANIFEST_KEYS.intersection(data):
+            return None
+    elif not isinstance(data, list):
+        raise ValueError(f"Scenario discovery candidate must contain a manifest: {resolved}")
+    return load_scenarios(resolved, base_dir=base_dir)
+
+
 def load_scenarios(path: str | Path, *, base_dir: Path | None = None) -> list[Mapping[str, Any]]:
     """Load scenario definitions from a YAML file.
 
@@ -760,6 +808,30 @@ def _resolve_map_id(
         required_profile=required_profile,
     )
     return entry.path
+
+
+def resolve_map_id(
+    map_id: str,
+    *,
+    source: str | Path,
+    required_profile: str = _DEFAULT_MAP_PROFILE,
+) -> Path:
+    """Resolve a scenario ``map_id`` through the canonical map registry.
+
+    Args:
+        map_id: Registry identifier to resolve.
+        source: Scenario or manifest path used in error messages.
+        required_profile: Capability profile required by the scenario.
+
+    Returns:
+        Path: Existing map path registered for ``map_id``.
+    """
+    return _resolve_map_id(
+        map_id.strip(),
+        map_registry=_load_map_registry(),
+        source=Path(source),
+        required_profile=required_profile,
+    )
 
 
 def _validate_map_catalog_entry(
@@ -2621,7 +2693,9 @@ __all__ = [
     "apply_single_pedestrian_overrides",
     "build_robot_config_from_scenario",
     "load_scenarios",
+    "load_scenarios_for_discovery",
     "map_cache_info",
     "resolve_map_definition",
+    "resolve_map_id",
     "select_scenario",
 ]

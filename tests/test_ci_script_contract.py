@@ -772,10 +772,13 @@ def test_run_tests_parallel_fails_before_worker_resolution_on_incomplete_profile
     assert not uv_called.exists()
 
 
+@pytest.mark.parametrize("stage_temproot_helper", [True, False], ids=["complete", "missing-helper"])
 def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(  # noqa: PLR0915
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage_temproot_helper: bool
 ) -> None:
     """New top-level core tests must reach PR-readiness pytest collection (issue #5108)."""
+    # Explicit --basetemp bypasses conftest's environment setup (issue #8672).
+    monkeypatch.delenv("PYTEST_DEBUG_TEMPROOT", raising=False)
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -783,6 +786,12 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(  # 
     script_dir.mkdir(parents=True)
     fake_bin.mkdir()
     optional_allowlist.parent.mkdir(parents=True)
+
+    if stage_temproot_helper:
+        shutil.copyfile(
+            ROOT / "tests/support/pytest_temproot.py",
+            optional_allowlist.parent / "pytest_temproot.py",
+        )
 
     for script_name in ("run_tests_parallel.sh", "common_setup.sh"):
         source = ROOT / "scripts" / "dev" / script_name
@@ -871,6 +880,13 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(  # 
         check=False,
     )
 
+    if not stage_temproot_helper:
+        assert result.returncode == 2
+        assert "can't open file" in result.stderr
+        assert "tests/support/pytest_temproot.py" in result.stderr
+        assert "No such file or directory" in result.stderr
+        return
+
     assert result.returncode == 0, result.stderr
     pytest_args = captured_args.read_text(encoding="utf-8")
     padded_pytest_args = f" {pytest_args} "
@@ -912,9 +928,10 @@ def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:
 
 
 def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Coverage-finalization fallback must be true no-xdist and fail closed (#6526)."""
+    monkeypatch.delenv("PYTEST_DEBUG_TEMPROOT", raising=False)
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -922,6 +939,9 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     script_dir.mkdir(parents=True)
     fake_bin.mkdir()
     (repo / "tests" / "support").mkdir(parents=True)
+    shutil.copyfile(
+        ROOT / "tests/support/pytest_temproot.py", repo / "tests/support/pytest_temproot.py"
+    )
     (repo / "tests" / "support" / "optional_test_allowlist.txt").write_text(
         "tests/optional\n", encoding="utf-8"
     )

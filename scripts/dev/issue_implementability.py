@@ -15,6 +15,10 @@ from typing import Any
 
 import yaml
 
+if __package__ in {None, ""}:
+    # Direct execution must prefer this checkout over ambient source roots.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.dev import gh_issue_rest, issue_claim, issue_dependency_packet
 from scripts.dev.issue_state_taxonomy import (
     execution_state_labels,

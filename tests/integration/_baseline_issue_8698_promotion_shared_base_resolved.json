@@ -1,0 +1,15 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "b22821259034c297d03776edac951c961177be9c",
+  "variants": {
+    "expert_ppo_issue_791_asymmetric_critic_promotion_base.yaml": "238500a0667fa330eb5ff46882417d8c27cb87e9f65af0d00901d7a6aff28f51",
+    "expert_ppo_issue_791_attention_head_promotion_base.yaml": "63ddad981addce06a4e396fb9217beaf34e2babbfe9a42ac78d69c1adc8c2891",
+    "expert_ppo_issue_791_attention_head_promotion_env22_base.yaml": "7c1552d8da4ee89adc7a24629085cf239aa50cb6d3408872d4bcfe8afa06f381",
+    "expert_ppo_issue_791_baseline_promotion_base.yaml": "e7aa8bc52c51469264d6c16ff8d1cca10ec89864d663627a6000132fa38aefa3",
+    "expert_ppo_issue_791_baseline_promotion_env22_base.yaml": "7c4518925d9784ac66aeb496e72abe2c0cfadff843a5fccca4053a898e1b7747",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_base.yaml": "f4f87bf8c37691c5c310ab66156aa318d63cfe6042dd42527d69e5c519fa074d",
+    "expert_ppo_issue_791_reward_curriculum_promotion_base.yaml": "ba0f0e76068d83e668c90de653addf8f46d25c985a760b90dc48ba14ef447448",
+    "expert_ppo_issue_791_reward_curriculum_v2_base.yaml": "68fbc0208e9f503d3ed4af8c28131f52ce0b9cab9e63529be08d18f0f955a0dc",
+    "expert_ppo_issue_791_stage1_base.yaml": "5348d09250cf1130d095146ca10c2b0904e1bad760faa9b496cecbf59c14f391"
+  }
+}

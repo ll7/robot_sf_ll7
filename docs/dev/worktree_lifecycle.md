@@ -285,3 +285,67 @@ bounded stale-owner recovery path.
 
 Do not remove a dirty worktree, an unpushed branch, a live-leased worktree, or a durable artifact
 without an explicit preservation record.
+
+## Verified merged-tree retirement
+
+When a completed pull request (PR) has had its remote branch deleted, an explicitly supplied
+proof bundle can authorize retirement of that one clean worktree without recreating the remote
+reference. The default reaper remains conservative: a missing upstream is still refused unless
+all verified inputs are supplied. GitHub's pull-request REST metadata does not provide an
+authoritative historical merge-method field, so this mode deliberately proves exact merged-tree
+identity and ancestry without claiming that the PR used squash, rebase, or regular merge.
+
+Run the verified mode from the registered `main` worktree and name the target's canonical,
+non-symlink path, surviving local branch, full head commit, and merged PR:
+
+```bash
+uv run python scripts/dev/stale_worktree_reaper.py \
+  --path "$WORKTREE_PATH" \
+  --verified-merged-pr 8658 \
+  --verified-branch feature/example \
+  --verified-head-sha <40-character-head-sha> \
+  --json
+```
+
+The read-only proof requires the target path to be an exact registered non-current worktree with a
+surviving local branch. That branch must retain `branch.<name>.remote=origin` and the matching
+`branch.<name>.merge` configuration while its `refs/remotes/origin/<name>` object is absent;
+never-published branches and branches with a still-resolvable upstream remain refused. Fresh
+authoritative PR metadata must identify this repository, the exact branch and head, a merged PR
+to `main`, and a full merge commit that resolves locally. The checked-out `main`, local
+`origin/main`, authoritative `origin/main` from a fresh `git ls-remote --heads` read, target head,
+PR merge commit, and all three complete Git tree IDs must agree as required by the plan, and the
+merge commit must be an ancestor of current `main`. The same authoritative read must show the
+candidate branch absent; a stale local remote-tracking ref is not treated as proof of deletion.
+The resulting
+verification evidence records `merge_method_scope=method_agnostic_exact_tree`; it is a content
+and ancestry proof, not a merge-method classifier.
+
+The command performs only bounded GitHub reads (`gh pr list` and `gh api`) and a read-only
+authoritative `git ls-remote`; it never posts, edits, fetches, mutates local refs, recreates refs,
+changes configuration, releases leases, or removes another worktree. The
+JSON candidate's `verification` object and audit log expose the exact repository, PR, branch,
+head, merge, main, tracking-ref, and tree identities plus the narrowly discharged
+`missing origin upstream only` risk. Existing dirty/untracked/ignored-content, open-PR,
+current-worktree, lease, and lifecycle-lock gates still apply. A verified candidate is safe to
+remove only through the canonical apply path:
+
+```bash
+uv run python scripts/dev/stale_worktree_reaper.py \
+  --path "$WORKTREE_PATH" \
+  --verified-merged-pr 8658 \
+  --verified-branch feature/example \
+  --verified-head-sha <40-character-head-sha> \
+  --apply --json
+```
+
+Immediately before the normal, non-force `git worktree remove`, the reaper reacquires the shared
+lifecycle lock and repeats registration, path, branch, head, ref, tree, main, authoritative remote,
+PR, cleanliness, ignored-state, open-PR, upstream-absence, and lease reads. It then performs a
+final registration/path, branch, HEAD/ref-identity, cleanliness, and ignored-state preservation
+recheck after the last remote/PR read and immediately before removal, closing the remaining window
+in which an ignored artifact or target identity could drift during verification. Any deletion,
+symlink/path alias, identity drift, new content, lease, lookup error, or lock failure refuses
+removal. Normal
+worktree removal preserves the local branch and its commits; artifact preservation remains the
+owner's responsibility before retirement.

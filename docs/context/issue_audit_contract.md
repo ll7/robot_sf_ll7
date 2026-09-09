@@ -60,13 +60,18 @@ and `anomalous` when a successful response contains only non-canonical or
 malformed rows. The successful-empty contract includes the exact canonical
 source and source kind, `source_proof: successful_empty_response`,
 `available: true`, `truncated: false`, an empty `errors` list, positive page
-and request counts, and zero raw, canonical, non-object, and normalized row
-counts. A zero-row source without this contract is also anomalous. The plan
-copies this result to `issue_inventory_status`; `unavailable` and `anomalous`
-add `issues` to `truncation_or_errors`, suppress mutations, and make the plan
-command return non-zero. Apply and decision-envelope admission refuse an
-inadmissible source regardless of the number of rows or mutations in a forged
-plan. An empty canonical inventory cannot carry mutations or pending decisions.
+and request counts within the page budget, and zero raw, canonical, non-object,
+malformed-object, and normalized row counts. A zero-row source without this
+contract is also anomalous. A non-empty plan row must retain a positive issue
+number, open state, matching issue URL, title, non-empty update version, and
+normalized label list; every mutation or pending decision must reference one of
+those exact canonical rows. The plan copies this result to
+`issue_inventory_status`; `unavailable` and `anomalous` add `issues` to
+`truncation_or_errors`, suppress mutations, and make the plan command return
+non-zero. Apply and decision-envelope admission refuse an inadmissible source
+or a row/reference mismatch regardless of the number of rows or mutations in a
+forged plan. An empty canonical inventory cannot carry mutations or pending
+decisions.
 The top-level `legacy_issue_inventory: true` marker is retained only for
 pre-contract callers that cannot provide source metadata; it applies only to
 the missing-metadata compatibility case and is never emitted by the current

@@ -830,7 +830,12 @@ def _documented_options(issue: Mapping[str, Any]) -> list[dict[str, Any]]:
 def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Project a GitHub issue row onto the plan's stable issue shape."""
     url = str(raw.get("html_url") or raw.get("url") or "")
-    author = str((raw.get("user") or {}).get("login") or raw.get("author") or "")
+    raw_user = raw.get("user")
+    author = str(
+        (raw_user.get("login") if isinstance(raw_user, Mapping) else None)
+        or raw.get("author")
+        or ""
+    )
     raw_assignees = raw.get("assignees")
     assignees = raw_assignees if isinstance(raw_assignees, list) else []
     raw_comments = raw.get("comments")
@@ -852,7 +857,15 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
         "comments": [
             {
                 "body": str(item.get("body") or ""),
-                "user": str((item.get("user") or {}).get("login") or ""),
+                "user": str(
+                    (
+                        item.get("user").get("login")
+                        if isinstance(item.get("user"), Mapping)
+                        else None
+                    )
+                    or item.get("author")
+                    or ""
+                ),
                 "url": str(item.get("html_url") or item.get("url") or ""),
                 "created_at": str(item.get("created_at") or ""),
             }
@@ -862,8 +875,8 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _is_canonical_issue_row(raw: Mapping[str, Any]) -> bool:
-    """Return whether a REST object has the minimum trustworthy issue identity."""
+def _has_canonical_issue_identity(raw: Mapping[str, Any]) -> bool:
+    """Return whether a row has the minimum trustworthy issue identity."""
     number = raw.get("number")
     if isinstance(number, bool) or not isinstance(number, int) or number <= 0:
         return False
@@ -878,6 +891,126 @@ def _is_canonical_issue_row(raw: Mapping[str, Any]) -> bool:
         return False
     match = re.search(r"/issues/([1-9][0-9]*)(?:[/?#]|$)", url)
     return match is not None and int(match.group(1)) == number
+
+
+def _is_canonical_issue_row(raw: Mapping[str, Any]) -> bool:
+    """Return whether a REST object has trustworthy identity and nested shape."""
+    if not _has_canonical_issue_identity(raw):
+        return False
+
+    raw_user = raw.get("user")
+    if raw_user is not None and not isinstance(raw_user, Mapping):
+        return False
+
+    raw_labels = raw.get("labels")
+    if raw_labels is not None and (
+        not isinstance(raw_labels, list)
+        or any(
+            not (
+                isinstance(item, str)
+                or (isinstance(item, Mapping) and isinstance(item.get("name"), str))
+            )
+            for item in raw_labels
+        )
+    ):
+        return False
+
+    raw_assignees = raw.get("assignees")
+    if raw_assignees is not None and (
+        not isinstance(raw_assignees, list)
+        or any(not isinstance(item, Mapping) for item in raw_assignees)
+    ):
+        return False
+
+    raw_comments = raw.get("comments")
+    if raw_comments is not None and (
+        not isinstance(raw_comments, list)
+        or any(
+            not isinstance(item, Mapping)
+            or (item.get("user") is not None and not isinstance(item.get("user"), Mapping))
+            for item in raw_comments
+        )
+    ):
+        return False
+    return True
+
+
+def _plan_issue_row_numbers(plan: Mapping[str, Any]) -> tuple[set[int], list[str]]:
+    """Validate plan issue rows and return their canonical numbers."""
+    if "issues" not in plan:
+        return set(), []
+    raw_rows = plan.get("issues")
+    if not isinstance(raw_rows, list):
+        return set(), ["plan issues must be a list"]
+
+    numbers: set[int] = set()
+    errors: list[str] = []
+    for index, raw_row in enumerate(raw_rows):
+        if not isinstance(raw_row, Mapping):
+            errors.append(f"plan issue row {index} is not an object")
+            continue
+        if not _has_canonical_issue_identity(raw_row):
+            errors.append(
+                f"plan issue row {index} lacks positive number, open state, title, or matching URL"
+            )
+            continue
+        number = raw_row["number"]
+        if not isinstance(raw_row.get("updated_at"), str) or not raw_row["updated_at"].strip():
+            errors.append(f"plan issue row #{number} lacks a non-empty updated_at value")
+        labels = raw_row.get("labels")
+        if not isinstance(labels, list) or not all(isinstance(label, str) for label in labels):
+            errors.append(f"plan issue row #{number} has an invalid labels list")
+        if number in numbers:
+            errors.append(f"plan contains duplicate canonical issue row #{number}")
+        numbers.add(number)
+    return numbers, errors
+
+
+def _pending_reference_number(item: Mapping[str, Any]) -> int | None:
+    """Return a pending decision's exact issue number when its reference is valid."""
+    raw_number = item.get("number")
+    if isinstance(raw_number, int) and not isinstance(raw_number, bool) and raw_number > 0:
+        return raw_number
+    raw_issue = item.get("issue")
+    if not isinstance(raw_issue, str):
+        return None
+    match = re.fullmatch(r"#?([1-9][0-9]*)", raw_issue.strip())
+    return int(match.group(1)) if match else None
+
+
+def _plan_issue_reference_errors(plan: Mapping[str, Any], *, issue_numbers: set[int]) -> list[str]:
+    """Reject mutations and decisions that target an issue absent from the plan."""
+    errors: list[str] = []
+    raw_mutations = plan.get("mutations")
+    if isinstance(raw_mutations, list):
+        for index, mutation in enumerate(raw_mutations):
+            if not isinstance(mutation, Mapping):
+                continue
+            number = mutation.get("issue")
+            if (
+                isinstance(number, int)
+                and not isinstance(number, bool)
+                and number > 0
+                and number not in issue_numbers
+            ):
+                errors.append(f"mutation {index} references absent canonical issue #{number}")
+
+    if "pending_decisions" not in plan:
+        return errors
+    pending = plan.get("pending_decisions")
+    if not isinstance(pending, list):
+        errors.append("plan pending_decisions must be a list")
+        return errors
+    for index, item in enumerate(pending):
+        if not isinstance(item, Mapping):
+            errors.append(f"pending decision {index} is not an object")
+            continue
+        number = _pending_reference_number(item)
+        if number is None:
+            errors.append(f"pending decision {index} has no exact positive issue reference")
+        elif number not in issue_numbers:
+            errors.append(f"pending decision {index} references absent canonical issue #{number}")
+    return errors
 
 
 def _normalize_pr(raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -2750,6 +2883,7 @@ def _empty_issue_source_contract_failures(
         "canonical_row_count": 0,
         "raw_row_count": 0,
         "non_object_row_count": 0,
+        "malformed_object_row_count": 0,
     }
     if canonical_row_count != 0:
         failures.append(f"plan contains {canonical_row_count} canonical issue row(s)")
@@ -2780,6 +2914,14 @@ def _empty_issue_source_contract_failures(
         and requests_attempted < pages_read
     ):
         failures.append("requests_attempted must be at least pages_read")
+    if (
+        isinstance(requests_attempted, int)
+        and not isinstance(requests_attempted, bool)
+        and isinstance(page_budget, int)
+        and not isinstance(page_budget, bool)
+        and requests_attempted > page_budget
+    ):
+        failures.append("requests_attempted must not exceed page_budget")
     reason = issue_meta.get("source_status_reason")
     if not isinstance(reason, str) or not reason.strip():
         failures.append("source_status_reason must be a non-empty string")
@@ -4012,6 +4154,7 @@ def apply_mutations(
 
     plan_issue_rows = plan.get("issues")
     canonical_row_count = len(plan_issue_rows) if isinstance(plan_issue_rows, list) else 0
+    plan_issue_numbers, plan_issue_row_errors = _plan_issue_row_numbers(plan)
     issue_inventory_status = _issue_inventory_source_assessment(
         {
             "repo": plan.get("repo"),
@@ -4067,6 +4210,17 @@ def apply_mutations(
         return refuse(
             "an empty canonical issue inventory cannot carry mutations or pending decisions",
             error_code="issue_inventory_empty_with_work",
+        )
+    if plan_issue_row_errors:
+        return refuse(
+            "; ".join(plan_issue_row_errors),
+            error_code="issue_inventory_rows_invalid",
+        )
+    reference_errors = _plan_issue_reference_errors(plan, issue_numbers=plan_issue_numbers)
+    if reference_errors and not legacy_source_missing:
+        return refuse(
+            "; ".join(reference_errors),
+            error_code="issue_inventory_reference_mismatch",
         )
 
     recorded_digest = str(plan.get("plan_digest") or "")
@@ -4498,6 +4652,7 @@ def build_decision_envelope(
 
     plan_issue_rows = plan.get("issues")
     canonical_row_count = len(plan_issue_rows) if isinstance(plan_issue_rows, list) else 0
+    plan_issue_numbers, plan_issue_row_errors = _plan_issue_row_numbers(plan)
     issue_inventory_status = _issue_inventory_source_assessment(
         {
             "repo": plan.get("repo"),
@@ -4540,6 +4695,15 @@ def build_decision_envelope(
     ):
         raise ValueError(
             "issue inventory is empty but the plan contains pending decisions; regenerate it"
+        )
+    if plan_issue_row_errors:
+        raise ValueError(
+            "issue inventory rows are not admissible: " + "; ".join(plan_issue_row_errors)
+        )
+    reference_errors = _plan_issue_reference_errors(plan, issue_numbers=plan_issue_numbers)
+    if reference_errors and not legacy_source_missing:
+        raise ValueError(
+            "issue inventory references are not admissible: " + "; ".join(reference_errors)
         )
 
     selected = select_next_pending_decision(

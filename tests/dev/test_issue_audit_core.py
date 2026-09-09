@@ -165,6 +165,7 @@ def _empty_issue_source_metadata() -> dict[str, Any]:
         "canonical_row_count": 0,
         "raw_row_count": 0,
         "non_object_row_count": 0,
+        "malformed_object_row_count": 0,
         "truncated": False,
         "errors": [],
         "source": "repos/ll7/robot_sf_ll7/issues?state=open",
@@ -1280,6 +1281,24 @@ def test_open_issue_source_contract_distinguishes_empty_and_bad_responses(
                 "html_url": "https://github.com/ll7/robot_sf_ll7/issues/111",
             }
         ],
+        [
+            {
+                "number": 110,
+                "title": "Malformed author",
+                "state": "open",
+                "html_url": "https://github.com/ll7/robot_sf_ll7/issues/110",
+                "user": "not-an-object",
+            }
+        ],
+        [
+            {
+                "number": 110,
+                "title": "Malformed comment author",
+                "state": "open",
+                "html_url": "https://github.com/ll7/robot_sf_ll7/issues/110",
+                "comments": [{"body": "comment", "user": "not-an-object"}],
+            }
+        ],
     ],
 )
 def test_open_issue_source_rejects_malformed_object_rows_without_raising(
@@ -1345,6 +1364,30 @@ def test_empty_issue_source_requires_complete_success_contract() -> None:
     assert plan["issue_inventory_status"]["error_code"] == ("issue_inventory_source_empty_unproven")
     assert plan["classification_status"]["mutations_suppressed"] is True
     assert plan["mutations"] == []
+
+
+def test_empty_issue_source_rejects_impossible_request_count() -> None:
+    """An empty response cannot claim more requests than its page budget."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata["requests_attempted"] = source_metadata["page_budget"] + 1
+    inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {"issues": source_metadata},
+    }
+
+    plan = build_audit_plan(inventory)
+
+    assert plan["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    )
+    assert plan["issue_inventory_status"]["error_code"] == ("issue_inventory_source_empty_unproven")
 
 
 def test_anomalous_issue_source_status_is_preserved_when_unavailable() -> None:
@@ -2265,6 +2308,83 @@ def test_envelope_rejects_inadmissible_source_with_nonzero_issue_rows() -> None:
     _attach_valid_provenance(plan)
 
     with pytest.raises(ValueError, match="issue inventory is not admissible"):
+        build_decision_envelope(plan)
+
+
+def test_apply_rejects_mutation_for_issue_absent_from_nonempty_inventory() -> None:
+    """A complete source with issue #111 cannot authorize a mutation for issue #110."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata.update(
+        {
+            "available": True,
+            "row_count": 1,
+            "canonical_row_count": 1,
+            "raw_row_count": 1,
+            "source_status": issue_audit_core.ISSUE_SOURCE_STATUS_COMPLETE,
+            "source_proof": "canonical_issue_rows",
+            "source_status_reason": "canonical open-issue response is complete",
+        }
+    )
+    plan: dict[str, Any] = {
+        "schema": issue_audit_core.PLAN_SCHEMA,
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [_issue(111)],
+        "mutations": [
+            {
+                "issue": 110,
+                "operation": "close_issue",
+                "value": None,
+                "expected_issue": _expected_issue(),
+            }
+        ],
+        "pending_decisions": [],
+        "inventory": {"issues": source_metadata},
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        raise AssertionError(f"absent-issue mutation must not reach REST: {args} {input_text}")
+
+    result = apply_mutations(
+        plan,
+        runner=runner,
+        apply_source_sha=plan["source_sha"],
+        apply_classifier_digest=plan["classifier_digest"],
+        apply_producer=plan["producer"],
+    )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "issue_inventory_reference_mismatch"
+    assert result["counts"]["planned"] == 1
+
+
+def test_envelope_rejects_decision_for_issue_absent_from_nonempty_inventory() -> None:
+    """A complete source with issue #111 cannot present a decision for issue #110."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata.update(
+        {
+            "available": True,
+            "row_count": 1,
+            "canonical_row_count": 1,
+            "raw_row_count": 1,
+            "source_status": issue_audit_core.ISSUE_SOURCE_STATUS_COMPLETE,
+            "source_proof": "canonical_issue_rows",
+            "source_status_reason": "canonical open-issue response is complete",
+        }
+    )
+    plan: dict[str, Any] = {
+        "schema": issue_audit_core.PLAN_SCHEMA,
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [_issue(111)],
+        "mutations": [],
+        "pending_decisions": [{"issue": "#110", "status": "ready"}],
+        "inventory": {"issues": source_metadata},
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+
+    with pytest.raises(ValueError, match="references are not admissible"):
         build_decision_envelope(plan)
 
 

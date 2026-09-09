@@ -157,8 +157,10 @@ malformed, or unexplained zero-row responses. The plan repeats this as `issue_in
 an empty status is admissible only with the complete source identity, proof, count, and successful
 read metadata; otherwise it is anomalous. An unavailable or anomalous source adds `issues` to
 `truncation_or_errors`, suppresses mutations, returns a nonzero exit, and must be rerun before an
-apply step. Apply and decision-envelope boundaries also reject forged work attached to an
-inadmissible or empty source. The explicit
+apply step. Non-empty plan rows must preserve canonical issue identity and schema, and every
+mutation or pending decision must target an issue present in those rows. Apply and
+decision-envelope boundaries also reject forged work attached to an inadmissible, mismatched, or
+empty source. The explicit
 `--max-wall-seconds 0` no-budget timeout remains a separate fail-closed status.
 
 Project #5 score synchronization uses the same fail-closed preflight. If its estimated field,

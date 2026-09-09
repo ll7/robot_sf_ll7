@@ -7,7 +7,7 @@ import math
 import os
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -56,6 +56,51 @@ class _MapRegistryEntry:
     profile: str | None = None
     limitations: tuple[str, ...] = ()
     validation_status: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioManifestSource:
+    """One manifest read while expanding a scenario definition."""
+
+    path: Path
+    data: Any
+
+
+@dataclass(frozen=True)
+class ScenarioEntryIssue:
+    """A row or included-manifest issue found during tolerant validation."""
+
+    source: Path
+    index: int | None
+    message: str
+    entry: Any = None
+
+
+@dataclass(frozen=True)
+class ScenarioValidationReport:
+    """Provenance-preserving result from tolerant canonical scenario loading."""
+
+    scenarios: list[Mapping[str, Any]]
+    manifest_sources: list[ScenarioManifestSource]
+    entry_issues: list[ScenarioEntryIssue]
+    load_issues: list[ScenarioEntryIssue]
+    load_error: str | None
+    raw_entry_count: int
+
+
+@dataclass
+class _ScenarioValidationCollector:
+    """Mutable collector shared by one recursive validation load."""
+
+    manifest_sources: list[ScenarioManifestSource] = field(default_factory=list)
+    entry_issues: list[ScenarioEntryIssue] = field(default_factory=list)
+    load_issues: list[ScenarioEntryIssue] = field(default_factory=list)
+    raw_entry_count: int = 0
+
+    @property
+    def issue_count(self) -> int:
+        """Return the number of issues collected so far."""
+        return len(self.entry_issues) + len(self.load_issues)
 
 
 def _load_yaml_documents(path: Path) -> Any:
@@ -190,12 +235,81 @@ def load_scenarios(path: str | Path, *, base_dir: Path | None = None) -> list[Ma
     return _load_scenarios_recursive(resolved, visited=set(), root=root)
 
 
+def load_scenarios_for_validation(
+    path: str | Path,
+    *,
+    base_dir: Path | None = None,
+) -> ScenarioValidationReport:
+    """Expand scenarios with provenance while retaining row-level failures.
+
+    This uses the same recursive loader, path rebasing, selection, override,
+    and registry logic as :func:`load_scenarios`. Unlike the strict runtime
+    entry point, malformed rows and broken includes are recorded so a caller
+    can report them alongside valid neighboring rows.
+
+    Returns:
+        ScenarioValidationReport: Expanded rows, all manifests read, and
+        tolerant-load diagnostics.
+    """
+    from robot_sf.training.task_bundles import (  # noqa: PLC0415
+        is_task_bundle_reference,
+        load_task_bundle_scenarios,
+    )
+
+    collector = _ScenarioValidationCollector()
+    try:
+        if is_task_bundle_reference(path):
+            scenarios = list(load_task_bundle_scenarios(path))
+            collector.raw_entry_count = len(scenarios)
+            return ScenarioValidationReport(
+                scenarios=scenarios,
+                manifest_sources=[],
+                entry_issues=[],
+                load_issues=[],
+                load_error=None,
+                raw_entry_count=collector.raw_entry_count,
+            )
+
+        resolved = Path(path).resolve()
+        if base_dir is None:
+            root = resolved
+        else:
+            root = base_dir.resolve()
+            if not root.exists():
+                raise ValueError(f"Scenario base_dir does not exist: {root}")
+        scenarios = _load_scenarios_recursive(
+            resolved,
+            visited=set(),
+            root=root,
+            collector=collector,
+        )
+    except (OSError, ValueError, RuntimeError, TypeError, yaml.YAMLError) as exc:
+        return ScenarioValidationReport(
+            scenarios=[],
+            manifest_sources=collector.manifest_sources,
+            entry_issues=collector.entry_issues,
+            load_issues=collector.load_issues,
+            load_error=str(exc),
+            raw_entry_count=collector.raw_entry_count,
+        )
+
+    return ScenarioValidationReport(
+        scenarios=scenarios,
+        manifest_sources=collector.manifest_sources,
+        entry_issues=collector.entry_issues,
+        load_issues=collector.load_issues,
+        load_error=None,
+        raw_entry_count=collector.raw_entry_count,
+    )
+
+
 def _load_scenarios_recursive(
     path: Path,
     *,
     visited: set[Path],
     root: Path,
     map_search_paths: list[Path] | None = None,
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Load scenarios from path, expanding any include references.
 
@@ -203,15 +317,20 @@ def _load_scenarios_recursive(
         list[Mapping[str, Any]]: Combined scenario entries.
     """
     resolved = path.resolve()
+    issues_before = collector.issue_count if collector is not None else 0
     if resolved in visited:
         raise ValueError(f"Scenario include cycle detected at '{resolved}'.")
     visited.add(resolved)
     try:
         data = _load_yaml_documents(resolved)
+        if collector is not None:
+            collector.manifest_sources.append(ScenarioManifestSource(resolved, data))
         scenarios, includes, local_map_search_paths = _load_scenario_manifest(
             data,
             source=resolved,
         )
+        if collector is not None:
+            collector.raw_entry_count += len(scenarios)
         combined: list[Mapping[str, Any]] = []
         inherited_search_paths = map_search_paths or []
         effective_search_paths = _merge_map_search_paths(
@@ -219,30 +338,49 @@ def _load_scenarios_recursive(
             local_map_search_paths,
         )
         for include_path in includes:
-            combined.extend(
-                _load_scenarios_recursive(
-                    include_path,
-                    visited=visited,
-                    root=root,
-                    map_search_paths=effective_search_paths,
+            try:
+                combined.extend(
+                    _load_scenarios_recursive(
+                        include_path,
+                        visited=visited,
+                        root=root,
+                        map_search_paths=effective_search_paths,
+                        collector=collector,
+                    )
                 )
-            )
+            except (OSError, ValueError, RuntimeError, TypeError, yaml.YAMLError) as exc:
+                if collector is None:
+                    raise
+                collector.load_issues.append(
+                    ScenarioEntryIssue(
+                        source=include_path.resolve(),
+                        index=None,
+                        message=str(exc),
+                    )
+                )
         combined.extend(
             _normalize_scenarios(
                 scenarios,
                 source=resolved,
                 root=root,
                 map_search_paths=effective_search_paths,
+                collector=collector,
             )
         )
         if isinstance(data, Mapping):
-            combined = _apply_scenario_selection(combined, data=data, source=resolved)
+            combined = _apply_scenario_selection(
+                combined,
+                data=data,
+                source=resolved,
+                collector=collector,
+            )
             combined = _apply_scenario_overrides(
                 combined,
                 data=data,
                 source=resolved,
                 root=root,
                 map_search_paths=effective_search_paths,
+                collector=collector,
             )
             combined = _apply_scenario_overrides_by_name(
                 combined,
@@ -250,8 +388,11 @@ def _load_scenarios_recursive(
                 source=resolved,
                 root=root,
                 map_search_paths=effective_search_paths,
+                collector=collector,
             )
         if not combined:
+            if collector is not None and collector.issue_count > issues_before:
+                return []
             raise ValueError(f"Scenario config missing scenarios: {resolved}")
         return combined
     finally:
@@ -327,6 +468,7 @@ def _apply_scenario_selection(
     *,
     data: Mapping[str, Any],
     source: Path,
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Apply explicit scenario selection after manifest expansion.
 
@@ -339,7 +481,15 @@ def _apply_scenario_selection(
 
     scenario_map: dict[str, Mapping[str, Any]] = {}
     for idx, scenario in enumerate(scenarios):
-        name = _scenario_identifier(scenario, source=source, index=idx)
+        try:
+            name = _scenario_identifier(scenario, source=source, index=idx)
+        except (TypeError, ValueError) as exc:
+            if collector is None:
+                raise
+            collector.entry_issues.append(
+                ScenarioEntryIssue(source=source, index=idx, message=str(exc), entry=scenario)
+            )
+            continue
         key = name.lower()
         if key in scenario_map:
             raise ValueError(
@@ -407,6 +557,7 @@ def _apply_scenario_overrides(
     source: Path,
     root: Path,
     map_search_paths: list[Path],
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Apply manifest-wide nested overrides after include expansion.
 
@@ -422,6 +573,7 @@ def _apply_scenario_overrides(
         source=source,
         root=root,
         map_search_paths=map_search_paths,
+        collector=collector,
     )
 
 
@@ -472,6 +624,7 @@ def _apply_scenario_overrides_by_name(
     source: Path,
     root: Path,
     map_search_paths: list[Path],
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Apply nested overrides to specific scenario names after expansion.
 
@@ -488,7 +641,16 @@ def _apply_scenario_overrides_by_name(
     merged: list[Mapping[str, Any]] = []
     applied_targets: set[str] = set()
     for index, scenario in enumerate(scenarios):
-        name = _scenario_identifier(scenario, source=source, index=index)
+        try:
+            name = _scenario_identifier(scenario, source=source, index=index)
+        except (TypeError, ValueError) as exc:
+            if collector is None:
+                raise
+            collector.entry_issues.append(
+                ScenarioEntryIssue(source=source, index=index, message=str(exc), entry=scenario)
+            )
+            merged.append(scenario)
+            continue
         key = name.lower()
         if key in target_keys and key in applied_targets:
             raise ValueError(
@@ -515,6 +677,7 @@ def _apply_scenario_overrides_by_name(
         source=source,
         root=root,
         map_search_paths=map_search_paths,
+        collector=collector,
     )
 
 
@@ -850,6 +1013,7 @@ def _normalize_scenarios(
     source: Path,
     root: Path,
     map_search_paths: list[Path],
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Filter and validate scenario mappings while preserving order.
 
@@ -862,20 +1026,47 @@ def _normalize_scenarios(
     normalized: list[Mapping[str, Any]] = []
     for idx, scenario in enumerate(scenarios):
         if not isinstance(scenario, Mapping):
-            raise ValueError(
+            error_message = (
                 f"Scenario entry {idx} in '{source}' must be a mapping; "
                 f"got {type(scenario).__name__}."
             )
-        _validate_scenario_entry(scenario, source=source, index=idx)
-        normalized.append(
-            _rebase_scenario_paths(
-                scenario,
-                source=source,
-                root=root,
-                map_search_paths=map_search_paths,
-                map_registry=map_registry,
+            if collector is None:
+                raise ValueError(error_message)
+            collector.entry_issues.append(
+                ScenarioEntryIssue(
+                    source=source,
+                    index=idx,
+                    message=error_message,
+                    entry=scenario,
+                )
             )
-        )
+            continue
+        try:
+            _validate_scenario_entry(scenario, source=source, index=idx)
+            normalized.append(
+                _rebase_scenario_paths(
+                    scenario,
+                    source=source,
+                    root=root,
+                    map_search_paths=map_search_paths,
+                    map_registry=map_registry,
+                )
+            )
+        except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as exc:
+            if collector is None:
+                raise
+            collector.entry_issues.append(
+                ScenarioEntryIssue(
+                    source=source,
+                    index=idx,
+                    message=str(exc),
+                    entry=scenario,
+                )
+            )
+            # Keep malformed mappings available for the validator and asset
+            # classifier; only non-mapping rows are omitted from the expanded
+            # mapping list because they cannot produce a scenario summary.
+            normalized.append(dict(scenario))
     return normalized
 
 
@@ -2710,12 +2901,16 @@ def map_cache_info() -> dict[str, int]:
 
 
 __all__ = [
+    "ScenarioEntryIssue",
+    "ScenarioManifestSource",
+    "ScenarioValidationReport",
     "_apply_social_group_overrides",
     "apply_route_overrides",
     "apply_single_pedestrian_overrides",
     "build_robot_config_from_scenario",
     "load_scenarios",
     "load_scenarios_for_discovery",
+    "load_scenarios_for_validation",
     "map_cache_info",
     "resolve_map_definition",
     "resolve_map_id",

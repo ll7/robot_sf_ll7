@@ -395,6 +395,34 @@ def test_catalog_fails_closed_on_malformed_manifest(
         cli_scenarios_module._build_catalog()
 
 
+def test_catalog_rejects_out_of_repo_symlink_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A catalog symlink cannot make an external manifest appear bundled."""
+    scenarios_root = tmp_path / "configs" / "scenarios"
+    scenarios_root.mkdir(parents=True)
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-manifest.yaml"
+    outside.write_text(
+        "scenarios:\n"
+        "  - name: external_symlink_manifest\n"
+        "    map_file: map.svg\n"
+        "    simulation_config:\n"
+        "      max_episode_steps: 10\n",
+        encoding="utf-8",
+    )
+    linked = scenarios_root / "linked.yaml"
+    linked.symlink_to(outside)
+    monkeypatch.setattr(cli_scenarios_module, "_find_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(cli_scenarios_module, "_CACHED_CATALOG", None)
+    monkeypatch.setattr(cli_scenarios_module, "_CACHED_EXCLUSIONS", None)
+
+    try:
+        with pytest.raises(ValueError, match=REASON_EXTERNAL_ASSET_DEPENDENT):
+            cli_scenarios_module.list_scenarios_payload()
+    finally:
+        outside.unlink(missing_ok=True)
+
+
 def test_map_resolution_uses_registry_and_never_basename_fallback() -> None:
     """Map lookup rejects basename guesses and gives ``map_id`` precedence."""
     repo_root = cli_scenarios_module._find_repo_root()
@@ -563,6 +591,63 @@ def test_validate_mixed_malformed_rows_fails_closed_with_diagnostics(
     assert "must be a mapping" in malformed_errors[0]["message"]
 
 
+def test_validate_nested_manifest_reports_metadata_schema_and_mixed_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Included metadata and malformed rows retain provenance and valid neighbors."""
+    scenarios_root = tmp_path / "configs" / "scenarios"
+    inputs_root = tmp_path / "configs" / "scenario_inputs"
+    scenarios_root.mkdir(parents=True)
+    inputs_root.mkdir(parents=True)
+    (tmp_path / "map.svg").write_text("<svg/>\n", encoding="utf-8")
+    child = inputs_root / "mixed.yaml"
+    child.write_text(
+        "schema_version: robot_sf.scenario_matrix.v0\n"
+        "scenarios:\n"
+        "  - name: included_valid_neighbor\n"
+        "    map_file: ../../map.svg\n"
+        "    simulation_config:\n"
+        "      max_episode_steps: 10\n"
+        "  - malformed nested row\n"
+        "  - name: included_schema_error\n"
+        "    map_file: ../../map.svg\n"
+        "    simulation_config:\n"
+        "      max_episode_steps: 11\n"
+        "    repeats: 0\n"
+        "  - name: included_second_neighbor\n"
+        "    map_file: ../../map.svg\n"
+        "    simulation_config:\n"
+        "      max_episode_steps: 12\n",
+        encoding="utf-8",
+    )
+    manifest = scenarios_root / "root.yaml"
+    manifest.write_text("includes:\n  - ../scenario_inputs/mixed.yaml\n", encoding="utf-8")
+    monkeypatch.setattr(cli_scenarios_module, "_find_repo_root", lambda: tmp_path)
+
+    payload = cli_scenarios_module.validate_scenario_payload(str(manifest))
+
+    assert payload["valid"] is False
+    assert payload["num_scenarios"] == 4
+    identities = {row["identity"] for row in payload["scenarios"]}
+    assert identities == {
+        "included_valid_neighbor",
+        "included_schema_error",
+        "included_second_neighbor",
+    }
+    metadata_errors = [error for error in payload["errors"] if error["path"] == "/schema_version"]
+    assert metadata_errors
+    assert metadata_errors[0]["source_file"].endswith("configs/scenario_inputs/mixed.yaml")
+    nested_row_errors = [
+        error for error in payload["errors"] if error.get("path") == "/scenarios/1"
+    ]
+    assert any(error["code"] == REASON_SCHEMA_VALIDATION_ERROR for error in nested_row_errors)
+    assert any(error["code"] == REASON_LOAD_FAILURE for error in nested_row_errors)
+    assert any(
+        error["code"] == REASON_SCHEMA_VALIDATION_ERROR and error["path"] == "/repeats"
+        for error in payload["errors"]
+    )
+
+
 def test_external_map_asset_is_explicitly_classified(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -585,6 +670,45 @@ def test_external_map_asset_is_explicitly_classified(
     assert payload["scenarios"][0]["status"] == STATUS_EXTERNAL_ASSET_DEPENDENT
     assert payload["scenarios"][0]["map_reference"]["external_asset_dependent"] is True
     assert any(error["code"] == REASON_EXTERNAL_ASSET_DEPENDENT for error in payload["errors"])
+
+
+def test_external_route_asset_sets_consistent_row_classification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An external route is explicit in the map reference and row status."""
+    scenarios_root = tmp_path / "configs" / "scenarios"
+    scenarios_root.mkdir(parents=True)
+    (tmp_path / "map.svg").write_text("<svg/>\n", encoding="utf-8")
+    external_route = tmp_path.parent / f"{tmp_path.name}-external-route.yaml"
+    manifest = scenarios_root / "external_route.yaml"
+    manifest.write_text(
+        "scenarios:\n"
+        "  - name: external_route_scenario\n"
+        "    map_file: ../../map.svg\n"
+        f"    route_overrides_file: {external_route}\n"
+        "    simulation_config:\n"
+        "      max_episode_steps: 10\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli_scenarios_module, "_find_repo_root", lambda: tmp_path)
+
+    try:
+        payload = cli_scenarios_module.validate_scenario_payload(str(manifest))
+        row = payload["scenarios"][0]
+
+        assert payload["status"] == STATUS_EXTERNAL_ASSET_DEPENDENT
+        assert row["status"] == STATUS_EXTERNAL_ASSET_DEPENDENT
+        assert row["validation_status"]["status"] == STATUS_EXTERNAL_ASSET_DEPENDENT
+        assert row["map_reference"]["external_asset_dependent"] is True
+        assert row["map_reference"]["external_map_asset_dependent"] is False
+        assert row["map_reference"]["external_route_asset_dependent"] is True
+        assert any(
+            error["code"] == REASON_EXTERNAL_ASSET_DEPENDENT
+            and error["path"] == "/route_overrides_file"
+            for error in payload["errors"]
+        )
+    finally:
+        external_route.unlink(missing_ok=True)
 
 
 def test_external_manifest_include_is_rejected_before_loading(
@@ -643,6 +767,38 @@ def test_friendly_validation_includes_json_diagnostic_codes(capsys) -> None:
     assert main(["scenarios", "validate", path, "--format", "json"]) == 2
     payload = json.loads(capsys.readouterr().out)
     assert any(error["code"] == REASON_SCHEMA_VALIDATION_ERROR for error in payload["errors"])
+
+
+def test_friendly_list_and_validate_include_all_json_contract_facts() -> None:
+    """Friendly projections expose every contract field represented in JSON."""
+    listed = cli_scenarios_module.list_scenarios_payload()
+    listed_text = cli_scenarios_module._format_list_scenarios(listed)
+    sample = listed["scenarios"][0]
+    assert listed["schema_version"] in listed_text
+    assert str(listed["count"]) in listed_text
+    for key in sample:
+        assert key in listed_text
+    for section in (
+        "map_reference",
+        "actor_counts",
+        "seed_policy",
+        "horizon_and_dt",
+        "kinematics_and_observation",
+        "validation_status",
+    ):
+        for key in sample[section]:
+            assert key in listed_text
+
+    validated = cli_scenarios_module.validate_scenario_payload(
+        "tests/fixtures/cli_scenarios/valid_scenario.yaml"
+    )
+    validated_text = cli_scenarios_module._format_validate_scenario(validated)
+    assert validated["schema_version"] in validated_text
+    assert validated["resolved_path"] in validated_text
+    assert "scenarios:" in validated_text
+    assert "fixture_valid_crossing" in validated_text
+    for key in validated["scenarios"][0]["kinematics_and_observation"]:
+        assert key in validated_text
 
 
 def test_unknown_map_id_keeps_stable_map_not_found_reason(

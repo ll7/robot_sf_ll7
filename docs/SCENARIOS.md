@@ -50,7 +50,9 @@ uv run robot-sf scenarios list --format json
         "route_overrides_file": null,
         "resolved_map_path": "maps/svg_maps/classic_crossing.svg",
         "map_exists": true,
-        "external_asset_dependent": false
+        "external_asset_dependent": false,
+        "external_map_asset_dependent": false,
+        "external_route_asset_dependent": false
       },
       "actor_counts": {
         "ped_density": 0.02,
@@ -208,10 +210,10 @@ scenario contract rejects unknown top-level row fields with
 `SCHEMA_VALIDATION_ERROR`; nested values are still checked by the canonical
 validator.
 
-Friendly output is a human-readable projection of the same status and diagnostic
-codes exposed by JSON. JSON remains the machine-readable contract; friendly output
-does not promise field ordering or whitespace parity, but it includes every
-row-level error code and message when validation fails.
+Friendly output is a human-readable projection of the same facts exposed by JSON.
+It includes a deterministic `Contract facts` section containing every payload
+field, nested value, status, reason, warning, and diagnostic; JSON remains the
+machine-readable contract, so field ordering and whitespace are not significant.
 
 ## Curated Roots and Exclusion Registry
 
@@ -225,9 +227,13 @@ Each YAML candidate is classified and expanded by the canonical scenario
 loader, including includes, selection, overrides, and map-registry rebasing.
 Auxiliary mappings without manifest keys are skipped; malformed manifests and
 mixed mapping/non-mapping rows fail closed instead of being silently dropped.
-Manifest references outside the repository are rejected before an external file
-is loaded. A map or route asset outside the repository is explicitly classified
-as `external_asset_dependent` in summaries and validation reports.
+Manifest references outside the repository, including symlink targets that resolve
+outside the repository, are rejected before an external file is read. Included
+manifests are passed through the canonical metadata and item-schema validators.
+Mixed malformed rows retain row-level diagnostics and valid neighbors in validate
+reports. A map or route asset outside the repository is explicitly classified as
+`external_asset_dependent`; the map reference also records whether the map or the
+route asset caused that classification.
 
 Files explicitly excluded from the runnable scenario catalog:
 - `configs/scenarios/archetype_validation_waivers.yaml`: Waiver specification registry.

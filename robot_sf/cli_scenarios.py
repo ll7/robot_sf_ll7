@@ -263,13 +263,16 @@ def _resolve_map_reference(
         )
 
     rel_resolved = None
-    external_asset = False
+    external_map_asset = False
     if resolved_map is not None:
         if _is_within_repo(resolved_map, repo_root):
             rel_resolved = resolved_map.relative_to(repo_root.resolve()).as_posix()
         else:
             rel_resolved = resolved_map.as_posix()
-            external_asset = True
+            external_map_asset = True
+
+    route_path = _resolve_asset_path(route_overrides, source_file=source_file)
+    external_route_asset = route_path is not None and not _is_within_repo(route_path, repo_root)
 
     return {
         "map_file": map_file,
@@ -277,7 +280,9 @@ def _resolve_map_reference(
         "route_overrides_file": route_overrides,
         "resolved_map_path": rel_resolved,
         "map_exists": map_exists,
-        "external_asset_dependent": external_asset,
+        "external_asset_dependent": external_map_asset or external_route_asset,
+        "external_map_asset_dependent": external_map_asset,
+        "external_route_asset_dependent": external_route_asset,
     }
 
 
@@ -434,7 +439,10 @@ def _scenario_asset_diagnostics(
                 "path": "/map_file",
             }
         )
-    elif map_reference.get("external_asset_dependent"):
+    elif map_reference.get(
+        "external_map_asset_dependent",
+        map_reference.get("external_asset_dependent", False),
+    ):
         has_external_asset = True
         reference_key = "map_id" if map_reference.get("map_id") else "map_file"
         reference_value = map_reference.get(reference_key)
@@ -714,6 +722,27 @@ def _catalog_source_priority(manifest_path: Path, scenarios_root: Path) -> int:
     return 1
 
 
+def _manifest_metadata_errors(manifest_sources: list[Any]) -> list[dict[str, Any]]:
+    """Validate metadata for every manifest read during canonical expansion.
+
+    Returns:
+        list[dict[str, Any]]: Canonical metadata errors in CLI form.
+    """
+    from robot_sf.benchmark.scenario.scenario_schema import (  # noqa: PLC0415
+        validate_scenario_matrix_metadata,
+    )
+
+    errors: list[dict[str, Any]] = []
+    for manifest in manifest_sources:
+        errors.extend(
+            _schema_errors_to_cli_errors(
+                validate_scenario_matrix_metadata(manifest.data),
+                source_file=manifest.path,
+            )
+        )
+    return errors
+
+
 def _load_catalog_declarations(  # noqa: C901
     *,
     scenarios_root: Path,
@@ -727,8 +756,11 @@ def _load_catalog_declarations(  # noqa: C901
             tuple item contains row-level schema and metadata diagnostics.
     """
     from robot_sf.training.scenario_loader import (  # noqa: PLC0415
-        load_scenarios_for_discovery,
+        _SCENARIO_MANIFEST_KEYS,
+        load_scenarios_for_validation,
     )
+
+    repo_root = _find_repo_root()
 
     curated_roots = [
         scenarios_root / "single",
@@ -746,34 +778,58 @@ def _load_catalog_declarations(  # noqa: C901
                 continue
             if curated_root == scenarios_root and manifest_path.parent != scenarios_root:
                 continue
-            raw_manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+            resolved_manifest = manifest_path.resolve()
+            if not _is_within_repo(resolved_manifest, repo_root):
+                raise ValueError(
+                    f"{REASON_EXTERNAL_ASSET_DEPENDENT}: scenario manifest '{rel_path}' "
+                    f"resolves outside the repository boundary: '{resolved_manifest}'."
+                )
+            raw_manifest = yaml.safe_load(resolved_manifest.read_text(encoding="utf-8"))
+            if isinstance(raw_manifest, Mapping) and not _SCENARIO_MANIFEST_KEYS.intersection(
+                raw_manifest
+            ):
+                continue
+            if not isinstance(raw_manifest, (Mapping, list)):
+                raise ValueError(
+                    f"Scenario discovery candidate must contain a manifest: {resolved_manifest}"
+                )
             external_errors = _manifest_external_asset_errors(
                 raw_manifest,
-                source_file=manifest_path,
-                repo_root=_find_repo_root(),
+                source_file=resolved_manifest,
+                repo_root=repo_root,
             )
             if external_errors:
                 raise ValueError(external_errors[0]["message"])
-            loaded = load_scenarios_for_discovery(manifest_path)
-            if loaded is None:
-                continue
+            report = load_scenarios_for_validation(resolved_manifest)
+            if report.load_error:
+                raise ValueError(
+                    f"Failed to load scenario manifest '{rel_path}': {report.load_error}"
+                )
+            if report.entry_issues or report.load_issues:
+                issue_messages = [
+                    issue.message for issue in (*report.entry_issues, *report.load_issues)
+                ]
+                raise ValueError("; ".join(issue_messages))
+            loaded = list(report.scenarios)
+            metadata_errors = _manifest_metadata_errors(report.manifest_sources)
             row_diagnostics, orphan_errors = _scenario_validation_diagnostics(
                 list(loaded),
                 raw_manifest=raw_manifest,
-                source_file=manifest_path,
+                source_file=resolved_manifest,
+                metadata_errors=metadata_errors,
             )
             if orphan_errors:
                 raise ValueError("; ".join(error["message"] for error in orphan_errors))
-            priority = _catalog_source_priority(manifest_path, scenarios_root)
+            priority = _catalog_source_priority(resolved_manifest, scenarios_root)
             for index, scenario in enumerate(loaded):
                 if not isinstance(scenario, Mapping):  # pragma: no cover - loader contract
                     raise ValueError(
-                        f"Scenario loader returned a non-mapping for '{manifest_path}'."
+                        f"Scenario loader returned a non-mapping for '{resolved_manifest}'."
                     )
                 entry = dict(scenario)
-                identity = _scenario_identity(entry, source_file=manifest_path)
+                identity = _scenario_identity(entry, source_file=resolved_manifest)
                 declarations.setdefault(identity.casefold(), []).append(
-                    (priority, rel_path, manifest_path, entry, row_diagnostics[index])
+                    (priority, rel_path, resolved_manifest, entry, row_diagnostics[index])
                 )
     return declarations
 
@@ -860,21 +916,25 @@ def _describe_validation_diagnostics(
             [dict(warning) for warning in validation.get("warnings", [])],
         )
 
-    from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
+    from robot_sf.training.scenario_loader import (  # noqa: PLC0415
+        load_scenarios_for_validation,
+    )
 
     try:
         raw_manifest = yaml.safe_load(source_file.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError):
         raw_manifest = None
-    try:
-        all_scenarios = list(load_scenarios(source_file))
-    except (OSError, ValueError, RuntimeError, yaml.YAMLError):
-        all_scenarios = [loaded]
+    report = load_scenarios_for_validation(source_file)
+    all_scenarios = list(report.scenarios) or [loaded]
+    metadata_errors = _manifest_metadata_errors(report.manifest_sources)
+    if not report.manifest_sources:
+        metadata_errors = None
 
     diagnostics, orphan_errors = _scenario_validation_diagnostics(
         all_scenarios,
         raw_manifest=raw_manifest,
         source_file=source_file,
+        metadata_errors=metadata_errors,
     )
     loaded_identity = _scenario_diagnostic_identity(loaded, source_file=source_file)
     selected_index = 0
@@ -887,6 +947,22 @@ def _describe_validation_diagnostics(
                 break
     selected_errors = list(diagnostics[selected_index]) if diagnostics else []
     selected_errors.extend(error for error in orphan_errors if error not in selected_errors)
+    selected_errors.extend(
+        error
+        for error in _scenario_load_issue_errors(report.entry_issues, report.load_issues)
+        if error not in selected_errors
+    )
+    if report.load_error:
+        selected_errors.append(
+            {
+                "code": REASON_LOAD_FAILURE,
+                "message": f"Failed to load scenarios from '{source_file}': {report.load_error}",
+                "scenario_id": None,
+                "path": source_file.as_posix(),
+                "index": None,
+                "source_file": source_file.as_posix(),
+            }
+        )
     return selected_errors, []
 
 
@@ -1115,6 +1191,7 @@ def _schema_errors_to_cli_errors(
     schema_errors: list[Mapping[str, Any]],
     *,
     scenarios: list[Mapping[str, Any]] | None = None,
+    source_file: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Convert canonical schema-validator errors to the CLI error envelope.
 
@@ -1137,13 +1214,71 @@ def _schema_errors_to_cli_errors(
                     scenarios[index],
                     source_file=Path("scenario.yaml"),
                 )
+        error = {
+            "code": code,
+            "message": err_msg,
+            "scenario_id": scenario_id,
+            "path": schema_error.get("path"),
+            "index": index,
+        }
+        if source_file is not None:
+            error["source_file"] = source_file.as_posix()
+        errors.append(error)
+    return errors
+
+
+def _scenario_load_issue_errors(
+    entry_issues: list[Any],
+    load_issues: list[Any],
+) -> list[dict[str, Any]]:
+    """Convert tolerant canonical-loader issues into stable CLI diagnostics.
+
+    Returns:
+        list[dict[str, Any]]: Stable row and manifest load diagnostics.
+    """
+    errors: list[dict[str, Any]] = []
+    for issue in entry_issues:
+        index = issue.index
+        path = f"/scenarios/{index}" if index is not None else issue.source.as_posix()
+        scenario_id = (
+            _scenario_diagnostic_identity(issue.entry, source_file=issue.source)
+            if isinstance(issue.entry, Mapping)
+            else None
+        )
+        if index is not None and not isinstance(issue.entry, Mapping):
+            errors.append(
+                {
+                    "code": REASON_SCHEMA_VALIDATION_ERROR,
+                    "message": issue.message,
+                    "scenario_id": scenario_id,
+                    "path": path,
+                    "index": index,
+                    "source_file": issue.source.as_posix(),
+                }
+            )
         errors.append(
             {
-                "code": code,
-                "message": err_msg,
+                "code": REASON_LOAD_FAILURE,
+                "message": (
+                    f"Failed to load scenario entry {index} from '{issue.source}': {issue.message}"
+                    if index is not None
+                    else f"Failed to load scenarios from '{issue.source}': {issue.message}"
+                ),
                 "scenario_id": scenario_id,
-                "path": schema_error.get("path"),
+                "path": path,
                 "index": index,
+                "source_file": issue.source.as_posix(),
+            }
+        )
+    for issue in load_issues:
+        errors.append(
+            {
+                "code": REASON_LOAD_FAILURE,
+                "message": f"Failed to load scenarios from '{issue.source}': {issue.message}",
+                "scenario_id": None,
+                "path": issue.source.as_posix(),
+                "index": None,
+                "source_file": issue.source.as_posix(),
             }
         )
     return errors
@@ -1154,6 +1289,7 @@ def _scenario_validation_diagnostics(  # noqa: C901
     *,
     raw_manifest: Any,
     source_file: Path,
+    metadata_errors: list[Mapping[str, Any]] | None = None,
 ) -> tuple[list[list[dict[str, Any]]], list[dict[str, Any]]]:
     """Collect canonical and CLI contract diagnostics for each scenario row.
 
@@ -1172,7 +1308,13 @@ def _scenario_validation_diagnostics(  # noqa: C901
     )
 
     diagnostics: list[list[dict[str, Any]]] = [[] for _ in scenarios]
-    metadata_errors = _schema_errors_to_cli_errors(validate_scenario_matrix_metadata(raw_manifest))
+    if metadata_errors is None:
+        metadata_errors = _schema_errors_to_cli_errors(
+            validate_scenario_matrix_metadata(raw_manifest),
+            source_file=source_file,
+        )
+    else:
+        metadata_errors = [dict(error) for error in metadata_errors]
     orphan_errors: list[dict[str, Any]] = []
 
     mapping_rows: list[Mapping[str, Any]] = []
@@ -1455,7 +1597,7 @@ def _status_from_diagnostics(
     return STATUS_INVALID
 
 
-def validate_scenario_payload(path_str: str) -> dict[str, Any]:
+def validate_scenario_payload(path_str: str) -> dict[str, Any]:  # noqa: C901
     """Validate a scenario YAML file or manifest against schema and filesystem rules.
 
     Args:
@@ -1469,7 +1611,9 @@ def validate_scenario_payload(path_str: str) -> dict[str, Any]:
     if early_error is not None or resolved is None:
         return early_error or {}
 
-    from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
+    from robot_sf.training.scenario_loader import (  # noqa: PLC0415
+        load_scenarios_for_validation,
+    )
 
     try:
         raw_manifest = yaml.safe_load(resolved.read_text(encoding="utf-8"))
@@ -1538,46 +1682,24 @@ def validate_scenario_payload(path_str: str) -> dict[str, Any]:
             "warnings": warnings,
         }
 
-    try:
-        scenarios = load_scenarios(resolved)
-    except (OSError, ValueError, yaml.YAMLError, RuntimeError) as exc:
-        diagnostics, orphan_errors = _scenario_validation_diagnostics(
-            raw_entries,
-            raw_manifest=raw_manifest,
+    report = load_scenarios_for_validation(resolved)
+    loaded_scenarios = list(report.scenarios)
+    if report.manifest_sources:
+        metadata_errors = _manifest_metadata_errors(report.manifest_sources)
+    else:
+        from robot_sf.benchmark.scenario.scenario_schema import (  # noqa: PLC0415
+            validate_scenario_matrix_metadata,
+        )
+
+        metadata_errors = _schema_errors_to_cli_errors(
+            validate_scenario_matrix_metadata(raw_manifest),
             source_file=resolved,
         )
-        rows, row_diagnostics = report_rows(raw_entries, diagnostics)
-        summaries, asset_errors, warnings, has_missing = _check_scenario_assets(
-            list(rows),
-            resolved,
-            repo_root,
-            validation_errors_by_scenario=row_diagnostics,
-        )
-        load_error = {
-            "code": REASON_LOAD_FAILURE,
-            "message": f"Failed to load scenarios from '{path_str}': {exc}",
-            "scenario_id": None,
-            "path": str(path_str),
-        }
-        errors = _deduplicate_diagnostics([*orphan_errors, load_error, *asset_errors])
-        errors.extend(error for error in manifest_asset_errors if error not in errors)
-        return {
-            "schema_version": SCHEMA_VALIDATE_VERSION,
-            "target_path": str(path_str),
-            "resolved_path": str(resolved),
-            "valid": False,
-            "status": _status_from_diagnostics(errors=errors, has_missing_asset=has_missing),
-            "num_scenarios": len(raw_entries),
-            "scenarios": summaries,
-            "errors": errors,
-            "warnings": warnings,
-        }
-
-    loaded_scenarios = list(scenarios)
     diagnostics, orphan_errors = _scenario_validation_diagnostics(
         loaded_scenarios,
         raw_manifest=raw_manifest,
         source_file=resolved,
+        metadata_errors=metadata_errors,
     )
     summaries, asset_errors, warnings, _has_missing = _check_scenario_assets(
         loaded_scenarios,
@@ -1585,9 +1707,22 @@ def validate_scenario_payload(path_str: str) -> dict[str, Any]:
         repo_root,
         validation_errors_by_scenario=diagnostics,
     )
-    errors = _deduplicate_diagnostics([*orphan_errors, *asset_errors])
+    errors = [*orphan_errors, *asset_errors]
+    errors.extend(_scenario_load_issue_errors(report.entry_issues, report.load_issues))
+    if report.load_error:
+        errors.append(
+            {
+                "code": REASON_LOAD_FAILURE,
+                "message": f"Failed to load scenarios from '{path_str}': {report.load_error}",
+                "scenario_id": None,
+                "path": str(path_str),
+                "index": None,
+                "source_file": resolved.as_posix(),
+            }
+        )
     if manifest_asset_errors:
-        errors = _deduplicate_diagnostics([*manifest_asset_errors, *errors])
+        errors.extend(manifest_asset_errors)
+    errors = _deduplicate_diagnostics(errors)
 
     # A manifest can be valid as a loader input but invalid under the canonical
     # schema or the CLI's strict field contract. Keep the loader's expanded row
@@ -1597,13 +1732,22 @@ def validate_scenario_payload(path_str: str) -> dict[str, Any]:
         error.get("code") in {REASON_MAP_NOT_FOUND, REASON_ROUTE_OVERRIDES_NOT_FOUND}
         for error in errors
     )
+    malformed_row_count = sum(issue.index is not None for issue in report.entry_issues)
+    if report.entry_issues or report.load_issues or report.load_error:
+        num_scenarios = max(
+            report.raw_entry_count,
+            len(loaded_scenarios) + malformed_row_count,
+            len(raw_entries) if report.load_error else 0,
+        )
+    else:
+        num_scenarios = len(loaded_scenarios)
     return {
         "schema_version": SCHEMA_VALIDATE_VERSION,
         "target_path": str(path_str),
         "resolved_path": str(resolved),
         "valid": is_valid,
         "status": _status_from_diagnostics(errors=errors, has_missing_asset=has_missing),
-        "num_scenarios": len(loaded_scenarios),
+        "num_scenarios": num_scenarios,
         "scenarios": summaries,
         "errors": errors,
         "warnings": warnings,
@@ -1616,7 +1760,12 @@ def _format_list_scenarios(payload: dict[str, Any]) -> str:
     Returns:
         str: Formatted terminal text.
     """
-    lines: list[str] = [f"Curated Scenarios ({payload['count']}):\n"]
+    lines: list[str] = [
+        f"Curated Scenarios ({payload['count']}):",
+        f"schema_version: {payload.get('schema_version')}",
+        f"count: {payload.get('count')}",
+        "",
+    ]
     for s in payload["scenarios"]:
         fam = f" ({s['family']})" if s.get("family") else ""
         lines.append(f"- {s['identity']}  [{s['status']}]{fam}")
@@ -1625,31 +1774,54 @@ def _format_list_scenarios(payload: dict[str, Any]) -> str:
         m_str = map_ref.get("map_file") or map_ref.get("map_id") or "none"
         exists_str = "exists" if map_ref.get("map_exists") else "not found"
         lines.append(f"    map: {m_str} [{exists_str}]")
+        lines.append(f"    map_file: {map_ref.get('map_file')}")
+        lines.append(f"    map_id: {map_ref.get('map_id')}")
+        lines.append(f"    route_overrides_file: {map_ref.get('route_overrides_file')}")
+        lines.append(f"    resolved_map_path: {map_ref.get('resolved_map_path')}")
+        lines.append(
+            f"    external_asset_dependent: {map_ref.get('external_asset_dependent', False)}"
+        )
+        lines.append(
+            "    external_map_asset_dependent: "
+            f"{map_ref.get('external_map_asset_dependent', False)}"
+        )
+        lines.append(
+            "    external_route_asset_dependent: "
+            f"{map_ref.get('external_route_asset_dependent', False)}"
+        )
         ac = s.get("actor_counts", {})
         lines.append(
             f"    actors: ped_density={ac.get('ped_density')}, single_peds={ac.get('single_pedestrians')}, robots={ac.get('num_robots')}"
         )
+        lines.append(f"    groups: {ac.get('groups')}")
         sp = s.get("seed_policy", {})
         lines.append(f"    seeds: count={sp.get('count')}, seeds={sp.get('seeds')}")
+        lines.append(f"    repeats: {sp.get('repeats')}")
         hd = s.get("horizon_and_dt", {})
-        if hd.get("max_episode_steps"):
-            lines.append(
-                f"    horizon: {hd.get('max_episode_steps')} steps (dt={hd.get('time_step')}, sim_time={hd.get('sim_time_s')}s)"
-            )
+        lines.append(
+            f"    horizon: {hd.get('max_episode_steps')} steps "
+            f"(dt={hd.get('time_step')}, sim_time={hd.get('sim_time_s')}s)"
+        )
         ko = s.get("kinematics_and_observation", {})
-        if ko.get("kinematics"):
-            lines.append(f"    kinematics: {ko.get('kinematics')}")
-        if s.get("duplicate_sources"):
-            lines.append(f"    duplicate sources: {', '.join(s['duplicate_sources'])}")
+        lines.append(f"    kinematics: {ko.get('kinematics')}")
+        lines.append(
+            f"    observation_visibility_enabled: {ko.get('observation_visibility_enabled')}"
+        )
+        lines.append(f"    fov_degrees: {ko.get('fov_degrees')}")
+        lines.append(f"    max_range_m: {ko.get('max_range_m')}")
+        lines.append(f"    duplicate_sources: {s.get('duplicate_sources', [])}")
         validation = s.get("validation_status", {})
-        if not validation.get("valid", True):
-            lines.append(
-                "    validation: "
-                f"{validation.get('status', s.get('status'))} "
-                f"({len(validation.get('errors', []))} error(s))"
-            )
-            for error in validation.get("errors", []):
-                lines.append(f"      [{error.get('code')}] {error.get('message')}")
+        lines.append(
+            "    validation: "
+            f"{validation.get('status', s.get('status'))} "
+            f"valid={validation.get('valid', False)} "
+            f"({len(validation.get('errors', []))} error(s))"
+        )
+        lines.append(f"    validation reasons: {validation.get('reasons', [])}")
+        for error in validation.get("errors", []):
+            lines.append(f"      [{error.get('code')}] {error.get('message')}")
+        for warning in validation.get("warnings", []):
+            lines.append(f"      warning [{warning.get('code')}] {warning.get('message')}")
         lines.append("")
 
     if payload.get("exclusions"):
@@ -1658,7 +1830,38 @@ def _format_list_scenarios(payload: dict[str, Any]) -> str:
             lines.append(f"- {exc['path']}: {exc['reason']}")
         lines.append("")
 
+    lines.append("Contract facts:")
+    _append_contract_facts(lines, payload, indent="  ")
+
     return "\n".join(lines)
+
+
+def _append_contract_facts(lines: list[str], value: Any, *, indent: str) -> None:
+    """Append every JSON contract value in deterministic, readable form."""
+    if isinstance(value, Mapping):
+        if not value:
+            lines.append(f"{indent}{{}}")
+            return
+        for key in sorted(value, key=str):
+            child = value[key]
+            if isinstance(child, (Mapping, list)):
+                lines.append(f"{indent}{key}:")
+                _append_contract_facts(lines, child, indent=f"{indent}  ")
+            else:
+                lines.append(f"{indent}{key}: {json.dumps(child, sort_keys=True, default=str)}")
+        return
+    if isinstance(value, list):
+        if not value:
+            lines.append(f"{indent}[]")
+            return
+        for child in value:
+            if isinstance(child, (Mapping, list)):
+                lines.append(f"{indent}-")
+                _append_contract_facts(lines, child, indent=f"{indent}  ")
+            else:
+                lines.append(f"{indent}- {json.dumps(child, sort_keys=True, default=str)}")
+        return
+    lines.append(f"{indent}{json.dumps(value, sort_keys=True, default=str)}")
 
 
 def _format_describe_scenario(payload: dict[str, Any]) -> str:
@@ -1668,6 +1871,8 @@ def _format_describe_scenario(payload: dict[str, Any]) -> str:
         str: Formatted terminal text.
     """
     lines: list[str] = [f"Scenario: {payload['identity']}\n"]
+    lines.append(f"  Schema Version: {payload.get('schema_version')}")
+    lines.append(f"  Requested Query: {payload.get('requested_query')}")
     lines.append(f"  Source File: {payload['source_file']}")
     if payload.get("duplicate_sources"):
         lines.append(f"  Duplicate Sources: {', '.join(payload['duplicate_sources'])}")
@@ -1682,6 +1887,13 @@ def _format_describe_scenario(payload: dict[str, Any]) -> str:
     lines.append(f"    resolved_path: {map_ref.get('resolved_map_path')}")
     lines.append(f"    map_exists: {map_ref.get('map_exists')}")
     lines.append(f"    external_asset_dependent: {map_ref.get('external_asset_dependent', False)}")
+    lines.append(
+        f"    external_map_asset_dependent: {map_ref.get('external_map_asset_dependent', False)}"
+    )
+    lines.append(
+        "    external_route_asset_dependent: "
+        f"{map_ref.get('external_route_asset_dependent', False)}"
+    )
 
     ac = payload.get("actor_counts", {})
     lines.append("  Actor Counts:")
@@ -1716,6 +1928,14 @@ def _format_describe_scenario(payload: dict[str, Any]) -> str:
     lines.append(f"    reasons: {', '.join(vs.get('reasons', [])) or 'none'}")
     for error in vs.get("errors", []):
         lines.append(f"    [{error.get('code')}] {error.get('message')}")
+    for warning in vs.get("warnings", []):
+        lines.append(f"    warning [{warning.get('code')}] {warning.get('message')}")
+    lines.append(
+        "  Raw Metadata: "
+        f"{json.dumps(payload.get('raw_metadata', {}), sort_keys=True, default=str)}"
+    )
+    lines.append("\nContract facts:")
+    _append_contract_facts(lines, payload, indent="  ")
 
     return "\n".join(lines)
 
@@ -1729,7 +1949,10 @@ def _format_validate_scenario(payload: dict[str, Any]) -> str:
     status_str = "PASS" if payload["valid"] else "FAIL"
     lines: list[str] = [
         f"Scenario validation: {status_str}",
+        f"Schema version: {payload.get('schema_version')}",
         f"Target: {payload['target_path']} ({payload['num_scenarios']} scenario(s))",
+        f"Resolved path: {payload.get('resolved_path')}",
+        f"Valid: {payload.get('valid')}",
         f"Status: {payload['status']}",
     ]
 
@@ -1746,6 +1969,9 @@ def _format_validate_scenario(payload: dict[str, Any]) -> str:
             sid_info = f" [{warn['scenario_id']}]" if warn.get("scenario_id") else ""
             path_info = f" ({warn['path']})" if warn.get("path") else ""
             lines.append(f"- [{warn['code']}]{sid_info}{path_info}: {warn['message']}")
+
+    lines.append("\nContract facts:")
+    _append_contract_facts(lines, payload, indent="  ")
 
     return "\n".join(lines)
 

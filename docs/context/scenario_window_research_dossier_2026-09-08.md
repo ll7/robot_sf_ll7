@@ -5,6 +5,12 @@ Status: preparation-only terminal packet. The complete machine-readable record i
 This work follows the live #7381 programme and the preparation rulings in #7383
 and #7384; the attached packet is guidance/evidence, not a replacement authority.
 
+Refresh provenance for this repair: current `origin/main` is
+`b22821259034c297d03776edac951c961177be9c`; the live #8620 parent tip is
+`ff7aa7ce86007c7dcc8c3d2be0ad285c75342db1`; and the relevance-window validation
+repair is `491b8e39e799bc6255edfa2205793f88bcfefd00`. The stack is refreshed for
+inspection, but live domain authority and native campaign admission remain blocked.
+
 ## Outcome
 
 The bounded result is an auditable implementation seam, not a shortened benchmark:

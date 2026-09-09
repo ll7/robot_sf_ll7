@@ -20,15 +20,15 @@
     "https://github.com/ll7/robot_sf_ll7/issues/7394"
   ],
   "repository_heads": {
-    "origin_main_at_start": "6c6574d441515908768e00845d8767a871f9711c",
-    "rw01_rw02_pr_8612_head": "1ec583b8ab19b5389dfd88ec2ec7c3c8573b86f7",
-    "rw03_rw04_pr_8620_head": "ff70195f96a3bcb64e92d1403f5de14c877ac4d5",
-    "rw05_rw06_rw07_pr_8622_code_head": "baa277ef3e847d5a05a4eb4963daa1948f76a16b"
+    "origin_main_at_start": "b22821259034c297d03776edac951c961177be9c",
+    "rw01_rw02_pr_8612_head": "b82d42e7152bba165b48b42bdb6c281aa1c41160",
+    "rw03_rw04_pr_8620_head": "ff7aa7ce86007c7dcc8c3d2be0ad285c75342db1",
+    "rw05_rw06_rw07_pr_8622_code_head": "491b8e39e799bc6255edfa2205793f88bcfefd00"
   },
   "receipt_binding": {
-    "base_head": "6c6574d441515908768e00845d8767a871f9711c",
-    "code_head": "baa277ef3e847d5a05a4eb4963daa1948f76a16b",
-    "dossier_commit_scope": "metadata-only refresh after code-head validation",
+    "base_head": "b22821259034c297d03776edac951c961177be9c",
+    "code_head": "491b8e39e799bc6255edfa2205793f88bcfefd00",
+    "dossier_commit_scope": "metadata-only refresh after fail-closed signal validation and stack ancestry refresh",
     "status": "exact_code_head_validated"
   },
   "pull_requests": [
@@ -253,9 +253,9 @@
     {"id": "H9", "statement": "PELT or a learned selector is needed for v1", "status": "blocked", "evidence": "Option A selected for preparation; alternatives deferred", "limitation": "reopen only after measured baseline shortcomings"}
   ],
   "command_receipts": [
-    {"command": "uv run pytest -q tests/benchmark/test_relevance_windows.py tests/benchmark/test_typed_snapshot.py tests/benchmark/test_last_avoidable_replay_issue_5442.py tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_continuation_experiment_plan.py tests/benchmark/test_scenario_window_research_dossier.py", "exit_code": 0, "result": "88 passed at code head baa277ef3e847d5a05a4eb4963daa1948f76a16b"},
-    {"command": "uv run ruff check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py", "exit_code": 0, "result": "passed at code head baa277ef3e847d5a05a4eb4963daa1948f76a16b"},
-    {"command": "uv run ruff format --check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py", "exit_code": 0, "result": "2 files already formatted at code head baa277ef3e847d5a05a4eb4963daa1948f76a16b"},
+    {"command": "uv run pytest -q tests/benchmark/test_relevance_windows.py tests/benchmark/test_typed_snapshot.py tests/benchmark/test_last_avoidable_replay_issue_5442.py tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_continuation_experiment_plan.py tests/benchmark/test_scenario_window_research_dossier.py", "exit_code": 0, "result": "116 passed at refreshed stack code head 491b8e39e799bc6255edfa2205793f88bcfefd00"},
+    {"command": "uv run ruff check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py", "exit_code": 0, "result": "passed at refreshed stack code head 491b8e39e799bc6255edfa2205793f88bcfefd00"},
+    {"command": "uv run ruff format --check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py", "exit_code": 0, "result": "2 files already formatted at refreshed stack code head 491b8e39e799bc6255edfa2205793f88bcfefd00"},
     {"command": "uv run pytest -q tests/dev/test_issue_7331_benchmark_namespace_inventory.py", "exit_code": 0, "result": "7 passed on the refreshed origin/main stack"},
     {"command": "BASE_REF=origin/main scripts/dev/pr_ready_check.sh", "exit_code": null, "result": "pending exact-head readiness after the final metadata refresh"},
     {"command": "causal availability and disjoint-event precursor regression probes", "exit_code": 0, "result": "future signals remain unknown and separate event precursors remain scoped"}

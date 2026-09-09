@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import ast
+import shutil
+import subprocess
+import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import pytest
+import yaml
+
 from scripts.dev.goal_issue_admission import admit_issue, compact_admission
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 def _preflight(*, ready: bool) -> dict[str, object]:
@@ -285,3 +295,59 @@ def test_only_goal_admission_calls_the_atomic_issue_claim_owner() -> None:
                     call_sites.add(path.relative_to(root).as_posix())
 
     assert call_sites == {"scripts/dev/goal_issue_admission.py"}
+
+
+@pytest.fixture
+def isolated_cli_env(tmp_path: Path) -> Iterator[dict[str, str]]:
+    """Keep real PyYAML, but exclude editable hooks, credentials and source roots."""
+    dependencies = tmp_path / "dependencies"
+    shutil.copytree(
+        Path(yaml.__file__).parent,
+        dependencies / "yaml",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    audit = tmp_path / "external-calls"
+    for name in ("gh", "git", "uv", "pip"):
+        command = commands / name
+        command.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$0" >> "$CALL_AUDIT"\nexit 97\n', encoding="utf-8"
+        )
+        command.chmod(0o755)
+    env = {"PATH": str(commands), "PYTHONPATH": str(dependencies), "CALL_AUDIT": str(audit)}
+    dependency = subprocess.run(
+        [sys.executable, "-S", "-B", "-c", "import yaml; assert yaml.safe_load('ok: true')['ok']"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert dependency.returncode == 0, dependency.stderr
+    yield env
+    assert not audit.exists(), "Offline CLI invoked an external command"
+    assert not list(tmp_path.rglob("*.pyc"))
+
+
+@pytest.mark.parametrize("foreign_cwd", [False, True], ids=["checkout", "foreign"])
+def test_direct_help_without_ambient_source_path(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+    foreign_cwd: bool,
+) -> None:
+    """The direct entrypoint works without inherited repository imports."""
+    root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-S", "-B", str(root / "scripts/dev/goal_issue_admission.py"), "--help"],
+        cwd=tmp_path if foreign_cwd else root,
+        env=isolated_cli_env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Gate an atomic issue claim" in result.stdout
+    assert result.stderr == ""

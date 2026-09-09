@@ -10,6 +10,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:
+    # Direct execution must prefer this checkout over ambient source roots.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.dev import issue_claim, issue_implementability
 
 SCHEMA = "goal_issue_admission.v1"

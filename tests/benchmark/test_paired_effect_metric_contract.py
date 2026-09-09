@@ -719,6 +719,39 @@ def test_map_episode_record_exposes_retained_mapping_at_contract_path() -> None:
     assert record["metrics"]["metric_values"] == metrics["metric_values"]
 
 
+def test_map_episode_record_uses_empty_mapping_when_metric_values_are_not_a_mapping() -> None:
+    """Malformed producer output stays an empty contract mapping at the root."""
+    from robot_sf.benchmark.map_runner import map_runner_episode
+
+    record = map_runner_episode._build_episode_record_dict(
+        scenario_id="fixture_scenario",
+        seed=111,
+        scenario_params={"id": "fixture_scenario"},
+        metrics={"metric_values": None},
+        safety_predicates={},
+        public_requirement_events={},
+        algo_meta={},
+        noise_spec={},
+        noise_stats={},
+        tracking_precision_spec={},
+        algo="social_force",
+        active_observation_mode="default",
+        active_observation_level="full",
+        ts_start="2026-09-08T00:00:00+00:00",
+        ts_end="2026-09-08T00:00:01+00:00",
+        status="completed",
+        steps_taken=1,
+        horizon_val=1,
+        wall_time=1.0,
+        termination_reason="success",
+        outcome={"success": True, "collision": False, "timeout_event": False},
+        contradictions=[],
+        view_integrity=None,
+    )
+
+    assert record["metric_values"] == {}
+
+
 def test_native_timeout_wrapper_trace_truncation_is_unavailable() -> None:
     """A declared timeout cannot yield latency or opportunity from a short trace."""
     record = _native_record("wrapper_on", length=3, stop_steps=(1,), recovery_step=2)

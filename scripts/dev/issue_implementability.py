@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import difflib
 import hashlib
 import json
 import re
@@ -198,7 +197,7 @@ def _heading_matches(heading: str, alias: str) -> bool:
 def inspect_contract(body: str) -> dict[str, Any]:
     """Inspect required implementation-contract sections without inferring intent."""
     records = _heading_records(body)
-    headings = sorted({heading for heading, _ in _heading_sections(body)})
+    headings = sorted({heading for heading, _ in records})
     fields: dict[str, dict[str, Any]] = {}
     missing_fields: list[str] = []
     for field, aliases in FIELD_ALIASES.items():
@@ -234,11 +233,16 @@ def preflight_body_text(body: str) -> dict[str, Any]:
     """
     contract = inspect_contract(body)
     missing_fields = list(contract["missing_fields"])
+    heading_candidates = [heading for heading, _ in _heading_sections(body)]
     return {
         "schema": "issue_body_preflight.v1",
         "ready": not missing_fields,
         "missing_fields": missing_fields,
-        "heading_suggestions": _suggest_heading_aliases(contract, set(missing_fields)),
+        "heading_suggestions": _suggest_heading_aliases(
+            contract,
+            set(missing_fields),
+            heading_candidates=heading_candidates,
+        ),
         "body_sha256": contract["body_sha256"],
     }
 
@@ -254,26 +258,27 @@ def _heading_similarity(heading: str, alias: str) -> float:
     """Deterministic similarity between normalized heading and alias text.
 
     Exact or leading-token matches score 1.0 so suffixed headings such as
-    ``inputs (formalization appended ...)`` still resolve; otherwise the score
-    is the best of stemmed-token Dice and :func:`difflib.SequenceMatcher` ratio
-    so near-misses such as ``input contract`` resolve without accepting
-    unrelated headings.
+    ``inputs (formalization appended ...)`` still resolve; otherwise a
+    stemmed-token Dice score is used. A shared token is required so
+    sequence-only overlaps such as ``outputs``/``inputs`` do not become
+    misleading suggestions.
     """
     if heading == alias or heading.startswith(alias + " "):
         return 1.0
     heading_tokens = {_stem_token(t) for t in heading.split()}
     alias_tokens = {_stem_token(t) for t in alias.split()}
     overlap = len(heading_tokens & alias_tokens)
-    dice = (
-        2 * overlap / (len(heading_tokens) + len(alias_tokens))
-        if heading_tokens and alias_tokens
-        else 0.0
-    )
-    return max(dice, difflib.SequenceMatcher(None, heading, alias).ratio())
+    if not overlap:
+        return 0.0
+    return 2 * overlap / (len(heading_tokens) + len(alias_tokens))
 
 
 def _suggest_heading_aliases(
-    contract: Mapping[str, Any], missing_fields: set[str], *, threshold: float = 0.6
+    contract: Mapping[str, Any],
+    missing_fields: set[str],
+    *,
+    threshold: float = 0.6,
+    heading_candidates: list[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Map each unmatched body heading to its closest canonical alias.
 
@@ -281,7 +286,9 @@ def _suggest_heading_aliases(
     of currently missing fields are suggested, so exact-heading bodies always
     produce an empty map. Similarity is deterministic (see
     :func:`_heading_similarity`); ties resolve by field then alias ordering.
-    Scores below ``threshold`` are omitted.
+    Scores below ``threshold`` are omitted. ``heading_candidates`` may include
+    empty sections for offline repair hints; it is deliberately separate from
+    the populated headings used by admission.
     """
     fields = contract.get("fields", {})
     matched = {
@@ -291,7 +298,8 @@ def _suggest_heading_aliases(
         for heading in field.get("matched_headings", [])
     }
     suggestions: dict[str, dict[str, Any]] = {}
-    for heading in sorted(set(contract.get("headings", [])) - matched):
+    candidates = contract.get("headings", []) if heading_candidates is None else heading_candidates
+    for heading in sorted(set(candidates) - matched):
         best: tuple[float, str, str] | None = None
         for field in sorted(missing_fields):
             for alias in sorted(FIELD_ALIASES.get(field, ())):
@@ -578,7 +586,7 @@ def _has_blocked_prefix(labels: set[str]) -> bool:
 
 
 def _pending_decision_heading(contract: dict[str, Any], labels: set[str]) -> bool:
-    """Detect an unresolved decision heading unless a ruling label is present."""
+    """Detect a populated unresolved decision heading unless ruled."""
     if "ruled" in labels or "domain-approved" in labels:
         return False
     decision_headings = {

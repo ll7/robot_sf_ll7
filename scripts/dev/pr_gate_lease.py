@@ -16,8 +16,9 @@ Usage:
     # Refresh an existing lease (heartbeat)
     python scripts/dev/pr_gate_lease.py heartbeat --worktree /path/to/worktree --extend-hours 2
 
-    # Release a lease explicitly
+    # Release a lease explicitly (supports --worktree before or after subcommand)
     python scripts/dev/pr_gate_lease.py release --worktree /path/to/worktree
+    python scripts/dev/pr_gate_lease.py --worktree /path/to/worktree release
 
     # Check if a worktree has an active lease
     python scripts/dev/pr_gate_lease.py status --worktree /path/to/worktree
@@ -34,7 +35,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -426,16 +427,21 @@ def status(*, worktree_path: Path | str | None = None) -> dict:
     }
 
 
-def _add_worktree_argument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--worktree",
-        type=Path,
-        help="Explicit worktree path; run from any surviving checkout of the repository",
-    )
+def _add_worktree_argument(
+    parser: argparse.ArgumentParser, *, suppress_default: bool = False
+) -> None:
+    kwargs: dict[str, Any] = {
+        "type": Path,
+        "help": "Explicit worktree path; run from any surviving checkout of the repository",
+    }
+    if suppress_default:
+        kwargs["default"] = argparse.SUPPRESS
+    parser.add_argument("--worktree", **kwargs)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    _add_worktree_argument(parser)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     create_parser = subparsers.add_parser("create", help="Create an active-worktree lease")
@@ -448,7 +454,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=DEFAULT_TTL_HOURS,
         help=f"Lease TTL in hours (default: {DEFAULT_TTL_HOURS})",
     )
-    _add_worktree_argument(create_parser)
+    _add_worktree_argument(create_parser, suppress_default=True)
 
     hb_parser = subparsers.add_parser("heartbeat", help="Refresh lease heartbeat")
     hb_parser.add_argument(
@@ -456,19 +462,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=float,
         help="Extend expiry by this many hours from now",
     )
-    _add_worktree_argument(hb_parser)
+    _add_worktree_argument(hb_parser, suppress_default=True)
 
     release_parser = subparsers.add_parser("release", help="Release the selected lease")
-    _add_worktree_argument(release_parser)
+    _add_worktree_argument(release_parser, suppress_default=True)
 
     status_parser = subparsers.add_parser("status", help="Show selected lease status")
-    _add_worktree_argument(status_parser)
+    _add_worktree_argument(status_parser, suppress_default=True)
 
     active_parser = subparsers.add_parser(
         "is-active",
         help="Exit 0 if active lease exists, 1 otherwise",
     )
-    _add_worktree_argument(active_parser)
+    _add_worktree_argument(active_parser, suppress_default=True)
 
     return parser.parse_args(argv)
 

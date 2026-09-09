@@ -220,20 +220,48 @@ classify_apt_update_output() {
 
 is_chrome_hash_mismatch_source_only() {
   local apt_output="$1"
-  local text="${apt_output,,}"
-  local host
-  local saw_chrome=false
+  local line
+  local pending_host=""
+  local pending_status=""
+  local saw_chrome_hash_mismatch=false
+  local saw_unrelated_error=false
 
-  [[ "$text" == *"hash sum mismatch"* ]] || return 1
-  ((${#apt_update_other_errors[@]} > 0)) || return 1
-  for host in "${apt_update_other_errors[@]}"; do
-    if [[ "$host" == "dl.google.com" ]]; then
-      saw_chrome=true
+  record_pending_apt_failure() {
+    [[ -z "$pending_host" ]] && return
+    local normalized_status="${pending_status,,}"
+    if [[ "$pending_host" == "dl.google.com" && "$normalized_status" == *"hash sum mismatch"* ]]; then
+      saw_chrome_hash_mismatch=true
     else
-      return 1
+      saw_unrelated_error=true
     fi
-  done
-  [[ "$saw_chrome" == true ]]
+    pending_host=""
+    pending_status=""
+  }
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == Err:* || "$line" == "W: Failed to fetch"* || "$line" == "E: Failed to fetch"* ]]; then
+      record_pending_apt_failure
+      if [[ "$line" =~ https?://([^/[:space:]]+) ]]; then
+        pending_host="${BASH_REMATCH[1]%%:*}"
+        pending_status="$line"
+      else
+        saw_unrelated_error=true
+      fi
+      continue
+    fi
+
+    if [[ "$line" == Get:* || "$line" == Hit:* || "$line" == Ign:* ]]; then
+      record_pending_apt_failure
+      continue
+    fi
+
+    if [[ -n "$pending_host" ]]; then
+      pending_status+=" $line"
+    fi
+  done <<< "$apt_output"
+  record_pending_apt_failure
+
+  [[ "$saw_chrome_hash_mismatch" == true && "$saw_unrelated_error" == false ]]
 }
 
 run_official_mirror_update() {

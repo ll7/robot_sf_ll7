@@ -32,6 +32,12 @@ def test_docs_readme_avoids_stale_completion_and_counts() -> None:
     assert "15 CLI subcommands" not in content
     assert "30 subcommands" not in content
 
+    # Avoid unbound completion, migration-count, and timestamp claims.
+    assert "fully operational" not in content.lower()
+    assert "implementation complete" not in content.lower()
+    assert "33 files" not in content.lower()
+    assert "_last updated:" not in content.lower()
+
     # Should contain durable phrasing
     assert "CLI subcommands with examples" in content
     assert "CLI subcommands covering full experiment workflows" in content

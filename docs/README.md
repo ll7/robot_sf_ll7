@@ -50,7 +50,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 ## 🚀 Social Navigation Benchmark Platform
 
-**The Social Navigation Benchmark Platform is now fully operational!**
+**The Social Navigation Benchmark Platform**
 
 ### Quick Start
 
@@ -515,7 +515,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * [**Actuator-Feasibility Validation (Issue #6056)**](./actuator_feasibility.md) - Experimental diagnostic for distinguishing geometric clearance from actuator-feasible maneuvers, with provisional-limit and claim-boundary documentation
 * [Regression Notes – Algorithm Aggregation](./dev/issues/142-aggregation-mixes-algorithms/design.md) - Test matrix, warnings, and smoke workflow for Feature 142
 * [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
-* **Full Classic Interaction Benchmark** – Implementation complete (episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics). See detailed guide: [ `benchmark_full_classic.md` ](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/` ).
+* **Full Classic Interaction Benchmark** – Episodes, aggregation, effect sizes, adaptive precision, plots, videos, and scaling metrics. See detailed guide: [ `benchmark_full_classic.md` ](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/` ).
 * **Benchmark Visual Artifacts** – SimulationView & synthetic video pipeline, performance metrics: [ `benchmark_visuals.md` ](./benchmark_visuals.md)
 * **Episode Video Artifacts (MVP)** – Design notes and links: [ `docs/dev/issues/video-artifacts/design.md` ](./dev/issues/video-artifacts/design.md)
 * [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
@@ -734,7 +734,7 @@ env = RobotEnv(env_config=EnvSettings(), debug=True)
   + Plan: `specs/149-architectural-coupling-and/plan.md`
   + Quickstart: `specs/149-architectural-coupling-and/quickstart.md`
 
-* **33 files** identified for migration to new pattern
+* Migration inventory identified for the new pattern
 * **Migration script** available for automated updates
 * **Full documentation** provided for smooth migration
 
@@ -771,5 +771,3 @@ When contributing to the project:
 * **ACMPC learned-MPC feasibility**: See `docs/context/issue_3985_acmpc_feasibility_assessment.md` for the assessment-only boundary for an Actor-Critic Model Predictive Control inspired local planner.
 
 ---
-
-_Last updated: April 2026 - Paper-matrix extended seed schedule context added_

@@ -98,6 +98,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -122,6 +123,9 @@ FALLBACK_PRIOR_BASELINE_COMMIT = "9fa96c01bf1c8152459f5fa8c481e938fb1e6725"
 REVIEW_SCHEMA_VERSION = "evidence_registry_baseline_review.v1"
 VALID_DISPOSITIONS = ("baseline", "remediate")
 REVIEW_TEMPLATE_SCHEMA = "evidence_registry_baseline_review_delta.v1"
+PROJECTION_SCHEMA = "evidence_registry_projection.v1"
+RATCHET_REPORT_SCHEMA = "evidence_registry_ratchet_report.v1"
+FULL_SHA1_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
 def _repo_root() -> Path:
@@ -137,7 +141,103 @@ def _repo_root() -> Path:
     return Path(proc.stdout.strip())
 
 
-def _validate_report(data: Any, source: str) -> dict[str, Any]:
+def _validate_projection_report(  # noqa: C901, PLR0912 - schema gate
+    projection: Any, source: str
+) -> None:
+    """Validate the complete immutable projection envelope in a linter report."""
+    if not isinstance(projection, dict):
+        raise RuntimeError(f"Report {source} has an invalid 'projection' mapping")
+    if projection.get("schema") != PROJECTION_SCHEMA:
+        raise RuntimeError(
+            f"Report {source} has an unsupported projection schema: {projection.get('schema')!r}"
+        )
+    if projection.get("mode") != "frozen_squash_base":
+        raise RuntimeError(f"Report {source} has an unsupported projection mode")
+    identities = {
+        key: projection.get(key)
+        for key in ("candidate_head", "frozen_base", "evaluated_head", "evaluated_base")
+    }
+    if any(
+        not isinstance(value, str) or not FULL_SHA1_RE.fullmatch(value)
+        for value in identities.values()
+    ):
+        raise RuntimeError(
+            f"Report {source} projection must carry exact candidate/evaluated head and base SHAs"
+        )
+    if identities["candidate_head"].lower() != identities["evaluated_head"].lower():
+        raise RuntimeError(f"Report {source} projection head identity is inconsistent")
+    if identities["frozen_base"].lower() != identities["evaluated_base"].lower():
+        raise RuntimeError(f"Report {source} projection base identity is inconsistent")
+    for alias in ("head_sha", "base_sha", "reachability_authority"):
+        if not isinstance(projection.get(alias), str):
+            raise RuntimeError(f"Report {source} projection {alias} is missing")
+    if projection["head_sha"].lower() != identities["candidate_head"].lower():
+        raise RuntimeError(f"Report {source} projection head_sha is inconsistent")
+    if projection["base_sha"].lower() != identities["frozen_base"].lower():
+        raise RuntimeError(f"Report {source} projection base_sha is inconsistent")
+    if projection["reachability_authority"].lower() != identities["frozen_base"].lower():
+        raise RuntimeError(f"Report {source} projection reachability authority is inconsistent")
+    if projection.get("complete") is not True:
+        raise RuntimeError(f"Report {source} projection is not complete")
+
+    tree = projection.get("evidence_tree")
+    if not isinstance(tree, dict):
+        raise RuntimeError(f"Report {source} projection is missing evidence_tree")
+    count = tree.get("count")
+    files = tree.get("files")
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise RuntimeError(f"Report {source} projection evidence_tree count is invalid")
+    if not isinstance(files, list) or any(not isinstance(path, str) or not path for path in files):
+        raise RuntimeError(f"Report {source} projection evidence_tree files are incomplete")
+    if len(files) != count or files != sorted(files) or len(files) != len(set(files)):
+        raise RuntimeError(f"Report {source} projection evidence_tree files are incomplete")
+    tree_sha = tree.get("tree_sha")
+    if not isinstance(tree_sha, str) or not FULL_SHA1_RE.fullmatch(tree_sha):
+        raise RuntimeError(f"Report {source} projection evidence_tree tree_sha is invalid")
+    serialized = json.dumps(files, ensure_ascii=True, separators=(",", ":"))
+    files_sha = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    if tree.get("sha256") != files_sha or tree.get("files_sha256") != files_sha:
+        raise RuntimeError(f"Report {source} projection evidence_tree digest is inconsistent")
+
+    producer_records = projection.get("producer_records")
+    if not isinstance(producer_records, list):
+        raise RuntimeError(f"Report {source} projection producer_records are missing")
+    for index, record in enumerate(producer_records):
+        if not isinstance(record, dict):
+            raise RuntimeError(f"Report {source} projection producer record {index} is malformed")
+        if not isinstance(record.get("campaign_id"), str) or not record["campaign_id"]:
+            raise RuntimeError(
+                f"Report {source} projection producer record {index} lacks campaign_id"
+            )
+        if not isinstance(record.get("receipt_path"), str) or not record["receipt_path"]:
+            raise RuntimeError(
+                f"Report {source} projection producer record {index} lacks receipt_path"
+            )
+        if not isinstance(record.get("producer_sha"), str) or not FULL_SHA1_RE.fullmatch(
+            record["producer_sha"]
+        ):
+            raise RuntimeError(
+                f"Report {source} projection producer record {index} lacks producer_sha"
+            )
+
+    projected_findings = projection.get("findings_by_path")
+    if not isinstance(projected_findings, dict):
+        raise RuntimeError(f"Report {source} projection findings_by_path is missing")
+    for path, codes in projected_findings.items():
+        if not isinstance(path, str) or not path or not isinstance(codes, dict):
+            raise RuntimeError(f"Report {source} projection findings_by_path is malformed")
+        for code, count in codes.items():
+            if (
+                not isinstance(code, str)
+                or not code
+                or isinstance(count, bool)
+                or not isinstance(count, int)
+                or count < 0
+            ):
+                raise RuntimeError(f"Report {source} projection finding counts are malformed")
+
+
+def _validate_report(data: Any, source: str) -> dict[str, Any]:  # noqa: C901
     """Validate the linter report schema before the ratchet consumes it."""
     if not isinstance(data, dict):
         raise RuntimeError(f"Report {source} must be a dictionary, got {type(data).__name__}")
@@ -168,10 +268,20 @@ def _validate_report(data: Any, source: str) -> dict[str, Any]:
             f"Report {source} has inconsistent findings metadata: "
             f"summary.findings={findings}, but issues contains {len(issues)} entries"
         )
+    projection = data.get("projection")
+    if projection is not None:
+        _validate_projection_report(projection, source)
+        if projection["findings_by_path"] != aggregate(data):
+            raise RuntimeError(f"Report {source} projection findings_by_path does not match issues")
     return data
 
 
-def run_linter(repo_root: Path) -> dict[str, Any]:
+def run_linter(
+    repo_root: Path,
+    *,
+    candidate_head: str | None = None,
+    frozen_base: str | None = None,
+) -> dict[str, Any]:
     """Run the evidence-registry linter and return its parsed JSON report.
 
     The linter runs in report mode (no ``--strict``); the ratchet decides
@@ -192,6 +302,12 @@ def run_linter(repo_root: Path) -> dict[str, Any]:
         "--disposition-file",
         str(disposition.relative_to(repo_root)),
     ]
+    if candidate_head is not None or frozen_base is not None:
+        if not candidate_head or not frozen_base:
+            raise RuntimeError(
+                "frozen-base projection requires both candidate_head and frozen_base"
+            )
+        cmd.extend(["--candidate-head", candidate_head, "--frozen-base", frozen_base])
     try:
         proc = subprocess.run(cmd, cwd=repo_root, check=False, capture_output=True, text=True)
     except OSError as exc:
@@ -244,6 +360,65 @@ def aggregate(report: dict[str, Any]) -> dict[str, dict[str, int]]:
     return {path: dict(sorted(codes.items())) for path, codes in sorted(by_path.items())}
 
 
+def _finding_delta(
+    current: dict[str, dict[str, int]], baseline: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """Return every baseline/candidate path-code count, including unchanged pairs."""
+    baseline_counts = (
+        {
+            str(path): {str(code): int(count) for code, count in codes.items()}
+            for path, codes in baseline.get("findings_by_path", {}).items()
+        }
+        if isinstance(baseline, dict)
+        else {}
+    )
+    rows: list[dict[str, Any]] = []
+    for path in sorted(set(current) | set(baseline_counts)):
+        current_codes = current.get(path, {})
+        baseline_codes = baseline_counts.get(path, {})
+        for code in sorted(set(current_codes) | set(baseline_codes)):
+            baseline_count = baseline_codes.get(code, 0)
+            candidate_count = current_codes.get(code, 0)
+            delta = candidate_count - baseline_count
+            status = "increased" if delta > 0 else "decreased" if delta < 0 else "unchanged"
+            rows.append(
+                {
+                    "path": path,
+                    "code": code,
+                    "baseline_count": baseline_count,
+                    "candidate_count": candidate_count,
+                    "delta": delta,
+                    "status": status,
+                }
+            )
+    return rows
+
+
+def build_ratchet_report(
+    report: dict[str, Any], baseline: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Build the inspectable report consumed by hosted and local admission."""
+    current = aggregate(report)
+    payload: dict[str, Any] = {
+        "schema": RATCHET_REPORT_SCHEMA,
+        "registry_root": report.get("registry_root"),
+        "checked_files": report.get("checked_files"),
+        "campaign_ids": report.get("campaign_ids", []),
+        "summary": report.get("summary", {}),
+        "issues": report.get("issues", []),
+        "findings_by_path": current,
+        "finding_delta": _finding_delta(current, baseline),
+        "projection": report.get("projection") or {"mode": "ordinary_head"},
+        "linter_report": report,
+    }
+    if baseline is not None:
+        payload["baseline"] = {
+            "findings_by_path": baseline.get("findings_by_path", {}),
+            "summary": baseline.get("summary", {}),
+        }
+    return payload
+
+
 def evidence_tree_manifest(registry_root: Path) -> dict[str, Any]:
     """Return a compact, deterministic manifest of the audited evidence files.
 
@@ -271,6 +446,18 @@ def evidence_tree_manifest(registry_root: Path) -> dict[str, Any]:
         "count": len(files),
         "sha256": hashlib.sha256(serialized.encode("utf-8")).hexdigest(),
     }
+
+
+def evidence_tree_manifest_for_report(
+    report: dict[str, Any], registry_root: Path
+) -> dict[str, Any]:
+    """Use the linter's immutable candidate tree when projection mode is active."""
+    projection = report.get("projection")
+    if isinstance(projection, dict):
+        tree = projection.get("evidence_tree")
+        if isinstance(tree, dict):
+            return {"count": tree.get("count"), "sha256": tree.get("sha256")}
+    return evidence_tree_manifest(registry_root)
 
 
 def check_evidence_tree_manifest(
@@ -1072,6 +1259,30 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--candidate-head",
+        type=str,
+        default=None,
+        help=(
+            "Exact 40-hex candidate head whose complete evidence tree is evaluated; "
+            "must be paired with --frozen-base."
+        ),
+    )
+    parser.add_argument(
+        "--frozen-base",
+        type=str,
+        default=None,
+        help=(
+            "Exact 40-hex target base whose ancestry alone resolves producers; "
+            "must be paired with --candidate-head."
+        ),
+    )
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        default=None,
+        help="Write the complete ratchet/projection report to this path after evaluation.",
+    )
+    parser.add_argument(
         "--prewrite-review",
         action="store_true",
         help=(
@@ -1103,8 +1314,31 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 def _gather_report(args: argparse.Namespace, repo_root: Path) -> dict[str, Any]:
     """Resolve the linter report either by running the linter or parsing --report."""
     if args.report is not None:
-        return load_report(args.report)
-    return run_linter(repo_root)
+        report = load_report(args.report)
+        if args.candidate_head is not None or args.frozen_base is not None:
+            if not args.candidate_head or not args.frozen_base:
+                raise RuntimeError(
+                    "frozen-base projection requires both --candidate-head and --frozen-base"
+                )
+            projection = report.get("projection")
+            if not isinstance(projection, dict):
+                raise RuntimeError(
+                    "explicit frozen-base identities cannot consume an ordinary unprojected report"
+                )
+            if (
+                projection.get("candidate_head", "").lower() != args.candidate_head.lower()
+                or projection.get("frozen_base", "").lower() != args.frozen_base.lower()
+            ):
+                raise RuntimeError(
+                    "report projection identities are stale or do not match the explicit "
+                    "candidate head/frozen base"
+                )
+        return report
+    return run_linter(
+        repo_root,
+        candidate_head=args.candidate_head,
+        frozen_base=args.frozen_base,
+    )
 
 
 def _print_aggregate(report: dict[str, Any]) -> None:
@@ -1126,6 +1360,8 @@ def _report_check(
     baseline: dict[str, Any],
     failures: list[str],
     notices: list[str],
+    *,
+    ratchet_report: dict[str, Any] | None = None,
 ) -> int:
     """Print the ``--check`` ratchet result and return the exit code."""
     baseline_total = int(baseline.get("summary", {}).get("total_findings", 0))
@@ -1134,6 +1370,27 @@ def _report_check(
         f"evidence-registry ratchet: findings={summary.get('findings', 0)} "
         f"(baseline={baseline_total})."
     )
+    projection = report.get("projection")
+    if isinstance(projection, dict):
+        print(
+            "evidence-registry projection: "
+            f"head={projection.get('candidate_head', '<missing>')} "
+            f"base={projection.get('frozen_base', '<missing>')} "
+            f"tree={projection.get('evidence_tree', {}).get('tree_sha', '<missing>')}"
+        )
+    if ratchet_report is not None:
+        changed_rows = [
+            row
+            for row in ratchet_report.get("finding_delta", [])
+            if row.get("status") != "unchanged"
+        ]
+        for row in changed_rows:
+            print(
+                "  projection delta: "
+                f"{row.get('path')} :: {row.get('code')} "
+                f"{row.get('baseline_count')} -> {row.get('candidate_count')} "
+                f"({row.get('status')})"
+            )
     for notice in notices:
         print(f"NOTICE: {notice}")
     if failures:
@@ -1286,11 +1543,19 @@ def _write_baseline(
     return 0
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     """Run the ratchet gate, baseline refresh, aggregate report, or companion-delta."""
     args = parse_args(list(sys.argv[1:] if argv is None else argv))
     repo_root = args.root.resolve() if args.root is not None else _repo_root()
     baseline_path = args.baseline if args.baseline.is_absolute() else repo_root / args.baseline
+
+    if (args.candidate_head is None) != (args.frozen_base is None):
+        print(
+            "ERROR: --candidate-head and --frozen-base must be supplied together; "
+            "omit both for ordinary HEAD mode.",
+            file=sys.stderr,
+        )
+        return 2
 
     if args.prewrite_review and not args.write_baseline:
         print("ERROR: --prewrite-review requires --write-baseline.", file=sys.stderr)
@@ -1343,11 +1608,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     findings_failures, notices = check_against_baseline(aggregate(report), baseline)
     manifest_failures, manifest_notices = check_evidence_tree_manifest(
-        evidence_tree_manifest(registry_root), baseline
+        evidence_tree_manifest_for_report(report, registry_root), baseline
     )
     failures = [*findings_failures, *manifest_failures]
     notices = [*notices, *manifest_notices]
-    return _report_check(report, baseline, failures, notices)
+    ratchet_report = build_ratchet_report(report, baseline)
+    if args.report_output is not None:
+        report_output = (
+            args.report_output
+            if args.report_output.is_absolute()
+            else repo_root / args.report_output
+        )
+        try:
+            report_output.parent.mkdir(parents=True, exist_ok=True)
+            write_json(report_output, ratchet_report)
+        except OSError as exc:
+            print(f"ERROR: could not write ratchet report: {exc}", file=sys.stderr)
+            return 2
+    return _report_check(
+        report,
+        baseline,
+        failures,
+        notices,
+        ratchet_report=ratchet_report,
+    )
 
 
 def _run_companion_delta(repo_root: Path, baseline_path: Path, review_arg: Path) -> int:

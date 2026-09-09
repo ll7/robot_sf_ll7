@@ -30,6 +30,16 @@ if (( fallback_timeout_seconds > phase_timeout_seconds )); then
   fallback_timeout_seconds="${phase_timeout_seconds}"
 fi
 
+apt_outer_timeout_seconds="${CI_STEP_TIMEOUT_SECONDS:-1200}"
+if ! [[ "${apt_outer_timeout_seconds}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ci_install_headless_packages error=invalid_outer_timeout value=${apt_outer_timeout_seconds} expected=positive_integer" >&2
+  exit 2
+fi
+if (( phase_timeout_seconds * 2 + fallback_timeout_seconds > apt_outer_timeout_seconds )); then
+  echo "ci_install_headless_packages error=invalid_timeout_budget phase_timeout_seconds=${phase_timeout_seconds} fallback_timeout_seconds=${fallback_timeout_seconds} outer_timeout_seconds=${apt_outer_timeout_seconds} expected=2_phase_plus_fallback_at_most_outer" >&2
+  exit 2
+fi
+
 missing=()
 for package_name in "$@"; do
   probe_output=""
@@ -75,10 +85,10 @@ trap cleanup_official_fallback_sources EXIT
 prepare_official_fallback_sources() {
   local codename=""
   local distribution_id=""
-  local os_release_file="/etc/os-release"
+  local os_release_file="${CI_HEADLESS_APT_OS_RELEASE_FILE:-/etc/os-release}"
 
   if [[ -r "${os_release_file}" ]]; then
-    # shellcheck disable=SC1091
+    # shellcheck disable=SC1090
     . "${os_release_file}"
     distribution_id="${ID:-}"
     codename="${VERSION_CODENAME:-}"
@@ -269,7 +279,13 @@ run_official_mirror_update() {
   fallback_output=""
   fallback_rc=125
   fallback_elapsed_seconds=0
-  if prepare_official_fallback_sources; then
+  fallback_failure_class="apt_update_official_mirror_fallback_failed"
+  fallback_failed_source="archive.ubuntu.com"
+  local fallback_prepare_output_file
+  fallback_prepare_output_file="$(mktemp "${TMPDIR:-/tmp}/ci-headless-apt-prepare.XXXXXX")"
+  if prepare_official_fallback_sources >"${fallback_prepare_output_file}" 2>&1; then
+    cat "${fallback_prepare_output_file}"
+    rm -f -- "${fallback_prepare_output_file}"
     fallback_started_seconds=$SECONDS
     if fallback_output=$(CI_STEP_TIMEOUT_SECONDS="${fallback_timeout_seconds}" \
       bash "${script_dir}/ci_step_timer.sh" "Headless package apt update (official mirror fallback)" \
@@ -283,6 +299,13 @@ run_official_mirror_update() {
     fi
     fallback_elapsed_seconds=$((SECONDS - fallback_started_seconds))
     printf '%s\n' "$fallback_output"
+  else
+    fallback_rc=$?
+    fallback_failure_class="apt_update_official_mirror_fallback_unavailable"
+    fallback_failed_source=""
+    fallback_output="$(<"${fallback_prepare_output_file}")"
+    rm -f -- "${fallback_prepare_output_file}"
+    printf '%s\n' "$fallback_output" >&2
   fi
 }
 
@@ -315,9 +338,9 @@ if [[ "$apt_update_rc" -ne 0 ]]; then
       )
     else
       apt_update_recovery_attempts=1
-      echo "ci_install_headless_packages warning=apt_update_official_mirror_fallback_failed rc=${fallback_rc} timeout_seconds=${fallback_timeout_seconds} retry_count=${apt_update_recovery_attempts}" >&2
-      emit_apt_failure "update" "$apt_update_rc" "$apt_update_elapsed_seconds" "$apt_update_output" "apt_update_timeout" "$apt_update_recovery_attempts"
-      exit "$apt_update_rc"
+      echo "ci_install_headless_packages warning=${fallback_failure_class} rc=${fallback_rc} timeout_seconds=${fallback_timeout_seconds} retry_count=${apt_update_recovery_attempts}" >&2
+      emit_apt_failure "update" "$fallback_rc" "$fallback_elapsed_seconds" "$fallback_output" "$fallback_failure_class" "$apt_update_recovery_attempts" "$fallback_failed_source" "$fallback_timeout_seconds"
+      exit "$fallback_rc"
     fi
   fi
 
@@ -342,8 +365,12 @@ if [[ "$apt_update_rc" -ne 0 ]]; then
           -o Dir::Etc::sourceparts=-
         )
       else
-        echo "ci_install_headless_packages warning=apt_update_chrome_hash_mismatch_recovery_failed source=dl.google.com rc=${fallback_rc} retry_count=${apt_update_recovery_attempts}" >&2
-        emit_apt_failure "update" "$fallback_rc" "$fallback_elapsed_seconds" "$fallback_output" "apt_update_chrome_hash_mismatch_recovery_failed" "$apt_update_recovery_attempts" "dl.google.com" "$fallback_timeout_seconds"
+        fallback_error_class="apt_update_chrome_hash_mismatch_recovery_failed"
+        if [[ "$fallback_failure_class" == "apt_update_official_mirror_fallback_unavailable" ]]; then
+          fallback_error_class="apt_update_chrome_hash_mismatch_recovery_unavailable"
+        fi
+        echo "ci_install_headless_packages warning=${fallback_error_class} source=dl.google.com rc=${fallback_rc} retry_count=${apt_update_recovery_attempts}" >&2
+        emit_apt_failure "update" "$fallback_rc" "$fallback_elapsed_seconds" "$fallback_output" "$fallback_error_class" "$apt_update_recovery_attempts" "dl.google.com" "$fallback_timeout_seconds"
         exit "$fallback_rc"
       fi
     fi

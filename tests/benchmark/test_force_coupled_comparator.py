@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import jsonschema
 import pytest
 
+import robot_sf.benchmark.force_coupled_comparator as comparator
 from robot_sf.benchmark.force_coupled_comparator import (
     CLAIM_BOUNDARY,
     FAILURE_CLASS_PATH_GENERATION,
@@ -30,6 +32,34 @@ from robot_sf.planner.force_coupled_potential_field import (
     ForceCoupledPotentialFieldConfig,
     ForceCoupledPotentialFieldPlanner,
 )
+
+
+class _SimulatorBoundaryFailurePlanner:
+    """Protocol fixture that fails at one canonical rollout boundary."""
+
+    def __init__(self, failure_phase: str) -> None:
+        self.failure_phase = failure_phase
+
+    def reset(self, *, seed: int | None = None) -> None:
+        del seed
+        if self.failure_phase == "reset":
+            raise RuntimeError("fixture reset failure")
+
+    def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        del observation
+        if self.failure_phase == "command":
+            return (float("nan"), 0.0)
+        return (0.1, 0.0)
+
+    def diagnostics(self) -> dict[str, object]:
+        if self.failure_phase == "diagnostics":
+            raise RuntimeError("fixture diagnostics failure")
+        if self.failure_phase == "diagnostic_status":
+            return {"planner_type": "simulator_boundary_fixture", "status": "unknown"}
+        return {"planner_type": "simulator_boundary_fixture", "status": "ok"}
+
+    def close(self) -> None:
+        """Release no resources; this fixture only exercises rollout boundaries."""
 
 
 def test_pure_pursuit_planner_lifecycle() -> None:
@@ -91,6 +121,45 @@ def test_first_step_planner_exception_is_classified_without_diagnostics() -> Non
     assert result.degraded is True
     assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
     assert result.degradation_reasons == ("plan_exception: fixture planner failure",)
+
+
+@pytest.mark.parametrize(
+    "failure_phase", ["reset", "diagnostics", "diagnostic_status", "command", "integration"]
+)
+def test_execute_rollout_captures_simulator_boundary_errors(
+    failure_phase: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Simulator-boundary failures set the flag and remain structured simulator results."""
+    scenario = get_canonical_comparison_scenarios()[0]
+    planner: comparator.LocalPlannerProtocol = _SimulatorBoundaryFailurePlanner(failure_phase)
+    if failure_phase == "integration":
+        scenario = replace(scenario, control_dt=0.0, max_steps=1)
+        planner = PurePursuitGoalPlanner()
+
+    observed_flags: list[bool] = []
+    original_classify_failure = comparator.classify_failure
+
+    def classify_failure_spy(**kwargs: object) -> str | None:
+        observed_flags.append(bool(kwargs["simulator_error"]))
+        return original_classify_failure(**kwargs)
+
+    monkeypatch.setattr(comparator, "classify_failure", classify_failure_spy)
+    result = execute_rollout(planner, scenario)
+
+    assert observed_flags == [True]
+    assert result.status == "error"
+    assert result.degraded is True
+    assert result.failure_class == FAILURE_CLASS_SIMULATOR
+    assert result.degradation_reasons[0].startswith("simulator_")
+
+
+def test_classify_failure_rejects_unknown_or_unclassified_rollouts() -> None:
+    """Unknown status and unsignaled non-success states fail closed."""
+    with pytest.raises(ValueError, match="unknown rollout status"):
+        classify_failure(status="unknown")
+
+    with pytest.raises(ValueError, match="unclassified non-ok rollout"):
+        classify_failure(status="degraded", degraded=True)
 
 
 def test_deterministic_receipt_invariant() -> None:
@@ -311,6 +380,56 @@ def test_summary_table_rejects_unknown_failure_class() -> None:
 
     with pytest.raises(ValueError, match="unknown failure class"):
         compute_summary_table([result])
+
+
+def test_summary_table_rejects_missing_failure_class() -> None:
+    """A non-ok row without a taxonomy class cannot disappear from aggregation."""
+    result = ComparatorRunResult(
+        planner_id="test_planner",
+        scenario_id="test_scenario",
+        seed=42,
+        steps=0,
+        completed=True,
+        collision=False,
+        near_miss=False,
+        min_clearance_obstacle_m=None,
+        min_clearance_pedestrian_m=None,
+        path_length_m=0.0,
+        mean_linear_speed_mps=0.0,
+        max_linear_speed_mps=0.0,
+        mean_angular_rate_radps=0.0,
+        max_angular_rate_radps=0.0,
+        jerk_metric=0.0,
+        mean_latency_ms=0.0,
+        status="degraded",
+        degraded=True,
+        degradation_reasons=("fixture_degraded",),
+        failure_class=None,
+    )
+
+    with pytest.raises(ValueError, match="missing failure class"):
+        compute_summary_table([result])
+
+
+def test_summary_table_excludes_degraded_and_near_miss_rows_from_success() -> None:
+    """Diagnostic success requires clean completion; near misses remain separate caveats."""
+    healthy = execute_rollout(PurePursuitGoalPlanner(), get_canonical_comparison_scenarios()[-1])
+    near_miss = replace(healthy, scenario_id="near_miss_fixture", near_miss=True)
+    degraded = replace(
+        healthy,
+        scenario_id="degraded_fixture",
+        status="degraded",
+        degraded=True,
+        degradation_reasons=("steering_rate_saturation",),
+        failure_class=FAILURE_CLASS_TRACKING,
+    )
+
+    [summary] = compute_summary_table([near_miss, degraded])
+
+    assert summary["success_rate"] == 0.0
+    assert summary["near_miss_rate"] == 0.5
+    assert summary["status_counts"] == {"ok": 1, "degraded": 1}
+    assert summary["failure_class_counts"][FAILURE_CLASS_TRACKING] == 1
 
 
 def test_v1_schema_accepts_receipts_without_optional_taxonomy_fields() -> None:

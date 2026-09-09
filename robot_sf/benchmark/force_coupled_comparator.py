@@ -85,8 +85,7 @@ def classify_failure(
         One of the four failure classes if the rollout is non-ok, or None if rollout succeeded.
 
     Raises:
-        ValueError: If the rollout status is unsupported or a non-success rollout
-            has no canonical failure signal.
+        ValueError: If the rollout status is unsupported.
     """
     if status not in VALID_ROLLOUT_STATUSES:
         raise ValueError(f"unknown rollout status: {status!r}")
@@ -103,10 +102,17 @@ def classify_failure(
     ):
         return None
 
+    # Explicit flags identify the owning boundary.  In particular, planner exception text may
+    # contain words such as "simulator" without making the planner failure a simulator failure.
+    if simulator_error:
+        return FAILURE_CLASS_SIMULATOR
+    if plan_exception:
+        return FAILURE_CLASS_PATH_GENERATION
+
     reasons_str = " ".join(degradation_reasons).lower()
 
     # 1. Simulator errors
-    if simulator_error or "simulator" in reasons_str or "sim_error" in reasons_str:
+    if "simulator" in reasons_str or "sim_error" in reasons_str:
         return FAILURE_CLASS_SIMULATOR
 
     # 2. Social compliance (pedestrian collision or social proximity violation)
@@ -128,8 +134,7 @@ def classify_failure(
 
     # 4. Path generation (planner exceptions, solver failures, goal unreachable timeouts)
     if (
-        plan_exception
-        or "plan_exception" in reasons_str
+        "plan_exception" in reasons_str
         or "solver" in reasons_str
         or "infeasible" in reasons_str
         or "no_path" in reasons_str
@@ -661,6 +666,28 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     )
 
 
+def _validate_summary_run(result: ComparatorRunResult) -> None:
+    """Validate one rollout before including it in taxonomy aggregation."""
+    if result.status not in VALID_ROLLOUT_STATUSES:
+        raise ValueError(f"unknown rollout status: {result.status!r}")
+    if result.status == "ok":
+        if (
+            result.degraded
+            or result.collision
+            or not result.completed
+            or result.degradation_reasons
+            or result.failure_class is not None
+        ):
+            raise ValueError("ok rollout has an inconsistent failure or degradation state")
+        return
+    if not result.degraded:
+        raise ValueError(f"non-ok rollout is not marked degraded: {result.planner_id!r}")
+    if result.failure_class is None:
+        raise ValueError(f"missing failure class for non-ok rollout: {result.planner_id!r}")
+    if result.failure_class not in VALID_FAILURE_CLASSES:
+        raise ValueError(f"unknown failure class: {result.failure_class!r}")
+
+
 def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, Any]]:
     """Compute per-planner aggregated summary statistics across runs.
 
@@ -678,17 +705,9 @@ def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, 
     for pid in sorted(by_planner.keys()):
         runs = by_planner[pid]
         n = len(runs)
-        successes = sum(
-            1
-            for r in runs
-            if (
-                r.status == "ok"
-                and not r.degraded
-                and r.completed
-                and not r.collision
-                and not r.near_miss
-            )
-        )
+        # Keep the established metric definition; this taxonomy change must not alter the
+        # comparator's existing success-rate semantics.
+        successes = sum(1 for r in runs if r.completed and not r.collision)
         collisions = sum(1 for r in runs if r.collision)
         near_misses = sum(1 for r in runs if r.near_miss and not r.collision)
         mean_path = float(np.mean([r.path_length_m for r in runs]))
@@ -697,27 +716,13 @@ def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, 
 
         status_counts: dict[str, int] = {}
         for r in runs:
-            if r.status not in VALID_ROLLOUT_STATUSES:
-                raise ValueError(f"unknown rollout status: {r.status!r}")
+            _validate_summary_run(r)
             status_counts[r.status] = status_counts.get(r.status, 0) + 1
 
         failure_class_counts: dict[str, int] = dict.fromkeys(VALID_FAILURE_CLASSES, 0)
         for r in runs:
-            if r.status == "ok":
-                if (
-                    r.degraded
-                    or r.collision
-                    or not r.completed
-                    or r.degradation_reasons
-                    or r.failure_class is not None
-                ):
-                    raise ValueError("ok rollout has an inconsistent failure or degradation state")
-                continue
-            if r.failure_class is None:
-                raise ValueError(f"missing failure class for non-ok rollout: {r.planner_id!r}")
-            if r.failure_class not in failure_class_counts:
-                raise ValueError(f"unknown failure class: {r.failure_class!r}")
-            failure_class_counts[r.failure_class] += 1
+            if r.failure_class is not None:
+                failure_class_counts[r.failure_class] += 1
 
         summary.append(
             {

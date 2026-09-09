@@ -22,7 +22,10 @@ structured as `status="error"`, `degraded=true`, with a `simulator_<phase>_failu
 diagnostic output remain `path_generation` failures through the existing `plan_exception` reason
 mechanism.
 
-Classification precedence remains explicit and four-way:
+Explicit boundary flags identify ownership before reason-substring classification: an explicit
+simulator flag yields `simulator`, while a planner exception yields `path_generation` even when
+the exception text contains words such as `simulator`. For rows without an explicit boundary flag,
+the remaining reason precedence is:
 
 1. `simulator`
 2. `social_compliance`
@@ -36,12 +39,11 @@ row cannot silently disappear from `failure_class_counts`.
 
 ## Diagnostic success and provenance
 
-For this comparator, `success_rate` counts only rows that are all of the following: `status="ok"`,
-not degraded, completed, collision-free, and not a near miss. A near miss may remain an `ok` row
-with no failure class because it is a separate clearance caveat rather than one of the four
-failure mechanisms, but it is never counted as diagnostic success. Degraded and fallback
-execution are likewise excluded from success; their status and degradation reasons remain
-visible rather than being normalized into a clean result.
+This change does not redefine the existing `success_rate` metric: it remains based on completed,
+collision-free rows. Near misses, degraded rows, and fallback reasons remain visible in their
+separate status/diagnostic fields, but this issue does not promote a new strict-success or
+failure-rate interpretation. Summary validation does require every non-`ok` row to retain its
+emitted `degraded=true` invariant and a canonical failure class.
 
 The canonical registry in this module contains native analytic planners only. This change does
 not convert adapter, fallback, or degraded provenance into native evidence, and it makes no

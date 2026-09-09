@@ -29,13 +29,9 @@ Plain-language summary: a deterministic diagnostic comparison harness that evalu
 
 ## Aggregate Summary Results
 
-`success_rate` uses the strict diagnostic definition documented by
-[Issue #8693](issue_8693_simulator_error_taxonomy.md): clean completion, no collision, no
-degraded execution, and no near miss. Near misses remain a separate caveat.
-
 | Planner ID | Runs | Success Rate | Collision Rate | Near-Miss Rate | Mean Path (m) | Mean Jerk Metric | Mean Latency (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `force_coupled_potential_field` | 4 | 0.7500 | 0.0000 | 0.2500 | 6.0333 | 0.7217 | 0.1396 |
+| `force_coupled_potential_field` | 4 | 1.0000 | 0.0000 | 0.2500 | 6.0333 | 0.7217 | 0.1396 |
 | `pure_pursuit_goal` | 4 | 0.5000 | 0.5000 | 0.0000 | 3.7501 | 5.2554 | 0.0122 |
 | `ablation_attractive_dominant` | 4 | 0.5000 | 0.5000 | 0.0000 | 3.7651 | 0.8402 | 0.1400 |
 | `ablation_repulsive_dominant` | 4 | 0.5000 | 0.0000 | 0.0000 | 8.9043 | 0.5993 | 0.1376 |

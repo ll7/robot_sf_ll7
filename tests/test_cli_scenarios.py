@@ -155,7 +155,7 @@ def test_validate_scenario_invalid_schema() -> None:
 
 def test_validate_scenario_malformed_yaml() -> None:
     """``validate_scenario_payload`` catches malformed YAML syntax."""
-    payload = validate_scenario_payload("tests/fixtures/cli_scenarios/malformed.yaml")
+    payload = validate_scenario_payload("tests/fixtures/cli_scenarios/malformed.yaml.invalid")
     assert payload["valid"] is False
     assert payload["status"] == STATUS_INVALID
     assert any(e["code"] == REASON_MALFORMED_YAML for e in payload["errors"])
@@ -270,7 +270,9 @@ def test_cli_scenarios_validate_friendly_and_json(capsys) -> None:
     assert "Scenario validation: FAIL" in out_missing
 
     # Malformed file exits 2
-    assert main(["scenarios", "validate", "tests/fixtures/cli_scenarios/malformed.yaml"]) == 2
+    assert (
+        main(["scenarios", "validate", "tests/fixtures/cli_scenarios/malformed.yaml.invalid"]) == 2
+    )
 
 
 def test_cli_scenarios_import_light_isolated_subprocess() -> None:

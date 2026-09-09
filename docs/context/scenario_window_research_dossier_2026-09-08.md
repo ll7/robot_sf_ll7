@@ -68,7 +68,7 @@ thresholds.
 | failure-mechanism agreement | categorical trace label | exact when labels exist; otherwise not evaluable | proposed |
 | primary metric error | metric-specific units | bound absolute or relative error before validation | not frozen |
 | planner ranking | ordering/rank correlation | only with full metric support and independent parents | blocked until transfer |
-| replay determinism | state/RNG stream | exact same-platform continuation for supported subset | subset only |
+| replay determinism | state/RNG stream | exact same-platform continuation for the typed snapshot/no-op subset; the last-avoidable engine remains contact-presence/step only | subset with explicit limitation |
 | precursor/avoidability event | step/event identity | zero missing declared precursor; finite search failure is unknown | proposed |
 
 ## Dependency and gated experiment plan

@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import yaml
 
@@ -84,6 +84,7 @@ ISSUE_SOURCE_STATUS_ANOMALOUS = "anomalous"
 ISSUE_SOURCE_EMPTY_PROOF = "successful_empty_response"
 ISSUE_SOURCE_KIND = "canonical_open_issues"
 LEGACY_ISSUE_INVENTORY_MARKER = "legacy_issue_inventory"
+EXPECTED_GITHUB_HOST = "github.com"
 
 _PREPARATION_AUDIT_SCHEMA = "open_issue_contract_audit.v1"
 PREPARATION_MARKER_END = prepare_open_issue_contracts.MARKER_END
@@ -875,73 +876,210 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _has_canonical_issue_identity(raw: Mapping[str, Any]) -> bool:
-    """Return whether a row has the minimum trustworthy issue identity."""
+def _repository_parts(repository: object) -> tuple[str, str] | None:
+    """Return the owner and repository components of a GitHub ``owner/repo`` value."""
+    if not isinstance(repository, str) or repository != repository.strip():
+        return None
+    parts = repository.split("/")
+    if len(parts) != 2 or any(not re.fullmatch(r"[A-Za-z0-9_.-]+", part or "") for part in parts):
+        return None
+    return parts[0], parts[1]
+
+
+def _canonical_issue_url(url: object, *, number: int, repository: str) -> bool:
+    """Return whether a URL is the expected public GitHub issue URL."""
+    if not isinstance(url, str) or not url or url != url.strip():
+        return False
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return False
+    parts = _repository_parts(repository)
+    if (
+        parts is None
+        or parsed.scheme != "https"
+        or parsed.netloc.casefold() != EXPECTED_GITHUB_HOST
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return False
+    owner, name = parts
+    expected_path = f"/{owner}/{name}/issues/{number}"
+    return parsed.path.casefold() in {
+        expected_path.casefold(),
+        f"{expected_path}/".casefold(),
+    }
+
+
+def _valid_issue_timestamp(value: object) -> bool:
+    """Return whether a REST timestamp is non-empty and timezone-aware ISO-8601."""
+    if not isinstance(value, str) or not value.strip() or value != value.strip():
+        return False
+    timestamp = value
+    if timestamp.endswith("Z"):
+        timestamp = f"{timestamp[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(timestamp)
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
+
+
+def _issue_identity_errors(raw: Mapping[str, Any], *, repository: str) -> list[str]:
+    """Return identity errors shared by raw REST and normalized plan issue rows."""
+    errors: list[str] = []
     number = raw.get("number")
     if isinstance(number, bool) or not isinstance(number, int) or number <= 0:
-        return False
+        errors.append("number must be a positive integer")
+        return errors
     title = raw.get("title")
-    if not isinstance(title, str):
-        return False
+    if not isinstance(title, str) or not title.strip():
+        errors.append("title must be a non-empty string")
     state = raw.get("state")
     if not isinstance(state, str) or state.lower() != "open":
-        return False
-    url = raw.get("html_url") or raw.get("url")
-    if not isinstance(url, str):
-        return False
-    match = re.search(r"/issues/([1-9][0-9]*)(?:[/?#]|$)", url)
-    return match is not None and int(match.group(1)) == number
+        errors.append("state must be the string 'open'")
+    url = raw.get("html_url") if "html_url" in raw else raw.get("url")
+    if not _canonical_issue_url(url, number=number, repository=repository):
+        errors.append(f"URL must be https://{EXPECTED_GITHUB_HOST}/{repository}/issues/{number}")
+    return errors
 
 
-def _is_canonical_issue_row(raw: Mapping[str, Any]) -> bool:
-    """Return whether a REST object has trustworthy identity and nested shape."""
-    if not _has_canonical_issue_identity(raw):
-        return False
+def _nested_login_errors(value: object, *, field: str) -> list[str]:
+    """Validate a GitHub user-like nested mapping used by an issue row."""
+    if value is None:
+        return []
+    if not isinstance(value, Mapping):
+        return [f"{field} must be an object or null"]
+    login = value.get("login")
+    if not isinstance(login, str) or not login.strip():
+        return [f"{field}.login must be a non-empty string"]
+    return []
+
+
+def _issue_row_validation_errors(
+    raw: Mapping[str, Any], *, repository: str, normalized: bool
+) -> list[str]:
+    """Validate issue fields before any normalization can coerce malformed values."""
+    errors = _issue_identity_errors(raw, repository=repository)
+    number = raw.get("number")
+    if isinstance(number, bool) or not isinstance(number, int) or number <= 0:
+        return errors
+
+    if not isinstance(raw.get("updated_at"), str) or not _valid_issue_timestamp(
+        raw.get("updated_at")
+    ):
+        errors.append("updated_at must be a non-empty timezone-aware ISO-8601 timestamp")
+
+    for field in ("body", "author"):
+        if field in raw and raw[field] is not None and not isinstance(raw[field], str):
+            errors.append(f"{field} must be a string or null")
 
     raw_user = raw.get("user")
-    if raw_user is not None and not isinstance(raw_user, Mapping):
-        return False
+    if normalized:
+        if "user" in raw and raw_user is not None and not isinstance(raw_user, str):
+            errors.append("user must be a string or null in a normalized row")
+    else:
+        errors.extend(_nested_login_errors(raw_user, field="user"))
 
     raw_labels = raw.get("labels")
-    if raw_labels is not None and (
-        not isinstance(raw_labels, list)
-        or any(
-            not (
-                isinstance(item, str)
-                or (isinstance(item, Mapping) and isinstance(item.get("name"), str))
-            )
-            for item in raw_labels
-        )
-    ):
-        return False
+    if normalized:
+        if not isinstance(raw_labels, list):
+            errors.append("labels must be a list of strings")
+        else:
+            for index, label in enumerate(raw_labels):
+                if not isinstance(label, str) or not label.strip():
+                    errors.append(f"labels[{index}] must be a non-empty string")
+    elif "labels" in raw:
+        if not isinstance(raw_labels, list):
+            errors.append("labels must be a list")
+        else:
+            for index, label in enumerate(raw_labels):
+                if isinstance(label, str):
+                    if not label.strip():
+                        errors.append(f"labels[{index}] must be a non-empty string")
+                elif isinstance(label, Mapping):
+                    name = label.get("name")
+                    if not isinstance(name, str) or not name.strip():
+                        errors.append(f"labels[{index}].name must be a non-empty string")
+                else:
+                    errors.append(f"labels[{index}] must be a string or object")
 
     raw_assignees = raw.get("assignees")
-    if raw_assignees is not None and (
-        not isinstance(raw_assignees, list)
-        or any(not isinstance(item, Mapping) for item in raw_assignees)
-    ):
-        return False
+    if "assignees" in raw:
+        if not isinstance(raw_assignees, list):
+            errors.append("assignees must be a list")
+        else:
+            for index, assignee in enumerate(raw_assignees):
+                if normalized:
+                    if not isinstance(assignee, str) or not assignee.strip():
+                        errors.append(f"assignees[{index}] must be a non-empty string")
+                elif not isinstance(assignee, Mapping):
+                    errors.append(f"assignees[{index}] must be an object")
+                else:
+                    errors.extend(
+                        f"assignees[{index}].{error.removeprefix('user.')}"
+                        if error.startswith("user.")
+                        else f"assignees[{index}]: {error}"
+                        for error in _nested_login_errors(assignee, field="user")
+                    )
 
     raw_comments = raw.get("comments")
-    if raw_comments is not None and (
-        not isinstance(raw_comments, list)
-        or any(
-            not isinstance(item, Mapping)
-            or (item.get("user") is not None and not isinstance(item.get("user"), Mapping))
-            for item in raw_comments
-        )
-    ):
-        return False
-    return True
+    if "comments" in raw:
+        if not isinstance(raw_comments, list):
+            errors.append("comments must be a list")
+        else:
+            for index, comment in enumerate(raw_comments):
+                if not isinstance(comment, Mapping):
+                    errors.append(f"comments[{index}] must be an object")
+                    continue
+                for field in ("body", "author", "html_url", "url", "created_at"):
+                    if (
+                        field in comment
+                        and comment[field] is not None
+                        and not isinstance(comment[field], str)
+                    ):
+                        errors.append(f"comments[{index}].{field} must be a string or null")
+                if comment.get("created_at") is not None and comment.get("created_at") != "":
+                    if not _valid_issue_timestamp(comment.get("created_at")):
+                        errors.append(f"comments[{index}].created_at must be a valid timestamp")
+                comment_user = comment.get("user")
+                if normalized:
+                    if (
+                        "user" in comment
+                        and comment_user is not None
+                        and not isinstance(comment_user, str)
+                    ):
+                        errors.append(f"comments[{index}].user must be a string or null")
+                else:
+                    errors.extend(
+                        f"comments[{index}].{error}"
+                        for error in _nested_login_errors(comment_user, field="user")
+                    )
+    return errors
+
+
+def _has_canonical_issue_identity(raw: Mapping[str, Any], repository: str = DEFAULT_REPO) -> bool:
+    """Return whether a row has positive identity and a repository-bound public URL."""
+    return not _issue_identity_errors(raw, repository=repository)
+
+
+def _is_canonical_issue_row(raw: Mapping[str, Any], repository: str = DEFAULT_REPO) -> bool:
+    """Return whether a REST object is safe to normalize into the issue inventory."""
+    return not _issue_row_validation_errors(raw, repository=repository, normalized=False)
 
 
 def _plan_issue_row_numbers(plan: Mapping[str, Any]) -> tuple[set[int], list[str]]:
-    """Validate plan issue rows and return their canonical numbers."""
+    """Validate normalized plan issue rows and return their canonical numbers."""
     if "issues" not in plan:
         return set(), []
     raw_rows = plan.get("issues")
     if not isinstance(raw_rows, list):
         return set(), ["plan issues must be a list"]
+    repository = plan.get("repo", DEFAULT_REPO)
+    if not isinstance(repository, str) or _repository_parts(repository) is None:
+        return set(), ["plan repo must be a GitHub owner/repository string"]
 
     numbers: set[int] = set()
     errors: list[str] = []
@@ -949,20 +1087,18 @@ def _plan_issue_row_numbers(plan: Mapping[str, Any]) -> tuple[set[int], list[str
         if not isinstance(raw_row, Mapping):
             errors.append(f"plan issue row {index} is not an object")
             continue
-        if not _has_canonical_issue_identity(raw_row):
-            errors.append(
-                f"plan issue row {index} lacks positive number, open state, title, or matching URL"
-            )
-            continue
-        number = raw_row["number"]
-        if not isinstance(raw_row.get("updated_at"), str) or not raw_row["updated_at"].strip():
-            errors.append(f"plan issue row #{number} lacks a non-empty updated_at value")
-        labels = raw_row.get("labels")
-        if not isinstance(labels, list) or not all(isinstance(label, str) for label in labels):
-            errors.append(f"plan issue row #{number} has an invalid labels list")
-        if number in numbers:
-            errors.append(f"plan contains duplicate canonical issue row #{number}")
-        numbers.add(number)
+        row_errors = _issue_row_validation_errors(
+            raw_row,
+            repository=repository,
+            normalized=True,
+        )
+        number = raw_row.get("number")
+        if row_errors:
+            errors.extend(f"plan issue row {index}: {error}" for error in row_errors)
+        if isinstance(number, int) and not isinstance(number, bool) and number > 0:
+            if number in numbers:
+                errors.append(f"plan contains duplicate canonical issue row #{number}")
+            numbers.add(number)
     return numbers, errors
 
 
@@ -983,8 +1119,75 @@ def _pending_reference_number(item: Mapping[str, Any]) -> int | None:
     return raw_number if raw_number == issue_number else None
 
 
+def _positive_issue_number(value: object) -> int | None:
+    """Return a positive integer issue number without coercing malformed values."""
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def _pending_issue_binding_errors(
+    item: Mapping[str, Any], row: Mapping[str, Any], *, index: int
+) -> list[str]:
+    """Ensure pending decision data is bound to the exact canonical plan row."""
+    number = row.get("number")
+    if isinstance(number, bool) or not isinstance(number, int) or number <= 0:
+        return [f"pending decision {index} has no valid canonical issue row"]
+
+    expected_decision_evidence = row.get("decision_evidence")
+    if not isinstance(expected_decision_evidence, list):
+        return [f"canonical issue row #{number} has invalid decision evidence"]
+    expected_sources = row.get("decision_sources")
+    if not isinstance(expected_sources, list):
+        return [f"canonical issue row #{number} has invalid decision sources"]
+    expected_options = row.get("documented_options")
+    if not isinstance(expected_options, list):
+        return [f"canonical issue row #{number} has invalid documented options"]
+    if row.get("decision_required") is not True:
+        return [f"canonical issue row #{number} is not marked decision-required"]
+    expected = {
+        "issue": f"#{number}",
+        "number": number,
+        "title": row.get("title"),
+        "url": row.get("url"),
+        "state": row.get("state"),
+        "labels": _label_names(row.get("labels")),
+        "classification": row.get("classification"),
+        "decision_required": True,
+        "question_source": "issue body/comments",
+        "blocking_evidence": "; ".join(str(value) for value in expected_decision_evidence)
+        or "decision gate detected",
+        "decision_evidence": expected_decision_evidence,
+        "evidence_sources": expected_sources,
+        "documented_options": expected_options,
+    }
+    errors: list[str] = []
+    for field, expected_value in expected.items():
+        if field not in item:
+            errors.append(f"pending decision {index} is missing {field}")
+            continue
+        actual_value = item[field]
+        if field == "labels":
+            if not isinstance(actual_value, list) or not all(
+                isinstance(label, str) and label.strip() for label in actual_value
+            ):
+                errors.append(f"pending decision {index} has invalid labels")
+                continue
+            actual_value = _label_names(actual_value)
+        elif field == "state":
+            if not isinstance(actual_value, str):
+                errors.append(f"pending decision {index} has invalid state")
+                continue
+            actual_value = actual_value.lower()
+        if actual_value != expected_value:
+            errors.append(
+                f"pending decision {index} {field} does not match canonical issue row #{number}"
+            )
+    return errors
+
+
 def _plan_issue_reference_errors(plan: Mapping[str, Any], *, issue_numbers: set[int]) -> list[str]:
-    """Reject mutations and decisions that target an issue absent from the plan."""
+    """Reject mutations and decisions absent from or forged against plan issue rows."""
     errors: list[str] = []
     raw_mutations = plan.get("mutations")
     if isinstance(raw_mutations, list):
@@ -1006,6 +1209,15 @@ def _plan_issue_reference_errors(plan: Mapping[str, Any], *, issue_numbers: set[
     if not isinstance(pending, list):
         errors.append("plan pending_decisions must be a list")
         return errors
+    raw_rows = plan.get("issues")
+    rows_by_number = {
+        row["number"]: row
+        for row in raw_rows
+        if isinstance(row, Mapping)
+        and isinstance(row.get("number"), int)
+        and not isinstance(row.get("number"), bool)
+        and row["number"] in issue_numbers
+    }
     for index, item in enumerate(pending):
         if not isinstance(item, Mapping):
             errors.append(f"pending decision {index} is not an object")
@@ -1015,6 +1227,8 @@ def _plan_issue_reference_errors(plan: Mapping[str, Any], *, issue_numbers: set[
             errors.append(f"pending decision {index} has no exact positive issue reference")
         elif number not in issue_numbers:
             errors.append(f"pending decision {index} references absent canonical issue #{number}")
+        elif number in rows_by_number:
+            errors.extend(_pending_issue_binding_errors(item, rows_by_number[number], index=index))
     return errors
 
 
@@ -1141,7 +1355,7 @@ def discover_open_issues(
     for row in rows:
         if "pull_request" in row:
             continue
-        if not _is_canonical_issue_row(row):
+        if not _is_canonical_issue_row(row, repository=repo):
             malformed_object_row_count += 1
             continue
         issues.append(_normalize_issue(row))
@@ -2871,6 +3085,53 @@ class Classification:
         }
 
 
+def _issue_source_metadata_shape_failures(issue_meta: Mapping[str, Any]) -> list[str]:
+    """Reject typed source metadata that a status branch would otherwise ignore."""
+    failures: list[str] = []
+    boolean_fields = (
+        "available",
+        "truncated",
+        "rate_limited",
+        "quota_exhausted",
+        "budget_exhausted",
+        "request_limit_exhausted",
+        "quota_uncertain",
+    )
+    for field in boolean_fields:
+        if field in issue_meta and type(issue_meta[field]) is not bool:
+            failures.append(f"{field} must be a boolean when present")
+
+    if "errors" in issue_meta:
+        errors = issue_meta["errors"]
+        if not isinstance(errors, list):
+            failures.append("errors must be a list when present")
+        elif any(not isinstance(error, str) or not error.strip() for error in errors):
+            failures.append("errors must contain only non-empty strings")
+
+    non_negative_integer_fields = (
+        "pages_read",
+        "requests_attempted",
+        "per_page",
+        "page_budget",
+        "row_count",
+        "raw_row_count",
+        "canonical_row_count",
+        "non_object_row_count",
+        "malformed_object_row_count",
+    )
+    for field in non_negative_integer_fields:
+        if field not in issue_meta:
+            continue
+        value = issue_meta[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            failures.append(f"{field} must be a non-negative integer when present")
+
+    for field in ("source", "source_kind", "source_status", "source_proof", "source_status_reason"):
+        if field in issue_meta and not isinstance(issue_meta[field], str):
+            failures.append(f"{field} must be a string when present")
+    return failures
+
+
 def _empty_issue_source_contract_failures(
     issue_meta: Mapping[str, Any], *, source: str, canonical_row_count: int
 ) -> list[str]:
@@ -3012,7 +3273,8 @@ def _issue_inventory_source_assessment(
     inventory: Mapping[str, Any], *, canonical_row_count: int
 ) -> dict[str, Any]:
     """Assess whether the canonical open-issue source can prove its row count."""
-    repository = str(inventory.get("repo") or DEFAULT_REPO)
+    raw_repository = inventory.get("repo", DEFAULT_REPO)
+    repository = raw_repository if isinstance(raw_repository, str) else DEFAULT_REPO
     source = f"repos/{repository}/issues?state=open"
     inventory_meta = inventory.get("inventory")
     issue_meta = inventory_meta.get("issues") if isinstance(inventory_meta, Mapping) else None
@@ -3049,12 +3311,42 @@ def _issue_inventory_source_assessment(
             )
         return assessed
 
-    if not isinstance(issue_meta, Mapping):
-        if canonical_row_count:
+    legacy_marker = inventory.get(LEGACY_ISSUE_INVENTORY_MARKER) is True
+    if (
+        not isinstance(raw_repository, str)
+        or not raw_repository
+        or _repository_parts(repository) is None
+    ):
+        return result(
+            ISSUE_SOURCE_STATUS_ANOMALOUS,
+            admissible=False,
+            error_code="issue_inventory_repository_invalid",
+            reason="the requested repository must be a GitHub owner/repository string",
+        )
+
+    source_metadata_absent = (
+        not isinstance(inventory_meta, Mapping) or "issues" not in inventory_meta
+    )
+    if source_metadata_absent or (isinstance(issue_meta, Mapping) and not issue_meta):
+        if canonical_row_count and legacy_marker:
             return result(
                 ISSUE_SOURCE_STATUS_COMPLETE,
                 admissible=True,
-                source_proof="canonical_issue_rows",
+                reason=(
+                    "legacy_issue_inventory marker permits canonical rows without source metadata"
+                ),
+                source_proof="legacy_canonical_issue_rows",
+                metadata_reported=False,
+            )
+        if canonical_row_count:
+            return result(
+                ISSUE_SOURCE_STATUS_ANOMALOUS,
+                admissible=False,
+                error_code="issue_inventory_source_missing",
+                reason=(
+                    f"{source} returned canonical rows without source-contract metadata; "
+                    "the source is not proven"
+                ),
                 metadata_reported=False,
             )
         return result(
@@ -3068,13 +3360,36 @@ def _issue_inventory_source_assessment(
             metadata_reported=False,
         )
 
+    if not isinstance(issue_meta, Mapping):
+        return result(
+            ISSUE_SOURCE_STATUS_ANOMALOUS,
+            admissible=False,
+            error_code="issue_inventory_source_metadata_invalid",
+            reason=f"{source} reported non-object source metadata",
+        )
+
     source_status = issue_meta.get("source_status")
-    source_errors = issue_meta.get("errors")
-    has_errors = isinstance(source_errors, list) and bool(source_errors)
-    raw_row_count = issue_meta.get("raw_row_count")
+    metadata_shape_failures = _issue_source_metadata_shape_failures(issue_meta)
+    if metadata_shape_failures and source_status not in {
+        ISSUE_SOURCE_STATUS_COMPLETE,
+        ISSUE_SOURCE_STATUS_EMPTY,
+    }:
+        return result(
+            ISSUE_SOURCE_STATUS_ANOMALOUS,
+            admissible=False,
+            error_code="issue_inventory_source_metadata_invalid",
+            reason=(
+                f"{source} reported malformed source metadata: "
+                + "; ".join(metadata_shape_failures)
+            ),
+        )
+
+    source_errors = issue_meta.get("errors", [])
+    has_errors = bool(source_errors)
     reported_canonical_row_count = issue_meta.get("canonical_row_count")
     if (
         isinstance(reported_canonical_row_count, int)
+        and not isinstance(reported_canonical_row_count, bool)
         and reported_canonical_row_count != canonical_row_count
     ):
         return result(
@@ -3086,22 +3401,8 @@ def _issue_inventory_source_assessment(
                 f"but the plan contains {canonical_row_count}; the source contract is inconsistent"
             ),
         )
-    if (
-        source_status == ISSUE_SOURCE_STATUS_ANOMALOUS
-        and not issue_meta.get("truncated")
-        and not has_errors
-    ):
-        return result(
-            ISSUE_SOURCE_STATUS_ANOMALOUS,
-            admissible=False,
-            error_code="issue_inventory_source_anomalous",
-            reason=str(
-                issue_meta.get("source_status_reason")
-                or f"{source} reported an anomalous source response"
-            ),
-        )
     if source_status == ISSUE_SOURCE_STATUS_COMPLETE and canonical_row_count > 0:
-        contract_failures = _complete_issue_source_contract_failures(
+        contract_failures = metadata_shape_failures + _complete_issue_source_contract_failures(
             issue_meta,
             source=source,
             canonical_row_count=canonical_row_count,
@@ -3116,7 +3417,35 @@ def _issue_inventory_source_assessment(
                     f"contract: {'; '.join(contract_failures)}"
                 ),
             )
-    if issue_meta.get("available") is False or issue_meta.get("truncated") or has_errors:
+        return result(
+            ISSUE_SOURCE_STATUS_COMPLETE,
+            admissible=True,
+            source_proof="canonical_issue_rows",
+        )
+    if source_status == ISSUE_SOURCE_STATUS_ANOMALOUS:
+        return result(
+            ISSUE_SOURCE_STATUS_ANOMALOUS,
+            admissible=False,
+            error_code="issue_inventory_source_anomalous",
+            reason=str(
+                issue_meta.get("source_status_reason")
+                or f"{source} reported an anomalous source response"
+            ),
+        )
+    if (
+        issue_meta.get("available") is False
+        or issue_meta.get("truncated") is True
+        or has_errors
+        or any(
+            issue_meta.get(field) is True
+            for field in (
+                "rate_limited",
+                "quota_exhausted",
+                "budget_exhausted",
+                "request_limit_exhausted",
+            )
+        )
+    ):
         reason = str(issue_meta.get("source_status_reason") or "")
         if not reason and has_errors:
             reason = str(source_errors[0])
@@ -3128,30 +3457,23 @@ def _issue_inventory_source_assessment(
         )
 
     if source_status is None:
-        if canonical_row_count:
-            return result(
-                ISSUE_SOURCE_STATUS_COMPLETE,
-                admissible=True,
-                source_proof="canonical_issue_rows",
-                metadata_reported=False,
-            )
         return result(
             ISSUE_SOURCE_STATUS_ANOMALOUS,
             admissible=False,
             error_code=(
                 "issue_inventory_source_anomalous"
-                if isinstance(raw_row_count, int) and raw_row_count > 0
+                if canonical_row_count > 0
                 else "issue_inventory_source_missing"
             ),
             reason=(
-                f"{source} returned rows but no canonical issue rows or source status"
-                if isinstance(raw_row_count, int) and raw_row_count > 0
-                else f"{source} returned zero canonical rows without source status"
+                f"{source} returned rows but no source status"
+                if canonical_row_count > 0
+                else f"{source} did not report source status"
             ),
         )
 
     if source_status == ISSUE_SOURCE_STATUS_EMPTY and canonical_row_count == 0:
-        contract_failures = _empty_issue_source_contract_failures(
+        contract_failures = metadata_shape_failures + _empty_issue_source_contract_failures(
             issue_meta,
             source=source,
             canonical_row_count=canonical_row_count,
@@ -3183,12 +3505,6 @@ def _issue_inventory_source_assessment(
             ISSUE_SOURCE_STATUS_EMPTY,
             admissible=True,
             source_proof=str(issue_meta.get("source_proof") or "explicit_source_contract"),
-        )
-    if source_status == ISSUE_SOURCE_STATUS_COMPLETE and canonical_row_count > 0:
-        return result(
-            ISSUE_SOURCE_STATUS_COMPLETE,
-            admissible=True,
-            source_proof=str(issue_meta.get("source_proof") or "canonical_issue_rows"),
         )
     if source_status in {
         ISSUE_SOURCE_STATUS_UNAVAILABLE,
@@ -3690,7 +4006,18 @@ def build_audit_plan(
         and isinstance(resolved_producer, Mapping)
         and resolved_producer.get("identity")
     )
-    issues = [item for item in inventory.get("issues", []) if isinstance(item, Mapping)]
+    raw_issue_rows = inventory.get("issues", [])
+    issue_row_errors: list[str] = []
+    if not isinstance(raw_issue_rows, list):
+        issue_row_errors.append("inventory issues must be a list")
+        candidate_issues: list[Mapping[str, Any]] = []
+    else:
+        candidate_issues = []
+        for index, item in enumerate(raw_issue_rows):
+            if not isinstance(item, Mapping):
+                issue_row_errors.append(f"inventory issue row {index} is not an object")
+                continue
+            candidate_issues.append(item)
     open_prs = [item for item in inventory.get("open_prs", []) if isinstance(item, Mapping)]
     merged_prs = [item for item in inventory.get("merged_prs", []) if isinstance(item, Mapping)]
     claims = inventory.get("claims") if isinstance(inventory.get("claims"), Mapping) else {}
@@ -3700,14 +4027,34 @@ def build_audit_plan(
         else {}
     )
     repository = str(inventory.get("repo") or DEFAULT_REPO)
+    for index, issue in enumerate(candidate_issues):
+        issue_row_errors.extend(
+            f"inventory issue row {index}: {error}"
+            for error in _issue_row_validation_errors(
+                issue,
+                repository=repository,
+                normalized=True,
+            )
+        )
+    issues = [] if issue_row_errors else candidate_issues
     worktrees = [item for item in inventory.get("worktrees", []) if isinstance(item, Mapping)]
     jobs = [item for item in inventory.get("jobs", []) if isinstance(item, Mapping)]
     available_labels = set(_label_names(inventory.get("labels")))
     issue_inventory_status = _issue_inventory_source_assessment(
         inventory,
-        canonical_row_count=len(issues),
+        canonical_row_count=len(candidate_issues),
     )
-    job_meta = inventory.get("inventory", {}).get("jobs", {})
+    if issue_row_errors:
+        issue_inventory_status = {
+            **issue_inventory_status,
+            "status": ISSUE_SOURCE_STATUS_ANOMALOUS,
+            "admissible": False,
+            "error_code": "issue_inventory_rows_invalid",
+            "reason": "; ".join(issue_row_errors),
+        }
+    inventory_meta = inventory.get("inventory")
+    inventory_meta = inventory_meta if isinstance(inventory_meta, Mapping) else {}
+    job_meta = inventory_meta.get("jobs", {})
     job_available = bool(job_meta.get("available", True)) if isinstance(job_meta, Mapping) else True
     open_numbers = {int(item.get("number", 0)) for item in issues}
     classifications: list[dict[str, Any]] = []
@@ -3832,7 +4179,6 @@ def build_audit_plan(
         classification_timeout_reason = (
             "issue-audit wall-time budget exhausted while finalizing the audit plan"
         )
-    inventory_meta = inventory.get("inventory") or {}
     quota_meta: dict[str, Any] = {}
     if isinstance(inventory.get("quota"), Mapping):
         quota_meta.update(inventory["quota"])
@@ -3954,7 +4300,7 @@ def build_audit_plan(
             "composable": [RESOURCE_PREFIX, EVIDENCE_PREFIX, sorted(STATE_QUALIFIER_LABELS)],
             "preserve_state_qualifiers": True,
         },
-        "inventory": inventory.get("inventory", {}),
+        "inventory": dict(inventory_meta),
         "issue_inventory_status": issue_inventory_status,
         "classification_status": classification_status,
         "inventory_coverage": (
@@ -3977,6 +4323,8 @@ def build_audit_plan(
             "truncated_or_error_sources": len(set(truncated)),
         },
     }
+    if inventory.get(LEGACY_ISSUE_INVENTORY_MARKER) is True:
+        plan[LEGACY_ISSUE_INVENTORY_MARKER] = True
     if incomplete_inventory:
         _suppress_mutation_fields(plan)
     elif _deadline_expired(effective_deadline):
@@ -4250,8 +4598,9 @@ def apply_mutations(
     plan_issue_numbers, plan_issue_row_errors = _plan_issue_row_numbers(plan)
     issue_inventory_status = _issue_inventory_source_assessment(
         {
-            "repo": plan.get("repo"),
+            "repo": plan.get("repo", DEFAULT_REPO),
             "inventory": plan.get("inventory"),
+            LEGACY_ISSUE_INVENTORY_MARKER: plan.get(LEGACY_ISSUE_INVENTORY_MARKER),
         },
         canonical_row_count=canonical_row_count,
     )
@@ -4280,6 +4629,7 @@ def apply_mutations(
         and canonical_row_count == 0
         and issue_inventory_status.get("status") == ISSUE_SOURCE_STATUS_ANOMALOUS
         and issue_inventory_status.get("error_code") == "issue_inventory_source_missing"
+        and issue_inventory_status.get("metadata_reported") is False
     )
     if not issue_inventory_status["admissible"] and not legacy_source_missing:
         refusal = refuse(
@@ -4748,8 +5098,9 @@ def build_decision_envelope(
     plan_issue_numbers, plan_issue_row_errors = _plan_issue_row_numbers(plan)
     issue_inventory_status = _issue_inventory_source_assessment(
         {
-            "repo": plan.get("repo"),
+            "repo": plan.get("repo", DEFAULT_REPO),
             "inventory": plan.get("inventory"),
+            LEGACY_ISSUE_INVENTORY_MARKER: plan.get(LEGACY_ISSUE_INVENTORY_MARKER),
         },
         canonical_row_count=canonical_row_count,
     )
@@ -4764,6 +5115,7 @@ def build_decision_envelope(
         and canonical_row_count == 0
         and issue_inventory_status.get("status") == ISSUE_SOURCE_STATUS_ANOMALOUS
         and issue_inventory_status.get("error_code") == "issue_inventory_source_missing"
+        and issue_inventory_status.get("metadata_reported") is False
     )
     if (not issue_inventory_status["admissible"] and not legacy_source_missing) or (
         recorded_status_inadmissible
@@ -4909,11 +5261,53 @@ def validate_decision_envelope(
             if envelope_digest != observed_digest:
                 errors.append("envelope plan digest does not match the current plan")
     expected_issue = envelope.get("issue") if isinstance(envelope.get("issue"), Mapping) else {}
-    expected_number = _pending_issue_number(expected_issue.get("number"))
+    repository = plan.get("repo") if plan is not None else envelope.get("repo")
+    if not isinstance(repository, str) or _repository_parts(repository) is None:
+        errors.append("envelope repo is not a valid GitHub owner/repository")
+    expected_number = _positive_issue_number(expected_issue.get("number"))
+    if expected_number is None:
+        errors.append("envelope issue number is not a positive integer")
+        expected_number_for_url = 0
+    else:
+        expected_number_for_url = expected_number
+    expected_url = expected_issue.get("url")
+    if (
+        isinstance(repository, str)
+        and _repository_parts(repository) is not None
+        and expected_number is not None
+        and not _canonical_issue_url(
+            expected_url,
+            number=expected_number_for_url,
+            repository=repository,
+        )
+    ):
+        errors.append("envelope issue URL is not bound to its repo and issue number")
     if live_issue is not None:
-        actual_number = _pending_issue_number(live_issue.get("number"))
+        actual_number = _positive_issue_number(live_issue.get("number"))
+        if actual_number is None:
+            errors.append("live issue number is not a positive integer")
         if actual_number != expected_number:
             errors.append("live issue number does not match the envelope")
+        expected_title = expected_issue.get("title")
+        actual_title = live_issue.get("title")
+        if expected_title != actual_title:
+            errors.append("live issue title changed since the envelope was created")
+        actual_url = (
+            live_issue.get("html_url") if "html_url" in live_issue else live_issue.get("url")
+        )
+        if expected_url != actual_url:
+            errors.append("live issue URL changed since the envelope was created")
+        if (
+            isinstance(repository, str)
+            and _repository_parts(repository) is not None
+            and actual_number is not None
+            and not _canonical_issue_url(
+                actual_url,
+                number=actual_number,
+                repository=repository,
+            )
+        ):
+            errors.append("live issue URL is not bound to its repo and issue number")
         expected_state = str(expected_issue.get("state") or "").lower()
         actual_state = str(live_issue.get("state") or "").lower()
         if expected_state and actual_state != expected_state:

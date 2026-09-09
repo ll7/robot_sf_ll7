@@ -155,13 +155,22 @@ open-issue metadata reports `source_status: complete` when issue rows are presen
 for a successful empty REST response, and `unavailable` or `anomalous` for failed, partial,
 malformed, or unexplained zero-row responses. The plan repeats this as `issue_inventory_status`;
 an empty status is admissible only with the complete source identity, proof, count, and successful
-read metadata; otherwise it is anomalous. An unavailable or anomalous source adds `issues` to
+read metadata; otherwise it is anomalous. Canonical issue URLs must use HTTPS on the expected
+`github.com` host and the exact requested `owner/repository/issues/<number>` path; a numeric issue
+suffix alone is not identity. REST rows are validated before normalization, including non-empty
+titles, valid non-empty `updated_at` values, and scalar/object shapes for fields used from nested
+users, labels, assignees, and comments. An unavailable or anomalous source adds `issues` to
 `truncation_or_errors`, suppresses mutations, returns a nonzero exit, and must be rerun before an
 apply step. Non-empty plan rows must preserve canonical issue identity and schema, and every
-mutation or pending decision must target an issue present in those rows. Apply and
-decision-envelope boundaries also reject forged work attached to an inadmissible, mismatched, or
-empty source. The explicit
-`--max-wall-seconds 0` no-budget timeout remains a separate fail-closed status.
+mutation or pending decision must target an issue present in those rows. A pending decision must
+match the canonical row's number, title, URL, state, labels, classification, decision evidence,
+evidence sources, and documented options. Apply and decision-envelope boundaries also reject
+forged work attached to an inadmissible, mismatched, or empty source. The exact top-level
+`legacy_issue_inventory: true` marker is reserved for pre-contract callers: for positive rows it
+may permit missing or empty source metadata, and apply/envelope retain the existing no-work
+zero-row compatibility path, but it never permits a partial mapping with omitted/null
+`source_status` or malformed typed fields. The explicit `--max-wall-seconds 0` no-budget timeout
+remains a separate fail-closed status.
 
 Project #5 score synchronization uses the same fail-closed preflight. If its estimated field,
 project, and item reads would cross the margin, it prints `status: quota_blocked`, performs no

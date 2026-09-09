@@ -62,21 +62,33 @@ source and source kind, `source_proof: successful_empty_response`,
 `available: true`, `truncated: false`, an empty `errors` list, positive page
 and request counts within the page budget, and zero raw, canonical, non-object,
 malformed-object, and normalized row counts. A zero-row source without this
-contract is also anomalous. A non-empty plan row must retain a positive issue
-number, open state, matching issue URL, title, non-empty update version, and
-normalized label list; every mutation or pending decision must reference one of
-those exact canonical rows. The plan copies this result to
+contract is also anomalous. Canonical issue URLs must use HTTPS on the expected
+`github.com` host and the exact requested `owner/repository/issues/<number>` path;
+the numeric `/issues/<number>` suffix alone is not identity. REST rows are
+validated before normalization: title and `updated_at` must be non-empty valid
+strings, and fields used from nested users, labels, assignees, and comments must
+have their expected scalar or object shape. A non-empty plan row must retain a
+positive issue number, open state, repository-bound URL, title, non-empty valid
+update version, and normalized label list; every mutation or pending decision
+must reference one of those exact canonical rows. The plan copies this result to
 `issue_inventory_status`; `unavailable` and `anomalous` add `issues` to
 `truncation_or_errors`, suppress mutations, and make the plan command return
 non-zero. Apply and decision-envelope admission refuse an inadmissible source
 or a row/reference mismatch regardless of the number of rows or mutations in a
 forged plan. An empty canonical inventory cannot carry mutations or pending
-decisions.
-The top-level `legacy_issue_inventory: true` marker is retained only for
-pre-contract callers that cannot provide source metadata; it applies only to
-the missing-metadata compatibility case and is never emitted by the current
-planner. An explicit `--max-wall-seconds 0` remains the separate no-budget
-timeout path and is not treated as a proven empty source.
+decisions. A pending decision must also match its canonical row's number, title,
+URL, state, labels, classification, decision evidence, evidence sources, and
+documented options; only the apply-produced `safe_mutations_applied` field is
+dynamic. The top-level `legacy_issue_inventory: true` marker is retained only
+for pre-contract callers that cannot provide source metadata. For positive rows,
+it permits the missing or empty metadata shape only when the marker is exactly
+boolean `true`; the apply and envelope boundaries retain the existing no-work
+zero-row compatibility path. It does not excuse a non-empty partial metadata
+mapping, an omitted or null `source_status` in such a mapping, or malformed
+`available`, `errors`, or exhaustion fields, and the current planner never emits
+it for live discovery.
+An explicit `--max-wall-seconds 0` remains the separate no-budget timeout path
+and is not treated as a proven empty source.
 
 An inventory page cap, failed read, unavailable SLURM query for a
 resource:slurm issue, or failed readback is an uncertainty. The plan records it

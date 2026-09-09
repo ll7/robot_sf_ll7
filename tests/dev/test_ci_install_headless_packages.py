@@ -221,6 +221,194 @@ fi
     assert "install -y --no-install-recommends poppler-utils" in log_text
 
 
+def test_ci_install_headless_packages_isolates_chrome_hash_mismatch(
+    tmp_path: Path,
+) -> None:
+    """A Chrome index mismatch gets one bounded official-mirror recovery attempt."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    log_path = tmp_path / "commands.log"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(
+        fake_bin / "sudo",
+        f'#!/usr/bin/env bash\nprintf \'sudo %s\\n\' "$*" >> {_shell_quote(log_path)}\n"$@"\n',
+    )
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+printf 'apt-get %s\\n' "$*" >> {_shell_quote(log_path)}
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    exit 0
+  fi
+  echo 'Err:1 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages'
+  echo '  Hash Sum mismatch'
+  exit 100
+fi
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_timer_test_environment(fake_bin),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "warning=apt_update_chrome_hash_mismatch source=dl.google.com retry_count=1" in (
+        result.stderr
+    )
+    assert (
+        "warning=apt_update_chrome_hash_mismatch_recovered source=dl.google.com"
+        " mirror=archive.ubuntu.com retry_count=1"
+    ) in result.stdout
+    log_text = log_path.read_text(encoding="utf-8")
+    assert "Dir::Etc::sourcelist=" in log_text
+    assert "Dir::Etc::sourceparts=-" in log_text
+    assert "install -y --no-install-recommends poppler-utils" in log_text
+
+
+def test_ci_install_headless_packages_reports_chrome_recovery_exhaustion(
+    tmp_path: Path,
+) -> None:
+    """A failed official-mirror recovery remains a terminal, identified failure."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    install_marker = tmp_path / "install-called"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    echo 'Err:1 https://archive.ubuntu.com/ubuntu noble InRelease'
+    echo '  500 Internal Server Error'
+    exit 100
+  fi
+  echo 'Err:1 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages'
+  echo '  Hash Sum mismatch'
+  exit 100
+fi
+touch {_shell_quote(install_marker)}
+exit 0
+""",
+    )
+
+    env = _timer_test_environment(fake_bin)
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 100
+    diagnostic = next(
+        line
+        for line in result.stderr.splitlines()
+        if "error=apt_update_chrome_hash_mismatch_recovery_failed" in line
+    )
+    assert "warning=apt_update_chrome_hash_mismatch_recovery_failed" in result.stderr
+    assert "timeout_seconds=1" in diagnostic
+    assert "retry_count=1" in diagnostic
+    assert "failed_source=dl.google.com" in diagnostic
+    assert not install_marker.exists()
+
+
+def test_ci_install_headless_packages_does_not_hide_unrelated_hash_failure(
+    tmp_path: Path,
+) -> None:
+    """A Chrome mismatch combined with another source failure still fails closed."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fallback_marker = tmp_path / "fallback-called"
+    install_marker = tmp_path / "install-called"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    touch {_shell_quote(fallback_marker)}
+  fi
+  echo 'Err:1 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages'
+  echo '  Hash Sum mismatch'
+  echo 'E: Failed to fetch https://archive.ubuntu.com/ubuntu/dists/noble/InRelease Hash Sum mismatch'
+  exit 100
+fi
+touch {_shell_quote(install_marker)}
+exit 0
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_timer_test_environment(fake_bin),
+    )
+
+    assert result.returncode == 100
+    assert "error=apt_update_failed" in result.stderr
+    assert "warning=apt_update_chrome_hash_mismatch" not in result.stderr
+    assert not fallback_marker.exists()
+    assert not install_marker.exists()
+
+
+def test_ci_install_headless_packages_does_not_retry_mixed_chrome_failures(
+    tmp_path: Path,
+) -> None:
+    """A Chrome mismatch plus another Chrome failure remains fail-closed."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fallback_marker = tmp_path / "fallback-called"
+    install_marker = tmp_path / "install-called"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    touch {_shell_quote(fallback_marker)}
+  fi
+  echo 'Err:1 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages'
+  echo '  Hash Sum mismatch'
+  echo 'Err:2 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 InRelease'
+  echo '  404 Not Found'
+  exit 100
+fi
+touch {_shell_quote(install_marker)}
+exit 0
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_timer_test_environment(fake_bin),
+    )
+
+    assert result.returncode == 100
+    assert "error=apt_update_failed" in result.stderr
+    assert "warning=apt_update_chrome_hash_mismatch" not in result.stderr
+    assert not fallback_marker.exists()
+    assert not install_marker.exists()
+
+
 def test_ci_install_headless_packages_reports_update_timeout_with_context(tmp_path: Path) -> None:
     """A slow apt update fails before the outer CI step timeout with actionable context."""
     fake_bin = tmp_path / "bin"

@@ -127,6 +127,12 @@ set, observed apt source hosts, timeout budget, and elapsed seconds. A third-par
 a warning-only exception; official-source failures, package-resolution failures, and timeouts
 remain fail-closed.
 
+For a bounded hosted-runner recovery, a `Hash Sum mismatch` attributed only to the Google Chrome
+APT source (`dl.google.com`) triggers one official Ubuntu mirror-isolation attempt. The helper logs
+the failed source and `retry_count`, and uses the isolated official source list for installation
+only after that update succeeds. A mismatch combined with any unrelated source failure, or a
+failed recovery attempt, remains a terminal setup failure.
+
 The promoted-planner and nightly performance workflows use the same headless stack, without `jq`
 where it is not needed.
 

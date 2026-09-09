@@ -15,7 +15,7 @@ approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
 latest_reconciliation_issue: 8567
-latest_reviewed_date: 2026-09-08
+latest_reviewed_date: 2026-09-09
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
@@ -129,8 +129,8 @@ decision_summary: >-
   Its configuration identities use the registry's explicit `config_sha256` field, while raw smoke
   row and trace digests remain bound by the receipt's worktree-local output statement. The new
   file was reviewed as non-claim instrumentation proof; refreshing the machine baseline updates
-  only the filesystem-derived evidence-tree manifest from 2374 to 2375 files and leaves the
-  429-finding disposition set unchanged.
+  only the filesystem-derived evidence-tree manifest from 2378 to 2379 files and leaves the
+  429-finding disposition set unchanged after the current-main #8658 refresh.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No

@@ -58,5 +58,7 @@ execution metadata and pass the same fail-closed summary contract before its row
 interpreted.
 
 The receipt remains `force_coupled_comparator_receipt.v1`; the taxonomy fields stay additive and
-optional for legacy receipt compatibility. Generated receipts carry the explicit class and
-summary counts.
+optional for legacy receipt compatibility. A legacy non-success row may omit `failure_class`, but
+an explicitly present value must be a canonical non-null class; generated receipts carry the
+explicit class and summary counts, and runtime aggregation remains fail-closed for missing
+classes.

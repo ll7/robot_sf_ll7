@@ -170,12 +170,12 @@
                 "degraded": {"const": true},
                 "degradation_reasons": {"minItems": 1},
                 "failure_class": {
+                  "type": "string",
                   "enum": [
                     "path_generation",
                     "tracking",
                     "social_compliance",
-                    "simulator",
-                    null
+                    "simulator"
                   ]
                 }
               },

@@ -726,6 +726,31 @@ def test_v1_schema_enforces_new_taxonomy_invariants_when_present() -> None:
         jsonschema.validate(instance=inconsistent_degraded, schema=schema)
 
 
+def test_v1_schema_rejects_explicit_null_failure_class_on_non_ok_row() -> None:
+    """Legacy omission stays compatible, but an explicit non-ok null is malformed."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    row = receipt["results"][0]
+    row.update(
+        {
+            "status": "degraded",
+            "degraded": True,
+            "degradation_reasons": ["fixture_degraded"],
+            "failure_class": None,
+        }
+    )
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

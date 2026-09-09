@@ -129,15 +129,137 @@ emit_apt_failure() {
   local elapsed_seconds="$3"
   local apt_output="$4"
   local failure_class="$5"
+  local retry_count="${6:-0}"
+  local failed_source="${7:-}"
   local sources
   sources="$(apt_source_hosts "$apt_output")"
 
-  echo "ci_install_headless_packages error=${failure_class} rc=${status} phase=${phase} timeout_seconds=${phase_timeout_seconds} elapsed_seconds=${elapsed_seconds} packages=${missing[*]} sources=${sources}" >&2
-  echo "::error title=Headless package ${phase} failed::class=${failure_class} rc=${status} timeout_seconds=${phase_timeout_seconds} elapsed_seconds=${elapsed_seconds} packages=${missing[*]} sources=${sources}" >&2
+  echo "ci_install_headless_packages error=${failure_class} rc=${status} phase=${phase} timeout_seconds=${phase_timeout_seconds} elapsed_seconds=${elapsed_seconds} retry_count=${retry_count} failed_source=${failed_source:-none} packages=${missing[*]} sources=${sources}" >&2
+  echo "::error title=Headless package ${phase} failed::class=${failure_class} rc=${status} timeout_seconds=${phase_timeout_seconds} elapsed_seconds=${elapsed_seconds} retry_count=${retry_count} failed_source=${failed_source:-none} packages=${missing[*]} sources=${sources}" >&2
+}
+
+is_apt_403_text() {
+  local text="${1,,}"
+  [[ "$text" =~ (403([^0-9]|$)|forbidden) ]]
+}
+
+is_official_apt_host() {
+  case "$1" in
+    ubuntu.com|*.ubuntu.com|debian.org|*.debian.org|canonical.com|*.canonical.com)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+apt_update_other_errors=()
+third_party_403_hosts=()
+classify_apt_update_output() {
+  local apt_output="$1"
+  local line
+  apt_update_other_errors=()
+  third_party_403_hosts=()
+  local pending_host=""
+  local pending_status=""
+  record_pending_apt_error() {
+    [[ -z "$pending_host" ]] && return
+    if is_apt_403_text "$pending_status" && ! is_official_apt_host "$pending_host"; then
+      third_party_403_hosts+=("$pending_host")
+    else
+      apt_update_other_errors+=("$pending_host")
+    fi
+    pending_host=""
+    pending_status=""
+  }
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == Err:* ]]; then
+      record_pending_apt_error
+      if [[ "$line" =~ https?://([^/[:space:]]+) ]]; then
+        pending_host="${BASH_REMATCH[1]%%:*}"
+        pending_status="$line"
+        if is_apt_403_text "$line"; then
+          record_pending_apt_error
+        fi
+      else
+        apt_update_other_errors+=("unknown")
+      fi
+      continue
+    fi
+
+    if [[ "$line" == "W: Failed to fetch"* ]]; then
+      record_pending_apt_error
+      if [[ "$line" =~ https?://([^/[:space:]]+) ]]; then
+        pending_host="${BASH_REMATCH[1]%%:*}"
+        pending_status="$line"
+        if is_apt_403_text "$line"; then
+          record_pending_apt_error
+        fi
+      else
+        apt_update_other_errors+=("unknown")
+      fi
+      continue
+    fi
+
+    if [[ "$line" == Get:* || "$line" == Hit:* || "$line" == Ign:* ]]; then
+      record_pending_apt_error
+      continue
+    fi
+
+    if [[ -n "$pending_host" ]]; then
+      pending_status+=" $line"
+      if is_apt_403_text "$line"; then
+        record_pending_apt_error
+      fi
+    fi
+  done <<< "$apt_output"
+  record_pending_apt_error
+}
+
+is_chrome_hash_mismatch_source_only() {
+  local apt_output="$1"
+  local text="${apt_output,,}"
+  local host
+  local saw_chrome=false
+
+  [[ "$text" == *"hash sum mismatch"* ]] || return 1
+  ((${#apt_update_other_errors[@]} > 0)) || return 1
+  for host in "${apt_update_other_errors[@]}"; do
+    if [[ "$host" == "dl.google.com" ]]; then
+      saw_chrome=true
+    else
+      return 1
+    fi
+  done
+  [[ "$saw_chrome" == true ]]
+}
+
+run_official_mirror_update() {
+  fallback_output=""
+  fallback_rc=125
+  fallback_elapsed_seconds=0
+  if prepare_official_fallback_sources; then
+    fallback_started_seconds=$SECONDS
+    if fallback_output=$(CI_STEP_TIMEOUT_SECONDS="${fallback_timeout_seconds}" \
+      bash "${script_dir}/ci_step_timer.sh" "Headless package apt update (official mirror fallback)" \
+      sudo apt-get "${apt_options[@]}" \
+      -o "Dir::Etc::sourcelist=${official_fallback_sources}" \
+      -o Dir::Etc::sourceparts=- \
+      update 2>&1); then
+      fallback_rc=0
+    else
+      fallback_rc=$?
+    fi
+    fallback_elapsed_seconds=$((SECONDS - fallback_started_seconds))
+    printf '%s\n' "$fallback_output"
+  fi
 }
 
 apt_update_output=""
 apt_update_rc=0
+apt_update_recovery_attempts=0
 apt_update_started_seconds=$SECONDS
 if apt_update_output=$(CI_STEP_TIMEOUT_SECONDS="${phase_timeout_seconds}" \
   bash "${script_dir}/ci_step_timer.sh" "Headless package apt update" \
@@ -151,26 +273,11 @@ apt_update_elapsed_seconds=$((SECONDS - apt_update_started_seconds))
 
 if [[ "$apt_update_rc" -ne 0 ]]; then
   if [[ "$apt_update_rc" -eq 124 ]]; then
-    fallback_output=""
-    fallback_rc=0
-    if prepare_official_fallback_sources; then
-      if fallback_output=$(CI_STEP_TIMEOUT_SECONDS="${fallback_timeout_seconds}" \
-        bash "${script_dir}/ci_step_timer.sh" "Headless package apt update (official mirror fallback)" \
-        sudo apt-get "${apt_options[@]}" \
-        -o "Dir::Etc::sourcelist=${official_fallback_sources}" \
-        -o Dir::Etc::sourceparts=- \
-        update 2>&1); then
-        fallback_rc=0
-      else
-        fallback_rc=$?
-      fi
-      printf '%s\n' "$fallback_output"
-    else
-      fallback_rc=125
-    fi
+    run_official_mirror_update
 
     if [[ "$fallback_rc" -eq 0 ]]; then
-      echo "ci_install_headless_packages warning=apt_update_official_mirror_fallback mirror=archive.ubuntu.com"
+      apt_update_recovery_attempts=1
+      echo "ci_install_headless_packages warning=apt_update_official_mirror_fallback mirror=archive.ubuntu.com retry_count=${apt_update_recovery_attempts}"
       apt_update_output="$fallback_output"
       apt_update_rc=0
       apt_source_options=(
@@ -178,8 +285,9 @@ if [[ "$apt_update_rc" -ne 0 ]]; then
         -o Dir::Etc::sourceparts=-
       )
     else
-      echo "ci_install_headless_packages warning=apt_update_official_mirror_fallback_failed rc=${fallback_rc} timeout_seconds=${fallback_timeout_seconds}" >&2
-      emit_apt_failure "update" "$apt_update_rc" "$apt_update_elapsed_seconds" "$apt_update_output" "apt_update_timeout"
+      apt_update_recovery_attempts=1
+      echo "ci_install_headless_packages warning=apt_update_official_mirror_fallback_failed rc=${fallback_rc} timeout_seconds=${fallback_timeout_seconds} retry_count=${apt_update_recovery_attempts}" >&2
+      emit_apt_failure "update" "$apt_update_rc" "$apt_update_elapsed_seconds" "$apt_update_output" "apt_update_timeout" "$apt_update_recovery_attempts"
       exit "$apt_update_rc"
     fi
   fi
@@ -190,91 +298,40 @@ if [[ "$apt_update_rc" -ne 0 ]]; then
       exit "$apt_update_rc"
     fi
 
-    is_apt_403_text() {
-      local text="${1,,}"
-      [[ "$text" =~ (403([^0-9]|$)|forbidden) ]]
-    }
+    classify_apt_update_output "$apt_update_output"
 
-    is_official_apt_host() {
-      case "$1" in
-        ubuntu.com|*.ubuntu.com|debian.org|*.debian.org|canonical.com|*.canonical.com)
-          return 0
-          ;;
-        *)
-          return 1
-          ;;
-      esac
-    }
-
-    apt_update_other_errors=()
-    third_party_403_hosts=()
-    pending_host=""
-    pending_status=""
-    record_pending_apt_error() {
-      [[ -z "$pending_host" ]] && return
-      if is_apt_403_text "$pending_status" && ! is_official_apt_host "$pending_host"; then
-        third_party_403_hosts+=("$pending_host")
+    if [[ "$apt_update_rc" -eq 100 ]] && is_chrome_hash_mismatch_source_only "$apt_update_output"; then
+      apt_update_recovery_attempts=$((apt_update_recovery_attempts + 1))
+      echo "ci_install_headless_packages warning=apt_update_chrome_hash_mismatch source=dl.google.com retry_count=${apt_update_recovery_attempts} action=official_mirror_isolation" >&2
+      run_official_mirror_update
+      if [[ "$fallback_rc" -eq 0 ]]; then
+        echo "ci_install_headless_packages warning=apt_update_chrome_hash_mismatch_recovered source=dl.google.com mirror=archive.ubuntu.com retry_count=${apt_update_recovery_attempts}"
+        apt_update_output="$fallback_output"
+        apt_update_rc=0
+        apt_source_options=(
+          -o "Dir::Etc::sourcelist=${official_fallback_sources}"
+          -o Dir::Etc::sourceparts=-
+        )
       else
-        apt_update_other_errors+=("$pending_host")
+        echo "ci_install_headless_packages warning=apt_update_chrome_hash_mismatch_recovery_failed source=dl.google.com rc=${fallback_rc} retry_count=${apt_update_recovery_attempts}" >&2
+        emit_apt_failure "update" "$fallback_rc" "$fallback_elapsed_seconds" "$fallback_output" "apt_update_chrome_hash_mismatch_recovery_failed" "$apt_update_recovery_attempts" "dl.google.com"
+        exit "$fallback_rc"
       fi
-      pending_host=""
-      pending_status=""
-    }
-
-    while IFS= read -r line || [[ -n "$line" ]]; do
-      if [[ "$line" == Err:* ]]; then
-        record_pending_apt_error
-        if [[ "$line" =~ https?://([^/[:space:]]+) ]]; then
-          pending_host="${BASH_REMATCH[1]%%:*}"
-          pending_status="$line"
-          if is_apt_403_text "$line"; then
-            record_pending_apt_error
-          fi
-        else
-          apt_update_other_errors+=("unknown")
-        fi
-        continue
-      fi
-
-      if [[ "$line" == "W: Failed to fetch"* ]]; then
-        record_pending_apt_error
-        if [[ "$line" =~ https?://([^/[:space:]]+) ]]; then
-          pending_host="${BASH_REMATCH[1]%%:*}"
-          pending_status="$line"
-          if is_apt_403_text "$line"; then
-            record_pending_apt_error
-          fi
-        else
-          apt_update_other_errors+=("unknown")
-        fi
-        continue
-      fi
-
-      if [[ "$line" == Get:* || "$line" == Hit:* || "$line" == Ign:* ]]; then
-        record_pending_apt_error
-        continue
-      fi
-
-      if [[ -n "$pending_host" ]]; then
-        pending_status+=" $line"
-        if is_apt_403_text "$line"; then
-          record_pending_apt_error
-        fi
-      fi
-    done <<< "$apt_update_output"
-    record_pending_apt_error
-
-    if [[ ${#apt_update_other_errors[@]} -gt 0 || ${#third_party_403_hosts[@]} -eq 0 ]]; then
-      IFS=,
-      echo "ci_install_headless_packages apt_update_classification=failed_sources sources=${apt_update_other_errors[*]:-unknown}" >&2
-      unset IFS
-      emit_apt_failure "update" "$apt_update_rc" "$apt_update_elapsed_seconds" "$apt_update_output" "apt_update_failed"
-      exit "$apt_update_rc"
     fi
 
-    IFS=,
-    echo "ci_install_headless_packages warning=ignored_third_party_apt_403 hosts=${third_party_403_hosts[*]}"
-    unset IFS
+    if [[ "$apt_update_rc" -ne 0 ]]; then
+      if [[ ${#apt_update_other_errors[@]} -gt 0 || ${#third_party_403_hosts[@]} -eq 0 ]]; then
+        IFS=,
+        echo "ci_install_headless_packages apt_update_classification=failed_sources sources=${apt_update_other_errors[*]:-unknown}" >&2
+        unset IFS
+        emit_apt_failure "update" "$apt_update_rc" "$apt_update_elapsed_seconds" "$apt_update_output" "apt_update_failed" "$apt_update_recovery_attempts"
+        exit "$apt_update_rc"
+      fi
+
+      IFS=,
+      echo "ci_install_headless_packages warning=ignored_third_party_apt_403 hosts=${third_party_403_hosts[*]}"
+      unset IFS
+    fi
   fi
 fi
 

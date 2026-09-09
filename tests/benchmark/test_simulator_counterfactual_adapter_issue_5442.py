@@ -171,6 +171,7 @@ def test_snapshot_restores_groups_behavior_rng_and_residual_state() -> None:
     )
     model = SimulatorCounterfactualModel(sim, capture_rng=False)
     snapshot = model.snapshot()
+    assert model.replay_state_complete == "false"
 
     expected_rng_draw = behavior_rng.random()
     groups.groups[0].clear()

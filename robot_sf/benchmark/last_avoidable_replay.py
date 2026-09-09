@@ -455,6 +455,24 @@ def _model_metadata(model: CounterfactualModel, field_name: str) -> str | None:
     return text or None
 
 
+def _snapshot_state_is_complete(model: CounterfactualModel) -> bool | None:
+    """Read an optional model declaration that its replay snapshot is complete.
+
+    Returns:
+        ``True`` or ``False`` when the model declares completeness; ``None`` when
+        the legacy protocol has no completeness declaration.
+    """
+    declared = _model_metadata(model, "replay_state_complete")
+    if declared is None:
+        return None
+    normalized = declared.strip().lower()
+    if normalized in {"true", "1", "yes", "complete"}:
+        return True
+    if normalized in {"false", "0", "no", "incomplete"}:
+        return False
+    return False
+
+
 def _bind_model_metadata(
     model: CounterfactualModel, config: ReplayConfig
 ) -> tuple[ReplayConfig, tuple[str, ...]]:
@@ -530,6 +548,30 @@ def locate_last_avoidable(  # noqa: C901 - explicit fail-closed verdict state ma
             notes=(
                 "declared replay provenance does not match the model contract: "
                 + "; ".join(metadata_mismatches),
+            ),
+        )
+    if _snapshot_state_is_complete(model) is False:
+        determinism = DeterminismCheck(
+            replays=config.determinism_replays,
+            collision_stable=False,
+            contact_step_stable=False,
+            observed_contact_steps=(None,) * config.determinism_replays,
+        )
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=bound_config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="incomplete_snapshot_state",
+            notes=(
+                "the model declared that its replay snapshot omits mutable state "
+                "required for deterministic continuation",
             ),
         )
     config = bound_config
@@ -672,40 +714,16 @@ def locate_last_avoidable(  # noqa: C901 - explicit fail-closed verdict state ma
     with_feasible = sum(1 for b in branches if b.has_feasible_actions)
     feasible_coverage = with_feasible / window_size if window_size else 0.0
 
-    preventable_steps = sorted(b.step for b in branches if b.any_prevented)
-
-    if preventable_steps:
-        t_uca = preventable_steps[0]
-        later_gaps = [
-            branch.step
-            for branch in branches
-            if branch.step > preventable_steps[-1] and not branch.has_feasible_actions
-        ]
-        # A finite witness establishes only that one intervention worked.  A
-        # later coverage gap prevents a certified point-of-no-return claim.
-        t_inevitable = None if later_gaps else min(preventable_steps[-1] + 1, config.t_contact)
-        notes = ()
-        if later_gaps:
-            notes = (
-                "a later decision point lacked feasible-action coverage; "
-                "the finite avoidance witness does not certify a point of no return",
-            )
-        return LastAvoidableReport(
-            verdict=VERDICT_AVOIDABLE,
-            config=config,
-            determinism=determinism,
-            branches=tuple(branches),
-            t_uca=t_uca,
-            t_inevitable=t_inevitable,
-            feasible_coverage=feasible_coverage,
-            minimal_sufficient_interventions=tuple(interventions),
-            runtime_s=runtime_s,
-            notes=notes,
+    # A preventing witness is not enough to certify avoidability when another
+    # decision point could not be evaluated.  Keep the entire branch table for
+    # diagnosis, but fail closed before emitting any non-unknown verdict.
+    if feasible_coverage < 1.0:
+        witness_note = (
+            "a finite avoidance witness was observed, but incomplete feasible-action "
+            "coverage prevents an avoidability determination"
+            if any(branch.any_prevented for branch in branches)
+            else "at least one decision point lacked a feasible action set; avoidability is untested"
         )
-
-    # No admissible action prevented contact at any decision point.
-    if with_feasible == 0 or feasible_coverage < 1.0:
-        # Coverage gap: we could not test avoidability everywhere -> abstain.
         return LastAvoidableReport(
             verdict=VERDICT_UNKNOWN,
             config=config,
@@ -718,10 +736,24 @@ def locate_last_avoidable(  # noqa: C901 - explicit fail-closed verdict state ma
             runtime_s=runtime_s,
             abstained=True,
             abstain_reason="incomplete_feasible_action_coverage",
-            notes=(
-                "no admissible action prevented contact, but at least one decision "
-                "point lacked a feasible action set; avoidability is untested",
-            ),
+            notes=(witness_note,),
+        )
+
+    preventable_steps = sorted(b.step for b in branches if b.any_prevented)
+
+    if preventable_steps:
+        t_uca = preventable_steps[0]
+        return LastAvoidableReport(
+            verdict=VERDICT_AVOIDABLE,
+            config=config,
+            determinism=determinism,
+            branches=tuple(branches),
+            t_uca=t_uca,
+            t_inevitable=min(preventable_steps[-1] + 1, config.t_contact),
+            feasible_coverage=feasible_coverage,
+            minimal_sufficient_interventions=tuple(interventions),
+            runtime_s=runtime_s,
+            notes=(),
         )
 
     # Full coverage, deterministic baseline, nothing prevents -> already unavoidable.

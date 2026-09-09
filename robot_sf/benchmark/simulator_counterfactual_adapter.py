@@ -407,6 +407,11 @@ class SimulatorCounterfactualModel:
                     return PED_RESPONSE_CLOSED_LOOP
         return PED_RESPONSE_REPLAYED
 
+    @property
+    def replay_state_complete(self) -> str:
+        """Report whether the adapter captured every declared RNG stream."""
+        return "true" if self.capture_rng else "false"
+
     def snapshot(self) -> _SimulatorSnapshot:
         """Capture the full live simulator state including the global RNG.
 

@@ -244,6 +244,26 @@ def test_nondeterministic_baseline_returns_unknown() -> None:
     assert report.verdict != "unavoidable"
 
 
+def test_incomplete_snapshot_state_returns_unknown_before_replay() -> None:
+    """A model that omits mutable state cannot pass on an accidentally stable horizon."""
+    model = fx.KinematicCollisionModel(fx.preventable_late_braking_scenario())
+    model.replay_state_complete = False
+    config = ReplayConfig(
+        t_danger=0,
+        t_contact=fx.find_contact_step(model.scenario) or 1,
+        horizon=5,
+        substitution_mode=SUBSTITUTION_HOLD,
+    )
+    report = locate_last_avoidable(
+        model,
+        fx.maintain_baseline_actions(config.t_contact + config.horizon + 2),
+        config,
+    )
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstained is True
+    assert report.abstain_reason == "incomplete_snapshot_state"
+
+
 def test_missing_feasible_action_returns_unknown() -> None:
     """A missing feasible action set abstains to unknown (coverage gap)."""
     report = _run(fx.missing_feasible_action_scenario())
@@ -274,7 +294,7 @@ def test_truncated_single_step_horizon_is_not_a_prevention() -> None:
 
 
 def test_late_coverage_gap_with_witness_does_not_certify_no_return() -> None:
-    """A finite early witness survives, but a later coverage gap clears t_inevitable."""
+    """A finite witness cannot certify avoidability when coverage is incomplete."""
     scenario = fx.preventable_late_braking_scenario()
     contact_step = fx.find_contact_step(scenario)
     assert contact_step is not None
@@ -292,10 +312,12 @@ def test_late_coverage_gap_with_witness_does_not_certify_no_return() -> None:
         fx.maintain_baseline_actions(config.t_contact + config.horizon + 2),
         config,
     )
-    assert report.verdict == VERDICT_AVOIDABLE
-    assert report.t_uca is not None
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstained is True
+    assert report.abstain_reason == "incomplete_feasible_action_coverage"
+    assert report.t_uca is None
     assert report.t_inevitable is None
-    assert any("later decision point" in note for note in report.notes)
+    assert any("finite avoidance witness" in note for note in report.notes)
 
 
 # -- acceptance criterion: output contract ----------------------------------

@@ -127,6 +127,30 @@ def _exact_changed_coverage_response(
     )
 
 
+def _exact_evidence_registry_response(
+    *, head_sha: str = FULL_SHA, status: str = "completed", conclusion: str | None = "success"
+) -> MagicMock:
+    """Build the exact-head REST evidence proof used by live gate fixtures."""
+    return _gh_response(
+        stdout=json.dumps(
+            {
+                "total_count": 1,
+                "check_runs": [
+                    {
+                        "id": 7002,
+                        "name": "evidence-registry-ratchet",
+                        "head_sha": head_sha,
+                        "status": status,
+                        "conclusion": conclusion,
+                        "started_at": "2026-08-18T01:00:00Z",
+                        "completed_at": "2026-08-18T01:01:00Z" if status == "completed" else None,
+                    }
+                ],
+            }
+        )
+    )
+
+
 def _changed_files_response(*filenames: str) -> MagicMock:
     """Build a REST pull-files response for missing-proof scope tests."""
     return _gh_response(stdout=json.dumps([{"filename": filename} for filename in filenames]))
@@ -230,6 +254,36 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert "baseRefOid" not in fields
     assert "reviewRequests" in fields
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
+
+
+def test_fetch_pr_snapshot_refreshes_graphql_evidence_status_by_exact_head() -> None:
+    """GraphQL rollup evidence is rebound through REST before gate consumption."""
+    raw_pr = _raw_pr()
+    raw_pr["statusCheckRollup"] = [
+        *raw_pr["statusCheckRollup"],
+        {
+            "name": "evidence-registry-ratchet",
+            "workflowName": "Evidence-registry ratchet",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+    ]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["evidence_registry"]["status"] == "success"
+    assert snapshot["evidence_registry"]["head_sha"] == FULL_SHA
+    assert mock_gh.call_args_list[3].args[0] == [
+        "api",
+        f"repos/owner/repo/commits/{FULL_SHA}/check-runs?per_page=100",
+    ]
 
 
 def test_fetch_pr_snapshot_records_active_exact_head_review_claim() -> None:

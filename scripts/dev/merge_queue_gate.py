@@ -2087,6 +2087,16 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
     evidence_registry = _classify_evidence_registry_checks(
         payload.get("statusCheckRollup"), head_sha=head_sha
     )
+    if evidence_registry["status"] != "missing" and snapshot_data_source == "graphql":
+        # GraphQL's StatusCheckRollup does not expose the check-run head SHA.
+        # Refresh the named proof through the exact-head REST endpoint before
+        # exposing it to admission; otherwise a green evidence check is
+        # incorrectly classified as malformed by the fail-closed consumer.
+        evidence_registry, evidence_registry_err = _fetch_exact_head_evidence_registry(
+            head_sha, repo=repo
+        )
+        if evidence_registry_err:
+            return {}, f"failed to fetch exact-head evidence registry: {evidence_registry_err}"
     review_evidence = {
         "check_runs": required_checks,
         "reviews": _to_receipt_review_evidence(

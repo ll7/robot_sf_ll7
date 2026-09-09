@@ -35,11 +35,12 @@ import argparse
 import json
 import math
 import subprocess
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "gate_worktree_guard.v1"
+MISSING_STATE_LOSS_BOUNDARY = "dirty_untracked_ignored_state_not_recoverable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,12 +51,15 @@ class GateWorktreeHealth:
     path: str
     exists: bool
     classification: str  # "healthy", "missing", "errored"
+    branch: str | None = None
+    head_sha: str | None = None
     lease_owner: str | None = None
     lease_pr_number: int | None = None
     lease_gate_id: str | None = None
     lease_expires_at: str | None = None
     cleanup_owner: str | None = None
     error: str | None = None
+    recovery: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,10 +70,12 @@ class GateWorktreeRecreate:
     path: str
     recreated: bool
     branch: str | None = None
+    head_sha: str | None = None
     lease_owner: str | None = None
     lease_pr_number: int | None = None
     lease_gate_id: str | None = None
     error: str | None = None
+    recovery: dict[str, Any] = field(default_factory=dict)
 
 
 def _run_command(
@@ -114,6 +120,17 @@ def _owner_label(owner: str | None, pr_number: int | None, gate_id: str | None) 
     if gate_id:
         parts.append(f"gate={gate_id}")
     return "; ".join(parts) if parts else None
+
+
+def _missing_state_recovery(*, branch: str | None, head_sha: str | None) -> dict[str, Any]:
+    """Describe the partial recovery boundary for a missing worktree."""
+    return {
+        "status": "partial",
+        "branch_checkout": "available_from_lease" if branch or head_sha else "unknown",
+        "local_state_restored": False,
+        "loss_boundary": MISSING_STATE_LOSS_BOUNDARY,
+        "next_action": "recover_dirty_state_from_backup_or_handoff",
+    }
 
 
 def _load_active_lease_for_path(path: Path) -> Any | None:
@@ -168,12 +185,15 @@ def verify_gate_worktree(path: str | Path) -> GateWorktreeHealth:
         "schema": SCHEMA_VERSION,
         "path": str(resolved),
         "exists": exists,
+        "branch": None,
+        "head_sha": None,
         "lease_owner": None,
         "lease_pr_number": None,
         "lease_gate_id": None,
         "lease_expires_at": None,
         "cleanup_owner": None,
         "error": None,
+        "recovery": {},
     }
 
     if exists:
@@ -184,16 +204,22 @@ def verify_gate_worktree(path: str | Path) -> GateWorktreeHealth:
 
     lease = _load_active_lease_for_path(resolved)
     if lease is not None:
+        branch = _normalise_branch(getattr(lease, "head_ref", None))
+        head_sha = getattr(lease, "head_sha", None)
         base["classification"] = "missing"
+        base["branch"] = branch
+        base["head_sha"] = head_sha
         base["lease_owner"] = lease.owner
         base["lease_pr_number"] = lease.pr_number
         base["lease_gate_id"] = lease.gate_id
         base["lease_expires_at"] = lease.expires_at
         base["cleanup_owner"] = _owner_label(lease.owner, lease.pr_number, lease.gate_id)
+        base["recovery"] = _missing_state_recovery(branch=branch, head_sha=head_sha)
         return GateWorktreeHealth(**base)
 
     # Missing and no live lease - cannot attribute ownership.
     base["classification"] = "missing"
+    base["recovery"] = _missing_state_recovery(branch=None, head_sha=None)
     return GateWorktreeHealth(**base)
 
 
@@ -215,7 +241,7 @@ def _add_worktree_under_lifecycle_lock(
         return None, f"worktree lifecycle lock failed: {exc}"
 
 
-def recreate_gate_worktree(
+def recreate_gate_worktree(  # noqa: PLR0915 - ordered recovery gates stay explicit
     path: str | Path,
     *,
     ttl_hours: float | None = None,
@@ -237,10 +263,12 @@ def recreate_gate_worktree(
         "schema": SCHEMA_VERSION,
         "path": str(resolved),
         "branch": None,
+        "head_sha": None,
         "lease_owner": None,
         "lease_pr_number": None,
         "lease_gate_id": None,
         "error": None,
+        "recovery": {},
     }
 
     if resolved.exists():
@@ -250,6 +278,7 @@ def recreate_gate_worktree(
     if lease is None:
         base["recreated"] = False
         base["error"] = "worktree missing and no live lease on record; cannot recreate safely"
+        base["recovery"] = _missing_state_recovery(branch=None, head_sha=None)
         return GateWorktreeRecreate(**base)
 
     if ttl_hours is not None and (
@@ -262,6 +291,10 @@ def recreate_gate_worktree(
         base["lease_owner"] = lease.owner
         base["lease_pr_number"] = lease.pr_number
         base["lease_gate_id"] = lease.gate_id
+        base["recovery"] = _missing_state_recovery(
+            branch=_normalise_branch(getattr(lease, "head_ref", None)),
+            head_sha=getattr(lease, "head_sha", None),
+        )
         base["error"] = "ttl_hours must be a positive finite number"
         return GateWorktreeRecreate(**base)
 
@@ -271,6 +304,7 @@ def recreate_gate_worktree(
         base["lease_owner"] = lease.owner
         base["lease_pr_number"] = lease.pr_number
         base["lease_gate_id"] = lease.gate_id
+        base["recovery"] = _missing_state_recovery(branch=branch, head_sha=head_sha)
         base["error"] = (
             "live lease found but no branch or commit on record; cannot recreate deterministically"
         )
@@ -280,9 +314,11 @@ def recreate_gate_worktree(
     if add_error is not None:
         base["recreated"] = False
         base["branch"] = branch
+        base["head_sha"] = head_sha
         base["lease_owner"] = lease.owner
         base["lease_pr_number"] = lease.pr_number
         base["lease_gate_id"] = lease.gate_id
+        base["recovery"] = _missing_state_recovery(branch=branch, head_sha=head_sha)
         base["error"] = add_error
         return GateWorktreeRecreate(**base)
 
@@ -290,9 +326,11 @@ def recreate_gate_worktree(
     if recovery_error is not None:
         base["recreated"] = False
         base["branch"] = branch
+        base["head_sha"] = head_sha
         base["lease_owner"] = lease.owner
         base["lease_pr_number"] = lease.pr_number
         base["lease_gate_id"] = lease.gate_id
+        base["recovery"] = _missing_state_recovery(branch=branch, head_sha=head_sha)
         base["error"] = recovery_error
         return GateWorktreeRecreate(**base)
 
@@ -300,9 +338,11 @@ def recreate_gate_worktree(
     if result.returncode != 0:
         base["recreated"] = False
         base["branch"] = branch
+        base["head_sha"] = head_sha
         base["lease_owner"] = lease.owner
         base["lease_pr_number"] = lease.pr_number
         base["lease_gate_id"] = lease.gate_id
+        base["recovery"] = _missing_state_recovery(branch=branch, head_sha=head_sha)
         base["error"] = f"git worktree add failed: {result.stderr.strip() or result.stdout.strip()}"
         return GateWorktreeRecreate(**base)
 
@@ -313,17 +353,21 @@ def recreate_gate_worktree(
     except (ImportError, RuntimeError, OSError, TypeError, ValueError) as exc:
         base["recreated"] = False
         base["branch"] = branch
+        base["head_sha"] = head_sha
         base["lease_owner"] = lease.owner
         base["lease_pr_number"] = lease.pr_number
         base["lease_gate_id"] = lease.gate_id
+        base["recovery"] = _missing_state_recovery(branch=branch, head_sha=head_sha)
         base["error"] = f"worktree recreated but lease refresh failed: {exc}"
         return GateWorktreeRecreate(**base)
 
     base["recreated"] = True
     base["branch"] = branch
+    base["head_sha"] = head_sha
     base["lease_owner"] = lease.owner
     base["lease_pr_number"] = lease.pr_number
     base["lease_gate_id"] = lease.gate_id
+    base["recovery"] = _missing_state_recovery(branch=branch, head_sha=head_sha)
     return GateWorktreeRecreate(**base)
 
 
@@ -462,6 +506,10 @@ def _format_health(health: GateWorktreeHealth) -> str:
         f"  Exists: {health.exists}",
         f"  Classification: {health.classification}",
     ]
+    if health.branch:
+        lines.append(f"  Branch: {health.branch}")
+    if health.head_sha:
+        lines.append(f"  HEAD: {health.head_sha}")
     if health.cleanup_owner:
         lines.append(f"  Cleanup owner: {health.cleanup_owner}")
     if health.lease_pr_number is not None:
@@ -472,6 +520,8 @@ def _format_health(health: GateWorktreeHealth) -> str:
         lines.append(f"  Lease expires: {health.lease_expires_at}")
     if health.error:
         lines.append(f"  Error: {health.error}")
+    if health.recovery.get("loss_boundary"):
+        lines.append(f"  Recovery loss boundary: {health.recovery['loss_boundary']}")
     return "\n".join(lines)
 
 
@@ -484,10 +534,14 @@ def _format_recreate(recreate: GateWorktreeRecreate) -> str:
     ]
     if recreate.branch:
         lines.append(f"  Branch: {recreate.branch}")
+    if recreate.head_sha:
+        lines.append(f"  HEAD: {recreate.head_sha}")
     if recreate.lease_pr_number is not None:
         lines.append(f"  Lease PR: #{recreate.lease_pr_number}")
     if recreate.error:
         lines.append(f"  Error: {recreate.error}")
+    if recreate.recovery.get("loss_boundary"):
+        lines.append(f"  Recovery loss boundary: {recreate.recovery['loss_boundary']}")
     return "\n".join(lines)
 
 

@@ -80,10 +80,13 @@ def _verify_gate_worktree(gate_worktree_path: str) -> dict[str, Any] | None:
         return {
             "exists": health.exists,
             "classification": health.classification,
+            "branch": health.branch,
+            "head_sha": health.head_sha,
             "cleanup_owner": health.cleanup_owner,
             "lease_owner": health.lease_owner,
             "lease_pr_number": health.lease_pr_number,
             "lease_gate_id": health.lease_gate_id,
+            "recovery": dict(health.recovery),
         }
     except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
         return {

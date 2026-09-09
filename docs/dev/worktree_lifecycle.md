@@ -35,6 +35,33 @@ scripts/dev/create_worktree.sh \
   --exec git rev-parse --show-toplevel
 ```
 
+## Cleanup safety invariant
+
+Repository-owned automatic cleanup is fail-closed: a linked worktree is not removable when its
+tracked or untracked state is dirty, ignored content is present, an open pull request (PR) covers
+its branch, push state cannot be proven safe, or an active task/gate lease exists. Use the reaper's
+JSON output as the decision record; refused candidates include `reason_codes`, the path/branch/HEAD
+identity, lease owner fields when available, and a `recovery` object that requires preservation and
+review before reclaim.
+
+```bash
+uv run python scripts/dev/stale_worktree_reaper.py \
+  --path "$WORKTREE_PATH" \
+  --apply \
+  --json
+```
+
+The apply path repeats every preservation read while holding the shared worktree lifecycle lock.
+This closes the gap between a dry-run plan and removal: a new dirty file, ignored output, open PR,
+unpushed state, unreadable check, or lease acquired after planning becomes a structured refusal and
+the worktree remains present. `--skip-pr-check` is therefore also a refusal signal, not permission
+to delete offline.
+
+The incident's separate external/app cleanup caller has not been located in this repository. This
+change does not claim to repair or intercept that caller. Until it is identified and routed through
+this contract, direct cleanup outside the reaper is unsupported and must be treated as unsafe; the
+repository can only guarantee the behavior of its supported reaper and lifecycle helpers.
+
 For `--mode review`, the creator launches that optional first command through the Linux Landlock
 process boundary. Keep later review commands as descendants of it, or invoke the guard's `run -- ...`
 form explicitly; the mode marker and Git hook do not attach an OS policy to future raw processes.
@@ -191,7 +218,9 @@ uv run python scripts/dev/gate_worktree_guard.py verify \
 ```
 
 The JSON health result is the compact recovery handoff: for a live lease it names the owner/task,
-PR/gate identifiers when present, expiry, and missing path. To recreate the checkout from the
+PR/gate identifiers when present, expiry, path, branch, and HEAD. A missing result always includes
+a recovery loss boundary: branch recreation can restore the checkout only, while dirty, untracked,
+and ignored local state cannot be recovered by this guard. To recreate the checkout from the
 persisted branch/commit metadata, use:
 
 ```bash
@@ -200,9 +229,10 @@ uv run python scripts/dev/gate_worktree_guard.py ensure \
   --json
 ```
 
-Recreation restores the branch checkout only. It cannot restore dirty, untracked, or ignored state
-that vanished with the directory; treat such state as lost and report that boundary explicitly.
-The guard never chooses a replacement branch or transport policy.
+The `recovery.loss_boundary` value is `dirty_untracked_ignored_state_not_recoverable`, and
+`local_state_restored` remains false even when recreation succeeds. Recover that state from a
+durable handoff or backup before continuing. The guard never chooses a replacement branch or
+transport policy.
 
 ## Delegated-worker isolation receipt
 

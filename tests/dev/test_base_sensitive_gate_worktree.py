@@ -50,6 +50,13 @@ class TestVerifyGateWorktree:
                     path=str(wt),
                     exists=False,
                     classification="missing",
+                    branch="feature",
+                    head_sha="c" * 40,
+                    recovery={
+                        "status": "partial",
+                        "local_state_restored": False,
+                        "loss_boundary": "dirty_untracked_ignored_state_not_recoverable",
+                    },
                     cleanup_owner="owner=auto-smart-routing; pr=#5819; gate=gate-5819",
                 )
                 health = gate._verify_gate_worktree(str(wt))
@@ -57,6 +64,12 @@ class TestVerifyGateWorktree:
         assert health is not None
         assert health["exists"] is False
         assert "owner=auto-smart-routing" in health["cleanup_owner"]
+        assert health["branch"] == "feature"
+        assert health["head_sha"] == "c" * 40
+        assert health["recovery"]["local_state_restored"] is False
+        assert health["recovery"]["loss_boundary"] == (
+            "dirty_untracked_ignored_state_not_recoverable"
+        )
 
     def test_missing_guard_helper_degrades_to_none(self, tmp_path) -> None:
         """When the guard helper is missing, the check degrades to None safely."""

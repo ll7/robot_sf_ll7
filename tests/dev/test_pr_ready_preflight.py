@@ -250,7 +250,9 @@ def _write_evidence_preflight_transport(repo: Path, *, ratchet_exit: int = 0) ->
     _make_fake_bin(repo, fail=False)
     trace = _write_lane_logging_stub(repo)
     checker = repo / "scripts" / "dev" / "evidence_registry_ratchet.py"
-    checker.write_text("# Fake transport target; never run a real evidence scan.\n", encoding="utf-8")
+    checker.write_text(
+        "# Fake transport target; never run a real evidence scan.\n", encoding="utf-8"
+    )
     python = repo / "bin" / "python"
     fallback = python.read_text(encoding="utf-8").split("\n", 1)[1]
     python.write_text(
@@ -308,6 +310,84 @@ def test_final_evidence_ratchet_failure_stops_before_test_lane(
     assert not list(scratch.glob("pr-ready-evidence-scope.*"))
 
 
+def test_final_evidence_missing_prerequisite_fails_before_test_lane(preflight_repo: Path) -> None:
+    """A missing checker dependency retains its diagnostic and nonzero status."""
+    trace = _write_evidence_preflight_transport(preflight_repo)
+    (preflight_repo / "CITATION.cff").write_text("changed\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change citation")
+    transport = preflight_repo / "bin/python"
+    transport.write_text(
+        transport.read_text(encoding="utf-8")
+        .replace("fixture ratchet diagnostic", "ModuleNotFoundError: fixture_checker_dependency")
+        .replace("exit 0 ;;", "exit 127 ;;"),
+        encoding="utf-8",
+    )
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 127, result.stdout + result.stderr
+    assert "ModuleNotFoundError: fixture_checker_dependency" in result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == ["ratchet --check"]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX signal and process-group cleanup")
+def test_final_evidence_sigterm_cleans_checker_and_releases_lock(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """The early checker uses the existing child cleanup and worktree-lock protocol."""
+    trace = _write_evidence_preflight_transport(preflight_repo)
+    (preflight_repo / "CITATION.cff").write_text("changed\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change citation")
+    transport = preflight_repo / "bin/python"
+    original = transport.read_text(encoding="utf-8")
+    transport.write_text(
+        original.replace(
+            "    exit 0 ;;",
+            '    : > "$PR_READY_EVIDENCE_READY"\n    while true; do sleep 0.05; done ;;',
+        ),
+        encoding="utf-8",
+    )
+    ready = tmp_path / "evidence-ready"
+    receipt = tmp_path / "evidence-termination.json"
+    env = {
+        "BASE_REF": "preflight-base",
+        "PR_READY_MODE": "final",
+        "PR_READY_EVIDENCE_READY": str(ready),
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_LOCK_DIR": str(tmp_path / "evidence-locks"),
+    }
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        _wait_for_marker(ready, process)
+        os.kill(process.pid, signal.SIGTERM)
+        stdout, stderr = _collect_process(process)
+        assert process.returncode == 143, stdout + stderr
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["phase"] == "evidence_registry_lane"
+        assert payload["lane"] == "evidence_registry"
+        assert payload["cleanup"]["verified"] is True
+        assert payload["process"]["child_process_group_exists"] is False
+        assert trace.read_text(encoding="utf-8").splitlines() == ["ratchet --check"]
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process)
+        transport.write_text(original, encoding="utf-8")
+
+    retry = _run_pr_ready(preflight_repo, env_overrides=env)
+    assert retry.returncode == 0, retry.stdout + retry.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == [
+        "ratchet --check",
+        "ratchet --check",
+        "core --lane core",
+        "stamp",
+    ]
+
+
 def _hosted_ratchet_input_examples() -> list[str]:
     """Exercise every current hosted filter through the actual final-readiness CLI."""
     workflow = REPO_ROOT / ".github/workflows/evidence-registry-ratchet.yml"
@@ -360,7 +440,9 @@ def test_final_evidence_preflight_handles_deletions_and_both_rename_sides(
         source.unlink()
     else:
         target = preflight_repo / (
-            "other/retained row.json" if change == "rename_out" else "docs/context/evidence/row.json"
+            "other/retained row.json"
+            if change == "rename_out"
+            else "docs/context/evidence/row.json"
         )
         target.parent.mkdir(parents=True, exist_ok=True)
         source.rename(target)
@@ -1858,7 +1940,9 @@ def test_missing_base_ref_falls_back_to_head_without_crashing(preflight_repo: Pa
     assert "unknown revision" not in result.stderr.lower()
 
 
-def test_final_unresolved_explicit_base_stops_before_scope_or_test_lane(preflight_repo: Path) -> None:
+def test_final_unresolved_explicit_base_stops_before_scope_or_test_lane(
+    preflight_repo: Path,
+) -> None:
     """Final proof cannot silently compare HEAD to itself after losing the requested base."""
     trace = _write_evidence_preflight_transport(preflight_repo)
     result = _run_pr_ready(

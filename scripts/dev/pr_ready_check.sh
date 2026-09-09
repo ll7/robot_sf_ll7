@@ -20,7 +20,7 @@ Environment variables:
                       Ignored when PR_READY_MODE is set.
   PR_READY_SKIP_PREFLIGHT  Set to "1" to skip cheap preflight checks for
                       core/optional test-collection dependencies and the bundled
-                      fast-pysf API.
+                      fast-pysf API. Does not bypass the final evidence-registry check.
   PR_READY_PR_BODY_FILE  Optional markdown PR body from an existing readable
                       regular file.
                       Process-substitution paths such as /dev/fd/63 are rejected

@@ -221,6 +221,57 @@ fi
     assert "install -y --no-install-recommends poppler-utils" in log_text
 
 
+def test_ci_install_headless_packages_reports_fallback_timeout_after_update_timeout(
+    tmp_path: Path,
+) -> None:
+    """A failed timeout fallback reports its own budget and output context."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    install_marker = tmp_path / "install-called"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    echo 'Err:1 https://archive.ubuntu.com/ubuntu noble InRelease'
+    echo '  500 Internal Server Error'
+  fi
+  exit 124
+fi
+touch {_shell_quote(install_marker)}
+exit 0
+""",
+    )
+
+    env = _timer_test_environment(fake_bin)
+    env["CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS"] = "2"
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        timeout=10,
+    )
+
+    assert result.returncode == 124
+    assert "warning=apt_update_official_mirror_fallback_failed" in result.stderr
+    diagnostic = next(
+        line
+        for line in result.stderr.splitlines()
+        if "error=apt_update_official_mirror_fallback_failed" in line
+    )
+    assert "rc=124" in diagnostic
+    assert "timeout_seconds=1" in diagnostic
+    assert "elapsed_seconds=" in diagnostic
+    assert "sources=archive.ubuntu.com" in diagnostic
+    assert not install_marker.exists()
+
+
 def test_ci_install_headless_packages_isolates_chrome_hash_mismatch(
     tmp_path: Path,
 ) -> None:
@@ -409,8 +460,10 @@ exit 0
     assert not install_marker.exists()
 
 
-def test_ci_install_headless_packages_reports_update_timeout_with_context(tmp_path: Path) -> None:
-    """A slow apt update fails before the outer CI step timeout with actionable context."""
+def test_ci_install_headless_packages_reports_fallback_failure_after_update_timeout(
+    tmp_path: Path,
+) -> None:
+    """A failed official fallback reports its own status and actionable context."""
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
 
@@ -427,6 +480,8 @@ def test_ci_install_headless_packages_reports_update_timeout_with_context(tmp_pa
         "#!/usr/bin/env bash\n"
         "if [[ \"$*\" == *' update' ]]; then\n"
         "  if [[ \"$*\" == *'Dir::Etc::sourcelist='* ]]; then\n"
+        "    echo 'Err:1 https://archive.ubuntu.com/ubuntu noble InRelease'\n"
+        "    echo '  500 Internal Server Error'\n"
         "    exit 100\n"
         "  fi\n"
         "  echo 'Get:1 https://archive.ubuntu.com/ubuntu noble InRelease'\n"
@@ -445,9 +500,9 @@ def test_ci_install_headless_packages_reports_update_timeout_with_context(tmp_pa
         timeout=10,
     )
 
-    assert result.returncode == 124
+    assert result.returncode == 100
     diagnostic = result.stderr
-    assert "error=apt_update_timeout" in diagnostic
+    assert "error=apt_update_official_mirror_fallback_failed" in diagnostic
     assert "phase=update" in diagnostic
     assert "packages=poppler-utils" in diagnostic
     assert "sources=archive.ubuntu.com" in diagnostic

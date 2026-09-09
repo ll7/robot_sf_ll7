@@ -66,8 +66,12 @@ The `robot-sf` command line interface provides contributor and user tooling:
   - `datasets`: `list`, `verify`, `prepare` benchmark datasets.
   - `demo`: Interactive demonstration launcher.
   - `examples`: `list`, `run` bundled examples.
+  - `recipe`: `list`, `explain`, `run` curated workflows defined by the repository recipe catalog.
 - **Beta CLI commands**:
   - `envs`: `list`, `describe <env-id>` for declarative environment inspection.
+- **Experimental CLI commands**:
+  - `gallery`: `build` discoverability-only scenario/planner galleries; gallery output is not
+    benchmark evidence.
 
 ## Supported Python Modules Catalog
 

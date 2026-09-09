@@ -30,6 +30,14 @@ STALE_PROPOSAL_PHRASES = (
     "maintainer-review proposal",
 )
 
+CANONICAL_POLICY_HEADINGS = (
+    "## Stability Levels",
+    "## Top-Level Entry Points",
+    "## Supported Python Modules Catalog",
+    "## Internal Architecture Boundaries",
+    "## Lifecycle and Deprecation Policy",
+)
+
 
 def test_canonical_public_api_page_exists_and_documents_all_exports() -> None:
     """docs/public_api.md is canonical and documents all top-level public facade exports."""
@@ -62,6 +70,12 @@ def test_no_duplicate_canonical_stability_policy_page() -> None:
 
     assert "[Robot SF Public API](../public_api.md)" in redirect_text
     assert "consolidated into the canonical" in redirect_text.lower()
+    # The former page is a forwarding pointer, not a second policy owner. Keep
+    # this contract heading-based so equivalent prose cannot silently duplicate
+    # the canonical policy.
+    assert "## " not in redirect_text
+    for heading in CANONICAL_POLICY_HEADINGS:
+        assert heading.lower() not in redirect_text.lower()
 
 
 def test_no_stale_proposal_language() -> None:

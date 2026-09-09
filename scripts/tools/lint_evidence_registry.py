@@ -11,10 +11,12 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import json
 import re
 import subprocess
 import sys
+import tarfile
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -31,6 +33,8 @@ COMMIT_RE = re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{40}(?![0-9a-fA-F])")
 FULL_SHA1_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 SYNTHETIC_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{40,}[^0-9a-fA-F]")
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+PROJECTION_SCHEMA = "evidence_registry_projection.v1"
+PROJECTION_MODE = "frozen_squash_base"
 MARKDOWN_CAMPAIGN_RE = re.compile(r"\bcampaign_id\s*[:=]\s*`?([A-Za-z0-9_.-]+)`?")
 COMMIT_KEYS = {"commit", "producing_commit", "source_commit", "git_commit"}
 CONFIG_PATH_KEYS = {
@@ -116,6 +120,10 @@ class CompanionBindingError(RuntimeError):
     """Raised when a companion binding cannot be trusted to resolve linter findings."""
 
 
+class ProjectionValidationError(RuntimeError):
+    """Raised when an explicit frozen-base projection cannot be evaluated safely."""
+
+
 def _require_full_history(repo_root: Path) -> None:
     """Fail before classifying commits when Git history is shallow."""
     result = subprocess.run(
@@ -136,18 +144,38 @@ def _require_full_history(repo_root: Path) -> None:
         )
 
 
-def _commit_is_head_reachable(repo_root: Path, commit: str) -> bool:
+def _commit_is_reachable(
+    repo_root: Path,
+    commit: str,
+    authority_ref: str = "HEAD",
+    cache: dict[tuple[str, str], bool] | None = None,
+    authority_commits: set[str] | None = None,
+) -> bool:
     """Return whether ``commit`` exists and belongs to the checked-out history.
 
     Git object stores may also contain commits fetched through unrelated branches
     or tags. Treating raw object presence as provenance resolution makes the
     evidence baseline depend on which refs happened to be fetched. Reachability
-    from ``HEAD`` gives full-history checkouts one stable authority while still
-    rejecting missing commit objects.
+    from the explicit authority ref gives full-history checkouts one stable
+    authority while still rejecting missing commit objects.
     """
-    return _git_succeeds(repo_root, "cat-file", "-e", f"{commit}^{{commit}}") and _git_succeeds(
-        repo_root, "merge-base", "--is-ancestor", commit, "HEAD"
-    )
+    key = (commit, authority_ref)
+    if cache is not None and key in cache:
+        return cache[key]
+    if authority_commits is not None:
+        reachable = commit.lower() in authority_commits
+    else:
+        reachable = _git_succeeds(
+            repo_root, "cat-file", "-e", f"{commit}^{{commit}}"
+        ) and _git_succeeds(repo_root, "merge-base", "--is-ancestor", commit, authority_ref)
+    if cache is not None:
+        cache[key] = reachable
+    return reachable
+
+
+def _commit_is_head_reachable(repo_root: Path, commit: str) -> bool:
+    """Return whether ``commit`` is reachable from the ordinary checked-out HEAD."""
+    return _commit_is_reachable(repo_root, commit)
 
 
 def _git_bytes(repo_root: Path, *args: str) -> bytes | None:
@@ -164,17 +192,55 @@ def _git_bytes(repo_root: Path, *args: str) -> bytes | None:
 
 
 def _config_hash_matches(
-    repo_root: Path, commit: str, path: str, declared_hashes: set[str]
+    repo_root: Path,
+    commit: str,
+    path: str,
+    declared_hashes: set[str],
+    cache: dict[tuple[str, str, tuple[str, ...]], bool] | None = None,
 ) -> bool:
     """Return whether one committed config blob matches a declared SHA-256 value."""
-
+    key = (commit, path, tuple(sorted(declared_hashes)))
+    if cache is not None and key in cache:
+        return cache[key]
     blob = _git_bytes(repo_root, "show", f"{commit}:{path}")
-    return blob is not None and hashlib.sha256(blob).hexdigest() in declared_hashes
+    matches = blob is not None and hashlib.sha256(blob).hexdigest() in declared_hashes
+    if cache is not None:
+        cache[key] = matches
+    return matches
 
 
-def _is_tracked(repo_root: Path, repo_path: str) -> bool:
-    """Return whether a normalized repository path is tracked in the current index."""
+def _is_tracked(
+    repo_root: Path,
+    repo_path: str,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
+) -> bool:
+    """Return whether a normalized path exists in the current index or an immutable tree."""
+    if content_ref is not None:
+        if tracked_paths is not None:
+            return repo_path in tracked_paths
+        if content_cache is not None and repo_path in content_cache:
+            return True
+        return _git_succeeds(repo_root, "cat-file", "-e", f"{content_ref}:{repo_path}")
     return _git_succeeds(repo_root, "ls-files", "--error-unmatch", "--", repo_path)
+
+
+def _repository_file_bytes(
+    repo_root: Path,
+    repo_path: str,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+) -> bytes | None:
+    """Read repository bytes from the working tree or an immutable commit tree."""
+    if content_ref is not None:
+        if content_cache is not None and repo_path in content_cache:
+            return content_cache[repo_path]
+        return _git_bytes(repo_root, "show", f"{content_ref}:{repo_path}")
+    try:
+        return (repo_root / repo_path).read_bytes()
+    except OSError:
+        return None
 
 
 def _resolve_repo_path(repo_root: Path, value: str) -> tuple[str, Path] | None:
@@ -194,17 +260,19 @@ def _resolve_repo_path(repo_root: Path, value: str) -> tuple[str, Path] | None:
     return normalized.as_posix(), candidate
 
 
-def _load_document(path: Path) -> Any:
+def _load_document(path: Path, raw: bytes | None = None) -> Any:
     """Load supported structured registry files, returning text for Markdown/CSV."""
-    raw = path.read_text(encoding="utf-8")
+    if raw is None:
+        raw = path.read_bytes()
+    decoded = raw.decode("utf-8")
     suffix = path.suffix.lower()
     if suffix == ".json":
-        return json.loads(raw)
+        return json.loads(decoded)
     if suffix in {".yaml", ".yml"}:
-        return yaml.safe_load(raw)
+        return yaml.safe_load(decoded)
     if suffix == ".csv":
-        return list(csv.DictReader(raw.splitlines()))
-    return raw
+        return list(csv.DictReader(decoded.splitlines()))
+    return decoded
 
 
 def _json_pointer_get(value: Any, pointer: str) -> Any:
@@ -239,10 +307,12 @@ def _ch7_binding_error(message: str) -> CompanionBindingError:
     return CompanionBindingError(f"{CH7_PORTFOLIO_COMPANION_BINDING}: {message}")
 
 
-def _load_ch7_companion_payload(path: Path) -> Mapping[str, Any]:
+def _load_ch7_companion_payload(path: Path, *, raw: bytes | None = None) -> Mapping[str, Any]:
     """Load and parse the #7047 companion payload."""
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        if raw is None:
+            raw = path.read_bytes()
+        value = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise _ch7_binding_error("could not read JSON") from exc
     if not isinstance(value, Mapping):
@@ -268,12 +338,23 @@ def _validate_ch7_companion_header(value: Mapping[str, Any]) -> list[Any]:
     return bindings
 
 
-def _validate_ch7_target(repo_root: Path) -> None:
+def _validate_ch7_target(
+    repo_root: Path,
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
+) -> None:
     """Validate that the approved source config is tracked and byte-matching."""
     target = _resolve_repo_path(repo_root, CH7_PORTFOLIO_TARGET_PATH)
-    if target is None or not _is_tracked(repo_root, target[0]):
+    if target is None or not _is_tracked(
+        repo_root, target[0], content_ref, content_cache, tracked_paths
+    ):
         raise _ch7_binding_error(f"target_path is not tracked: {CH7_PORTFOLIO_TARGET_PATH}")
-    actual_target_sha256 = hashlib.sha256(target[1].read_bytes()).hexdigest()
+    target_bytes = _repository_file_bytes(repo_root, target[0], content_ref, content_cache)
+    if target_bytes is None:
+        raise _ch7_binding_error(f"target_path cannot be read: {CH7_PORTFOLIO_TARGET_PATH}")
+    actual_target_sha256 = hashlib.sha256(target_bytes).hexdigest()
     if actual_target_sha256 != CH7_PORTFOLIO_TARGET_SHA256:
         raise _ch7_binding_error("target_path digest mismatch")
 
@@ -294,28 +375,43 @@ def _ch7_resolution_key(binding: Mapping[str, Any], index: int) -> tuple[str, st
 
 
 def _validate_ch7_document_digest(
-    repo_root: Path, binding: Mapping[str, Any], document_path: str
+    repo_root: Path,
+    binding: Mapping[str, Any],
+    document_path: str,
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
 ) -> Path:
     """Validate that the bound package document is tracked and byte-matching."""
     document = _resolve_repo_path(repo_root, document_path)
-    if document is None or not _is_tracked(repo_root, document[0]):
+    if document is None or not _is_tracked(
+        repo_root, document[0], content_ref, content_cache, tracked_paths
+    ):
         raise _ch7_binding_error(f"document_path is not tracked: {document_path}")
+    document_bytes = _repository_file_bytes(repo_root, document[0], content_ref, content_cache)
+    if document_bytes is None:
+        raise _ch7_binding_error(f"document_path cannot be read: {document_path}")
     document_sha256 = binding.get("document_sha256")
     if (
         not isinstance(document_sha256, str)
         or not SHA256_RE.fullmatch(document_sha256)
-        or hashlib.sha256(document[1].read_bytes()).hexdigest() != document_sha256
+        or hashlib.sha256(document_bytes).hexdigest() != document_sha256
     ):
         raise _ch7_binding_error(f"document digest mismatch for {document_path}")
     return document[1]
 
 
 def _validate_ch7_document_pointers(
+    repo_root: Path,
     document_path: str,
     document: Path,
     binding: Mapping[str, Any],
     index: int,
     expected: Mapping[str, str],
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
 ) -> None:
     """Validate the bound package JSON pointers and digest value."""
     pointer = binding.get("document_json_pointer")
@@ -323,10 +419,16 @@ def _validate_ch7_document_pointers(
     if not isinstance(pointer, str) or not isinstance(digest_pointer, str):
         raise _ch7_binding_error(f"bindings[{index}] requires JSON pointers")
     try:
-        document_value = _load_document(document)
+        normalized_path = document.relative_to(repo_root).as_posix()
+        document_bytes = _repository_file_bytes(
+            repo_root, normalized_path, content_ref, content_cache
+        )
+        if document_bytes is None:
+            raise KeyError(document_path)
+        document_value = _load_document(document, raw=document_bytes)
         actual_value = _json_pointer_get(document_value, pointer)
         actual_digest_value = _json_pointer_get(document_value, digest_pointer)
-    except (KeyError, ValueError) as exc:
+    except (KeyError, ValueError, UnicodeDecodeError, yaml.YAMLError) as exc:
         raise _ch7_binding_error(f"JSON pointer does not resolve for {document_path}") from exc
     if actual_value != binding.get("document_json_value"):
         raise _ch7_binding_error(f"pointer value mismatch for {document_path}")
@@ -338,7 +440,14 @@ def _validate_ch7_document_pointers(
 
 
 def _validate_ch7_binding_entry(
-    repo_root: Path, binding: Any, index: int, resolutions: set[tuple[str, str, str]]
+    repo_root: Path,
+    binding: Any,
+    index: int,
+    resolutions: set[tuple[str, str, str]],
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
 ) -> None:
     """Validate one #7047 companion binding entry."""
     if not isinstance(binding, Mapping):
@@ -348,23 +457,64 @@ def _validate_ch7_binding_entry(
         document_path, code, _message = resolution_key
         raise _ch7_binding_error(f"duplicate binding for {document_path}/{code}")
     document_path = resolution_key[0]
-    document = _validate_ch7_document_digest(repo_root, binding, document_path)
+    document = _validate_ch7_document_digest(
+        repo_root,
+        binding,
+        document_path,
+        content_ref=content_ref,
+        content_cache=content_cache,
+        tracked_paths=tracked_paths,
+    )
     expected = CH7_PORTFOLIO_ALLOWED_BINDING_POINTERS[resolution_key]
-    _validate_ch7_document_pointers(document_path, document, binding, index, expected)
+    _validate_ch7_document_pointers(
+        repo_root,
+        document_path,
+        document,
+        binding,
+        index,
+        expected,
+        content_ref=content_ref,
+        content_cache=content_cache,
+    )
     resolutions.add(resolution_key)
 
 
-def _load_ch7_portfolio_companion_resolutions(repo_root: Path) -> frozenset[tuple[str, str, str]]:
+def _load_ch7_portfolio_companion_resolutions(
+    repo_root: Path,
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
+) -> frozenset[tuple[str, str, str]]:
     """Load the canonical #7047 companion binding and return exact findings it resolves."""
     path = repo_root / CH7_PORTFOLIO_COMPANION_BINDING
-    if not path.is_file():
+    binding_bytes = _repository_file_bytes(
+        repo_root,
+        CH7_PORTFOLIO_COMPANION_BINDING.as_posix(),
+        content_ref,
+        content_cache,
+    )
+    if binding_bytes is None:
         return frozenset()
-    value = _load_ch7_companion_payload(path)
+    value = _load_ch7_companion_payload(path, raw=binding_bytes)
     bindings = _validate_ch7_companion_header(value)
-    _validate_ch7_target(repo_root)
+    _validate_ch7_target(
+        repo_root,
+        content_ref=content_ref,
+        content_cache=content_cache,
+        tracked_paths=tracked_paths,
+    )
     resolutions: set[tuple[str, str, str]] = set()
     for index, binding in enumerate(bindings):
-        _validate_ch7_binding_entry(repo_root, binding, index, resolutions)
+        _validate_ch7_binding_entry(
+            repo_root,
+            binding,
+            index,
+            resolutions,
+            content_ref=content_ref,
+            content_cache=content_cache,
+            tracked_paths=tracked_paths,
+        )
     if resolutions != CH7_PORTFOLIO_ALLOWED_BINDINGS:
         raise _ch7_binding_error("bindings do not cover the exact #7047 set")
     return frozenset(resolutions)
@@ -538,13 +688,17 @@ def _has_location(mapping: Mapping[str, Any], ancestors: tuple[Mapping[str, Any]
     )
 
 
-def _artifact_hash_finding(
+def _artifact_hash_finding(  # noqa: PLR0913 - candidate-tree inputs stay explicit.
     repo_root: Path,
     display_path: Path,
     key: str,
     declared_hash: str,
     mapping: Mapping[str, Any],
     ancestors: tuple[Mapping[str, Any], ...],
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
 ) -> dict[str, str] | None:
     """Check one artifact hash declaration, returning its finding when invalid."""
     if not SHA256_RE.fullmatch(declared_hash):
@@ -555,7 +709,9 @@ def _artifact_hash_finding(
             display_path, "hash_without_artifact_path", f"{key} lacks an adjacent artifact path"
         )
     resolved = _resolve_repo_path(repo_root, artifact_path)
-    if resolved is None or not _is_tracked(repo_root, resolved[0]):
+    if resolved is None or not _is_tracked(
+        repo_root, resolved[0], content_ref, content_cache, tracked_paths
+    ):
         if not _has_location(mapping, ancestors):
             return _issue(
                 display_path,
@@ -563,7 +719,14 @@ def _artifact_hash_finding(
                 f"{artifact_path} is not tracked and lacks an explicit location marker",
             )
         return None
-    actual_hash = hashlib.sha256(resolved[1].read_bytes()).hexdigest()
+    artifact_bytes = _repository_file_bytes(repo_root, resolved[0], content_ref, content_cache)
+    if artifact_bytes is None:
+        return _issue(
+            display_path,
+            "artifact_unreadable",
+            f"{resolved[0]} cannot be read from the evaluated evidence tree",
+        )
+    actual_hash = hashlib.sha256(artifact_bytes).hexdigest()
     if actual_hash != declared_hash.lower():
         return _issue(
             display_path,
@@ -573,7 +736,15 @@ def _artifact_hash_finding(
     return None
 
 
-def _artifact_findings(repo_root: Path, display_path: Path, value: Any) -> list[dict[str, str]]:
+def _artifact_findings(
+    repo_root: Path,
+    display_path: Path,
+    value: Any,
+    *,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
+) -> list[dict[str, str]]:
     """Validate artifact checksum declarations against tracked artifact paths."""
     if isinstance(value, str):
         return []
@@ -585,20 +756,50 @@ def _artifact_findings(repo_root: Path, display_path: Path, value: Any) -> list[
             if not isinstance(declared_hash, str):
                 continue
             finding = _artifact_hash_finding(
-                repo_root, display_path, key, declared_hash, mapping, ancestors
+                repo_root,
+                display_path,
+                key,
+                declared_hash,
+                mapping,
+                ancestors,
+                content_ref=content_ref,
+                content_cache=content_cache,
+                tracked_paths=tracked_paths,
             )
             if finding:
                 findings.append(finding)
     return findings
 
 
-def _campaign_metadata_findings(  # noqa: C901 - rule-to-finding mapping is intentionally linear
+def _commit_path_exists(
+    repo_root: Path,
+    commit: str,
+    path: str,
+    cache: dict[tuple[str, str], bool] | None = None,
+) -> bool:
+    """Return whether one path exists at one commit, with per-run memoization."""
+    key = (commit, path)
+    if cache is not None and key in cache:
+        return cache[key]
+    exists = _git_succeeds(repo_root, "cat-file", "-e", f"{commit}:{path}")
+    if cache is not None:
+        cache[key] = exists
+    return exists
+
+
+def _campaign_metadata_findings(  # noqa: C901, PLR0913 - rule-to-finding mapping is intentionally linear
     repo_root: Path,
     display_path: Path,
     campaign_ids: Sequence[str],
     config_paths: Sequence[str],
     config_hashes: Sequence[str],
     commits: Sequence[str],
+    *,
+    reachability_ref: str = "HEAD",
+    reachability_cache: dict[tuple[str, str], bool] | None = None,
+    authority_commits: set[str] | None = None,
+    path_cache: dict[tuple[str, str], bool] | None = None,
+    config_hash_cache: dict[tuple[str, str, tuple[str, ...]], bool] | None = None,
 ) -> list[dict[str, str]]:
     """Validate campaign-required identifiers and config existence at declared commits."""
     findings: list[dict[str, str]] = []
@@ -623,7 +824,15 @@ def _campaign_metadata_findings(  # noqa: C901 - rule-to-finding mapping is inte
             _issue(display_path, "missing_commit", "campaign_id requires a full producing commit")
         )
     resolved_commits = [
-        commit for commit in set(commits) if _commit_is_head_reachable(repo_root, commit)
+        commit
+        for commit in set(commits)
+        if _commit_is_reachable(
+            repo_root,
+            commit,
+            reachability_ref,
+            reachability_cache,
+            authority_commits,
+        )
     ]
     declared_config_hashes = {item.lower() for item in config_hashes if SHA256_RE.fullmatch(item)}
     for config_path in sorted(set(config_paths)):
@@ -637,7 +846,7 @@ def _campaign_metadata_findings(  # noqa: C901 - rule-to-finding mapping is inte
                 )
             )
         elif not any(
-            _git_succeeds(repo_root, "cat-file", "-e", f"{commit}:{normalized[0]}")
+            _commit_path_exists(repo_root, commit, normalized[0], path_cache)
             for commit in resolved_commits
         ):
             findings.append(
@@ -649,7 +858,13 @@ def _campaign_metadata_findings(  # noqa: C901 - rule-to-finding mapping is inte
             )
         elif declared_config_hashes:
             config_hash_matches = any(
-                _config_hash_matches(repo_root, commit, normalized[0], declared_config_hashes)
+                _config_hash_matches(
+                    repo_root,
+                    commit,
+                    normalized[0],
+                    declared_config_hashes,
+                    config_hash_cache,
+                )
                 for commit in resolved_commits
             )
             if not config_hash_matches:
@@ -663,18 +878,34 @@ def _campaign_metadata_findings(  # noqa: C901 - rule-to-finding mapping is inte
     return findings
 
 
-def _lint_document(repo_root: Path, path: Path) -> _DocumentRecord:
+def _lint_document(
+    repo_root: Path,
+    path: Path,
+    *,
+    raw: bytes | None = None,
+    display_path: Path | None = None,
+    content_ref: str | None = None,
+    content_cache: Mapping[str, bytes] | None = None,
+    tracked_paths: set[str] | None = None,
+) -> _DocumentRecord:
     """Read one document and retain only document-local integrity findings."""
-    display_path = path.relative_to(repo_root)
+    display_path = display_path or path.relative_to(repo_root)
     try:
-        value = _load_document(path)
+        value = _load_document(path, raw=raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError) as exc:
         return _DocumentRecord(
             path, [], [], [], [], [_issue(display_path, "unreadable_document", str(exc))]
         )
     campaign_ids = _campaign_ids(value)
     config_paths, config_hashes, commits = _file_metadata(value)
-    local_findings = _artifact_findings(repo_root, display_path, value)
+    local_findings = _artifact_findings(
+        repo_root,
+        display_path,
+        value,
+        content_ref=content_ref,
+        content_cache=content_cache,
+        tracked_paths=tracked_paths,
+    )
     local_findings.extend(_synthetic_commit_findings(display_path, value))
     return _DocumentRecord(
         path,
@@ -690,6 +921,232 @@ def _bundle_path(registry_root: Path, path: Path) -> Path:
     """Return an evidence bundle root, treating root-level files as independent bundles."""
     relative = path.relative_to(registry_root)
     return path if len(relative.parts) == 1 else registry_root / relative.parts[0]
+
+
+def _canonical_projection_commit(repo_root: Path, value: str, label: str) -> str:
+    """Resolve and return one explicitly supplied full commit identity."""
+    if not isinstance(value, str) or not FULL_SHA1_RE.fullmatch(value):
+        raise ProjectionValidationError(
+            f"frozen-base projection {label} must be an exact 40-hex commit SHA; got {value!r}"
+        )
+    resolved = _git_bytes(repo_root, "rev-parse", "--verify", f"{value}^{{commit}}")
+    if resolved is None:
+        raise ProjectionValidationError(
+            f"frozen-base projection {label} {value} is unavailable as a commit object; "
+            "fetch the complete candidate/base history and retry"
+        )
+    try:
+        canonical = resolved.decode("ascii").strip()
+    except UnicodeDecodeError as exc:
+        raise ProjectionValidationError(
+            f"frozen-base projection {label} resolution was not valid ASCII"
+        ) from exc
+    if not FULL_SHA1_RE.fullmatch(canonical) or canonical.lower() != value.lower():
+        raise ProjectionValidationError(
+            f"frozen-base projection {label} identity did not bind exactly to {value}"
+        )
+    return canonical.lower()
+
+
+def _prepare_projection(
+    repo_root: Path,
+    candidate_head: str | None,
+    frozen_base: str | None,
+) -> dict[str, str] | None:
+    """Validate an optional candidate/base pair and return canonical identities."""
+    if candidate_head is None and frozen_base is None:
+        return None
+    if not candidate_head or not frozen_base:
+        raise ProjectionValidationError(
+            "frozen-base projection requires both --candidate-head and --frozen-base; "
+            "provide neither to retain ordinary HEAD mode"
+        )
+    candidate = _canonical_projection_commit(repo_root, candidate_head, "candidate head")
+    base = _canonical_projection_commit(repo_root, frozen_base, "frozen base")
+    current_head_bytes = _git_bytes(repo_root, "rev-parse", "--verify", "HEAD^{commit}")
+    if current_head_bytes is None:
+        raise ProjectionValidationError(
+            "frozen-base projection could not resolve the checked-out HEAD"
+        )
+    current_head = current_head_bytes.decode("ascii", errors="replace").strip().lower()
+    if current_head != candidate:
+        raise ProjectionValidationError(
+            "frozen-base projection candidate head is stale: checked-out HEAD is "
+            f"{current_head or '<unavailable>'}, but candidate head is {candidate}"
+        )
+    if not _git_succeeds(repo_root, "merge-base", "--is-ancestor", base, candidate):
+        raise ProjectionValidationError(
+            f"frozen-base projection base {base} is not an ancestor of candidate head {candidate}; "
+            "refresh the base/head identities"
+        )
+    # A non-shallow marker alone is not enough: alternates/promisor repositories
+    # can still omit an object from an apparently complete checkout. Validate the
+    # complete candidate/base ancestry before reading any evidence metadata.
+    for label, ref in (("candidate head", candidate), ("frozen base", base)):
+        if not _git_succeeds(repo_root, "rev-list", "--objects", "--missing=error", ref):
+            raise ProjectionValidationError(
+                f"frozen-base projection {label} history is incomplete or has missing Git objects "
+                f"at {ref}; fetch a complete history before retrying"
+            )
+    return {"candidate_head": candidate, "frozen_base": base}
+
+
+def _candidate_evidence_tree(  # noqa: C901, PLR0912, PLR0915 - immutable tree contract.
+    repo_root: Path, registry_root: Path, candidate_head: str
+) -> dict[str, Any]:
+    """Return a complete, immutable manifest of the candidate evidence tree."""
+    try:
+        registry_relative = registry_root.resolve().relative_to(repo_root).as_posix()
+    except ValueError as exc:
+        raise ProjectionValidationError(
+            "frozen-base projection registry root must be inside the repository"
+        ) from exc
+    tree_bytes = _git_bytes(repo_root, "rev-parse", f"{candidate_head}:{registry_relative}")
+    if tree_bytes is None:
+        raise ProjectionValidationError(
+            f"candidate evidence tree {registry_relative} is missing at {candidate_head}"
+        )
+    tree_sha = tree_bytes.decode("ascii", errors="replace").strip().lower()
+    if not FULL_SHA1_RE.fullmatch(tree_sha) or not _git_succeeds(
+        repo_root, "cat-file", "-t", tree_sha
+    ):
+        raise ProjectionValidationError(
+            f"candidate evidence tree identity is unavailable at {candidate_head}"
+        )
+    tree_type = _git_bytes(repo_root, "cat-file", "-t", tree_sha)
+    if tree_type is None or tree_type.strip() != b"tree":
+        raise ProjectionValidationError(
+            f"candidate evidence path {registry_relative} is not a complete Git tree"
+        )
+    listing = _git_bytes(
+        repo_root,
+        "ls-tree",
+        "-r",
+        "-z",
+        "--full-tree",
+        candidate_head,
+        "--",
+        registry_relative,
+    )
+    if listing is None:
+        raise ProjectionValidationError(
+            f"candidate evidence tree listing is unavailable at {candidate_head}"
+        )
+    prefix = registry_relative + "/"
+    files: list[str] = []
+    for entry in listing.split(b"\0"):
+        if not entry:
+            continue
+        try:
+            metadata, raw_path = entry.split(b"\t", 1)
+            mode, object_type, _object_sha = metadata.split()
+            path = raw_path.decode("utf-8")
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise ProjectionValidationError(
+                "candidate evidence tree contains an invalid Git tree entry"
+            ) from exc
+        if mode not in {b"100644", b"100755"} or object_type != b"blob":
+            raise ProjectionValidationError(
+                f"candidate evidence tree contains a non-regular entry: {path!r}"
+            )
+        if not path.startswith(prefix) or path == prefix:
+            raise ProjectionValidationError(
+                f"candidate evidence tree returned an invalid path: {path!r}"
+            )
+        files.append(path[len(prefix) :])
+    if len(files) != len(set(files)):
+        raise ProjectionValidationError("candidate evidence tree contains duplicate paths")
+    files.sort()
+    repository_files = {f"{registry_relative}/{relative}" for relative in files}
+    archive = _git_bytes(
+        repo_root,
+        "archive",
+        "--format=tar",
+        candidate_head,
+        "--",
+        registry_relative,
+    )
+    if archive is None:
+        raise ProjectionValidationError(
+            f"candidate evidence tree contents are unavailable at {candidate_head}"
+        )
+    content_cache: dict[str, bytes] = {}
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as archive_file:
+            for member in archive_file.getmembers():
+                if not member.isfile() or member.name not in repository_files:
+                    continue
+                extracted = archive_file.extractfile(member)
+                if extracted is None:
+                    raise ProjectionValidationError(
+                        f"candidate evidence file {member.name} cannot be extracted"
+                    )
+                content_cache[member.name] = extracted.read()
+    except (OSError, tarfile.TarError) as exc:
+        raise ProjectionValidationError(
+            f"candidate evidence tree archive could not be read at {candidate_head}"
+        ) from exc
+    if set(content_cache) != repository_files:
+        raise ProjectionValidationError(
+            f"candidate evidence tree contents are incomplete at {candidate_head}"
+        )
+    tracked_listing = _git_bytes(repo_root, "ls-tree", "-r", "-z", "--name-only", candidate_head)
+    if tracked_listing is None:
+        raise ProjectionValidationError(
+            f"candidate tracked-path inventory is unavailable at {candidate_head}"
+        )
+    try:
+        tracked_paths = {item.decode("utf-8") for item in tracked_listing.split(b"\0") if item}
+    except UnicodeDecodeError as exc:
+        raise ProjectionValidationError(
+            f"candidate tracked-path inventory is not valid UTF-8 at {candidate_head}"
+        ) from exc
+    serialized = json.dumps(files, ensure_ascii=True, separators=(",", ":"))
+    files_sha256 = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    return {
+        "tree_sha": tree_sha,
+        "count": len(files),
+        "files": files,
+        "sha256": files_sha256,
+        "files_sha256": files_sha256,
+        "content_cache": content_cache,
+        "tracked_paths": tracked_paths,
+    }
+
+
+def _candidate_artifact_cache(
+    repo_root: Path,
+    candidate_head: str,
+    artifact_paths: set[str],
+    tracked_paths: set[str],
+) -> dict[str, bytes]:
+    """Read referenced candidate artifacts in one immutable Git archive."""
+    selected = sorted(artifact_paths & tracked_paths)
+    if not selected:
+        return {}
+    archive = _git_bytes(repo_root, "archive", "--format=tar", candidate_head, "--", *selected)
+    if archive is None:
+        raise ProjectionValidationError(
+            f"candidate artifact content is unavailable at {candidate_head}"
+        )
+    cache: dict[str, bytes] = {}
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as archive_file:
+            for member in archive_file.getmembers():
+                if not member.isfile() or member.name not in selected:
+                    continue
+                extracted = archive_file.extractfile(member)
+                if extracted is not None:
+                    cache[member.name] = extracted.read()
+    except (OSError, tarfile.TarError) as exc:
+        raise ProjectionValidationError(
+            f"candidate artifact archive could not be read at {candidate_head}"
+        ) from exc
+    if set(cache) != set(selected):
+        raise ProjectionValidationError(
+            f"candidate artifact content is incomplete at {candidate_head}"
+        )
+    return cache
 
 
 def _load_dispositions(path: Path | None) -> dict[str, dict[str, str]]:
@@ -736,38 +1193,163 @@ def _disposition_summary(
     }
 
 
-def lint_evidence_registry(
+def lint_evidence_registry(  # noqa: C901, PLR0912, PLR0915 - ordinary/projected gate contract.
     repo_root: Path,
     registry_root: Path,
     disposition_path: Path | None = None,
     exclude_codes: frozenset[str] = frozenset(),
+    *,
+    candidate_head: str | None = None,
+    frozen_base: str | None = None,
 ) -> dict[str, Any]:
-    """Return a deterministic integrity report for every supported evidence file."""
+    """Return a deterministic integrity report for every supported evidence file.
+
+    With no projection identities the linter preserves its ordinary working-tree
+    and ``HEAD`` behavior. When both identities are supplied, every evidence file
+    is read from the candidate commit and every producer reachability decision is
+    made from the frozen base only; incidental refs never participate.
+    """
     repo_root = repo_root.resolve()
     _require_full_history(repo_root)
-    companion_resolutions = _load_ch7_portfolio_companion_resolutions(repo_root)
     registry_root = registry_root.resolve()
+    projection_identity = _prepare_projection(repo_root, candidate_head, frozen_base)
+    projection_tree = (
+        _candidate_evidence_tree(repo_root, registry_root, projection_identity["candidate_head"])
+        if projection_identity is not None
+        else None
+    )
+    candidate_content_cache: dict[str, bytes] | None = None
+    candidate_tracked_paths: set[str] | None = None
+    if projection_tree is not None:
+        candidate_content_cache = projection_tree.pop("content_cache")
+        candidate_tracked_paths = projection_tree.pop("tracked_paths")
+    companion_resolutions = _load_ch7_portfolio_companion_resolutions(
+        repo_root,
+        content_ref=projection_identity["candidate_head"] if projection_identity else None,
+        content_cache=candidate_content_cache,
+        tracked_paths=candidate_tracked_paths,
+    )
     campaigns: dict[str, list[_DocumentRecord]] = defaultdict(list)
     findings: list[dict[str, str]] = []
-    files = sorted(
-        path
-        for path in registry_root.rglob("*")
-        if path.is_file() and path.suffix.lower() in {".json", ".yaml", ".yml", ".md", ".csv"}
-    )
-    for path in files:
-        document = _lint_document(repo_root, path)
+    projection_producer_records: set[tuple[str, str, str]] = set()
+    reachability_cache: dict[tuple[str, str], bool] = {}
+    path_cache: dict[tuple[str, str], bool] = {}
+    config_hash_cache: dict[tuple[str, str, tuple[str, ...]], bool] = {}
+    if projection_tree is None:
+        files = sorted(
+            path
+            for path in registry_root.rglob("*")
+            if path.is_file() and path.suffix.lower() in {".json", ".yaml", ".yml", ".md", ".csv"}
+        )
+        document_inputs = [(path, None, None) for path in files]
+    else:
+        registry_relative = registry_root.relative_to(repo_root)
+        files = sorted(
+            repo_root / registry_relative / relative
+            for relative in projection_tree["files"]
+            if Path(relative).suffix.lower() in {".json", ".yaml", ".yml", ".md", ".csv"}
+        )
+        document_inputs = []
+        artifact_paths: set[str] = set()
+        for path in files:
+            relative = path.relative_to(repo_root).as_posix()
+            raw = candidate_content_cache.get(relative) if candidate_content_cache else None
+            if raw is None:
+                raise ProjectionValidationError(
+                    f"candidate evidence file {relative} disappeared while reading "
+                    f"{projection_identity['candidate_head']}"
+                )
+            document_inputs.append((path, raw, Path(relative)))
+            try:
+                value = _load_document(path, raw=raw)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError):
+                continue
+            if not isinstance(value, str):
+                for mapping, ancestors in _iter_mappings(value):
+                    for key, declared_hash in mapping.items():
+                        if (
+                            not isinstance(key, str)
+                            or key.lower() not in {"sha256", "source_sha256"}
+                            or not isinstance(declared_hash, str)
+                        ):
+                            continue
+                        artifact_path = _artifact_path(mapping, ancestors)
+                        if artifact_path is None:
+                            continue
+                        resolved = _resolve_repo_path(repo_root, artifact_path)
+                        if resolved is not None:
+                            artifact_paths.add(resolved[0])
+        candidate_content_cache.update(
+            _candidate_artifact_cache(
+                repo_root,
+                projection_identity["candidate_head"],
+                artifact_paths,
+                candidate_tracked_paths or set(),
+            )
+        )
+    for path, raw, display_path in document_inputs:
+        document = _lint_document(
+            repo_root,
+            path,
+            raw=raw,
+            display_path=display_path,
+            content_ref=projection_identity["candidate_head"] if projection_identity else None,
+            content_cache=candidate_content_cache,
+            tracked_paths=candidate_tracked_paths,
+        )
         findings.extend(document.findings)
-        for campaign_id in document.campaign_ids:
+        # A row-oriented CSV can repeat one campaign identifier thousands of
+        # times.  The linter's bundle-level semantics are document/campaign
+        # based, so retain one document membership per campaign instead of
+        # multiplying every repeated row into the projection report.
+        for campaign_id in set(document.campaign_ids):
             campaigns[campaign_id].append(document)
+            if projection_identity is not None:
+                projection_producer_records.update(
+                    (
+                        campaign_id,
+                        document.path.relative_to(repo_root).as_posix(),
+                        commit,
+                    )
+                    for commit in document.commits
+                )
+    reachability_ref = (
+        projection_identity["frozen_base"] if projection_identity is not None else "HEAD"
+    )
+    authority_history = _git_bytes(repo_root, "rev-list", "--full-history", reachability_ref)
+    if authority_history is None:
+        raise RuntimeError(
+            f"could not enumerate complete producer reachability from {reachability_ref}"
+        )
+    authority_commits = {
+        line.decode("ascii").lower()
+        for line in authority_history.splitlines()
+        if FULL_SHA1_RE.fullmatch(line.decode("ascii"))
+    }
     for campaign_id, documents in sorted(campaigns.items()):
         canonical_path = min(document.path for document in documents).relative_to(repo_root)
         config_paths = [path for document in documents for path in document.config_paths]
         config_hashes = [item for document in documents for item in document.config_hashes]
         commits = [commit for document in documents for commit in document.commits]
         for commit in sorted(set(commits)):
-            if not _commit_is_head_reachable(repo_root, commit):
+            if not _commit_is_reachable(
+                repo_root,
+                commit,
+                reachability_ref,
+                reachability_cache,
+                authority_commits,
+            ):
+                authority = (
+                    f" from frozen base {reachability_ref}"
+                    if projection_identity is not None
+                    else ""
+                )
                 findings.append(
-                    _issue(canonical_path, "dangling_commit", f"commit {commit} does not resolve")
+                    _issue(
+                        canonical_path,
+                        "dangling_commit",
+                        f"commit {commit} does not resolve{authority}",
+                    )
                 )
         findings.extend(
             _campaign_metadata_findings(
@@ -777,6 +1359,11 @@ def lint_evidence_registry(
                 config_paths,
                 config_hashes,
                 commits,
+                reachability_ref=reachability_ref,
+                reachability_cache=reachability_cache,
+                authority_commits=authority_commits,
+                path_cache=path_cache,
+                config_hash_cache=config_hash_cache,
             )
         )
         bundle_paths = sorted(
@@ -805,6 +1392,48 @@ def lint_evidence_registry(
         "issues": active,
         "summary": {"findings": len(active), "by_code": by_code},
     }
+    if projection_identity is not None and projection_tree is not None:
+        campaign_records = [
+            {
+                "campaign_id": campaign_id,
+                "receipt_paths": sorted(
+                    {document.path.relative_to(repo_root).as_posix() for document in documents}
+                ),
+                "producer_shas": sorted(
+                    {commit for document in documents for commit in document.commits}
+                ),
+            }
+            for campaign_id, documents in sorted(campaigns.items())
+        ]
+        report["projection"] = {
+            "schema": PROJECTION_SCHEMA,
+            "mode": PROJECTION_MODE,
+            "candidate_head": projection_identity["candidate_head"],
+            "frozen_base": projection_identity["frozen_base"],
+            "evaluated_head": projection_identity["candidate_head"],
+            "evaluated_base": projection_identity["frozen_base"],
+            "head_sha": projection_identity["candidate_head"],
+            "base_sha": projection_identity["frozen_base"],
+            "reachability_authority": projection_identity["frozen_base"],
+            "evidence_tree": projection_tree,
+            "checked_files": len(files),
+            "complete": True,
+            "campaigns": campaign_records,
+            "producer_records": [
+                {
+                    "campaign_id": campaign_id,
+                    "receipt_path": receipt_path,
+                    "producer_sha": producer_sha,
+                }
+                for campaign_id, receipt_path, producer_sha in sorted(projection_producer_records)
+            ],
+            "findings_by_path": {
+                path: dict(
+                    sorted(Counter(item["code"] for item in active if item["path"] == path).items())
+                )
+                for path in sorted({item["path"] for item in active})
+            },
+        }
     if exclude_codes:
         report["excluded_codes"] = sorted(exclude_codes)
         report["excluded_issues"] = excluded
@@ -863,6 +1492,24 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional YAML file declaring excluded codes with justification.",
     )
+    parser.add_argument(
+        "--candidate-head",
+        type=str,
+        default=None,
+        help=(
+            "Explicit full SHA-1 of the candidate evidence tree and checked-out HEAD; "
+            "must be paired with --frozen-base."
+        ),
+    )
+    parser.add_argument(
+        "--frozen-base",
+        type=str,
+        default=None,
+        help=(
+            "Explicit full SHA-1 whose ancestry is the only producer-reachability authority; "
+            "must be paired with --candidate-head."
+        ),
+    )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve() if args.repo_root else _repo_root_from_git()
     registry_root = (
@@ -881,8 +1528,15 @@ def main(argv: list[str] | None = None) -> int:
             code.strip() for code in args.exclude_codes.split(",") if code.strip()
         )
     try:
-        report = lint_evidence_registry(repo_root, registry_root, disposition_path, exclude_codes)
-    except (CompanionBindingError, ShallowRepositoryError) as exc:
+        report = lint_evidence_registry(
+            repo_root,
+            registry_root,
+            disposition_path,
+            exclude_codes,
+            candidate_head=args.candidate_head,
+            frozen_base=args.frozen_base,
+        )
+    except (CompanionBindingError, ProjectionValidationError, ShallowRepositoryError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(report, indent=2, sort_keys=True))

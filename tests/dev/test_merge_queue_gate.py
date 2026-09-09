@@ -986,6 +986,7 @@ def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
     )
     assert "--advisory" not in merge_group_step
     assert "--from-event" in merge_group_step
+    assert '--merge-group-evidence-head "$GITHUB_SHA"' in merge_group_step
     assert "--advisory" in source_pr_step
     assert "exit 0" in workflow  # Bootstrap skip remains advisory before the gate exists on main.
     assert "MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}" in workflow
@@ -2145,6 +2146,64 @@ def test_clean_ancestry_passes_gate() -> None:
     assert audit.passed is True
     assert audit.ancestry_state == "clean"
     assert "stacked_ancestry_not_independently_mergeable" not in audit.reasons
+
+
+@pytest.mark.parametrize(
+    ("evidence_status", "evidence_head", "expected_reason"),
+    [
+        ("missing", FULL_SHA, "evidence_registry_proof_missing"),
+        ("pending", FULL_SHA, "evidence_registry_proof_pending"),
+        ("failure", FULL_SHA, "evidence_registry_proof_failed"),
+        ("success", "c" * 40, "evidence_registry_proof_stale"),
+    ],
+)
+def test_evidence_registry_status_is_fail_closed_for_gate_consumers(
+    evidence_status: str, evidence_head: str, expected_reason: str
+) -> None:
+    """Native/direct status consumers reject missing, stale, or failed proof."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(evidence_registry={"status": evidence_status, "head_sha": evidence_head}),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.evidence_registry_status == (
+        "stale" if evidence_status == "success" else evidence_status
+    )
+    assert expected_reason in audit.reasons
+
+
+def test_evidence_registry_success_status_binds_to_exact_head() -> None:
+    """A successful canonical check is consumable only when its head matches."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(evidence_registry={"status": "success", "head_sha": FULL_SHA}),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.evidence_registry_status == "success"
+    assert audit.evidence_registry_head_sha == FULL_SHA
+
+
+def test_evidence_registry_status_classifier_requires_reported_head() -> None:
+    """A named successful check without its own head identity is malformed."""
+    status = merge_queue_gate_module._classify_evidence_registry_checks(
+        [
+            {
+                "name": "evidence-registry-ratchet",
+                "workflowName": "Evidence-registry ratchet",
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
+        head_sha=FULL_SHA,
+    )
+
+    assert status["status"] == "malformed"
 
 
 def test_missing_ancestry_block_is_not_evaluated() -> None:

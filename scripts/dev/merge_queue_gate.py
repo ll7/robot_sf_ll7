@@ -130,6 +130,8 @@ COMPLETED_STATUS = "completed"
 GATE_WORKFLOW_NAME = "Merge Queue Gate"
 GATE_JOB_NAME = "merge-queue-gate"
 CHANGED_COVERAGE_CHECK_NAME = "changed-coverage-gate"
+EVIDENCE_REGISTRY_WORKFLOW_NAME = "Evidence-registry ratchet"
+EVIDENCE_REGISTRY_CHECK_NAME = "evidence-registry-ratchet"
 SNAPSHOT_PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
 # Keep this list in lockstep with the top-level ``paths-ignore`` filters in
 # ``.github/workflows/ci.yml``.  The merge gate may need to explain why that
@@ -194,6 +196,8 @@ class MergeGateAudit:
     body_not_ready_sentinels: list[str] = field(default_factory=list)
     closing_discipline_status: str = "not_evaluated"
     closing_discipline_blockers: list[str] = field(default_factory=list)
+    evidence_registry_status: str = "not_evaluated"
+    evidence_registry_head_sha: str = ""
     reasons: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -373,7 +377,7 @@ def _core_preflight_reasons(
     return reasons
 
 
-def _fail_closed_reasons(  # noqa: PLR0913
+def _fail_closed_reasons(  # noqa: C901, PLR0913
     *,
     draft: bool,
     merge_ready: bool,
@@ -389,6 +393,7 @@ def _fail_closed_reasons(  # noqa: PLR0913
     body_not_ready_sentinels: list[str] | None = None,
     ancestry_state: str = "",
     closing_discipline_status: str = "not_evaluated",
+    evidence_registry_status: str = "not_evaluated",
 ) -> list[str]:
     """Collect fail-closed reasons for one gate evaluation.
 
@@ -435,6 +440,17 @@ def _fail_closed_reasons(  # noqa: PLR0913
                 "blocked": "closing_discipline_blocked",
                 "unavailable": "closing_discipline_unavailable",
             }.get(closing_discipline_status, "closing_discipline_not_verified")
+        )
+    if evidence_registry_status not in {"success", "not_evaluated"}:
+        reasons.append(
+            {
+                "missing": "evidence_registry_proof_missing",
+                "pending": "evidence_registry_proof_pending",
+                "failure": "evidence_registry_proof_failed",
+                "stale": "evidence_registry_proof_stale",
+                "malformed": "evidence_registry_proof_malformed",
+                "unavailable": "evidence_registry_proof_unavailable",
+            }.get(evidence_registry_status, "evidence_registry_proof_unknown")
         )
     return reasons
 
@@ -515,7 +531,7 @@ def _resolve_merge_group_binding(
     return binding, str(queue_merging_strategy or "unknown").upper()
 
 
-def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission dimensions.
+def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed admission dimensions.
     pr: dict[str, Any],
     *,
     main_sha: str = "",
@@ -558,6 +574,10 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
         reviewers remain, ``False`` when no reviewer request remains, ``None``
         when not evaluated (fails closed; the runtime CLI always supplies a
         definitive value).
+      evidence_registry: live snapshots carry the status of the canonical
+        exact-head evidence-registry check.  Its status is consumed here, but
+        its projection report is parsed only by the evidence linter/ratchet.
+        Pure older fixtures without this field retain ``not_evaluated``.
       merge_group_head_sha: source-head SHA encoded in a canonical
         ``merge_group.head_ref``. When provided, it must prefix-match the live
         PR head SHA; any mismatch fails closed so a queue ref cannot be rebound
@@ -620,6 +640,21 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
     metadata_verdict_status = _metadata_verdict_status(pr, metadata_digest_value)
     review_claim_status = _review_claim_status(pr, head_sha=head_sha, now=now)
 
+    evidence_registry = pr.get("evidence_registry")
+    if evidence_registry is None:
+        evidence_registry_status = "not_evaluated"
+        evidence_registry_head_sha = ""
+    elif not isinstance(evidence_registry, dict):
+        evidence_registry_status = "malformed"
+        evidence_registry_head_sha = ""
+    else:
+        evidence_registry_status = str(evidence_registry.get("status") or "unknown").lower()
+        evidence_registry_head_sha = str(evidence_registry.get("head_sha") or "")
+        if evidence_registry_status == "success" and (
+            not evidence_registry_head_sha or evidence_registry_head_sha.lower() != head_sha.lower()
+        ):
+            evidence_registry_status = "stale"
+
     merge_group_head_sha = str(merge_group_head_sha or "").lower()
     merge_group_head_binding, queue_strategy = _resolve_merge_group_binding(
         merge_group_head_sha, head_sha, queue_merging_strategy
@@ -652,6 +687,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
             body_not_ready_sentinels=body_not_ready_sentinels,
             ancestry_state=ancestry_state,
             closing_discipline_status=closing_discipline_status,
+            evidence_registry_status=evidence_registry_status,
         )
     )
     if not head_sha:
@@ -689,6 +725,8 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
         body_not_ready_sentinels=body_not_ready_sentinels,
         closing_discipline_status=closing_discipline_status,
         closing_discipline_blockers=closing_discipline_blockers,
+        evidence_registry_status=evidence_registry_status,
+        evidence_registry_head_sha=evidence_registry_head_sha,
         reasons=reasons,
     )
 
@@ -855,6 +893,103 @@ def _fetch_exact_head_changed_coverage(
     if total_count > len(check_runs):
         return {}, "exact-head check-run response is incomplete; refusing stale-proof bypass"
     return _classify_changed_coverage_checks(check_runs, head_sha=head_sha), None
+
+
+def _classify_evidence_registry_checks(check_runs: Any, *, head_sha: str) -> dict[str, Any]:
+    """Classify the canonical evidence proof without parsing its report.
+
+    The evidence workflow owns projection/provenance parsing. Merge admission
+    consumes only its exact-head status, keeping this route a status consumer
+    rather than a second provenance parser.
+    """
+    if not isinstance(check_runs, list) or any(not isinstance(item, dict) for item in check_runs):
+        return {
+            "status": "malformed",
+            "head_sha": head_sha,
+            "name": EVIDENCE_REGISTRY_CHECK_NAME,
+            "workflow_name": EVIDENCE_REGISTRY_WORKFLOW_NAME,
+        }
+    effective_runs, _superseded_count = _latest_check_runs(check_runs)
+    candidates = [
+        check
+        for check in effective_runs
+        if str(check.get("name") or "").strip() == EVIDENCE_REGISTRY_CHECK_NAME
+    ]
+    if not candidates:
+        return {
+            "status": "missing",
+            "head_sha": head_sha,
+            "name": EVIDENCE_REGISTRY_CHECK_NAME,
+            "workflow_name": EVIDENCE_REGISTRY_WORKFLOW_NAME,
+        }
+
+    def sort_key(check: dict[str, Any]) -> tuple[str, int]:
+        timestamp = str(
+            check.get("completed_at")
+            or check.get("completedAt")
+            or check.get("started_at")
+            or check.get("startedAt")
+            or check.get("created_at")
+            or check.get("createdAt")
+            or ""
+        )
+        try:
+            identifier = int(check.get("id", 0) or 0)
+        except (TypeError, ValueError):
+            identifier = 0
+        return timestamp, identifier
+
+    latest = max(candidates, key=sort_key)
+    workflow_name = str(latest.get("workflowName") or latest.get("workflow_name") or "")
+    reported_head = str(latest.get("head_sha") or latest.get("headSha") or "")
+    status_value = str(latest.get("status") or "").lower()
+    conclusion = str(latest.get("conclusion") or "").lower()
+    if workflow_name and workflow_name != EVIDENCE_REGISTRY_WORKFLOW_NAME:
+        status = "malformed"
+    elif not reported_head:
+        status = "malformed"
+    elif reported_head.lower() != head_sha.lower():
+        status = "stale"
+    elif status_value != COMPLETED_STATUS:
+        status = "pending" if status_value in PENDING_STATUSES else "malformed"
+    elif conclusion != "success":
+        status = "failure"
+    else:
+        status = "success"
+    return {
+        "status": status,
+        "head_sha": reported_head or head_sha,
+        "name": EVIDENCE_REGISTRY_CHECK_NAME,
+        "workflow_name": workflow_name or EVIDENCE_REGISTRY_WORKFLOW_NAME,
+        "check_run_id": latest.get("id"),
+        "started_at": latest.get("started_at") or latest.get("startedAt"),
+        "completed_at": latest.get("completed_at") or latest.get("completedAt"),
+        "conclusion": latest.get("conclusion"),
+        "details_url": latest.get("html_url") or latest.get("details_url"),
+    }
+
+
+def _fetch_exact_head_evidence_registry(
+    head_sha: str, *, repo: str
+) -> tuple[dict[str, Any], str | None]:
+    """Fetch only the canonical evidence check status for one exact commit."""
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha):
+        return {}, "evidence proof head SHA is missing or malformed"
+    result = _gh(["api", f"repos/{repo}/commits/{head_sha}/check-runs?per_page=100"])
+    if result.returncode != 0:
+        return {}, result.stderr.strip() or "exact-head evidence check query failed"
+    payload, err = _parse_json(result.stdout)
+    if err or not isinstance(payload, dict):
+        return {}, err or "exact-head evidence check response is not a JSON object"
+    check_runs = payload.get("check_runs")
+    if not isinstance(check_runs, list) or any(not isinstance(item, dict) for item in check_runs):
+        return {}, "exact-head evidence check response has no valid check_runs list"
+    total_count = payload.get("total_count")
+    if type(total_count) is not int or total_count < len(check_runs):
+        return {}, "exact-head evidence check response has an invalid total_count"
+    if total_count > len(check_runs):
+        return {}, "exact-head evidence check response is incomplete"
+    return _classify_evidence_registry_checks(check_runs, head_sha=head_sha), None
 
 
 def _graphql_error(payload: dict[str, Any]) -> str | None:
@@ -1949,6 +2084,9 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         head_sha=head_sha,
         expected_metadata_digest=current_metadata_digest,
     )
+    evidence_registry = _classify_evidence_registry_checks(
+        payload.get("statusCheckRollup"), head_sha=head_sha
+    )
     review_evidence = {
         "check_runs": required_checks,
         "reviews": _to_receipt_review_evidence(
@@ -2020,6 +2158,14 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
             "fallback_diagnostic": graphql_fallback_diagnostic or None,
         },
     }
+    if evidence_registry["status"] != "missing":
+        # Admission consumes only this exact-head status. The evidence workflow
+        # owns all projection/report parsing, so this route cannot accidentally
+        # grow a duplicate provenance implementation.  A source PR without the
+        # path-scoped evidence check is left out because this older gate has no
+        # complete changed-path applicability proof; the hosted workflow remains
+        # authoritative for that route boundary.
+        snapshot["evidence_registry"] = evidence_registry
     return snapshot, None
 
 
@@ -2236,6 +2382,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- merge-ready: `{audit.merge_ready}`",
         f"- exact-head changed-coverage status: `{audit.changed_coverage_status}`",
         f"- changed-coverage head SHA: `{audit.changed_coverage_head_sha or '?'}`",
+        f"- exact-head evidence-registry status: `{audit.evidence_registry_status}`",
+        f"- evidence-registry head SHA: `{audit.evidence_registry_head_sha or '?'}`",
         f"- gate-verdict status: `{audit.gate_verdict_status}`",
         f"- exact-head review-claim status: `{audit.review_claim_status}`",
         f"- PR metadata digest: `{audit.metadata_digest or '?'}`",
@@ -2262,7 +2410,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
         "trailer + exact-head `changed-coverage-gate` proof (or a complete CI-ignored docs-only "
         "file-set proof) + resolved threads + no outstanding reviewer requests + "
         "no active exact-head review claim + `ALLGREEN` queue strategy; fail-closed on any "
-        "missing dimension. "
+        "missing dimension. The canonical evidence-registry projection is consumed through its "
+        "exact-head status check; its report remains owned by the evidence linter/ratchet. "
         "See `docs/dev_guide.md` and "
         "`.agents/skills/gh-pr-merger/SKILL.md`."
     )
@@ -2289,6 +2438,7 @@ def _evaluate_live(
     repo: str,
     merge_group_base_sha: str = "",
     merge_group_head_sha: str = "",
+    merge_group_evidence_head_sha: str = "",
 ) -> tuple[MergeGateAudit, str | None]:
     """Fetch live PR state, evaluate the gate, and return ``(audit, error)``."""
     snapshot, err = fetch_pr_snapshot(pr_number, repo=repo)
@@ -2310,6 +2460,17 @@ def _evaluate_live(
         "status": closing_discipline_status,
         "blockers": closing_discipline_blockers,
     }
+    evidence_error: str | None = None
+    if merge_group_evidence_head_sha:
+        evidence_proof, evidence_error = _fetch_exact_head_evidence_registry(
+            merge_group_evidence_head_sha, repo=repo
+        )
+        snapshot["evidence_registry"] = evidence_proof or {
+            "status": "unavailable",
+            "head_sha": merge_group_evidence_head_sha,
+            "name": EVIDENCE_REGISTRY_CHECK_NAME,
+            "workflow_name": EVIDENCE_REGISTRY_WORKFLOW_NAME,
+        }
 
     if merge_group_base_sha:
         # Inside the merge queue the base SHA is the prospective current main, so
@@ -2367,7 +2528,7 @@ def _evaluate_live(
         merge_group_head_sha=merge_group_head_sha,
         queue_merging_strategy=queue_merging_strategy or "",
     )
-    return audit, None
+    return audit, evidence_error
 
 
 def _self_test() -> int:
@@ -2707,6 +2868,14 @@ def main(argv: list[str] | None = None) -> int:
         default=False,
         help=("preserve a failed source-PR audit but exit zero; valid only with --pr"),
     )
+    parser.add_argument(
+        "--merge-group-evidence-head",
+        default="",
+        help=(
+            "exact synthetic merge-group SHA whose evidence-registry status must be consumed; "
+            "used only by the native merge-group workflow"
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.self_test:
@@ -2750,6 +2919,7 @@ def main(argv: list[str] | None = None) -> int:
         repo=repo,
         merge_group_base_sha=merge_group_base_sha,
         merge_group_head_sha=merge_group_head_sha,
+        merge_group_evidence_head_sha=args.merge_group_evidence_head,
     )
 
     _append_step_summary(_format_summary(audit))

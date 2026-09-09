@@ -73,6 +73,34 @@ def _write_entry(
     return path
 
 
+def _write_projection_entry(
+    evidence: Path,
+    *,
+    campaign_id: str,
+    commit: str,
+    config_path: str,
+    config_sha256: str,
+    artifact_sha256: str,
+    name: str,
+) -> Path:
+    """Write a receipt whose producer config exists only on the feature branch."""
+    path = evidence / name
+    path.write_text(
+        json.dumps(
+            {
+                "campaign_id": campaign_id,
+                "config_path": config_path,
+                "config_sha256": config_sha256,
+                "commit": commit,
+                "artifact_path": "docs/context/evidence/artifact.json",
+                "sha256": artifact_sha256,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def _write_ch7_companion_fixture(
     repo: Path,
     *,
@@ -284,6 +312,165 @@ def test_dangling_commit_is_classified(tmp_path: Path) -> None:
     report = linter.lint_evidence_registry(repo, evidence)
 
     assert {issue["code"] for issue in report["issues"]} >= {"dangling_commit"}
+
+
+def test_frozen_squash_projection_matches_real_squash_and_ignores_incidental_refs(
+    tmp_path: Path,
+) -> None:
+    """A #8657-shaped producer is blocked before and after a disposable squash."""
+    linter = _load_linter()
+    repo, evidence, base_commit, _base_config_sha256 = _make_repo(tmp_path / "squash")
+    branch_config = repo / "configs" / "branch-added.yaml"
+    branch_config.write_text("seed: 8657\n", encoding="utf-8")
+    _git(repo, "add", str(branch_config.relative_to(repo)))
+    _git(repo, "commit", "-qm", "feature producer")
+    producer = _git(repo, "rev-parse", "HEAD")
+    config_sha256 = hashlib.sha256(branch_config.read_bytes()).hexdigest()
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    receipt = _write_projection_entry(
+        evidence,
+        campaign_id="campaign-8657-class",
+        commit=producer,
+        config_path="configs/branch-added.yaml",
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="projection.json",
+    )
+    receipt_bytes = receipt.read_bytes()
+    _git(repo, "add", str(receipt.relative_to(repo)))
+    _git(repo, "commit", "-qm", "feature receipt")
+    candidate = _git(repo, "rev-parse", "HEAD")
+
+    # Keep the producer alive through unrelated refs. The projection authority
+    # must still be the frozen base, never object/ref presence.
+    _git(repo, "branch", "incidental-producer-ref", producer)
+    _git(repo, "tag", "incidental-producer-tag", producer)
+
+    ordinary = linter.lint_evidence_registry(repo, evidence)
+    assert ordinary["issues"] == []
+
+    projected = linter.lint_evidence_registry(
+        repo,
+        evidence,
+        candidate_head=candidate,
+        frozen_base=base_commit,
+    )
+    assert [(issue["path"], issue["code"]) for issue in projected["issues"]] == [
+        ("docs/context/evidence/projection.json", "config_missing_at_commit"),
+        ("docs/context/evidence/projection.json", "dangling_commit"),
+    ]
+    projection = projected["projection"]
+    assert projection["candidate_head"] == candidate
+    assert projection["frozen_base"] == base_commit
+    assert projection["evidence_tree"]["count"] == 2
+    assert projection["evidence_tree"]["files"] == ["artifact.json", "projection.json"]
+    assert projection["producer_records"] == [
+        {
+            "campaign_id": "campaign-8657-class",
+            "receipt_path": "docs/context/evidence/projection.json",
+            "producer_sha": producer,
+        }
+    ]
+    assert projection["findings_by_path"]["docs/context/evidence/projection.json"] == {
+        "config_missing_at_commit": 1,
+        "dangling_commit": 1,
+    }
+
+    # A real disposable squash has the same candidate tree and receipt bytes,
+    # but no producer parent. Its ordinary HEAD result must agree exactly.
+    _git(repo, "checkout", "--detach", "-q", base_commit)
+    _git(repo, "merge", "--squash", candidate)
+    _git(repo, "commit", "-qm", "disposable squash")
+    squash = _git(repo, "rev-parse", "HEAD")
+    assert (repo / "docs/context/evidence/projection.json").read_bytes() == receipt_bytes
+    squashed = linter.lint_evidence_registry(repo, evidence)
+    assert [(issue["path"], issue["code"]) for issue in squashed["issues"]] == [
+        ("docs/context/evidence/projection.json", "config_missing_at_commit"),
+        ("docs/context/evidence/projection.json", "dangling_commit"),
+    ]
+    assert squash != candidate
+
+    # A producer already ancestral to the frozen base remains valid.
+    ancestral_repo, ancestral_evidence, ancestral_base, ancestral_config_sha256 = _make_repo(
+        tmp_path / "ancestral"
+    )
+    ancestral_artifact_sha256 = hashlib.sha256(
+        (ancestral_evidence / "artifact.json").read_bytes()
+    ).hexdigest()
+    ancestral_receipt = _write_entry(
+        ancestral_evidence,
+        campaign_id="campaign-ancestral",
+        commit=ancestral_base,
+        config_sha256=ancestral_config_sha256,
+        artifact_sha256=ancestral_artifact_sha256,
+        name="ancestral.json",
+    )
+    _git(ancestral_repo, "add", str(ancestral_receipt.relative_to(ancestral_repo)))
+    _git(ancestral_repo, "commit", "-qm", "ancestral receipt")
+    ancestral_candidate = _git(ancestral_repo, "rev-parse", "HEAD")
+    assert (
+        linter.lint_evidence_registry(
+            ancestral_repo,
+            ancestral_evidence,
+            candidate_head=ancestral_candidate,
+            frozen_base=ancestral_base,
+        )["issues"]
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("candidate_head", "frozen_base", "message"),
+    [
+        (None, "a" * 40, "requires both"),
+        ("b" * 40, None, "requires both"),
+        ("f" * 40, "a" * 40, "unavailable as a commit object"),
+    ],
+)
+def test_frozen_squash_projection_rejects_missing_or_one_sided_identities(
+    tmp_path: Path,
+    candidate_head: str | None,
+    frozen_base: str | None,
+    message: str,
+) -> None:
+    """Explicit projection identity failures never fall back to ordinary HEAD."""
+    linter = _load_linter()
+    repo, evidence, base_commit, _config_sha256 = _make_repo(tmp_path)
+    kwargs = {"candidate_head": candidate_head, "frozen_base": frozen_base}
+    if candidate_head == "f" * 40:
+        kwargs["frozen_base"] = base_commit
+    with pytest.raises(linter.ProjectionValidationError, match=message):
+        linter.lint_evidence_registry(repo, evidence, **kwargs)
+
+
+def test_frozen_squash_projection_rejects_stale_head_and_shallow_history(tmp_path: Path) -> None:
+    """A stale checked-out head or shallow ancestry cannot produce a projection report."""
+    linter = _load_linter()
+    repo, evidence, base_commit, _config_sha256 = _make_repo(tmp_path / "stale")
+    _git(repo, "commit", "--allow-empty", "-qm", "checked-out candidate")
+    with pytest.raises(linter.ProjectionValidationError, match="candidate head is stale"):
+        linter.lint_evidence_registry(
+            repo,
+            evidence,
+            candidate_head=base_commit,
+            frozen_base=base_commit,
+        )
+
+    source, _source_evidence, _source_commit, _source_hash = _make_repo(tmp_path / "source")
+    _git(source, "commit", "--allow-empty", "-qm", "second history node")
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--depth", "1", source.as_uri(), str(shallow)],
+        check=True,
+    )
+    shallow_head = _git(shallow, "rev-parse", "HEAD")
+    with pytest.raises(linter.ShallowRepositoryError, match="shallow repository detected"):
+        linter.lint_evidence_registry(
+            shallow,
+            shallow / "docs/context/evidence",
+            candidate_head=shallow_head,
+            frozen_base=shallow_head,
+        )
 
 
 def test_commit_on_unrelated_ref_stays_dangling_until_head_reaches_it(

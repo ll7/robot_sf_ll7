@@ -100,12 +100,31 @@ review policy, focused tests, and workflow paths listed in
 Deletions and both sides of renames count; whitespace or newlines in a filename do not change
 the path boundary. Unrelated changes skip this early check.
 
-The entry point runs `uv run python scripts/dev/evidence_registry_ratchet.py --check` exactly once
-for that relevant scope. This is read-only: it neither repairs the registry nor refreshes its
-baseline. A checker failure preserves its diagnostic and exit status, including statuses 1 and 2,
-and prevents formatting, tests, and a success stamp. Missing prerequisites or failed change
-enumeration also fail closed. An explicitly requested final-mode `BASE_REF` that remains
-unresolved after the existing best-effort fetch cannot fall back to `HEAD`.
+The entry point runs the canonical check exactly once for that relevant scope. In final mode it
+binds the check to the exact committed head and resolved base, for example:
+
+```bash
+candidate_head="$(git rev-parse --verify HEAD^{commit})"
+frozen_base="$(git rev-parse --verify origin/main^{commit})"
+uv run python scripts/dev/evidence_registry_ratchet.py --check \
+  --candidate-head "$candidate_head" --frozen-base "$frozen_base" \
+  --report-output /tmp/evidence-registry-ratchet-report.json
+```
+
+The projection reads the complete candidate evidence tree and uses only the frozen base for
+producer reachability. Its report records the candidate/base/tree identities, exact receipt and
+producer bindings, and projected per-path/per-code deltas. This is read-only: it neither repairs
+the registry nor refreshes its baseline. A checker failure preserves its diagnostic and exit
+status, including statuses 1 and 2, and prevents formatting, tests, and a success stamp. Missing,
+stale, shallow, or incomplete identities/history fail closed. An explicitly requested final-mode
+`BASE_REF` that remains unresolved after the existing best-effort fetch cannot fall back to `HEAD`.
+
+Hosted pull-request and merge-group runs use the same explicit projection. The direct/native merge
+gate consumers only consume the named exact-head check status; they do not parse the projection a
+second time. The current source-PR gate has no complete changed-file applicability proof for the
+path-filtered workflow, so an absent source-PR evidence check remains an explicit boundary rather
+than a claimed universal block. The native merge-group workflow supplies the synthetic exact head
+and frozen base to the canonical evidence job. The single-account receipt inherits this gate audit.
 
 `PR_READY_SKIP_PREFLIGHT=1` does not disable this integrity check. Interim mode retains its existing
 behavior, including base fallback, and does not run the new early check. A successful check is
@@ -177,7 +196,9 @@ A fixture that omits both fails closed in the lane with git's
 "Author identity unknown" error instead of silently passing on a developer
 machine.
 
-# Final PR proof when the change crosses the escalation boundary
+## Final PR proof when the change crosses the escalation boundary
+
+```bash
 BASE_REF=origin/main PR_READY_MODE=final scripts/dev/pr_ready_check.sh
 ```
 

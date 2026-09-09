@@ -109,6 +109,15 @@ run is diagnostic-only: 4/4 candidates were feasible, with observed episode coun
 and 1 timeout; no safety, planner, benchmark, paper, or source-method claim follows:
 [issue_7340_real_manifest_feasibility_first.md](issue_7340_real_manifest_feasibility_first.md).
 
+Issue #8570 bounded adversarial falsification answerability packet: source-hashed #7340
+search-space/template/map bindings, explicit actor/unit/effectiveness mappings, lexicographic
+Covariance Matrix Adaptation Evolution Strategy (CMA-ES) plus equal-budget random/Halton design,
+held-out seed separation, and fail-closed reuse of
+`research_answerability.v1` and the existing feasibility-first rejection ledger. The packet is
+diagnostic-only; template-mode `pedestrian_delay_s` remains provenance-only and cannot authorize
+compute:
+[issue_8570_adversarial_falsification_answerability.md](issue_8570_adversarial_falsification_answerability.md).
+
 Issue #7261 stale-base observation: input-backed `stale_base_observation_window.v1` measurement
 with deterministic nearest-rank P50/P95 wait summaries, exact-head/base red-main classification,
 compatible baseline comparison, and fail-closed `not_available`/`invalid_contract` states. The

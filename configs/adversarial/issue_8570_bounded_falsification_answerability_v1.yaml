@@ -1,0 +1,438 @@
+# Issue #8570 bounded falsification answerability packet.
+#
+# This is a source-bound preparation contract. It does not launch an optimizer,
+# simulator, planner, campaign, or confirmation replay, and it makes no
+# robustness, safety, benchmark, or scientific claim.
+schema_version: adversarial_falsification_answerability.v1
+packet_id: issue_8570_bounded_falsification_first_slice
+issue: 8570
+claim_boundary: >-
+  diagnostic-only preparation packet: source-bound adversarial falsification design;
+  no simulator, planner, optimizer, campaign, benchmark, safety, or scientific claim
+evidence_tier: diagnostic-only
+claim_eligible: false
+
+source:
+  base_ref: origin/main
+  base_commit: c61b0f93683e1f9d2c83125f1d830b3d0162f3d1
+  inputs:
+    search_space:
+      path: configs/adversarial/issue_7340_station_platform_search_space_v1.yaml
+      sha256: c196ccd789238dd0ea946b6d45f2c29d3f225527cbc4ab8c65d6c6221f4d57f4
+      role: frozen #7340 search-space bytes and bounds
+    scenario_template:
+      path: configs/adversarial/issue_7340_station_platform_medium_v1.yaml
+      sha256: b82dce96beb16cedd53a0584981d1c5cc9d1a4bdac043b2a9e9168fcb058dec1
+      role: frozen #7340 scenario-template bytes and actor binding
+    map:
+      path: maps/svg_maps/classic_station_platform.svg
+      sha256: 5f03421ac3d16d6008e92e00634fa9f3d0c896304ffd204691d79a3a115be156
+      role: map input referenced by the frozen #7340 scenario template
+  search_space:
+    input_id: search_space
+    schema_version: adversarial-search-space.v1
+    semantic:
+      schema_version: adversarial-search-space.v1
+      variables:
+        start_x:
+          min: 6.0
+          max: 10.0
+        start_y:
+          min: 21.2
+          max: 22.8
+        goal_x:
+          min: 18.0
+          max: 26.0
+        goal_y:
+          min: 21.2
+          max: 22.8
+        spawn_time_s:
+          min: 0.0
+          max: 1.0
+        pedestrian_speed_mps:
+          min: 0.8
+          max: 1.4
+        pedestrian_delay_s:
+          min: 0.0
+          max: 1.0
+        scenario_seed:
+          min: 301.0
+          max: 303.0
+      constraints:
+        min_start_goal_distance_m: 5.0
+      pedestrian:
+        id: p2
+        route_mode: template
+  scenario_template:
+    input_id: scenario_template
+    scenario_name: issue_7340_station_platform_medium
+    pedestrian_id: p2
+    pedestrian_route_mode: template
+  owners:
+    - path: robot_sf/benchmark/research_answerability.py
+      sha256: a0305f04586d098416cb84231712e45c4c278222f2541cb4f5daa56aade68ce6
+      symbols:
+        - validate_adversarial_falsification_packet
+        - load_adversarial_falsification_packet
+        - compute_adversarial_falsification_packet_digest
+      role: packet validation, loading, and digest owner
+    - path: robot_sf/adversarial/search_harness.py
+      sha256: 511d488e1614a7d301abd16a87447a2fc8d60f0263ed271945b0421ef50013b9
+      symbols:
+        - FiniteSearchSpaceManifest
+        - prepare_baseline
+        - prepare_equal_budget_baselines
+      role: typed proposal and pre-simulation adapter boundary
+    - path: robot_sf/adversarial/feasibility_first.py
+      sha256: 79345a3b6469c9b78850720801ce7feed41003b9330b5ade9e544694f6e9a053
+      symbols:
+        - CHECK_NAMES
+        - build_scenario_feasibility_ledger
+        - rank_feasible_candidates
+      role: four-predicate feasibility and rejection accounting owner
+    - path: robot_sf/adversarial/bundle.py
+      sha256: fe6e899c21d9318a2ccc646c4f2b9f4f721e4059a58a5636ed6e6e1743560263
+      symbols:
+        - build_candidate_payload
+        - validate_template_pedestrian_binding
+      role: existing candidate materialization and template-binding owner
+
+variable_order:
+  - start_x
+  - start_y
+  - goal_x
+  - goal_y
+  - spawn_time_s
+  - pedestrian_speed_mps
+  - pedestrian_delay_s
+  - scenario_seed
+variable_map:
+  start_x:
+    actor: robot
+    field: route_overrides.robot_routes[].waypoints[0][0]
+    unit: m
+    kind: continuous
+    bounds: {min: 6.0, max: 10.0}
+    runtime_effective: true
+    binding_status: runtime_effective
+    source_path: variables.start_x
+    effectiveness_note: Candidate route start x is emitted into the existing robot route override.
+  start_y:
+    actor: robot
+    field: route_overrides.robot_routes[].waypoints[0][1]
+    unit: m
+    kind: continuous
+    bounds: {min: 21.2, max: 22.8}
+    runtime_effective: true
+    binding_status: runtime_effective
+    source_path: variables.start_y
+    effectiveness_note: Candidate route start y is emitted into the existing robot route override.
+  goal_x:
+    actor: robot
+    field: route_overrides.robot_routes[].waypoints[1][0]
+    unit: m
+    kind: continuous
+    bounds: {min: 18.0, max: 26.0}
+    runtime_effective: true
+    binding_status: runtime_effective
+    source_path: variables.goal_x
+    effectiveness_note: Candidate route goal x is emitted into the existing robot route override.
+  goal_y:
+    actor: robot
+    field: route_overrides.robot_routes[].waypoints[1][1]
+    unit: m
+    kind: continuous
+    bounds: {min: 21.2, max: 22.8}
+    runtime_effective: true
+    binding_status: runtime_effective
+    source_path: variables.goal_y
+    effectiveness_note: Candidate route goal y is emitted into the existing robot route override.
+  spawn_time_s:
+    actor: pedestrian:p2
+    field: single_pedestrians[p2].start_delay_s
+    unit: s
+    kind: continuous
+    bounds: {min: 0.0, max: 1.0}
+    runtime_effective: true
+    binding_status: runtime_effective
+    source_path: variables.spawn_time_s
+    effectiveness_note: Existing bundle/template binding writes candidate spawn time as p2 start delay.
+  pedestrian_speed_mps:
+    actor: pedestrian:p2
+    field: single_pedestrians[p2].speed_m_s
+    unit: m/s
+    kind: continuous
+    bounds: {min: 0.8, max: 1.4}
+    runtime_effective: true
+    binding_status: runtime_effective
+    source_path: variables.pedestrian_speed_mps
+    effectiveness_note: Existing bundle/template binding writes candidate speed to p2 runtime config.
+  pedestrian_delay_s:
+    actor: pedestrian:p2
+    field: wait_at[0].wait_s
+    unit: s
+    kind: continuous
+    bounds: {min: 0.0, max: 1.0}
+    runtime_effective: false
+    binding_status: provenance_only
+    source_path: variables.pedestrian_delay_s
+    effectiveness_note: >-
+      Provenance-only in #7340 template mode: the loader permits wait_at only on explicit
+      trajectories, so no runtime wait is authorized until a future adapter proves effectiveness.
+  scenario_seed:
+    actor: scenario
+    field: seeds[] + simulation_config.route_spawn_seed
+    unit: seed
+    kind: integer
+    bounds: {min: 301.0, max: 303.0}
+    runtime_effective: true
+    binding_status: runtime_effective
+    source_path: variables.scenario_seed
+    effectiveness_note: Existing scenario and route-spawn seed fields carry the candidate seed.
+
+feasibility:
+  owner: robot_sf.adversarial.feasibility_first
+  contract_version: scenario_feasibility_contract.v1
+  predicate_order:
+    - kinematic_reachability
+    - behavioral_consistency
+    - geometry_traffic
+    - simulator_validity
+  predicates:
+    - name: kinematic_reachability
+      source: robot_sf.adversarial.feasibility_first.FeasibilityCheck
+      meaning: The route satisfies the declared reachability and command-limit checks.
+      unavailable_verdict: missing
+      required_for_acceptance: true
+    - name: behavioral_consistency
+      source: robot_sf.adversarial.feasibility_first.FeasibilityCheck
+      meaning: The actor and runtime-binding assumptions are loader-consistent.
+      unavailable_verdict: missing
+      required_for_acceptance: true
+    - name: geometry_traffic
+      source: robot_sf.adversarial.feasibility_first.FeasibilityCheck
+      meaning: Geometry and traffic evidence is explicitly admissible.
+      unavailable_verdict: missing
+      required_for_acceptance: true
+    - name: simulator_validity
+      source: robot_sf.adversarial.feasibility_first.FeasibilityCheck
+      meaning: A separately authorized simulator or validator accepts the input.
+      unavailable_verdict: missing
+      required_for_acceptance: true
+  rejection_accounting:
+    owner: robot_sf.adversarial.feasibility_first.build_scenario_feasibility_ledger
+    pre_simulation: true
+    rejected_excluded_from_safety_denominator: true
+    unavailable_is_not_pass: true
+
+objective:
+  owner: robot_sf.adversarial.feasibility_first.rank_feasible_candidates
+  ordering:
+    - rank: 1
+      name: feasibility
+      direction: maximize
+      unit: boolean
+      source: ScenarioFeasibilityContract.feasible
+    - rank: 2
+      name: kinematic_criticality
+      direction: maximize
+      unit: normalized_score
+      source: HierarchicalScenarioValue.kinematic_criticality
+    - rank: 3
+      name: controllability_risk
+      direction: maximize
+      unit: normalized_score
+      source: HierarchicalScenarioValue.controllability_risk
+    - rank: 4
+      name: diversity
+      direction: maximize
+      unit: normalized_score
+      source: HierarchicalScenarioValue.diversity
+    - rank: 5
+      name: normalized_perturbation_cost
+      direction: minimize
+      unit: normalized_cost
+      source: approved mixed-unit perturbation-cost rule
+    - rank: 6
+      name: candidate_digest
+      direction: minimize
+      unit: lexicographic_sha256
+      source: deterministic candidate/control digest
+  scalarization: none
+  deterministic_tie_break: true
+
+search_methods:
+  primary:
+    id: cma_es
+    algorithm: CMA-ES
+    owner: robot_sf.adversarial.cma_me
+    role: proposal
+    budget_per_seed: 64
+    seed_group: search
+    execution_status: declared_not_executed
+  controls:
+    - id: random
+      algorithm: seeded_uniform
+      owner: robot_sf.adversarial.search_harness.RandomBaseline
+      role: equal_budget_control
+      budget_per_seed: 64
+      seed_group: search
+      execution_status: declared_not_executed
+    - id: halton
+      algorithm: Halton quasi-random
+      owner: robot_sf.adversarial.search_harness.QuasiRandomBaseline
+      role: equal_budget_control
+      budget_per_seed: 64
+      seed_group: search
+      execution_status: declared_not_executed
+  equal_budget: true
+  control_owner: robot_sf.adversarial.search_harness
+
+seed_policy:
+  # Packet-local deterministic allocations; these are not measured outcomes.
+  search_seeds: [857001, 857002, 857003]
+  confirmation_seeds: [857101, 857102, 857103, 857104, 857105]
+  candidate_seed_mode: index_derived
+  search_and_confirmation_disjoint: true
+  confirmation_role: held_out_confirmation
+
+budget:
+  candidate_budget_per_arm_per_seed: 64
+  search_candidate_rows_per_arm: 192
+  search_candidate_rows_all_arms: 576
+  rollouts_per_candidate: 1
+  max_steps_per_rollout: 120
+  diagnostic_only: true
+
+outcome_vocabulary:
+  result: A valid, available, runtime-effective execution row satisfying the declared result rule.
+  "null": A valid, available row where the predeclared effect or contrast is absent.
+  inconclusive: Available rows do not resolve the declared decision without overclaiming.
+  invalid: An input or row violates the packet contract and cannot enter an estimand denominator.
+  unavailable: A required producer or execution dependency did not provide interpretable evidence.
+  blocked: A precompute gate or explicit prerequisite forbids execution or interpretation.
+
+artifact_plan:
+  checksum_algorithm: sha256
+  required:
+    - id: packet
+      format: YAML
+      path: configs/adversarial/issue_8570_bounded_falsification_answerability_v1.yaml
+      checksum: self_digest
+      required_before_claim: true
+    - id: proposal_rows
+      format: JSONL
+      path: output/adversarial/issue_8570/proposal_rows.jsonl
+      checksum: per-file-sha256
+      required_before_claim: true
+    - id: feasibility_rejection_ledger
+      format: JSON
+      path: output/adversarial/issue_8570/feasibility_rejection_ledger.json
+      checksum: per-file-sha256
+      required_before_claim: true
+    - id: confirmation_rows
+      format: JSONL
+      path: output/adversarial/issue_8570/confirmation_rows.jsonl
+      checksum: per-file-sha256
+      required_before_claim: true
+    - id: confirmation_dossier
+      format: JSON
+      path: output/adversarial/issue_8570/confirmation_dossier.json
+      checksum: per-file-sha256
+      required_before_claim: true
+  raw_and_derived_separate: true
+  local_output_boundary: The output tree is a disposable cache; durable evidence must be promoted with checksums.
+  incomplete_outcome_policy: Preserve invalid, unavailable, inconclusive, and blocked rows explicitly; never coerce them to result or null.
+
+compute_ceiling:
+  max_wall_time_seconds: 7199
+  max_search_candidate_rows: 576
+  max_confirmation_seeds: 5
+  max_steps_per_rollout: 120
+  max_workers: 1
+  local_only: true
+  simulator_allowed: false
+  planner_allowed: false
+  optimizer_allowed: false
+  slurm_allowed: false
+
+answerability:
+  schema_version: research_answerability.v1
+  question:
+    research_question: Can the approved first-slice falsification design be checked before compute without changing the frozen #7340 source contract?
+    bounded_claim: This packet records a reproducible diagnostic preparation design and no empirical falsification result.
+    decision_vocabulary: [continue, stop, inconclusive, invalid]
+    negative_result_meaning: No valid runtime result, null, or confirmation is implied by a preparation-only or unavailable row.
+  estimand:
+    primary: Candidate-level falsification outcome by declared search arm and held-out confirmation seed, with invalid and unavailable rows visible.
+    reference_or_null: Equal-budget seeded random and Halton controls over the same source-bound candidate surface.
+    decision_predicates: Only rows passing every feasibility predicate and the future runtime-effective adapter gate may contribute to a result or null decision.
+    minimally_important_effect: Not required for this diagnostic packet; the #7382 budget is a starting design and is not powered evidence.
+  producers:
+    - field: feasibility_predicates
+      producer: feasibility_first.build_scenario_feasibility_ledger
+      source: robot_sf/adversarial/feasibility_first.py
+      unit: verdict
+      direction: pass_required
+      denominator: candidate
+      pairing_key: candidate_id
+      missingness_rule: Preserve missing or contradictory predicates as rejected and outside safety denominators.
+      status: available
+      execution_mode: native
+      required: true
+    - field: pedestrian_delay_runtime_effective
+      producer: bundle.build_candidate_payload plus scenario_loader
+      source: configs/adversarial/issue_7340_station_platform_search_space_v1.yaml
+      unit: boolean
+      direction: true_required
+      denominator: candidate
+      pairing_key: candidate_id
+      missingness_rule: Template-mode provenance-only delay is unavailable until an adapter proves runtime effectiveness.
+      status: unavailable
+      execution_mode: unavailable
+      required: true
+    - field: falsification_outcomes
+      producer: future approved native/replay runner
+      source: not produced by this preparation packet
+      unit: outcome
+      direction: declared_rule
+      denominator: valid_available_candidate_seed
+      pairing_key: candidate_id_seed
+      missingness_rule: Preserve absent execution as unavailable or blocked; never count it as a result or null.
+      status: unavailable
+      execution_mode: unavailable
+      required: true
+  analysis:
+    analysis_unit: candidate x execution seed
+    resampling_unit: held-out confirmation seed
+    command: No execution command is authorized by this packet; future execution must bind the packet digest.
+    multiplicity: One predeclared primary comparison across equal-budget arms; no result is computed here.
+    sensitivity_plan: Recheck source bytes, feasibility predicates, seed disjointness, and runtime effectiveness before any future adapter-backed run.
+    dry_run_status: passed
+    comparability_status: not_required
+  design:
+    mode: diagnostic
+    power_status: not_required
+    budget: 64 candidates per arm for each of three search seeds, with five distinct held-out confirmation seeds declared.
+    sample_size: No rows are executed; future confirmation cardinality must be specified by the approved runner.
+  artifacts:
+    raw_owner: future approved adversarial execution and evidence registry owners
+    durable_path: docs/context/evidence/issue_8570_bounded_falsification/
+    checksums: [packet self_digest, raw input SHA-256, per-artifact SHA-256]
+    durability_status: planned
+    incomplete_policy: Keep no-result vocabulary and rejection ledger rows explicit; do not promote diagnostic preparation to evidence.
+
+compute_authorization:
+  gate: research_answerability.v1
+  status: blocked
+  authorized: false
+  evaluated_state: blocked_missing_producer
+  blocking_reasons:
+    - pedestrian_delay_s is not runtime-effective in #7340 template mode; metadata or provenance cannot authorize compute.
+    - native falsification outcomes and held-out confirmation artifacts are unavailable in this preparation-only packet.
+  future_adapter_condition: >-
+    A future adapter may reconsider this gate only after it proves a runtime-effective pedestrian_delay_s
+    binding, preserves the source digest and bounds, supplies native/replay outputs, and passes the same
+    research_answerability.v1 evaluator; metadata-only changes remain blocked.
+
+self_digest: 4f1ef8fd59362a4e46b03dfe283336e8700c614d3806ab2cb4f055dc2182d21e

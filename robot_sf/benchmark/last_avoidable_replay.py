@@ -340,10 +340,12 @@ def _capture_window_snapshots(
     baseline_actions: Sequence[Any],
     config: ReplayConfig,
 ) -> dict[int, Any]:
-    """Return snapshots at the start of each step in ``[t_danger, t_contact)``.
+    """Return pre-contact snapshots at the start of each step in the window.
 
     ``snapshots[t]`` is the state from which baseline ``action[t]`` would be
-    applied — i.e. the decision point at step ``t``.
+    applied — i.e. the decision point at step ``t``. If contact is observed
+    before the declared window end, later snapshots are omitted so post-contact
+    states cannot be evaluated as counterfactual starts.
     """
     model.restore(initial_snapshot)
     if len(baseline_actions) < config.t_contact:
@@ -354,6 +356,8 @@ def _capture_window_snapshots(
         )
     snapshots: dict[int, Any] = {}
     for step in range(config.t_contact):
+        if model.collision():
+            break
         if config.t_danger <= step < config.t_contact:
             snapshots[step] = model.snapshot()
         model.step(baseline_actions[step])
@@ -418,6 +422,15 @@ def _branch_over_window(
             )
             continue
         model.restore(step_snapshot)
+        if model.collision():
+            # A post-contact snapshot is not a decision point from which a
+            # counterfactual intervention can be attributed. Preserve it as a
+            # coverage gap so callers fail closed instead of testing actions
+            # after the baseline has already contacted.
+            branches.append(
+                TimeBranchResult(step=step, feasible_count=0, preventing_action_labels=())
+            )
+            continue
         feasible = list(model.feasible_actions())
         preventing_labels: list[str] = []
         for action in feasible:
@@ -707,6 +720,25 @@ def locate_last_avoidable(  # noqa: C901 - explicit fail-closed verdict state ma
             notes=(
                 "baseline contact was observed outside the declared "
                 f"[{config.t_danger}, {config.t_contact}] contact bounds",
+            ),
+        )
+    if observed_contact != config.t_contact:
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="baseline_contact_tick_mismatch",
+            notes=(
+                "baseline contact tick did not match the declared contact tick: "
+                f"observed={observed_contact}, declared={config.t_contact}; "
+                "exact agreement is required before branch evaluation",
             ),
         )
 

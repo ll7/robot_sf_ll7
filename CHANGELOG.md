@@ -354,8 +354,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`robot_sf/benchmark/last_avoidable_fixtures.py`), the `last_avoidable_replay.v1` output schema, an
   offline report CLI (`scripts/analysis/run_last_avoidable_replay_issue_5442.py`), and a context note
   (`docs/context/issue_5442_last_avoidable_replay.md`). Controlled-fixture diagnostic evidence only;
-  `normative_fault` is always `not_assessed`. No production-simulator snapshot seam (that would be a
-  broad change — see the note), no benchmark/Slurm run, no metric/paper claim.
+  `normative_fault` is always `not_assessed`. The narrow in-memory production-simulator adapter is
+  diagnostic-only and does not provide durable, verified native-continuation provenance. No
+  benchmark/Slurm run, no metric/paper claim.
 * **issue #5441 `collision_causal_report.v1` fail-closed cause-report contract.** Adds
   `robot_sf/benchmark/schemas/collision_causal_report.v1.json` and validator
   `robot_sf/benchmark/collision_causal_report.py` that separate observed reconstruction, proximate

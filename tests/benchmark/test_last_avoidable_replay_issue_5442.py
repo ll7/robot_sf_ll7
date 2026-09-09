@@ -26,6 +26,8 @@ from robot_sf.benchmark.last_avoidable_replay import (
     VERDICT_UNKNOWN,
     ReplayConfig,
     _action_prevents_contact,
+    _branch_over_window,
+    _capture_window_snapshots,
     locate_last_avoidable,
 )
 
@@ -228,6 +230,61 @@ def test_contact_tick_matches_applied_action_count_at_boundary() -> None:
     )
 
     assert report.determinism.observed_contact_steps == (contact_tick,) * 5
+
+
+def test_declared_contact_tick_mismatch_abstains_before_branching() -> None:
+    """A validly shaped but incorrect t_contact cannot certify avoidability."""
+    scenario = fx.preventable_late_braking_scenario()
+    actual_contact_tick = fx.find_contact_step(scenario)
+    assert actual_contact_tick == 10
+    config = ReplayConfig(
+        t_danger=0,
+        t_contact=12,
+        horizon=18,
+        substitution_mode=SUBSTITUTION_HOLD,
+        determinism_replays=5,
+    )
+
+    report = locate_last_avoidable(
+        fx.KinematicCollisionModel(scenario),
+        fx.maintain_baseline_actions(config.t_contact + config.horizon + 2),
+        config,
+    )
+
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstained is True
+    assert report.abstain_reason == "baseline_contact_tick_mismatch"
+    assert report.determinism.observed_contact_steps == (actual_contact_tick,) * 5
+    assert report.branches == ()
+    assert report.t_uca is None
+    assert report.t_inevitable is None
+    assert report.minimal_sufficient_interventions == ()
+    jsonschema.validate(report.to_dict(), _SCHEMA)
+
+
+def test_post_contact_snapshots_are_coverage_gaps_for_branching() -> None:
+    """Branching never tests interventions from snapshots already in contact."""
+    scenario = fx.preventable_late_braking_scenario()
+    actual_contact_tick = fx.find_contact_step(scenario)
+    assert actual_contact_tick == 10
+    config = ReplayConfig(
+        t_danger=0,
+        t_contact=12,
+        horizon=2,
+        substitution_mode=SUBSTITUTION_HOLD,
+    )
+    model = fx.KinematicCollisionModel(scenario)
+    initial_snapshot = model.snapshot()
+    baseline_actions = fx.maintain_baseline_actions(config.t_contact + config.horizon)
+    snapshots = _capture_window_snapshots(model, initial_snapshot, baseline_actions, config)
+
+    branches, interventions = _branch_over_window(model, snapshots, baseline_actions, config)
+    post_contact_branches = [branch for branch in branches if branch.step >= actual_contact_tick]
+
+    assert len(post_contact_branches) == config.t_contact - actual_contact_tick
+    assert all(branch.feasible_count == 0 for branch in post_contact_branches)
+    assert all(not branch.any_prevented for branch in post_contact_branches)
+    assert all(intervention["step"] < actual_contact_tick for intervention in interventions)
 
 
 # -- acceptance criterion: already-unavoidable contact ----------------------

@@ -72,6 +72,10 @@ entries:
   status: proposal
   freshness: maintained
   area: planner
+- path: docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_8063_goal_belief_contract_receipt.v1.json
   status: evidence
   freshness: evidence

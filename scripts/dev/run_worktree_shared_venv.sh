@@ -27,6 +27,8 @@ from the selected venv, so a stale venv would silently run a drifted binary. Bef
 the freshness preflight compares the resolved `<venv>/bin/<tool>` version against the exact `==`
 pin in the active checkout's pyproject; on mismatch it fails closed with the exact `--venv`
 remedy instead of running. One preflight log line (with elapsed ms) is always emitted.
+Exact development pins are parsed structurally using host Python 3.11+ (stdlib only).
+Malformed TOML or ambiguous/unsupported exact declarations fail closed; unpinned tools still skip.
 
 Standalone commands with a verified boundary that does not import project packages can use
 --standalone. That mode skips the project-source freshness check and does not add the worktree root
@@ -614,6 +616,66 @@ recover_stale_fast_pysf_automatically() {
   echo "Automatic fast-pysf recovery selected worktree environment: $venv_path" >&2
 }
 
+read_default_dev_tool_pin() {
+  # Match the isolated runner's trusted host boundary, without its stricter Ruff-only policy.
+  # Keep this lazy so interpreter, explicit-path and no-manifest skips need no TOML runtime.
+  local host_python="" candidate
+  for candidate in /usr/bin/python3 /usr/local/bin/python3; do
+    if [[ -x "$candidate" ]] && "$candidate" -I -S -B -c 'import tomllib' 2>/dev/null; then
+      host_python="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$host_python" ]]; then
+    echo "ERROR: Shared-venv pin parser requires host Python 3.11+ with stdlib tomllib." >&2
+    return 2
+  fi
+  "$host_python" -I -S -B - "$1" "$2" <<'PY'
+import re
+import sys
+import tomllib
+
+try:
+    with open(sys.argv[1], "rb") as stream:
+        manifest = tomllib.load(stream)
+    groups = manifest.get("dependency-groups", {})
+    if not isinstance(groups, dict):
+        raise ValueError("dependency-groups must be a table")
+    dev = groups.get("dev", [])
+    if not isinstance(dev, list) or any(not isinstance(item, str) for item in dev):
+        raise ValueError("dev must be an array of strings; include groups are unsupported")
+    tool = sys.argv[2]
+    declarations = []
+    pins = set()
+    for item in dev:
+        name = re.match(r"[A-Za-z0-9_.-]+", item.strip())
+        if name is None or name.group() != tool:
+            continue
+        declarations.append(item)
+        exact = re.fullmatch(re.escape(tool) + r"==([0-9A-Za-z._+-]+)", item.strip())
+        if exact:
+            pins.add(exact.group(1))
+        else:
+            # Marker/URL equality is not a tool pin. Preserve plain wildcard-only ranges,
+            # but never disguise an unsupported exact-looking declaration as unpinned.
+            requirement = item.partition(";")[0].partition("@")[0].strip()
+            wildcard = re.fullmatch(
+                re.escape(tool) + r"\s*==\s*[0-9]+(?:\.[0-9]+)*\.\*", requirement
+            )
+            if "==" in requirement and wildcard is None:
+                raise ValueError(f"unsupported exact development declaration for {tool}")
+    if len(pins) > 1:
+        raise ValueError(f"conflicting exact development pins for {tool}")
+    if pins and any(item.strip() != f"{tool}=={next(iter(pins))}" for item in declarations):
+        raise ValueError(f"ambiguous development declarations for {tool}")
+    if pins:
+        print(next(iter(pins)))
+except (OSError, ValueError, TypeError) as exc:
+    print(f"ERROR: Shared-venv pin parser failed: {exc}", file=sys.stderr)
+    sys.exit(2)
+PY
+}
+
 check_shared_venv_freshness() {
   local venv_path="$1"
   local src_pkg="$repo_root/fast-pysf/pysocialforce"
@@ -720,8 +782,10 @@ check_shared_venv_freshness() {
     skip_reason="no-pin-manifest"
   fi
   if [[ -z "$skip_reason" ]]; then
-    local tool_esc="${tool//./\\.}"
-    pin="$(grep -E "^[[:space:]]*\"${tool_esc}==[0-9A-Za-z._+-]+\"" "$repo_root/pyproject.toml" 2>/dev/null | head -n 1 | sed -E 's/^[^=]*==([0-9A-Za-z._+-]+).*/\1/' || true)"
+    if ! pin="$(read_default_dev_tool_pin "$repo_root/pyproject.toml" "$tool")"; then
+      echo "ERROR: Shared-venv tool freshness preflight failed: tool=$tool reason=pin-parser-error elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2
+      return 2
+    fi
     if [[ -z "$pin" ]]; then
       skip_reason="unpinned"
     fi

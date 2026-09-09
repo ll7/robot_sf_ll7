@@ -146,6 +146,15 @@ def _github_read(
             stdout="",
             stderr="reaper GitHub transport only permits gh pr list",
         )
+    if args[1:2] == ["api"] and (
+        len(args) != 3 or re.fullmatch(r"repos/[^/\s]+/[^/\s]+/pulls/[1-9][0-9]*", args[2]) is None
+    ):
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=126,
+            stdout="",
+            stderr="reaper GitHub transport only permits PR-detail reads",
+        )
     if transport is not None:
         return transport(args)
     return _run_command(args)

@@ -217,6 +217,23 @@ def test_parse_worktree_porcelain_extracts_rows() -> None:
     assert rows[1]["branch"] == "issue-99-fix"
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["gh", "api", "repos/ll7/robot_sf_ll7/pulls/1", "--method", "DELETE"],
+        ["gh", "api", "repos/ll7/robot_sf_ll7/issues/1"],
+        ["gh", "api", "repos/ll7/robot_sf_ll7/pulls/0"],
+        ["gh", "pr", "close", "1"],
+    ],
+)
+def test_github_read_transport_refuses_non_read_commands(args: list[str]) -> None:
+    """The injectable/default GitHub boundary permits only bounded read shapes."""
+    result = reaper._github_read(args, transport=lambda _: pytest.fail("transport was called"))
+
+    assert result.returncode == 126
+    assert "permits" in result.stderr
+
+
 def test_classify_current_worktree_is_protected(tmp_path: Path) -> None:
     """The current worktree must never be classified as deletable."""
     wt = tmp_path / "worktree-current"

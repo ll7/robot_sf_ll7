@@ -94,6 +94,37 @@ def _report(*findings: dict[str, str]) -> dict[str, object]:
     return {"summary": {"findings": len(findings)}, "issues": list(findings)}
 
 
+def _projection(report: dict[str, object]) -> dict[str, object]:
+    """Build a complete synthetic projection for ratchet report-schema tests."""
+    files = ["projection.json"]
+    files_sha256 = hashlib.sha256(
+        json.dumps(files, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema": ratchet.PROJECTION_SCHEMA,
+        "mode": "frozen_squash_base",
+        "candidate_head": "a" * 40,
+        "frozen_base": "b" * 40,
+        "evaluated_head": "a" * 40,
+        "evaluated_base": "b" * 40,
+        "head_sha": "a" * 40,
+        "base_sha": "b" * 40,
+        "reachability_authority": "b" * 40,
+        "evidence_tree": {
+            "tree_sha": "c" * 40,
+            "count": 1,
+            "files": files,
+            "sha256": files_sha256,
+            "files_sha256": files_sha256,
+        },
+        "checked_files": 1,
+        "complete": True,
+        "campaigns": [],
+        "producer_records": [],
+        "findings_by_path": ratchet.aggregate(report),
+    }
+
+
 # --- pure ratchet logic -----------------------------------------------------------
 
 
@@ -175,6 +206,45 @@ def test_build_baseline_payload_round_trips_through_check() -> None:
     assert payload["summary"]["files_with_findings"] == 2
     failures, _ = ratchet.check_against_baseline(ratchet.aggregate(report), payload)
     assert failures == []
+
+
+def test_projected_ratchet_report_preserves_identity_and_finding_delta() -> None:
+    """The emitted ratchet envelope carries the projection and path/code delta."""
+    report = _report(_issue("projection.json", "dangling_commit"))
+    report["projection"] = _projection(report)
+    ratchet._validate_report(report, "projection fixture")
+
+    baseline = {"findings_by_path": {"projection.json": {"dangling_commit": 0}}}
+    emitted = ratchet.build_ratchet_report(report, baseline)
+
+    assert emitted["schema"] == ratchet.RATCHET_REPORT_SCHEMA
+    assert emitted["projection"] == report["projection"]
+    assert emitted["findings_by_path"] == {"projection.json": {"dangling_commit": 1}}
+    assert emitted["finding_delta"] == [
+        {
+            "path": "projection.json",
+            "code": "dangling_commit",
+            "baseline_count": 0,
+            "candidate_count": 1,
+            "delta": 1,
+            "status": "increased",
+        }
+    ]
+
+
+def test_ratchet_rejects_one_sided_explicit_projection_identity(tmp_path: Path) -> None:
+    """A candidate/base projection cannot silently downgrade to ordinary HEAD mode."""
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps({"schema_version": 1, "findings_by_path": {}}), encoding="utf-8")
+    proc = _run_cli(
+        tmp_path,
+        _report(),
+        "--candidate-head",
+        "a" * 40,
+    )
+
+    assert proc.returncode == 2
+    assert "must be supplied together" in proc.stderr
 
 
 def test_load_baseline_rejects_wrong_schema_version(tmp_path: Path) -> None:

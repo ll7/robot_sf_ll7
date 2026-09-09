@@ -46,6 +46,97 @@ owned environment manually with `uv sync --all-extras --reinstall-package robot-
 checkout only when that ownership is intentional. The standalone helper and its ownership boundary
 are documented in `scripts/dev/recover_fast_pysf_worktree.sh`.
 
+## Validate with an isolated Ruff version
+
+Use the active checkout's exact Ruff version without changing a shared or local project
+environment. This is useful when the owning checkout intentionally pins an older version:
+re-syncing that owner would reinstall its older pin, not satisfy the newer worktree.
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh --isolated-ruff -- \
+  ruff check tests/test_ci_script_contract.py
+scripts/dev/run_worktree_shared_venv.sh --isolated-ruff -- \
+  ruff format --check tests/test_ci_script_contract.py
+```
+
+The opt-in mode requires host Python 3.11+ and uv. Host Python runs with `-I -S -B`, without
+project or site imports, and requires one exact development dependency pin matching
+`tool.ruff.required-version`. It verifies the provisioned Ruff version before validation. The
+default shared-environment freshness refusal remains unchanged; isolated success is focused proof,
+not final readiness or permission to bypass a stale environment.
+
+Only bare `ruff check` and `ruff format --check` are supported. File paths, spaces, a `--` filename
+separator, and the caller's working directory are preserved. Safe selectors include `--select`,
+`--extend-select`, `--ignore`, `--extend-ignore`, per-file ignores, exclusions, target version,
+line length, and output format. Unknown options, stdin, mutation flags, configuration overrides,
+cache/output-file redirects, and combinations with other wrapper options fail closed.
+
+This route explicitly uses the active root's `pyproject.toml`; **nested and user Ruff configurations
+are ignored**. Root configuration cannot enable `fix` or `fix-only`, extend another configuration,
+or redirect cache/output. Ruff's cache and fixing are additionally disabled at the command line.
+
+Provisioning may access the network to download the exact pinned Ruff into a fresh task-owned
+directory under the resolved system `/tmp`. No shared/user cache is reused or deleted. Both uv's
+cache and temporary state stay there, outside the owning/worktree checkout and project environments;
+symlink-resolved cache/temp aliases into those locations are rejected. Inherited uv, Python, Ruff,
+and XDG redirects are cleared for the child. `UV_OFFLINE=1` is the sole inherited uv control; with
+the deliberately empty isolated cache, an unavailable package fails closed rather than falling
+back to another tool. The wrapper removes its own temporary directory on success, failure, and
+catchable `INT`, `TERM`, or `HUP`, terminating the child process group and allowing at most two
+seconds before forced termination. As with other processes, `SIGKILL` or host loss cannot execute
+cleanup. Ruff's normal validation exit code is preserved; admission/provisioning failure exits 2,
+and caught interruption returns the conventional `128 + signal` status.
+
+For full PR proof, prepare an intentionally local environment through the existing bootstrap route
+and run final readiness. This mode does not sync dependencies or replace the readiness formatter.
+
+## Early evidence-registry check in final readiness
+
+Final readiness checks the evidence registry before formatting or starting any test lane when the
+committed base-to-head changes touch a hosted evidence-registry input. This includes
+`docs/context/evidence/`, release and citation metadata, and the checker, linter, baseline,
+review policy, focused tests, and workflow paths listed in
+[the hosted workflow](../../.github/workflows/evidence-registry-ratchet.yml).
+Deletions and both sides of renames count; whitespace or newlines in a filename do not change
+the path boundary. Unrelated changes skip this early check.
+
+The entry point runs the canonical check exactly once for that relevant scope. In final mode it
+binds the check to the exact committed head and resolved base, for example:
+
+```bash
+candidate_head="$(git rev-parse --verify HEAD^{commit})"
+frozen_base="$(git rev-parse --verify origin/main^{commit})"
+uv run python scripts/dev/evidence_registry_ratchet.py --check \
+  --candidate-head "$candidate_head" --frozen-base "$frozen_base" \
+  --report-output /tmp/evidence-registry-ratchet-report.json
+```
+
+The projection reads the complete candidate evidence tree and uses only the frozen base for
+producer reachability. Its report records the candidate/base/tree identities, exact receipt and
+producer bindings, and projected per-path/per-code deltas. This is read-only: it neither repairs
+the registry nor refreshes its baseline. A checker failure preserves its diagnostic and exit
+status, including statuses 1 and 2, and prevents formatting, tests, and a success stamp. Missing,
+stale, shallow, or incomplete identities/history fail closed. An explicitly requested final-mode
+`BASE_REF` that remains unresolved after the existing best-effort fetch cannot fall back to `HEAD`.
+
+Hosted pull-request and merge-group runs use the same explicit projection. The direct/native merge
+gate consumers only consume the named exact-head check status; they do not parse the projection a
+second time. Because GraphQL status rollups omit check-run head identities, source-PR snapshots
+rebind a present evidence check through the exact REST check-run endpoint before admission consumes
+it. The current source-PR gate has no complete changed-file applicability proof for the
+path-filtered workflow, so an absent source-PR evidence check remains an explicit boundary rather
+than a claimed universal block. The native merge-group workflow supplies the synthetic exact head
+and frozen base to the canonical evidence job and evaluates the resulting proof against that
+synthetic head, while retaining the source PR head as a separate queue-ref identity. Native
+`--from-event` evaluation requires that synthetic head as a full 40-character
+`--merge-group-evidence-head` value at the CLI boundary. The single-account receipt inherits this
+gate audit.
+
+`PR_READY_SKIP_PREFLIGHT=1` does not disable this integrity check. Interim mode retains its existing
+behavior, including base fallback, and does not run the new early check. A successful check is
+only an early rejection filter: all later readiness gates, core registry invariants, hosted
+checks, and final freshness requirements still apply. No success is cached between runs.
+
 ## Readiness count selectors
 
 When reporting readiness counts, name the exact selector so another contributor can reproduce the
@@ -111,7 +202,9 @@ A fixture that omits both fails closed in the lane with git's
 "Author identity unknown" error instead of silently passing on a developer
 machine.
 
-# Final PR proof when the change crosses the escalation boundary
+## Final PR proof when the change crosses the escalation boundary
+
+```bash
 BASE_REF=origin/main PR_READY_MODE=final scripts/dev/pr_ready_check.sh
 ```
 

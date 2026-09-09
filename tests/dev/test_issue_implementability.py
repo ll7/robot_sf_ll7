@@ -4,18 +4,292 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import hashlib
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from scripts.dev import issue_dependency_packet, issue_implementability
 from scripts.dev.issue_implementability import evaluate_issue, inspect_contract, live_issue_report
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 REPOSITORY = "ll7/robot_sf_ll7"
+
+
+@pytest.fixture
+def cli_checkout(tmp_path: Path) -> Iterator[Path]:
+    """Stage the real offline import closure in a checkout whose path has spaces."""
+    root = Path(__file__).resolve().parents[2]
+    checkout = tmp_path / "active checkout"
+    paths = ["scripts/__init__.py"] + [
+        f"scripts/dev/{name}.py"
+        for name in (
+            "issue_implementability",
+            "gh_issue_rest",
+            "issue_claim",
+            "issue_dependency_packet",
+            "issue_state_taxonomy",
+            "_gh_rest",
+            "github_transport_policy",
+        )
+    ]
+    for path in paths:
+        target = checkout / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / path, target)
+    original = {
+        path.relative_to(checkout): path.read_bytes()
+        for path in checkout.rglob("*")
+        if path.is_file()
+    }
+    yield checkout
+    assert {
+        path.relative_to(checkout): path.read_bytes()
+        for path in checkout.rglob("*")
+        if path.is_file()
+    } == original
+
+
+@pytest.fixture
+def isolated_cli_env(tmp_path: Path) -> Iterator[dict[str, str]]:
+    """Keep real PyYAML, but exclude editable hooks, credentials and source roots."""
+    dependencies = tmp_path / "dependencies"
+    shutil.copytree(
+        Path(yaml.__file__).parent,
+        dependencies / "yaml",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    audit = tmp_path / "external-calls"
+    for name in ("gh", "git", "uv", "pip"):
+        command = commands / name
+        command.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$0" >> "$CALL_AUDIT"\nexit 97\n', encoding="utf-8"
+        )
+        command.chmod(0o755)
+    env = {"PATH": str(commands), "PYTHONPATH": str(dependencies), "CALL_AUDIT": str(audit)}
+    dependency = subprocess.run(
+        [sys.executable, "-S", "-B", "-c", "import yaml; assert yaml.safe_load('ok: true')['ok']"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert dependency.returncode == 0, dependency.stderr
+    yield env
+    assert not audit.exists(), "Offline CLI invoked an external command"
+    assert not list(tmp_path.rglob("*.pyc"))
+
+
+@pytest.mark.parametrize("foreign_cwd", [False, True], ids=["checkout", "foreign"])
+def test_direct_help_without_ambient_source_path(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+    foreign_cwd: bool,
+) -> None:
+    """The actual direct entrypoint works without inherited repository imports."""
+    root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-S", "-B", str(root / "scripts/dev/issue_implementability.py"), "--help"],
+        cwd=tmp_path if foreign_cwd else root,
+        env=isolated_cli_env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--preflight-body" in result.stdout
+    assert result.stderr == ""
+
+
+def test_direct_help_from_space_checkout(
+    cli_checkout: Path,
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """An absolute entrypoint in a space-containing checkout needs no cwd assistance."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-B",
+            str(cli_checkout / "scripts/dev/issue_implementability.py"),
+            "--help",
+        ],
+        cwd=tmp_path,
+        env=isolated_cli_env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--preflight-body" in result.stdout
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    ("mode", "complete", "labels", "claimed", "classification", "exit_code"),
+    [
+        ("preflight", True, [], "false", "ready", 0),
+        ("preflight", False, [], "false", "needs_spec", 2),
+        ("body", True, ["state:ready"], "false", "ready", 0),
+        ("body", True, ["state:ready", "state:blocked"], "false", "state_conflict", 2),
+        ("body", True, [], "false", "state_conflict", 2),
+        ("body", True, ["state:ready"], "true", "already_claimed", 2),
+        ("body", True, ["state:ready"], "unknown", "error", 1),
+    ],
+)
+def test_isolated_offline_cli_direct_module_parity(
+    cli_checkout: Path,
+    isolated_cli_env: dict[str, str],
+    mode: str,
+    complete: bool,
+    labels: list[str],
+    claimed: str,
+    classification: str,
+    exit_code: int,
+) -> None:
+    """Direct execution preserves the real offline decisions and exact JSON bytes."""
+    tmp_path = cli_checkout.parent
+    body = COMPLETE_BODY if complete else "## Objective\nRepair one defect.\n"
+    body_file = tmp_path / "body with spaces.md"
+    body_file.write_text(body, encoding="utf-8")
+    if mode == "preflight":
+        args = ["--preflight-body", str(body_file)]
+    else:
+        args = ["1", "--body-file", str(body_file), "--claimed", claimed]
+        for label in labels:
+            args.extend(["--label", label])
+    results = []
+    for entrypoint, cwd in (
+        ([str(cli_checkout / "scripts/dev/issue_implementability.py")], tmp_path),
+        (["-m", "scripts.dev.issue_implementability"], cli_checkout),
+    ):
+        result = subprocess.run(
+            [sys.executable, "-S", "-B", *entrypoint, *args],
+            cwd=cwd,
+            env=isolated_cli_env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+        assert result.returncode == exit_code, result.stderr or result.stdout
+        assert result.stderr == ""
+        results.append(result.stdout)
+    assert results[0] == results[1]
+    report = json.loads(results[0])
+    assert report["ready"] is (exit_code == 0)
+    if mode == "preflight":
+        assert report["schema"] == "issue_body_preflight.v1"
+        assert report["body_sha256"] == hashlib.sha256(body.encode()).hexdigest()
+        assert report["missing_fields"] == (
+            [] if complete else ["scope", "inputs", "acceptance", "verification"]
+        )
+    else:
+        assert report["schema"] == "issue_implementability.v1"
+        assert report["classification"] == classification
+    assert body_file.read_text(encoding="utf-8") == body
+
+
+def test_safe_path_direct_cli_prefers_active_checkout(
+    cli_checkout: Path,
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """An active root already later in sys.path must outrank a competing checkout."""
+    hostile = tmp_path / "competing checkout"
+    package = hostile / "scripts"
+    package.mkdir(parents=True)
+    poison = package / "__init__.py"
+    poison.write_text("raise AssertionError('competing checkout imported')\n", encoding="utf-8")
+    env = dict(isolated_cli_env)
+    env["PYTHONPATH"] = os.pathsep.join([str(hostile), str(cli_checkout), env["PYTHONPATH"]])
+    script = cli_checkout / "scripts/dev/issue_implementability.py"
+    result = subprocess.run(
+        [sys.executable, "-P", "-S", "-B", str(script), "--help"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--preflight-body" in result.stdout
+    assert result.stderr == ""
+    # Supplemental readback verifies the actual helper files after public CLI execution.
+    readback = subprocess.run(
+        [
+            sys.executable,
+            "-P",
+            "-S",
+            "-B",
+            "-c",
+            "import runpy,sys; from pathlib import Path; script=sys.argv[1]; "
+            "sys.argv=[script,'--help'];\n"
+            "try: runpy.run_path(script,run_name='__main__')\n"
+            "except SystemExit as exc: assert exc.code == 0\n"
+            "for name in ('gh_issue_rest','issue_claim','issue_dependency_packet','issue_state_taxonomy'):\n"
+            " assert Path(sys.modules['scripts.dev.'+name].__file__).resolve().parent == Path(script).parent\n",
+            str(script),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert readback.returncode == 0, readback.stderr
+    assert (
+        poison.read_text(encoding="utf-8")
+        == "raise AssertionError('competing checkout imported')\n"
+    )
+
+
+def test_ordinary_module_import_preserves_search_path(
+    cli_checkout: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """Importing as a package keeps the caller's module search order unchanged."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-B",
+            "-c",
+            "import sys; from pathlib import Path; before=list(sys.path); "
+            "from scripts.dev import issue_implementability; "
+            "assert sys.path == before; "
+            "assert Path(issue_implementability.__file__).resolve() == "
+            "Path('scripts/dev/issue_implementability.py').resolve()",
+        ],
+        cwd=cli_checkout,
+        env=isolated_cli_env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == result.stderr == ""
+
 
 COMPLETE_BODY = """## Objective
 Repair one bounded workflow defect.
@@ -665,6 +939,76 @@ def test_preflight_body_text_rejects_empty_body() -> None:
         "acceptance",
         "verification",
     ]
+    assert payload["heading_suggestions"] == {}
+
+
+def test_preflight_body_text_suggests_alias_for_parenthesized_heading() -> None:
+    """Issue #8694: a near-miss heading maps to its closest missing-field alias."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        "## Inputs (formalization appended 2026-09-08)\n\n- one file\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == ["inputs"]
+    suggestion = payload["heading_suggestions"]["inputs (formalization appended 2026 09 08)"]
+    assert suggestion["field"] == "inputs"
+    assert suggestion["alias"] == "inputs"
+
+
+def test_preflight_body_text_suggests_alias_for_input_contract_heading() -> None:
+    """A near-miss `Input contract` heading suggests the `inputs` field."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        "## Input contract\n\n- one file\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == ["inputs"]
+    suggestion = payload["heading_suggestions"]["input contract"]
+    assert suggestion["field"] == "inputs"
+    assert suggestion["alias"] == "inputs"
+
+
+def test_preflight_body_text_suggests_alias_for_empty_input_contract_heading() -> None:
+    """Empty near-miss headings remain visible to the suggestion helper."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        "## Input contract\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == ["inputs"]
+    suggestion = payload["heading_suggestions"]["input contract"]
+    assert suggestion["field"] == "inputs"
+    assert suggestion["alias"] == "inputs"
+
+
+def test_preflight_body_text_suggests_nothing_for_exact_body() -> None:
+    """Exact-heading bodies produce an empty suggestion map."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        "## Inputs\n\n- one file\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is True
+    assert payload["heading_suggestions"] == {}
 
 
 def test_preflight_body_file_reads_disk_without_network(tmp_path: Path) -> None:

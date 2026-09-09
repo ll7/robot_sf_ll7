@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import difflib
 import hashlib
 import json
 import re
@@ -14,6 +15,10 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+if __package__ in {None, ""}:
+    # Direct execution must prefer this checkout over ambient source roots.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.dev import gh_issue_rest, issue_claim, issue_dependency_packet
 from scripts.dev.issue_state_taxonomy import (
@@ -193,7 +198,7 @@ def _heading_matches(heading: str, alias: str) -> bool:
 def inspect_contract(body: str) -> dict[str, Any]:
     """Inspect required implementation-contract sections without inferring intent."""
     records = _heading_records(body)
-    headings = sorted({heading for heading, _ in records})
+    headings = sorted({heading for heading, _ in _heading_sections(body)})
     fields: dict[str, dict[str, Any]] = {}
     missing_fields: list[str] = []
     for field, aliases in FIELD_ALIASES.items():
@@ -220,11 +225,12 @@ def preflight_body_text(body: str) -> dict[str, Any]:
     """Run the deterministic zero-write preflight for one issue body.
 
     Returns a stable JSON-ready verdict with ``ready``, the exact ``missing_fields``
-    (objective, scope, inputs, acceptance, verification), and the body digest so a
-    worker can repair the local draft before any GitHub create request. This guard
-    creates no labels, comments, projects, claims, or issues; the live
-    ``goal_issue_admission`` boundary remains responsible for state, claims,
-    blockers, and freshness.
+    (objective, scope, inputs, acceptance, verification), ``heading_suggestions``
+    mapping each unmatched body heading to its closest canonical alias (empty when
+    nothing is missing), and the body digest so a worker can repair the local draft
+    before any GitHub create request. This guard creates no labels, comments,
+    projects, claims, or issues; the live ``goal_issue_admission`` boundary remains
+    responsible for state, claims, blockers, and freshness.
     """
     contract = inspect_contract(body)
     missing_fields = list(contract["missing_fields"])
@@ -232,8 +238,74 @@ def preflight_body_text(body: str) -> dict[str, Any]:
         "schema": "issue_body_preflight.v1",
         "ready": not missing_fields,
         "missing_fields": missing_fields,
+        "heading_suggestions": _suggest_heading_aliases(contract, set(missing_fields)),
         "body_sha256": contract["body_sha256"],
     }
+
+
+def _stem_token(token: str) -> str:
+    """Reduce one token to a light stem for heading similarity (plural folding)."""
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
+def _heading_similarity(heading: str, alias: str) -> float:
+    """Deterministic similarity between normalized heading and alias text.
+
+    Exact or leading-token matches score 1.0 so suffixed headings such as
+    ``inputs (formalization appended ...)`` still resolve; otherwise the score
+    is the best of stemmed-token Dice and :func:`difflib.SequenceMatcher` ratio
+    so near-misses such as ``input contract`` resolve without accepting
+    unrelated headings.
+    """
+    if heading == alias or heading.startswith(alias + " "):
+        return 1.0
+    heading_tokens = {_stem_token(t) for t in heading.split()}
+    alias_tokens = {_stem_token(t) for t in alias.split()}
+    overlap = len(heading_tokens & alias_tokens)
+    dice = (
+        2 * overlap / (len(heading_tokens) + len(alias_tokens))
+        if heading_tokens and alias_tokens
+        else 0.0
+    )
+    return max(dice, difflib.SequenceMatcher(None, heading, alias).ratio())
+
+
+def _suggest_heading_aliases(
+    contract: Mapping[str, Any], missing_fields: set[str], *, threshold: float = 0.6
+) -> dict[str, dict[str, Any]]:
+    """Map each unmatched body heading to its closest canonical alias.
+
+    Only headings that matched no contract field are considered, and only aliases
+    of currently missing fields are suggested, so exact-heading bodies always
+    produce an empty map. Similarity is deterministic (see
+    :func:`_heading_similarity`); ties resolve by field then alias ordering.
+    Scores below ``threshold`` are omitted.
+    """
+    fields = contract.get("fields", {})
+    matched = {
+        heading
+        for field in fields.values()
+        if isinstance(field, Mapping)
+        for heading in field.get("matched_headings", [])
+    }
+    suggestions: dict[str, dict[str, Any]] = {}
+    for heading in sorted(set(contract.get("headings", [])) - matched):
+        best: tuple[float, str, str] | None = None
+        for field in sorted(missing_fields):
+            for alias in sorted(FIELD_ALIASES.get(field, ())):
+                score = _heading_similarity(heading, alias)
+                if best is None or score > best[0]:
+                    best = (score, field, alias)
+        if best is not None and best[0] >= threshold:
+            score, field, alias = best
+            suggestions[heading] = {
+                "field": field,
+                "alias": alias,
+                "score": round(score, 4),
+            }
+    return suggestions
 
 
 def preflight_body_file(path: str | Path) -> dict[str, Any]:

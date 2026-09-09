@@ -1874,6 +1874,7 @@ def test_evaluate_merge_gate_fails_closed_when_runtime_dimensions_are_missing() 
 
 def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> None:
     """The live merge_group path uses its encoded PR and matching source SHA."""
+    synthetic_head = "9" * 40
     event_path = tmp_path / "merge_group.json"
     event_path.write_text(
         json.dumps(
@@ -1902,10 +1903,20 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
             _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(head_sha=synthetic_head),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
-        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
 
     assert exit_code == 0
     calls = [call.args[0] for call in mock_gh.call_args_list]
@@ -1915,6 +1926,7 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
 
 def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
     """The event payload's branch-name queue ref resolves like its full ref form."""
+    synthetic_head = "9" * 40
     event_path = tmp_path / "merge_group.json"
     event_path.write_text(
         json.dumps(
@@ -1942,10 +1954,20 @@ def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
             _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(head_sha=synthetic_head),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
-        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
 
     assert exit_code == 0
 
@@ -1956,11 +1978,21 @@ def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
 )
 def test_from_event_rejects_malformed_event_payload(tmp_path, capsys, event) -> None:
     """Malformed or non-queue payloads fail closed before any GitHub query."""
+    synthetic_head = "9" * 40
     event_path = tmp_path / "merge_group.json"
     event_path.write_text(json.dumps(event), encoding="utf-8")
 
     with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
-        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
 
     assert exit_code == 1
     assert mock_gh.call_count == 0
@@ -1970,6 +2002,7 @@ def test_from_event_rejects_malformed_event_payload(tmp_path, capsys, event) -> 
 def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, capsys) -> None:
     """A queue ref cannot be rebound to a newer or unrelated PR head."""
     encoded_sha = "deadbeefcafe"
+    synthetic_head = "9" * 40
     event_path = tmp_path / "merge_group.json"
     event_path.write_text(
         json.dumps(
@@ -1990,16 +2023,44 @@ def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, cap
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
             _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(head_sha=synthetic_head),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
-        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
 
     audit = json.loads(capsys.readouterr().out)
     assert exit_code == 1
     assert audit["merge_group_head_sha"] == encoded_sha
     assert audit["merge_group_head_binding"] == "mismatch"
     assert "merge_group_head_sha_mismatch" in audit["reasons"]
+
+
+@pytest.mark.parametrize("value", ["", "not-a-sha", "a" * 39, "a" * 41])
+def test_from_event_requires_full_synthetic_evidence_head(tmp_path, capsys, value) -> None:
+    """Native queue evaluation rejects absent or malformed synthetic evidence identities."""
+    event_path = tmp_path / "merge_group.json"
+    event_path.write_text("{}", encoding="utf-8")
+
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        args = ["--from-event", str(event_path), "--repo", "owner/repo"]
+        if value:
+            args.extend(["--merge-group-evidence-head", value])
+        with pytest.raises(SystemExit) as excinfo:
+            main(args)
+
+    assert excinfo.value.code == 2
+    assert mock_gh.call_count == 0
+    assert "merge-group-evidence-head" in capsys.readouterr().err
 
 
 def test_pr_mode_fails_closed_when_current_main_sha_is_unavailable(capsys) -> None:

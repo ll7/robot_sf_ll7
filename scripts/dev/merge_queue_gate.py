@@ -2848,6 +2848,20 @@ def _load_merge_group_event(path: str) -> tuple[dict[str, Any] | None, str | Non
     return event, None
 
 
+def _validate_merge_group_evidence_head(
+    parser: argparse.ArgumentParser, *, from_event: str, evidence_head: str
+) -> None:
+    """Require exact synthetic evidence identity on the native queue route."""
+    if not from_event:
+        return
+    if not evidence_head:
+        parser.error("--merge-group-evidence-head is required with --from-event; failing closed")
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", evidence_head):
+        parser.error(
+            "--merge-group-evidence-head must be a full 40-character commit SHA; failing closed"
+        )
+
+
 def _audit_exit_code(audit: MergeGateAudit, *, advisory: bool) -> int:
     """Return the CLI status while preserving a truthful advisory audit."""
     if advisory and not audit.passed:
@@ -2909,6 +2923,11 @@ def main(argv: list[str] | None = None) -> int:
         return _self_test()
     if args.advisory and not args.pr:
         parser.error("--advisory is valid only with --pr; merge_group remains fail-closed")
+    _validate_merge_group_evidence_head(
+        parser,
+        from_event=args.from_event,
+        evidence_head=args.merge_group_evidence_head,
+    )
 
     repo = _resolve_owner_repo(args.repo)
     if not repo:

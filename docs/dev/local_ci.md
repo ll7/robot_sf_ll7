@@ -127,8 +127,10 @@ it. The current source-PR gate has no complete changed-file applicability proof 
 path-filtered workflow, so an absent source-PR evidence check remains an explicit boundary rather
 than a claimed universal block. The native merge-group workflow supplies the synthetic exact head
 and frozen base to the canonical evidence job and evaluates the resulting proof against that
-synthetic head, while retaining the source PR head as a separate queue-ref identity. The
-single-account receipt inherits this gate audit.
+synthetic head, while retaining the source PR head as a separate queue-ref identity. Native
+`--from-event` evaluation requires that synthetic head as a full 40-character
+`--merge-group-evidence-head` value at the CLI boundary. The single-account receipt inherits this
+gate audit.
 
 `PR_READY_SKIP_PREFLIGHT=1` does not disable this integrity check. Interim mode retains its existing
 behavior, including base fallback, and does not run the new early check. A successful check is

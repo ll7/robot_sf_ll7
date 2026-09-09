@@ -2931,7 +2931,9 @@ def _empty_issue_source_contract_failures(
     if not isinstance(reason, str) or not reason.strip():
         failures.append("source_status_reason must be a non-empty string")
     for field in ("rate_limited", "quota_exhausted", "budget_exhausted", "request_limit_exhausted"):
-        if issue_meta.get(field) is True:
+        if field in issue_meta and type(issue_meta[field]) is not bool:
+            failures.append(f"{field} must be a boolean when present")
+        elif issue_meta.get(field) is True:
             failures.append(f"{field} must not be true")
     return failures
 
@@ -2999,7 +3001,9 @@ def _complete_issue_source_contract_failures(
     if not isinstance(reason, str) or not reason.strip():
         failures.append("source_status_reason must be a non-empty string")
     for field in ("rate_limited", "quota_exhausted", "budget_exhausted", "request_limit_exhausted"):
-        if issue_meta.get(field) is True:
+        if field in issue_meta and type(issue_meta[field]) is not bool:
+            failures.append(f"{field} must be a boolean when present")
+        elif issue_meta.get(field) is True:
             failures.append(f"{field} must not be true")
     return failures
 

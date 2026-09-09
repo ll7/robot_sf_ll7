@@ -1390,6 +1390,30 @@ def test_empty_issue_source_rejects_impossible_request_count() -> None:
     assert plan["issue_inventory_status"]["error_code"] == ("issue_inventory_source_empty_unproven")
 
 
+def test_empty_issue_source_rejects_non_boolean_exhaustion_flags() -> None:
+    """An empty response cannot use stringified exhaustion flags as proof."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata["budget_exhausted"] = "false"
+    inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {"issues": source_metadata},
+    }
+
+    plan = build_audit_plan(inventory)
+
+    assert plan["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    )
+    assert plan["issue_inventory_status"]["error_code"] == ("issue_inventory_source_empty_unproven")
+
+
 def test_anomalous_issue_source_status_is_preserved_when_unavailable() -> None:
     """An explicit anomaly remains distinguishable from an unavailable read."""
     source_metadata = _empty_issue_source_metadata()
@@ -1434,6 +1458,7 @@ def test_complete_issue_source_requires_typed_success_metadata() -> None:
             "source_proof": "canonical_issue_rows",
             "source_status_reason": "canonical open-issue response is complete",
             "errors": "read failed",
+            "budget_exhausted": "true",
         }
     )
     inventory = {

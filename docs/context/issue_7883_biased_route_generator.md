@@ -6,7 +6,7 @@ not evidence of human preference, pedestrian intent, comfort, or social complian
 prerequisite contract [#7890](https://github.com/ll7/robot_sf_ll7/issues/7890)).
 **Owner module:** `robot_sf/nav/biased_route_generator.py`.
 **Observability contract:** `robot_sf/benchmark/route_choice_observability.py` (`route_choice_observability.v1`).
-**Source reference:** Kim, S., Gu, Y., & Cheong, H. (2026). Bubble-chain biased global path planning in structured indoor environments. *Journal of Intelligent & Robotic Systems* (19 August 2026). DOI: [10.1007/s10846-026-02444-3](https://doi.org/10.1007/s10846-026-02444-3).
+**Source reference:** Kim, T., Gu, C., & Cheong, J. (2026). *Biased Global Path Planning Method using Bubble Chains for Human-friendly Navigation*. *Journal of Intelligent & Robotic Systems* (19 August 2026). DOI: [10.1007/s10846-026-02444-3](https://doi.org/10.1007/s10846-026-02444-3).
 
 Plain-language summary: this module provides pure, typed, deterministic utilities to generate
 route alternatives under explicit side biases (`neutral`, `left`, `right`) across canonical
@@ -16,17 +16,20 @@ predictability diagnostics without requiring heavy simulation or stochastic samp
 
 ## 1. Source Method and Scope Limits
 
-The route-bias concept is adapted from bubble-chain biased global planning described by Kim, Gu,
-and Cheong (*Journal of Intelligent & Robotic Systems*, 19 August 2026,
-DOI: [10.1007/s10846-026-02444-3](https://doi.org/10.1007/s10846-026-02444-3)):
+The route-bias concept is conceptually inspired by the bubble-chain biased global planning described
+by Kim, Gu, and Cheong (*Journal of Intelligent & Robotic Systems*, 19 August 2026,
+DOI: [10.1007/s10846-026-02444-3](https://doi.org/10.1007/s10846-026-02444-3)). This module is a
+diagnostic analogue, not a reimplementation of the paper's bubble-chain construction, learned
+suppression, or open-uniform B-spline interpolation:
 
 - **Structured-indoor environments only in the source:** The source methodology is strictly scoped
   to structured indoor layouts (such as hallways, rooms, and regular passages) where geometric bubble
   chains can constrain alternative homotopy channels. It does not establish validity for unstructured,
   open outdoor spaces, or complex multi-agent urban flows.
-- **No autonomous mobile vehicle (AMV) evidence:** The source paper does not report empirical
-  physical autonomous mobile vehicle (AMV) platform trials, hardware deployments, or onboard sensor
-  experiments; its validation is limited to simulation/algorithmic evaluation.
+- **Source experiments are not reproduced here:** The cited paper reports simulations and
+  experiments for mobile robots in structured indoor public environments. This repository's
+  synthetic generator has no physical autonomous mobile vehicle (AMV) deployment evidence and
+  does not reproduce or extend those source experiments.
 - **Planner-route observability only — never human predictability:** In this repository, the
   generated conditions serve exclusively to test whether a robot navigation policy exhibits observable,
   consistent topological decisions under controlled geometric bias. Synthetic routes and simulator
@@ -76,10 +79,12 @@ diagonal jumps.
 
 ## 6. Claim Boundaries and Non-Goals
 
-- **Structured-indoor scope only**: The bubble-chain biasing method was evaluated in structured indoor
-  environments; its assumptions do not transfer to unstructured, open outdoor, or mixed-traffic settings.
-- **No autonomous mobile vehicle (AMV) evidence**: Neither the source method nor this synthetic generator
-  provides physical AMV field trial or real-world vehicle deployment evidence.
+- **Structured-indoor source scope only**: The cited paper studies mobile-robot path planning in
+  structured indoor public environments; its reported evidence does not establish validity for
+  unstructured, open outdoor, or mixed-traffic settings.
+- **No physical AMV evidence in this repository**: This synthetic generator provides no physical
+  AMV field trial or real-world vehicle deployment evidence. The cited source's experiments are
+  not reproduced or extended by this module.
 - **No human preference or intent claims**: Generates deterministic synthetic routes for controlled
   benchmarking; does not model or assert actual pedestrian choice mechanics. Simulator traces and
   synthetic biased routes in this module evaluate planner observability only.

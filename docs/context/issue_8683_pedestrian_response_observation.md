@@ -42,7 +42,7 @@ reference metadata; it never treats an unreferenced side label as available evid
 The focused tests replay the existing canonical corridor and dual-doorway fixtures with identical
 inputs and assert byte-stable JSON-ready records. The fixtures are structured indoor diagnostics
 only. Their source limitation is that they do not establish behavior outside structured indoor
-scenes; there is no autonomous mobile vehicle (AMV) evidence, human-subject validation, or basis
+scenes; there is no autonomous mobility vehicle (AMV) evidence, human-subject validation, or basis
 for human-predictability or social-compliance claims.
 
 This contract does not change planners, metric semantics, campaigns, preregistration, social-

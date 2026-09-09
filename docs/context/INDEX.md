@@ -86,8 +86,9 @@ pedestrian preference, response, comfort, or human predictability:
 
 Issue #8683 pedestrian-response observation (`pedestrian_response_observation.v1`): a typed,
 per-encounter diagnostic record that composes the existing route-side reports with observed
-clearance and response-presence fields. It is limited to structured-indoor fixtures, has no AMV
-evidence, and makes no planner, metric, social-compliance, or human-predictability claim:
+clearance and response-presence fields. It is limited to structured-indoor fixtures, has no
+autonomous mobility vehicle (AMV) evidence, and makes no planner, metric, social-compliance, or
+human-predictability claim:
 [issue_8683_pedestrian_response_observation.md](issue_8683_pedestrian_response_observation.md).
 
 Issue #7888 incident-to-scenario provenance contract (`incident_scenario_provenance.v1`):

@@ -43,6 +43,7 @@ replay diverges, the engine abstains to ``unknown`` rather than guessing.
 from __future__ import annotations
 
 import random
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -186,20 +187,40 @@ def _capture_single_runtimes(peds_behaviors: list[Any]) -> list[Any]:
     return runtimes
 
 
-def _restore_single_runtimes(peds_behaviors: list[Any], runtimes: list[Any]) -> None:
-    """Restore single-pedestrian behavior runtime state from a snapshot."""
+def _restore_single_runtimes(peds_behaviors: list[Any], runtimes: list[Any]) -> None:  # noqa: C901
+    """Restore single-pedestrian behavior runtime state from a complete snapshot."""
+    if not isinstance(runtimes, list) or len(runtimes) != len(peds_behaviors):
+        raise ValueError("single-pedestrian runtime snapshot does not match behavior count")
     for behavior, saved in zip(peds_behaviors, runtimes, strict=True):
-        if saved is None or not hasattr(behavior, "_runtimes"):
+        current_runtimes = getattr(behavior, "_runtimes", None)
+        if current_runtimes is None:
+            if saved is not None:
+                raise ValueError("snapshot contains runtimes for a behavior without runtimes")
             continue
-        current_by_ped_id = {int(runtime.ped_id): runtime for runtime in behavior._runtimes}
+        if saved is None:
+            raise ValueError("snapshot is missing single-pedestrian runtime state")
+        if not isinstance(saved, list) or len(saved) != len(current_runtimes):
+            raise ValueError("single-pedestrian runtime snapshot does not match actor count")
+        current_by_ped_id = {int(runtime.ped_id): runtime for runtime in current_runtimes}
         current_by_definition_id = {
             str(getattr(runtime.definition, "id", runtime.ped_id)): runtime
-            for runtime in behavior._runtimes
+            for runtime in current_runtimes
         }
         restored: list[SinglePedestrianRuntime] = []
+        matched_runtime_ids: set[int] = set()
         for fields in saved:
+            if not isinstance(fields, Mapping):
+                raise ValueError("single-pedestrian runtime state must be a mapping")
             # Accept snapshots written before the typed runtime representation.
             if "definition" in fields:
+                legacy_current = current_by_ped_id.get(int(fields["ped_id"]))
+                if legacy_current is None:
+                    raise ValueError(
+                        "single-pedestrian snapshot identity does not match destination"
+                    )
+                if id(legacy_current) in matched_runtime_ids:
+                    raise ValueError("single-pedestrian snapshot contains a duplicate runtime")
+                matched_runtime_ids.add(id(legacy_current))
                 restored.append(SinglePedestrianRuntime(**fields))
                 continue
             current = current_by_ped_id.get(int(fields["ped_id"])) or current_by_definition_id.get(
@@ -210,6 +231,9 @@ def _restore_single_runtimes(peds_behaviors: list[Any], runtimes: list[Any]) -> 
                     "single-pedestrian snapshot identity does not match the destination "
                     f"behavior (ped_id={fields.get('ped_id')!r})"
                 )
+            if id(current) in matched_runtime_ids:
+                raise ValueError("single-pedestrian snapshot contains a duplicate runtime")
+            matched_runtime_ids.add(id(current))
             mutable_fields = {
                 key: value
                 for key, value in fields.items()
@@ -234,6 +258,8 @@ def _restore_single_runtimes(peds_behaviors: list[Any], runtimes: list[Any]) -> 
                     **mutable_fields,
                 )
             )
+        if len(matched_runtime_ids) != len(current_runtimes):
+            raise ValueError("single-pedestrian snapshot omits a destination runtime")
         behavior._runtimes = restored
 
 
@@ -269,25 +295,35 @@ def _capture_behavior_rng_states(peds_behaviors: list[Any]) -> dict[str, Any]:
 
 def _restore_behavior_rng_states(peds_behaviors: list[Any], saved: dict[str, Any] | None) -> None:
     """Restore owned NumPy generator states, rejecting identity drift."""
-    if not saved:
-        return
+    if saved is not None and not isinstance(saved, Mapping):
+        raise ValueError("behavior RNG snapshot must be a mapping")
+    expected_keys: set[str] = set()
     for index, behavior in enumerate(peds_behaviors):
         identity = _stable_behavior_identity(index, behavior)
         for attribute in ("rng", "_rng"):
             key = f"{identity}:{attribute}"
-            if key in saved:
-                state = saved[key]
-            else:
-                # Read-only compatibility for snapshots written by the first
-                # hardening slice, which keyed generators by process-local object id.
-                state = saved.get(id(behavior))  # type: ignore[arg-type]
-                if state is None:
-                    continue
             generator = getattr(behavior, attribute, None)
             bit_generator = getattr(generator, "bit_generator", None)
             if bit_generator is None:
-                raise ValueError(f"snapshot requires missing behavior RNG {key!r}")
+                continue
+            expected_keys.add(key)
+            if saved is None:
+                raise ValueError(f"snapshot is missing behavior RNG {key!r}")
+            if key in saved:
+                state = saved[key]
+            elif id(behavior) in saved:
+                # Read-only compatibility for snapshots written by the first
+                # hardening slice, which keyed generators by process-local object id.
+                state = saved[id(behavior)]
+            else:
+                raise ValueError(f"snapshot is missing behavior RNG {key!r}")
             bit_generator.state = deepcopy(state)
+    if saved is not None:
+        unexpected = {key for key in saved if isinstance(key, str) and key not in expected_keys}
+        if unexpected:
+            raise ValueError(
+                f"snapshot contains unknown behavior RNG identities: {sorted(unexpected)}"
+            )
 
 
 def _capture_pedestrian_groups(groups: Any) -> tuple[dict[Any, Any], dict[Any, Any]]:
@@ -373,7 +409,11 @@ def _capture_residual_adversary_state(simulator: Any) -> dict[str, Any] | None:
 def _restore_residual_adversary_state(simulator: Any, saved: dict[str, Any] | None) -> None:
     """Restore a captured residual-adversary state without loading executable objects."""
     if saved is None:
+        if getattr(simulator, "_residual_adversary", None) is not None:
+            raise ValueError("snapshot is missing residual-adversary state")
         return
+    if not isinstance(saved, Mapping):
+        raise ValueError("residual-adversary snapshot must be a mapping")
     adversary = getattr(simulator, "_residual_adversary", None)
     if adversary is None:
         builder = getattr(simulator, "_build_residual_adversary", None)
@@ -383,9 +423,14 @@ def _restore_residual_adversary_state(simulator: Any, saved: dict[str, Any] | No
         if adversary is None:
             raise ValueError("snapshot contains residual-adversary state but config is inactive")
         simulator._residual_adversary = adversary
+    expected_fields = {field for field in _RESIDUAL_STATE_FIELDS if hasattr(adversary, field)}
+    unsupported = set(saved) - set(_RESIDUAL_STATE_FIELDS)
+    if unsupported:
+        raise ValueError(f"unsupported residual-adversary state field {sorted(unsupported)}")
+    missing = expected_fields - set(saved)
+    if missing:
+        raise ValueError(f"snapshot is missing residual-adversary state fields: {sorted(missing)}")
     for field, value in saved.items():
-        if field not in _RESIDUAL_STATE_FIELDS:
-            raise ValueError(f"unsupported residual-adversary state field {field!r}")
         setattr(adversary, field, deepcopy(value))
 
 
@@ -413,42 +458,49 @@ def _capture_route_navigators(peds_behaviors: list[Any]) -> dict[str, Any]:
     return navigators
 
 
-def _restore_route_navigators(peds_behaviors: list[Any], navigators: dict[str, Any]) -> None:
-    """Restore route-group navigator mutable state from a snapshot."""
+def _restore_route_navigators(  # noqa: C901
+    peds_behaviors: list[Any], navigators: dict[str, Any]
+) -> None:
+    """Restore route-group navigator state, rejecting missing identities or fields."""
+    if not isinstance(navigators, Mapping):
+        raise ValueError("route navigator snapshot must be a mapping")
+    expected_identities: set[str] = set()
     for index, behavior in enumerate(peds_behaviors):
         navs = getattr(behavior, "navigators", None)
         if not navs:
             continue
-        # Keep the identity derivation local as well as shared with capture: the
-        # supplied isolated control-flow probe extracts this function on its own.
-        behavior_type = type(behavior).__name__.lower()
-        if hasattr(behavior, "single_offset"):
-            identity = f"single:{int(behavior.single_offset)}"
-        else:
-            global_offset = int(getattr(behavior, "global_ped_offset", 0))
-            groups = ",".join(sorted(str(int(group_id)) for group_id in navs))
-            identity = (
-                f"route:{global_offset}:{groups}"
-                if navs is not None
-                else (f"behavior:{index}:{behavior_type}")
-            )
+        identity = _stable_behavior_identity(index, behavior)
+        expected_identities.add(identity)
         captured = navigators.get(identity)
         if captured is None:
             # Read-only compatibility for an in-memory snapshot from the old
             # process-local representation. Durable snapshots never emit this key.
             captured = navigators.get(id(behavior))  # type: ignore[arg-type]
-        if not captured:
-            continue
+        if captured is None:
+            raise ValueError(f"snapshot is missing route navigator identity {identity!r}")
+        if not isinstance(captured, Mapping):
+            raise ValueError(f"route navigator state for {identity!r} must be a mapping")
+        captured_group_ids = {str(group_id) for group_id in captured}
+        expected_group_ids = {str(group_id) for group_id in navs}
+        if captured_group_ids != expected_group_ids:
+            raise ValueError(
+                f"route navigator group identities for {identity!r} do not match destination"
+            )
         for gid, nav in navs.items():
-            state = captured.get(gid)
-            if state is None:
-                # Durable JSON snapshots stringify mapping keys; accept both
-                # representations while keeping behavior identity stable.
-                state = captured.get(str(gid))
-            if state is None:
-                continue
+            state = captured.get(gid, captured.get(str(gid)))
+            if not isinstance(state, Mapping):
+                raise ValueError(f"route navigator state for group {gid!r} is incomplete")
+            if "waypoint_id" not in state or "reached_waypoint" not in state:
+                raise ValueError(f"route navigator state for group {gid!r} is incomplete")
             nav.waypoint_id = state["waypoint_id"]
             nav.reached_waypoint = state["reached_waypoint"]
+    unexpected = {
+        key for key in navigators if isinstance(key, str) and key not in expected_identities
+    }
+    if unexpected:
+        raise ValueError(
+            f"snapshot contains unknown route navigator identities: {sorted(unexpected)}"
+        )
 
 
 def _restore_robot_navigators(robot_navigators: list[Any], saved: list[Any]) -> None:
@@ -643,16 +695,14 @@ class SimulatorCounterfactualModel:
             pedestrian_group_by_ped=pedestrian_group_by_ped,
             residual_adversary=deepcopy(getattr(self.sim, "_residual_adversary", None)),
             behavior_rng_states=behavior_rng_states,
-            ped_max_speeds=(
-                None if max_speeds is None else np.asarray(max_speeds, dtype=float).copy()
-            ),
+            ped_max_speeds=None if max_speeds is None else np.asarray(max_speeds).copy(),
             python_random_state=deepcopy(random.getstate()) if self.capture_rng else None,
             residual_adversary_state=_capture_residual_adversary_state(self.sim),
             absolute_time_s=absolute_time_s,
             remaining_budget_steps=remaining_budget_steps,
         )
 
-    def restore(self, snapshot: _SimulatorSnapshot) -> None:
+    def restore(self, snapshot: _SimulatorSnapshot) -> None:  # noqa: C901
         """Restore the live simulator to a previously captured snapshot."""
         self._step_index = snapshot.step_index
         self.sim.pysf_state.pysf_states()[...] = snapshot.pysf_state
@@ -683,8 +733,13 @@ class SimulatorCounterfactualModel:
             )
             _synchronize_pysf_groups(self.sim)
         _restore_behavior_rng_states(self.sim.peds_behaviors, snapshot.behavior_rng_states)
-        if snapshot.residual_adversary is not None or hasattr(self.sim, "_residual_adversary"):
+        if snapshot.residual_adversary is not None:
             self.sim._residual_adversary = deepcopy(snapshot.residual_adversary)
+        elif (
+            snapshot.residual_adversary_state is None
+            and getattr(self.sim, "_residual_adversary", None) is not None
+        ):
+            raise ValueError("snapshot is missing residual-adversary state")
         self.sim.peds_have_obstacle_forces = snapshot.peds_have_obstacle_forces
         peds = getattr(getattr(self.sim, "pysf_sim", None), "peds", None)
         if snapshot.ped_max_speeds is not None and peds is not None:

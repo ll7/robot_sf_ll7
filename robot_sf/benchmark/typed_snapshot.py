@@ -34,6 +34,24 @@ from robot_sf.benchmark.simulator_counterfactual_adapter import _SimulatorSnapsh
 SNAPSHOT_SCHEMA = "simulator_typed_snapshot.v2"
 SNAPSHOT_BOUNDARY = "pre_step"
 _DIGEST_FIELDS = ("map_sha256", "config_sha256", "code_revision")
+_REQUIRED_STATE_FIELDS = frozenset(
+    {
+        "actor_order",
+        "robot_poses",
+        "robot_states",
+        "robot_navigators",
+        "single_runtimes",
+        "route_navigators",
+        "pedestrian_groups",
+        "pedestrian_group_by_ped",
+        "rng_capture_complete",
+        "global_rng",
+        "python_random_state",
+        "behavior_rng_states",
+        "residual_adversary_state",
+        "peds_have_obstacle_forces",
+    }
+)
 _MISSING = object()
 _RESTORE_FAILURES = (
     AttributeError,
@@ -878,6 +896,30 @@ def _validate_rng_capture_state(state: Mapping[str, Any], model: Any) -> None:
         raise SnapshotPayloadError("typed snapshot RNG state is incomplete")
 
 
+def _validate_required_state_fields(state: Mapping[str, Any]) -> None:
+    """Reject snapshots that silently omit supported mutable state fields."""
+    missing = sorted(_REQUIRED_STATE_FIELDS - set(state))
+    if missing:
+        raise SnapshotPayloadError(f"snapshot state is missing supported fields: {missing}")
+
+
+def _metadata_digest(metadata: Mapping[str, Any]) -> str:
+    """Hash canonical metadata while excluding its self-referential digest.
+
+    Returns:
+        The SHA-256 digest of the canonical metadata payload.
+    """
+    payload = deepcopy(dict(metadata))
+    payload.pop("metadata_sha256", None)
+    try:
+        encoded = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise SnapshotPayloadError(f"snapshot metadata is not canonical JSON: {exc}") from exc
+    return hashlib.sha256(encoded).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class TypedSimulatorSnapshot:
     """In-memory typed snapshot, independent of process-local object identity."""
@@ -1018,6 +1060,7 @@ class TypedSimulatorSnapshot:
                 "destination model is not a supported one-robot adapter"
             )
         state = self.state
+        _validate_required_state_fields(state)
         _validate_rng_capture_state(state, model)
         _validate_destination_shape(state, self.arrays, sim)
         robot_poses, robot_states, robot_navigators = _restore_robot_payload(state, sim)
@@ -1138,6 +1181,7 @@ def write_typed_snapshot(
         payload_tmp.replace(payload_target)
         metadata["payload_sha256"] = _sha256_file(payload_target)
         metadata["payload_bytes"] = payload_target.stat().st_size
+        metadata["metadata_sha256"] = _metadata_digest(metadata)
         metadata_tmp = metadata_target.with_suffix(metadata_target.suffix + ".tmp")
         metadata_tmp.write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -1212,6 +1256,11 @@ def read_typed_snapshot(metadata_path: str | Path) -> TypedSimulatorSnapshot:
     """
     metadata_target = Path(metadata_path)
     metadata = _read_snapshot_metadata(metadata_target)
+    expected_metadata_hash = metadata.get("metadata_sha256")
+    if not isinstance(expected_metadata_hash, str) or not _is_digest(expected_metadata_hash):
+        raise SnapshotPayloadError("snapshot metadata_sha256 is missing or malformed")
+    if _metadata_digest(metadata) != expected_metadata_hash:
+        raise SnapshotPayloadError("snapshot metadata digest mismatch")
     payload_target = metadata_target.with_suffix(metadata_target.suffix + ".npz")
     expected_hash = metadata.get("payload_sha256")
     if not isinstance(expected_hash, str) or not _is_digest(expected_hash):

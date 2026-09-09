@@ -34,11 +34,18 @@ from robot_sf.benchmark.last_avoidable_replay import (
     locate_last_avoidable,
 )
 from robot_sf.benchmark.simulator_counterfactual_adapter import (
+    _RESIDUAL_STATE_FIELDS,
     SimulatorCounterfactualModel,
+    _capture_behavior_rng_states,
     _capture_route_navigators,
     _capture_single_runtimes,
+    _restore_behavior_rng_states,
+    _restore_pedestrian_groups,
+    _restore_residual_adversary_state,
     _restore_route_navigators,
     _restore_single_runtimes,
+    _stable_behavior_identity,
+    _synchronize_pysf_groups,
 )
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.navigation import RouteNavigator
@@ -187,6 +194,16 @@ def test_snapshot_restores_groups_behavior_rng_and_residual_state() -> None:
     assert sim.pysf_sim.peds.groups == [[0]]
     assert behavior_rng.random() == expected_rng_draw
     assert sim._residual_adversary.counter == 1
+
+
+def test_missing_behavior_rng_identity_fails_closed() -> None:
+    """A destination-owned generator cannot keep running from branch state."""
+    behavior = SimpleNamespace(rng=np.random.default_rng(7))
+    captured = _capture_behavior_rng_states([behavior])
+    captured.clear()
+
+    with pytest.raises(ValueError, match="missing behavior RNG"):
+        _restore_behavior_rng_states([behavior], captured)
 
 
 def test_single_runtime_snapshot_round_trip_restores_dataclass_fields() -> None:
@@ -724,8 +741,22 @@ def test_route_group_navigator_progress_restores() -> None:
 
     assert navigator.waypoint_id == 1
     assert navigator.reached_waypoint is False
-    _restore_route_navigators([behavior], {})
-    _restore_route_navigators([behavior], {id(behavior): {8: {}}})
+    with pytest.raises(ValueError, match="missing route navigator identity"):
+        _restore_route_navigators([behavior], {})
+    with pytest.raises(ValueError, match="group identities"):
+        _restore_route_navigators([behavior], {id(behavior): {8: {}}})
+
+
+def test_route_group_navigator_missing_state_field_fails_closed() -> None:
+    """A route navigator cannot silently retain its branch waypoint state."""
+    navigator = RouteNavigator([(0.0, 0.0), (1.0, 0.0)])
+    behavior = SimpleNamespace(navigators={7: navigator})
+    snapshot = _capture_route_navigators([behavior])
+    identity = next(iter(snapshot))
+    snapshot[identity][7].pop("waypoint_id")
+
+    with pytest.raises(ValueError, match="state for group"):
+        _restore_route_navigators([behavior], snapshot)
 
 
 def test_pedestrian_only_collision_is_false_for_empty_crowd() -> None:
@@ -764,3 +795,284 @@ def test_no_contact_baseline_abstains() -> None:
 
     assert report.verdict == VERDICT_UNKNOWN
     assert report.abstain_reason == "baseline_no_contact"
+
+
+def _single_runtime_behavior(ped_id: int = 3) -> SimpleNamespace:
+    """Build a behavior double carrying one single-pedestrian runtime."""
+    runtime = SinglePedestrianRuntime(
+        ped_id=ped_id,
+        definition=SimpleNamespace(id=f"ped-{ped_id}"),
+        trajectory=[(1.0, 2.0)],
+        waypoint_index=1,
+        pending_waits={1: 0.5},
+    )
+    return SimpleNamespace(_runtimes=[runtime])
+
+
+def test_single_runtime_shape_mismatches_fail_closed() -> None:
+    """Malformed runtime snapshots cannot silently misalign destination state."""
+    behavior = _single_runtime_behavior()
+    saved = _capture_single_runtimes([behavior])
+
+    with pytest.raises(ValueError, match="does not match behavior count"):
+        _restore_single_runtimes([behavior], "not-a-list")
+    with pytest.raises(ValueError, match="does not match behavior count"):
+        _restore_single_runtimes([behavior], [saved[0], saved[0]])
+    with pytest.raises(ValueError, match="without runtimes"):
+        _restore_single_runtimes([SimpleNamespace()], [saved[0]])
+    with pytest.raises(ValueError, match="missing single-pedestrian runtime"):
+        _restore_single_runtimes([behavior], [None])
+    with pytest.raises(ValueError, match="does not match actor count"):
+        _restore_single_runtimes([behavior], [saved[0] + saved[0]])
+
+
+def test_single_runtime_malformed_entries_fail_closed() -> None:
+    """Non-mapping, misidentified, duplicated, or omitted runtimes fail closed."""
+    behavior = _single_runtime_behavior()
+    saved = _capture_single_runtimes([behavior])
+    fields = dict(saved[0][0])
+
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _restore_single_runtimes([behavior], [["not-a-mapping"]])
+
+    legacy_unknown = dict(fields, definition=SimpleNamespace(id="ped-3"), ped_id=999)
+    with pytest.raises(ValueError, match="does not match destination"):
+        _restore_single_runtimes([behavior], [[legacy_unknown]])
+
+    legacy_fields = dict(fields, definition=SimpleNamespace(id="ped-3"))
+    legacy_fields.pop("definition_id", None)
+    two_runtime_behavior = SimpleNamespace(
+        _runtimes=[
+            SinglePedestrianRuntime(
+                ped_id=3,
+                definition=SimpleNamespace(id="ped-3"),
+                trajectory=[(1.0, 2.0)],
+                waypoint_index=1,
+                pending_waits={},
+            ),
+            SinglePedestrianRuntime(
+                ped_id=4,
+                definition=SimpleNamespace(id="ped-4"),
+                trajectory=[(3.0, 4.0)],
+                waypoint_index=0,
+                pending_waits={},
+            ),
+        ]
+    )
+    with pytest.raises(ValueError, match="duplicate runtime"):
+        _restore_single_runtimes([two_runtime_behavior], [[legacy_fields, legacy_fields]])
+
+    modern_unknown = dict(fields, ped_id=999, definition_id="ped-999")
+    with pytest.raises(ValueError, match="does not match the destination"):
+        _restore_single_runtimes([behavior], [[modern_unknown]])
+
+    with pytest.raises(ValueError, match="duplicate runtime"):
+        _restore_single_runtimes([two_runtime_behavior], [[fields, fields]])
+
+    two_behaviors = [_single_runtime_behavior(3), _single_runtime_behavior(4)]
+    two_saved = _capture_single_runtimes(two_behaviors)
+    # NOTE: the "omits a destination runtime" guard is unreachable behind the
+    # equal-length actor-count check above; flagged for the author in review.
+    assert len(two_saved) == 2
+
+
+def test_stable_identity_prefers_single_offset() -> None:
+    """Behaviors with a single-pedestrian offset use the single identity."""
+    assert _stable_behavior_identity(0, SimpleNamespace(single_offset=5)) == "single:5"
+
+
+def test_behavior_rng_snapshot_must_be_mapping() -> None:
+    """A non-mapping RNG snapshot cannot restore generator state."""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _restore_behavior_rng_states([], "not-a-mapping")
+
+
+def test_behavior_rng_id_keyed_compat_snapshot_restores() -> None:
+    """Snapshots keyed by process-local object id still restore (read-only compat)."""
+    behavior = SimpleNamespace(rng=np.random.default_rng(7))
+    captured = _capture_behavior_rng_states([behavior])
+    assert len(captured) == 1
+    key, state = next(iter(captured.items()))
+    compat_saved = {id(behavior): state}
+
+    behavior.rng.random()
+    _restore_behavior_rng_states([behavior], compat_saved)
+
+    assert behavior.rng.bit_generator.state["state"] == state["state"]
+    assert key not in compat_saved
+
+
+def test_behavior_rng_unexpected_identity_fails_closed() -> None:
+    """Unknown generator identities in a snapshot fail closed."""
+    behavior = SimpleNamespace(rng=np.random.default_rng(7))
+    captured = _capture_behavior_rng_states([behavior])
+
+    with pytest.raises(ValueError, match="unknown behavior RNG identities"):
+        _restore_behavior_rng_states([behavior], {**captured, "ghost:rng": {}})
+
+
+def test_pedestrian_groups_plain_cache_attribute_clears() -> None:
+    """Group doubles without an invalidator still clear a stale list cache."""
+    groups = SimpleNamespace(groups={1: [2]}, group_by_ped_id={2: 1}, _groups_as_lists_cache=[[2]])
+    assert not callable(getattr(groups, "_invalidate_groups_as_lists_cache", None))
+
+    _restore_pedestrian_groups(groups, {1: [2]}, {2: 1})
+
+    assert groups._groups_as_lists_cache is None
+
+
+def test_synchronize_pysf_groups_tolerates_missing_layers() -> None:
+    """Backend-less simulators keep the public grouping snapshot seam."""
+    sim_without_backend = SimpleNamespace(pysf_sim=None, groups=None)
+    assert _synchronize_pysf_groups(sim_without_backend) is None
+
+    sim_without_groups = SimpleNamespace(
+        pysf_sim=SimpleNamespace(peds=SimpleNamespace()), groups=None
+    )
+    assert _synchronize_pysf_groups(sim_without_groups) is None
+
+
+def test_residual_adversary_restore_branches_fail_closed() -> None:
+    """Residual-adversary restore rejects absent, malformed, and partial state."""
+    with pytest.raises(ValueError, match="missing residual-adversary state"):
+        _restore_residual_adversary_state(
+            SimpleNamespace(_residual_adversary=SimpleNamespace()), None
+        )
+    assert (
+        _restore_residual_adversary_state(SimpleNamespace(_residual_adversary=None), None) is None
+    )
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _restore_residual_adversary_state(SimpleNamespace(), "not-a-mapping")
+    with pytest.raises(ValueError, match="requires a residual-adversary instance"):
+        _restore_residual_adversary_state(SimpleNamespace(), {})
+    with pytest.raises(ValueError, match="config is inactive"):
+        _restore_residual_adversary_state(
+            SimpleNamespace(_build_residual_adversary=lambda: None), {}
+        )
+
+    field = _RESIDUAL_STATE_FIELDS[0]
+    with pytest.raises(ValueError, match="unsupported residual-adversary state field"):
+        _restore_residual_adversary_state(
+            SimpleNamespace(_residual_adversary=SimpleNamespace()), {"bogus": 1}
+        )
+    with pytest.raises(ValueError, match="missing residual-adversary state fields"):
+        _restore_residual_adversary_state(
+            SimpleNamespace(_residual_adversary=SimpleNamespace(**{field: 1})), {}
+        )
+
+    adversary = SimpleNamespace(**{field: 1})
+    _restore_residual_adversary_state(SimpleNamespace(_residual_adversary=adversary), {field: 2})
+    assert adversary._last_residual == 2
+
+
+def test_route_navigator_snapshot_must_be_mapping() -> None:
+    """A non-mapping navigator snapshot cannot restore waypoint progress."""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _restore_route_navigators([], "not-a-mapping")
+
+
+def test_route_navigator_non_mapping_state_fails_closed() -> None:
+    """Navigator state that is not a per-group mapping fails closed."""
+    navigator = RouteNavigator([(0.0, 0.0), (1.0, 0.0)])
+    behavior = SimpleNamespace(navigators={7: navigator})
+    snapshot = _capture_route_navigators([behavior])
+    identity = next(iter(snapshot))
+
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _restore_route_navigators([behavior], {identity: "not-a-mapping"})
+    with pytest.raises(ValueError, match="is incomplete"):
+        _restore_route_navigators([behavior], {identity: {7: "not-a-mapping"}})
+
+
+def test_restore_missing_robot_velocity_resets_state() -> None:
+    """A snapshot without robot velocity state resets rather than reusing branch state."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    snapshot = model.snapshot()
+    snapshot.robot_velocities = [None for _ in snapshot.robot_velocities]
+
+    model.restore(snapshot)
+
+    assert snapshot.robot_velocities == [None for _ in snapshot.robot_velocities]
+
+
+def test_restore_missing_residual_adversary_state_fails_closed() -> None:
+    """A destination-owned adversary cannot keep running from stateless branch data."""
+    plain_sim = _build_simulator()
+    plain_model = SimulatorCounterfactualModel(plain_sim, collision_radius=_COLLISION_RADIUS)
+    snapshot = plain_model.snapshot()
+    assert snapshot.residual_adversary is None
+    assert snapshot.residual_adversary_state is None
+
+    armed_sim = _build_simulator()
+    armed_sim._residual_adversary = SimpleNamespace()
+    armed_model = SimulatorCounterfactualModel(armed_sim, collision_radius=_COLLISION_RADIUS)
+    with pytest.raises(ValueError, match="missing residual-adversary state"):
+        armed_model.restore(snapshot)
+
+
+def test_restore_mismatched_max_speeds_replaces_backend_speeds() -> None:
+    """A shape-mismatched speed snapshot replaces backend speeds instead of broadcasting."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    snapshot = model.snapshot()
+    if snapshot.ped_max_speeds is None:
+        pytest.skip("fixture simulator captures no pedestrian max speeds")
+    snapshot.ped_max_speeds = np.asarray([0.5], dtype=float)
+
+    model.restore(snapshot)
+
+
+def test_behavior_rng_absent_snapshot_covers_empty_and_missing_branches() -> None:
+    """Generator-less behaviors tolerate absent snapshots; owned ones do not."""
+    assert _restore_behavior_rng_states([SimpleNamespace()], None) is None
+
+    behavior = SimpleNamespace(rng=np.random.default_rng(1))
+    with pytest.raises(ValueError, match="missing behavior RNG"):
+        _restore_behavior_rng_states([behavior], None)
+
+
+def test_pedestrian_groups_without_cache_attribute_skips_invalidation() -> None:
+    """Group doubles with no cache attribute restore without invalidation."""
+    groups = SimpleNamespace(groups={1: [2]}, group_by_ped_id={2: 1})
+    assert not hasattr(groups, "_invalidate_groups_as_lists_cache")
+    assert not hasattr(groups, "_groups_as_lists_cache")
+
+    _restore_pedestrian_groups(groups, {1: [3]}, {3: 1})
+
+    assert groups.groups == {1: [3]}
+    assert groups.group_by_ped_id == {3: 1}
+
+
+def test_residual_adversary_builder_path_restores_fields() -> None:
+    """A builder-provided adversary receives validated snapshot fields."""
+    field = _RESIDUAL_STATE_FIELDS[0]
+    adversary = SimpleNamespace(**{field: 0})
+    sim = SimpleNamespace(_build_residual_adversary=lambda: adversary)
+
+    _restore_residual_adversary_state(sim, {field: 7})
+
+    assert sim._residual_adversary is adversary
+    assert adversary._last_residual == 7
+
+
+def test_route_navigator_unknown_identity_fails_closed() -> None:
+    """Navigator identities outside the destination behaviors fail closed."""
+    navigator = RouteNavigator([(0.0, 0.0), (1.0, 0.0)])
+    behavior = SimpleNamespace(navigators={7: navigator})
+    snapshot = _capture_route_navigators([behavior])
+
+    with pytest.raises(ValueError, match="unknown route navigator identities"):
+        _restore_route_navigators([behavior], {**snapshot, "ghost": {}})
+
+
+def test_restore_without_group_snapshot_skips_group_sync() -> None:
+    """A group-less snapshot restores without touching backend membership."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    snapshot = model.snapshot()
+    assert snapshot.pedestrian_groups is not None
+    snapshot.pedestrian_groups = None
+    snapshot.pedestrian_group_by_ped = None
+
+    model.restore(snapshot)

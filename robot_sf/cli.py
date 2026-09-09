@@ -72,6 +72,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_datasets_subparser(subparsers)
     _add_envs_subparser(subparsers)
     _add_scenarios_subparser(subparsers)
+    _add_planners_subparser(subparsers)
     # The ``examples`` subcommand owns its own sub-subcommand parser
     # (``list``/``run``); it is registered here only so the top-level parser
     # recognises the token. Remaining args are forwarded by the handler.
@@ -148,10 +149,11 @@ def _build_parser() -> argparse.ArgumentParser:
     g_build.set_defaults(gallery_cmd="build")
 
     # Curated recipe catalog (issue #5795): list / run / explain blessed workflows.
-    from robot_sf import release_cli  # noqa: PLC0415
     from robot_sf.recipes import cli as recipes_cli  # noqa: PLC0415
 
     recipes_cli.build_subparser(subparsers)
+    from robot_sf import release_cli  # noqa: PLC0415
+
     release_cli.build_subparser(subparsers)
     return parser
 
@@ -348,6 +350,13 @@ def _build_scenarios_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="cmd")
     _add_scenarios_subparser(subparsers)
     return parser
+
+
+def _add_planners_subparser(sub: argparse._SubParsersAction) -> None:
+    """Register the ``robot-sf planners`` subcommand tree."""
+    from robot_sf import cli_planners  # noqa: PLC0415
+
+    cli_planners._add_planners_subparser(sub)
 
 
 def _handle_models(args: argparse.Namespace) -> int:
@@ -659,6 +668,24 @@ def _handle_recipe(args: argparse.Namespace) -> int:
     return recipes_cli.handle(args)
 
 
+def _handle_planners(args: argparse.Namespace) -> int:
+    """Dispatch the ``robot-sf planners`` subcommand.
+
+    Returns:
+        int: Process-style exit code (0 success, 2 unknown planner key).
+    """
+    from robot_sf import cli_planners  # noqa: PLC0415
+
+    cmd = args.planners_cmd
+    if cmd == "list":
+        return cli_planners._handle_planners_list(args)
+    if cmd == "describe":
+        return cli_planners._handle_planners_describe(args)
+    parser = _build_parser()  # pragma: no cover - defensive
+    parser.error(f"unknown planners command: {cmd}")
+    return 2
+
+
 def _handle_release(args: argparse.Namespace) -> int:
     """Dispatch the release command after its parser has been selected.
 
@@ -676,6 +703,7 @@ _HANDLERS = {
     "datasets": _handle_datasets,
     "envs": _handle_envs,
     "scenarios": _handle_scenarios,
+    "planners": _handle_planners,
     "gallery": _handle_gallery,
     "recipe": _handle_recipe,
     "release": _handle_release,

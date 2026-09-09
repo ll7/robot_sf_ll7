@@ -96,6 +96,8 @@ and its declared matrix, seeds, metrics, and artifact-provenance requirements.
   `uv run robot-sf datasets prepare <id>`.
 - Discover the supported environment catalog: `uv run robot-sf envs list` and
   `uv run robot-sf envs describe <env-id>`.
+- Discover registered planners and baselines: `uv run robot-sf planners list` and
+  `uv run robot-sf planners describe <planner-key>`.
 - Move to reproducible evaluation: [Research & Benchmark Guide](research-guide.md).
 
 All generated files in this path belong under the git-ignored `output/` directory. Keep raw runs,

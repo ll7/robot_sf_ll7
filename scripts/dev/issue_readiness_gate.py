@@ -18,11 +18,13 @@ import json
 import re
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 from scripts.dev import gh_issue_rest, gh_pr_label_rest, goal_issue_admission
-from scripts.dev.issue_implementability import READY_LABEL, preflight_body_file
+from scripts.dev.issue_implementability import READY_LABEL, preflight_body_text
 from scripts.dev.issue_state_taxonomy import state_labels
+from scripts.tools.issue_template_audit import audit_archetype_metadata
 
 DEFAULT_REMOTE = "origin"
 DEFAULT_SOURCE_REF = "origin/main"
@@ -216,6 +218,30 @@ def gate_issue(
     return _write_and_verify_readiness(number, repo=repo)
 
 
+def preflight_creation_body(body_file: str) -> dict[str, Any]:
+    """Compose existing body and metadata checks without granting live readiness."""
+    try:
+        body = Path(body_file).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return {
+            "schema": "issue_creation_preflight.v1",
+            "ready": False,
+            "body_sha256": "",
+            "missing_fields": [],
+            "metadata_findings": [],
+            "error": f"body file unreadable: {exc}",
+        }
+    structural = preflight_body_text(body)
+    findings = list(audit_archetype_metadata(body).findings)
+    return {
+        "schema": "issue_creation_preflight.v1",
+        "ready": structural["ready"] and not findings,
+        "body_sha256": structural["body_sha256"],
+        "missing_fields": structural["missing_fields"],
+        "metadata_findings": findings,
+    }
+
+
 def create_issue(
     *,
     title: str,
@@ -231,16 +257,15 @@ def create_issue(
     produced by a passing live admission check.
     """
     initial_labels = [label for label in labels if label != READY_LABEL]
-    try:
-        preflight = preflight_body_file(body_file)
-    except OSError as exc:
+    preflight = preflight_creation_body(body_file)
+    if "error" in preflight:
         return _result(
             "error",
             issue=None,
             ready_added=False,
             verified=False,
             phase="create",
-            error=f"body file unreadable: {exc}",
+            error=preflight["error"],
         )
     if preflight.get("ready") is not True:
         return _result(
@@ -250,6 +275,7 @@ def create_issue(
             verified=False,
             phase="create",
             missing_fields=list(preflight.get("missing_fields", [])),
+            metadata_findings=list(preflight.get("metadata_findings", [])),
             body_sha256=preflight.get("body_sha256", ""),
         )
     args = [
@@ -313,6 +339,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    preflight_parser = subparsers.add_parser(
+        "preflight", help="check a creation body offline; emit JSON without live readiness"
+    )
+    preflight_parser.add_argument("--body-file", required=True)
+
     gate_parser = subparsers.add_parser("gate", help="gate readiness for an existing issue")
     gate_parser.add_argument("number", type=int)
     gate_parser.add_argument("--repo", default=gh_issue_rest.DEFAULT_REPO)
@@ -330,6 +361,10 @@ def main(argv: list[str] | None = None) -> int:
     create_parser.add_argument("--json", action="store_true")
 
     args = parser.parse_args(argv)
+    if args.command == "preflight":
+        payload = preflight_creation_body(args.body_file)
+        print(json.dumps(payload, sort_keys=True))
+        return 0 if payload["ready"] else 2
     if args.command == "gate":
         payload = gate_issue(
             args.number,

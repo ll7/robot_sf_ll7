@@ -66,10 +66,10 @@ Robot SF grades every claim by how strong its evidence is. Always label results 
 
 | Term | Plain-language meaning |
 | --- | --- |
-| **Fast lane** | The small set of deterministic, quick checks a pull request must pass for its exact changed lines (fast unit/contract tests plus lint), so review feedback arrives in minutes instead of after the full suite. A file joins the lane by registering its covering test in `tests/conftest.py`. |
-| **Merge-ready** | A pull-request label meaning an exact-head review found the full proof bar met (linked contract satisfied, current tests and checks green, threads resolved) and the change is cleared for the guarded merger to merge. Applied only with fresh exact-head evidence, never in advance. |
-| **Residual** | Work a completed change deliberately leaves behind: accepted follow-ups, known limitations, or the next nominated slice — recorded explicitly so nothing silently drops. A residual audit verifies which acceptance bullets remain open and nominates at most one next child. |
-| **Provenance** | The recorded lineage of a result or artifact: which code, config, seed, checkpoint, and input produced it, pinned so someone else can reproduce or audit it. Benchmark and paper-facing claims require it; its absence fails closed. |
+| **Fast lane** | The quick pull-request feedback path: the repository routes tests by configured directory/path fragments, filename prefixes, or explicit filenames, with slow-file overrides, and its fast-feedback shards run the routed non-slow tests plus lint and type checks. A changed-coverage gate then verifies the exact changed lines. |
+| **Merge-ready** | A pull-request label meaning the guarded admission checks are current: the pull request is non-draft, its exact head and base match the reviewed evidence, its title/body metadata is reconciled, required checks are green, and exact-head review has accepted the linked contract with no unresolved actionable threads or requested reviewers. The label is applied only with fresh evidence; the [guarded merger policy](../.agents/skills/gh-pr-merger/SKILL.md) performs the final merge. |
+| **Residual** | Work a completed change deliberately leaves behind: accepted follow-ups, known limitations, or the next concrete slice — recorded explicitly so nothing silently drops. A residual audit verifies which acceptance bullets remain open and records that slice or any follow-up issues. |
+| **Provenance** | The recorded lineage appropriate to a result or artifact and its claim: for example, the relevant code, config, seed, checkpoint, inputs, runtime, or generation command, pinned so someone else can reproduce or audit it. Required fields depend on the artifact and claim; benchmark and paper-facing claims require complete provenance, and missing required provenance fails closed. |
 
 ---
 

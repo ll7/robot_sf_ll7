@@ -42,7 +42,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:
+    # Direct execution must resolve this checkout's transport and write guards,
+    # ahead of any competing checkout or editable installation on sys.path.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.dev._gh_rest import as_str as _as_str
 from scripts.dev._gh_rest import gh_api_comments_get as _gh_api

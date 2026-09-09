@@ -10,7 +10,10 @@ non-list payloads.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from scripts.dev.gh_pr_comments_rest import (
@@ -357,3 +360,19 @@ def test_cli_fails_closed_on_rest_error(capsys) -> None:
     payload = json.loads(captured.err)
     assert payload["status"] == "error"
     assert "projectCards" in payload["error"]
+
+
+def test_direct_invocation_without_ambient_pythonpath(tmp_path: Path) -> None:
+    """Direct CLI invocation must succeed from an arbitrary working directory without PYTHONPATH."""
+    entrypoint = Path(__file__).resolve().parents[2] / "scripts/dev/gh_pr_comments_rest.py"
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
+    proc = subprocess.run(
+        [sys.executable, "-B", "-I", str(entrypoint), "--help"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert "usage:" in proc.stdout.lower()

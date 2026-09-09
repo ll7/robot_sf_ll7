@@ -2,13 +2,233 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
+import sys
+from pathlib import Path
+from subprocess import CompletedProcess
 from unittest.mock import patch
 
 import pytest
 
 from scripts.dev import issue_readiness_gate
-from scripts.dev.issue_implementability import READY_LABEL
+from scripts.dev.issue_implementability import READY_LABEL, preflight_body_text
+from scripts.tools.issue_template_audit import audit_archetype_metadata
+
+COMPLETE_BODY = (
+    "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
+    "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n"
+)
+CANONICAL_METADATA = (
+    "## Archetype Metadata\n\n```yaml\narchetype: workflow\n"
+    "evidence_tier: smoke\nlinked_policy: []\n```\n\n"
+)
+
+
+def test_preflight_cli_accepts_valid_body_without_transport(tmp_path: Path, capsys) -> None:
+    """The reusable offline entrypoint reports a digest but performs no live operations."""
+    body = CANONICAL_METADATA + COMPLETE_BODY
+    path = tmp_path / "body.md"
+    path.write_text(body, encoding="utf-8")
+    with patch.object(issue_readiness_gate.subprocess, "run") as run:
+        code = issue_readiness_gate.main(["preflight", "--body-file", str(path)])
+    assert code == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "schema": "issue_creation_preflight.v1",
+        "ready": True,
+        "missing_fields": [],
+        "metadata_findings": [],
+        "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+    }
+    run.assert_not_called()
+
+
+def test_create_rejects_invalid_metadata_before_transport(tmp_path: Path) -> None:
+    """A complete five-field body with invalid taxonomy must never reach creation."""
+    body_file = tmp_path / "invalid.md"
+    body_file.write_text(
+        "## Archetype Metadata\n\n```yaml\narchetype: bug\n"
+        "evidence_tier: reproducible_bug\nlinked_policy: []\n```\n\n" + COMPLETE_BODY,
+        encoding="utf-8",
+    )
+    with (
+        patch.object(
+            issue_readiness_gate.subprocess,
+            "run",
+            return_value=CompletedProcess(["fake-gh"], 1, "", "offline stop"),
+        ) as run,
+        patch.object(issue_readiness_gate.goal_issue_admission, "admit_issue") as admit,
+        patch.object(issue_readiness_gate.gh_pr_label_rest, "add_label") as label,
+    ):
+        result = issue_readiness_gate.create_issue(
+            title="fixture",
+            body_file=str(body_file),
+            labels=[],
+            repo="ll7/robot_sf_ll7",
+        )
+    assert run.call_count == 0, f"invalid metadata reached {run.call_count} fake create call(s)"
+    assert result["outcome"] == "preflight_rejected"
+    admit.assert_not_called()
+    label.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "",
+        "## Archetype Metadata\narchetype: workflow\n",
+        "## Archetype Metadata\n```yaml\n{}\n```\n",
+        CANONICAL_METADATA.replace("archetype: workflow\n", ""),
+        CANONICAL_METADATA.replace("evidence_tier: smoke\n", ""),
+        CANONICAL_METADATA.replace("linked_policy: []\n", ""),
+        CANONICAL_METADATA.replace("workflow", "bug"),
+        CANONICAL_METADATA.replace("smoke", "reproducible_bug"),
+        "## Archetype Metadata\n```yaml\narchetype: [\n```\n",
+        "## Archetype Metadata\n```yaml\n- workflow\n```\n",
+    ],
+    ids=[
+        "no-heading",
+        "no-fence",
+        "no-keys",
+        "no-archetype",
+        "no-tier",
+        "no-policy",
+        "invalid-archetype",
+        "invalid-tier",
+        "malformed",
+        "non-mapping",
+    ],
+)
+def test_precreate_reports_canonical_findings_without_writes(
+    tmp_path: Path,
+    capsys,
+    metadata: str,
+) -> None:
+    """Both public routes forward the existing auditor's findings without policy forks."""
+    body = metadata + "\n" + COMPLETE_BODY
+    path = tmp_path / "body.md"
+    path.write_text(body, encoding="utf-8")
+    expected = list(audit_archetype_metadata(body).findings)
+    assert expected
+    assert preflight_body_text(body)["ready"] is True
+    with (
+        patch.object(issue_readiness_gate.subprocess, "run") as run,
+        patch.object(issue_readiness_gate.gh_issue_rest, "fetch_issue") as fetch,
+        patch.object(issue_readiness_gate.goal_issue_admission, "admit_issue") as admit,
+        patch.object(issue_readiness_gate.gh_pr_label_rest, "add_label") as label,
+    ):
+        code = issue_readiness_gate.main(["preflight", "--body-file", str(path)])
+        preflight = json.loads(capsys.readouterr().out)
+        created = issue_readiness_gate.create_issue(
+            title="fixture",
+            body_file=str(path),
+            labels=[],
+            repo="ll7/robot_sf_ll7",
+        )
+    assert code == 2
+    assert preflight["ready"] is False
+    assert preflight["missing_fields"] == created["missing_fields"] == []
+    assert preflight["metadata_findings"] == created["metadata_findings"] == expected
+    assert (
+        preflight["body_sha256"]
+        == created["body_sha256"]
+        == hashlib.sha256(body.encode()).hexdigest()
+    )
+    assert created["outcome"] == "preflight_rejected"
+    for boundary in (run, fetch, admit, label):
+        boundary.assert_not_called()
+    assert path.read_text(encoding="utf-8") == body
+
+
+@pytest.mark.parametrize(
+    "archetype,tier,policy", [("workflow", "smoke", "[]"), ("agent_task", "proposal", "null")]
+)
+def test_precreate_preserves_existing_alias_and_policy_acceptance(
+    tmp_path: Path,
+    archetype: str,
+    tier: str,
+    policy: str,
+) -> None:
+    """Read aliases and linked_policy shape remain owned by the canonical auditor."""
+    body = (
+        CANONICAL_METADATA.replace("workflow", archetype)
+        .replace("smoke", tier)
+        .replace("[]", policy)
+        + COMPLETE_BODY
+    )
+    path = tmp_path / "body.md"
+    path.write_text(body, encoding="utf-8")
+    with patch.object(
+        issue_readiness_gate.subprocess,
+        "run",
+        return_value=CompletedProcess([], 1, "", "offline stop"),
+    ) as run:
+        preflight = issue_readiness_gate.preflight_creation_body(str(path))
+        issue_readiness_gate.create_issue(
+            title="fixture", body_file=str(path), labels=[], repo="ll7/robot_sf_ll7"
+        )
+    assert preflight["ready"] is True
+    assert preflight["metadata_findings"] == []
+    run.assert_called_once()
+    assert path.read_text(encoding="utf-8") == body
+
+
+@pytest.mark.parametrize("case", ["valid", "invalid", "incomplete", "missing", "invalid-utf8"])
+def test_preflight_cli_real_process_is_offline(tmp_path: Path, case: str) -> None:
+    """The published module command has stable exits and cannot call GitHub or provision tools."""
+    path = tmp_path / "body with spaces.md"
+    body = CANONICAL_METADATA + COMPLETE_BODY
+    if case == "invalid":
+        body = body.replace("workflow", "bug").replace("smoke", "reproducible_bug")
+    elif case == "incomplete":
+        body = CANONICAL_METADATA + "## Objective\nOnly the objective.\n"
+    if case == "invalid-utf8":
+        path.write_bytes(b"\xff")
+    elif case != "missing":
+        path.write_text(body, encoding="utf-8")
+    before = path.read_bytes() if path.exists() else None
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    audit = tmp_path / "external-calls"
+    for name in ("gh", "git", "uv", "pip"):
+        command = commands / name
+        command.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$0" >> "$CALL_AUDIT"\nexit 97\n', encoding="utf-8"
+        )
+        command.chmod(0o755)
+    root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "scripts.dev.issue_readiness_gate",
+            "preflight",
+            "--body-file",
+            str(path),
+        ],
+        cwd=root,
+        env={"PATH": str(commands), "CALL_AUDIT": str(audit)},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == (0 if case == "valid" else 2), result.stderr
+    assert result.stderr == ""
+    payload = json.loads(result.stdout)
+    assert payload["schema"] == "issue_creation_preflight.v1"
+    assert payload["ready"] is (case == "valid")
+    if case in {"missing", "invalid-utf8"}:
+        assert payload["body_sha256"] == ""
+        assert "body file unreadable" in payload["error"]
+    else:
+        assert payload["body_sha256"] == hashlib.sha256(body.encode()).hexdigest()
+        assert payload["metadata_findings"] == list(audit_archetype_metadata(body).findings)
+        assert payload["missing_fields"] == preflight_body_text(body)["missing_fields"]
+    assert not audit.exists()
+    assert (path.read_bytes() if path.exists() else None) == before
 
 
 def _issue(
@@ -232,8 +452,7 @@ def test_create_issue_strips_readiness_from_initial_labels(tmp_path) -> None:  #
     """Creation omits state:ready from the initial label set and parses the new number."""
     body_file = tmp_path / "body.md"
     body_file.write_text(
-        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
-        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        CANONICAL_METADATA + COMPLETE_BODY,
         encoding="utf-8",
     )
     created = _issue(8110, labels=["bug"])
@@ -278,8 +497,7 @@ def test_create_issue_fails_closed_when_url_is_unparseable(tmp_path) -> None:  #
     """An unparseable create output is an error with no issue or label write."""
     body_file = tmp_path / "body.md"
     body_file.write_text(
-        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
-        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        CANONICAL_METADATA + COMPLETE_BODY,
         encoding="utf-8",
     )
     with patch.object(issue_readiness_gate.subprocess, "run") as run:
@@ -360,8 +578,7 @@ def test_create_issue_invokes_the_gh_executable(tmp_path) -> None:  # type: igno
     """The create subprocess command starts with the gh executable (live-caught bug)."""
     body_file = tmp_path / "body.md"
     body_file.write_text(
-        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
-        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        CANONICAL_METADATA + COMPLETE_BODY,
         encoding="utf-8",
     )
     with patch.object(issue_readiness_gate.subprocess, "run") as run:

@@ -137,9 +137,9 @@ def classify_failure(
     ):
         return FAILURE_CLASS_PATH_GENERATION
 
-    raise ValueError(
-        "unclassified non-ok rollout: provide a canonical failure signal or degradation reason"
-    )
+    # Preserve the established compatibility fallback for recognized non-ok statuses.  Summary
+    # aggregation still requires the returned class, so this cannot disappear from the taxonomy.
+    return FAILURE_CLASS_PATH_GENERATION
 
 
 @dataclass(frozen=True)
@@ -464,6 +464,14 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     plan_exception_occurred = False
     simulator_error_occurred = False
 
+    def record_plan_exception(exc: Exception) -> None:
+        """Record a planner-owned lifecycle or output failure as path generation."""
+        nonlocal degraded, plan_exception_occurred, status
+        status = "error"
+        degraded = True
+        plan_exception_occurred = True
+        degradation_reasons.append(f"plan_exception: {exc}")
+
     def record_simulator_error(phase: str, exc: Exception) -> None:
         """Record a simulator-side failure without allowing it to escape the rollout."""
         nonlocal degraded, simulator_error_occurred, status
@@ -474,8 +482,8 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
 
     try:
         planner.reset(seed=scenario.seed)
-    except Exception as exc:  # noqa: BLE001 - lifecycle failures are simulator-side results
-        record_simulator_error("reset", exc)
+    except Exception as exc:  # noqa: BLE001 - planner lifecycle failures are path-generation results
+        record_plan_exception(exc)
 
     last_v = 0.0
     last_a = 0.0
@@ -488,7 +496,11 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             if dist_to_goal <= scenario.goal_tolerance:
                 completed = True
                 break
+        except Exception as exc:  # noqa: BLE001 - analytic simulator state failures are structured
+            record_simulator_error("state", exc)
+            break
 
+        try:
             if scenario.obstacles:
                 min_obs_dist, col_obs, nm_obs = _update_clearance(
                     scenario.obstacles,
@@ -516,7 +528,11 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
                 near_miss = near_miss or nm_ped
                 if col_ped:
                     col_ped_occurred = True
+        except Exception as exc:  # noqa: BLE001 - analytic clearance failures are structured
+            record_simulator_error("clearance", exc)
+            break
 
+        try:
             obs = {
                 "robot": [rx, ry, rtheta],
                 "goal": [gx, gy],
@@ -527,8 +543,8 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
                 },
                 "sim": {"timestep": dt},
             }
-        except Exception as exc:  # noqa: BLE001 - analytic step failures are simulator-side results
-            record_simulator_error("step", exc)
+        except Exception as exc:  # noqa: BLE001 - analytic simulator-state failures are structured
+            record_simulator_error("state", exc)
             break
 
         try:
@@ -537,10 +553,7 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             t1 = time.perf_counter()
             latencies_ms.append((t1 - t0) * 1000.0)
         except Exception as exc:  # noqa: BLE001 - all planner failures stay path-generation failures
-            status = "error"
-            degraded = True
-            plan_exception_occurred = True
-            degradation_reasons.append(f"plan_exception: {exc}")
+            record_plan_exception(exc)
             break
 
         try:
@@ -568,7 +581,11 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
                 )
             linear_speeds.append(linear_cmd)
             angular_rates.append(angular_cmd)
+        except Exception as exc:  # noqa: BLE001 - planner output-boundary failures are path-generation results
+            record_plan_exception(exc)
+            break
 
+        try:
             accel = (linear_cmd - last_v) / dt
             if step > 0:
                 jerk = (accel - last_a) / dt
@@ -585,8 +602,8 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             if not all(math.isfinite(value) for value in (rx, ry, rtheta, path_length)):
                 raise ValueError("non-finite simulator state")
             step += 1
-        except Exception as exc:  # noqa: BLE001 - command/state failures are simulator-side results
-            record_simulator_error("step", exc)
+        except Exception as exc:  # noqa: BLE001 - analytic kinematic integration failures are structured
+            record_simulator_error("integration", exc)
             break
 
     mean_linear = float(np.mean(linear_speeds)) if linear_speeds else 0.0

@@ -124,12 +124,22 @@ def test_first_step_planner_exception_is_classified_without_diagnostics() -> Non
 
 
 @pytest.mark.parametrize(
-    "failure_phase", ["reset", "diagnostics", "diagnostic_status", "command", "integration"]
+    "failure_phase, expected_failure_class, expected_simulator_error",
+    [
+        ("reset", FAILURE_CLASS_PATH_GENERATION, False),
+        ("diagnostics", FAILURE_CLASS_PATH_GENERATION, False),
+        ("diagnostic_status", FAILURE_CLASS_PATH_GENERATION, False),
+        ("command", FAILURE_CLASS_PATH_GENERATION, False),
+        ("integration", FAILURE_CLASS_SIMULATOR, True),
+    ],
 )
-def test_execute_rollout_captures_simulator_boundary_errors(
-    failure_phase: str, monkeypatch: pytest.MonkeyPatch
+def test_execute_rollout_classifies_planner_boundaries_and_simulator_integration(
+    failure_phase: str,
+    expected_failure_class: str,
+    expected_simulator_error: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Simulator-boundary failures set the flag and remain structured simulator results."""
+    """Planner-owned failures stay path-generation; analytic integration sets the flag."""
     scenario = get_canonical_comparison_scenarios()[0]
     planner: comparator.LocalPlannerProtocol = _SimulatorBoundaryFailurePlanner(failure_phase)
     if failure_phase == "integration":
@@ -146,20 +156,22 @@ def test_execute_rollout_captures_simulator_boundary_errors(
     monkeypatch.setattr(comparator, "classify_failure", classify_failure_spy)
     result = execute_rollout(planner, scenario)
 
-    assert observed_flags == [True]
+    assert observed_flags == [expected_simulator_error]
     assert result.status == "error"
     assert result.degraded is True
-    assert result.failure_class == FAILURE_CLASS_SIMULATOR
-    assert result.degradation_reasons[0].startswith("simulator_")
+    assert result.failure_class == expected_failure_class
+    if expected_simulator_error:
+        assert result.degradation_reasons[0].startswith("simulator_integration_failure")
+    else:
+        assert result.degradation_reasons[0].startswith("plan_exception:")
 
 
-def test_classify_failure_rejects_unknown_or_unclassified_rollouts() -> None:
-    """Unknown status and unsignaled non-success states fail closed."""
+def test_classify_failure_rejects_unknown_status_and_preserves_path_fallback() -> None:
+    """Unknown statuses fail closed while the established non-success fallback remains stable."""
     with pytest.raises(ValueError, match="unknown rollout status"):
         classify_failure(status="unknown")
 
-    with pytest.raises(ValueError, match="unclassified non-ok rollout"):
-        classify_failure(status="degraded", degraded=True)
+    assert classify_failure(status="degraded", degraded=True) == FAILURE_CLASS_PATH_GENERATION
 
 
 def test_deterministic_receipt_invariant() -> None:

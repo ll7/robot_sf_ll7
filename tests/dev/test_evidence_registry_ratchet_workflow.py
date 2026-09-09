@@ -71,3 +71,20 @@ def test_ratchet_runs_when_release_assurance_inputs_change() -> None:
 
     assert "docs/RELEASE.md" in paths
     assert "CITATION.cff" in paths
+
+
+def test_ratchet_workflow_binds_explicit_projection_and_persists_report() -> None:
+    """PR and merge-group runs must validate identities and retain the canonical report."""
+    workflow = yaml.load(WORKFLOW_PATH.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    step = _ratchet_step()
+    run = step["run"]
+
+    assert "merge_group" in workflow["on"]
+    assert _ratchet_job()["steps"][0]["with"]["fetch-depth"] == "0"
+    assert step["env"]["CANDIDATE_HEAD"]
+    assert step["env"]["FROZEN_BASE"]
+    assert "--candidate-head" in run
+    assert "--frozen-base" in run
+    assert "missing exact candidate head" in run
+    assert "missing exact frozen base" in run
+    assert "--report-output output/evidence/ratchet-report.json" in run

@@ -164,13 +164,15 @@ users, labels, assignees, and comments. An unavailable or anomalous source adds 
 apply step. Non-empty plan rows must preserve canonical issue identity and schema, and every
 mutation or pending decision must target an issue present in those rows. A pending decision must
 match the canonical row's number, title, URL, state, labels, classification, decision evidence,
-evidence sources, and documented options. Apply and decision-envelope boundaries also reject
-forged work attached to an inadmissible, mismatched, or empty source. The exact top-level
-`legacy_issue_inventory: true` marker is reserved for pre-contract callers: for positive rows it
-may permit missing or empty source metadata, and apply/envelope retain the existing no-work
-zero-row compatibility path, but it never permits a partial mapping with omitted/null
-`source_status` or malformed typed fields. The explicit `--max-wall-seconds 0` no-budget timeout
-remains a separate fail-closed status.
+evidence sources, and documented options. The open-issues endpoint's integer `comments` count is
+accepted as a summary and normalized until comment enrichment is requested; malformed comment
+shapes remain anomalous. Apply and decision-envelope boundaries also reject forged work attached
+to an inadmissible, mismatched, or empty source. The exact top-level
+`legacy_issue_inventory: true` marker is retained for pre-contract compatibility but never proves
+missing source metadata, an empty inventory, or mutations/envelopes; marker-bearing work still
+requires a complete source contract. Explicit quota uncertainty/unavailable status and impossible
+`pages_read`/`requests_attempted` values remain inadmissible. The explicit
+`--max-wall-seconds 0` no-budget timeout remains a separate fail-closed status.
 
 Project #5 score synchronization uses the same fail-closed preflight. If its estimated field,
 project, and item reads would cross the margin, it prints `status: quota_blocked`, performs no

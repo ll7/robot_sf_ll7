@@ -192,6 +192,14 @@ def _complete_issue_source_metadata(canonical_row_count: int) -> dict[str, Any]:
     return metadata
 
 
+def _attach_complete_issue_inventory(plan: dict[str, Any], issue_numbers: list[int]) -> None:
+    """Add the explicit canonical source contract required by write-capable fixtures."""
+    plan["issues"] = [_issue(number) for number in sorted(set(issue_numbers))]
+    plan["inventory"] = {
+        "issues": _complete_issue_source_metadata(len(plan["issues"])),
+    }
+
+
 def test_state_contradiction_prefers_observed_active_work() -> None:
     """Active work wins over a contradictory ready label to avoid false readiness."""
     classification = classify_issue(
@@ -1286,6 +1294,33 @@ def test_open_issue_source_contract_distinguishes_empty_and_bad_responses(
         assert metadata["source_status_reason"]
 
 
+def test_open_issue_source_accepts_github_comments_count() -> None:
+    """The issues endpoint returns a comment count before optional comment enrichment."""
+    payload = [
+        {
+            "number": 110,
+            "title": "Bounded issue",
+            "state": "open",
+            "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+            "html_url": "https://github.com/ll7/robot_sf_ll7/issues/110",
+            "user": {"login": "maintainer"},
+            "labels": [],
+            "comments": 3,
+        }
+    ]
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+    rows, metadata = discover_open_issues("ll7/robot_sf_ll7", runner=runner)
+
+    assert [row["number"] for row in rows] == [110]
+    assert rows[0]["comments"] == []
+    assert metadata["source_status"] == issue_audit_core.ISSUE_SOURCE_STATUS_COMPLETE
+    assert metadata["malformed_object_row_count"] == 0
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -1366,8 +1401,8 @@ def test_open_issue_source_rejects_mixed_valid_and_malformed_objects() -> None:
     assert metadata["malformed_object_row_count"] == 1
 
 
-def test_positive_issue_rows_require_source_metadata_or_explicit_legacy_marker() -> None:
-    """Positive rows cannot authorize a plan through an unmarked legacy shape."""
+def test_legacy_marker_is_preserved_without_proving_source_metadata() -> None:
+    """The legacy marker remains compatible metadata but cannot prove an inventory."""
     base_inventory = {
         "repo": "ll7/robot_sf_ll7",
         "issues": [_issue(110)],
@@ -1400,12 +1435,63 @@ def test_positive_issue_rows_require_source_metadata_or_explicit_legacy_marker()
     marked_plan = build_audit_plan(marked_inventory)
 
     assert marked_plan["issue_inventory_status"]["status"] == (
-        issue_audit_core.ISSUE_SOURCE_STATUS_COMPLETE
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
     )
-    assert marked_plan["issue_inventory_status"]["admissible"] is True
-    assert marked_plan["classification_status"]["status"] == "complete"
+    assert marked_plan["issue_inventory_status"]["admissible"] is False
+    assert marked_plan["classification_status"]["status"] == "incomplete"
+    assert marked_plan["classification_status"]["mutations_suppressed"] is True
     assert len(marked_plan["issues"]) == 1
+    assert marked_plan["mutations"] == []
     assert marked_plan[issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER] is True
+
+
+def test_legacy_marker_never_authorizes_mutation_or_envelope() -> None:
+    """A marker-bearing metadata-free plan cannot reach either write boundary."""
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [
+                _issue(
+                    110,
+                    labels=["decision-required"],
+                    body="Maintainer decision required.\n(A) Keep open.\n(B) Close.",
+                )
+            ],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["decision-required"],
+            "inventory": {},
+            issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
+        }
+    )
+
+    with pytest.raises(ValueError, match="issue inventory is not admissible"):
+        build_decision_envelope(plan)
+
+    plan["mutations"] = [
+        {
+            "operation": "add_label",
+            "issue": 110,
+            "value": "state:running",
+            "expected_issue": _expected_issue(),
+        }
+    ]
+    plan["plan_digest"] = compute_plan_digest(plan)
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("metadata-free legacy plans must not reach REST")
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["error_code"] == "issue_inventory_source_missing"
+    assert result["applied"] == []
+    assert calls == []
 
 
 def test_legacy_marker_does_not_admit_partial_or_non_object_source_metadata() -> None:
@@ -1437,7 +1523,7 @@ def test_legacy_marker_does_not_admit_partial_or_non_object_source_metadata() ->
 
 
 def test_legacy_marker_does_not_bypass_zero_row_partial_metadata_at_admission() -> None:
-    """The legacy no-work exception applies only when source metadata is truly absent."""
+    """A legacy marker cannot turn partial zero-row metadata into source proof."""
     plan: dict[str, Any] = {
         "schema": issue_audit_core.PLAN_SCHEMA,
         "repo": "ll7/robot_sf_ll7",
@@ -1616,6 +1702,9 @@ def test_plan_envelope_and_apply_bind_issue_url_to_plan_repo() -> None:
         ("assignees", [{"login": {}}]),
         ("assignees", [None]),
         ("comments", None),
+        ("comments", True),
+        ("comments", -1),
+        ("comments", "3"),
         ("comments", [{"body": [], "user": {"login": "owner"}}]),
         ("comments", [{"author": []}]),
         ("comments", [{"html_url": []}]),
@@ -1800,6 +1889,159 @@ def test_complete_issue_source_requires_typed_success_metadata() -> None:
         "issue_inventory_source_complete_unproven"
     )
     assert plan["classification_status"]["mutations_suppressed"] is True
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("quota_uncertain", True),
+        ("available", False),
+        ("source_status", issue_audit_core.ISSUE_SOURCE_STATUS_UNAVAILABLE),
+    ],
+)
+def test_issue_source_rejects_explicit_quota_uncertainty(field: str, value: object) -> None:
+    """A complete-looking issue source cannot hide an unavailable quota state."""
+    source_metadata = _complete_issue_source_metadata(1)
+    source_metadata[field] = value
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [_issue(110, labels=["state:ready"])],
+            "open_prs": [],
+            "merged_prs": [],
+            "labels": ["state:ready"],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "inventory": {"issues": source_metadata},
+        }
+    )
+
+    assert plan["issue_inventory_status"]["admissible"] is False
+    assert plan["classification_status"]["mutations_suppressed"] is True
+    assert plan["mutations"] == []
+    plan["mutations"] = [
+        {
+            "operation": "add_label",
+            "issue": 110,
+            "value": "state:running",
+            "expected_issue": _expected_issue(),
+        }
+    ]
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("uncertain source metadata must be rejected before REST")
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("pages_read", 2),
+        ("requests_attempted", 0),
+        ("requests_attempted", issue_audit_core.DEFAULT_MAX_PAGES + 1),
+    ],
+)
+def test_issue_source_rejects_impossible_request_page_counts(field: str, value: int) -> None:
+    """Source admission rejects impossible pagination accounting before writes."""
+    source_metadata = _complete_issue_source_metadata(1)
+    source_metadata[field] = value
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [_issue(110, labels=["state:ready"])],
+            "open_prs": [],
+            "merged_prs": [],
+            "labels": ["state:ready"],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "inventory": {"issues": source_metadata},
+        }
+    )
+
+    assert plan["issue_inventory_status"]["admissible"] is False
+    assert plan["issue_inventory_status"]["error_code"] in {
+        "issue_inventory_source_complete_unproven",
+        "issue_inventory_source_metadata_invalid",
+    }
+    assert plan["mutations"] == []
+    plan["mutations"] = [
+        {
+            "operation": "add_label",
+            "issue": 110,
+            "value": "state:running",
+            "expected_issue": _expected_issue(),
+        }
+    ]
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("impossible source metadata must be rejected before REST")
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "quota",
+    [
+        {"available": True, "status": "ok", "quota_uncertain": True},
+        {"available": False, "status": "unavailable"},
+        {"status": "unavailable"},
+        {"status": "ok", "contract_errors": ["quota source was malformed"]},
+    ],
+)
+def test_apply_rejects_uncertain_plan_quota_before_any_rest_call(
+    quota: dict[str, object],
+) -> None:
+    """A forged plan quota state cannot reach a preflight, POST, or PATCH."""
+    plan: dict[str, Any] = {
+        "schema": issue_audit_core.PLAN_SCHEMA,
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 110,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            }
+        ],
+        "inventory": {"issues": _complete_issue_source_metadata(1)},
+        "quota": quota,
+        "truncation_or_errors": [],
+    }
+    _attach_complete_issue_inventory(plan, [110])
+    plan["quota"] = quota
+    _attach_valid_provenance(plan)
+
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("uncertain plan quota must be rejected before REST")
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["error_code"] == "quota_unavailable"
+    assert result["applied"] == []
+    assert calls == []
 
 
 def test_comment_inventory_bails_out_after_actual_rate_limit() -> None:
@@ -2282,6 +2524,7 @@ def test_targeted_coverage_does_not_hide_global_history_truncation() -> None:
             "labels": [],
             issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
             "inventory": {
+                "issues": _complete_issue_source_metadata(1),
                 "closed_prs": {"truncated": True, "errors": []},
                 "issue_timeline_merged_prs": {
                     "available": True,
@@ -2451,7 +2694,16 @@ def test_slow_in_process_discovery_emits_a_timeout_plan(
     output = tmp_path / "issue-audit-plan.json"
     started = time.monotonic()
 
-    result = main(["plan", "--max-wall-seconds", "0.05", "--output", str(output)])
+    result = main(
+        [
+            "plan",
+            "--read-only-diagnostic",
+            "--max-wall-seconds",
+            "0.05",
+            "--output",
+            str(output),
+        ]
+    )
 
     assert time.monotonic() - started < 0.5
     assert result == 2
@@ -3106,7 +3358,7 @@ def test_plan_finalization_overrun_scrubs_all_mutation_surfaces(
             "jobs": [],
             "labels": ["state:ready"],
             issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
-            "inventory": {},
+            "inventory": {"issues": _complete_issue_source_metadata(1)},
         },
         deadline=10.0,
     )
@@ -3151,13 +3403,22 @@ def test_plan_serialization_overrun_emits_the_scrubbed_timeout_artifact(
             "worktrees": [],
             "jobs": [],
             issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
-            "inventory": {},
+            "inventory": {"issues": _complete_issue_source_metadata(1)},
         }
 
     monkeypatch.setattr(issue_audit_core, "discover_inventory", discover)
     output = tmp_path / "issue-audit-plan.json"
 
-    result = main(["plan", "--max-wall-seconds", "30", "--output", str(output)])
+    result = main(
+        [
+            "plan",
+            "--read-only-diagnostic",
+            "--max-wall-seconds",
+            "30",
+            "--output",
+            str(output),
+        ]
+    )
 
     assert result == 2
     plan = json.loads(output.read_text(encoding="utf-8"))
@@ -3196,7 +3457,7 @@ def test_build_plan_indexes_merged_pr_references_once(
             "jobs": [],
             "labels": [],
             issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
-            "inventory": {},
+            "inventory": {"issues": _complete_issue_source_metadata(1)},
         }
     )
 
@@ -3235,7 +3496,16 @@ def test_plan_cli_shares_one_deadline_between_discovery_and_classification(
     monkeypatch.setattr(issue_audit_core, "build_audit_plan", build)
     output = tmp_path / "issue-audit-plan.json"
 
-    result = main(["plan", "--max-wall-seconds", "30", "--output", str(output)])
+    result = main(
+        [
+            "plan",
+            "--read-only-diagnostic",
+            "--max-wall-seconds",
+            "30",
+            "--output",
+            str(output),
+        ]
+    )
 
     assert result == 0
     assert len(observed) == 2
@@ -3270,6 +3540,7 @@ def test_plan_cli_accepts_a_separate_closed_pr_page_budget(
     result = main(
         [
             "plan",
+            "--read-only-diagnostic",
             "--max-pages",
             "2",
             "--max-closed-pr-pages",
@@ -3344,7 +3615,7 @@ def test_decision_envelope_is_sorted_bound_to_plan_and_source_backed() -> None:
             "jobs": [],
             "labels": ["decision-required"],
             issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
-            "inventory": {},
+            "inventory": {"issues": _complete_issue_source_metadata(2)},
         }
     )
 
@@ -3408,7 +3679,7 @@ def test_documented_options_require_explicit_markers() -> None:
             "jobs": [],
             "labels": ["decision-required"],
             issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
-            "inventory": {},
+            "inventory": {"issues": _complete_issue_source_metadata(1)},
         }
     )
 
@@ -3440,7 +3711,7 @@ def test_decision_envelope_rejects_stale_plan_and_live_issue_state() -> None:
             "jobs": [],
             "labels": ["decision-required"],
             issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
-            "inventory": {},
+            "inventory": {"issues": _complete_issue_source_metadata(1)},
         }
     )
     envelope = build_decision_envelope(plan)
@@ -3469,6 +3740,49 @@ def test_decision_envelope_rejects_stale_plan_and_live_issue_state() -> None:
     validation = validate_decision_envelope(envelope, plan=plan, live_issue=changed_issue)
     assert validation["ok"] is False
     assert any("URL changed" in error for error in validation["errors"])
+
+
+def test_validate_decision_envelope_binds_issue_to_current_pending_row() -> None:
+    """A matching plan digest cannot retarget an envelope to a non-pending issue."""
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [
+                _issue(
+                    210,
+                    labels=["decision-required"],
+                    body="Maintainer decision required.\n(A) Keep open.\n(B) Close.",
+                )
+            ],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["decision-required"],
+            "inventory": {"issues": _complete_issue_source_metadata(1)},
+        }
+    )
+    envelope = build_decision_envelope(plan)
+    assert envelope is not None
+    assert validate_decision_envelope(envelope, plan=plan)["ok"] is True
+
+    forged = json.loads(json.dumps(envelope))
+    forged["issue"].update(
+        {
+            "number": 999,
+            "display": "#999",
+            "url": "https://github.com/ll7/robot_sf_ll7/issues/999",
+        }
+    )
+    assert forged["plan_digest"] == plan["plan_digest"]
+    validation = validate_decision_envelope(forged, plan=plan)
+    assert validation["ok"] is False
+    assert any("not a current pending canonical issue" in error for error in validation["errors"])
+
+    unbound_validation = validate_decision_envelope(envelope)
+    assert unbound_validation["ok"] is False
+    assert any("plan is required" in error for error in unbound_validation["errors"])
 
 
 def test_decision_envelope_marks_undocumented_choices_and_incomplete_inventory() -> None:
@@ -3513,7 +3827,7 @@ def test_envelope_cli_emits_machine_readable_payload(
             "jobs": [],
             "labels": ["decision-required"],
             issue_audit_core.LEGACY_ISSUE_INVENTORY_MARKER: True,
-            "inventory": {},
+            "inventory": {"issues": _complete_issue_source_metadata(1)},
         }
     )
     plan_path = tmp_path / "plan.json"
@@ -3607,6 +3921,7 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [106])
     _attach_valid_provenance(plan)
     result = apply_mutations(plan, runner=runner)
 
@@ -3667,6 +3982,7 @@ def test_apply_treats_absent_label_delete_as_idempotent() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [107])
     _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -3720,6 +4036,7 @@ def test_apply_keeps_unrelated_label_404_as_failure() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [108])
     _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -3779,6 +4096,7 @@ def test_apply_skips_entire_issue_batch_when_state_or_version_is_stale(
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -3850,6 +4168,7 @@ def test_apply_proceeds_on_timestamp_only_drift_with_matching_labels() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -3902,6 +4221,7 @@ def test_apply_blocks_on_label_drift_with_retry_handoff() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -3951,6 +4271,7 @@ def test_apply_blocks_on_state_drift_with_labels() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -3984,6 +4305,7 @@ def test_apply_rejects_malformed_expected_labels_before_reads() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     plan["plan_digest"] = compute_plan_digest(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -4009,6 +4331,7 @@ def test_apply_rejects_missing_state_version_precondition_before_reads() -> None
         "mutations": [{"operation": "add_label", "issue": 109, "value": "state:running"}],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     plan["plan_digest"] = compute_plan_digest(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -4094,6 +4417,7 @@ def test_apply_rejects_mixed_invalid_and_valid_plan_before_any_rest_call(
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109, 110])
     plan["plan_digest"] = compute_plan_digest(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -4202,6 +4526,7 @@ def test_apply_readback_rejects_state_change_after_label_write() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -4244,6 +4569,7 @@ def test_apply_rejects_stale_plan_digest_before_mutation() -> None:
         "mutations": [],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [110])
     plan["plan_digest"] = compute_plan_digest(plan)
     plan["mutations"].append(
         {
@@ -4284,6 +4610,7 @@ def test_apply_rejects_unreasoned_blocked_label_before_mutation() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [124])
     plan["plan_digest"] = compute_plan_digest(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -4334,6 +4661,7 @@ def test_apply_accepts_reasoned_blocked_label() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [126])
     _attach_valid_provenance(plan)
 
     result = apply_mutations(plan, runner=runner)
@@ -4730,6 +5058,7 @@ def test_main_plan_cli_reports_concise_quota_warning_and_exits_2(
     code = main(
         [
             "plan",
+            "--read-only-diagnostic",
             "--repo",
             "ll7/robot_sf_ll7",
             "--output",
@@ -5177,6 +5506,7 @@ def test_apply_rejects_missing_source_sha() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     plan["plan_digest"] = compute_plan_digest(plan)
     result = apply_mutations(plan, runner=runner)
 
@@ -5207,6 +5537,7 @@ def test_apply_rejects_source_sha_mismatch() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     _attach_valid_provenance(plan)
     plan["source_sha"] = "0" * 40
     plan["plan_digest"] = compute_plan_digest(plan)
@@ -5244,6 +5575,7 @@ def test_apply_rejects_classifier_digest_mismatch() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     _attach_valid_provenance(plan)
     plan["classifier_digest"] = "a" * 64
     plan["plan_digest"] = compute_plan_digest(plan)
@@ -5318,6 +5650,7 @@ def test_apply_rejects_stale_origin_main_revision() -> None:
         ],
         "truncation_or_errors": [],
     }
+    _attach_complete_issue_inventory(plan, [109])
     _attach_valid_provenance(plan)
     result = apply_mutations(
         plan,

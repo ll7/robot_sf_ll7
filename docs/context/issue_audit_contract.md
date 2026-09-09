@@ -67,7 +67,9 @@ contract is also anomalous. Canonical issue URLs must use HTTPS on the expected
 the numeric `/issues/<number>` suffix alone is not identity. REST rows are
 validated before normalization: title and `updated_at` must be non-empty valid
 strings, and fields used from nested users, labels, assignees, and comments must
-have their expected scalar or object shape. A non-empty plan row must retain a
+have their expected scalar or object shape. The open-issues endpoint's integer
+`comments` count is accepted as a row summary and normalized to an empty comment
+list until optional comment enrichment runs. A non-empty plan row must retain a
 positive issue number, open state, repository-bound URL, title, non-empty valid
 update version, and normalized label list; every mutation or pending decision
 must reference one of those exact canonical rows. The plan copies this result to
@@ -79,14 +81,16 @@ forged plan. An empty canonical inventory cannot carry mutations or pending
 decisions. A pending decision must also match its canonical row's number, title,
 URL, state, labels, classification, decision evidence, evidence sources, and
 documented options; only the apply-produced `safe_mutations_applied` field is
-dynamic. The top-level `legacy_issue_inventory: true` marker is retained only
-for pre-contract callers that cannot provide source metadata. For positive rows,
-it permits the missing or empty metadata shape only when the marker is exactly
-boolean `true`; the apply and envelope boundaries retain the existing no-work
-zero-row compatibility path. It does not excuse a non-empty partial metadata
-mapping, an omitted or null `source_status` in such a mapping, or malformed
-`available`, `errors`, or exhaustion fields, and the current planner never emits
-it for live discovery.
+dynamic. The top-level `legacy_issue_inventory: true` marker is retained and
+round-tripped for pre-contract callers, but it never proves missing source
+metadata, an empty inventory, or a quota state. A marker-bearing plan still
+needs the complete source contract before it can authorize mutations or an
+envelope; the marker does not excuse a partial metadata mapping, an omitted or
+null `source_status`, or malformed typed fields. Explicit quota uncertainty or
+unavailable status is not admissible even when the issue source otherwise looks
+complete. Request and page counts must be non-negative and satisfy
+`pages_read <= requests_attempted <= page_budget`; impossible values are
+anomalous. The current planner never emits the marker for live discovery.
 An explicit `--max-wall-seconds 0` remains the separate no-budget timeout path
 and is not treated as a proven empty source.
 
@@ -456,6 +460,11 @@ interactive skill may ask one focused clarification question but must not
 invent a policy option or apply an answer. A truncated inventory, a relevant
 unavailable SLURM inventory, a stale plan digest, or changed live issue state
 is fail-closed.
+
+Envelope validation independently binds the selected issue projection to one
+current pending decision row and its canonical issue row in the supplied plan;
+a matching plan digest alone is not enough. A validator call without the
+current plan is therefore not admissible for answer application.
 
 The answer format is `#<issue-number>: <option-token>`. The token must be one
 of the source-backed options in the envelope. Before applying it, the

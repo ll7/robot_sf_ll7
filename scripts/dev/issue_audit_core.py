@@ -85,6 +85,9 @@ ISSUE_SOURCE_EMPTY_PROOF = "successful_empty_response"
 ISSUE_SOURCE_KIND = "canonical_open_issues"
 LEGACY_ISSUE_INVENTORY_MARKER = "legacy_issue_inventory"
 EXPECTED_GITHUB_HOST = "github.com"
+UNCERTAIN_QUOTA_STATUSES = frozenset(
+    {"exhausted", "insufficient", "quota_blocked", "failed", "malformed", "unavailable"}
+)
 
 _PREPARATION_AUDIT_SCHEMA = "open_issue_contract_audit.v1"
 PREPARATION_MARKER_END = prepare_open_issue_contracts.MARKER_END
@@ -1027,7 +1030,13 @@ def _issue_row_validation_errors(
 
     raw_comments = raw.get("comments")
     if "comments" in raw:
-        if not isinstance(raw_comments, list):
+        if (
+            isinstance(raw_comments, int)
+            and not isinstance(raw_comments, bool)
+            and raw_comments >= 0
+        ):
+            pass
+        elif not isinstance(raw_comments, list):
             errors.append("comments must be a list")
         else:
             for index, comment in enumerate(raw_comments):
@@ -3126,6 +3135,21 @@ def _issue_source_metadata_shape_failures(issue_meta: Mapping[str, Any]) -> list
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             failures.append(f"{field} must be a non-negative integer when present")
 
+    pages_read = issue_meta.get("pages_read")
+    requests_attempted = issue_meta.get("requests_attempted")
+    page_budget = issue_meta.get("page_budget")
+    valid_pages_read = isinstance(pages_read, int) and not isinstance(pages_read, bool)
+    valid_requests_attempted = isinstance(requests_attempted, int) and not isinstance(
+        requests_attempted, bool
+    )
+    valid_page_budget = isinstance(page_budget, int) and not isinstance(page_budget, bool)
+    if valid_pages_read and valid_page_budget and pages_read > page_budget:
+        failures.append("pages_read must not exceed page_budget")
+    if valid_requests_attempted and valid_pages_read and requests_attempted < pages_read:
+        failures.append("requests_attempted must be at least pages_read")
+    if valid_requests_attempted and valid_page_budget and requests_attempted > page_budget:
+        failures.append("requests_attempted must not exceed page_budget")
+
     for field in ("source", "source_kind", "source_status", "source_proof", "source_status_reason"):
         if field in issue_meta and not isinstance(issue_meta[field], str):
             failures.append(f"{field} must be a string when present")
@@ -3161,37 +3185,16 @@ def _empty_issue_source_contract_failures(
         value = issue_meta.get(field)
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             failures.append(f"{field} must be a positive integer")
-    pages_read = issue_meta.get("pages_read")
-    requests_attempted = issue_meta.get("requests_attempted")
-    page_budget = issue_meta.get("page_budget")
-    if (
-        isinstance(pages_read, int)
-        and not isinstance(pages_read, bool)
-        and isinstance(page_budget, int)
-        and not isinstance(page_budget, bool)
-        and pages_read > page_budget
-    ):
-        failures.append("pages_read must not exceed page_budget")
-    if (
-        isinstance(pages_read, int)
-        and not isinstance(pages_read, bool)
-        and isinstance(requests_attempted, int)
-        and not isinstance(requests_attempted, bool)
-        and requests_attempted < pages_read
-    ):
-        failures.append("requests_attempted must be at least pages_read")
-    if (
-        isinstance(requests_attempted, int)
-        and not isinstance(requests_attempted, bool)
-        and isinstance(page_budget, int)
-        and not isinstance(page_budget, bool)
-        and requests_attempted > page_budget
-    ):
-        failures.append("requests_attempted must not exceed page_budget")
     reason = issue_meta.get("source_status_reason")
     if not isinstance(reason, str) or not reason.strip():
         failures.append("source_status_reason must be a non-empty string")
-    for field in ("rate_limited", "quota_exhausted", "budget_exhausted", "request_limit_exhausted"):
+    for field in (
+        "rate_limited",
+        "quota_exhausted",
+        "budget_exhausted",
+        "request_limit_exhausted",
+        "quota_uncertain",
+    ):
         if field in issue_meta and type(issue_meta[field]) is not bool:
             failures.append(f"{field} must be a boolean when present")
         elif issue_meta.get(field) is True:
@@ -3231,41 +3234,101 @@ def _complete_issue_source_contract_failures(
         value = issue_meta.get(field)
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             failures.append(f"{field} must be a positive integer")
-    pages_read = issue_meta.get("pages_read")
-    requests_attempted = issue_meta.get("requests_attempted")
-    page_budget = issue_meta.get("page_budget")
-    if (
-        isinstance(pages_read, int)
-        and not isinstance(pages_read, bool)
-        and isinstance(page_budget, int)
-        and not isinstance(page_budget, bool)
-        and pages_read > page_budget
-    ):
-        failures.append("pages_read must not exceed page_budget")
-    if (
-        isinstance(requests_attempted, int)
-        and not isinstance(requests_attempted, bool)
-        and isinstance(page_budget, int)
-        and not isinstance(page_budget, bool)
-        and requests_attempted > page_budget
-    ):
-        failures.append("requests_attempted must not exceed page_budget")
-    if (
-        isinstance(pages_read, int)
-        and not isinstance(pages_read, bool)
-        and isinstance(requests_attempted, int)
-        and not isinstance(requests_attempted, bool)
-        and requests_attempted < pages_read
-    ):
-        failures.append("requests_attempted must be at least pages_read")
     reason = issue_meta.get("source_status_reason")
     if not isinstance(reason, str) or not reason.strip():
         failures.append("source_status_reason must be a non-empty string")
-    for field in ("rate_limited", "quota_exhausted", "budget_exhausted", "request_limit_exhausted"):
+    for field in (
+        "rate_limited",
+        "quota_exhausted",
+        "budget_exhausted",
+        "request_limit_exhausted",
+        "quota_uncertain",
+    ):
         if field in issue_meta and type(issue_meta[field]) is not bool:
             failures.append(f"{field} must be a boolean when present")
         elif issue_meta.get(field) is True:
             failures.append(f"{field} must not be true")
+    return failures
+
+
+def _quota_metadata_contract_failures(raw_quota: object, *, field: str) -> list[str]:
+    """Reject quota metadata that could make an incomplete read look writable."""
+    if not isinstance(raw_quota, Mapping):
+        return [f"{field} must be an object when present"]
+
+    failures: list[str] = []
+    for name in (
+        "available",
+        "quota_uncertain",
+        "quota_exhausted",
+        "budget_exhausted",
+        "request_limit_exhausted",
+        "rate_limited",
+    ):
+        if name in raw_quota and type(raw_quota[name]) is not bool:
+            failures.append(f"{field}.{name} must be a boolean when present")
+    status = raw_quota.get("status")
+    if "status" in raw_quota and not isinstance(status, str):
+        failures.append(f"{field}.status must be a string when present")
+    elif "status" in raw_quota and status != "ok":
+        status_reason = (
+            "unavailable or uncertain"
+            if status in UNCERTAIN_QUOTA_STATUSES
+            else "not an available quota status"
+        )
+        failures.append(f"{field}.status={status!r} is {status_reason}")
+    if raw_quota.get("available") is False:
+        failures.append(f"{field}.available is false")
+    if raw_quota.get("quota_uncertain") is True:
+        failures.append(f"{field}.quota_uncertain is true")
+    if raw_quota.get("quota_exhausted") is True:
+        failures.append(f"{field}.quota_exhausted is true")
+    if raw_quota.get("budget_exhausted") is True:
+        failures.append(f"{field}.budget_exhausted is true")
+    if raw_quota.get("request_limit_exhausted") is True:
+        failures.append(f"{field}.request_limit_exhausted is true")
+    if raw_quota.get("rate_limited") is True:
+        failures.append(f"{field}.rate_limited is true")
+    contract_errors = raw_quota.get("contract_errors")
+    if "contract_errors" in raw_quota:
+        if not isinstance(contract_errors, list) or any(
+            not isinstance(error, str) or not error.strip() for error in contract_errors
+        ):
+            failures.append(f"{field}.contract_errors must be a list of non-empty strings")
+        elif contract_errors:
+            failures.append(f"{field}.contract_errors is not empty")
+    return failures
+
+
+def _quota_contract_failures_from_inventory(inventory: Mapping[str, Any]) -> list[str]:
+    """Collect malformed or uncertain quota metadata from both inventory shapes."""
+    failures: list[str] = []
+    if "quota" in inventory:
+        failures.extend(_quota_metadata_contract_failures(inventory.get("quota"), field="quota"))
+    nested_inventory = inventory.get("inventory")
+    if isinstance(nested_inventory, Mapping) and "quota" in nested_inventory:
+        failures.extend(
+            _quota_metadata_contract_failures(
+                nested_inventory.get("quota"),
+                field="inventory.quota",
+            )
+        )
+    return failures
+
+
+def _quota_contract_failures_from_plan(plan: Mapping[str, Any]) -> list[str]:
+    """Collect malformed or uncertain quota metadata from a serialized plan."""
+    failures: list[str] = []
+    if "quota" in plan:
+        failures.extend(_quota_metadata_contract_failures(plan.get("quota"), field="plan.quota"))
+    inventory = plan.get("inventory")
+    if isinstance(inventory, Mapping) and "quota" in inventory:
+        failures.extend(
+            _quota_metadata_contract_failures(
+                inventory.get("quota"),
+                field="plan.inventory.quota",
+            )
+        )
     return failures
 
 
@@ -3311,7 +3374,6 @@ def _issue_inventory_source_assessment(
             )
         return assessed
 
-    legacy_marker = inventory.get(LEGACY_ISSUE_INVENTORY_MARKER) is True
     if (
         not isinstance(raw_repository, str)
         or not raw_repository
@@ -3328,16 +3390,6 @@ def _issue_inventory_source_assessment(
         not isinstance(inventory_meta, Mapping) or "issues" not in inventory_meta
     )
     if source_metadata_absent or (isinstance(issue_meta, Mapping) and not issue_meta):
-        if canonical_row_count and legacy_marker:
-            return result(
-                ISSUE_SOURCE_STATUS_COMPLETE,
-                admissible=True,
-                reason=(
-                    "legacy_issue_inventory marker permits canonical rows without source metadata"
-                ),
-                source_proof="legacy_canonical_issue_rows",
-                metadata_reported=False,
-            )
         if canonical_row_count:
             return result(
                 ISSUE_SOURCE_STATUS_ANOMALOUS,
@@ -4184,6 +4236,9 @@ def build_audit_plan(
         quota_meta.update(inventory["quota"])
     if isinstance(inventory_meta.get("quota"), Mapping):
         quota_meta.update(inventory_meta["quota"])
+    quota_contract_failures = _quota_contract_failures_from_inventory(inventory)
+    if quota_contract_failures:
+        quota_meta["contract_errors"] = sorted(set(quota_contract_failures))
     quota_exhausted = bool(
         quota_meta.get("quota_exhausted") or quota_meta.get("status") == "exhausted"
     )
@@ -4201,7 +4256,10 @@ def build_audit_plan(
             "unavailable",
         }
         or (isinstance(quota_meta.get("available"), bool) and not quota_meta["available"])
+        or bool(quota_contract_failures)
     )
+    if quota_uncertain:
+        quota_meta["quota_uncertain"] = True
     truncated: list[str] = []
     inventory_uncertainties: list[str] = []
     issue_inventory_incomplete = not bool(issue_inventory_status["admissible"])
@@ -4593,6 +4651,13 @@ def apply_mutations(
     if not isinstance(raw_truncation_errors, list):
         return refuse("plan truncation_or_errors must be a list")
 
+    quota_contract_failures = _quota_contract_failures_from_plan(plan)
+    if quota_contract_failures:
+        return refuse(
+            "quota metadata is not admissible: " + "; ".join(sorted(set(quota_contract_failures))),
+            error_code="quota_unavailable",
+        )
+
     plan_issue_rows = plan.get("issues")
     canonical_row_count = len(plan_issue_rows) if isinstance(plan_issue_rows, list) else 0
     plan_issue_numbers, plan_issue_row_errors = _plan_issue_row_numbers(plan)
@@ -4624,14 +4689,7 @@ def apply_mutations(
         )
         refusal["issue_inventory_status"] = dict(recorded_issue_inventory_status)
         return refusal
-    legacy_source_missing = (
-        plan.get(LEGACY_ISSUE_INVENTORY_MARKER) is True
-        and canonical_row_count == 0
-        and issue_inventory_status.get("status") == ISSUE_SOURCE_STATUS_ANOMALOUS
-        and issue_inventory_status.get("error_code") == "issue_inventory_source_missing"
-        and issue_inventory_status.get("metadata_reported") is False
-    )
-    if not issue_inventory_status["admissible"] and not legacy_source_missing:
+    if not issue_inventory_status["admissible"]:
         refusal = refuse(
             str(issue_inventory_status["reason"]),
             error_code=str(issue_inventory_status["error_code"]),
@@ -4639,16 +4697,12 @@ def apply_mutations(
         refusal["issue_inventory_status"] = issue_inventory_status
         return refusal
     pending_decisions = plan.get("pending_decisions")
-    if (
-        canonical_row_count == 0
-        and (
-            planned_count > 0
-            or (
-                pending_decisions is not None
-                and (not isinstance(pending_decisions, list) or bool(pending_decisions))
-            )
+    if canonical_row_count == 0 and (
+        planned_count > 0
+        or (
+            pending_decisions is not None
+            and (not isinstance(pending_decisions, list) or bool(pending_decisions))
         )
-        and not legacy_source_missing
     ):
         return refuse(
             "an empty canonical issue inventory cannot carry mutations or pending decisions",
@@ -4660,7 +4714,7 @@ def apply_mutations(
             error_code="issue_inventory_rows_invalid",
         )
     reference_errors = _plan_issue_reference_errors(plan, issue_numbers=plan_issue_numbers)
-    if reference_errors and not legacy_source_missing:
+    if reference_errors:
         return refuse(
             "; ".join(reference_errors),
             error_code="issue_inventory_reference_mismatch",
@@ -5093,6 +5147,12 @@ def build_decision_envelope(
     if expected_plan_digest and expected_plan_digest != current_digest:
         raise ValueError("plan digest is stale; refresh the inventory before presenting a decision")
 
+    quota_contract_failures = _quota_contract_failures_from_plan(plan)
+    if quota_contract_failures:
+        raise ValueError(
+            "quota metadata is not admissible: " + "; ".join(sorted(set(quota_contract_failures)))
+        )
+
     plan_issue_rows = plan.get("issues")
     canonical_row_count = len(plan_issue_rows) if isinstance(plan_issue_rows, list) else 0
     plan_issue_numbers, plan_issue_row_errors = _plan_issue_row_numbers(plan)
@@ -5110,16 +5170,7 @@ def build_decision_envelope(
         or recorded_issue_inventory_status.get("status")
         in {ISSUE_SOURCE_STATUS_UNAVAILABLE, ISSUE_SOURCE_STATUS_ANOMALOUS}
     )
-    legacy_source_missing = (
-        plan.get(LEGACY_ISSUE_INVENTORY_MARKER) is True
-        and canonical_row_count == 0
-        and issue_inventory_status.get("status") == ISSUE_SOURCE_STATUS_ANOMALOUS
-        and issue_inventory_status.get("error_code") == "issue_inventory_source_missing"
-        and issue_inventory_status.get("metadata_reported") is False
-    )
-    if (not issue_inventory_status["admissible"] and not legacy_source_missing) or (
-        recorded_status_inadmissible
-    ):
+    if not issue_inventory_status["admissible"] or recorded_status_inadmissible:
         reason = str(
             (
                 recorded_issue_inventory_status.get("reason")
@@ -5130,13 +5181,9 @@ def build_decision_envelope(
         )
         raise ValueError(f"issue inventory is not admissible: {reason}")
     pending_decisions = plan.get("pending_decisions")
-    if (
-        canonical_row_count == 0
-        and (
-            pending_decisions is not None
-            and (not isinstance(pending_decisions, list) or bool(pending_decisions))
-        )
-        and not legacy_source_missing
+    if canonical_row_count == 0 and (
+        pending_decisions is not None
+        and (not isinstance(pending_decisions, list) or bool(pending_decisions))
     ):
         raise ValueError(
             "issue inventory is empty but the plan contains pending decisions; regenerate it"
@@ -5146,7 +5193,7 @@ def build_decision_envelope(
             "issue inventory rows are not admissible: " + "; ".join(plan_issue_row_errors)
         )
     reference_errors = _plan_issue_reference_errors(plan, issue_numbers=plan_issue_numbers)
-    if reference_errors and not legacy_source_missing:
+    if reference_errors:
         raise ValueError(
             "issue inventory references are not admissible: " + "; ".join(reference_errors)
         )
@@ -5239,6 +5286,112 @@ def build_decision_envelope(
     }
 
 
+def _envelope_pending_binding_errors(
+    envelope: Mapping[str, Any],
+    plan: Mapping[str, Any],
+    expected_issue: Mapping[str, Any],
+) -> list[str]:
+    """Bind an envelope issue to the current admissible pending plan row."""
+    errors: list[str] = []
+    quota_contract_failures = _quota_contract_failures_from_plan(plan)
+    if quota_contract_failures:
+        errors.append(
+            "current plan quota metadata is not admissible: "
+            + "; ".join(sorted(set(quota_contract_failures)))
+        )
+    raw_plan_issue_rows = plan.get("issues")
+    if not isinstance(raw_plan_issue_rows, list):
+        errors.append("current plan issues must be a list")
+        plan_issue_rows: list[object] = []
+        canonical_row_count = 0
+    else:
+        plan_issue_rows = raw_plan_issue_rows
+        canonical_row_count = len(plan_issue_rows)
+    plan_issue_numbers, plan_issue_row_errors = _plan_issue_row_numbers(plan)
+    errors.extend(f"current plan: {error}" for error in plan_issue_row_errors)
+
+    issue_inventory_status = _issue_inventory_source_assessment(
+        {
+            "repo": plan.get("repo", DEFAULT_REPO),
+            "inventory": plan.get("inventory"),
+            "quota": plan.get("quota"),
+            LEGACY_ISSUE_INVENTORY_MARKER: plan.get(LEGACY_ISSUE_INVENTORY_MARKER),
+        },
+        canonical_row_count=canonical_row_count,
+    )
+    if not issue_inventory_status["admissible"]:
+        errors.append(
+            "current plan issue inventory is not admissible: "
+            + str(issue_inventory_status.get("reason") or "source contract failed")
+        )
+    recorded_status = plan.get("issue_inventory_status")
+    if isinstance(recorded_status, Mapping) and (
+        recorded_status.get("admissible") is False
+        or recorded_status.get("status")
+        in {ISSUE_SOURCE_STATUS_UNAVAILABLE, ISSUE_SOURCE_STATUS_ANOMALOUS}
+    ):
+        errors.append("current plan records an inadmissible issue inventory")
+
+    pending = plan.get("pending_decisions")
+    if not isinstance(pending, list):
+        errors.append("current plan pending_decisions must be a list")
+        return errors
+    reference_errors = _plan_issue_reference_errors(plan, issue_numbers=plan_issue_numbers)
+    errors.extend(f"current plan: {error}" for error in reference_errors)
+
+    expected_number = _positive_issue_number(expected_issue.get("number"))
+    matching_pending = [
+        (index, item)
+        for index, item in enumerate(pending)
+        if isinstance(item, Mapping)
+        and expected_number is not None
+        and _pending_reference_number(item) == expected_number
+    ]
+    if not matching_pending:
+        errors.append("envelope issue is not a current pending canonical issue")
+        return errors
+    if len(matching_pending) > 1:
+        errors.append("envelope issue has multiple current pending canonical rows")
+        return errors
+
+    pending_index, pending_row = matching_pending[0]
+    current_rows = {
+        row.get("number"): row
+        for row in plan_issue_rows
+        if isinstance(row, Mapping) and _positive_issue_number(row.get("number")) is not None
+    }
+    current_row = current_rows.get(expected_number)
+    if not isinstance(current_row, Mapping):
+        errors.append("envelope issue is not a current pending canonical issue")
+        return errors
+    pending_binding_errors = _pending_issue_binding_errors(
+        pending_row,
+        current_row,
+        index=pending_index,
+    )
+    errors.extend(f"current plan: {error}" for error in pending_binding_errors)
+    expected_projection = {
+        "number": expected_number,
+        "display": f"#{expected_number}",
+        "title": pending_row.get("title"),
+        "url": pending_row.get("url"),
+        "state": str(pending_row.get("state") or "").lower(),
+        "labels": _label_names(pending_row.get("labels")),
+        "classification": pending_row.get("classification"),
+    }
+    for field, current_value in expected_projection.items():
+        envelope_value = expected_issue.get(field)
+        if field == "state":
+            envelope_value = str(envelope_value or "").lower()
+        elif field == "labels":
+            envelope_value = _label_names(envelope_value)
+        if envelope_value != current_value:
+            errors.append(f"envelope issue {field} does not match the current pending row")
+    if envelope.get("repo") != plan.get("repo"):
+        errors.append("envelope repo does not match the current plan")
+    return errors
+
+
 def validate_decision_envelope(
     envelope: Mapping[str, Any],
     *,
@@ -5247,6 +5400,7 @@ def validate_decision_envelope(
 ) -> dict[str, Any]:
     """Check plan binding and live issue state before applying an answer."""
     errors: list[str] = []
+    expected_issue = envelope.get("issue") if isinstance(envelope.get("issue"), Mapping) else {}
     if envelope.get("schema") != ENVELOPE_SCHEMA:
         errors.append(f"expected {ENVELOPE_SCHEMA} envelope")
     envelope_digest = str(envelope.get("plan_digest") or "")
@@ -5260,7 +5414,9 @@ def validate_decision_envelope(
         else:
             if envelope_digest != observed_digest:
                 errors.append("envelope plan digest does not match the current plan")
-    expected_issue = envelope.get("issue") if isinstance(envelope.get("issue"), Mapping) else {}
+        errors.extend(_envelope_pending_binding_errors(envelope, plan, expected_issue))
+    else:
+        errors.append("plan is required to bind the envelope to a current pending canonical row")
     repository = plan.get("repo") if plan is not None else envelope.get("repo")
     if not isinstance(repository, str) or _repository_parts(repository) is None:
         errors.append("envelope repo is not a valid GitHub owner/repository")

@@ -1048,7 +1048,10 @@ def test_pr_ready_sigterm_writes_core_receipt_and_cleans_lane(
         }
         assert "received SIGTERM" not in payload["last_progress"]["message"]
         assert payload["cleanup"]["verified"] is True
-        assert payload["process"]["child_process_group_exists"] is False, payload["process"]
+        if payload["process"]["child_process_group_exists"]:
+            assert payload["process"]["child_process_group_liveness"] == "zombie_only"
+        else:
+            assert payload["process"]["child_process_group_liveness"] == "absent"
         assert payload["process"]["child_registration_state"] == "registered"
         assert "environment" not in payload
         assert "command" not in payload
@@ -1056,6 +1059,99 @@ def test_pr_ready_sigterm_writes_core_receipt_and_cleans_lane(
     finally:
         _stop_process_group(process, signal.SIGKILL)
         _collect_process(process)
+
+
+def _reap_zombie_descendants() -> int:
+    """Reap all adopted zombie children and return reaped count."""
+    reaped_count = 0
+    while True:
+        try:
+            reaped_pid, _ = os.waitpid(-1, os.WNOHANG)
+            if reaped_pid <= 0:
+                break
+            reaped_count += 1
+        except ChildProcessError:
+            break
+    return reaped_count
+
+
+def _verify_subreaper_receipt(receipt: Path) -> bool:
+    """Verify that the termination receipt accurately reflects zombie group cleanup."""
+    if not receipt.is_file():
+        return False
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    cleanup = payload.get("cleanup", {})
+    proc_info = payload.get("process", {})
+    return (
+        cleanup.get("verified") is True
+        and cleanup.get("status") == "process_group_terminated_and_verified"
+        and proc_info.get("child_process_group_liveness") in {"absent", "zombie_only"}
+        and proc_info.get("child_registration_state") == "registered"
+    )
+
+
+def _run_subreaper_pr_ready_child(
+    preflight_repo: Path, env: dict[str, str], ready: Path, receipt: Path, pipe_w: int
+) -> None:
+    """Execute readiness under subreaper, verify receipt, and signal reaped count."""
+    import ctypes
+
+    libc = ctypes.CDLL(None)
+    PR_SET_CHILD_SUBREAPER = 36
+    if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
+        os._exit(2)
+    pr_ready_proc = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        _wait_for_marker(ready, pr_ready_proc, timeout=10.0)
+        os.kill(pr_ready_proc.pid, signal.SIGTERM)
+        _ = _collect_process(pr_ready_proc, timeout=5.0)
+        if pr_ready_proc.returncode != 143 or not _verify_subreaper_receipt(receipt):
+            os._exit(3)
+        reaped_count = _reap_zombie_descendants()
+        os.write(pipe_w, f"ok:{reaped_count}\n".encode())
+        os.close(pipe_w)
+        os._exit(0)
+    finally:
+        _stop_process_group(pr_ready_proc, signal.SIGKILL)
+        try:
+            _collect_process(pr_ready_proc, timeout=1.0)
+        except Exception:
+            pass
+        os._exit(9)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_CHILD_SUBREAPER is Linux-specific")
+def test_pr_ready_sigterm_under_subreaper_verifies_zombie_cleanup(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A subreaper harness reaps adopted zombies and retains verified cleanup."""
+    ready = tmp_path / "core-ready"
+    release = tmp_path / "core-release"
+    receipt = tmp_path / "core-termination.json"
+    _write_signal_lane_stub(preflight_repo)
+    env = {
+        "PR_READY_MODE": "interim",
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_SIGNAL_CORE_READY": str(ready),
+        "PR_READY_SIGNAL_CORE_RELEASE": str(release),
+    }
+
+    pipe_r, pipe_w = os.pipe()
+    harness_pid = os.fork()
+    if harness_pid == 0:
+        os.close(pipe_r)
+        _run_subreaper_pr_ready_child(preflight_repo, env, ready, receipt, pipe_w)
+
+    os.close(pipe_w)
+    try:
+        data = os.read(pipe_r, 64).decode("utf-8").strip()
+    finally:
+        os.close(pipe_r)
+        _, status = os.waitpid(harness_pid, 0)
+
+    exit_code = os.waitstatus_to_exitcode(status)
+    assert exit_code == 0, f"subreaper harness failed with exit code {exit_code}"
+    assert data.startswith("ok:"), f"unexpected harness output: {data}"
 
 
 @pytest.mark.skipif(

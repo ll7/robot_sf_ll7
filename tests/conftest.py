@@ -438,6 +438,9 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # The bounded answerability packet uses deterministic schema, digest, and
+    # provenance fixtures; keep its changed-module coverage in fast shards.
+    "test_research_answerability.py",
     # Matched-compute runtime and canary tests use injected seams and deterministic
     # receipt fixtures; keep their accounting coverage in pull-request fast shards.
     "test_matched_compute_runtime.py",

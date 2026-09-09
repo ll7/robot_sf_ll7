@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -659,7 +661,13 @@ def test_create_issue_invokes_the_gh_executable(tmp_path) -> None:  # type: igno
 
 @pytest.fixture
 def isolated_cli_env(tmp_path: Path) -> Iterator[dict[str, str]]:
-    """Keep real PyYAML, but exclude editable hooks, credentials and source roots."""
+    """Stage only declared dependencies and fake commands for isolated CLI probes.
+
+    ``PYTHONPATH`` deliberately names the copied PyYAML dependency, not this
+    repository.  The direct-entrypoint bootstrap is responsible for finding the
+    repository package; the subprocess still has the declared third-party
+    dependency it needs.
+    """
     dependencies = tmp_path / "dependencies"
     shutil.copytree(
         Path(yaml.__file__).parent,
@@ -691,22 +699,54 @@ def isolated_cli_env(tmp_path: Path) -> Iterator[dict[str, str]]:
     assert not list(tmp_path.rglob("*.pyc"))
 
 
+def _run_readiness_cli(
+    root: Path,
+    *,
+    env: dict[str, str],
+    cwd: Path,
+    args: list[str],
+    direct: bool,
+    script: Path | None = None,
+    flags: tuple[str, ...] = ("-S", "-B"),
+) -> subprocess.CompletedProcess[str]:
+    """Run one direct or module CLI with an explicitly controlled environment."""
+    command = [sys.executable, *flags]
+    if direct:
+        command.append(str(script or root / "scripts/dev/issue_readiness_gate.py"))
+    else:
+        command.extend(["-m", "scripts.dev.issue_readiness_gate"])
+    command.extend(args)
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+
+
+def _assert_repository_is_not_an_ambient_dependency(root: Path, env: dict[str, str]) -> None:
+    """Keep the repository source path distinct from the explicitly staged dependency."""
+    assert str(root) not in env["PYTHONPATH"].split(os.pathsep)
+
+
 @pytest.mark.parametrize("foreign_cwd", [False, True], ids=["checkout", "foreign"])
 def test_direct_help_without_ambient_source_path(
     tmp_path: Path,
     isolated_cli_env: dict[str, str],
     foreign_cwd: bool,
 ) -> None:
-    """The direct entrypoint works without inherited repository imports."""
+    """The direct entrypoint works without an ambient source path."""
     root = Path(__file__).resolve().parents[2]
-    result = subprocess.run(
-        [sys.executable, "-S", "-B", str(root / "scripts/dev/issue_readiness_gate.py"), "--help"],
-        cwd=tmp_path if foreign_cwd else root,
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+    result = _run_readiness_cli(
+        root,
         env=isolated_cli_env,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=15,
+        cwd=tmp_path if foreign_cwd else root,
+        args=["--help"],
+        direct=True,
     )
     assert result.returncode == 0, result.stderr
     assert "preflight" in result.stdout
@@ -721,27 +761,128 @@ def test_direct_preflight_without_ambient_source_path(
 ) -> None:
     """Direct execution of the offline preflight subcommand works from a foreign cwd."""
     root = Path(__file__).resolve().parents[2]
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
     body_file = tmp_path / "sample.md"
     body_file.write_text(CANONICAL_METADATA + COMPLETE_BODY, encoding="utf-8")
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-S",
-            "-B",
-            str(root / "scripts/dev/issue_readiness_gate.py"),
-            "preflight",
-            "--body-file",
-            str(body_file),
-        ],
-        cwd=tmp_path,
+    result = _run_readiness_cli(
+        root,
         env=isolated_cli_env,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=15,
+        cwd=tmp_path,
+        args=["preflight", "--body-file", str(body_file)],
+        direct=True,
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["schema"] == "issue_creation_preflight.v1"
     assert payload["ready"] is True
     assert payload["missing_fields"] == []
+
+
+def test_direct_entrypoint_prefers_worktree_over_hostile_pythonpath(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """Direct execution must put the resolved worktree before an untrusted source path."""
+    root = Path(__file__).resolve().parents[2]
+    hostile = tmp_path / "hostile-source"
+    (hostile / "scripts/dev").mkdir(parents=True)
+    (hostile / "scripts/__init__.py").write_text(
+        "raise RuntimeError('hostile scripts package imported')\n", encoding="utf-8"
+    )
+    (hostile / "scripts/dev/__init__.py").write_text(
+        "raise RuntimeError('hostile scripts.dev package imported')\n", encoding="utf-8"
+    )
+    env = dict(isolated_cli_env)
+    env["PYTHONPATH"] = os.pathsep.join([str(hostile), env["PYTHONPATH"]])
+    _assert_repository_is_not_an_ambient_dependency(root, env)
+
+    result = _run_readiness_cli(
+        root,
+        env=env,
+        cwd=tmp_path,
+        args=["--help"],
+        direct=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "preflight" in result.stdout
+    assert result.stderr == ""
+
+
+def test_direct_entrypoint_resolves_symlinked_worktree_root(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """A symlinked worktree path still resolves imports from the real worktree root."""
+    root = Path(__file__).resolve().parents[2]
+    alias_root = tmp_path / "worktree-alias"
+    alias_root.symlink_to(root, target_is_directory=True)
+    body_file = tmp_path / "sample.md"
+    body_file.write_text(CANONICAL_METADATA + COMPLETE_BODY, encoding="utf-8")
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+
+    result = _run_readiness_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=tmp_path,
+        args=["preflight", "--body-file", str(body_file)],
+        direct=True,
+        script=alias_root / "scripts/dev/issue_readiness_gate.py",
+        flags=("-P", "-S", "-B"),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["ready"] is True
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    "body,expected_returncode",
+    [
+        (CANONICAL_METADATA + COMPLETE_BODY, 0),
+        (
+            CANONICAL_METADATA.replace("archetype: workflow", "archetype: bug").replace(
+                "evidence_tier: smoke", "evidence_tier: reproducible_bug"
+            )
+            + COMPLETE_BODY,
+            2,
+        ),
+    ],
+    ids=["valid", "invalid-metadata"],
+)
+def test_direct_and_module_preflight_outputs_and_exit_codes_match(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+    body: str,
+    expected_returncode: int,
+) -> None:
+    """Direct and module entrypoints share output and exit-code contracts."""
+    root = Path(__file__).resolve().parents[2]
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+    body_file = tmp_path / "parity.md"
+    body_file.write_text(body, encoding="utf-8")
+    direct = _run_readiness_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=tmp_path,
+        args=["preflight", "--body-file", str(body_file)],
+        direct=True,
+    )
+    module = _run_readiness_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=root,
+        args=["preflight", "--body-file", str(body_file)],
+        direct=False,
+    )
+
+    assert direct.returncode == module.returncode == expected_returncode
+    assert direct.stderr == module.stderr == ""
+    assert json.loads(direct.stdout) == json.loads(module.stdout)
+
+
+def test_module_import_preserves_sys_path() -> None:
+    """Package imports do not apply the direct-entrypoint path bootstrap."""
+    before = list(sys.path)
+    importlib.reload(issue_readiness_gate)
+    assert sys.path == before

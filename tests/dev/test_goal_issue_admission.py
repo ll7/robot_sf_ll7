@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import ast
+import importlib
+import json
+import os
 import shutil
 import subprocess
 import sys
@@ -13,6 +16,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
+from scripts.dev import goal_issue_admission
 from scripts.dev.goal_issue_admission import admit_issue, compact_admission
 
 if TYPE_CHECKING:
@@ -299,7 +303,13 @@ def test_only_goal_admission_calls_the_atomic_issue_claim_owner() -> None:
 
 @pytest.fixture
 def isolated_cli_env(tmp_path: Path) -> Iterator[dict[str, str]]:
-    """Keep real PyYAML, but exclude editable hooks, credentials and source roots."""
+    """Stage only declared dependencies and fake commands for isolated CLI probes.
+
+    ``PYTHONPATH`` deliberately names the copied PyYAML dependency, not this
+    repository.  The direct-entrypoint bootstrap is responsible for finding the
+    repository package; the subprocess still has the declared third-party
+    dependency it needs.
+    """
     dependencies = tmp_path / "dependencies"
     shutil.copytree(
         Path(yaml.__file__).parent,
@@ -331,23 +341,153 @@ def isolated_cli_env(tmp_path: Path) -> Iterator[dict[str, str]]:
     assert not list(tmp_path.rglob("*.pyc"))
 
 
+def _run_admission_cli(
+    root: Path,
+    *,
+    env: dict[str, str],
+    cwd: Path,
+    args: list[str],
+    direct: bool,
+    script: Path | None = None,
+    flags: tuple[str, ...] = ("-S", "-B"),
+) -> subprocess.CompletedProcess[str]:
+    """Run one direct or module CLI with an explicitly controlled environment."""
+    command = [sys.executable, *flags]
+    if direct:
+        command.append(str(script or root / "scripts/dev/goal_issue_admission.py"))
+    else:
+        command.extend(["-m", "scripts.dev.goal_issue_admission"])
+    command.extend(args)
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+
+
+def _assert_repository_is_not_an_ambient_dependency(root: Path, env: dict[str, str]) -> None:
+    """Keep the repository source path distinct from the explicitly staged dependency."""
+    assert str(root) not in env["PYTHONPATH"].split(os.pathsep)
+
+
 @pytest.mark.parametrize("foreign_cwd", [False, True], ids=["checkout", "foreign"])
 def test_direct_help_without_ambient_source_path(
     tmp_path: Path,
     isolated_cli_env: dict[str, str],
     foreign_cwd: bool,
 ) -> None:
-    """The direct entrypoint works without inherited repository imports."""
+    """The direct entrypoint works without an ambient source path."""
     root = Path(__file__).resolve().parents[2]
-    result = subprocess.run(
-        [sys.executable, "-S", "-B", str(root / "scripts/dev/goal_issue_admission.py"), "--help"],
-        cwd=tmp_path if foreign_cwd else root,
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+    result = _run_admission_cli(
+        root,
         env=isolated_cli_env,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=15,
+        cwd=tmp_path if foreign_cwd else root,
+        args=["--help"],
+        direct=True,
     )
     assert result.returncode == 0, result.stderr
     assert "Gate an atomic issue claim" in result.stdout
     assert result.stderr == ""
+
+
+def test_direct_entrypoint_prefers_worktree_over_hostile_pythonpath(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """Direct execution must put the resolved worktree before an untrusted source path."""
+    root = Path(__file__).resolve().parents[2]
+    hostile = tmp_path / "hostile-source"
+    (hostile / "scripts/dev").mkdir(parents=True)
+    (hostile / "scripts/__init__.py").write_text(
+        "raise RuntimeError('hostile scripts package imported')\n", encoding="utf-8"
+    )
+    (hostile / "scripts/dev/__init__.py").write_text(
+        "raise RuntimeError('hostile scripts.dev package imported')\n", encoding="utf-8"
+    )
+    env = dict(isolated_cli_env)
+    env["PYTHONPATH"] = os.pathsep.join([str(hostile), env["PYTHONPATH"]])
+    _assert_repository_is_not_an_ambient_dependency(root, env)
+
+    result = _run_admission_cli(
+        root,
+        env=env,
+        cwd=tmp_path,
+        args=["0", "--check-only"],
+        direct=True,
+    )
+
+    assert result.returncode == 1, result.stderr
+    assert json.loads(result.stdout)["outcome"] == "error"
+    assert result.stderr == ""
+
+
+def test_direct_entrypoint_resolves_symlinked_worktree_root(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """A symlinked worktree path still resolves imports from the real worktree root."""
+    root = Path(__file__).resolve().parents[2]
+    alias_root = tmp_path / "worktree-alias"
+    alias_root.symlink_to(root, target_is_directory=True)
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+
+    result = _run_admission_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=tmp_path,
+        args=["0", "--check-only"],
+        direct=True,
+        script=alias_root / "scripts/dev/goal_issue_admission.py",
+        flags=("-P", "-S", "-B"),
+    )
+
+    assert result.returncode == 1, result.stderr
+    assert json.loads(result.stdout) == {
+        "error": "issue number must be positive",
+        "issue": 0,
+        "ok": False,
+        "outcome": "error",
+        "schema": "goal_issue_admission.v1",
+        "write_attempted": False,
+    }
+    assert result.stderr == ""
+
+
+def test_direct_and_module_invalid_issue_outputs_and_exit_codes_match(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """Direct and module entrypoints share invalid-input output and exit contracts."""
+    root = Path(__file__).resolve().parents[2]
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+    args = ["0", "--check-only"]
+    direct = _run_admission_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=tmp_path,
+        args=args,
+        direct=True,
+    )
+    module = _run_admission_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=root,
+        args=args,
+        direct=False,
+    )
+
+    assert direct.returncode == module.returncode == 1
+    assert direct.stderr == module.stderr == ""
+    assert json.loads(direct.stdout) == json.loads(module.stdout)
+
+
+def test_module_import_preserves_sys_path() -> None:
+    """Package imports do not apply the direct-entrypoint path bootstrap."""
+    before = list(sys.path)
+    importlib.reload(goal_issue_admission)
+    assert sys.path == before

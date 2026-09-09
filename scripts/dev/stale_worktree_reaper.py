@@ -17,7 +17,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +45,7 @@ class WorktreeCandidate:
     classification: str  # "current", "clean_stale", "risky"
     risk_flags: list[str] = field(default_factory=list)
     preservation_required: str = ""
+    refusal: dict[str, Any] = field(default_factory=dict)
     verification: dict[str, Any] = field(default_factory=dict)
 
 
@@ -186,6 +187,13 @@ def _verified_refusal(
         classification="risky",
         risk_flags=unique_flags,
         preservation_required=f"verified refusal: {reason}",
+        refusal=_build_refusal_metadata(
+            path=path,
+            branch=branch,
+            head_sha=head_sha,
+            flags=unique_flags,
+            reasons=unique_reasons,
+        ),
     )
 
 
@@ -222,23 +230,35 @@ def _parse_worktree_porcelain(stdout: str) -> list[dict[str, str]]:  # noqa: C90
 def _is_worktree_dirty(path: str) -> bool:
     """Check if a worktree has uncommitted changes."""
     result = _run_command(["git", "status", "--porcelain"], cwd=path)
-    return result.returncode == 0 and bool(result.stdout.strip())
+    return result.returncode != 0 or bool(result.stdout.strip())
+
+
+def _read_unpushed_state(path: str, branch: str) -> tuple[bool, str | None]:
+    """Return whether push state is risky, including a reason when unverified."""
+    if not branch:
+        return True, "worktree has no branch; push state cannot be verified"
+
+    upstream = _run_command(["git", "rev-parse", "--abbrev-ref", "@{upstream}"], cwd=path)
+    if upstream.returncode != 0 or not upstream.stdout.strip():
+        detail = upstream.stderr.strip() or upstream.stdout.strip()
+        suffix = f": {detail}" if detail else ""
+        return True, f"worktree upstream could not be verified{suffix}"
+
+    upstream_ref = upstream.stdout.strip()
+    result = _run_command(["git", "log", f"{upstream_ref}..HEAD", "--oneline"], cwd=path)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        suffix = f": {detail}" if detail else ""
+        return True, f"worktree push state could not be verified{suffix}"
+    if result.stdout.strip():
+        return True, "worktree has commits not pushed to its upstream"
+    return False, None
 
 
 def _has_unpushed_commits(path: str, branch: str) -> bool:
     """Check if a worktree has commits not pushed to its upstream branch."""
-    if not branch:
-        return True
-    upstream = _run_command(["git", "rev-parse", "--abbrev-ref", "@{upstream}"], cwd=path)
-    if upstream.returncode != 0 or not upstream.stdout.strip():
-        return True
-    result = _run_command(
-        ["git", "log", f"{upstream.stdout.strip()}..HEAD", "--oneline"],
-        cwd=path,
-    )
-    if result.returncode != 0:
-        return True
-    return bool(result.stdout.strip())
+    risky, _reason = _read_unpushed_state(path, branch)
+    return risky
 
 
 def _has_open_pr(branch: str) -> bool:
@@ -249,15 +269,12 @@ def _has_open_pr(branch: str) -> bool:
         ["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number"],
     )
     if result.returncode != 0:
-        # A missing executable is a new failure result from _run_command's
-        # OSError boundary; retain the reaper's conservative behavior rather
-        # than turning an unavailable PR check into deletion eligibility.
-        return result.returncode == 127
+        return True
     try:
         data = json.loads(result.stdout)
-        return isinstance(data, list) and len(data) > 0
+        return not isinstance(data, list) or len(data) > 0
     except (json.JSONDecodeError, TypeError):
-        return False
+        return True
 
 
 def _has_ignored_output(path: str) -> bool:
@@ -267,11 +284,56 @@ def _has_ignored_output(path: str) -> bool:
         cwd=path,
     )
     if result.returncode != 0:
-        return False
+        return True
     for line in result.stdout.splitlines():
         if line.startswith("!! "):
             return True
     return False
+
+
+def _build_refusal_metadata(
+    *,
+    path: str,
+    branch: str,
+    head_sha: str,
+    flags: list[str],
+    reasons: list[str],
+    lease_state: str | None = None,
+    lease: Any | None = None,
+) -> dict[str, Any]:
+    """Build structured refusal and recovery metadata for JSON consumers."""
+    reason_codes = list(dict.fromkeys(flags))
+    refusal_reasons = list(dict.fromkeys(reasons))
+    lease_metadata: dict[str, Any] = {"state": lease_state or "none"}
+    if lease is not None:
+        lease_metadata.update(
+            {
+                "owner": getattr(lease, "owner", None),
+                "gate_id": getattr(lease, "gate_id", None),
+                "pr_number": getattr(lease, "pr_number", None),
+                "expires_at": getattr(lease, "expires_at", None),
+                "worktree_path": getattr(lease, "worktree_path", None),
+                "head_ref": getattr(lease, "head_ref", None),
+                "head_sha": getattr(lease, "head_sha", None),
+            }
+        )
+    return {
+        "status": "refused",
+        "reason_codes": reason_codes,
+        "reasons": refusal_reasons,
+        "worktree": {
+            "path": path,
+            "branch": branch or None,
+            "head_sha": head_sha or None,
+        },
+        "owner": lease_metadata.get("owner"),
+        "lease": lease_metadata,
+        "recovery": {
+            "required": True,
+            "action": "preserve_and_review_before_reclaim",
+            "worktree_must_remain": True,
+        },
+    }
 
 
 def _lease_owner_summary(lease: Any) -> str:
@@ -1113,26 +1175,38 @@ def classify_worktree(  # noqa: C901 - preserves the legacy gate order beside ve
             github_transport=github_transport,
         )
 
-    risk_flags: list[str] = []
+    risk_flags, reasons = _read_strict_cleanliness(path)
 
-    if _is_worktree_dirty(path):
-        risk_flags.append("dirty")
-
-    if _has_unpushed_commits(path, branch):
+    unpushed, unpushed_reason = _read_unpushed_state(path, branch)
+    if unpushed:
         risk_flags.append("unpushed_commits")
+        if unpushed_reason:
+            reasons.append(unpushed_reason)
 
     if skip_pr_check and branch:
         risk_flags.append("pr_check_skipped")
-    elif _has_open_pr(branch):
-        risk_flags.append("open_pr")
+        reasons.append("open-PR state was intentionally skipped")
+    elif branch:
+        open_pr, open_pr_error, open_pr_numbers = _read_strict_open_pr_state(
+            branch,
+            repo=DEFAULT_GITHUB_REPO,
+            transport=github_transport,
+        )
+        if open_pr_error is not None:
+            risk_flags.append("unreadable_open_pr_state")
+            reasons.append(open_pr_error)
+        elif open_pr:
+            risk_flags.append("open_pr")
+            joined = ", ".join(f"#{number}" for number in open_pr_numbers)
+            reasons.append(f"branch has open PR coverage: {joined}")
 
-    if _has_ignored_output(path):
-        risk_flags.append("ignored_output")
-
-    if _has_active_pr_gate_lease(path):
+    lease_state, lease = _worktree_lease_state(path)
+    if lease_state == "active":
         risk_flags.append("active_pr_gate_lease")
-    elif _check_worktree_lease_state(path) == "unreadable":
+        reasons.append(f"worktree has an active lease ({_lease_owner_summary(lease)})")
+    elif lease_state == "unreadable":
         risk_flags.append("unreadable_pr_gate_lease")
+        reasons.append("worktree lease could not be read")
 
     if risk_flags:
         return WorktreeCandidate(
@@ -1143,6 +1217,15 @@ def classify_worktree(  # noqa: C901 - preserves the legacy gate order beside ve
             classification="risky",
             risk_flags=risk_flags,
             preservation_required=f"risky: {', '.join(risk_flags)}",
+            refusal=_build_refusal_metadata(
+                path=path,
+                branch=branch,
+                head_sha=head_sha,
+                flags=risk_flags,
+                reasons=reasons,
+                lease_state=lease_state,
+                lease=lease,
+            ),
         )
 
     return WorktreeCandidate(
@@ -1502,12 +1585,12 @@ def _read_final_verified_preservation_state(
     return _read_strict_cleanliness(path)
 
 
-def _attempt_candidate_removal(
+def _attempt_candidate_removal(  # noqa: C901, PLR0912 - ordered refusal gates stay visible
     candidate: WorktreeCandidate,
     *,
     github_transport: GitHubTransport | None = None,
-) -> tuple[str, str, str | None]:
-    """Remove one candidate under the lifecycle lock after rechecking its lease."""
+) -> tuple[str, str, str | None, dict[str, Any] | None]:
+    """Remove one candidate under the lifecycle lock after rechecking protections."""
     from scripts.dev.pr_gate_lease import worktree_lifecycle_lock
 
     try:
@@ -1522,12 +1605,29 @@ def _attempt_candidate_removal(
                     "refused live lease candidate "
                     f"{candidate.path} ({_lease_owner_summary(lease)})",
                     None,
+                    _build_refusal_metadata(
+                        path=candidate.path,
+                        branch=candidate.branch,
+                        head_sha=candidate.head_sha,
+                        flags=["active_pr_gate_lease"],
+                        reasons=[f"worktree has an active lease ({_lease_owner_summary(lease)})"],
+                        lease_state=lease_state,
+                        lease=lease,
+                    ),
                 )
             if lease_state == "unreadable":
                 return (
                     "refused",
                     f"refused unreadable lease candidate {candidate.path} (owner/task unknown)",
                     None,
+                    _build_refusal_metadata(
+                        path=candidate.path,
+                        branch=candidate.branch,
+                        head_sha=candidate.head_sha,
+                        flags=["unreadable_pr_gate_lease"],
+                        reasons=["worktree lease could not be read"],
+                        lease_state=lease_state,
+                    ),
                 )
 
             if candidate.verification:
@@ -1540,6 +1640,13 @@ def _attempt_candidate_removal(
                         "refused",
                         f"refused verified candidate {candidate.path}: {detail}",
                         None,
+                        _build_refusal_metadata(
+                            path=candidate.path,
+                            branch=candidate.branch,
+                            head_sha=candidate.head_sha,
+                            flags=["verified_merge_refused"],
+                            reasons=[detail],
+                        ),
                     )
                 current_path = candidate.verification.get("current_path")
                 if not isinstance(current_path, str) or not current_path:
@@ -1548,6 +1655,13 @@ def _attempt_candidate_removal(
                         f"refused verified candidate {candidate.path}: "
                         "apply-time preservation recheck: missing current main path",
                         None,
+                        _build_refusal_metadata(
+                            path=candidate.path,
+                            branch=candidate.branch,
+                            head_sha=candidate.head_sha,
+                            flags=["verified_merge_refused"],
+                            reasons=["apply-time preservation recheck: missing current main path"],
+                        ),
                     )
                 request, request_error = _request_from_verified_candidate(candidate)
                 if request_error is not None:
@@ -1556,6 +1670,13 @@ def _attempt_candidate_removal(
                         f"refused verified candidate {candidate.path}: "
                         f"apply-time preservation recheck: {request_error}",
                         None,
+                        _build_refusal_metadata(
+                            path=candidate.path,
+                            branch=candidate.branch,
+                            head_sha=candidate.head_sha,
+                            flags=["verified_merge_refused"],
+                            reasons=[f"apply-time preservation recheck: {request_error}"],
+                        ),
                     )
                 assert request is not None
                 final_flags, final_reasons = _read_final_verified_preservation_state(
@@ -1570,6 +1691,93 @@ def _attempt_candidate_removal(
                         f"refused verified candidate {candidate.path}: "
                         f"apply-time preservation recheck: {preservation_detail}",
                         None,
+                        _build_refusal_metadata(
+                            path=candidate.path,
+                            branch=candidate.branch,
+                            head_sha=candidate.head_sha,
+                            flags=final_flags,
+                            reasons=[f"apply-time preservation recheck: {preservation_detail}"],
+                        ),
+                    )
+            else:
+                current_branch, current_sha, identity_error = _read_worktree_identity(
+                    candidate.path
+                )
+                if identity_error is not None:
+                    return (
+                        "refused",
+                        f"refused candidate {candidate.path}: apply-time identity recheck: "
+                        f"{identity_error}",
+                        None,
+                        _build_refusal_metadata(
+                            path=candidate.path,
+                            branch=candidate.branch,
+                            head_sha=candidate.head_sha,
+                            flags=["unreadable_worktree_identity"],
+                            reasons=[identity_error],
+                        ),
+                    )
+                if current_branch != candidate.branch:
+                    return (
+                        "refused",
+                        f"refused candidate {candidate.path}: apply-time identity recheck: "
+                        "checked-out branch changed",
+                        None,
+                        _build_refusal_metadata(
+                            path=candidate.path,
+                            branch=candidate.branch,
+                            head_sha=candidate.head_sha,
+                            flags=["branch_drift"],
+                            reasons=["checked-out branch changed during apply"],
+                        ),
+                    )
+                if current_sha is None or current_sha.casefold() != candidate.head_sha.casefold():
+                    return (
+                        "refused",
+                        f"refused candidate {candidate.path}: apply-time identity recheck: "
+                        "worktree HEAD changed",
+                        None,
+                        _build_refusal_metadata(
+                            path=candidate.path,
+                            branch=candidate.branch,
+                            head_sha=candidate.head_sha,
+                            flags=["head_drift"],
+                            reasons=["worktree HEAD changed during apply"],
+                        ),
+                    )
+                preservation_flags, preservation_reasons = _read_strict_cleanliness(candidate.path)
+                unpushed, unpushed_reason = _read_unpushed_state(candidate.path, candidate.branch)
+                if unpushed:
+                    preservation_flags.append("unpushed_commits")
+                    if unpushed_reason:
+                        preservation_reasons.append(unpushed_reason)
+                if candidate.branch:
+                    open_pr, open_pr_error, open_pr_numbers = _read_strict_open_pr_state(
+                        candidate.branch,
+                        repo=DEFAULT_GITHUB_REPO,
+                        transport=github_transport,
+                    )
+                    if open_pr_error is not None:
+                        preservation_flags.append("unreadable_open_pr_state")
+                        preservation_reasons.append(open_pr_error)
+                    elif open_pr:
+                        preservation_flags.append("open_pr")
+                        joined = ", ".join(f"#{number}" for number in open_pr_numbers)
+                        preservation_reasons.append(f"branch has open PR coverage: {joined}")
+                if preservation_flags:
+                    detail = "; ".join(preservation_reasons) or ", ".join(preservation_flags)
+                    return (
+                        "refused",
+                        f"refused candidate {candidate.path}: apply-time preservation recheck: "
+                        f"{detail}",
+                        None,
+                        _build_refusal_metadata(
+                            path=candidate.path,
+                            branch=candidate.branch,
+                            head_sha=candidate.head_sha,
+                            flags=preservation_flags,
+                            reasons=preservation_reasons,
+                        ),
                     )
 
             repo_cwd = (
@@ -1584,6 +1792,14 @@ def _attempt_candidate_removal(
             "error",
             f"refused lifecycle-lock failure {candidate.path}",
             f"failed lifecycle guard for {candidate.path}: {exc}",
+            None,
+            _build_refusal_metadata(
+                path=candidate.path,
+                branch=candidate.branch,
+                head_sha=candidate.head_sha,
+                flags=["lifecycle_lock_failure"],
+                reasons=[f"failed lifecycle guard: {exc}"],
+            ),
         )
 
     if result.returncode != 0:
@@ -1591,8 +1807,18 @@ def _attempt_candidate_removal(
             "error",
             f"failed to remove {candidate.path}",
             f"failed to remove {candidate.path}: {result.stderr.strip()}",
+            None,
+            _build_refusal_metadata(
+                path=candidate.path,
+                branch=candidate.branch,
+                head_sha=candidate.head_sha,
+                flags=["removal_failed"],
+                reasons=[
+                    f"git worktree remove failed: {result.stderr.strip() or result.stdout.strip()}"
+                ],
+            ),
         )
-    return "removed", f"removed {candidate.path}", None
+    return "removed", f"removed {candidate.path}", None, None
 
 
 def apply_deletions(
@@ -1611,7 +1837,8 @@ def apply_deletions(
     refused = list(plan.refused)
     audit_log = list(plan.audit_log)
 
-    for candidate in plan.candidates:
+    candidates = list(plan.candidates)
+    for index, candidate in enumerate(plan.candidates):
         if candidate.classification != "clean_stale":
             if candidate.classification == "risky":
                 audit_log.append(f"refused risky candidate {candidate.path}")
@@ -1621,7 +1848,7 @@ def apply_deletions(
             audit_log.append(f"refused current worktree {candidate.path}")
             continue
 
-        outcome, audit_event, error = _attempt_candidate_removal(
+        outcome, audit_event, error, refusal = _attempt_candidate_removal(
             candidate,
             github_transport=github_transport,
         )
@@ -1631,13 +1858,28 @@ def apply_deletions(
             errors.append(error)
         if outcome != "removed" and candidate.path not in refused:
             refused.append(candidate.path)
+        if refusal is not None:
+            refusal_flags = refusal.get("reason_codes", [])
+            if not isinstance(refusal_flags, list):
+                refusal_flags = ["cleanup_refused"]
+            candidates[index] = replace(
+                candidate,
+                classification="risky",
+                risk_flags=list(dict.fromkeys(str(flag) for flag in refusal_flags)),
+                preservation_required=(
+                    "risky: " + ", ".join(str(flag) for flag in refusal_flags)
+                    if refusal_flags
+                    else "risky: cleanup_refused"
+                ),
+                refusal=refusal,
+            )
 
     return ReaperPlan(
         schema=plan.schema,
         mode="apply",
         total_worktrees=plan.total_worktrees,
         current_worktree=plan.current_worktree,
-        candidates=plan.candidates,
+        candidates=candidates,
         deletable=deletable,
         refused=refused,
         errors=errors,
@@ -1719,7 +1961,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--skip-pr-check",
         action="store_true",
-        help="Skip GitHub PR lookup (faster, offline-safe)",
+        help="Skip GitHub PR lookup; candidates remain refused (offline-safe)",
     )
     parser.add_argument(
         "--limit",

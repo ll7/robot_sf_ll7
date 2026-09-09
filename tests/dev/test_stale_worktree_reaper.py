@@ -490,6 +490,92 @@ def test_apply_refuses_risky_candidates(tmp_path: Path) -> None:
     assert any("refused risky candidate" in event for event in result.audit_log)
 
 
+def test_apply_rechecks_dirty_and_ignored_linked_worktree(tmp_path: Path) -> None:
+    """A clean plan cannot remove tracked or ignored state added before apply."""
+    repo = tmp_path / "repo"
+    target = tmp_path / "linked-target"
+    remote = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "--initial-branch=main", str(repo)], check=True, capture_output=True
+    )
+    _git(repo, "config", "user.email", "fixture@example.invalid")
+    _git(repo, "config", "user.name", "Fixture User")
+    _git(repo, "init", "--bare", str(remote))
+    _git(repo, "remote", "add", "origin", str(remote))
+    (repo / "tracked.txt").write_text("base\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("output/\n", encoding="utf-8")
+    _git(repo, "add", "tracked.txt", ".gitignore")
+    _git(repo, "commit", "-m", "base")
+    _git(repo, "push", "-u", "origin", "main")
+    _git(repo, "worktree", "add", "-b", "stale", str(target), "main")
+    _git(target, "config", "branch.stale.remote", "origin")
+    _git(target, "config", "branch.stale.merge", "refs/heads/main")
+
+    transport = _FakeGitHubTransport({})
+    with patch.object(reaper, "_worktree_lease_state", return_value=(None, None)):
+        plan = reaper.build_plan(
+            current_path=str(repo),
+            target_path=str(target),
+            github_transport=transport,
+        )
+    assert plan.deletable == [str(target)]
+
+    (target / "tracked.txt").write_text("must survive\n", encoding="utf-8")
+    (target / "output").mkdir()
+    (target / "output" / "evidence.txt").write_text("local evidence\n", encoding="utf-8")
+
+    with patch.object(reaper, "_worktree_lease_state", return_value=(None, None)):
+        result = reaper.apply_deletions(plan, github_transport=transport)
+
+    assert target.exists()
+    assert str(target) in result.refused
+    candidate = next(item for item in result.candidates if item.path == str(target))
+    assert {"dirty", "ignored_output"}.issubset(candidate.refusal["reason_codes"])
+    assert candidate.refusal["worktree"]["path"] == str(target)
+
+
+@pytest.mark.parametrize(
+    "failed_command",
+    ["status", "ignored", "open_pr"],
+)
+def test_classification_read_failure_is_a_machine_readable_refusal(
+    tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess, failed_command: str
+) -> None:
+    """An unavailable preservation read must never produce a deletable candidate."""
+    main = tmp_path / "main"
+    stale = tmp_path / "stale-wt"
+    main.mkdir()
+    stale.mkdir()
+    if failed_command == "status":
+        fake_subprocess.register(
+            ["git", "status", "--porcelain"], _result(stderr="status unavailable", returncode=1)
+        )
+    elif failed_command == "ignored":
+        fake_subprocess.register(
+            ["git", "status", "--ignored"], _result(stderr="ignored unavailable", returncode=1)
+        )
+    else:
+        fake_subprocess.register(
+            ["gh", "pr", "list"], _result(stderr="GitHub unavailable", returncode=1)
+        )
+    _setup_reaper_mock(fake_subprocess, branch="stale-branch")
+    monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
+    monkeypatch.setattr(reaper, "_worktree_lease_state", lambda _path: (None, None))
+
+    candidate = reaper.classify_worktree(
+        path=str(stale),
+        branch="stale-branch",
+        head_sha="abc",
+        current_path=str(main),
+    )
+
+    assert candidate.classification == "risky"
+    assert candidate.refusal["status"] == "refused"
+    assert candidate.refusal["worktree"]["branch"] == "stale-branch"
+    assert candidate.refusal["worktree"]["head_sha"] == "abc"
+    assert candidate.refusal["recovery"]["worktree_must_remain"] is True
+
+
 def test_dry_run_produces_no_deletion_command(
     tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess
 ) -> None:
@@ -557,10 +643,16 @@ def test_classify_active_pr_gate_lease_risk(
         fake_subprocess, branch="lease-branch", git_common_dir=str(tmp_path / ".git")
     )
 
-    def fake_has_active_lease(path: str) -> bool:
-        return True
-
-    monkeypatch.setattr(reaper, "_has_active_pr_gate_lease", fake_has_active_lease)
+    lease = SimpleNamespace(
+        owner="worker-8699",
+        gate_id="task-8699",
+        pr_number=8699,
+        expires_at="2026-09-09T12:00:00+00:00",
+        worktree_path=str(lease_wt),
+        head_ref="lease-branch",
+        head_sha="abc",
+    )
+    monkeypatch.setattr(reaper, "_worktree_lease_state", lambda path: ("active", lease))
     monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
 
     candidate = reaper.classify_worktree(
@@ -572,6 +664,12 @@ def test_classify_active_pr_gate_lease_risk(
     )
     assert candidate.classification == "risky"
     assert "active_pr_gate_lease" in candidate.risk_flags
+    assert candidate.refusal["owner"] == "worker-8699"
+    assert candidate.refusal["worktree"] == {
+        "path": str(lease_wt),
+        "branch": "lease-branch",
+        "head_sha": "abc",
+    }
 
 
 def test_classify_no_pr_gate_lease_not_risky(
@@ -587,10 +685,7 @@ def test_classify_no_pr_gate_lease_not_risky(
         fake_subprocess, branch="stale-branch", git_common_dir=str(tmp_path / ".git")
     )
 
-    def fake_has_active_lease(path: str) -> bool:
-        return False
-
-    monkeypatch.setattr(reaper, "_has_active_pr_gate_lease", fake_has_active_lease)
+    monkeypatch.setattr(reaper, "_worktree_lease_state", lambda path: (None, None))
     monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
 
     candidate = reaper.classify_worktree(
@@ -794,7 +889,7 @@ def test_verified_merged_tree_accepts_regular_merge_shape(tmp_path: Path) -> Non
         "ambiguous_open_pr",
     ],
 )
-def test_verified_negative_matrix_fails_closed(  # noqa: C901, PLR0915 - each named negative mutates one proof input
+def test_verified_negative_matrix_fails_closed(  # noqa: C901, PLR0912, PLR0915 - each named negative mutates one proof input
     tmp_path: Path,
     failure: str,
 ) -> None:
@@ -859,6 +954,9 @@ def test_verified_negative_matrix_fails_closed(  # noqa: C901, PLR0915 - each na
     assert plan.deletable == []
     assert str(target) in plan.refused or plan.errors
     assert target.is_dir()
+    if plan.candidates:
+        assert plan.candidates[0].refusal["status"] == "refused"
+        assert plan.candidates[0].refusal["worktree"]["path"] == str(target)
     if failure == "ambiguous_open_pr":
         assert "unreadable_open_pr_state" in plan.candidates[0].risk_flags
     else:

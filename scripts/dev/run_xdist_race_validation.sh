@@ -168,9 +168,13 @@ mode_markers = {
     "xdist": "Resolved pytest execution mode: pytest-xdist (dist=",
     "no-xdist": "Resolved pytest execution mode: in-process serial (pytest-xdist disabled).",
 }
+candidate_lines = [
+    line for line in log_text.splitlines()
+    if line.startswith("Resolved pytest execution mode:")
+]
 matches = [
     mode
-    for line in log_text.splitlines()
+    for line in candidate_lines
     for mode, marker in mode_markers.items()
     if (mode == "no-xdist" and line == marker)
     or (
@@ -180,7 +184,7 @@ matches = [
         and line[len(marker):-2].strip()
     )
 ]
-print(matches[0] if len(matches) == 1 else "unknown")
+print(matches[0] if len(candidate_lines) == 1 and len(matches) == 1 else "unknown")
 PY
       )"
       if [[ "$execution_mode" == "xdist" || "$execution_mode" == "no-xdist" ]]; then

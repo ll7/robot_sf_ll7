@@ -1744,6 +1744,51 @@ def test_evaluate_live_carries_current_closing_discipline_result() -> None:
     )
 
 
+def test_evaluate_live_binds_native_evidence_to_synthetic_merge_group_head() -> None:
+    """Native evidence status is checked against the synthetic queue commit."""
+    source_head = FULL_SHA
+    synthetic_head = "9" * 40
+    queue_base = "b" * 40
+    snapshot = _gate_ready_pr()
+    snapshot["reviewers_requested"] = False
+    with (
+        patch.object(merge_queue_gate_module, "fetch_pr_snapshot", return_value=(snapshot, None)),
+        patch.object(
+            merge_queue_gate_module,
+            "_fetch_exact_head_evidence_registry",
+            return_value=(
+                {
+                    "status": "success",
+                    "head_sha": synthetic_head,
+                    "name": "evidence-registry-ratchet",
+                },
+                None,
+            ),
+        ) as mock_evidence,
+        patch.object(
+            merge_queue_gate_module, "fetch_merge_queue_strategy", return_value=("ALLGREEN", None)
+        ),
+        patch.object(merge_queue_gate_module, "fetch_threads_resolved", return_value=(True, None)),
+        patch.object(
+            merge_queue_gate_module, "get_pr_commit_messages", return_value="repair commit"
+        ),
+        patch.object(merge_queue_gate_module, "check_closes_discipline", return_value=[]),
+    ):
+        audit, error = merge_queue_gate_module._evaluate_live(
+            42,
+            repo="owner/repo",
+            merge_group_base_sha=queue_base,
+            merge_group_head_sha=source_head,
+            merge_group_evidence_head_sha=synthetic_head,
+        )
+
+    assert error is None
+    assert audit.passed is True
+    assert audit.evidence_registry_head_sha == synthetic_head
+    assert audit.evidence_registry_expected_head_sha == synthetic_head
+    mock_evidence.assert_called_once_with(synthetic_head, repo="owner/repo")
+
+
 def test_outstanding_requested_reviewer_fails_closed() -> None:
     """An explicit reviewer request receives the same fail-closed merger-preflight treatment."""
     gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"

@@ -198,6 +198,7 @@ class MergeGateAudit:
     closing_discipline_blockers: list[str] = field(default_factory=list)
     evidence_registry_status: str = "not_evaluated"
     evidence_registry_head_sha: str = ""
+    evidence_registry_expected_head_sha: str = ""
     reasons: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -641,6 +642,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
     review_claim_status = _review_claim_status(pr, head_sha=head_sha, now=now)
 
     evidence_registry = pr.get("evidence_registry")
+    evidence_registry_expected_head_sha = head_sha
     if evidence_registry is None:
         evidence_registry_status = "not_evaluated"
         evidence_registry_head_sha = ""
@@ -650,8 +652,12 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
     else:
         evidence_registry_status = str(evidence_registry.get("status") or "unknown").lower()
         evidence_registry_head_sha = str(evidence_registry.get("head_sha") or "")
+        evidence_registry_expected_head_sha = str(
+            evidence_registry.get("expected_head_sha") or head_sha
+        )
         if evidence_registry_status == "success" and (
-            not evidence_registry_head_sha or evidence_registry_head_sha.lower() != head_sha.lower()
+            not evidence_registry_head_sha
+            or evidence_registry_head_sha.lower() != evidence_registry_expected_head_sha.lower()
         ):
             evidence_registry_status = "stale"
 
@@ -727,6 +733,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
         closing_discipline_blockers=closing_discipline_blockers,
         evidence_registry_status=evidence_registry_status,
         evidence_registry_head_sha=evidence_registry_head_sha,
+        evidence_registry_expected_head_sha=evidence_registry_expected_head_sha,
         reasons=reasons,
     )
 
@@ -2475,11 +2482,21 @@ def _evaluate_live(
         evidence_proof, evidence_error = _fetch_exact_head_evidence_registry(
             merge_group_evidence_head_sha, repo=repo
         )
-        snapshot["evidence_registry"] = evidence_proof or {
-            "status": "unavailable",
-            "head_sha": merge_group_evidence_head_sha,
-            "name": EVIDENCE_REGISTRY_CHECK_NAME,
-            "workflow_name": EVIDENCE_REGISTRY_WORKFLOW_NAME,
+        snapshot["evidence_registry"] = {
+            **(
+                evidence_proof
+                or {
+                    "status": "unavailable",
+                    "head_sha": merge_group_evidence_head_sha,
+                    "name": EVIDENCE_REGISTRY_CHECK_NAME,
+                    "workflow_name": EVIDENCE_REGISTRY_WORKFLOW_NAME,
+                }
+            ),
+            # A native merge-group check runs on the synthetic merge-group
+            # commit, while the source PR identity remains the encoded source
+            # head. Keep the expected proof identity explicit so the evaluator
+            # does not compare the synthetic evidence with the source head.
+            "expected_head_sha": merge_group_evidence_head_sha,
         }
 
     if merge_group_base_sha:

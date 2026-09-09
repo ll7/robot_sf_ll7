@@ -121,10 +121,14 @@ stale, shallow, or incomplete identities/history fail closed. An explicitly requ
 
 Hosted pull-request and merge-group runs use the same explicit projection. The direct/native merge
 gate consumers only consume the named exact-head check status; they do not parse the projection a
-second time. The current source-PR gate has no complete changed-file applicability proof for the
+second time. Because GraphQL status rollups omit check-run head identities, source-PR snapshots
+rebind a present evidence check through the exact REST check-run endpoint before admission consumes
+it. The current source-PR gate has no complete changed-file applicability proof for the
 path-filtered workflow, so an absent source-PR evidence check remains an explicit boundary rather
 than a claimed universal block. The native merge-group workflow supplies the synthetic exact head
-and frozen base to the canonical evidence job. The single-account receipt inherits this gate audit.
+and frozen base to the canonical evidence job and evaluates the resulting proof against that
+synthetic head, while retaining the source PR head as a separate queue-ref identity. The
+single-account receipt inherits this gate audit.
 
 `PR_READY_SKIP_PREFLIGHT=1` does not disable this integrity check. Interim mode retains its existing
 behavior, including base fallback, and does not run the new early check. A successful check is

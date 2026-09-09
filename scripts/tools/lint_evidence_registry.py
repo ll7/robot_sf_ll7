@@ -1149,11 +1149,12 @@ def _candidate_artifact_cache(
     return cache
 
 
-def _load_dispositions(path: Path | None) -> dict[str, dict[str, str]]:
+def _load_dispositions(path: Path | None, *, raw: bytes | None = None) -> dict[str, dict[str, str]]:
     """Load optional report-mode category dispositions from the versioned packet."""
-    if path is None or not path.is_file():
+    if path is None or (raw is None and not path.is_file()):
         return {}
-    value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    text = raw.decode("utf-8") if raw is not None else path.read_text(encoding="utf-8")
+    value = yaml.safe_load(text)
     if (
         not isinstance(value, Mapping)
         or value.get("schema_version") != "evidence_registry_disposition.v1"
@@ -1384,7 +1385,32 @@ def lint_evidence_registry(  # noqa: C901, PLR0912, PLR0915 - ordinary/projected
     active = [item for item in findings if item["code"] not in exclude_codes]
     by_code = dict(sorted(Counter(item["code"] for item in active).items()))
     excluded_by_code = dict(sorted(Counter(item["code"] for item in excluded).items()))
-    dispositions = _load_dispositions(disposition_path)
+    disposition_present = disposition_path is not None and disposition_path.is_file()
+    if projection_identity is None:
+        dispositions = _load_dispositions(disposition_path)
+    else:
+        # The projection must not summarize candidate findings with a dirty
+        # worktree companion. Read the optional disposition packet from the
+        # candidate tree, and treat a packet absent from that tree as absent.
+        disposition_raw = None
+        if disposition_path is not None:
+            try:
+                disposition_relative = disposition_path.resolve().relative_to(repo_root).as_posix()
+            except ValueError:
+                disposition_relative = ""
+            if disposition_relative:
+                disposition_raw = _repository_file_bytes(
+                    repo_root,
+                    disposition_relative,
+                    projection_identity["candidate_head"],
+                    candidate_content_cache,
+                )
+        disposition_present = disposition_raw is not None
+        dispositions = (
+            _load_dispositions(disposition_path, raw=disposition_raw)
+            if disposition_raw is not None
+            else {}
+        )
     report: dict[str, Any] = {
         "registry_root": registry_root.relative_to(repo_root).as_posix(),
         "checked_files": len(files),
@@ -1441,7 +1467,7 @@ def lint_evidence_registry(  # noqa: C901, PLR0912, PLR0915 - ordinary/projected
             "findings": len(excluded),
             "by_code": excluded_by_code,
         }
-    if disposition_path is not None and disposition_path.is_file():
+    if disposition_present and disposition_path is not None:
         try:
             report["disposition_path"] = disposition_path.relative_to(repo_root).as_posix()
         except ValueError:

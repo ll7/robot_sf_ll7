@@ -716,6 +716,53 @@ def test_disposition_packet_classifies_without_suppressing_findings(tmp_path: Pa
     }
 
 
+def test_projected_disposition_summary_reads_candidate_bytes(tmp_path: Path) -> None:
+    """A dirty worktree disposition packet cannot alter a candidate projection."""
+    linter = _load_linter()
+    repo, evidence, base_commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-projected-disposition",
+        commit="f" * 40,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="projected-disposition.json",
+    )
+    disposition_path = evidence / "dispositions.yaml"
+    disposition_path.write_text(
+        "schema_version: evidence_registry_disposition.v1\n"
+        "categories:\n"
+        "  - code: dangling_commit\n"
+        "    status: candidate_status\n",
+        encoding="utf-8",
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "add projected disposition")
+    candidate = _git(repo, "rev-parse", "HEAD")
+
+    disposition_path.write_text(
+        "schema_version: evidence_registry_disposition.v1\n"
+        "categories:\n"
+        "  - code: dangling_commit\n"
+        "    status: dirty_worktree_status\n",
+        encoding="utf-8",
+    )
+
+    report = linter.lint_evidence_registry(
+        repo,
+        evidence,
+        disposition_path,
+        candidate_head=candidate,
+        frozen_base=base_commit,
+    )
+
+    assert report["disposition_summary"] == {
+        "by_status": {"candidate_status": 1},
+        "unclassified_by_code": {"config_missing_at_commit": 1},
+    }
+
+
 def test_reports_dir_filename_manifest_hash_is_verified(tmp_path: Path) -> None:
     """Nested filename hashes resolve against the declared reports directory."""
     linter = _load_linter()

@@ -33,6 +33,11 @@ The packet reuses `research_answerability.v1` and
 predicates remain visible and outside safety denominators. Its outcome vocabulary distinguishes
 `result`, `null`, `inconclusive`, `invalid`, `unavailable`, and `blocked`.
 
+The stop rule is non-adaptive: each search arm stops at 64 candidates for each of the three search
+seeds, confirmation remains unauthorized and is bounded to the five declared held-out seeds, and
+contract failure stops before compute. No replacement rows or objective-driven early stopping is
+allowed.
+
 Focused tests cover self-digest and source/bound tampering, seed/budget accounting, complete
 outcomes, the template-delay gate, and deterministic feasibility/rejection accounting. No test
 launches a simulator or other compute campaign.

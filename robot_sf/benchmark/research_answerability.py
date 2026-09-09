@@ -857,6 +857,48 @@ def _validate_packet_design(packet: Mapping[str, Any]) -> None:  # noqa: C901, P
         raise AdversarialFalsificationPacketError("budget rollout accounting is invalid")
 
 
+def _validate_packet_stop_rule(packet: Mapping[str, Any]) -> None:
+    """Require a fixed budget stop rule with no adaptive replacement rows."""
+    stop_rule = packet["stop_rule"]
+    search = stop_rule["search"]
+    budget = packet["budget"]
+    search_seeds = packet["seed_policy"]["search_seeds"]
+    if (
+        search["action"] != "stop"
+        or search["candidates_per_arm_per_seed"] != budget["candidate_budget_per_arm_per_seed"]
+    ):
+        raise AdversarialFalsificationPacketError(
+            "stop_rule.search must stop at the declared per-seed candidate budget"
+        )
+    if search["search_seed_count"] != len(search_seeds) or not search["no_early_stop_on_objective"]:
+        raise AdversarialFalsificationPacketError(
+            "stop_rule.search must cover all search seeds without objective-based early stopping"
+        )
+
+    confirmation = stop_rule["confirmation"]
+    confirmation_seeds = packet["seed_policy"]["confirmation_seeds"]
+    if (
+        confirmation["action"] != "stop"
+        or confirmation["held_out_seed_count"] != len(confirmation_seeds)
+        or confirmation["execution_status"] != "not_authorized"
+    ):
+        raise AdversarialFalsificationPacketError(
+            "stop_rule.confirmation must stop at the five declared held-out seeds and remain unauthorized"
+        )
+
+    contract_failure = stop_rule["contract_failure"]
+    if contract_failure["action"] != "stop_before_compute" or tuple(
+        contract_failure["outcomes"]
+    ) != ("invalid", "unavailable", "inconclusive", "blocked"):
+        raise AdversarialFalsificationPacketError(
+            "stop_rule.contract_failure must preserve all explicit no-result outcomes"
+        )
+    if stop_rule["replacement_rows_allowed"]:
+        raise AdversarialFalsificationPacketError(
+            "stop_rule.replacement_rows_allowed must be false"
+        )
+
+
 def _validate_packet_outcomes(packet: Mapping[str, Any]) -> None:
     """Require the complete no-result vocabulary without adding aliases."""
     vocabulary = packet["outcome_vocabulary"]
@@ -946,6 +988,7 @@ def validate_adversarial_falsification_packet(
     _validate_packet_variable_map(packet, search_space_semantics=semantics)
     _validate_packet_feasibility(packet)
     _validate_packet_design(packet)
+    _validate_packet_stop_rule(packet)
     _validate_packet_outcomes(packet)
     _validate_packet_compute_gate(packet)
 

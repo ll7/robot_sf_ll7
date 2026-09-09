@@ -264,6 +264,35 @@ def test_issue_8570_packet_accounts_for_equal_budgets_and_disjoint_seeds() -> No
         validate_adversarial_falsification_packet(tampered)
 
 
+def test_issue_8570_packet_has_nonadaptive_budget_stop_rule() -> None:
+    """Search and held-out budgets stop deterministically without replacement rows."""
+    packet = _issue_8570_packet()
+    assert packet["stop_rule"] == {
+        "search": {
+            "action": "stop",
+            "candidates_per_arm_per_seed": 64,
+            "search_seed_count": 3,
+            "no_early_stop_on_objective": True,
+        },
+        "confirmation": {
+            "action": "stop",
+            "held_out_seed_count": 5,
+            "execution_status": "not_authorized",
+        },
+        "contract_failure": {
+            "action": "stop_before_compute",
+            "outcomes": ["invalid", "unavailable", "inconclusive", "blocked"],
+        },
+        "replacement_rows_allowed": False,
+    }
+
+    tampered = copy.deepcopy(packet)
+    tampered["stop_rule"]["search"]["candidates_per_arm_per_seed"] = 63
+    _refresh_packet_digest(tampered)
+    with pytest.raises(AdversarialFalsificationPacketError, match="stop_rule.search"):
+        validate_adversarial_falsification_packet(tampered)
+
+
 def test_issue_8570_packet_has_complete_no_result_vocabulary() -> None:
     """Result, null, and every explicit no-result state remain distinct."""
     packet = _issue_8570_packet()

@@ -20,6 +20,7 @@
     "search_methods",
     "seed_policy",
     "budget",
+    "stop_rule",
     "outcome_vocabulary",
     "artifact_plan",
     "compute_ceiling",
@@ -79,6 +80,7 @@
     "search_methods": {"$ref": "#/$defs/search_methods"},
     "seed_policy": {"$ref": "#/$defs/seed_policy"},
     "budget": {"$ref": "#/$defs/budget"},
+    "stop_rule": {"$ref": "#/$defs/stop_rule"},
     "outcome_vocabulary": {
       "type": "object",
       "additionalProperties": false,
@@ -375,6 +377,46 @@
         "rollouts_per_candidate": {"const": 1},
         "max_steps_per_rollout": {"type": "integer", "minimum": 1},
         "diagnostic_only": {"const": true}
+      }
+    },
+    "stop_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["search", "confirmation", "contract_failure", "replacement_rows_allowed"],
+      "properties": {
+        "search": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "candidates_per_arm_per_seed", "search_seed_count", "no_early_stop_on_objective"],
+          "properties": {
+            "action": {"const": "stop"},
+            "candidates_per_arm_per_seed": {"type": "integer", "minimum": 1},
+            "search_seed_count": {"type": "integer", "minimum": 1},
+            "no_early_stop_on_objective": {"const": true}
+          }
+        },
+        "confirmation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "held_out_seed_count", "execution_status"],
+          "properties": {
+            "action": {"const": "stop"},
+            "held_out_seed_count": {"const": 5},
+            "execution_status": {"const": "not_authorized"}
+          }
+        },
+        "contract_failure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "outcomes"],
+          "properties": {
+            "action": {"const": "stop_before_compute"},
+            "outcomes": {
+              "const": ["invalid", "unavailable", "inconclusive", "blocked"]
+            }
+          }
+        },
+        "replacement_rows_allowed": {"const": false}
       }
     },
     "artifact_plan": {

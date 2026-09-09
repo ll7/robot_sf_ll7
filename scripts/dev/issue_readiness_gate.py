@@ -228,6 +228,7 @@ def preflight_creation_body(body_file: str) -> dict[str, Any]:
             "ready": False,
             "body_sha256": "",
             "missing_fields": [],
+            "heading_suggestions": {},
             "metadata_findings": [],
             "error": f"body file unreadable: {exc}",
         }
@@ -238,6 +239,7 @@ def preflight_creation_body(body_file: str) -> dict[str, Any]:
         "ready": structural["ready"] and not findings,
         "body_sha256": structural["body_sha256"],
         "missing_fields": structural["missing_fields"],
+        "heading_suggestions": structural["heading_suggestions"],
         "metadata_findings": findings,
     }
 

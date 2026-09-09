@@ -395,6 +395,9 @@ _FAST_FILES = {
     # Paired-effect metric-contract tests are deterministic schema, provenance,
     # and materialization coverage for the native counterfactual producer.
     "test_paired_effect_metric_contract.py",
+    # Native wrapper trace tests exercise the map-runner producer paths that
+    # are otherwise excluded with the benchmark slow-test default.
+    "test_safety_wrapper_runtime.py",
     # CUDA/NVML runtime classification tests are deterministic unit contracts
     # (importlib stubs, no real GPU) that cover the changed telemetry producer
     # in the exact-head changed-coverage gate.

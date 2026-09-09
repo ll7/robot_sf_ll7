@@ -119,9 +119,10 @@ Split broad ideas before writing.
 4. De-duplicate against open/closed issues before creation.
 5. Draft/update through `gh-issue-creator` only when state is `issue_ready`.
    - Before any create request, run the zero-write body preflight
-     `uv run python scripts/dev/issue_implementability.py --preflight-body <body.md>`;
-     an incomplete body (missing objective, scope, inputs, acceptance, or
-     verification) stops the workflow before GitHub with the exact missing fields.
+     `uv run python -m scripts.dev.issue_readiness_gate preflight --body-file <body.md>`;
+     incomplete structure or invalid archetype metadata stops creation with exact missing
+     fields, canonical metadata findings, and the body digest. Require exit 0 and
+     `ready: true`; this offline result grants neither live readiness nor a claim.
    - Issue creation must not set `state:ready` up front. Use
      `scripts/dev/issue_readiness_gate.py create ...` (or run `gate <number>` on the
      freshly created issue): create without readiness, exact-read through the REST
@@ -133,7 +134,7 @@ Split broad ideas before writing.
      `state_conflict`, `drift`, or `error`) naming the next authority. Retries are
      idempotent and never remove labels owned by a human or another workflow.
    - Discovery is not complete until every created issue has both a passing
-     `issue_implementability.py --preflight-body` result and a recorded
+     `issue_readiness_gate preflight --body-file` result and a recorded
      `issue_readiness_gate.py` outcome. A created issue without a readiness
      outcome is an unfinished discovery result and cannot support a saturated
      lane verdict.

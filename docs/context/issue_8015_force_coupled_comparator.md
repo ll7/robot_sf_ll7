@@ -6,7 +6,7 @@
 **CLI Entry Point:** `scripts/benchmark/check_force_coupled_comparator.py`.
 **Receipt Schema:** `robot_sf/benchmark/schemas/force_coupled_comparator_receipt.v1.json`.
 **Contract Tests:** `tests/benchmark/test_force_coupled_comparator.py`.
-**Source Reference:** Jing, H., et al. (2026). *Local path planning for autonomous vehicles: a dynamic potential field-guided and force-coupled adaptive pure pursuit approach*. *Scientific Reports* (21 August 2026). DOI: [10.1038/s41598-026-63761-z](https://doi.org/10.1038/s41598-026-63761-z).
+**Source Reference:** Jing, Z., et al. (2026). *Local path planning for autonomous vehicles: a dynamic potential field-guided and force-coupled adaptive pure pursuit approach*. *Scientific Reports* (21 August 2026). DOI: [10.1038/s41598-026-63761-z](https://doi.org/10.1038/s41598-026-63761-z).
 
 Plain-language summary: a deterministic diagnostic comparison harness that evaluates the opt-in `force_coupled_potential_field` local planner against reference baselines (`pure_pursuit_goal`, attractive-dominant ablation, and repulsive-dominant ablation) on canonical analytic scenarios (`analytic_static_obstacle`, `analytic_pedestrian_interaction`, `analytic_symmetric_obstacle`, `analytic_unobstructed`).
 
@@ -19,8 +19,8 @@ The comparator evaluates a local planner derived from the improved adaptive pure
 - forward-kinematic integration and continuous steering-rate constraints for Ackermann-steered autonomous road vehicles.
 
 **Scope boundaries in the source:**
-- **Autonomous road vehicle scope:** The source publication specifically addresses highway and urban road navigation for passenger vehicles operating within defined lanes, interacting with motorized vehicles, and following vehicular turning kinematics.
-- **Vehicle results are not social-navigation evidence:** Source experiments measure road vehicle lane-keeping, high-speed collision avoidance, and vehicle overtaking maneuvers. These results do not model pedestrian crowd dynamics, proxemics, pedestrian compliance, or reciprocal collision avoidance, and must not be treated as social-navigation evidence.
+- **Autonomous road vehicle scope:** The source publication addresses local planning for autonomous road vehicles in obstacle-constrained driving scenarios. Its reported evaluation is bounded to static-obstacle ROS/Gazebo experiments and one low-speed real-vehicle static-obstacle test.
+- **Vehicle results are not social-navigation evidence:** The source does not establish evidence for moving vehicles, pedestrians, cyclists, or high-speed driving. Its results do not model pedestrian crowd dynamics, proxemics, pedestrian compliance, or reciprocal collision avoidance, and must not be treated as social-navigation evidence.
 
 ## 2. Implementation Deviations and Transfer Risks
 
@@ -33,13 +33,13 @@ The repository implementation (`robot_sf/planner/force_coupled_potential_field.p
    - *Source:* Enforces continuous steering-rack angular rates and dynamic lateral tire acceleration limits.
    - *Deviation:* Enforced through hard-predicate rate clipping on linear acceleration (`max_linear_rate`) and angular acceleration (`max_angular_rate`) per discrete control step. Overlap conditions issue explicit rate-limited stop requests (`status: degraded`) rather than dynamic vehicle evasion maneuvers.
 3. **Pedestrian-Interaction Separation:**
-   - *Source:* Dynamic obstacles in the source paper are other road vehicles obeying vehicular traffic dynamics.
-   - *Deviation:* In this harness, pedestrians are observed as separate geometric entities emitting isotropic repulsive forces without vehicle-traffic heuristics. Pedestrian-interaction scenarios (`analytic_pedestrian_interaction`) are strictly executed and reported separately from static-obstacle scenarios (`analytic_static_obstacle`), rather than combined into a single collapsed vehicular safety metric.
+   - *Source:* The publication's reported evaluation is bounded to static obstacles and does not establish moving-object or pedestrian-interaction dynamics.
+   - *Deviation:* In this harness, pedestrians are observed as separate geometric entities emitting isotropic repulsive forces without vehicle-traffic heuristics. Execution records retain distinct scenario IDs for pedestrian and static-obstacle cases, while the aggregate summary below combines all four scenarios per planner.
 
 **Expected Transfer Risks and Domain Limitations:**
-- **No Direct Parameter Transfer:** Potential-field gains, influence cutoffs (`influence_radius_m`), and look-ahead scaling calibrated for high-speed road vehicles cannot be transferred directly to low-speed pedestrian-shared social navigation spaces.
+- **No Direct Parameter Transfer:** Potential-field gains, influence cutoffs (`influence_radius_m`), and look-ahead scaling from this road-vehicle method cannot be assumed to transfer directly to low-speed pedestrian-shared social navigation spaces.
 - **Static vs. Dynamic Separation:** Zero-collision performance in static obstacle scenarios provides zero evidence of safe or socially compliant behavior around moving pedestrians. Evaluating them separately prevents false confidence in social navigation capability.
-- **Diagnostic Comparator Boundary:** The harness evaluates local implementation integrity, numeric stability, and relative performance against canonical baseline baselines on four fixed synthetic scenarios. It establishes no benchmark ranking, no leaderboard placement, and no release-roster promotion.
+- **Diagnostic Comparator Boundary:** The harness evaluates local implementation integrity, numeric stability, and relative performance against canonical baselines on four fixed synthetic scenarios. It establishes no benchmark ranking, no leaderboard placement, and no release-roster promotion.
 
 ## 3. Compared Planner Configurations
 

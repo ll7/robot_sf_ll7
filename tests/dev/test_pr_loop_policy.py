@@ -122,14 +122,16 @@ def _with_released_review_claim(
 ) -> dict[str, object]:
     """Attach a released ``review-claim: released @ <sha>`` comment."""
     claimed = sha if sha is not None else str(result.get("head_sha", ""))
-    result["comments"] = [
+    comments = result.setdefault("comments", [])
+    assert isinstance(comments, list)
+    comments.append(
         {
             "author": "lane-a-bot",
             "authorAssociation": association,
-            "createdAt": "2026-08-18T12:00:00Z",
+            "createdAt": "2026-08-18T12:00:01Z",
             "body": f"review-claim: released @ {claimed}",
         }
-    ]
+    )
     return result
 
 
@@ -817,7 +819,8 @@ def test_released_review_claim_clears_active_writer() -> None:
     pr = _pr(7502, overall="success", head_sha=FULL_SHA)
     _with_review_claim(pr, lane="lane-a", sha=FULL_SHA, until=FUTURE_UTC)
     _with_released_review_claim(pr, sha=FULL_SHA)
-    assert classify_pr_state(pr, now=NOW_UTC) != "active_writer"
+    assert len(pr["comments"]) == 2
+    assert classify_pr_state(pr, now=NOW_UTC.replace(minute=1)) != "active_writer"
 
 
 def test_expired_review_claim_does_not_park() -> None:
@@ -895,6 +898,232 @@ def test_active_review_claim_helper_reports_lane_and_expiry() -> None:
     assert claim.sha == FULL_SHA
     assert claim.expires_at is not None
     assert claim.expires_at == datetime(2026, 8, 18, 13, 30, 0, tzinfo=UTC)
+
+
+def test_earlier_release_does_not_cancel_later_same_head_review_claim() -> None:
+    """A new review of an unchanged head establishes its own active hold."""
+    pr = _pr(8649, overall="success", labels=["merge-ready"], head_sha=FULL_SHA)
+    pr["comments"] = [
+        {
+            "author_association": "OWNER",
+            "created_at": "2026-08-18T11:00:00Z",
+            "body": f"review-claim: released @ {FULL_SHA}",
+        },
+        {
+            "author_association": "OWNER",
+            "created_at": "2026-08-18T11:30:00Z",
+            "body": f"review-claim: second-review @ {FULL_SHA} until {FUTURE_UTC}",
+        },
+    ]
+
+    claim = active_review_claim(pr, FULL_SHA, NOW_UTC)
+
+    assert claim is not None
+    assert claim.lane == "second-review"
+    assert classify_pr_state(pr, now=NOW_UTC) == "active_writer"
+
+
+def _claim_entry(lane: str = "lane-a", **metadata: object) -> dict[str, object]:
+    """Build a trusted raw marker entry, without implicit publication metadata."""
+    return {
+        "author_association": "OWNER",
+        "body": f"review-claim: {lane} @ {FULL_SHA} until {FUTURE_UTC}",
+        **metadata,
+    }
+
+
+def _release_entry(**metadata: object) -> dict[str, object]:
+    """Build a release with the same raw shape as a claim fixture."""
+    return _claim_entry(**{"body": f"review-claim: released @ {FULL_SHA}", **metadata})
+
+
+@pytest.mark.parametrize("collection", ["comments", "reviews"])
+@pytest.mark.parametrize("time_key", ["createdAt", "created_at", "submittedAt", "submitted_at"])
+@pytest.mark.parametrize("release_later", [False, True])
+@pytest.mark.parametrize("reverse_input", [False, True])
+def test_review_claim_publication_orders_raw_entries(
+    collection: str, time_key: str, release_later: bool, reverse_input: bool
+) -> None:
+    """Publication time, not endpoint spelling or array sorting, orders events."""
+    claim_time = "2026-08-18T11:00:00Z" if release_later else "2026-08-18T11:30:00Z"
+    release_time = "2026-08-18T11:30:00Z" if release_later else "2026-08-18T11:00:00Z"
+    entries = [
+        _claim_entry(**{time_key: claim_time}),
+        _release_entry(**{time_key: release_time}),
+    ]
+    if reverse_input:
+        entries.reverse()
+    assert (active_review_claim({collection: entries}, FULL_SHA, NOW_UTC) is None) == release_later
+
+
+@pytest.mark.parametrize("claim_source", ["comments", "reviews"])
+@pytest.mark.parametrize("release_later", [False, True])
+def test_review_claim_publication_orders_across_sources(
+    claim_source: str, release_later: bool
+) -> None:
+    """Concatenating comments before reviews must not imply their chronology."""
+    release_source = "reviews" if claim_source == "comments" else "comments"
+    keys = {"comments": "createdAt", "reviews": "submitted_at"}
+    claim = _claim_entry(**{keys[claim_source]: "2026-08-18T11:15:00Z"})
+    release_time = "2026-08-18T11:30:00Z" if release_later else "2026-08-18T11:00:00Z"
+    release = _release_entry(**{keys[release_source]: release_time})
+    pr = {claim_source: [claim], release_source: [release]}
+    assert (active_review_claim(pr, FULL_SHA, NOW_UTC) is None) == release_later
+
+
+@pytest.mark.parametrize("collection", ["comments", "reviews"])
+def test_review_submission_not_creation_or_update_orders_claim(collection: str) -> None:
+    """A review's publication is submission, including when wrapped as comments."""
+    claim = _claim_entry(submitted_at="2026-08-18T11:30:00Z", created_at="2026-08-18T10:00:00Z")
+    release = _release_entry(submittedAt="2026-08-18T11:00:00Z", updated_at="2026-08-18T11:45:00Z")
+    assert active_review_claim({collection: [claim, release]}, FULL_SHA, NOW_UTC) is not None
+
+
+@pytest.mark.parametrize(
+    ("claim_metadata", "release_metadata"),
+    [
+        ({"created_at": "2026-08-18T11:00:00Z"}, {"createdAt": "2026-08-18T11:00:00Z"}),
+        ({}, {"created_at": "2026-08-18T11:30:00Z"}),
+        ({"created_at": "2026-08-18T11:00:00Z"}, {}),
+        ({}, {"created_at": None}),
+        ({}, {"created_at": ""}),
+        ({}, {"created_at": "not-a-date"}),
+        ({}, {"created_at": "2026-08-18T11:30:00"}),
+        ({}, {"created_at": "9999-12-31T23:59:59-01:00"}),
+        ({}, {"submitted_at": 123}),
+        ({"created_at": None}, {}),
+        (
+            {"created_at": "2026-08-18T11:00:00Z"},
+            {"createdAt": "2026-08-18T11:30:00Z", "created_at": "2026-08-18T10:00:00Z"},
+        ),
+        (
+            {"created_at": "2026-08-18T11:00:00Z"},
+            {"submitted_at": None, "created_at": "2026-08-18T11:30:00Z"},
+        ),
+    ],
+)
+def test_ambiguous_publication_cannot_clear_claim(
+    claim_metadata: dict[str, object], release_metadata: dict[str, object]
+) -> None:
+    """Unknown chronology retains a bounded active hold rather than authorizing release."""
+    pr = {"comments": [_claim_entry(**claim_metadata), _release_entry(**release_metadata)]}
+    assert active_review_claim(pr, FULL_SHA, NOW_UTC) is not None
+
+
+@pytest.mark.parametrize("claim_source", ["comments", "reviews"])
+def test_missing_cross_source_publication_cannot_clear_claim(claim_source: str) -> None:
+    """There is no legacy list-order relationship between distinct endpoints."""
+    other = "reviews" if claim_source == "comments" else "comments"
+    pr = {claim_source: [_claim_entry()], other: [_release_entry()]}
+    assert active_review_claim(pr, FULL_SHA, NOW_UTC) is not None
+
+
+@pytest.mark.parametrize("release_later", [False, True])
+def test_timestamp_free_same_source_preserves_ordered_legacy_stream(release_later: bool) -> None:
+    """Legacy callers already provide an ordered single-collection event stream."""
+    entries = [_claim_entry(), _release_entry()]
+    if not release_later:
+        entries.reverse()
+    assert (active_review_claim({"comments": entries}, FULL_SHA, NOW_UTC) is None) == release_later
+
+
+@pytest.mark.parametrize("same_body", [False, True])
+@pytest.mark.parametrize("final_release", [False, True])
+def test_review_claim_repeated_cycles_preserve_later_lane(
+    same_body: bool, final_release: bool
+) -> None:
+    """Every marker occurrence counts, including repeated markers in one body."""
+    entries = [_claim_entry(), _release_entry(), _claim_entry("second-review")]
+    if final_release:
+        entries.append(_release_entry())
+    if same_body:
+        entries = [_claim_entry(body="\n".join(str(entry["body"]) for entry in entries))]
+    claim = active_review_claim({"comments": entries}, FULL_SHA, NOW_UTC)
+    if final_release:
+        assert claim is None
+    else:
+        assert claim is not None and claim.lane == "second-review"
+
+
+@pytest.mark.parametrize("claim_first", [False, True])
+def test_same_body_markers_use_text_order_even_with_invalid_publication(claim_first: bool) -> None:
+    """Within one body, offsets establish order without any wall-clock timestamp."""
+    entries = [_claim_entry(), _release_entry()]
+    if not claim_first:
+        entries.reverse()
+    entry = _claim_entry(
+        body="\n".join(str(item["body"]) for item in entries), created_at="invalid"
+    )
+    assert (active_review_claim({"comments": [entry]}, FULL_SHA, NOW_UTC) is None) == claim_first
+
+
+@pytest.mark.parametrize("association", ["OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"])
+def test_later_release_retains_trust_boundary(association: str) -> None:
+    """Only existing trusted associations may clear another lane's claim."""
+    pr = {"comments": [_claim_entry(), _release_entry(author_association=association)]}
+    assert (active_review_claim(pr, FULL_SHA, NOW_UTC) is None) == (association != "CONTRIBUTOR")
+
+
+@pytest.mark.parametrize(
+    ("claim_sha", "release_sha", "released"),
+    [
+        (FULL_SHA, FULL_SHA.upper(), True),
+        (SHORT_SHA, SHORT_SHA.upper(), True),
+        (FULL_SHA[:7], FULL_SHA[:7], True),
+        (SHORT_SHA, FULL_SHA, False),
+        (FULL_SHA, SHORT_SHA, False),
+        (FULL_SHA, "deadbeef00000000000000000000000000000001", False),
+    ],
+)
+def test_review_release_keeps_exact_token_not_prefix_equivalence(
+    claim_sha: str, release_sha: str, released: bool
+) -> None:
+    """Short-head compatibility does not expand the release marker's authority."""
+    entries = [
+        _claim_entry(body=f"review-claim: lane-a @ {claim_sha} until {FUTURE_UTC}"),
+        _release_entry(body=f"review-claim: released @ {release_sha}"),
+    ]
+    assert (active_review_claim({"comments": entries}, FULL_SHA, NOW_UTC) is None) == released
+
+
+def test_later_expired_lane_does_not_hide_another_active_claim() -> None:
+    """A renewed or expired lane cannot overwrite a different surviving hold."""
+    entries = [
+        _claim_entry("first-review"),
+        _claim_entry(body=f"review-claim: expired-review @ {FULL_SHA} until {PAST_UTC}"),
+    ]
+    claim = active_review_claim({"comments": entries}, FULL_SHA, NOW_UTC)
+    assert claim is not None and claim.lane == "first-review"
+
+
+def test_matching_publication_aliases_normalize_timezone_offsets() -> None:
+    """Equivalent aware aliases are valid evidence for a later release."""
+    claim = _claim_entry(created_at="2026-08-18T11:00:00Z")
+    release = _release_entry(
+        createdAt="2026-08-18T11:30:00Z", created_at="2026-08-18T13:30:00+02:00"
+    )
+    assert active_review_claim({"comments": [claim, release]}, FULL_SHA, NOW_UTC) is None
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        _claim_entry(author_association="CONTRIBUTOR"),
+        _claim_entry(body=f"review-claim: lane-a @ deadbee until {FUTURE_UTC}"),
+        _claim_entry(body=f"review-claim: lane-a @ {FULL_SHA} until {PAST_UTC}"),
+        _claim_entry(body=f"review-claim: lane-a @ {FULL_SHA} until 2026-08-18T12:00:00Z"),
+        _claim_entry(body=f"review-claim: lane-a @ {FULL_SHA} until malformed"),
+    ],
+)
+def test_prior_release_does_not_promote_ineligible_claim(claim: dict[str, object]) -> None:
+    """A new event still needs the existing trust, head, and expiry eligibility."""
+    assert active_review_claim({"comments": [_release_entry(), claim]}, FULL_SHA, NOW_UTC) is None
+
+
+def test_release_with_until_suffix_is_not_a_new_released_lane_claim() -> None:
+    """Overlapping regex matches must not reinterpret release as a claim."""
+    entry = _release_entry(body=f"review-claim: released @ {FULL_SHA} until {FUTURE_UTC}")
+    assert active_review_claim({"comments": [entry]}, FULL_SHA, NOW_UTC) is None
 
 
 def test_parse_review_claim_marker_roundtrip() -> None:

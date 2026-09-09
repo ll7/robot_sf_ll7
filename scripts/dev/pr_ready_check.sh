@@ -20,7 +20,7 @@ Environment variables:
                       Ignored when PR_READY_MODE is set.
   PR_READY_SKIP_PREFLIGHT  Set to "1" to skip cheap preflight checks for
                       core/optional test-collection dependencies and the bundled
-                      fast-pysf API.
+                      fast-pysf API. Does not bypass the final evidence-registry check.
   PR_READY_PR_BODY_FILE  Optional markdown PR body from an existing readable
                       regular file.
                       Process-substitution paths such as /dev/fd/63 are rejected
@@ -47,6 +47,8 @@ if [ "$#" -gt 0 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
   exit 0
 fi
 
+pr_ready_explicit_base_ref=0
+[[ -z "${BASE_REF:-}" ]] || pr_ready_explicit_base_ref=1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
@@ -74,6 +76,7 @@ pr_ready_child_launch_started=0
 pr_ready_previous_async_pid=""
 pr_ready_parent_pgid=""
 pr_ready_cleanup_status="no_child_active"
+pr_ready_evidence_scope_file=""
 pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
 if [[ -z "$pr_ready_termination_receipt" ]]; then
   pr_ready_termination_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || printf 'unknown')"
@@ -321,6 +324,9 @@ pr_ready_exit_without_coverage() {
     pr_ready_finalize_child_registration_for_exit
     handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
   fi
+  if [[ -n "$pr_ready_evidence_scope_file" ]]; then
+    rm -f -- "$pr_ready_evidence_scope_file" || true
+  fi
   release_pr_ready_lock || true
   return "$exit_code"
 }
@@ -514,13 +520,61 @@ resolve_base_ref() {
     fi
   fi
 
-  # Fall back to HEAD so readiness gates still run instead of crashing. On a
+  if [[ "$pr_ready_final" == "1" && "$pr_ready_explicit_base_ref" == "1" ]]; then
+    printf 'Cannot resolve explicitly requested final-readiness base %q; refusing HEAD fallback and test lanes.\n' "$BASE_REF" >&2
+    return 2
+  fi
+
+  # Fall back to HEAD so interim/default-base gates still run instead of crashing. On a
   # fresh checkout this yields an empty changed-file set rather than a fatal
   # git error, and keeps a valid ref flowing to the coverage/perf/freshness
   # checks that also consume BASE_REF.
   printf 'Falling back to BASE_REF=HEAD; changed-file gates will compare against HEAD.\n' >&2
   BASE_REF="HEAD"
   export BASE_REF
+}
+
+preflight_check_evidence_registry() {
+  [[ "$pr_ready_final" == "1" ]] || return 0
+  mark_pr_ready_progress "evidence_registry_scope" "none" "resolving evidence-registry inputs"
+  local changed_path relevant=0 scope_status=0
+  pr_ready_evidence_scope_file="$(mktemp "${TMPDIR:-/tmp}/pr-ready-evidence-scope.XXXXXX")"
+  # NUL framing preserves whitespace/newlines. Disabling rename detection exposes
+  # both sides, including a deletion or a rename out of the evidence subtree.
+  # Unlike process substitution, the explicit status check cannot hide Git failure.
+  if git diff --name-only --no-renames -z "$BASE_REF...HEAD" > "$pr_ready_evidence_scope_file"; then
+    while IFS= read -r -d '' changed_path; do
+      # Keep aligned with evidence-registry-ratchet.yml pull_request.paths;
+      # executable preflight tests cover every hosted input and path boundaries.
+      case "$changed_path" in
+        docs/context/evidence/*|docs/RELEASE.md|CITATION.cff|\
+        scripts/dev/evidence_registry_ratchet.py|scripts/tools/lint_evidence_registry.py|\
+        scripts/validation/evidence_registry_baseline.json|\
+        scripts/validation/evidence_registry_baseline_review.yaml|\
+        tests/dev/test_evidence_registry_ratchet.py|\
+        tests/dev/test_evidence_registry_ratchet_workflow.py|\
+        .github/workflows/evidence-registry-ratchet.yml)
+          relevant=1 ;;
+      esac
+    done < "$pr_ready_evidence_scope_file"
+  else
+    scope_status=$?
+  fi
+  rm -f -- "$pr_ready_evidence_scope_file"
+  pr_ready_evidence_scope_file=""
+  if [[ "$scope_status" -ne 0 ]]; then
+    printf 'Cannot resolve final evidence-registry input scope; refusing to start test lanes.\n' >&2
+    return "$scope_status"
+  fi
+  [[ "$relevant" == "1" ]] || return 0
+  if [[ ! -f "$SCRIPT_DIR/evidence_registry_ratchet.py" ]]; then
+    printf 'Required evidence-registry checker is missing: %s\n' "$SCRIPT_DIR/evidence_registry_ratchet.py" >&2
+    return 2
+  fi
+  printf 'Checking evidence-registry integrity before formatting and test lanes.\n' >&2
+  # Reuse child registration and signal cleanup; this never writes a baseline or
+  # replaces the later core invariants, hosted gate, or final freshness checks.
+  run_pr_ready_lane evidence_registry uv run python "$SCRIPT_DIR/evidence_registry_ratchet.py" --check
 }
 
 is_optional_readiness_path() {
@@ -746,6 +800,7 @@ fi
 
 mark_pr_ready_progress "base_resolution" "none" "resolving readiness base reference"
 resolve_base_ref
+preflight_check_evidence_registry
 
 if [[ "$pr_ready_final" != "1" && "$(worktree_state)" != "clean" ]]; then
   dirty_paths=()

@@ -111,6 +111,11 @@ def classify_failure(
 
     reasons_str = " ".join(degradation_reasons).lower()
 
+    # Planner-owned diagnostic text must retain its ownership even when the free-form reason
+    # contains a simulator keyword.
+    if "plan_exception" in reasons_str or "planner_diagnostic" in reasons_str:
+        return FAILURE_CLASS_PATH_GENERATION
+
     # 1. Simulator errors
     if "simulator" in reasons_str or "sim_error" in reasons_str:
         return FAILURE_CLASS_SIMULATOR
@@ -134,8 +139,7 @@ def classify_failure(
 
     # 4. Path generation (planner exceptions, solver failures, goal unreachable timeouts)
     if (
-        "plan_exception" in reasons_str
-        or "solver" in reasons_str
+        "solver" in reasons_str
         or "infeasible" in reasons_str
         or "no_path" in reasons_str
         or not completed
@@ -571,12 +575,14 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             if diag_status == "degraded" or diag.get("degraded") is True:
                 degraded = True
                 for reason in diag.get("degradation_reasons", []):
-                    if reason not in degradation_reasons:
-                        degradation_reasons.append(str(reason))
+                    planner_reason = f"planner_diagnostic: {reason}"
+                    if planner_reason not in degradation_reasons:
+                        degradation_reasons.append(planner_reason)
             if diag.get("fallback") is True:
                 degraded = True
-                if "fallback_execution" not in degradation_reasons:
-                    degradation_reasons.append("fallback_execution")
+                fallback_reason = "planner_diagnostic: fallback_execution"
+                if fallback_reason not in degradation_reasons:
+                    degradation_reasons.append(fallback_reason)
 
             linear_cmd = float(linear_cmd)
             angular_cmd = float(angular_cmd)

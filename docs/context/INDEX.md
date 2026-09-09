@@ -73,8 +73,8 @@ ranking, release-roster change, or social-compliance certification:
 Issue #8693 simulator-error and diagnostic-success contract: the canonical comparator captures
 analytic simulator state, clearance, and integration exceptions, keeps planner-owned failures in
 path generation, preserves the established fallback, rejects unknown or missing failure classes,
-and excludes degraded and near-miss rows from diagnostic success. It makes no
-benchmark-improvement claim:
+and validates taxonomy-bearing status/degraded invariants without redefining the existing
+completion/collision success rate. It makes no benchmark-improvement claim:
 [issue_8693_simulator_error_taxonomy.md](issue_8693_simulator_error_taxonomy.md).
 
 Issue #8619 constrained-MPC baseline specification (lane 2 of #7319): a design-only contract for

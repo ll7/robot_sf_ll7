@@ -68,6 +68,12 @@ class _SimulatorBoundaryFailurePlanner:
                 "status": "degraded",
                 "degradation_reasons": ["fixture_degraded"],
             }
+        if self.failure_phase == "degraded_simulator_text":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "degraded",
+                "degradation_reasons": ["simulator backend unavailable"],
+            }
         if self.failure_phase == "fallback_diagnostics":
             return {
                 "planner_type": "simulator_boundary_fixture",
@@ -195,7 +201,11 @@ def test_execute_rollout_classifies_planner_boundaries_and_simulator_integration
 
 @pytest.mark.parametrize(
     ("failure_phase", "expected_reason"),
-    [("degraded_diagnostics", "fixture_degraded"), ("fallback_diagnostics", "fallback_execution")],
+    [
+        ("degraded_diagnostics", "fixture_degraded"),
+        ("degraded_simulator_text", "simulator backend unavailable"),
+        ("fallback_diagnostics", "fallback_execution"),
+    ],
 )
 def test_execute_rollout_records_diagnostic_degradation(
     failure_phase: str,
@@ -208,7 +218,7 @@ def test_execute_rollout_records_diagnostic_degradation(
     assert result.status == "degraded"
     assert result.degraded is True
     assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
-    assert expected_reason in result.degradation_reasons
+    assert f"planner_diagnostic: {expected_reason}" in result.degradation_reasons
 
 
 def test_execute_rollout_captures_simulator_state_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -289,6 +299,13 @@ def test_classify_failure_rejects_unknown_status_and_preserves_path_fallback() -
         classify_failure(status="unknown")
 
     assert classify_failure(status="degraded", degraded=True) == FAILURE_CLASS_PATH_GENERATION
+    assert (
+        classify_failure(
+            status="degraded",
+            degradation_reasons=("plan_exception: simulator backend unavailable",),
+        )
+        == FAILURE_CLASS_PATH_GENERATION
+    )
 
 
 def test_deterministic_receipt_invariant() -> None:
@@ -647,6 +664,30 @@ def test_v1_schema_rejects_noncanonical_taxonomy_alias() -> None:
 
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=receipt, schema=schema)
+
+
+def test_v1_schema_enforces_new_taxonomy_invariants_when_present() -> None:
+    """New taxonomy-bearing rows are schema-checked while legacy rows remain optional."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+    unknown_status = run_force_coupled_comparator()
+    unknown_status["results"][0]["status"] = "unknown"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=unknown_status, schema=schema)
+
+    inconsistent_degraded = run_force_coupled_comparator()
+    inconsistent_degraded["results"][0]["status"] = "degraded"
+    inconsistent_degraded["results"][0]["degraded"] = False
+    inconsistent_degraded["results"][0]["failure_class"] = FAILURE_CLASS_PATH_GENERATION
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=inconsistent_degraded, schema=schema)
 
 
 def test_comparator_run_result_serialization_with_failure_class() -> None:

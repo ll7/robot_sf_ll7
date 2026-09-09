@@ -32,7 +32,8 @@ the remaining reason precedence is:
 3. `tracking`
 4. `path_generation`
 
-Unknown rollout statuses and non-canonical classes fail closed with `ValueError`. For a recognized
+Planner-owned diagnostic reasons carry a `planner_diagnostic` prefix, so reason text cannot
+override that ownership even when it contains a simulator keyword. Unknown rollout statuses and non-canonical classes fail closed with `ValueError`. For a recognized
 non-success status without a more specific signal, `classify_failure` preserves the established
 `path_generation` fallback. Summary aggregation still rejects a missing non-success class, so a
 row cannot silently disappear from `failure_class_counts`.

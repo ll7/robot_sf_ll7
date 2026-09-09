@@ -85,8 +85,8 @@ Worked examples (re-check the labels on GitHub before acting):
 
 | Labels on the issue | Dispatchable? |
 |---|---|
-| `state:ready` and no contradictory `state:*` label | Yes. As of writing, #6095 is the single open `resource:slurm` issue that satisfies this. |
-| `state:running` | No — already in progress (e.g. #6127). |
+| `state:ready` and no contradictory `state:*` label | Yes. For example, an open `resource:slurm` issue carrying `state:ready` with no contradictory state label is dispatchable — verify current labels with the live issue query before acting. |
+| `state:running` | No — already in progress. |
 | `state:blocked`, `parked`, or any single non-`ready` state label | No. |
 | no `state:*` label at all | No — undispatchable, not free work. |
 
@@ -331,10 +331,14 @@ If you use robot_sf_ll7 for research:
 
 Examples go in `examples/` and are referenced in [`examples/README.md`](examples/README.md).
 
+> `examples/README.md` is generated from [`examples/examples_manifest.yaml`](examples/examples_manifest.yaml)
+> by `scripts/validation/render_examples_readme.py`. Never hand-edit the generated file: add or
+> edit the manifest entry, then regenerate.
+
 When adding an example:
 1. Make it runnable: `uv run python examples/your_example.py`
 2. Add comments explaining key steps
-3. Document in `examples/README.md`
+3. Add a manifest entry in `examples/examples_manifest.yaml` and regenerate with `uv run python scripts/validation/render_examples_readme.py`
 4. Test that it runs without errors
 
 ### Improving Docstrings

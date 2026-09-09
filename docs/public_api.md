@@ -70,6 +70,7 @@ The `robot-sf` command line interface provides contributor and user tooling:
 - **Beta CLI commands**:
   - `envs`: `list`, `describe <env-id>` for declarative environment inspection.
 - **Experimental CLI commands**:
+  - `planners`: `list`, `describe <key-or-alias>` for import-light planner and baseline discovery.
   - `gallery`: `build` discoverability-only scenario/planner galleries; gallery output is not
     benchmark evidence.
 - **Maintainer/release CLI command**:
@@ -115,6 +116,20 @@ uv run robot-sf envs describe <env-id>
 ```
 
 The catalog is the declarative source of truth for public environment identifiers; see `robot_sf.gym_env.env_registry` for programmatic access.
+
+## Discovering the Planner Catalog
+
+To inspect registered planners, aliases, readiness tiers, and declared prerequisites without
+constructing planner instances or importing optional heavy dependencies:
+
+```bash
+uv run robot-sf planners list
+uv run robot-sf planners describe <key-or-alias>
+```
+
+Discovery metadata is not benchmark-success evidence. An `unknown` availability value means that
+local optional dependencies were not probed; diagnostic, unavailable, and metadata-incomplete rows
+remain separate from claims that a planner is runnable or benchmark-ready.
 
 ## Lifecycle and Deprecation Policy
 

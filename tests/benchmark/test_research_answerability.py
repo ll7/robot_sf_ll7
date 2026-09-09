@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from robot_sf.adversarial.feasibility_first import (
     build_scenario_feasibility_ledger,
     evaluate_scenario_feasibility,
 )
+from robot_sf.benchmark import research_answerability as answerability_module
 from robot_sf.benchmark.research_answerability import (
     ADVERSARIAL_FALSIFICATION_PACKET_OUTCOMES,
     AdversarialFalsificationPacketError,
@@ -102,6 +104,91 @@ def test_malformed_contract_is_invalid() -> None:
 
 
 @pytest.mark.parametrize(
+    ("mutator", "message"),
+    [
+        (lambda contract: contract.update({"question": None}), "must be a mapping"),
+        (lambda contract: contract.update({"producers": []}), "must be a non-empty list"),
+        (
+            lambda contract: contract["question"].update({"decision_vocabulary": [1]}),
+            "only non-empty strings",
+        ),
+        (
+            lambda contract: contract["question"].update({"decision_vocabulary": ["pause"]}),
+            "unsupported values",
+        ),
+        (
+            lambda contract: contract["producers"][0].update({"status": "unknown"}),
+            "status must be one of",
+        ),
+        (
+            lambda contract: contract["producers"][0].update({"execution_mode": "unknown"}),
+            "execution_mode must be one of",
+        ),
+        (
+            lambda contract: contract["producers"][0].update({"required": "yes"}),
+            "required must be a boolean",
+        ),
+        (
+            lambda contract: contract["analysis"].update({"dry_run_status": "unknown-value"}),
+            "dry_run_status must be",
+        ),
+        (
+            lambda contract: contract["analysis"].update({"comparability_status": "unknown-value"}),
+            "comparability_status must be",
+        ),
+        (
+            lambda contract: contract["design"].update({"mode": "unknown-value"}),
+            "design.mode must be",
+        ),
+        (
+            lambda contract: contract["design"].update({"power_status": "unknown-value"}),
+            "design.power_status must be",
+        ),
+        (
+            lambda contract: contract["artifacts"].update({"checksums": []}),
+            "checksums must be",
+        ),
+        (
+            lambda contract: contract["artifacts"].update({"durability_status": "unknown-value"}),
+            "durability_status must be",
+        ),
+    ],
+)
+def test_answerability_contract_validation_rejects_invalid_values(mutator, message: str) -> None:
+    """Structural answerability fields fail closed with actionable messages."""
+    contract = _example_contract()
+    mutator(contract)
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "invalid_contract"
+    assert message in result.reasons[0]
+
+
+def test_answerability_validation_rejects_non_mapping_and_wrong_schema() -> None:
+    """The evaluator distinguishes non-mappings and unsupported schema versions."""
+    assert evaluate_answerability([]).state == "invalid_contract"
+
+    contract = _example_contract()
+    contract["schema_version"] = "research_answerability.v0"
+    result = evaluate_answerability(contract)
+
+    assert result.state == "invalid_contract"
+    assert "schema_version" in result.reasons[0]
+
+
+def test_unknown_power_status_is_a_blocked_underpowered_design() -> None:
+    """A declared but unknown power classification cannot become answerable."""
+    contract = _example_contract()
+    contract["design"]["power_status"] = "unknown"
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "blocked_underpowered"
+    assert "unknown" in result.reasons[0]
+
+
+@pytest.mark.parametrize(
     ("case_id", "mutator", "expected"),
     [
         (
@@ -149,6 +236,22 @@ def test_manifest_without_answerability_is_not_declared() -> None:
     assert result["decision_capable"] is False
 
 
+def test_manifest_with_non_mapping_answerability_is_invalid() -> None:
+    """A malformed optional manifest section is reported, not ignored."""
+    result = answerability_from_manifest({"answerability": []})
+
+    assert result["state"] == "invalid_contract"
+    assert result["decision_capable"] is False
+
+
+def test_manifest_answerability_delegates_to_contract_evaluator() -> None:
+    """A declared manifest section uses the same answerability state machine."""
+    result = answerability_from_manifest({"answerability": _example_contract()})
+
+    assert result["state"] == "diagnostic_only"
+    assert result["schema_version"] == "research_answerability.v1"
+
+
 def _issue_8570_packet() -> dict[str, object]:
     """Load the checked-in packet for mutation-based validator tests."""
     return load_adversarial_falsification_packet(ADVERSARIAL_PACKET)
@@ -157,6 +260,50 @@ def _issue_8570_packet() -> dict[str, object]:
 def _refresh_packet_digest(packet: dict[str, object]) -> None:
     """Keep a mutated fixture self-consistent so semantic checks are reached."""
     packet["self_digest"] = compute_adversarial_falsification_packet_digest(packet)
+
+
+def _source_semantics() -> dict[str, object]:
+    """Load the frozen search-space semantics used by private binding checks."""
+    path = REPO_ROOT / "configs/adversarial/issue_7340_station_platform_search_space_v1.yaml"
+    return answerability_module._packet_source_semantics(path)
+
+
+def _assert_private_packet_error(
+    packet: dict[str, object], validator, mutation, message: str
+) -> None:
+    """Apply one semantic mutation and assert its fail-closed private validator."""
+    mutation(packet)
+    with pytest.raises(AdversarialFalsificationPacketError, match=message):
+        validator(packet)
+
+
+def _scenario_source_packet(tmp_path: Path, payload: object) -> dict[str, object]:
+    """Point a packet at a temporary scenario-template payload for source checks."""
+    packet = _issue_8570_packet()
+    scenario_path = tmp_path / "scenario-template.yaml"
+    scenario_path.write_text(
+        payload if isinstance(payload, str) else yaml.safe_dump(payload), encoding="utf-8"
+    )
+    packet["source"]["inputs"]["scenario_template"]["sha256"] = hashlib.sha256(
+        scenario_path.read_bytes()
+    ).hexdigest()
+    original_resolver = answerability_module._resolve_packet_source_path
+
+    def resolve_source(value, *, repo_root: Path, field: str) -> Path:
+        if field == "source.inputs.scenario_template.path":
+            return scenario_path
+        return original_resolver(value, repo_root=repo_root, field=field)
+
+    packet["_scenario_resolver"] = resolve_source
+    return packet
+
+
+def _validate_scenario_source_packet(packet: dict[str, object]) -> None:
+    """Validate a temporary scenario payload using the packet source checker."""
+    resolver = packet.pop("_scenario_resolver")
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(answerability_module, "_resolve_packet_source_path", resolver)
+        answerability_module._validate_packet_sources(packet, repo_root=REPO_ROOT)
 
 
 def test_issue_8570_packet_is_schema_valid_and_compute_blocked() -> None:
@@ -314,6 +461,415 @@ def test_issue_8570_packet_rejects_template_delay_as_runtime_effective() -> None
 
     with pytest.raises(AdversarialFalsificationPacketError, match="runtime_effective"):
         validate_adversarial_falsification_packet(packet)
+
+
+def test_issue_8570_packet_rejects_missing_runtime_effectiveness_note() -> None:
+    """Provenance-only variables must explain why they are not runtime inputs."""
+    packet = _issue_8570_packet()
+    packet["variable_map"]["pedestrian_delay_s"]["effectiveness_note"] = (
+        "This value is documented for analysis."
+    )
+    _refresh_packet_digest(packet)
+
+    with pytest.raises(AdversarialFalsificationPacketError, match="explain its missing"):
+        validate_adversarial_falsification_packet(packet)
+
+
+def test_packet_digest_and_schema_loaders_fail_closed(tmp_path: Path, monkeypatch) -> None:
+    """Digest and schema loader failures remain explicit instead of being swallowed."""
+    with pytest.raises(AdversarialFalsificationPacketError, match="packet must be a mapping"):
+        compute_adversarial_falsification_packet_digest([])
+    with pytest.raises(AdversarialFalsificationPacketError, match="canonically serialized"):
+        compute_adversarial_falsification_packet_digest({"value": object()})
+
+    malformed_schema = tmp_path / "malformed-schema.json"
+    malformed_schema.write_text("{", encoding="utf-8")
+    monkeypatch.setattr(answerability_module, "_PACKET_SCHEMA_FILE", malformed_schema)
+    with pytest.raises(AdversarialFalsificationPacketError, match="cannot load"):
+        answerability_module.load_adversarial_falsification_packet_schema()
+
+    non_object_schema = tmp_path / "non-object-schema.json"
+    non_object_schema.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(answerability_module, "_PACKET_SCHEMA_FILE", non_object_schema)
+    with pytest.raises(AdversarialFalsificationPacketError, match="must be a JSON object"):
+        answerability_module.load_adversarial_falsification_packet_schema()
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ("", "must be a non-empty path"),
+        ("/absolute/input.yaml", "must be repository-relative"),
+        ("../outside.yaml", "escapes the repository root"),
+        ("missing/input.yaml", "does not resolve to a file"),
+    ],
+)
+def test_packet_source_path_resolution_is_fail_closed(
+    tmp_path: Path, value: str, message: str
+) -> None:
+    """Packet source paths cannot be empty, absolute, escaping, or missing."""
+    with pytest.raises(AdversarialFalsificationPacketError, match=message):
+        answerability_module._resolve_packet_source_path(
+            value, repo_root=tmp_path, field="source.input.path"
+        )
+
+
+def test_packet_source_validation_rejects_malformed_digest() -> None:
+    """Source digest syntax is checked before reading source bytes."""
+    packet = _issue_8570_packet()
+    packet["source"]["inputs"]["search_space"]["sha256"] = "not-a-sha"
+
+    with pytest.raises(AdversarialFalsificationPacketError, match="lowercase SHA-256"):
+        answerability_module._validate_packet_sources(packet, repo_root=REPO_ROOT)
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ("[", "cannot load source scenario template"),
+        (["item"], "scenario template must be a mapping"),
+        ({"scenarios": []}, "first scenario mapping"),
+    ],
+)
+def test_packet_source_scenario_shape_is_validated(
+    tmp_path: Path, payload: object, message: str
+) -> None:
+    """Scenario-template parsing fails closed for malformed source content."""
+    packet = _scenario_source_packet(tmp_path, payload)
+
+    with pytest.raises(AdversarialFalsificationPacketError, match=message):
+        _validate_scenario_source_packet(packet)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda scenario: scenario.update({"name": "other-scenario"}), "scenario_name"),
+        (lambda scenario: scenario.update({"single_pedestrians": []}), "pedestrian binding"),
+        (lambda scenario: scenario.pop("map_file"), "map_file is missing"),
+        (
+            lambda scenario: scenario.update({"map_file": "../../maps/other.svg"}),
+            "does not match the scenario template map_file",
+        ),
+    ],
+)
+def test_packet_source_scenario_bindings_are_validated(
+    tmp_path: Path, mutation, message: str
+) -> None:
+    """Scenario name, pedestrian, and map bindings cannot drift from the packet."""
+    source_path = REPO_ROOT / "configs/adversarial/issue_7340_station_platform_medium_v1.yaml"
+    payload = yaml.safe_load(source_path.read_text(encoding="utf-8"))
+    payload["scenarios"][0]["map_file"] = str(
+        REPO_ROOT / "maps/svg_maps/classic_station_platform.svg"
+    )
+    mutation(payload["scenarios"][0])
+    packet = _scenario_source_packet(tmp_path, payload)
+
+    with pytest.raises(AdversarialFalsificationPacketError, match=message):
+        _validate_scenario_source_packet(packet)
+
+
+def test_packet_source_binding_rejects_route_mode_drift(tmp_path: Path) -> None:
+    """The packet's declared pedestrian route mode remains bound to source semantics."""
+    source_path = REPO_ROOT / "configs/adversarial/issue_7340_station_platform_medium_v1.yaml"
+    payload = yaml.safe_load(source_path.read_text(encoding="utf-8"))
+    payload["scenarios"][0]["map_file"] = str(
+        REPO_ROOT / "maps/svg_maps/classic_station_platform.svg"
+    )
+    packet = _scenario_source_packet(tmp_path, payload)
+    packet["source"]["scenario_template"]["pedestrian_route_mode"] = "waypoint"
+
+    with pytest.raises(AdversarialFalsificationPacketError, match="route_mode"):
+        _validate_scenario_source_packet(packet)
+
+
+def test_packet_source_validation_rejects_malformed_owner_digest() -> None:
+    """Code-owner digests must be syntactically valid before byte comparison."""
+    packet = _issue_8570_packet()
+    packet["source"]["owners"][0]["sha256"] = "not-a-sha"
+
+    with pytest.raises(AdversarialFalsificationPacketError, match=r"owners\[0\].sha256"):
+        answerability_module._validate_packet_sources(packet, repo_root=REPO_ROOT)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda packet: packet.update({"variable_order": ["start_y"]}),
+            "variable_order",
+        ),
+        (
+            lambda packet: packet["variable_map"].update({"unexpected": {}}),
+            "variable_map keys",
+        ),
+        (
+            lambda packet: packet["variable_map"]["start_x"].update({"actor": "pedestrian"}),
+            "variable_map.start_x.actor",
+        ),
+        (
+            lambda packet: packet["variable_map"]["start_x"].update({"effectiveness_note": ""}),
+            "effectiveness_note",
+        ),
+    ],
+)
+def test_packet_variable_bindings_fail_closed(mutation, message: str) -> None:
+    """Variable order, keys, bindings, and effectiveness notes are immutable contracts."""
+    packet = _issue_8570_packet()
+
+    _assert_private_packet_error(
+        packet,
+        lambda candidate: answerability_module._validate_packet_variable_map(
+            candidate, search_space_semantics=_source_semantics()
+        ),
+        mutation,
+        message,
+    )
+
+
+def test_packet_variable_binding_requires_provenance_note_for_delay() -> None:
+    """Template-mode delay metadata must explain its provenance-only status."""
+    packet = _issue_8570_packet()
+    packet["variable_map"]["pedestrian_delay_s"]["effectiveness_note"] = (
+        "This is a runtime delay input."
+    )
+    _refresh_packet_digest(packet)
+
+    with pytest.raises(AdversarialFalsificationPacketError, match="explain its missing"):
+        validate_adversarial_falsification_packet(packet)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda packet: packet["feasibility"].update({"contract_version": "v0"}),
+            "contract_version",
+        ),
+        (
+            lambda packet: packet["feasibility"].update({"predicate_order": ["wrong"]}),
+            "predicate_order",
+        ),
+        (
+            lambda packet: packet["feasibility"]["predicates"][0].update({"name": "wrong"}),
+            "predicates",
+        ),
+        (
+            lambda packet: packet["feasibility"]["rejection_accounting"].update(
+                {"owner": "other.owner"}
+            ),
+            "ledger owner",
+        ),
+        (
+            lambda packet: packet["feasibility"]["rejection_accounting"].update(
+                {"pre_simulation": False}
+            ),
+            "pre-simulation",
+        ),
+    ],
+)
+def test_packet_feasibility_contract_is_reused_exactly(mutation, message: str) -> None:
+    """The packet cannot fork predicate order or rejection-ledger ownership."""
+    packet = _issue_8570_packet()
+
+    _assert_private_packet_error(
+        packet, answerability_module._validate_packet_feasibility, mutation, message
+    )
+
+
+def test_packet_feasibility_contract_detects_owner_order_drift(monkeypatch) -> None:
+    """A changed shared feasibility vocabulary invalidates the packet."""
+    packet = _issue_8570_packet()
+    monkeypatch.setattr(
+        "robot_sf.adversarial.feasibility_first.CHECK_NAMES",
+        ("changed",),
+    )
+
+    with pytest.raises(AdversarialFalsificationPacketError, match="CHECK_NAMES"):
+        answerability_module._validate_packet_feasibility(packet)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda packet: packet["objective"]["ordering"][0].update({"name": "wrong"}),
+            "objective.ordering",
+        ),
+        (
+            lambda packet: packet["objective"].update({"scalarization": "weighted"}),
+            "lexicographic",
+        ),
+        (
+            lambda packet: packet["seed_policy"].update(
+                {"search_seeds": packet["seed_policy"]["search_seeds"][:2]}
+            ),
+            "three search and five",
+        ),
+        (
+            lambda packet: packet["seed_policy"].update({"search_seeds": [301, 301, 302]}),
+            "unique",
+        ),
+        (
+            lambda packet: packet["seed_policy"].update({"candidate_seed_mode": "random"}),
+            "index_derived",
+        ),
+        (
+            lambda packet: packet["budget"].update({"search_candidate_rows_per_arm": 1}),
+            "per_arm",
+        ),
+        (
+            lambda packet: packet["compute_ceiling"].update({"max_search_candidate_rows": 1}),
+            "max_search_candidate_rows",
+        ),
+        (
+            lambda packet: packet["compute_ceiling"].update({"max_confirmation_seeds": 1}),
+            "max_confirmation_seeds",
+        ),
+        (
+            lambda packet: packet["compute_ceiling"].update({"max_steps_per_rollout": 1}),
+            "max_steps_per_rollout",
+        ),
+        (
+            lambda packet: packet["search_methods"].update(
+                {"primary": {**packet["search_methods"]["primary"], "id": "other"}}
+            ),
+            "search_methods",
+        ),
+        (
+            lambda packet: packet["search_methods"]["primary"].update({"budget_per_seed": 1}),
+            "equal-budget",
+        ),
+        (
+            lambda packet: packet["search_methods"].update({"equal_budget": False}),
+            "equal_budget",
+        ),
+        (
+            lambda packet: packet["budget"].update({"rollouts_per_candidate": 2}),
+            "rollout",
+        ),
+    ],
+)
+def test_packet_design_budget_contract_fails_closed(mutation, message: str) -> None:
+    """Objective, seed, budget, and search-method drift cannot authorize compute."""
+    packet = _issue_8570_packet()
+
+    _assert_private_packet_error(
+        packet, answerability_module._validate_packet_design, mutation, message
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda packet: packet["stop_rule"]["search"].update({"action": "continue"}),
+            "stop_rule.search",
+        ),
+        (
+            lambda packet: packet["stop_rule"]["confirmation"].update(
+                {"execution_status": "authorized"}
+            ),
+            "confirmation",
+        ),
+        (
+            lambda packet: packet["stop_rule"]["contract_failure"].update({"action": "continue"}),
+            "contract_failure",
+        ),
+        (
+            lambda packet: packet["stop_rule"].update({"replacement_rows_allowed": True}),
+            "replacement_rows_allowed",
+        ),
+    ],
+)
+def test_packet_stop_rule_is_nonadaptive_and_fail_closed(mutation, message: str) -> None:
+    """No-result outcomes and fixed budgets cannot be replaced adaptively."""
+    packet = _issue_8570_packet()
+
+    _assert_private_packet_error(
+        packet, answerability_module._validate_packet_stop_rule, mutation, message
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda packet: packet["outcome_vocabulary"].pop("null"),
+            "outcome_vocabulary",
+        ),
+        (
+            lambda packet: packet["outcome_vocabulary"].update({"null": ""}),
+            "meanings",
+        ),
+    ],
+)
+def test_packet_outcome_vocabulary_remains_complete(mutation, message: str) -> None:
+    """Explicit result and no-result states cannot be removed or left undefined."""
+    packet = _issue_8570_packet()
+
+    _assert_private_packet_error(
+        packet, answerability_module._validate_packet_outcomes, mutation, message
+    )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda packet: packet["compute_authorization"].update({"gate": "other.v1"}),
+            "compute_authorization.gate",
+        ),
+        (
+            lambda packet: packet["compute_authorization"].update(
+                {"evaluated_state": "answerable"}
+            ),
+            "evaluated_state",
+        ),
+        (
+            lambda packet: packet["compute_authorization"].update({"authorized": True}),
+            "derived fail-closed",
+        ),
+        (
+            lambda packet: packet["compute_authorization"].update({"status": "authorized"}),
+            "status does not match",
+        ),
+        (
+            lambda packet: packet["compute_authorization"].update({"blocking_reasons": []}),
+            "blocking_reasons",
+        ),
+        (
+            lambda packet: packet["compute_authorization"].update(
+                {"blocking_reasons": ["some other reason"]}
+            ),
+            "must name the non-runtime",
+        ),
+        (
+            lambda packet: packet["compute_authorization"].update({"future_adapter_condition": ""}),
+            "future_adapter_condition",
+        ),
+    ],
+)
+def test_packet_compute_authorization_is_derived_and_explicit(mutation, message: str) -> None:
+    """The compute gate must agree with answerability and runtime effectiveness."""
+    packet = _issue_8570_packet()
+
+    _assert_private_packet_error(
+        packet, answerability_module._validate_packet_compute_gate, mutation, message
+    )
+
+
+def test_packet_loader_rejects_invalid_yaml_and_non_mapping(tmp_path: Path) -> None:
+    """Packet loading reports malformed YAML and non-object documents."""
+    malformed = tmp_path / "malformed.yaml"
+    malformed.write_text("[", encoding="utf-8")
+    with pytest.raises(AdversarialFalsificationPacketError, match="cannot load"):
+        load_adversarial_falsification_packet(malformed)
+
+    non_mapping = tmp_path / "scalar.yaml"
+    non_mapping.write_text("- item\n", encoding="utf-8")
+    with pytest.raises(AdversarialFalsificationPacketError, match="must be a mapping"):
+        load_adversarial_falsification_packet(non_mapping)
 
 
 def _fixture_feasibility_contract(

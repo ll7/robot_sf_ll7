@@ -70,7 +70,7 @@ source:
     pedestrian_route_mode: template
   owners:
     - path: robot_sf/benchmark/research_answerability.py
-      sha256: 51c54fdeb4bc1da5eae0be1c9a83e7493cdeb7ed039d1b18feb3ddaef36d5693
+      sha256: bf38986b0968c057d2df317d2feea56d7d1a5a29ab53d8351a7d145a16f3e5e3
       symbols:
         - validate_adversarial_falsification_packet
         - load_adversarial_falsification_packet
@@ -450,4 +450,4 @@ compute_authorization:
     binding, preserves the source digest and bounds, supplies native/replay outputs, and passes the same
     research_answerability.v1 evaluator; metadata-only changes remain blocked.
 
-self_digest: 5ac83a38ceab1306e9205c2e4b33a8f054f71f4639d141624168e9e2b3b1146b
+self_digest: 060fcd95d00bdeeabfc1697bb378e606188a4fa678b8375f937831914ca65395

@@ -164,6 +164,29 @@ def test_unsupported_replay_verdict_abstains_and_fails_closed() -> None:
     validate_collision_causal_report(report)
 
 
+def test_native_live_replay_abstains_without_verified_provenance() -> None:
+    """A native adapter result cannot be relabelled as synthetic causal evidence."""
+    from dataclasses import replace
+
+    replay = _run_replay(fx.preventable_late_braking_scenario())
+    native = replace(replay, config=replace(replay.config, source_kind="live_episode"))
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id="native-unsupported",
+        case_id="fixture",
+        replay=native,
+        metadata=_METADATA,
+    )
+
+    assert report["abstained"] is True
+    assert report["abstention_reason"] == "native_simulator_causal_join_unsupported"
+    assert report["data_source"]["source_kind"] == "unknown"
+    assert report["causal_contribution"]["verdict"] == "unknown"
+    assert report["causal_contribution"]["supported_actual_cause"] is False
+    assert "native_simulator_provenance" in report["missing_fields"]
+    validate_collision_causal_report(report)
+
+
 def test_two_action_interaction_joins_as_avoidable() -> None:
     """A closed-loop two-body interaction replay joins as an avoidable report."""
     scenario = fx.two_action_interaction_scenario()

@@ -384,6 +384,8 @@ _FAST_FILES = {
     # for the exact-head changed-coverage gate (issue #5442).
     "test_simulator_counterfactual_adapter_issue_5442.py",
     "test_last_avoidable_replay_issue_5442.py",
+    "test_collision_causal_report.py",
+    "test_collision_causal_report_join_5442.py",
     "test_compare_coverage_cli.py",
     "test_global_route.py",
     "test_open_coverage_report.py",

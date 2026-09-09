@@ -21,7 +21,7 @@ geometry, uses the explicit held-out-family split, and rejects a non-frozen
 budget, archive, or search-space override.
 
 The comparison run keeps archive-nearness under an explicitly diagnostic
-namespace. When valid independent native planner-execution outcomes (the frozen
+namespace. When valid independent planner-execution outcomes (the frozen
 ``adversarial_independent_outcomes.v2`` row contract) are supplied, the
 top-level comparison and the issue #2921 stop rule follow those outcomes
 exclusively, and the decision vocabulary is exactly ``continue | stop |
@@ -73,6 +73,14 @@ HELD_OUT_DIAGNOSTIC_BOUNDARY = (
 #: Frozen decision vocabulary for the #3275 contract (no revise, no generic blocked).
 ISSUE_3275_DECISION_VOCABULARY = ("continue", "stop", "inconclusive")
 
+_CONTRACT_EXECUTION_IDENTITY_FIELDS = (
+    "policy_semantics",
+    "adapter_name",
+    "upstream_command_space",
+    "benchmark_command_space",
+    "projection_policy",
+)
+
 
 def classify_issue_2921_stop_rule(
     *,
@@ -80,7 +88,7 @@ def classify_issue_2921_stop_rule(
 ) -> dict[str, Any]:
     """Return the issue #2921 ``continue | stop | inconclusive`` decision.
 
-    The decision follows independent native planner-execution outcomes only. When
+    The decision follows independent planner-execution outcomes only. When
     no valid independent outcome evaluation is available, the decision is
     ``inconclusive``; it is never ``continue`` or ``stop`` on archive-nearness.
     The vocabulary is exactly :data:`ISSUE_3275_DECISION_VOCABULARY` (no
@@ -974,10 +982,33 @@ def _contract_outcome_metadata(contract: dict[str, Any]) -> dict[str, str]:
         raise ValueError(f"frozen outcome schema must be {OUTCOME_SCHEMA_VERSION!r}")
     if outcome_contract.get("objective") != OUTCOME_OBJECTIVE:
         raise ValueError(f"frozen outcome objective must be {OUTCOME_OBJECTIVE!r}")
+    admitted_fields = outcome_contract.get("admitted_row_fields")
+    required_fields = {
+        "execution_identity",
+        "producer_commit",
+        "episode_record_sha256",
+        "outcome",
+    }
+    if not isinstance(admitted_fields, list) or not required_fields.issubset(set(admitted_fields)):
+        raise ValueError("frozen outcome contract does not declare complete canonical provenance")
     return {
         "schema": OUTCOME_SCHEMA_VERSION,
         "objective": OUTCOME_OBJECTIVE,
     }
+
+
+def _contract_execution_identity(contract: dict[str, Any]) -> tuple[str, dict[str, str]]:
+    """Return the frozen execution mode and exact identity required by admission."""
+    planner = contract.get("target_planner")
+    identity = planner.get("execution_identity") if isinstance(planner, dict) else None
+    if not isinstance(identity, dict) or identity.get("execution_mode") != "adapter":
+        raise ValueError("frozen contract must declare adapter execution identity")
+    if any(
+        not isinstance(identity.get(field), str) or not identity[field].strip()
+        for field in _CONTRACT_EXECUTION_IDENTITY_FIELDS
+    ):
+        raise ValueError("frozen contract adapter identity is incomplete")
+    return "adapter", {field: str(identity[field]) for field in _CONTRACT_EXECUTION_IDENTITY_FIELDS}
 
 
 def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
@@ -994,6 +1025,10 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
             "candidate_pool_size": max(args.budget * 5, 50),
             "candidate_pool_seed": args.seed,
             "expected_execution_commit": None,
+            "expected_execution_mode": "native",
+            "expected_execution_identity": None,
+            "require_producer_commit": False,
+            "require_episode_record_sha256": False,
             "alpha_two_sided": 0.05,
             "null_test_permutations": args.null_test_permutations,
             "null_test_seed": args.seed,
@@ -1002,6 +1037,7 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
 
     contract = load_issue_3275_contract(args.contract)
     outcome_metadata = _contract_outcome_metadata(contract)
+    execution_mode, execution_identity = _contract_execution_identity(contract)
     null_test_params = _contract_null_test_params(contract)
     return {
         "expected_target_planner_id": contract["target_planner"]["id"],
@@ -1018,6 +1054,10 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
         "candidate_pool_size": contract["budget"]["candidate_pool_size"],
         "candidate_pool_seed": contract["budget"]["candidate_pool_seed"],
         "expected_execution_commit": contract["target_planner"]["execution_commit"],
+        "expected_execution_mode": execution_mode,
+        "expected_execution_identity": execution_identity,
+        "require_producer_commit": True,
+        "require_episode_record_sha256": True,
         "outcome_metadata": outcome_metadata,
         **null_test_params,
     }
@@ -1249,6 +1289,10 @@ def _admission_spec_from_binding(frozen: dict[str, Any], binding: dict[str, Any]
         if binding is not None
         else None,
         expected_execution_commit=frozen["expected_execution_commit"],
+        expected_execution_mode=frozen["expected_execution_mode"],
+        expected_execution_identity=frozen["expected_execution_identity"],
+        require_producer_commit=frozen["require_producer_commit"],
+        require_episode_record_sha256=frozen["require_episode_record_sha256"],
     )
 
 

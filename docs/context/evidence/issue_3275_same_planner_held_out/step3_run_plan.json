@@ -17,15 +17,26 @@
   "estimated_run_count": 144,
   "estimated_run_count_note": "24 selected candidates x (1 deterministic replay + 5 independent confirmation seeds) = 6 planner executions each; the exact admission loop is fixed by the step-3 runner.",
   "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+  "execution_commit_role": "historical_planner_reference_lineage",
+  "execution_identity": {
+    "adapter_name": "SocialForcePlannerAdapter",
+    "benchmark_command_space": "unicycle_vw",
+    "execution_mode": "adapter",
+    "policy_semantics": "social_force_adapter",
+    "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+    "upstream_command_space": "velocity_vector_xy"
+  },
   "frozen_contract_path": "configs/adversarial/issue_3275_same_planner_contract.json",
-  "frozen_contract_sha256": "2f57c1d155752bc04556cbeef4df41b98fcd9fcb0ae92605ad87f725b39e6ae8",
+  "frozen_contract_sha256": "8d80b34496b4668ea12cbd13a25da604acf28a1af34ca688956ed7799cc340a1",
   "objective": "certified_failure_outcome proposal-vs-random comparison over the predeclared disjoint candidate pool under identical frozen per-arm budget.",
   "output_locations": {
     "comparison_report": "<step3 output>/report.json",
     "independent_outcomes_packet": "<step3 output>/independent_outcomes.json"
   },
-  "resource_class": "local single-CPU worker; native execution mode only (no fallback/degraded); no GPU/SLURM requirement declared for the social_force planner.",
-  "resumability_rules": "step 3 is resumable per candidate and per row under the frozen adversarial_independent_outcomes.v2 row contract; every admitted row must match the external v2 binding (exact arm membership, candidate manifest SHA-256, pool index, scenario seed, execution seeds, pool seed, record SHA-256) and native-only execution mode.",
+  "producer_command": "uv run python scripts/adversarial/materialize_issue_6105_outcomes.py --contract configs/adversarial/issue_3275_same_planner_contract.json --bindings docs/context/evidence/issue_3275_same_planner_held_out/candidate_manifest_bindings.v2.json --execution-records <raw execution JSONL> --output <step3 output>/independent_outcomes.json",
+  "producer_commit": "recorded_by_producer_after_merge",
+  "resource_class": "local single-CPU worker; canonical SocialForcePlannerAdapter execution only (no native, fallback, or degraded aliases); no GPU/SLURM requirement declared for the social_force planner.",
+  "resumability_rules": "step 3 is resumable per candidate and per row under the frozen adversarial_independent_outcomes.v2 row contract; every admitted row must match the external v2 binding (exact arm membership, candidate manifest SHA-256, pool index, scenario seed, execution seeds, pool seed, record SHA-256), the declared adapter identity, and complete execution diagnostics.",
   "run_command": "uv run python scripts/adversarial/run_proposal_vs_random_issue_2921.py --contract configs/adversarial/issue_3275_same_planner_contract.json --expected-candidate-manifest-hashes docs/context/evidence/issue_3275_same_planner_held_out/candidate_manifest_bindings.v2.json --evaluation-outcomes <step3 independent-outcomes packet path>",
   "schema_version": "issue_3275_step3_run_plan.v1",
   "target_planner_id": "social_force"

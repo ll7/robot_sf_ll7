@@ -3,12 +3,24 @@
 from __future__ import annotations
 
 from robot_sf.benchmark.termination_reason import (
+    TIMEOUT_TERMINATION_REASONS,
     collision_event,
     outcome_contradictions,
     resolve_termination_reason,
     route_complete_success,
     status_from_termination_reason,
 )
+
+
+def test_timeout_termination_reasons_share_the_benchmark_vocabulary() -> None:
+    """Legacy and explicit timeout labels remain one shared policy."""
+    assert TIMEOUT_TERMINATION_REASONS == (
+        "horizon",
+        "max_steps",
+        "terminated",
+        "timeout",
+        "truncated",
+    )
 
 
 def test_resolve_termination_reason_all_paths() -> None:

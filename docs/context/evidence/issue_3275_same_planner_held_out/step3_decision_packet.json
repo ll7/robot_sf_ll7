@@ -1,4 +1,6 @@
 {
+  "status_role": "historical_pre_7066_producer_blocker",
+  "superseded_by": "issue_7066_outcome_producer_readiness.md",
   "authoritative_decision_function": {
     "independent_outcome_evaluation": {
       "decision": {

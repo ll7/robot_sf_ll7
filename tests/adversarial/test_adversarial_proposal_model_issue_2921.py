@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import random
@@ -22,6 +23,8 @@ from robot_sf.adversarial.proposal_model import (
 from robot_sf.adversarial.scenario_manifest import AdversarialScenarioManifest
 from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
     ISSUE_3275_DECISION_VOCABULARY,
+    _admission_spec_from_binding,
+    _contract_frozen_params,
     _contract_outcome_metadata,
     _rank_pool_ids_by_candidate_identity,
     classify_issue_2921_stop_rule,
@@ -37,6 +40,13 @@ _RECERT = (
     / "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json"
 )
 _ARCHIVE = _REPO_ROOT / "docs/context/evidence/issue_5305_certified_archive/archive.json"
+_ADAPTER_IDENTITY = {
+    "policy_semantics": "social_force_adapter",
+    "adapter_name": "SocialForcePlannerAdapter",
+    "upstream_command_space": "velocity_vector_xy",
+    "benchmark_command_space": "unicycle_vw",
+    "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+}
 
 
 def _candidate(x: float, y: float, speed: float = 1.0) -> CandidateSpec:
@@ -136,6 +146,27 @@ def test_contract_metadata_rejects_unfrozen_outcome_semantics(
 
     with pytest.raises(ValueError, match="frozen outcome"):
         _contract_outcome_metadata(contract)
+
+
+def test_contract_admission_preserves_frozen_adapter_identity() -> None:
+    """The contract runner must not silently fall back to native admission."""
+    args = argparse.Namespace(
+        contract=_CONTRACT,
+        minimally_important=0.20,
+        budget=12,
+        seed=42,
+        null_test_permutations=1000,
+    )
+
+    frozen = _contract_frozen_params(args)
+    spec = _admission_spec_from_binding(frozen, None)
+
+    assert frozen["expected_execution_mode"] == "adapter"
+    assert frozen["expected_execution_identity"] == _ADAPTER_IDENTITY
+    assert spec.expected_execution_mode == "adapter"
+    assert spec.expected_execution_identity == _ADAPTER_IDENTITY
+    assert spec.require_producer_commit is True
+    assert spec.require_episode_record_sha256 is True
 
 
 @pytest.mark.parametrize(
@@ -810,8 +841,13 @@ def _v2_row(
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
         "execution_config_lineage": {"config": "eval.yaml"},
         "execution_mode": "native",
-        "primary_failure": "collision" if failure else "none",
-        "termination_reason": "collision" if failure else "goal_reached",
+        "outcome": {
+            "route_complete": not failure,
+            "collision_event": failure,
+            "timeout_event": False,
+        },
+        "primary_failure": "collision" if failure else "success",
+        "termination_reason": "collision" if failure else "success",
         "independent_failure_outcome": failure,
         "scenario_certification_status": "passed",
         "candidate_certification_status": "passed",
@@ -860,6 +896,18 @@ def _contract_v2_outcome_packet(
                 row["candidate_pool_seed"] = candidate_pool_seed
                 row["candidate_pool_index"] = int(manifest_id.removeprefix("pool_"))
                 row["scenario_seed"] = scenario_seeds_by_id[manifest_id]
+                row["execution_mode"] = "adapter"
+                row["execution_identity"] = dict(_ADAPTER_IDENTITY)
+                row["producer_commit"] = "a" * 40
+                row["episode_record_sha256"] = hashlib.sha256(
+                    f"episode-{row['row_id']}".encode()
+                ).hexdigest()
+                row["execution_config_lineage"] = {
+                    "config": "eval.yaml",
+                    "target_planner_config_sha256": row["target_planner_config_sha256"],
+                    "planner_reference_commit": row["execution_commit"],
+                    "producer_commit": row["producer_commit"],
+                }
                 manifest_hashes = report.get("arm_manifest_sha256_by_id")
                 if manifest_hashes is not None:
                     row["candidate_manifest_sha256"] = manifest_hashes[manifest_id]
@@ -874,6 +922,9 @@ def _contract_v2_outcome_packet(
         "target_planner_config_sha256": (
             "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735"
         ),
+        "execution_mode": "adapter",
+        "execution_identity": dict(_ADAPTER_IDENTITY),
+        "producer_commit": "a" * 40,
         "eval_archive_sha256": report["archive_evaluation_provenance"]["eval_archive_sha256"],
         "rows": rows,
     }

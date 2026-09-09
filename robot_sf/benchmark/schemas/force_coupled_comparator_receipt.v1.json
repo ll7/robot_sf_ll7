@@ -107,7 +107,8 @@
           "mean_latency_ms",
           "status",
           "degraded",
-          "degradation_reasons"
+          "degradation_reasons",
+          "failure_class"
         ],
         "properties": {
           "planner_id": {"type": "string", "minLength": 1},
@@ -131,6 +132,18 @@
           "degradation_reasons": {
             "type": "array",
             "items": {"type": "string"}
+          },
+          "failure_class": {
+            "type": ["string", "null"],
+            "enum": [
+              "path_generation",
+              "tracking",
+              "social_compliance",
+              "simulator",
+              "path-generation",
+              "social-compliance",
+              null
+            ]
           }
         }
       }
@@ -149,7 +162,8 @@
           "mean_path_length_m",
           "mean_jerk_metric",
           "mean_latency_ms",
-          "status_counts"
+          "status_counts",
+          "failure_class_counts"
         ],
         "properties": {
           "planner_id": {"type": "string", "minLength": 1},
@@ -161,6 +175,10 @@
           "mean_jerk_metric": {"type": "number", "minimum": 0.0},
           "mean_latency_ms": {"type": "number", "minimum": 0.0},
           "status_counts": {
+            "type": "object",
+            "additionalProperties": {"type": "integer"}
+          },
+          "failure_class_counts": {
             "type": "object",
             "additionalProperties": {"type": "integer"}
           }

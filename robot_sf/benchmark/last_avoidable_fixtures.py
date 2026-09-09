@@ -2,13 +2,15 @@
 
 These fixtures implement :class:`~robot_sf.benchmark.last_avoidable_replay.CounterfactualModel`
 with a minimal 2D kinematic robot/pedestrian interaction. They are *controlled
-fixtures*, not the production simulator: the full robot_sf simulator draws
-pedestrian goals/zones from the **global** numpy RNG and exposes no snapshot API,
-so a faithful mid-episode snapshot/restore seam there would require a broad
-simulator change (out of scope for #5442; see
-``docs/context/issue_5442_last_avoidable_replay.md``). This kinematic model gives
-a fully deterministic, snapshot-restorable state — including its own RNG — so the
-counterfactual-replay engine can be validated end to end on CPU.
+fixtures*, not the production simulator. They keep engine validation
+deterministic and isolated; the diagnostic production-simulator adapter is
+implemented separately in
+:mod:`robot_sf.benchmark.simulator_counterfactual_adapter`. A broader general
+snapshot API may still require more simulator work, but it is not a prerequisite
+for this controlled fixture or the adapter's narrow diagnostic seam. This
+kinematic model gives a fully deterministic, snapshot-restorable state —
+including its own RNG — so the counterfactual-replay engine can be validated end
+to end on CPU.
 
 The robot travels along ``+x`` toward a crossing pedestrian and may command a
 deceleration each tick. In ``replayed`` pedestrian mode the pedestrian follows a
@@ -238,14 +240,15 @@ def _deep_copy_state(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def find_contact_step(scenario: KinematicScenario, max_steps: int = 200) -> int | None:
-    """Roll the maintain-speed baseline forward and return the first contact step.
+    """Roll the baseline forward and return the first contact state tick.
 
     This helper derives ``t_contact`` for a scenario so fixtures need not hard-code
     it.
 
     Returns:
-        The first step index at which contact occurs, or ``None`` if no contact
-        occurs within ``max_steps``.
+        The number of applied baseline actions at which contact first occurs, or
+        ``None`` if no contact occurs within ``max_steps`` actions. Initial contact
+        is state tick zero.
     """
     model = KinematicCollisionModel(scenario)
     if model.collision():
@@ -253,7 +256,7 @@ def find_contact_step(scenario: KinematicScenario, max_steps: int = 200) -> int 
     for step in range(max_steps):
         model.step(0.0)
         if model.collision():
-            return step
+            return step + 1
     return None
 
 
@@ -807,7 +810,8 @@ def already_unavoidable_01_fixture() -> CollisionCauseFixture:
     No fault signature is injected; the cause is the inevitability itself, which
     the analyser derives from the full replay's branch transition. The replay
     starts at step 0 so the last preventable step (17) and point of no return
-    (18) are computed from the scenario rather than supplied by the fixture.
+    (18) are computed from the scenario rather than supplied by the fixture. The
+    declared contact bound is state tick 21.
 
     Returns:
         The ``already_unavoidable_01`` fault-injection fixture.
@@ -824,7 +828,7 @@ def already_unavoidable_01_fixture() -> CollisionCauseFixture:
     )
     replay_config = ReplayConfig(
         t_danger=0,
-        t_contact=20,
+        t_contact=21,
         horizon=28,
         substitution_mode=SUBSTITUTION_HOLD,
         pedestrian_response=PED_RESPONSE_REPLAYED,

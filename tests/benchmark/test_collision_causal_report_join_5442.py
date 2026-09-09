@@ -164,6 +164,29 @@ def test_unsupported_replay_verdict_abstains_and_fails_closed() -> None:
     validate_collision_causal_report(report)
 
 
+def test_native_live_replay_abstains_without_verified_provenance() -> None:
+    """A native adapter result cannot be relabelled as synthetic causal evidence."""
+    from dataclasses import replace
+
+    replay = _run_replay(fx.preventable_late_braking_scenario())
+    native = replace(replay, config=replace(replay.config, source_kind="live_episode"))
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id="native-unsupported",
+        case_id="fixture",
+        replay=native,
+        metadata=_METADATA,
+    )
+
+    assert report["abstained"] is True
+    assert report["abstention_reason"] == "native_simulator_causal_join_unsupported"
+    assert report["data_source"]["source_kind"] == "unknown"
+    assert report["causal_contribution"]["verdict"] == "unknown"
+    assert report["causal_contribution"]["supported_actual_cause"] is False
+    assert "native_simulator_provenance" in report["missing_fields"]
+    validate_collision_causal_report(report)
+
+
 def test_two_action_interaction_joins_as_avoidable() -> None:
     """A closed-loop two-body interaction replay joins as an avoidable report."""
     scenario = fx.two_action_interaction_scenario()
@@ -171,6 +194,36 @@ def test_two_action_interaction_joins_as_avoidable() -> None:
     assert report["causal_contribution"]["verdict"] == "avoidable"
     assert report["causal_contribution"]["supported_actual_cause"] is True
     assert report["causal_contribution"]["pedestrian_response_assumption"] == "closed_loop"
+
+
+def test_default_pedestrian_response_is_schema_safe() -> None:
+    """An omitted response assumption joins as explicit ``unknown``."""
+    scenario = fx.preventable_late_braking_scenario()
+    contact_step = fx.find_contact_step(scenario)
+    assert contact_step is not None
+    replay = locate_last_avoidable(
+        fx.KinematicCollisionModel(scenario),
+        fx.maintain_baseline_actions(contact_step + 6),
+        ReplayConfig(
+            t_danger=0,
+            t_contact=contact_step,
+            horizon=6,
+            substitution_mode=SUBSTITUTION_HOLD,
+            action_set_id="decel_lattice",
+            feasibility_filter="all_admissible_decel",
+            collision_predicate="euclidean_distance<=collision_radius",
+        ),
+    )
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id="default-response",
+        case_id="fixture",
+        replay=replay,
+        metadata=_METADATA,
+    )
+
+    assert report["causal_contribution"]["pedestrian_response_assumption"] == "unknown"
+    validate_collision_causal_report(report)
 
 
 def test_join_rejects_unknown_mechanism_label() -> None:

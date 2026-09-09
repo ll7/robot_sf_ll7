@@ -468,6 +468,13 @@ def _signal_from_row(row: Mapping[str, Any], name: str) -> RelevanceSignal:
     if availability is not None:
         if not isinstance(availability, int) or isinstance(availability, bool):
             raise RelevanceContractError(f"signals.{name}.available_at_step must be integer")
+        # A retained row may carry a value computed later in the parent trace.
+        # It must remain unknown until the declared availability step; otherwise
+        # offline selection can use future information as if it were causal.
+        if availability > int(row["step"]):
+            raw = None
+            missingness = "not_available"
+            value = None
     return RelevanceSignal(
         name=name,
         value=value,
@@ -588,28 +595,42 @@ def _build_windows(
         else:
             runs.append([index])
     required_precursors = _required_precursor_indices(rows, trigger_indices)
-    expanded: list[tuple[int, int, list[int]]] = []
+    expanded: list[tuple[int, int, list[int], set[str], set[int]]] = []
     for run in runs:
         start = max(0, run[0] - thresholds.pre_roll_steps)
         end = min(len(rows) - 1, run[-1] + thresholds.post_roll_steps)
-        relevant_precursors = [index for index in required_precursors if index <= run[-1]]
+        run_event_ids = {
+            str(rows[index]["event_id"]) for index in run if rows[index].get("event_id") is not None
+        }
+        relevant_precursors = [
+            index
+            for index in required_precursors
+            if index <= run[-1]
+            and (not run_event_ids or str(rows[index].get("event_id")) in run_event_ids)
+        ]
         if relevant_precursors:
             start = min([start, *relevant_precursors])
-        expanded.append((start, end, run))
-    merged: list[tuple[int, int, list[int]]] = []
-    for start, end, run in expanded:
-        if merged and start <= merged[-1][1] + 1:
-            old_start, old_end, old_run = merged[-1]
-            merged[-1] = (old_start, max(old_end, end), old_run + run)
+        expanded.append((start, end, run, run_event_ids, set(relevant_precursors)))
+    merged: list[tuple[int, int, list[int], set[str], set[int]]] = []
+    for start, end, run, event_ids, precursor_indices in expanded:
+        same_event = bool(event_ids) and bool(merged) and bool(event_ids & merged[-1][3])
+        untyped_event = not event_ids or (bool(merged) and not merged[-1][3])
+        if merged and start <= merged[-1][1] + 1 and (same_event or untyped_event):
+            old_start, old_end, old_run, old_event_ids, old_precursors = merged[-1]
+            merged[-1] = (
+                old_start,
+                max(old_end, end),
+                old_run + run,
+                old_event_ids | event_ids,
+                old_precursors | precursor_indices,
+            )
         else:
-            merged.append((start, end, list(run)))
+            merged.append((start, end, list(run), set(event_ids), precursor_indices))
     windows: list[RelevanceWindow] = []
-    for start, end, run in merged:
+    for start, end, run, _event_ids, precursor_indices in merged:
         indices = tuple(range(start, end + 1))
         trigger_steps = tuple(sorted(rows[index]["step"] for index in run))
-        precursor_indices = tuple(
-            sorted(index for index in required_precursors if index in indices)
-        )
+        window_precursors = tuple(sorted(index for index in precursor_indices if index in indices))
         windows.append(
             RelevanceWindow(
                 start_step=int(rows[start]["step"]),
@@ -617,7 +638,7 @@ def _build_windows(
                 row_indices=indices,
                 original_step_indices=tuple(int(rows[index]["step"]) for index in indices),
                 trigger_steps=trigger_steps,
-                precursor_steps=tuple(int(rows[index]["step"]) for index in precursor_indices),
+                precursor_steps=tuple(int(rows[index]["step"]) for index in window_precursors),
                 reasons=tuple(
                     sorted({reason for index in run for reason in vectors[index].active_reasons})
                 ),

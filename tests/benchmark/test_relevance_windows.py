@@ -111,6 +111,25 @@ def test_multistage_events_merge_overlapping_intervals() -> None:
     assert set(window.precursor_steps) == {1}
 
 
+def test_disjoint_event_precursors_do_not_expand_or_merge_each_other() -> None:
+    """Separate event identities retain separate windows and precursor ownership."""
+    rows = _parent_rows()
+    rows[1].update({"event_id": "first", "precursor": True})
+    rows[3].update({"event_id": "first", "clearance_m": 0.8})
+    rows[5].update({"event_id": "second", "precursor": True})
+    rows[7].update({"event_id": "second", "clearance_m": 0.8})
+    selection = select_relevance_windows(
+        rows,
+        parent_digest=_parent_digest(),
+        thresholds=RelevanceThresholds(pre_roll_steps=2, post_roll_steps=2),
+    )
+    assert len(selection.windows) == 2
+    assert selection.windows[0].precursor_steps == (1,)
+    assert selection.windows[1].precursor_steps == (5,)
+    assert selection.windows[0].start_step == 1
+    assert selection.windows[1].start_step == 5
+
+
 def test_too_late_crop_is_rejected_as_unsafe() -> None:
     """Dropping a required precursor cannot be presented as a valid excerpt."""
     rows = _parent_rows()
@@ -144,6 +163,35 @@ def test_fractional_signal_availability_is_rejected() -> None:
     rows[0]["signal_metadata"] = {"ttc_s": {"available_at_step": 1.5}}
     with pytest.raises(RelevanceContractError, match="available_at_step must be integer"):
         select_relevance_windows(rows, parent_digest=_parent_digest())
+
+
+def test_future_signal_is_unknown_until_declared_availability_step() -> None:
+    """A later-computed risk signal cannot trigger an earlier window."""
+    rows = _parent_rows(3)
+    rows[0]["signals"] = {
+        "ttc_s": {"value": 1.0, "available_at_step": 1},
+    }
+    rows[1]["signals"] = {
+        "ttc_s": {"value": 1.0, "available_at_step": 1},
+    }
+    selection = select_relevance_windows(rows, parent_digest=_parent_digest())
+    assert "ttc_s" in selection.vectors[0].unknown_signals
+    assert selection.vectors[0].active_reasons == ()
+    assert selection.vectors[1].active_reasons == ("ttc_s",)
+
+
+def test_future_signal_remains_unknown_even_when_row_has_flat_value() -> None:
+    """Flat row fields obey the same causal availability boundary as metadata."""
+    rows = _parent_rows(2)
+    rows[0].update(
+        {
+            "ttc_s": 1.0,
+            "signal_metadata": {"ttc_s": {"available_at_step": 1}},
+        }
+    )
+    selection = select_relevance_windows(rows, parent_digest=_parent_digest())
+    assert "ttc_s" in selection.vectors[0].unknown_signals
+    assert selection.vectors[0].active_reasons == ()
 
 
 def test_manifest_writer_preserves_parent_rows_and_digest(tmp_path: Path) -> None:

@@ -1462,6 +1462,46 @@ def _revalidate_verified_candidate(
     return True, "verified plan revalidated under lifecycle lock"
 
 
+def _read_final_verified_preservation_state(
+    request: VerifiedMergeRequest,
+    *,
+    path: str,
+    current_path: str,
+) -> tuple[list[str], list[str]]:
+    """Repeat mutable target identity and preservation reads immediately before removal."""
+    flags, reasons = _read_verified_registration(
+        request,
+        path=path,
+        current_path=current_path,
+    )
+    if reasons:
+        return flags, reasons
+
+    exact, path_reason = _exact_registered_path(request.path, path)
+    if not exact:
+        return ["verified_merge_refused"], [path_reason or "target path mismatch"]
+
+    target_branch, target_sha, identity_error = _read_worktree_identity(path)
+    if identity_error is not None:
+        return ["verified_merge_refused"], [identity_error]
+    if target_branch != request.branch:
+        return ["branch_drift"], ["checked-out branch changed during final preservation check"]
+    if target_sha is None or target_sha.casefold() != request.head_sha.casefold():
+        return ["head_drift"], ["worktree HEAD changed during final preservation check"]
+
+    branch_sha, branch_error = _read_commit_ref(
+        f"refs/heads/{request.branch}",
+        cwd=current_path,
+        description="final local branch ref read",
+    )
+    if branch_error is not None:
+        return ["verified_merge_refused"], [branch_error]
+    if branch_sha != request.head_sha.casefold():
+        return ["branch_drift"], ["local branch ref changed during final preservation check"]
+
+    return _read_strict_cleanliness(path)
+
+
 def _attempt_candidate_removal(
     candidate: WorktreeCandidate,
     *,
@@ -1501,7 +1541,28 @@ def _attempt_candidate_removal(
                         f"refused verified candidate {candidate.path}: {detail}",
                         None,
                     )
-                final_flags, final_reasons = _read_strict_cleanliness(candidate.path)
+                current_path = candidate.verification.get("current_path")
+                if not isinstance(current_path, str) or not current_path:
+                    return (
+                        "refused",
+                        f"refused verified candidate {candidate.path}: "
+                        "apply-time preservation recheck: missing current main path",
+                        None,
+                    )
+                request, request_error = _request_from_verified_candidate(candidate)
+                if request_error is not None:
+                    return (
+                        "refused",
+                        f"refused verified candidate {candidate.path}: "
+                        f"apply-time preservation recheck: {request_error}",
+                        None,
+                    )
+                assert request is not None
+                final_flags, final_reasons = _read_final_verified_preservation_state(
+                    request,
+                    path=candidate.path,
+                    current_path=current_path,
+                )
                 if final_flags:
                     preservation_detail = "; ".join(final_reasons) or ", ".join(final_flags)
                     return (

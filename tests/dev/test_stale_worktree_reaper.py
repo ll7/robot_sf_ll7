@@ -72,6 +72,30 @@ class _IgnoredRaceTransport(_FakeGitHubTransport):
         return result
 
 
+class _IdentityRaceTransport(_FakeGitHubTransport):
+    """Mutate the target identity during the apply-time PR-detail read."""
+
+    def __init__(self, metadata: dict[str, object], target: Path, mutation: str):
+        super().__init__(metadata)
+        self._target = target
+        self._mutation = mutation
+
+    def __call__(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+        result = super().__call__(args)
+        api_calls = sum(call[1:2] == ["api"] for call in self.calls)
+        if args[1:2] == ["api"] and api_calls == 2:
+            if self._mutation == "detached":
+                _git(self._target, "checkout", "--detach", "HEAD")
+            elif self._mutation == "branch":
+                _git(self._target, "branch", "feature/other")
+                _git(self._target, "checkout", "feature/other")
+            elif self._mutation == "head":
+                (self._target / "tracked.txt").write_text("late head\n", encoding="utf-8")
+                _git(self._target, "add", "tracked.txt")
+                _git(self._target, "commit", "-m", "late head")
+        return result
+
+
 def _commit_tree(repo: Path, tree_sha: str, message: str, *parents: str) -> str:
     """Create a disposable commit object without changing a checked-out ref."""
     args = ["commit-tree", tree_sha]
@@ -898,6 +922,32 @@ def test_verified_apply_refuses_ignored_content_created_after_final_remote_read(
     assert any("apply-time preservation recheck" in event for event in result.audit_log)
     assert target.is_dir()
     assert preserved.read_text(encoding="utf-8") == "must be preserved\n"
+
+
+@pytest.mark.parametrize("mutation", ["detached", "branch", "head"])
+def test_verified_apply_refuses_identity_created_after_final_remote_read(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    """Final locked identity reads catch detached, branch, and HEAD drift."""
+    fixture = _verified_fixture(tmp_path / mutation)
+    target = fixture["target"]
+    metadata = fixture["metadata"]
+    assert isinstance(target, Path)
+    assert isinstance(metadata, dict)
+    transport = _IdentityRaceTransport(metadata, target, mutation)
+
+    with patch.object(reaper, "_worktree_lease_state", return_value=(None, None)):
+        plan = _verified_plan(fixture, transport)
+    assert plan.deletable == [str(target)]
+
+    with patch.object(reaper, "_worktree_lease_state", return_value=(None, None)):
+        result = reaper.apply_deletions(plan, github_transport=transport)
+
+    assert result.errors == []
+    assert str(target) in result.refused
+    assert any("apply-time preservation recheck" in event for event in result.audit_log)
+    assert target.is_dir()
 
 
 def test_verified_never_published_and_existing_upstream_are_refused(tmp_path: Path) -> None:

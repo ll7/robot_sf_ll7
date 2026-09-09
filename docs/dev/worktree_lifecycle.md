@@ -342,9 +342,10 @@ uv run python scripts/dev/stale_worktree_reaper.py \
 Immediately before the normal, non-force `git worktree remove`, the reaper reacquires the shared
 lifecycle lock and repeats registration, path, branch, head, ref, tree, main, authoritative remote,
 PR, cleanliness, ignored-state, open-PR, upstream-absence, and lease reads. It then performs a
-final cleanliness and ignored-state preservation recheck after the last remote/PR read and before
-removal, closing the remaining window in which an ignored artifact could appear during verification.
-Any deletion, symlink/path alias, identity drift, new content, lease, lookup error, or lock failure
-refuses removal. Normal
+final registration/path, branch, HEAD/ref-identity, cleanliness, and ignored-state preservation
+recheck after the last remote/PR read and immediately before removal, closing the remaining window
+in which an ignored artifact or target identity could drift during verification. Any deletion,
+symlink/path alias, identity drift, new content, lease, lookup error, or lock failure refuses
+removal. Normal
 worktree removal preserves the local branch and its commits; artifact preservation remains the
 owner's responsibility before retirement.

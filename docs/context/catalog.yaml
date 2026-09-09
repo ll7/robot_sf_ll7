@@ -72,6 +72,10 @@ entries:
   status: proposal
   freshness: maintained
   area: planner
+- path: docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_8063_goal_belief_contract_receipt.v1.json
   status: evidence
   freshness: evidence
@@ -7543,3 +7547,19 @@ entries:
   status: evidence
   freshness: evidence
   area: release_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/source_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/verification.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

@@ -12,12 +12,14 @@ import pytest
 
 from scripts.dev.pr_gate_lease import (
     PRGateLease,
+    _parse_args,
     create_lease,
     heartbeat,
     is_active,
     lease_path,
     legacy_lease_path,
     load_lease,
+    main,
     release_lease,
     save_lease,
     status,
@@ -407,3 +409,101 @@ class TestPRGateLeaseRobustnessAndIsolation:
             assert path2.parent == git_common
             assert path1.name.startswith(".pr-gate-lease-")
             assert path2.name.startswith(".pr-gate-lease-")
+
+
+class TestPRGateLeaseCLI:
+    """Tests for CLI argument parsing and execution."""
+
+    @pytest.mark.parametrize(
+        ("argv", "expected_cmd", "expected_wt"),
+        [
+            (["--worktree", "/path/a", "release"], "release", Path("/path/a")),
+            (["release", "--worktree", "/path/a"], "release", Path("/path/a")),
+            (["--worktree", "/path/b", "status"], "status", Path("/path/b")),
+            (["status", "--worktree", "/path/b"], "status", Path("/path/b")),
+            (["--worktree", "/path/c", "is-active"], "is-active", Path("/path/c")),
+            (["is-active", "--worktree", "/path/c"], "is-active", Path("/path/c")),
+            (
+                ["--worktree", "/path/d", "heartbeat", "--extend-hours", "2"],
+                "heartbeat",
+                Path("/path/d"),
+            ),
+            (
+                ["heartbeat", "--worktree", "/path/d", "--extend-hours", "2"],
+                "heartbeat",
+                Path("/path/d"),
+            ),
+            (
+                ["--worktree", "/path/e", "create", "--gate-id", "test-g"],
+                "create",
+                Path("/path/e"),
+            ),
+            (
+                ["create", "--worktree", "/path/e", "--gate-id", "test-g"],
+                "create",
+                Path("/path/e"),
+            ),
+            (["release"], "release", None),
+            (["status"], "status", None),
+            (["is-active"], "is-active", None),
+        ],
+    )
+    def test_worktree_argument_ordering(
+        self, argv: list[str], expected_cmd: str, expected_wt: Path | None
+    ) -> None:
+        """--worktree is accepted both before and after the subcommand."""
+        args = _parse_args(argv)
+        assert args.command == expected_cmd
+        assert args.worktree == expected_wt
+
+    def test_cli_lifecycle_end_to_end(self, tmp_path: Path) -> None:
+        """Full lifecycle via main() with mixed argument ordering."""
+        git_common = tmp_path / ".git"
+        git_common.mkdir()
+        wt = tmp_path / "test-wt"
+        wt.mkdir()
+
+        with patch("scripts.dev.pr_gate_lease._git_common_dir", return_value=git_common):
+            # Create using subcommand-level --worktree
+            rc = main(
+                ["create", "--worktree", str(wt), "--gate-id", "task-8684", "--owner", "worker"]
+            )
+            assert rc == 0
+
+            # is-active using root-level --worktree
+            assert main(["--worktree", str(wt), "is-active"]) == 0
+
+            # is-active using subcommand-level --worktree
+            assert main(["is-active", "--worktree", str(wt)]) == 0
+
+            # Heartbeat using root-level --worktree
+            rc = main(["--worktree", str(wt), "heartbeat", "--extend-hours", "3"])
+            assert rc == 0
+
+            # Status using subcommand-level --worktree
+            rc = main(["status", "--worktree", str(wt)])
+            assert rc == 0
+
+            # Release using root-level --worktree
+            rc = main(["--worktree", str(wt), "release"])
+            assert rc == 0
+
+            # Now is-active returns 1
+            assert main(["--worktree", str(wt), "is-active"]) == 1
+
+    def test_script_is_executable_and_standalone(self) -> None:
+        """The script has execute permissions and runs standalone."""
+        import os
+        import subprocess
+
+        script_path = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "pr_gate_lease.py"
+        assert os.access(script_path, os.X_OK), "scripts/dev/pr_gate_lease.py must be executable"
+
+        result = subprocess.run(
+            [str(script_path), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0
+        assert "Worktree lease management" in result.stdout

@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import TYPE_CHECKING
 
 import pytest
 
 from scripts.dev import pr_ready_termination
-from scripts.dev.pr_ready_termination import TerminationContext, build_receipt, write_receipt
+from scripts.dev.pr_ready_termination import (
+    TerminationContext,
+    _process_group_exists,
+    _process_group_liveness,
+    build_receipt,
+    write_receipt,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -262,3 +269,154 @@ def test_verified_cleanup_requires_registered_child_identifiers(cleanup_status: 
 
     assert receipt["cleanup"]["verified"] is False
     assert receipt["cleanup"]["status"] == "process_group_cleanup_unverified"
+
+
+def test_process_group_liveness_returns_none_for_none() -> None:
+    """A missing PGID produces None liveness rather than defaulting to absent."""
+    assert _process_group_liveness(None) is None
+
+
+def test_process_group_liveness_absent_for_nonexistent_pgid() -> None:
+    """A nonexistent process group is truthfully classified as absent."""
+    assert _process_group_liveness(9999999) == "absent"
+
+
+def test_process_group_liveness_live_for_active_process_group() -> None:
+    """An active process group with live processes is classified as live."""
+    assert _process_group_liveness(os.getpgrp()) == "live"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+def test_process_group_liveness_zombie_only_for_unreaped_group() -> None:
+    """An exited unreaped process group leader is recognized as zombie_only."""
+    pipe_r, pipe_w = os.pipe()
+    child_pid = os.fork()
+    if child_pid == 0:
+        os.close(pipe_r)
+        os.setsid()
+        os.write(pipe_w, b"ready\n")
+        os.close(pipe_w)
+        os._exit(0)
+
+    os.close(pipe_w)
+    try:
+        os.read(pipe_r, 6)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            liveness = _process_group_liveness(child_pid)
+            if liveness == "zombie_only":
+                break
+            time.sleep(0.01)
+        assert _process_group_exists(child_pid) is True
+        assert _process_group_liveness(child_pid) == "zombie_only"
+    finally:
+        os.close(pipe_r)
+        os.waitpid(child_pid, 0)
+
+    assert _process_group_exists(child_pid) is False
+    assert _process_group_liveness(child_pid) == "absent"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
+def test_process_group_liveness_live_for_mixed_group() -> None:
+    """A process group with both live and zombie members is classified as live."""
+    ready_r, ready_w = os.pipe()
+    release_r, release_w = os.pipe()
+
+    leader_pid = os.fork()
+    if leader_pid == 0:
+        os.close(ready_r)
+        os.close(release_w)
+        os.setsid()
+        zombie_child = os.fork()
+        if zombie_child == 0:
+            os.close(release_r)
+            os.close(ready_w)
+            os._exit(0)
+        os.write(ready_w, b"ready\n")
+        os.close(ready_w)
+        os.read(release_r, 1)
+        os.close(release_r)
+        os.waitpid(zombie_child, 0)
+        os._exit(0)
+
+    os.close(ready_w)
+    os.close(release_r)
+    try:
+        os.read(ready_r, 6)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            if _process_group_liveness(leader_pid) == "live":
+                break
+            time.sleep(0.01)
+        assert _process_group_exists(leader_pid) is True
+        assert _process_group_liveness(leader_pid) == "live"
+    finally:
+        os.close(ready_r)
+        try:
+            os.write(release_w, b"x")
+        except OSError:
+            pass
+        os.close(release_w)
+        os.waitpid(leader_pid, 0)
+
+
+def test_verified_group_cleanup_accepts_zombie_only_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A group with child_process_group_exists=True but zombie_only liveness retains verified cleanup."""
+    monkeypatch.setattr(pr_ready_termination, "_process_group_exists", lambda _: True)
+    monkeypatch.setattr(pr_ready_termination, "_process_group_liveness", lambda _: "zombie_only")
+    receipt = build_receipt(
+        TerminationContext(
+            signal_number=15,
+            phase="core_lane",
+            lane="core",
+            last_progress="core readiness lane running",
+            last_progress_at_utc="2026-09-03T06:00:00Z",
+            cleanup_status="process_group_terminated_and_verified",
+            mode="interim",
+            child_pid=1234,
+            child_process_group_id=1234,
+            child_registration_state="registered",
+        )
+    )
+
+    assert receipt["process"]["child_process_group_exists"] is True
+    assert receipt["process"]["child_process_group_liveness"] == "zombie_only"
+    assert receipt["cleanup"] == {
+        "status": "process_group_terminated_and_verified",
+        "verified": True,
+    }
+
+
+def test_verified_group_cleanup_rejects_live_or_unknown_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A group with live or unknown liveness is downgraded to unverified cleanup."""
+    for liveness in ("live", "unknown"):
+        monkeypatch.setattr(pr_ready_termination, "_process_group_exists", lambda _: True)
+        monkeypatch.setattr(
+            pr_ready_termination, "_process_group_liveness", lambda _, live=liveness: live
+        )
+        receipt = build_receipt(
+            TerminationContext(
+                signal_number=15,
+                phase="core_lane",
+                lane="core",
+                last_progress="core readiness lane running",
+                last_progress_at_utc="2026-09-03T06:00:00Z",
+                cleanup_status="process_group_terminated_and_verified",
+                mode="interim",
+                child_pid=1234,
+                child_process_group_id=1234,
+                child_registration_state="registered",
+            )
+        )
+
+        assert receipt["process"]["child_process_group_exists"] is True
+        assert receipt["process"]["child_process_group_liveness"] == liveness
+        assert receipt["cleanup"] == {
+            "status": "process_group_cleanup_unverified",
+            "verified": False,
+        }

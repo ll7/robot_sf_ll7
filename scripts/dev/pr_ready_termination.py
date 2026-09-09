@@ -154,6 +154,79 @@ def _process_group_exists(process_group_id: int | None) -> bool | None:
     return True
 
 
+def _parse_proc_stat_state(entry_path: str, process_group_id: int) -> str | None:
+    """Return process state if entry belongs to process_group_id, else None."""
+    try:
+        with open(f"{entry_path}/stat", encoding="utf-8", errors="replace") as handle:
+            content = handle.read(READ_LIMIT_BYTES)
+    except OSError:
+        return None
+    rparen = content.rfind(")")
+    if rparen == -1:
+        return None
+    fields = content[rparen + 1 :].split()
+    if len(fields) < 3:
+        return None
+    try:
+        if int(fields[2]) == process_group_id:
+            return fields[0]
+    except ValueError:
+        return None
+    return None
+
+
+def _inspect_process_group_members(process_group_id: int) -> tuple[int, int] | None:
+    """Return (live_count, zombie_count) for an existing group, or None if unreadable."""
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return None
+    try:
+        entries = os.scandir(proc_root)
+    except OSError:
+        return None
+    live_count = 0
+    zombie_count = 0
+    with entries:
+        for entry in entries:
+            if not entry.name.isdigit():
+                continue
+            state = _parse_proc_stat_state(entry.path, process_group_id)
+            if state == "Z":
+                zombie_count += 1
+            elif state is not None:
+                live_count += 1
+    return live_count, zombie_count
+
+
+def _process_group_liveness(process_group_id: int | None) -> str | None:
+    """Return 'absent', 'zombie_only', 'live', or 'unknown' for a process group.
+
+    - 'absent': the process group has no members in the system process table.
+    - 'zombie_only': the process group exists, but every member is in zombie (Z) state.
+    - 'live': the process group exists and has at least one live (non-zombie) member.
+    - 'unknown': liveness cannot be verified (probing/platform unavailable or unreadable).
+    """
+    if process_group_id is None:
+        return None
+    exists = _process_group_exists(process_group_id)
+    if exists is False:
+        return "absent"
+    if exists is None:
+        return "unknown"
+
+    counts = _inspect_process_group_members(process_group_id)
+    if counts is not None:
+        live_count, zombie_count = counts
+        if live_count > 0:
+            return "live"
+        if zombie_count > 0:
+            return "zombie_only"
+        if _process_group_exists(process_group_id) is False:
+            return "absent"
+
+    return "unknown"
+
+
 def _signal_details(signal_number: int) -> dict[str, int | str | None]:
     """Return a stable signal name and conventional shell status."""
     try:
@@ -195,6 +268,7 @@ def build_receipt(context: TerminationContext) -> dict[str, Any]:
     process_group_absent = _identifier_is_absent(context.child_process_group_id)
     registration_state = _registration_state(context.child_registration_state)
     process_group_exists = _process_group_exists(process_group_value)
+    process_group_liveness = _process_group_liveness(process_group_value)
     direct_cleanup_verified_statuses = {
         "direct_process_already_exited_and_verified",
         "direct_process_killed_and_verified",
@@ -215,7 +289,7 @@ def build_receipt(context: TerminationContext) -> dict[str, Any]:
             registration_state == "registered"
             and child_pid_value is not None
             and process_group_value is not None
-            and process_group_exists is False
+            and process_group_liveness in ("absent", "zombie_only")
         )
     elif context.cleanup_status in direct_cleanup_verified_statuses:
         cleanup_verified = (
@@ -223,7 +297,10 @@ def build_receipt(context: TerminationContext) -> dict[str, Any]:
             and child_pid_value is not None
             and (
                 process_group_absent
-                or (process_group_value is not None and process_group_exists is False)
+                or (
+                    process_group_value is not None
+                    and process_group_liveness in ("absent", "zombie_only")
+                )
             )
         )
     cleanup_status = _bounded_text(context.cleanup_status)
@@ -254,6 +331,7 @@ def build_receipt(context: TerminationContext) -> dict[str, Any]:
             "child_pid": child_pid_value,
             "child_process_group_id": process_group_value,
             "child_process_group_exists": process_group_exists,
+            "child_process_group_liveness": process_group_liveness,
             "child_registration_state": registration_state,
         },
         "resources": _resource_snapshot(),

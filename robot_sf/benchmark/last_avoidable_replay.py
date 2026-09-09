@@ -121,6 +121,10 @@ class ReplayConfig:
         pedestrian_response: Pedestrian response assumption for this run, e.g.
             ``replayed`` (pedestrian follows its recorded path) or ``closed_loop``
             (pedestrian reacts to the robot).
+        source_kind: Provenance classification for the replay source. Native live
+            simulator adapters bind this to ``live_episode``; legacy controlled
+            fixtures leave it ``unspecified`` and the causal join treats that as
+            synthetic-fixture evidence.
     """
 
     t_danger: int
@@ -132,6 +136,7 @@ class ReplayConfig:
     feasibility_filter: str = "unspecified"
     collision_predicate: str = "unspecified"
     pedestrian_response: str = "unspecified"
+    source_kind: str = "unspecified"
 
     def __post_init__(self) -> None:
         """Validate window, horizon, replay count, and substitution mode."""
@@ -157,6 +162,7 @@ class ReplayConfig:
             "horizon": self.horizon,
             "substitution_mode": self.substitution_mode,
             "determinism_replays": self.determinism_replays,
+            "source_kind": self.source_kind,
             "action_set_id": self.action_set_id,
             "feasibility_filter": self.feasibility_filter,
             "collision_predicate": self.collision_predicate,
@@ -483,9 +489,19 @@ def _bind_model_metadata(
     """
     bound_config = config
     mismatches: list[str] = []
-    for field_name in ("collision_predicate", "pedestrian_response"):
+    # These fields are model-bound rather than caller assertions. In particular,
+    # the native adapter's action lattice and source kind must be reflected in the
+    # report before any replay result can be considered attributable.
+    model_fields = {
+        "source_kind": "replay_source_kind",
+        "action_set_id": "action_set_id",
+        "feasibility_filter": "feasibility_filter",
+        "collision_predicate": "collision_predicate",
+        "pedestrian_response": "pedestrian_response",
+    }
+    for field_name, model_field in model_fields.items():
         declared = getattr(bound_config, field_name)
-        actual = _model_metadata(model, field_name)
+        actual = _model_metadata(model, model_field)
         if actual is None:
             continue
         if declared == "unspecified":

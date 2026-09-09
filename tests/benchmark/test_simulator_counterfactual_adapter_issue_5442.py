@@ -109,8 +109,8 @@ def _run_engine(model: SimulatorCounterfactualModel, *, determinism_replays: int
         horizon=horizon,
         substitution_mode=SUBSTITUTION_HOLD,
         determinism_replays=determinism_replays,
-        action_set_id="simulator_native_action_lattice",
-        feasibility_filter="native_maintain_or_brake",
+        action_set_id="unspecified",
+        feasibility_filter="unspecified",
         collision_predicate="robot_pedestrian_center_distance_v1",
         pedestrian_response="closed_loop",
     )
@@ -428,6 +428,51 @@ def test_native_action_lattices_and_labels_follow_robot_contracts(
 
     assert actions
     assert label_fragment in model.action_label(actions[-1])
+
+
+def test_native_replay_metadata_binds_action_contract_and_source() -> None:
+    """Native reports bind the executed lattice instead of trusting caller labels."""
+    robot = SimpleNamespace(
+        config=SimpleNamespace(max_linear_decel=4.0, max_angular_accel=2.0),
+        state=SimpleNamespace(),
+    )
+    sim = SimpleNamespace(
+        robots=[robot],
+        config=SimpleNamespace(
+            prf_config=SimpleNamespace(is_active=False),
+            apf_config=SimpleNamespace(is_active=False),
+            residual_adversary=SimpleNamespace(is_active=False),
+        ),
+        peds_behaviors=[],
+    )
+    model = SimulatorCounterfactualModel(sim, capture_rng=False)
+    report = locate_last_avoidable(
+        model,
+        [],
+        ReplayConfig(
+            t_danger=0,
+            t_contact=1,
+            horizon=1,
+            action_set_id="two_action_lattice",
+            feasibility_filter="caller_declared_filter",
+            collision_predicate="robot_pedestrian_center_distance_v1",
+            pedestrian_response="replayed",
+        ),
+    )
+
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstain_reason == "metadata_mismatch"
+    assert "action_set_id" in report.notes[0]
+    assert "feasibility_filter" in report.notes[0]
+
+    native = locate_last_avoidable(
+        model,
+        [],
+        ReplayConfig(t_danger=0, t_contact=1, horizon=1),
+    )
+    assert native.config.source_kind == "live_episode"
+    assert native.config.action_set_id.startswith("simulator_native_action_lattice_v1:")
+    assert native.config.feasibility_filter == "native_all_supported_actions_v1:n=5"
 
 
 def test_unknown_action_contract_fails_closed_and_uses_generic_label() -> None:

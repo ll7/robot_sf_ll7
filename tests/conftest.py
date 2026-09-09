@@ -392,6 +392,9 @@ _FAST_FILES = {
     # schema/compatibility coverage for changed benchmark producers.
     "test_algorithm_contract_registry.py",
     "test_algorithm_readiness_contract.py",
+    # Paired-effect metric-contract tests are deterministic schema, provenance,
+    # and materialization coverage for the native counterfactual producer.
+    "test_paired_effect_metric_contract.py",
     # CUDA/NVML runtime classification tests are deterministic unit contracts
     # (importlib stubs, no real GPU) that cover the changed telemetry producer
     # in the exact-head changed-coverage gate.

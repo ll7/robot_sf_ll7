@@ -1439,6 +1439,11 @@ def discover_issue_comments(
     )
     comments: list[dict[str, str]] = []
     errors = list(meta.get("errors", []))
+    non_object_row_count = int(meta.get("non_object_row_count", 0))
+    if non_object_row_count:
+        errors.append(
+            f"comment response contained {non_object_row_count} malformed non-object row(s)"
+        )
     malformed_object_row_count = int(meta.get("malformed_object_row_count", 0))
     for index, row in enumerate(rows):
         row_errors: list[str] = []
@@ -1491,6 +1496,7 @@ def attach_issue_comments(
         "errors": [],
         "processed_issue_count": 0,
         "requests_attempted": 0,
+        "non_object_row_count": 0,
         "malformed_object_row_count": 0,
     }
     for issue in issues:
@@ -1507,6 +1513,7 @@ def attach_issue_comments(
         metadata["row_count"] += len(comments)
         metadata["truncated"] = bool(metadata["truncated"] or comment_meta.get("truncated"))
         metadata["errors"].extend(comment_meta.get("errors", []))
+        metadata["non_object_row_count"] += int(comment_meta.get("non_object_row_count", 0))
         metadata["malformed_object_row_count"] += int(
             comment_meta.get("malformed_object_row_count", 0)
         )

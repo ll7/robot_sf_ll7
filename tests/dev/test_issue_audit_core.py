@@ -1223,6 +1223,44 @@ def test_comment_discovery_is_bounded_and_rest_normalized() -> None:
     assert metadata["errors"] == []
 
 
+def test_comment_discovery_marks_mixed_non_object_rows_unavailable() -> None:
+    """A dropped non-object row makes even a mixed comment response unavailable."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            json.dumps(
+                [
+                    "malformed-comment-row",
+                    {
+                        "body": "Maintainer decision required.",
+                        "user": {"login": "owner"},
+                        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/110#issuecomment-1",
+                        "created_at": "2026-08-11T10:00:00Z",
+                    },
+                ]
+            ),
+            "",
+        )
+
+    comments, metadata = discover_issue_comments("ll7/robot_sf_ll7", 110, runner=runner)
+
+    assert comments == [
+        {
+            "body": "Maintainer decision required.",
+            "user": "owner",
+            "url": "https://github.com/ll7/robot_sf_ll7/issues/110#issuecomment-1",
+            "created_at": "2026-08-11T10:00:00Z",
+        }
+    ]
+    assert metadata["available"] is False
+    assert metadata["non_object_row_count"] == 1
+    assert metadata["row_count"] == 1
+    assert any("non-object" in error for error in metadata["errors"])
+
+
 @pytest.mark.parametrize("user", ["not-an-object", {"login": ""}, 42, []])
 def test_comment_discovery_rejects_malformed_nested_user_without_attribute_error(
     user: object,

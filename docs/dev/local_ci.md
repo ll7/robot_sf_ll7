@@ -90,6 +90,28 @@ and caught interruption returns the conventional `128 + signal` status.
 For full PR proof, prepare an intentionally local environment through the existing bootstrap route
 and run final readiness. This mode does not sync dependencies or replace the readiness formatter.
 
+## Early evidence-registry check in final readiness
+
+Final readiness checks the evidence registry before formatting or starting any test lane when the
+committed base-to-head changes touch a hosted evidence-registry input. This includes
+`docs/context/evidence/`, release and citation metadata, and the checker, linter, baseline,
+review policy, focused tests, and workflow paths listed in
+[the hosted workflow](../../.github/workflows/evidence-registry-ratchet.yml).
+Deletions and both sides of renames count; whitespace or newlines in a filename do not change
+the path boundary. Unrelated changes skip this early check.
+
+The entry point runs `uv run python scripts/dev/evidence_registry_ratchet.py --check` exactly once
+for that relevant scope. This is read-only: it neither repairs the registry nor refreshes its
+baseline. A checker failure preserves its diagnostic and exit status, including statuses 1 and 2,
+and prevents formatting, tests, and a success stamp. Missing prerequisites or failed change
+enumeration also fail closed. An explicitly requested final-mode `BASE_REF` that remains
+unresolved after the existing best-effort fetch cannot fall back to `HEAD`.
+
+`PR_READY_SKIP_PREFLIGHT=1` does not disable this integrity check. Interim mode retains its existing
+behavior, including base fallback, and does not run the new early check. A successful check is
+only an early rejection filter: all later readiness gates, core registry invariants, hosted
+checks, and final freshness requirements still apply. No success is cached between runs.
+
 ## Readiness count selectors
 
 When reporting readiness counts, name the exact selector so another contributor can reproduce the

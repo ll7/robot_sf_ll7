@@ -51,7 +51,9 @@ remaining (the global-RNG snapshot seam was the gated dependency):
   seam, and a full `locate_last_avoidable` run on a genuine production fixture
   (`classic_doorway.svg`, density 0.06, route seed 21, global seed 25) where the
   forward-acceleration baseline contacts after 39 applied ticks and native braking
-  avoids contact (`avoidable`, deterministic baseline, full feasible coverage).
+  avoids contact (`avoidable`, deterministic baseline, full coverage of the declared finite
+  action lattice). The underlying production command space remains continuous, so this is not
+  exhaustive continuous-action coverage.
 
 Scope correction versus the earlier doc's "broad simulator replacement" note: a code
 re-survey on current `main` found pedestrian goal/zone resampling now draws from the
@@ -66,11 +68,13 @@ guessing.
 
 | Verdict | Meaning |
 | --- | --- |
-| `avoidable` | Deterministic baseline, full feasible-action coverage, and at least one admissible action prevents contact within the frozen horizon. `t_uca` and `t_inevitable` are reported. |
-| `already_unavoidable` | Deterministic baseline, full feasible-action coverage, but **no** admissible action at any decision point prevents contact. `t_inevitable = t_danger`. |
+| `avoidable` | Deterministic baseline, full coverage of the declared action set, and at least one admissible action prevents contact within the frozen horizon. `t_uca` and `t_inevitable` are reported. |
+| `already_unavoidable` | Deterministic baseline, full coverage of the declared action set, but **no** admissible action at any decision point prevents contact. `t_inevitable = t_danger`. |
 | `unknown` | Baseline replay is not deterministic **or** feasible-action coverage over the window is incomplete. Per the issue contract this **never** collapses to `unavoidable`. |
 
-`t_uca` is the earliest window step at which an admissible action prevents contact
+`t_contact` and `observed_contact_steps` use the same state-tick convention: the
+contact-producing action at index ``t_contact - 1`` yields contact state tick
+``t_contact``. `t_uca` is the earliest window step at which an admissible action prevents contact
 (the earliest point the robot could have started avoiding). `t_inevitable` is one
 past the latest step at which any admissible action still prevents contact (the
 point of no return). Blame is placed on the earliest avoidable action, not on the
@@ -108,7 +112,7 @@ causal claim; divergence still abstains to `unknown`.
 | --- | --- |
 | Snapshot/restore includes RNG + actor state | `KinematicCollisionModel.snapshot/restore`; `test_snapshot_includes_rng_and_actor_state`, `test_snapshot_without_rng_diverges` |
 | Baseline branching reproduces the fixture within tolerance | `_verify_determinism` (20 replays); determinism check in each avoidable/unavoidable test |
-| Action set, feasibility filter, horizon, collision predicate, pedestrian response versioned in output | `ReplayConfig.to_dict` → `config` block; schema `config` required fields |
+| Action set, declared action-set coverage, horizon, collision predicate, pedestrian response versioned in output | `ReplayConfig.to_dict` → `config` block; schema `config` required fields |
 | `t_inevitable` and `t_uca` computed for preventable late braking, already-unavoidable, two-action interaction | `test_preventable_late_braking_is_avoidable`, `test_already_unavoidable_contact`, `test_two_action_interaction_closed_loop_avoidable` |
 | Missing feasible set or nondeterministic baseline → `unknown`, never `unavoidable` | `test_missing_feasible_action_returns_unknown`, `test_nondeterministic_baseline_returns_unknown` |
 | Output conforms to a report contract and preserves every branch result | `last_avoidable_replay.v1.json`; `branches` preserved; `test_report_conforms_to_schema_and_records_provenance` |

@@ -277,6 +277,7 @@ def create_issue(
             verified=False,
             phase="create",
             missing_fields=list(preflight.get("missing_fields", [])),
+            heading_suggestions=dict(preflight.get("heading_suggestions", {})),
             metadata_findings=list(preflight.get("metadata_findings", [])),
             body_sha256=preflight.get("body_sha256", ""),
         )

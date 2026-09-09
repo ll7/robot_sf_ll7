@@ -24,6 +24,7 @@ from scripts.dev.issue_audit_core import (
     compute_plan_digest,
     discover_issue_comments,
     discover_issue_timeline_merged_prs,
+    discover_open_issues,
     label_api_path,
     main,
     parse_decision_answer,
@@ -149,6 +150,28 @@ def _healthy_quota_meta(*, core_remaining: int = 500) -> tuple:
             "budget_exhausted": False,
         },
     )
+
+
+def _empty_issue_source_metadata() -> dict[str, Any]:
+    """Return an explicit successful-empty source contract for plan fixtures."""
+    return {
+        "available": True,
+        "pages_read": 1,
+        "requests_attempted": 1,
+        "per_page": issue_audit_core.PER_PAGE,
+        "page_budget": issue_audit_core.DEFAULT_MAX_PAGES,
+        "row_count": 0,
+        "canonical_row_count": 0,
+        "raw_row_count": 0,
+        "non_object_row_count": 0,
+        "truncated": False,
+        "errors": [],
+        "source": "repos/ll7/robot_sf_ll7/issues?state=open",
+        "source_kind": issue_audit_core.ISSUE_SOURCE_KIND,
+        "source_status": issue_audit_core.ISSUE_SOURCE_STATUS_EMPTY,
+        "source_proof": issue_audit_core.ISSUE_SOURCE_EMPTY_PROOF,
+        "source_status_reason": "successful empty response from the canonical open-issue source",
+    }
 
 
 def test_state_contradiction_prefers_observed_active_work() -> None:
@@ -1164,6 +1187,85 @@ def test_comment_inventory_reports_degraded_reads_as_unavailable() -> None:
     assert issues[0]["comments"] == []
 
 
+@pytest.mark.parametrize(
+    (
+        "payload",
+        "returncode",
+        "stderr",
+        "expected_status",
+        "expected_available",
+        "expected_row_count",
+    ),
+    [
+        ([], 0, "", issue_audit_core.ISSUE_SOURCE_STATUS_EMPTY, True, 0),
+        (
+            [
+                {
+                    "number": 110,
+                    "title": "Bounded issue",
+                    "body": "",
+                    "state": "open",
+                    "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+                    "html_url": "https://github.com/ll7/robot_sf_ll7/issues/110",
+                    "user": {"login": "maintainer"},
+                    "labels": [],
+                }
+            ],
+            0,
+            "",
+            issue_audit_core.ISSUE_SOURCE_STATUS_COMPLETE,
+            True,
+            1,
+        ),
+        (
+            [{"number": 901, "html_url": "https://github.com/ll7/robot_sf_ll7/pull/901"}],
+            0,
+            "",
+            issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS,
+            False,
+            0,
+        ),
+        (["malformed-row"], 0, "", issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS, False, 0),
+        (
+            None,
+            1,
+            "open issue endpoint unavailable",
+            issue_audit_core.ISSUE_SOURCE_STATUS_UNAVAILABLE,
+            False,
+            0,
+        ),
+    ],
+)
+def test_open_issue_source_contract_distinguishes_empty_and_bad_responses(
+    payload: object,
+    returncode: int,
+    stderr: str,
+    expected_status: str,
+    expected_available: bool,
+    expected_row_count: int,
+) -> None:
+    """The canonical source distinguishes proven emptiness from unsafe zero rows."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        return subprocess.CompletedProcess(
+            args,
+            returncode,
+            json.dumps(payload) if payload is not None else "",
+            stderr,
+        )
+
+    rows, metadata = discover_open_issues("ll7/robot_sf_ll7", runner=runner)
+
+    assert len(rows) == expected_row_count
+    assert metadata["source_status"] == expected_status
+    assert metadata["available"] is expected_available
+    if expected_status == issue_audit_core.ISSUE_SOURCE_STATUS_EMPTY:
+        assert metadata["source_proof"] == issue_audit_core.ISSUE_SOURCE_EMPTY_PROOF
+    else:
+        assert metadata["source_status_reason"]
+
+
 def test_comment_inventory_bails_out_after_actual_rate_limit() -> None:
     """A rate-limited comment thread stops optional comment reads immediately."""
     queried: list[int] = []
@@ -1869,7 +1971,183 @@ def test_plan_writes_fail_closed_artifact_when_wall_budget_is_zero(
     plan = json.loads(output.read_text(encoding="utf-8"))
     assert plan["mutations"] == []
     assert plan["truncation_or_errors"]
+    assert plan["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_UNAVAILABLE
+    )
     assert "wall-time budget exhausted" in json.dumps(plan["inventory"])
+
+
+def test_unexplained_empty_issue_source_is_not_a_complete_plan() -> None:
+    """A zero-row source without an explicit contract cannot authorize an empty audit."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata.pop("source_status")
+    source_metadata.pop("source_proof")
+    source_metadata.pop("source_status_reason")
+    inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {"issues": source_metadata},
+    }
+
+    plan = build_audit_plan(inventory)
+
+    assert plan["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    )
+    assert plan["issue_inventory_status"]["error_code"] == "issue_inventory_source_missing"
+    assert plan["classification_status"]["status"] == "incomplete"
+    assert plan["classification_status"]["mutations_suppressed"] is True
+    assert "issues" in plan["inventory_uncertainties"]
+    assert "issues" in plan["truncation_or_errors"]
+    assert plan["mutations"] == []
+    with pytest.raises(ValueError, match="issue inventory is not admissible"):
+        build_decision_envelope(plan)
+
+
+def test_explicit_empty_issue_source_rejects_contradictory_counts() -> None:
+    """A forged empty marker cannot hide rows reported by the source metadata."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata["raw_row_count"] = 1
+    inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {"issues": source_metadata},
+    }
+
+    plan = build_audit_plan(inventory)
+
+    assert plan["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    )
+    assert plan["issue_inventory_status"]["error_code"] == ("issue_inventory_source_inconsistent")
+    assert plan["mutations"] == []
+    assert "issues" in plan["truncation_or_errors"]
+
+
+def test_successful_empty_issue_source_remains_an_admissible_noop() -> None:
+    """An explicit successful-empty source remains distinct from an unavailable source."""
+    inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {"issues": _empty_issue_source_metadata()},
+    }
+
+    plan = build_audit_plan(inventory)
+    result = apply_mutations(
+        plan,
+        apply_source_sha=plan["source_sha"],
+        apply_classifier_digest=plan["classifier_digest"],
+        apply_producer=plan["producer"],
+    )
+
+    assert plan["issue_inventory_status"]["status"] == (issue_audit_core.ISSUE_SOURCE_STATUS_EMPTY)
+    assert plan["classification_status"]["status"] == "complete"
+    assert plan["truncation_or_errors"] == []
+    assert result["ok"] is True
+    assert result["counts"]["planned"] == 0
+
+
+def test_apply_rejects_the_old_permissive_zero_row_shape() -> None:
+    """Apply rejects a legacy zero-row plan that lacks source-contract proof."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        raise AssertionError(f"anomalous zero-row plans must not reach REST: {args} {input_text}")
+
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata.pop("source_status")
+    source_metadata.pop("source_proof")
+    source_metadata.pop("source_status_reason")
+    plan: dict[str, Any] = {
+        "schema": issue_audit_core.PLAN_SCHEMA,
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "mutations": [],
+        "inventory": {"issues": source_metadata},
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+
+    result = apply_mutations(
+        plan,
+        runner=runner,
+        apply_source_sha=plan["source_sha"],
+        apply_classifier_digest=plan["classifier_digest"],
+        apply_producer=plan["producer"],
+    )
+
+    assert result["ok"] is False
+    assert result["error_code"] == "issue_inventory_source_missing"
+    assert result["counts"]["planned"] == 0
+    assert result["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    )
+
+
+def test_plan_cli_reports_anomalous_empty_issue_source(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """The CLI emits a machine-readable artifact and nonzero status for an unsafe empty source."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata["raw_row_count"] = 1
+    source_metadata.pop("source_status")
+    source_metadata.pop("source_proof")
+    source_metadata.pop("source_status_reason")
+    anomalous_inventory = {
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {"issues": source_metadata},
+    }
+    monkeypatch.setattr(
+        issue_audit_core,
+        "check_origin_main_freshness",
+        lambda *args, **kwargs: (True, "head", "main", ""),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_inventory",
+        lambda *args, **kwargs: anomalous_inventory,
+    )
+    output = tmp_path / "issue-audit-plan.json"
+
+    result = main(["plan", "--max-wall-seconds", "30", "--output", str(output)])
+
+    assert result == 2
+    captured = capsys.readouterr()
+    assert "canonical open-issue inventory anomalous" in captured.err
+    assert "no empty queue admitted" in captured.err
+    assert "Next action:" in captured.err
+    plan = json.loads(output.read_text(encoding="utf-8"))
+    assert plan["issue_inventory_status"]["status"] == (
+        issue_audit_core.ISSUE_SOURCE_STATUS_ANOMALOUS
+    )
+    assert plan["classification_status"]["mutations_suppressed"] is True
+    assert "issues" in plan["truncation_or_errors"]
 
 
 def test_classification_timeout_is_explicit_and_suppresses_mutations(
@@ -2142,7 +2420,7 @@ def test_plan_cli_shares_one_deadline_between_discovery_and_classification(
             "claims": {},
             "worktrees": [],
             "jobs": [],
-            "inventory": {},
+            "inventory": {"issues": _empty_issue_source_metadata()},
         }
 
     original_build = issue_audit_core.build_audit_plan
@@ -2181,7 +2459,7 @@ def test_plan_cli_accepts_a_separate_closed_pr_page_budget(
             "claims": {},
             "worktrees": [],
             "jobs": [],
-            "inventory": {},
+            "inventory": {"issues": _empty_issue_source_metadata()},
         }
 
     monkeypatch.setattr(issue_audit_core, "discover_inventory", discover)

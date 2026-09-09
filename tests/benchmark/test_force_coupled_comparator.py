@@ -308,6 +308,42 @@ def test_classify_failure_rejects_unknown_status_and_preserves_path_fallback() -
     )
 
 
+@pytest.mark.parametrize(
+    ("signals", "expected"),
+    [
+        (
+            {
+                "status": "error",
+                "plan_exception": True,
+                "collision_pedestrian": True,
+            },
+            FAILURE_CLASS_PATH_GENERATION,
+        ),
+        (
+            {
+                "status": "degraded",
+                "collision_pedestrian": True,
+                "degradation_reasons": ("planner_diagnostic: simulator backend unavailable",),
+            },
+            FAILURE_CLASS_PATH_GENERATION,
+        ),
+        (
+            {
+                "status": "error",
+                "collision_pedestrian": True,
+                "degradation_reasons": ("simulator backend unavailable",),
+            },
+            FAILURE_CLASS_SIMULATOR,
+        ),
+    ],
+)
+def test_classify_failure_preserves_planner_boundary_precedence(
+    signals: dict[str, object], expected: str
+) -> None:
+    """Planner ownership wins over combined pedestrian/simulator signals."""
+    assert classify_failure(**signals) == expected  # type: ignore[arg-type]
+
+
 def test_deterministic_receipt_invariant() -> None:
     """Running the comparator suite multiple times yields bitwise-identical receipts and digests."""
     receipt1 = run_force_coupled_comparator()
@@ -688,6 +724,42 @@ def test_v1_schema_enforces_new_taxonomy_invariants_when_present() -> None:
     inconsistent_degraded["results"][0]["failure_class"] = FAILURE_CLASS_PATH_GENERATION
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=inconsistent_degraded, schema=schema)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("collision", True),
+        ("completed", False),
+        ("degradation_reasons", ["fixture_degraded"]),
+    ],
+)
+def test_v1_schema_rejects_inconsistent_ok_rollout(field: str, value: object) -> None:
+    """The receipt schema rejects ok rows carrying failure-state signals."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    row = receipt["results"][0]
+    row.update(
+        {
+            "status": "ok",
+            "completed": True,
+            "collision": False,
+            "degraded": False,
+            "degradation_reasons": [],
+            "failure_class": None,
+        }
+    )
+    row[field] = value
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
 
 
 @pytest.mark.parametrize("malformation", ["unknown", "negative", "missing"])

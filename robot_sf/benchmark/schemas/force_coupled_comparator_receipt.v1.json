@@ -126,7 +126,7 @@
           "max_angular_rate_radps": {"type": "number"},
           "jerk_metric": {"type": "number", "minimum": 0.0},
           "mean_latency_ms": {"type": "number", "minimum": 0.0},
-          "status": {"type": "string"},
+          "status": {"type": "string", "enum": ["ok", "error", "degraded"]},
           "degraded": {"type": "boolean"},
           "degradation_reasons": {
             "type": "array",
@@ -145,42 +145,41 @@
         },
         "allOf": [
           {
-            "if": {"required": ["failure_class"]},
+            "if": {
+              "properties": {"status": {"const": "ok"}},
+              "required": ["status"]
+            },
             "then": {
               "properties": {
-                "status": {"enum": ["ok", "error", "degraded"]}
+                "completed": {"const": true},
+                "collision": {"const": false},
+                "degraded": {"const": false},
+                "degradation_reasons": {"const": []},
+                "failure_class": {"const": null}
               },
-              "allOf": [
-                {
-                  "if": {"properties": {"status": {"const": "ok"}}},
-                  "then": {
-                    "properties": {
-                      "degraded": {"const": false},
-                      "failure_class": {"const": null}
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "status": {"enum": ["error", "degraded"]}
-                    }
-                  },
-                  "then": {
-                    "properties": {
-                      "degraded": {"const": true},
-                      "failure_class": {
-                        "enum": [
-                          "path_generation",
-                          "tracking",
-                          "social_compliance",
-                          "simulator"
-                        ]
-                      }
-                    }
-                  }
+              "required": ["completed", "collision", "degraded", "degradation_reasons"]
+            }
+          },
+          {
+            "if": {
+              "properties": {"status": {"enum": ["error", "degraded"]}},
+              "required": ["status"]
+            },
+            "then": {
+              "properties": {
+                "degraded": {"const": true},
+                "degradation_reasons": {"minItems": 1},
+                "failure_class": {
+                  "enum": [
+                    "path_generation",
+                    "tracking",
+                    "social_compliance",
+                    "simulator",
+                    null
+                  ]
                 }
-              ]
+              },
+              "required": ["degraded", "degradation_reasons"]
             }
           }
         ]

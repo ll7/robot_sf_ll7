@@ -384,6 +384,49 @@ def _read_commit_ref(ref: str, *, cwd: str, description: str) -> tuple[str | Non
     return sha.lower(), None
 
 
+def _read_authoritative_origin_refs(
+    *, cwd: str, branch: str, base_branch: str
+) -> tuple[dict[str, str] | None, str | None]:
+    """Read the remote ``origin`` refs without updating any local refs.
+
+    Local remote-tracking refs can be stale or manually retained after a remote
+    branch is deleted.  Verified cleanup therefore needs one successful
+    ``git ls-remote`` observation proving that the base branch resolves to the
+    current local main commit and that the candidate branch is absent.  Empty
+    output for the candidate is meaningful; an unavailable remote, malformed
+    output, duplicate ref, or missing base ref is an ambiguous refusal.
+    """
+    requested_refs = {
+        f"refs/heads/{base_branch}": "base",
+        f"refs/heads/{branch}": "candidate",
+    }
+    result = _run_command(
+        ["git", "ls-remote", "--heads", "origin", *requested_refs],
+        cwd=cwd,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic"
+        return None, f"authoritative origin ref read failed: {detail}"
+
+    observed: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 2 or not _is_full_sha(parts[0]) or parts[1] not in requested_refs:
+            return None, "authoritative origin ref read returned malformed output"
+        ref = parts[1]
+        if ref in observed:
+            return None, f"authoritative origin ref read returned duplicate {ref}"
+        observed[ref] = parts[0].lower()
+
+    base_ref = f"refs/heads/{base_branch}"
+    candidate_ref = f"refs/heads/{branch}"
+    if base_ref not in observed:
+        return None, f"authoritative origin base ref is absent: {base_ref}"
+    if candidate_ref in observed:
+        return None, f"authoritative origin candidate ref still exists: {candidate_ref}"
+    return {"base_sha": observed[base_ref], "candidate_state": "absent"}, None
+
+
 def _read_tree_sha(commit_sha: str, *, cwd: str, description: str) -> tuple[str | None, str | None]:
     """Resolve a commit's complete Git tree identity."""
     if not _is_full_sha(commit_sha):
@@ -861,20 +904,39 @@ def _verified_worktree_state(  # noqa: C901, PLR0912, PLR0915 - ordered fail-clo
     )
     if main_error is not None:
         return None, ["verified_merge_refused"], [main_error]
-    remote_main_sha, remote_main_error = _read_commit_ref(
+    local_remote_main_sha, remote_main_error = _read_commit_ref(
         f"refs/remotes/origin/{request.base_branch}",
         cwd=current_path,
-        description="remote main ref read",
+        description="local remote-tracking main ref read",
     )
     if remote_main_error is not None:
         return None, ["verified_merge_refused"], [remote_main_error]
-    if current_sha != local_main_sha or current_sha != remote_main_sha:
+    if current_sha != local_main_sha or current_sha != local_remote_main_sha:
         return (
             None,
             ["verified_merge_refused"],
             [
                 "current main identity is stale or inconsistent: "
-                f"HEAD={current_sha}, local={local_main_sha}, remote={remote_main_sha}"
+                f"HEAD={current_sha}, local={local_main_sha}, remote_tracking={local_remote_main_sha}"
+            ],
+        )
+
+    authoritative_refs, authoritative_error = _read_authoritative_origin_refs(
+        cwd=current_path,
+        branch=request.branch,
+        base_branch=request.base_branch,
+    )
+    if authoritative_error is not None:
+        return None, ["verified_merge_refused"], [authoritative_error]
+    assert authoritative_refs is not None
+    remote_main_sha = authoritative_refs["base_sha"]
+    if remote_main_sha != current_sha:
+        return (
+            None,
+            ["verified_merge_refused"],
+            [
+                "authoritative origin main is stale or inconsistent: "
+                f"HEAD={current_sha}, remote={remote_main_sha}"
             ],
         )
 
@@ -955,6 +1017,9 @@ def _verified_worktree_state(  # noqa: C901, PLR0912, PLR0915 - ordered fail-clo
         "merge_commit_sha": merge_commit_sha,
         "main_sha": current_sha,
         "remote_main_sha": remote_main_sha,
+        "local_remote_main_sha": local_remote_main_sha,
+        "authoritative_remote_main_sha": remote_main_sha,
+        "authoritative_remote_branch_state": authoritative_refs["candidate_state"],
         "worktree_tree_sha": target_tree,
         "merge_tree_sha": merge_tree,
         "main_tree_sha": main_tree,
@@ -1434,6 +1499,15 @@ def _attempt_candidate_removal(
                     return (
                         "refused",
                         f"refused verified candidate {candidate.path}: {detail}",
+                        None,
+                    )
+                final_flags, final_reasons = _read_strict_cleanliness(candidate.path)
+                if final_flags:
+                    preservation_detail = "; ".join(final_reasons) or ", ".join(final_flags)
+                    return (
+                        "refused",
+                        f"refused verified candidate {candidate.path}: "
+                        f"apply-time preservation recheck: {preservation_detail}",
                         None,
                     )
 

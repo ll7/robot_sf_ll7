@@ -313,13 +313,17 @@ surviving local branch. That branch must retain `branch.<name>.remote=origin` an
 never-published branches and branches with a still-resolvable upstream remain refused. Fresh
 authoritative PR metadata must identify this repository, the exact branch and head, a merged PR
 to `main`, and a full merge commit that resolves locally. The checked-out `main`, local
-`origin/main`, target head, PR merge commit, and all three complete Git tree IDs must agree as
-required by the plan, and the merge commit must be an ancestor of current `main`. The resulting
+`origin/main`, authoritative `origin/main` from a fresh `git ls-remote --heads` read, target head,
+PR merge commit, and all three complete Git tree IDs must agree as required by the plan, and the
+merge commit must be an ancestor of current `main`. The same authoritative read must show the
+candidate branch absent; a stale local remote-tracking ref is not treated as proof of deletion.
+The resulting
 verification evidence records `merge_method_scope=method_agnostic_exact_tree`; it is a content
 and ancestry proof, not a merge-method classifier.
 
-The command performs only bounded GitHub reads (`gh pr list` and `gh api`); it never posts, edits,
-fetches, recreates refs, changes configuration, releases leases, or removes another worktree. The
+The command performs only bounded GitHub reads (`gh pr list` and `gh api`) and a read-only
+authoritative `git ls-remote`; it never posts, edits, fetches, mutates local refs, recreates refs,
+changes configuration, releases leases, or removes another worktree. The
 JSON candidate's `verification` object and audit log expose the exact repository, PR, branch,
 head, merge, main, tracking-ref, and tree identities plus the narrowly discharged
 `missing origin upstream only` risk. Existing dirty/untracked/ignored-content, open-PR,
@@ -336,8 +340,11 @@ uv run python scripts/dev/stale_worktree_reaper.py \
 ```
 
 Immediately before the normal, non-force `git worktree remove`, the reaper reacquires the shared
-lifecycle lock and repeats registration, path, branch, head, ref, tree, main, PR, cleanliness,
-ignored-state, open-PR, upstream-absence, and lease reads. Any deletion, symlink/path alias,
-identity drift, new content, lease, lookup error, or lock failure refuses removal. Normal
+lifecycle lock and repeats registration, path, branch, head, ref, tree, main, authoritative remote,
+PR, cleanliness, ignored-state, open-PR, upstream-absence, and lease reads. It then performs a
+final cleanliness and ignored-state preservation recheck after the last remote/PR read and before
+removal, closing the remaining window in which an ignored artifact could appear during verification.
+Any deletion, symlink/path alias, identity drift, new content, lease, lookup error, or lock failure
+refuses removal. Normal
 worktree removal preserves the local branch and its commits; artifact preservation remains the
 owner's responsibility before retirement.

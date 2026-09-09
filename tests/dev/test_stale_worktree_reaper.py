@@ -55,6 +55,23 @@ class _FakeGitHubTransport:
         return _result(stderr="unexpected GitHub command", returncode=1)
 
 
+class _IgnoredRaceTransport(_FakeGitHubTransport):
+    """Create ignored target content during the apply-time PR-detail read."""
+
+    def __init__(self, metadata: dict[str, object], target: Path):
+        super().__init__(metadata)
+        self._target = target
+
+    def __call__(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+        result = super().__call__(args)
+        api_calls = sum(call[1:2] == ["api"] for call in self.calls)
+        if args[1:2] == ["api"] and api_calls == 2:
+            late_output = self._target / "output" / "created-during-read.txt"
+            late_output.parent.mkdir()
+            late_output.write_text("must be preserved\n", encoding="utf-8")
+        return result
+
+
 def _commit_tree(repo: Path, tree_sha: str, message: str, *parents: str) -> str:
     """Create a disposable commit object without changing a checked-out ref."""
     args = ["commit-tree", tree_sha]
@@ -80,7 +97,9 @@ def _verified_fixture(tmp_path: Path) -> dict[str, object]:
     )
     _git(repo, "config", "user.email", "fixture@example.invalid")
     _git(repo, "config", "user.name", "Fixture User")
-    _git(repo, "remote", "add", "origin", str(tmp_path / "remote.git"))
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    _git(repo, "remote", "add", "origin", str(remote))
     (repo / "tracked.txt").write_text("base\n", encoding="utf-8")
     (repo / ".gitignore").write_text("output/\n", encoding="utf-8")
     _git(repo, "add", "tracked.txt", ".gitignore")
@@ -97,6 +116,7 @@ def _verified_fixture(tmp_path: Path) -> dict[str, object]:
     merge_sha = _commit_tree(repo, tree_sha, "squash merge", base_sha)
     _git(repo, "reset", "--hard", merge_sha)
     _git(repo, "update-ref", "refs/remotes/origin/main", merge_sha)
+    _git(repo, "push", "origin", f"{merge_sha}:refs/heads/main")
     _git(target, "config", "branch.feature/verified.remote", "origin")
     _git(target, "config", "branch.feature/verified.merge", "refs/heads/feature/verified")
     metadata = {
@@ -117,6 +137,7 @@ def _verified_fixture(tmp_path: Path) -> dict[str, object]:
     }
     return {
         "repo": repo,
+        "remote": remote,
         "target": target,
         "base_sha": base_sha,
         "head_sha": head_sha,
@@ -717,6 +738,7 @@ def test_verified_merged_tree_accepts_regular_merge_shape(tmp_path: Path) -> Non
     )
     _git(repo, "reset", "--hard", regular_merge_sha)
     _git(repo, "update-ref", "refs/remotes/origin/main", regular_merge_sha)
+    _git(repo, "push", "--force", "origin", f"{regular_merge_sha}:refs/heads/main")
     metadata = json.loads(json.dumps(fixture["metadata"]))
     assert isinstance(metadata, dict)
     metadata["merge_commit_sha"] = regular_merge_sha
@@ -743,11 +765,12 @@ def test_verified_merged_tree_accepts_regular_merge_shape(tmp_path: Path) -> Non
         "different_tree",
         "not_ancestor",
         "stale_remote_main",
+        "remote_unavailable",
         "lookup_error",
         "ambiguous_open_pr",
     ],
 )
-def test_verified_negative_matrix_fails_closed(  # noqa: C901 - each named negative mutates one proof input
+def test_verified_negative_matrix_fails_closed(  # noqa: C901, PLR0915 - each named negative mutates one proof input
     tmp_path: Path,
     failure: str,
 ) -> None:
@@ -792,6 +815,10 @@ def test_verified_negative_matrix_fails_closed(  # noqa: C901 - each named negat
         assert isinstance(repo, Path)
         assert isinstance(base_sha, str)
         _git(repo, "update-ref", "refs/remotes/origin/main", base_sha)
+    elif failure == "remote_unavailable":
+        repo = fixture["repo"]
+        assert isinstance(repo, Path)
+        _git(repo, "remote", "set-url", "origin", str(repo / "missing-remote.git"))
     elif failure == "lookup_error":
         metadata = [_result(stderr="HTTP 503", returncode=1)]
     elif failure == "ambiguous_open_pr":
@@ -812,6 +839,65 @@ def test_verified_negative_matrix_fails_closed(  # noqa: C901 - each named negat
         assert "unreadable_open_pr_state" in plan.candidates[0].risk_flags
     else:
         assert "verified_merge_refused" in plan.candidates[0].risk_flags
+
+
+def test_verified_refuses_authoritative_remote_branch_reappearance(tmp_path: Path) -> None:
+    """A remote branch that is absent locally still blocks verified cleanup."""
+    fixture = _verified_fixture(tmp_path)
+    repo = fixture["repo"]
+    remote = fixture["remote"]
+    target = fixture["target"]
+    head_sha = fixture["head_sha"]
+    assert isinstance(repo, Path)
+    assert isinstance(remote, Path)
+    assert isinstance(target, Path)
+    assert isinstance(head_sha, str)
+    _git(repo, "push", "origin", f"{head_sha}:refs/heads/feature/verified")
+    _git(repo, "update-ref", "-d", "refs/remotes/origin/feature/verified")
+    metadata = fixture["metadata"]
+    assert isinstance(metadata, dict)
+    transport = _FakeGitHubTransport(metadata)
+
+    with patch.object(reaper, "_worktree_lease_state", return_value=(None, None)):
+        plan = _verified_plan(fixture, transport)
+
+    assert plan.deletable == []
+    assert str(target) in plan.refused
+    assert any(
+        "authoritative origin candidate ref still exists" in event for event in plan.audit_log
+    )
+    assert target.is_dir()
+
+
+def test_verified_apply_refuses_ignored_content_created_after_final_remote_read(
+    tmp_path: Path,
+) -> None:
+    """Apply-time preservation recheck catches ignored content created during the last read."""
+    fixture = _verified_fixture(tmp_path)
+    repo = fixture["repo"]
+    target = fixture["target"]
+    metadata = fixture["metadata"]
+    assert isinstance(repo, Path)
+    assert isinstance(target, Path)
+    assert isinstance(metadata, dict)
+    transport = _IgnoredRaceTransport(metadata, target)
+
+    with patch.object(reaper, "_worktree_lease_state", return_value=(None, None)):
+        plan = _verified_plan(fixture, transport)
+    assert plan.deletable == [str(target)]
+
+    with (
+        patch.object(reaper, "_worktree_lease_state", return_value=(None, None)),
+        patch("scripts.dev.pr_gate_lease.worktree_lifecycle_lock", _null_lock),
+    ):
+        result = reaper.apply_deletions(plan, github_transport=transport)
+
+    preserved = target / "output" / "created-during-read.txt"
+    assert result.errors == []
+    assert str(target) in result.refused
+    assert any("apply-time preservation recheck" in event for event in result.audit_log)
+    assert target.is_dir()
+    assert preserved.read_text(encoding="utf-8") == "must be preserved\n"
 
 
 def test_verified_never_published_and_existing_upstream_are_refused(tmp_path: Path) -> None:

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DEV = REPO_ROOT / "scripts" / "dev"
@@ -242,6 +243,254 @@ def _write_lane_logging_stub(repo: Path) -> Path:
     )
     stub.chmod(0o755)
     return repo / "lane.log"
+
+
+def _write_evidence_preflight_transport(repo: Path, *, ratchet_exit: int = 0) -> Path:
+    """Record the checker/test/stamp boundary without running expensive validation."""
+    _make_fake_bin(repo, fail=False)
+    trace = _write_lane_logging_stub(repo)
+    checker = repo / "scripts" / "dev" / "evidence_registry_ratchet.py"
+    checker.write_text("# Fake transport target; never run a real evidence scan.\n", encoding="utf-8")
+    python = repo / "bin" / "python"
+    fallback = python.read_text(encoding="utf-8").split("\n", 1)[1]
+    python.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "${1##*/}" in\n'
+        "  evidence_registry_ratchet.py)\n"
+        '    printf "ratchet %s\\n" "$2" >> "$PWD/lane.log"\n'
+        '    printf "fixture ratchet diagnostic\\n" >&2\n'
+        f"    exit {ratchet_exit} ;;\n"
+        "  pr_ready_freshness.py)\n"
+        '    printf "stamp\\n" >> "$PWD/lane.log" ;;\n'
+        "esac\n" + fallback,
+        encoding="utf-8",
+    )
+    formatter = repo / "scripts" / "dev" / "ruff_fix_format.sh"
+    formatter.write_text(
+        '#!/usr/bin/env bash\nprintf "format\\n" >> "$PWD/lane.log"\n',
+        encoding="utf-8",
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "evidence transport fixture")
+    _git(repo, "branch", "preflight-base")
+    return trace
+
+
+@pytest.mark.parametrize("ratchet_exit", [1, 2])
+@pytest.mark.parametrize("skip_preflight", ["0", "1"])
+def test_final_evidence_ratchet_failure_stops_before_test_lane(
+    preflight_repo: Path, tmp_path: Path, ratchet_exit: int, skip_preflight: str
+) -> None:
+    """A rejected evidence input cannot reach formatting, tests or a success stamp."""
+    trace = _write_evidence_preflight_transport(preflight_repo, ratchet_exit=ratchet_exit)
+    evidence = preflight_repo / "docs/context/evidence/new manifest.json"
+    evidence.parent.mkdir(parents=True)
+    evidence.write_text("{}\n", encoding="utf-8")
+    (preflight_repo / "changed.py").write_text("pass\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "add evidence")
+
+    scratch = tmp_path / "scope scratch"
+    scratch.mkdir()
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={
+            "BASE_REF": "preflight-base",
+            "PR_READY_MODE": "final",
+            "PR_READY_SKIP_PREFLIGHT": skip_preflight,
+            "TMPDIR": str(scratch),
+        },
+    )
+
+    assert result.returncode == ratchet_exit, result.stdout + result.stderr
+    assert "fixture ratchet diagnostic" in result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == ["ratchet --check"]
+    assert not list(scratch.glob("pr-ready-evidence-scope.*"))
+
+
+def _hosted_ratchet_input_examples() -> list[str]:
+    """Exercise every current hosted filter through the actual final-readiness CLI."""
+    workflow = REPO_ROOT / ".github/workflows/evidence-registry-ratchet.yml"
+    payload = yaml.load(workflow.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    return [
+        pattern.replace("**", "sample").replace("*", "sample")
+        for pattern in payload["on"]["pull_request"]["paths"]
+    ]
+
+
+@pytest.mark.parametrize("changed_path", _hosted_ratchet_input_examples())
+def test_final_evidence_preflight_covers_every_hosted_input(
+    preflight_repo: Path, changed_path: str
+) -> None:
+    """A new hosted input filter cannot silently lack the corresponding local gate."""
+    trace = _write_evidence_preflight_transport(preflight_repo)
+    path = preflight_repo / changed_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("changed fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change hosted input")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = trace.read_text(encoding="utf-8").splitlines()
+    assert calls[0] == "ratchet --check"
+    assert calls.count("ratchet --check") == 1
+    assert "core --lane core" in calls
+    assert calls[-1] == "stamp"
+
+
+@pytest.mark.parametrize("change", ["modify", "delete", "rename_in", "rename_out"])
+def test_final_evidence_preflight_handles_deletions_and_both_rename_sides(
+    preflight_repo: Path, change: str
+) -> None:
+    """Removing or moving an evidence input cannot evade the committed scope check."""
+    source = preflight_repo / (
+        "other/retained row.json" if change == "rename_in" else "docs/context/evidence/row.json"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text("unchanged source content\n", encoding="utf-8")
+    trace = _write_evidence_preflight_transport(preflight_repo)
+    if change == "modify":
+        source.write_text("modified content\n", encoding="utf-8")
+    elif change == "delete":
+        source.unlink()
+    else:
+        target = preflight_repo / (
+            "other/retained row.json" if change == "rename_out" else "docs/context/evidence/row.json"
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source.rename(target)
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", change)
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = trace.read_text(encoding="utf-8").splitlines()
+    assert calls == ["ratchet --check", "core --lane core", "stamp"]
+
+
+@pytest.mark.parametrize(
+    ("changed_path", "expected_check"),
+    [
+        ("docs/context/evidence/with space.json", True),
+        ("docs/context/evidence/with\ttab.json", True),
+        ("docs/context/evidence/with\nnewline.json", True),
+        ("docs/context/evidence-not/row.json", False),
+        ("other/docs/context/evidence/row.json", False),
+        ("prefix\ndocs/context/evidence/row.json", False),
+        ("CITATION.cff.bak", False),
+        ("unrelated.txt", False),
+        (None, False),
+    ],
+)
+def test_final_evidence_preflight_preserves_path_boundaries(
+    preflight_repo: Path, changed_path: str | None, expected_check: bool
+) -> None:
+    """NUL framing preserves real whitespace without treating a newline as another path."""
+    trace = _write_evidence_preflight_transport(preflight_repo)
+    if changed_path is not None:
+        path = preflight_repo / changed_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}\n", encoding="utf-8")
+        _git(preflight_repo, "add", "-A")
+        _git(preflight_repo, "commit", "-q", "-m", "path boundary")
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = trace.read_text(encoding="utf-8").splitlines()
+    expected = (["ratchet --check"] if expected_check else []) + ["core --lane core", "stamp"]
+    assert calls == expected
+
+
+@pytest.mark.parametrize("later_failure", [False, True])
+def test_evidence_success_preserves_formatting_and_downstream_gates(
+    preflight_repo: Path, later_failure: bool
+) -> None:
+    """Early success neither replaces later checks nor grants a cached success stamp."""
+    trace = _write_evidence_preflight_transport(preflight_repo)
+    (preflight_repo / "CITATION.cff").write_text("fixture\n", encoding="utf-8")
+    optional = preflight_repo / "robot_sf/benchmark/probe.py"
+    optional.parent.mkdir(parents=True)
+    optional.write_text("pass\n", encoding="utf-8")
+    if later_failure:
+        gate = preflight_repo / "scripts/dev/check_changed_coverage.sh"
+        gate.write_text('#!/usr/bin/env bash\nprintf "later gate rejected\\n" >&2\nexit 67\n')
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "later gates remain required")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == (67 if later_failure else 0), result.stdout + result.stderr
+    calls = trace.read_text(encoding="utf-8").splitlines()
+    expected = ["ratchet --check", "format", "core --lane core", "optional --lane optional"]
+    assert calls == expected + ([] if later_failure else ["stamp"])
+    if later_failure:
+        assert "later gate rejected" in result.stderr
+
+
+def test_interim_evidence_change_keeps_existing_pipeline(preflight_repo: Path) -> None:
+    """The first bounded preflight slice changes final mode only."""
+    trace = _write_evidence_preflight_transport(preflight_repo, ratchet_exit=2)
+    (preflight_repo / "CITATION.cff").write_text("fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "interim input")
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "interim"},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == ["core --lane core", "stamp"]
+
+
+def test_final_evidence_scope_git_failure_is_not_an_empty_success(preflight_repo: Path) -> None:
+    """A failed Git producer must stop before checker, formatting, lanes and stamp."""
+    trace = _write_evidence_preflight_transport(preflight_repo)
+    git = preflight_repo / "bin/git"
+    git.write_text(
+        '#!/usr/bin/env bash\nfor arg in "$@"; do\n'
+        '  if [[ "$arg" == "--no-renames" ]]; then\n'
+        '    printf "fixture Git enumeration failed\\n" >&2\n    exit 128\n  fi\ndone\n'
+        f'exec "{shutil.which("git")}" "$@"\n',
+        encoding="utf-8",
+    )
+    git.chmod(0o755)
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+    assert result.returncode == 128, result.stdout + result.stderr
+    assert "fixture Git enumeration failed" in result.stderr
+    assert "Cannot resolve final evidence-registry input scope" in result.stderr
+    assert not trace.exists()
+
+
+def test_final_missing_evidence_checker_is_not_skipped(preflight_repo: Path) -> None:
+    """Deleting the checker is itself in scope and cannot make its invocation optional."""
+    trace = _write_evidence_preflight_transport(preflight_repo)
+    (preflight_repo / "scripts/dev/evidence_registry_ratchet.py").unlink()
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "delete checker")
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "Required evidence-registry checker is missing" in result.stderr
+    assert not trace.exists()
 
 
 @pytest.fixture()
@@ -1607,6 +1856,20 @@ def test_missing_base_ref_falls_back_to_head_without_crashing(preflight_repo: Pa
     # The raw git error must not leak; the missing ref is handled gracefully.
     assert "fatal" not in result.stderr.lower()
     assert "unknown revision" not in result.stderr.lower()
+
+
+def test_final_unresolved_explicit_base_stops_before_scope_or_test_lane(preflight_repo: Path) -> None:
+    """Final proof cannot silently compare HEAD to itself after losing the requested base."""
+    trace = _write_evidence_preflight_transport(preflight_repo)
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "non_existent_branch", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "Cannot resolve explicitly requested final-readiness base" in result.stderr
+    assert "Falling back" not in result.stderr
+    assert not trace.exists()
 
 
 def test_valid_base_ref_is_used_unchanged(preflight_repo: Path) -> None:

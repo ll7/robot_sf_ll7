@@ -198,7 +198,7 @@ def _heading_matches(heading: str, alias: str) -> bool:
 def inspect_contract(body: str) -> dict[str, Any]:
     """Inspect required implementation-contract sections without inferring intent."""
     records = _heading_records(body)
-    headings = sorted({heading for heading, _ in records})
+    headings = sorted({heading for heading, _ in _heading_sections(body)})
     fields: dict[str, dict[str, Any]] = {}
     missing_fields: list[str] = []
     for field, aliases in FIELD_ALIASES.items():

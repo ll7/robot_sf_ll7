@@ -968,14 +968,19 @@ def _plan_issue_row_numbers(plan: Mapping[str, Any]) -> tuple[set[int], list[str
 
 def _pending_reference_number(item: Mapping[str, Any]) -> int | None:
     """Return a pending decision's exact issue number when its reference is valid."""
-    raw_number = item.get("number")
-    if isinstance(raw_number, int) and not isinstance(raw_number, bool) and raw_number > 0:
-        return raw_number
     raw_issue = item.get("issue")
     if not isinstance(raw_issue, str):
         return None
     match = re.fullmatch(r"#?([1-9][0-9]*)", raw_issue.strip())
-    return int(match.group(1)) if match else None
+    if not match:
+        return None
+    issue_number = int(match.group(1))
+    raw_number = item.get("number")
+    if raw_number is None:
+        return issue_number
+    if isinstance(raw_number, bool) or not isinstance(raw_number, int) or raw_number <= 0:
+        return None
+    return raw_number if raw_number == issue_number else None
 
 
 def _plan_issue_reference_errors(plan: Mapping[str, Any], *, issue_numbers: set[int]) -> list[str]:

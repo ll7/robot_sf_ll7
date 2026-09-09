@@ -2388,6 +2388,35 @@ def test_envelope_rejects_decision_for_issue_absent_from_nonempty_inventory() ->
         build_decision_envelope(plan)
 
 
+def test_envelope_rejects_mismatched_pending_issue_references() -> None:
+    """A pending row's numeric and display issue references must agree."""
+    source_metadata = _empty_issue_source_metadata()
+    source_metadata.update(
+        {
+            "available": True,
+            "row_count": 1,
+            "canonical_row_count": 1,
+            "raw_row_count": 1,
+            "source_status": issue_audit_core.ISSUE_SOURCE_STATUS_COMPLETE,
+            "source_proof": "canonical_issue_rows",
+            "source_status_reason": "canonical open-issue response is complete",
+        }
+    )
+    plan: dict[str, Any] = {
+        "schema": issue_audit_core.PLAN_SCHEMA,
+        "repo": "ll7/robot_sf_ll7",
+        "issues": [_issue(111)],
+        "mutations": [],
+        "pending_decisions": [{"issue": "#110", "number": 111, "status": "ready"}],
+        "inventory": {"issues": source_metadata},
+        "truncation_or_errors": [],
+    }
+    _attach_valid_provenance(plan)
+
+    with pytest.raises(ValueError, match="references are not admissible"):
+        build_decision_envelope(plan)
+
+
 def test_apply_rejects_the_old_permissive_zero_row_shape() -> None:
     """Apply rejects a legacy zero-row plan that lacks source-contract proof."""
 

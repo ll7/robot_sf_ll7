@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf import cli_datasets, cli_envs, cli_models, release_cli
+from robot_sf import cli_datasets, cli_envs, cli_models, cli_planners
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
 from robot_sf.examples_cli import examples_cli_main
 from robot_sf.recipes import cli as recipes_cli
@@ -76,6 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_models_subparser(subparsers)
     _add_datasets_subparser(subparsers)
     _add_envs_subparser(subparsers)
+    _add_planners_subparser(subparsers)
     # The ``examples`` subcommand owns its own sub-subcommand parser
     # (``list``/``run``); it is registered here only so the top-level parser
     # recognises the token. Remaining args are forwarded by the handler.
@@ -153,6 +154,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Curated recipe catalog (issue #5795): list / run / explain blessed workflows.
     recipes_cli.build_subparser(subparsers)
+    from robot_sf import release_cli  # noqa: PLC0415
+
     release_cli.build_subparser(subparsers)
     return parser
 
@@ -322,6 +325,11 @@ def _add_envs_subparser(sub: argparse._SubParsersAction) -> None:
         default="friendly",
         help="Output format (default: friendly).",
     )
+
+
+def _add_planners_subparser(sub: argparse._SubParsersAction) -> None:
+    """Register the ``robot-sf planners`` subcommand tree."""
+    cli_planners._add_planners_subparser(sub)
 
 
 def _handle_models(args: argparse.Namespace) -> int:
@@ -603,14 +611,42 @@ def _handle_envs(args: argparse.Namespace) -> int:
     return 2
 
 
+def _handle_planners(args: argparse.Namespace) -> int:
+    """Dispatch the ``robot-sf planners`` subcommand.
+
+    Returns:
+        int: Process-style exit code (0 success, 2 unknown planner key).
+    """
+    cmd = args.planners_cmd
+    if cmd == "list":
+        return cli_planners._handle_planners_list(args)
+    if cmd == "describe":
+        return cli_planners._handle_planners_describe(args)
+    parser = _build_parser()  # pragma: no cover - defensive
+    parser.error(f"unknown planners command: {cmd}")
+    return 2
+
+
+def _handle_release(args: argparse.Namespace) -> int:
+    """Dispatch the ``robot-sf release`` subcommand.
+
+    Returns:
+        int: Process-style exit code from the release CLI.
+    """
+    from robot_sf import release_cli  # noqa: PLC0415
+
+    return release_cli.handle(args)
+
+
 _HANDLERS = {
     "doctor": _handle_doctor,
     "models": _handle_models,
     "datasets": _handle_datasets,
     "envs": _handle_envs,
+    "planners": _handle_planners,
     "gallery": _handle_gallery,
     "recipe": recipes_cli.handle,
-    "release": release_cli.handle,
+    "release": _handle_release,
 }
 
 

@@ -418,6 +418,9 @@ _FAST_FILES = {
     # CLI distribution-control regressions are deterministic input-boundary
     # contracts and exercise the benchmark error path in PR fast shards.
     "test_cli_plot_distributions_ci.py",
+    # Planner discovery tests are deterministic catalog and import-boundary
+    # contracts; keep their changed-line coverage in exact-head fast shards.
+    "test_cli_planners.py",
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",

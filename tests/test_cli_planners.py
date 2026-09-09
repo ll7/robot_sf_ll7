@@ -6,8 +6,10 @@ import argparse
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
+import yaml
 
 from robot_sf import cli_planners
 from robot_sf.baselines import BASELINES
@@ -74,10 +76,60 @@ def test_planners_list_payload_structure() -> None:
         "required_artifacts",
         "metadata_source",
         "summary",
+        "readiness_status",
+        "availability_status",
+        "counts_as_success_evidence",
+        "metadata_completeness",
     }
     for entry in payload["planners"]:
         missing = required_fields - set(entry.keys())
         assert not missing, f"Planner {entry.get('canonical_name')} missing fields: {missing}"
+        assert entry["compatible_robot_kinematics"]
+
+
+def test_random_discovery_matches_declared_readiness_matrix() -> None:
+    """Random remains a diagnostic, degraded, non-success discovery entry."""
+    matrix_path = Path(__file__).parents[1] / "configs/benchmarks/planner_readiness_matrix_v1.yaml"
+    matrix = yaml.safe_load(matrix_path.read_text(encoding="utf-8"))
+    random_row = next(row for row in matrix["rows"] if row["planner_id"] == "random")
+
+    payload = describe_planner_payload("random")
+    assert payload["tier"] == random_row["tier"] == "diagnostic"
+    assert payload["requires_explicit_opt_in"] is random_row["requires_explicit_opt_in"] is True
+    assert payload["readiness_status"] == random_row["readiness_status"] == "degraded"
+    assert payload["availability_status"] == random_row["availability_status"] == "not_available"
+    assert (
+        payload["counts_as_success_evidence"] is random_row["counts_as_success_evidence"] is False
+    )
+    assert payload["status"] == "diagnostic_opt_in"
+
+
+def test_discovery_preserves_unknown_kinematics_and_marks_partial_metadata() -> None:
+    """Absent compatibility metadata is explicit, never an empty capability list."""
+    payload = describe_planner_payload("random")
+    assert payload["compatible_robot_kinematics"] == ["unknown"]
+    assert payload["metadata_completeness"] == "partial"
+
+
+def test_discovery_preserves_explicit_not_declared_kinematics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit source marker is retained verbatim by discovery."""
+    profile = dict(cli_planners._KINEMATICS_PROFILE_BY_CANONICAL["goal"])
+    profile["compatible_robot_kinematics"] = ["not_declared"]
+    monkeypatch.setitem(cli_planners._KINEMATICS_PROFILE_BY_CANONICAL, "goal", profile)
+
+    entry = cli_planners._build_planner_entry(
+        cli_planners._ALGORITHMS[0], frozenset(), ["goal"]
+    ).to_dict()
+    assert entry["compatible_robot_kinematics"] == ["not_declared"]
+    assert entry["metadata_completeness"] == "partial"
+
+
+def test_availability_is_not_a_local_dependency_probe() -> None:
+    """Undeclared local availability stays unknown while matrix exclusions stay explicit."""
+    assert describe_planner_payload("orca")["availability_status"] == "unknown"
+    assert describe_planner_payload("random")["availability_status"] == "not_available"
 
 
 def test_describe_planner_canonical() -> None:
@@ -132,6 +184,9 @@ def test_cli_planners_list_friendly(capsys: pytest.CaptureFixture[str]) -> None:
     assert "- social_force" in out
     assert "Exclusions (" in out
     assert "native_command" in out
+    assert "readiness status: degraded" in out
+    assert "availability: not_available" in out
+    assert "metadata completeness: partial" in out
 
 
 def test_cli_planners_list_json(capsys: pytest.CaptureFixture[str]) -> None:
@@ -153,6 +208,7 @@ def test_cli_planners_describe_friendly(capsys: pytest.CaptureFixture[str]) -> N
     assert "Planner: orca" in out
     assert "Execution Mode: adapter" in out
     assert "Required Extras: rvo2" in out
+    assert "Availability Status: unknown" in out
 
 
 def test_cli_planners_describe_alias_friendly(capsys: pytest.CaptureFixture[str]) -> None:

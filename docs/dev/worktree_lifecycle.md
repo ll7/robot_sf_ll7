@@ -169,6 +169,9 @@ lease explicitly:
 uv run python scripts/dev/pr_gate_lease.py release --worktree "$WORKTREE_PATH"
 ```
 
+The script is also directly executable (`scripts/dev/pr_gate_lease.py release --worktree "$WORKTREE_PATH"`)
+and accepts `--worktree` either before or after the subcommand (`scripts/dev/pr_gate_lease.py --worktree "$WORKTREE_PATH" release`).
+
 Lease creation, heartbeat, release, and guarded cleanup all serialize on the existing
 `robot-sf-create-worktree.lock` identity. Cleanup therefore cannot observe "no lease" and then
 remove the worktree while a task concurrently claims it. Expired leases are deliberately non-live:

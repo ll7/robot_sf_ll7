@@ -7547,3 +7547,19 @@ entries:
   status: evidence
   freshness: evidence
   area: release_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/source_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/verification.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

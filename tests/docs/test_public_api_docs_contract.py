@@ -51,6 +51,9 @@ def test_canonical_public_api_page_exists_and_documents_all_exports() -> None:
     assert "## Supported Python Modules Catalog" in text
     assert "## Internal Architecture Boundaries" in text
     assert "## Lifecycle and Deprecation Policy" in text
+    assert "`release`" in text
+    assert "./RELEASE.md" in text
+    assert "maintainer-facing" in text
 
     # Verify all symbols exported in robot_sf.__all__ are documented
     for export_name in robot_sf.__all__:

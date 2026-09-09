@@ -72,6 +72,10 @@ The `robot-sf` command line interface provides contributor and user tooling:
 - **Experimental CLI commands**:
   - `gallery`: `build` discoverability-only scenario/planner galleries; gallery output is not
     benchmark evidence.
+- **Maintainer/release CLI command**:
+  - `release`: benchmark-data release operations, including the read-only `audit-published`,
+    fail-closed `doctor`, and guarded `zenodo` workflows. See [Release Operations](./RELEASE.md);
+    this maintainer-facing command is not part of the stable end-user API.
 
 ## Supported Python Modules Catalog
 

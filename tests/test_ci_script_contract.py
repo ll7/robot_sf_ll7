@@ -1051,6 +1051,32 @@ def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
         (True, "truncated-prefix", None),
         (True, "truncated-suffix", None),
         (True, "empty-dist", None),
+        (True, "serial-then-truncated", None),
+        (True, "truncated-then-serial", None),
+        (True, "xdist-then-truncated", None),
+        (True, "truncated-then-xdist", None),
+        (True, "prefix-only", None),
+        (True, "whitespace-dist", None),
+        (True, "malformed-serial", None),
+        (True, "duplicate-serial", None),
+        (True, "both-reversed", None),
+        (True, "serial-then-prefix", None),
+        (True, "prefix-then-serial", None),
+        (True, "xdist-then-prefix", None),
+        (True, "prefix-then-xdist", None),
+        (True, "serial-then-empty", None),
+        (True, "empty-then-serial", None),
+        (True, "xdist-then-empty", None),
+        (True, "empty-then-xdist", None),
+        (True, "serial-then-malformed", None),
+        (True, "malformed-then-xdist", None),
+        (True, "serial-with-noise", "no-xdist"),
+        (True, "xdist-with-noise", "xdist"),
+        (True, "serial-crlf", "no-xdist"),
+        (True, "xdist-crlf", "xdist"),
+        (True, "serial-no-final-newline", "no-xdist"),
+        (True, "xdist-no-final-newline", "xdist"),
+        (True, "custom-dist", "xdist"),
         (False, "serial", None),
     ],
 )
@@ -1065,6 +1091,52 @@ def test_xdist_race_validation_uses_compact_timeout_and_execution_mode(
     fake_uv = tmp_path / "uv"
     diagnostic_args = tmp_path / "diagnostic-args.txt"
     artifact_dir = tmp_path / "artifacts"
+    serial = "Resolved pytest execution mode: in-process serial (pytest-xdist disabled)."
+    xdist = "Resolved pytest execution mode: pytest-xdist (dist=worksteal)."
+    truncated = "Resolved pytest execution mode: pytest-xdist (dist="
+    prefix = "Resolved pytest execution mode:"
+    empty = "Resolved pytest execution mode: pytest-xdist (dist=)."
+    malformed = f"{prefix} unrecognized mode"
+    noise = f"unrelated output\ntest output: {xdist}\n {serial}\nResolved pytest execution mode"
+    logs = {
+        "serial": f"{serial}\n",
+        "xdist": f"{xdist}\n",
+        "both": f"{serial}\n{xdist}",
+        "duplicate": f"{xdist}\n{xdist}",
+        "spoofed": f"test output: {xdist}",
+        "truncated-prefix": truncated,
+        "truncated-suffix": xdist[:-1],
+        "empty-dist": empty,
+        "serial-then-truncated": f"{serial}\n{truncated}",
+        "truncated-then-serial": f"{truncated}\n{serial}",
+        "xdist-then-truncated": f"{xdist}\n{truncated}",
+        "truncated-then-xdist": f"{truncated}\n{xdist}",
+        "prefix-only": prefix,
+        "whitespace-dist": "Resolved pytest execution mode: pytest-xdist (dist= \t ).",
+        "malformed-serial": serial[:-1],
+        "duplicate-serial": f"{serial}\n{serial}",
+        "both-reversed": f"{xdist}\n{serial}",
+        "serial-then-prefix": f"{serial}\n{prefix}",
+        "prefix-then-serial": f"{prefix}\n{serial}",
+        "xdist-then-prefix": f"{xdist}\n{prefix}",
+        "prefix-then-xdist": f"{prefix}\n{xdist}",
+        "serial-then-empty": f"{serial}\n{empty}",
+        "empty-then-serial": f"{empty}\n{serial}",
+        "xdist-then-empty": f"{xdist}\n{empty}",
+        "empty-then-xdist": f"{empty}\n{xdist}",
+        "serial-then-malformed": f"{serial}\n{malformed}",
+        "malformed-then-xdist": f"{malformed}\n{xdist}",
+        "serial-with-noise": f"{noise}\n{serial}\n{noise}\n",
+        "xdist-with-noise": f"{noise}\n{xdist}\n{noise}\n",
+        "serial-crlf": f"{serial}\r\n",
+        "xdist-crlf": f"{xdist}\r\n",
+        "serial-no-final-newline": serial,
+        "xdist-no-final-newline": xdist,
+        "custom-dist": "Resolved pytest execution mode: pytest-xdist (dist= custom-value ).",
+    }
+    if log_mode not in {"missing", "missing-path"}:
+        artifact_dir.mkdir()
+        (artifact_dir / "compact.log").write_bytes(logs[log_mode].encode("utf-8"))
     fake_uv.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
@@ -1077,43 +1149,9 @@ case "$*" in
     mkdir -p "$UV_ARTIFACT_DIR"
     log_path="$UV_ARTIFACT_DIR/compact.log"
     summary_log_path="$log_path"
-    case "$UV_LOG_MODE" in
-      serial)
-        printf '%s\\n' 'Resolved pytest execution mode: in-process serial (pytest-xdist disabled).' > "$log_path"
-        ;;
-      xdist)
-        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' > "$log_path"
-        ;;
-      both)
-        printf '%s\\n' 'Resolved pytest execution mode: in-process serial (pytest-xdist disabled).' > "$log_path"
-        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' >> "$log_path"
-        ;;
-      duplicate)
-        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' > "$log_path"
-        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal).' >> "$log_path"
-        ;;
-      spoofed)
-        printf '%s\\n' 'test output: Resolved pytest execution mode: pytest-xdist (dist=worksteal).' > "$log_path"
-        ;;
-      truncated-prefix)
-        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=' > "$log_path"
-        ;;
-      truncated-suffix)
-        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=worksteal)' > "$log_path"
-        ;;
-      empty-dist)
-        printf '%s\\n' 'Resolved pytest execution mode: pytest-xdist (dist=).' > "$log_path"
-        ;;
-      missing-path)
-        summary_log_path=""
-        ;;
-      missing)
-        ;;
-      *)
-        echo "unexpected log mode: $UV_LOG_MODE" >&2
-        exit 98
-        ;;
-    esac
+    if [[ "$UV_LOG_MODE" == "missing-path" ]]; then
+      summary_log_path=""
+    fi
     printf '{"schema":"compact_validation_summary.v2","exit_code":124,"timed_out":%s,"log_path":"%s"}\\n' "$UV_COMPACT_TIMED_OUT" "$summary_log_path"
     exit 124
     ;;
@@ -1167,6 +1205,11 @@ esac
         assert not diagnostic_args.exists()
         if compact_timed_out:
             assert "diagnostic unavailable" in result.stderr
+            if log_mode not in {"missing", "missing-path"}:
+                assert (
+                    "xdist race timeout diagnostic unavailable: "
+                    "pytest execution mode was not uniquely recorded."
+                ) in result.stderr
         else:
             assert "did not report timed_out=true" in result.stderr
 

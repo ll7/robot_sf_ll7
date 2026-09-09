@@ -48,7 +48,7 @@ Open `docs/_build/html/index.html` for the browsable navigation layer. The site 
 thin: existing Markdown files remain the source of truth, and generated HTML under
 `docs/_build/` is disposable local output.
 
-## 🚀 Social Navigation Benchmark Platform (Complete)
+## 🚀 Social Navigation Benchmark Platform
 
 **The Social Navigation Benchmark Platform is now fully operational!**
 
@@ -56,8 +56,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 * **[Complete Quickstart Guide](../specs/120-social-navigation-benchmark-plan/quickstart.md)** - Step-by-step experiment execution, visualization, and interpretation
 * **[Public API](public_api.md)** - The supported top-level facade (`make_env`, `load_scenario`, `run_episode`), lifecycle guarantees, and deprecation policy
-* **[CLI Reference](./dev/issues/social-navigation-benchmark/README.md)** - All 15 CLI subcommands with examples
-* **Implementation Status**: All major features complete, 108 tests passing
+* **[CLI Reference](./dev/issues/social-navigation-benchmark/README.md)** - CLI subcommands with examples
 
 ### Core Capabilities
 
@@ -66,7 +65,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **Baseline Interface**: Unified PlannerProtocol for SocialForce, PPO, Random planners
 * **Statistical Analysis**: Bootstrap confidence intervals and robust aggregation
 * **Figure Orchestrator**: Distribution plots, Pareto frontiers, force fields, thumbnails, tables
-* **CLI Tools**: 30 subcommands covering full experiment workflow
+* **CLI Tools**: CLI subcommands covering full experiment workflows
 
 ### Ready-to-Use Workflows
 
@@ -78,7 +77,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 ---
 
-- [🚀 Social Navigation Benchmark Platform (Complete)](#-social-navigation-benchmark-platform-complete)
+- [🚀 Social Navigation Benchmark Platform](#-social-navigation-benchmark-platform)
   - [Quick Start](#quick-start)
   - [Core Capabilities](#core-capabilities)
   - [Ready-to-Use Workflows](#ready-to-use-workflows)

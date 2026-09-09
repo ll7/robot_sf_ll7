@@ -148,6 +148,16 @@ Issues carrying explicit `state:review` or `needs-triage` remain visible for aud
 snapshot must classify them as non-claimable until the corresponding human gate is cleared. A
 review- or triage-pending issue must not be reselected as an autonomous implementation target.
 
+### Empty issue-audit inventories
+
+The issue-audit plan distinguishes a proven empty queue from a source failure. Its canonical
+open-issue metadata reports `source_status: complete` when issue rows are present, `empty` only
+for a successful empty REST response, and `unavailable` or `anomalous` for failed, partial,
+malformed, or unexplained zero-row responses. The plan repeats this as `issue_inventory_status`;
+an unavailable or anomalous source adds `issues` to `truncation_or_errors`, suppresses mutations,
+returns a nonzero exit, and must be rerun before an apply step. The explicit
+`--max-wall-seconds 0` no-budget timeout remains a separate fail-closed status.
+
 Project #5 score synchronization uses the same fail-closed preflight. If its estimated field,
 project, and item reads would cross the margin, it prints `status: quota_blocked`, performs no
 Project #5 writes, and returns a nonzero exit for ordinary sync. The autopilot's `--only-empty`

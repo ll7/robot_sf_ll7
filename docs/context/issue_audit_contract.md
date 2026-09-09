@@ -52,6 +52,17 @@ The core inventories, with bounded pagination:
 5. local worktrees and their branches; and
 6. visible SLURM jobs when squeue is available.
 
+The canonical open-issue source reports a machine-readable `source_status`:
+`complete` when canonical issue rows are present, `empty` only when a
+successful REST response explicitly contains no rows, `unavailable` when the
+read is failed or partial, and `anomalous` when a successful response contains
+only non-canonical or malformed rows. A zero-row source without this contract
+is also anomalous. The plan copies this result to `issue_inventory_status`;
+`unavailable` and `anomalous` add `issues` to `truncation_or_errors`, suppress
+mutations, and make the plan command return non-zero. Apply refuses those
+plans before any REST mutation. An explicit `--max-wall-seconds 0` remains the
+separate no-budget timeout path and is not treated as a proven empty source.
+
 An inventory page cap, failed read, unavailable SLURM query for a
 resource:slurm issue, or failed readback is an uncertainty. The plan records it
 and the apply path fails closed. A partial inventory is never evidence that an
@@ -291,7 +302,17 @@ Every plan has schema issue_audit_plan.v1 and contains:
       "repo": "ll7/robot_sf_ll7",
       "mode": "autonomous",
       "project5": {"writes": false, "owner": "gh-issue-sequencer"},
-      "inventory": {},
+      "inventory": {
+        "issues": {
+          "source_status": "empty",
+          "source_proof": "successful_empty_response"
+        }
+      },
+      "issue_inventory_status": {
+        "status": "empty",
+        "admissible": true,
+        "source_proof": "successful_empty_response"
+      },
       "classification_status": {
         "status": "complete",
         "resume_from_issue": null,

@@ -14,8 +14,8 @@ see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_cle
 
 ## Documentation layers (start here by audience)
 
-Robot SF docs are split into three audience layers. Pick the one that matches your goal; each has its
-own index so you never fall straight into issue-specific context notes.
+Robot SF docs are organized into audience-oriented layers. Pick the one that matches your goal; each
+has its own index so you never fall straight into issue-specific context notes.
 
 - 👤 **[User Guide](./user-guide.md)** — task-oriented: install, run a demo, load a map, choose a
   planner, run a benchmark, visualize results, troubleshoot. *New here? Start here.*
@@ -125,7 +125,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, setup, testing, quality gates, and coding standards
 * **[Pinned Scenario-Archetype Validation](./dev/scenario_archetype_validation.md)** - Exact waiver schema and fail-closed CI checks for the four pinned archetypes
-* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
+* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
 * **[Security Triage Guidance](./security_triage.md)** - Vulnerability reporting, dependency scanning, static-analysis triage, and accepted-risk handling for research code
@@ -425,9 +425,9 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Helper Catalog](./dev/helper_catalog.md)** - Reusable render helpers for frame capture, output directories, and video contact sheets
 * **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
 * **[OSM Map Generation](./osm_map_workflow.md)** - Programmatic, reproducible maps from OpenStreetMap data (PBF import, zone/route definition, scenario creation)
-  + **Quick Start**: 3 approaches (visual editor, programmatic API, hybrid)
-  + **API Reference**: 6 helper functions (zones, routes, config management, YAML loading)
-  + **Examples**: 4 realistic scenarios (simple navigation, urban intersection, variable density, load/verify)
+  + **Quick Start**: compare visual-editor, programmatic-API, and hybrid approaches
+  + **API Reference**: helper functions for zones, routes, configuration management, and YAML loading
+  + **Examples**: realistic navigation scenarios plus map load and verification workflows
 * **[Map Verification](../specs/001-map-verification/quickstart.md)** - Validate SVG maps for structural integrity and runtime compatibility
 * **[Issue 388 Execution Notes](./context/issue_388_execution.md)** - Self-intersecting obstacle-path repair behavior and validation details
 * **[Francis 2023 Scenario Pack](../maps/svg_maps/francis2023/readme.md)** - SVG maps +
@@ -453,7 +453,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue 483 Execution Notes](./context/issue_483_execution.md)** - Cold/warm regression guard implementation details and workflow wiring
 * **[Issue 495 Execution Notes](./context/issue_495_execution.md)** - Overall trend benchmark matrix, history comparison, and nightly cache-backed tracking
 * **[Warning Hygiene Sweep](./context/warning_hygiene_2026-02-13.md)** - Warning-noise root-cause fixes and dependency mitigation notes
-* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
+* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, absolute floor enforcement, and CI integration
 
 ### Hardware & Environment
@@ -471,7 +471,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 ### 🏗️ Architecture & Development
 
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, testing, and quality standards
-* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
+* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Configuration Architecture](./architecture/configuration.md)** - Configuration hierarchy, precedence rules, and migration guide
 * **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
 * **[Coverage Guide](./coverage_guide.md)** - Comprehensive guide to code coverage collection, baseline tracking, absolute floor enforcement, and CI integration

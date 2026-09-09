@@ -7,6 +7,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DOCS_README = ROOT / "docs" / "README.md"
 
+STALE_COUNT_PHRASES = (
+    "three audience layers",
+    "12-class test taxonomy",
+    "3 approaches",
+    "6 helper functions",
+    "4 realistic scenarios",
+)
+
 
 def test_docs_readme_avoids_stale_completion_and_counts() -> None:
     """docs/README.md should not retain stale completion tags, test counts, or conflicting subcommand counts."""
@@ -37,6 +45,11 @@ def test_docs_readme_avoids_stale_completion_and_counts() -> None:
     assert "implementation complete" not in content.lower()
     assert "33 files" not in content.lower()
     assert "_last updated:" not in content.lower()
+
+    # Keep known inventory and audience descriptions durable: equivalent stale
+    # counts should not return under a superficially different heading.
+    for phrase in STALE_COUNT_PHRASES:
+        assert phrase not in content.lower()
 
     # Should contain durable phrasing
     assert "CLI subcommands with examples" in content

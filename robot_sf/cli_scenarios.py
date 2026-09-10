@@ -1358,12 +1358,15 @@ def _scenario_validation_diagnostics(  # noqa: C901
     for schema_error in canonical_errors:
         compact_index = schema_error.get("index")
         if not isinstance(compact_index, int) or not 0 <= compact_index < len(original_indices):
-            orphan_errors.extend(_schema_errors_to_cli_errors([schema_error]))
+            orphan_errors.extend(
+                _schema_errors_to_cli_errors([schema_error], source_file=source_file)
+            )
             continue
         original_index = original_indices[compact_index]
         converted = _schema_errors_to_cli_errors(
             [schema_error],
             scenarios=mapping_rows,
+            source_file=getattr(mapping_rows[compact_index], "_scenario_source_file", source_file),
         )[0]
         converted["index"] = original_index
         diagnostics[original_index].append(converted)
@@ -1374,6 +1377,9 @@ def _scenario_validation_diagnostics(  # noqa: C901
                 first_original_index = original_indices[first_index]
                 first_error = dict(converted)
                 first_error["index"] = first_original_index
+                first_error["source_file"] = getattr(
+                    mapping_rows[first_index], "_scenario_source_file", source_file
+                ).as_posix()
                 if first_error not in diagnostics[first_original_index]:
                     diagnostics[first_original_index].append(first_error)
 

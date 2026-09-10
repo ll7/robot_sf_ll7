@@ -621,7 +621,14 @@ def test_validate_nested_manifest_reports_metadata_schema_and_mixed_rows(
         encoding="utf-8",
     )
     manifest = scenarios_root / "root.yaml"
-    manifest.write_text("includes:\n  - ../scenario_inputs/mixed.yaml\n", encoding="utf-8")
+    manifest.write_text(
+        "includes:\n"
+        "  - ../scenario_inputs/mixed.yaml\n"
+        "scenario_overrides:\n"
+        "  simulation_config:\n"
+        "    max_episode_steps: 13\n",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(cli_scenarios_module, "_find_repo_root", lambda: tmp_path)
 
     payload = cli_scenarios_module.validate_scenario_payload(str(manifest))
@@ -646,6 +653,12 @@ def test_validate_nested_manifest_reports_metadata_schema_and_mixed_rows(
         error["code"] == REASON_SCHEMA_VALIDATION_ERROR and error["path"] == "/repeats"
         for error in payload["errors"]
     )
+    repeats_errors = [error for error in payload["errors"] if error.get("path") == "/repeats"]
+    assert repeats_errors[0]["source_file"].endswith("configs/scenario_inputs/mixed.yaml")
+    included_schema_row = next(
+        row for row in payload["scenarios"] if row["identity"] == "included_schema_error"
+    )
+    assert included_schema_row["map_reference"]["map_exists"] is True
 
 
 def test_external_map_asset_is_explicitly_classified(

@@ -88,6 +88,14 @@ class ScenarioValidationReport:
     raw_entry_count: int
 
 
+class _ScenarioValidationMapping(dict[str, Any]):
+    """Expanded scenario mapping carrying its manifest source internally."""
+
+    def __init__(self, scenario: Mapping[str, Any], *, source_file: Path) -> None:
+        super().__init__(scenario)
+        self._scenario_source_file = source_file
+
+
 @dataclass
 class _ScenarioValidationCollector:
     """Mutable collector shared by one recursive validation load."""
@@ -550,6 +558,12 @@ def _deep_merge_mapping(base: Mapping[str, Any], overrides: Mapping[str, Any]) -
     return merged
 
 
+def _scenario_validation_source(scenario: Mapping[str, Any], fallback: Path) -> Path:
+    """Return an expanded row's source manifest, or the current manifest."""
+    source_file = getattr(scenario, "_scenario_source_file", fallback)
+    return source_file if isinstance(source_file, Path) else fallback
+
+
 def _apply_scenario_overrides(
     scenarios: list[Mapping[str, Any]],
     *,
@@ -568,8 +582,17 @@ def _apply_scenario_overrides(
     overrides = _resolve_scenario_overrides(data, source=source)
     if not overrides:
         return scenarios
+    merged = [_deep_merge_mapping(scenario, overrides) for scenario in scenarios]
+    if collector is not None:
+        merged = [
+            _ScenarioValidationMapping(
+                scenario,
+                source_file=_scenario_validation_source(original, source),
+            )
+            for original, scenario in zip(scenarios, merged, strict=True)
+        ]
     return _normalize_scenarios(
-        [_deep_merge_mapping(scenario, overrides) for scenario in scenarios],
+        merged,
         source=source,
         root=root,
         map_search_paths=map_search_paths,
@@ -663,7 +686,13 @@ def _apply_scenario_overrides_by_name(
         if override_name is None:
             merged.append(scenario)
             continue
-        merged.append(_deep_merge_mapping(scenario, overrides_by_name[override_name]))
+        merged_scenario = _deep_merge_mapping(scenario, overrides_by_name[override_name])
+        if collector is not None:
+            merged_scenario = _ScenarioValidationMapping(
+                merged_scenario,
+                source_file=_scenario_validation_source(scenario, source),
+            )
+        merged.append(merged_scenario)
 
     if unused:
         unknown = ", ".join(sorted(unused.values()))
@@ -1025,6 +1054,7 @@ def _normalize_scenarios(
         map_registry = _load_map_registry()
     normalized: list[Mapping[str, Any]] = []
     for idx, scenario in enumerate(scenarios):
+        scenario_source = _scenario_validation_source(scenario, source)
         if not isinstance(scenario, Mapping):
             error_message = (
                 f"Scenario entry {idx} in '{source}' must be a mapping; "
@@ -1043,14 +1073,17 @@ def _normalize_scenarios(
             continue
         try:
             _validate_scenario_entry(scenario, source=source, index=idx)
+            normalized_scenario = _rebase_scenario_paths(
+                scenario,
+                source=source,
+                root=root,
+                map_search_paths=map_search_paths,
+                map_registry=map_registry,
+            )
             normalized.append(
-                _rebase_scenario_paths(
-                    scenario,
-                    source=source,
-                    root=root,
-                    map_search_paths=map_search_paths,
-                    map_registry=map_registry,
-                )
+                _ScenarioValidationMapping(normalized_scenario, source_file=scenario_source)
+                if collector is not None
+                else normalized_scenario
             )
         except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as exc:
             if collector is None:
@@ -1066,7 +1099,11 @@ def _normalize_scenarios(
             # Keep malformed mappings available for the validator and asset
             # classifier; only non-mapping rows are omitted from the expanded
             # mapping list because they cannot produce a scenario summary.
-            normalized.append(dict(scenario))
+            normalized.append(
+                _ScenarioValidationMapping(dict(scenario), source_file=scenario_source)
+                if collector is not None
+                else dict(scenario)
+            )
     return normalized
 
 

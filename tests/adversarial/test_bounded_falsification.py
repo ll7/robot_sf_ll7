@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 
+import scripts.adversarial.run_issue_8571_bounded_falsification_slice as preflight_cli
 from robot_sf.adversarial.bounded_falsification import (
     CLAIM_BOUNDARY,
     VERTICAL_SLICE_SCHEMA_VERSION,
@@ -15,6 +19,10 @@ from robot_sf.adversarial.bounded_falsification import (
     validate_bounded_falsification_preflight,
     write_bounded_falsification_preflight,
 )
+from robot_sf.benchmark.research_answerability import (
+    compute_adversarial_falsification_packet_digest,
+)
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKET = REPO_ROOT / "configs/adversarial/issue_8570_bounded_falsification_answerability_v1.yaml"
@@ -368,3 +376,73 @@ def test_preflight_validator_accepts_explicit_source_binding_arguments() -> None
         packet_path=PACKET,
         repo_root=REPO_ROOT,
     )
+
+
+def test_preflight_rejects_rehashed_noncanonical_packet(tmp_path: Path) -> None:
+    """Recomputing a digest must not authorize a mutated packet outside the committed identity."""
+    packet = yaml.safe_load(PACKET.read_text(encoding="utf-8"))
+    packet["seed_policy"]["search_seeds"] = [857011, 857012, 857013]
+    packet["budget"]["max_steps_per_rollout"] = 7
+    packet["compute_ceiling"]["max_steps_per_rollout"] = 7
+    packet["outcome_vocabulary"]["blocked"] = "forged blocked meaning"
+    packet["self_digest"] = compute_adversarial_falsification_packet_digest(packet)
+    forged_packet = tmp_path / "forged-packet.yaml"
+    forged_packet.write_text(yaml.safe_dump(packet, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(BoundedFalsificationError, match="canonical packet"):
+        build_bounded_falsification_preflight(forged_packet, repo_root=REPO_ROOT)
+
+
+def test_generated_route_overlays_fail_closed_as_proposal_only(tmp_path: Path) -> None:
+    """Inline route proposals must never be mistaken for loader-ready runtime inputs."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    overlay = report["arms"]["random"][0]["preparation"]["candidates"][0]["overlay"]
+    assert overlay["provenance"]["route_overrides_contract"]["status"] == "proposal_only"
+    assert overlay["provenance"]["route_overrides_contract"]["loadable"] is False
+    assert overlay["provenance"]["route_overrides_contract"]["payload_sha256"]
+
+    materialized = deepcopy(overlay["materialized"])
+    materialized["scenarios"][0]["map_file"] = str(
+        REPO_ROOT / "maps/svg_maps/classic_station_platform.svg"
+    )
+    scenario_path = tmp_path / "proposal.yaml"
+    scenario_path.write_text(yaml.safe_dump(materialized, sort_keys=False), encoding="utf-8")
+    scenario = load_scenarios(scenario_path)[0]
+
+    assert "route_overrides_file" not in scenario
+    with pytest.raises(ValueError, match="proposal-only"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+@pytest.mark.parametrize(
+    ("fail_on_blocked", "expected_exit"),
+    [(False, 0), (True, 2)],
+)
+def test_cli_blocked_exit_mode_is_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    fail_on_blocked: bool,
+    expected_exit: int,
+) -> None:
+    """Ledger generation may succeed by default, while admission mode fails closed."""
+    blocked_report = {
+        "schema_version": VERTICAL_SLICE_SCHEMA_VERSION,
+        "gate": {"status": "blocked"},
+        "outcome_summary": {"blocked": 1},
+        "execution": {"simulator_executed": False},
+    }
+    monkeypatch.setattr(
+        preflight_cli,
+        "write_bounded_falsification_preflight",
+        lambda *args, **kwargs: blocked_report,
+    )
+    argv = [
+        "run_issue_8571_bounded_falsification_slice.py",
+        "--output",
+        str(tmp_path / "report.json"),
+    ]
+    if fail_on_blocked:
+        argv.append("--fail-on-blocked")
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert preflight_cli.main() == expected_exit

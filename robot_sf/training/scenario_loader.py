@@ -1532,6 +1532,12 @@ def build_robot_config_from_scenario(
 
     from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: PLC0415
 
+    if scenario.get("route_overrides") is not None and scenario.get("route_overrides_file") is None:
+        raise ValueError(
+            "inline route_overrides are proposal-only; materialize a route_overrides_file "
+            "before runtime scenario loading"
+        )
+
     _reject_required_platform_semantic_consumers(scenario)
 
     config = RobotSimulationConfig()

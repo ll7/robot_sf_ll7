@@ -38,6 +38,11 @@ def _parser() -> argparse.ArgumentParser:
         default=DEFAULT_OUTPUT,
         help="JSON output path (defaults to the disposable output tree)",
     )
+    parser.add_argument(
+        "--fail-on-blocked",
+        action="store_true",
+        help="return status 2 when the generated ledger gate is blocked",
+    )
     return parser
 
 
@@ -61,6 +66,8 @@ def main() -> int:
             sort_keys=True,
         )
     )
+    if args.fail_on_blocked and report["gate"]["status"] == "blocked":
+        return 2
     return 0
 
 

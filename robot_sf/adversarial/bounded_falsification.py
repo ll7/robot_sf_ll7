@@ -43,6 +43,16 @@ CLAIM_BOUNDARY = (
 OUTCOME_STATUSES = ("result", "null", "inconclusive", "invalid", "unavailable", "blocked")
 CONTROL_ARMS = ("random", "halton")
 PRIMARY_ARM = "cma_es"
+CANONICAL_PACKET_RELATIVE_PATH = (
+    "configs/adversarial/issue_8570_bounded_falsification_answerability_v1.yaml"
+)
+CANONICAL_PACKET_SELF_DIGEST = "060fcd95d00bdeeabfc1697bb378e606188a4fa678b8375f937831914ca65395"
+CANONICAL_PACKET_FILE_SHA256 = "7a6d3d7eb25b7de47e735630c2f47c0ccff131f9301f6eb07f4fa694e73d0197"
+_ROUTE_PROPOSAL_REASON = (
+    "This diagnostic preflight does not write candidate route files; materialize a "
+    "route_overrides.yaml artifact through robot_sf.adversarial.bundle.write_candidate_inputs "
+    "before scenario loading or replay."
+)
 _REPORT_FIELDS = frozenset(
     {
         "schema_version",
@@ -234,6 +244,23 @@ def _thaw_source(value: Any) -> Any:
     return value
 
 
+def _canonical_value_digest(value: Any) -> str:
+    """Return a deterministic SHA-256 digest for one JSON-shaped proposal payload."""
+    try:
+        encoded = json.dumps(
+            _thaw_source(value),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise BoundedFalsificationError(
+            f"proposal payload cannot be canonically serialized for digest: {exc}"
+        ) from exc
+    return hashlib.sha256(encoded).hexdigest()
+
+
 class _FrozenSourceCandidateSpecAdapter:
     """Reuse the bundle adapter without changing its frozen packet-owned source bytes."""
 
@@ -257,7 +284,43 @@ class _FrozenSourceCandidateSpecAdapter:
         candidate: SearchCandidate,
     ) -> ImmutableScenarioOverlay:
         """Materialize through the existing pure bundle seam after the compatibility conversion."""
-        return self._delegate.materialize(_thaw_source(source_scenario), candidate)
+        overlay = self._delegate.materialize(_thaw_source(source_scenario), candidate)
+        patch = _thaw_source(overlay.patch)
+        if not isinstance(patch, dict):
+            raise TypeError("candidate overlay patch must be a mapping")
+        route_payload = patch.pop("route_overrides", None)
+        scenarios = patch.get("scenarios")
+        if not isinstance(route_payload, Mapping):
+            raise ValueError("candidate overlay route proposal is missing")
+        if (
+            not isinstance(scenarios, list)
+            or len(scenarios) != 1
+            or not isinstance(scenarios[0], Mapping)
+        ):
+            raise ValueError("candidate overlay must contain one specialized scenario")
+
+        specialized = dict(scenarios[0])
+        specialized.pop("route_overrides_file", None)
+        specialized["route_overrides"] = _thaw_source(route_payload)
+        patch["scenarios"] = [specialized]
+        provenance = _thaw_source(overlay.provenance)
+        if not isinstance(provenance, dict):
+            raise TypeError("candidate overlay provenance must be a mapping")
+        provenance["route_file_name"] = None
+        provenance["route_overrides_contract"] = {
+            "status": "proposal_only",
+            "loadable": False,
+            "payload_sha256": _canonical_value_digest(route_payload),
+            "materialization_owner": "robot_sf.adversarial.bundle.write_candidate_inputs",
+            "reason": _ROUTE_PROPOSAL_REASON,
+        }
+        return ImmutableScenarioOverlay(
+            source=overlay.source,
+            patch=patch,
+            candidate_id=overlay.candidate_id,
+            adapter_id=overlay.adapter_id,
+            provenance=provenance,
+        )
 
 
 def _source_inputs(packet: Mapping[str, Any], *, repo_root: Path) -> list[dict[str, Any]]:
@@ -347,15 +410,26 @@ def _load_preflight_source(
     root = (
         Path(repo_root).resolve() if repo_root is not None else Path(__file__).resolve().parents[2]
     )
-    packet_file = (
-        root / "configs/adversarial/issue_8570_bounded_falsification_answerability_v1.yaml"
-        if packet_path is None
-        else Path(packet_path)
-    )
+    canonical_packet_file = (root / CANONICAL_PACKET_RELATIVE_PATH).resolve()
+    packet_file = canonical_packet_file if packet_path is None else Path(packet_path)
     if not packet_file.is_absolute():
         packet_file = root / packet_file
     packet_file = packet_file.resolve()
+    if packet_file != canonical_packet_file:
+        raise BoundedFalsificationError(
+            "preflight packet must use the committed canonical packet path: "
+            f"{CANONICAL_PACKET_RELATIVE_PATH}"
+        )
+    actual_file_sha256 = _sha256_file(packet_file)
+    if actual_file_sha256 != CANONICAL_PACKET_FILE_SHA256:
+        raise BoundedFalsificationError(
+            "canonical #8570 packet file digest does not match the trusted committed digest"
+        )
     packet = load_adversarial_falsification_packet(packet_file, repo_root=root)
+    if packet.get("self_digest") != CANONICAL_PACKET_SELF_DIGEST:
+        raise BoundedFalsificationError(
+            "canonical #8570 packet self_digest does not match the trusted committed digest"
+        )
     if packet["issue"] != 8570:
         raise BoundedFalsificationError("preflight packet must be the issue #8570 packet")
 

@@ -101,6 +101,20 @@ def test_build_robot_config_from_scenario_supports_route_overrides_file(tmp_path
     assert updated_map.ped_routes[0].waypoints == [(5.0, 16.0), (10.0, 10.0), (15.0, 4.0)]
 
 
+def test_build_robot_config_rejects_mixed_route_representations(tmp_path: Path) -> None:
+    """Mixed inline/file routes must fail before runtime can discard inline provenance."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    scenario = {
+        "name": "ambiguous-route-proposal",
+        "map_file": str(Path("maps/svg_maps/classic_overtaking.svg").resolve()),
+        "route_overrides": {"robot_routes": [], "ped_routes": []},
+        "route_overrides_file": str(tmp_path / "route_override.yaml"),
+    }
+
+    with pytest.raises(ValueError, match="both inline route_overrides and route_overrides_file"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
 def test_load_scenarios_rebases_route_override_paths_from_included_archetypes() -> None:
     """Included issue-596 archetypes should resolve route override paths into repo-root form."""
     scenarios = load_scenarios(

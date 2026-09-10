@@ -1532,7 +1532,12 @@ def build_robot_config_from_scenario(
 
     from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: PLC0415
 
-    if scenario.get("route_overrides") is not None and scenario.get("route_overrides_file") is None:
+    if scenario.get("route_overrides") is not None:
+        if scenario.get("route_overrides_file") is not None:
+            raise ValueError(
+                "scenario cannot define both inline route_overrides and route_overrides_file; "
+                "use exactly one route representation"
+            )
         raise ValueError(
             "inline route_overrides are proposal-only; materialize a route_overrides_file "
             "before runtime scenario loading"

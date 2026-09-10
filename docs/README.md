@@ -42,15 +42,20 @@ one-frame smoke baseline rather than calibrated or benchmark evidence.
 ## Static Docs Site
 
 This repository includes a lightweight Sphinx site over the existing Markdown docs. Build it from
-the repository root with:
+the repository root with the curated strict wrapper:
 
 ```bash
-uv run --group docs sphinx-build -b html docs docs/_build/html
+scripts/dev/sphinx_strict_build.sh
 ```
 
-Open `docs/_build/html/index.html` for the browsable navigation layer. The site is intentionally
-thin: existing Markdown files remain the source of truth, and generated HTML under
-`docs/_build/` is disposable local output.
+Open `output/docs-strict/html/index.html` for the browsable navigation layer. The wrapper builds
+only the `docs/index.rst` toctree closure, promotes warnings to errors, and writes generated HTML
+outside the source tree under the git-ignored `output/` directory.
+
+The curated site intentionally does not build the historical corpus under `docs/context/`,
+`docs/dev/`, and similar trees. A raw full-tree `sphinx-build docs <out>` is unsupported: broad
+warning-class suppressions are not configured, so it reports the historical corpus warnings by
+design. See `CONTRIBUTING.md` for the strict-build contract and the curated source manifest.
 
 ## 🚀 Social Navigation Benchmark Platform
 

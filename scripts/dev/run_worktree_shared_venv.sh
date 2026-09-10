@@ -490,10 +490,71 @@ if [[ "$git_common_dir" != "$repo_root/.git" ]]; then
   is_linked_worktree=1
 fi
 
+worktree_selection_key=""
+if [[ "$is_linked_worktree" -eq 1 ]]; then
+  worktree_selection_key="$(printf '%s' "$repo_root" | git hash-object --stdin | cut -c1-12)"
+fi
+
 if [[ -n "$scratch_dir" ]]; then
   configure_scratch_dir "$scratch_dir"
 fi
 check_scratch_capacity "${TMPDIR:-/tmp}"
+
+# Per-worktree selection gate (issue #8798): serialize venv selection plus the
+# interpreter/tool freshness checks (and any automatic fast-pysf recovery) so a
+# concurrent invocation cannot observe a half-finished owner->worktree handoff.
+# The gate is released as soon as verification finishes, before the wrapped
+# command runs, so it never serializes command execution itself.
+selection_gate_dir=""
+
+release_venv_selection_gate() {
+  if [[ -n "$selection_gate_dir" ]]; then
+    rm -rf "$selection_gate_dir" 2>/dev/null || true
+    selection_gate_dir=""
+  fi
+}
+
+acquire_venv_selection_gate() {
+  if [[ "$is_linked_worktree" -ne 1 || -n "$venv_override" || -n "$standalone"     || -n "$skip_freshness" || "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" == "skip"     || -n "$recover_stale_fast_pysf" ]]; then
+    return 0
+  fi
+  selection_gate_dir="$git_common_dir/robot-sf-venv-selection-${worktree_selection_key}.lockdir"
+  if [[ -L "$selection_gate_dir" ]]; then
+    echo "ERROR: refusing a symlinked shared-venv selection gate: $selection_gate_dir" >&2
+    return 2
+  fi
+
+  local gate_deadline=$((SECONDS + 600))
+  while ! mkdir "$selection_gate_dir" 2>/dev/null; do
+    local gate_owner=""
+    local gate_is_stale=0
+    gate_owner="$(cat "$selection_gate_dir/pid" 2>/dev/null || true)"
+    if [[ -z "$gate_owner" ]]; then
+      gate_is_stale=1
+    elif [[ "$gate_owner" =~ ^[0-9]+$ ]] && ! kill -0 "$gate_owner" 2>/dev/null; then
+      gate_is_stale=1
+    fi
+    if [[ "$gate_is_stale" -eq 1 ]] \
+      && find "$selection_gate_dir" -maxdepth 0 -mmin +2 2>/dev/null | grep -q .; then
+      # The gate holder died mid-verification; reclaim after its directory is
+      # old enough that a live holder could not still be writing its PID.
+      rm -rf "$selection_gate_dir" 2>/dev/null || true
+      continue
+    fi
+    if (( SECONDS >= gate_deadline )); then
+      echo "ERROR: timed out waiting for the shared-venv selection gate: $selection_gate_dir" >&2
+      echo "Another invocation is verifying the linked-worktree environment; retry after it finishes." >&2
+      return 2
+    fi
+    sleep 0.2
+  done
+  printf '%s\n' "$$" >"$selection_gate_dir/pid"
+  trap release_venv_selection_gate EXIT
+  echo "Shared-venv selection gate acquired: $selection_gate_dir" >&2
+}
+
+
+acquire_venv_selection_gate
 
 if [[ -n "$recover_stale_fast_pysf" ]]; then
   if [[ -n "$venv_override" ]]; then
@@ -882,6 +943,8 @@ if [[ -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]];
     exit 2
   fi
 fi
+
+release_venv_selection_gate
 
 export UV_PROJECT_ENVIRONMENT="$venv_path"
 export UV_NO_SYNC=1

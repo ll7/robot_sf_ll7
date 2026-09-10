@@ -280,6 +280,11 @@ def save_pareto_png(  # noqa: PLR0913
             if pdf_dir:
                 os.makedirs(pdf_dir, exist_ok=True)
             fig.savefig(out_pdf)
+        if out_svg is not None:
+            svg_dir = os.path.dirname(out_svg)
+            if svg_dir:
+                os.makedirs(svg_dir, exist_ok=True)
+            fig.savefig(out_svg, format="svg")
 
         if out_svg is not None:
             svg_dir = os.path.dirname(out_svg)

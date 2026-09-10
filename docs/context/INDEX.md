@@ -13,6 +13,14 @@ opt-in, domain-gated runtime correction boundary. This is a compatibility and im
 note only; it does not establish physical, safety, benchmark, or paper-facing evidence:
 [issue_8222_obstacle_force_compatibility.md](issue_8222_obstacle_force_compatibility.md).
 
+Scenario-window preparation packet (RW-01—RW-08): source-contract repairs, typed native
+continuation snapshot inventory, deterministic relevance-window selector, explicit unsafe-crop
+refusal, and gated experiment/dossier boundary. Preparation-only; no shortened benchmark or
+planner-ranking claim:
+[scenario_window_research_dossier_2026-09-08.md](scenario_window_research_dossier_2026-09-08.md),
+[simulator_typed_snapshot_contract.md](simulator_typed_snapshot_contract.md),
+[simulator_state_inventory.v1.json](simulator_state_inventory.v1.json).
+
 Public pedestrian goal and force prediction research: observation-only candidate generation,
 path-tangent/open-ray/unknown semantics, coverage-only evaluation, and the next held-out research
 directions. Current receipts are smoke evidence only:
@@ -386,6 +394,13 @@ rewritten:
 
 Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
 [issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).
+
+Typed simulator snapshot continuation contract and machine-readable state inventory:
+pre-step boundary, strict destination restoration, explicit RNG requirements, typed no-op
+determinism comparison, and unsupported controller/history state. This remains preparation-only
+diagnostic context, not benchmark or paper-facing evidence:
+[simulator_typed_snapshot_contract.md](simulator_typed_snapshot_contract.md),
+[simulator_state_inventory.v1.json](simulator_state_inventory.v1.json).
 
 Issue #5441 `collision_causal_report.v1` field-producer map, temporal causal-graph nodes, and
 fail-closed contract decision record (model-scoped, `normative_fault: not_assessed`):

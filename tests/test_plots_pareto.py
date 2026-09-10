@@ -74,7 +74,7 @@ def test_save_vector_options(tmp_path):
     ]
     out_png = tmp_path / "pareto.png"
     out_pdf = tmp_path / "pareto.pdf"
-    out_svg = tmp_path / "pareto.svg"
+    out_svg = tmp_path / "vector" / "pareto.svg"
     meta = save_pareto_png(
         records,
         str(out_png),

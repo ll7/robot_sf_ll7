@@ -77,9 +77,14 @@ uv run --offline --no-sync robot-sf recipe explain first-demo
 ```
 
 ```bash
+uv run robot-sf examples check quickstart/01_basic_robot --format json
 uv run robot-sf examples run quickstart/01_basic_robot --fast
 uv run robot-sf recipe run first-demo
 ```
+
+Use `robot-sf examples check <id>` (or `--check` on a maintained example script) to validate
+declared prerequisites without starting a simulation: it reports one stable status such as `ready`,
+`missing_model`, or `missing_map`, plus safe acquisition instructions for registry-backed models.
 
 `examples` is the source-of-truth inventory for example scripts. Recipes are thin mappings to
 existing scripts and configs; they do not add simulation or training logic. Use

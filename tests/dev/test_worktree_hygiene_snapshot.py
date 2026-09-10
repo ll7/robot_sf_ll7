@@ -610,6 +610,86 @@ def test_build_retirement_plan_budget_marks_unprocessed_rows_review(
     assert any("retirement scan incomplete" in error for error in plan.errors)
 
 
+def test_apply_resume_cursor_accepts_parsed_and_dataclass_rows() -> None:
+    """The cursor applies to both parsed dict rows and hygiene dataclass rows."""
+    parsed_rows = [{"path": "alpha"}, {"path": "beta"}, {"path": "gamma"}]
+    assert snapshot._apply_resume_cursor(parsed_rows, "beta") == [{"path": "gamma"}]
+    assert snapshot._apply_resume_cursor(parsed_rows, "missing") == parsed_rows
+    row = _hygiene_row(path="alpha", branch="feature-a")
+    assert snapshot._apply_resume_cursor([row], "alpha") == []
+
+
+def test_build_retirement_plan_reports_resume_cursor(monkeypatch, tmp_path: Path) -> None:
+    """An incomplete scan names the last processed path for bounded resume."""
+    row_a = _hygiene_row(path=str(tmp_path / "worktree-a"), branch="feature-a")
+    row_b = _hygiene_row(path=str(tmp_path / "worktree-b"), branch="feature-b")
+    hygiene = snapshot.HygieneSnapshot(
+        schema=snapshot.SCHEMA_VERSION,
+        current_worktree=str(tmp_path / "main"),
+        total_worktrees=2,
+        included_worktrees=2,
+        worktrees_truncated=False,
+        filters=[],
+        issue_counts={},
+        repo_status=None,
+        worktrees=[row_a, row_b],
+        errors=[],
+    )
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
+
+    plan = snapshot.build_retirement_plan(
+        snapshot=hygiene,
+        worktree_budget=1,
+        time_budget_seconds=60,
+        pull_requests=[],
+        active_claims={},
+    )
+
+    assert plan.progress.terminal_status == snapshot.RETIREMENT_PLAN_INCOMPLETE
+    assert plan.progress.resume_after_path == row_a.path
+
+
+def test_build_retirement_plan_resume_after_skips_processed_rows(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Passing the previous cursor back must continue instead of rescanning."""
+    row_a = _hygiene_row(path=str(tmp_path / "worktree-a"), branch="feature-a")
+    row_b = _hygiene_row(path=str(tmp_path / "worktree-b"), branch="feature-b")
+    hygiene = snapshot.HygieneSnapshot(
+        schema=snapshot.SCHEMA_VERSION,
+        current_worktree=str(tmp_path / "main"),
+        total_worktrees=2,
+        included_worktrees=2,
+        worktrees_truncated=False,
+        filters=[],
+        issue_counts={},
+        repo_status=None,
+        worktrees=[row_a, row_b],
+        errors=[],
+    )
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(
+        snapshot, "_coverage_for_row", lambda _row, **_kwargs: ("ancestor_of_origin_main", [])
+    )
+
+    plan = snapshot.build_retirement_plan(
+        snapshot=hygiene,
+        worktree_budget=1,
+        time_budget_seconds=60,
+        pull_requests=[],
+        active_claims={},
+        resume_after=row_a.path,
+    )
+
+    assert plan.progress.selected_worktrees == 1
+    assert plan.progress.processed_worktrees == 1
+    assert plan.progress.unprocessed_worktrees == 0
+    assert plan.progress.resume_after_path is None
+    assert [worktree.path for worktree in plan.worktrees] == [row_b.path]
+
+
 def test_build_retirement_plan_caches_fallback_branch_lookups(monkeypatch, tmp_path: Path) -> None:
     """Fallback PR queries run once per unique branch, not once per worktree."""
     rows = [

@@ -71,6 +71,60 @@ def test_preflight_is_deterministic_and_persisted_report_round_trips(tmp_path: P
     assert json.loads(output.read_text(encoding="utf-8")) == first
 
 
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda report: report.pop("feasibility"),
+        lambda report: report["feasibility"].pop("owner"),
+    ],
+)
+def test_preflight_validator_rejects_missing_feasibility_fields(mutate) -> None:
+    """The report must include every canonical feasibility declaration field."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    mutate(report)
+
+    with pytest.raises(BoundedFalsificationError, match="feasibility"):
+        validate_bounded_falsification_preflight(report)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("feasibility", "owner", "forged.owner"),
+        ("feasibility", "native_predicates_executed", True),
+        ("feasibility", "simulator_validity", "valid"),
+        ("native_outcomes", "status", "available"),
+    ],
+)
+def test_preflight_validator_rejects_forged_feasibility_and_native_claims(
+    section: str, field: str, value: object
+) -> None:
+    """Feasibility and native execution claims must be recomputed from the packet."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report[section][field] = value
+
+    with pytest.raises(BoundedFalsificationError, match=section):
+        validate_bounded_falsification_preflight(report)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda report: report.update({"unexpected": True}),
+        lambda report: report["feasibility"].update({"unexpected": True}),
+        lambda report: report["arms"]["random"][0].update({"unexpected": True}),
+        lambda report: report["outcome_rows"][0].update({"unexpected": True}),
+    ],
+)
+def test_preflight_validator_rejects_unknown_report_and_nested_fields(mutate) -> None:
+    """Unknown fields cannot extend the builder-emitted report or ledger schemas."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    mutate(report)
+
+    with pytest.raises(BoundedFalsificationError, match="unknown fields"):
+        validate_bounded_falsification_preflight(report)
+
+
 def test_preflight_validator_rejects_claim_result_rows() -> None:
     """Preparation must not be relabeled as an available result or null outcome."""
     report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)

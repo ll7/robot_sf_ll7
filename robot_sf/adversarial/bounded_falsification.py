@@ -43,6 +43,91 @@ CLAIM_BOUNDARY = (
 OUTCOME_STATUSES = ("result", "null", "inconclusive", "invalid", "unavailable", "blocked")
 CONTROL_ARMS = ("random", "halton")
 PRIMARY_ARM = "cma_es"
+_REPORT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "issue",
+        "packet",
+        "claim_boundary",
+        "source",
+        "zero_overlay_equivalence",
+        "arms",
+        "feasibility",
+        "execution",
+        "gate",
+        "outcome_vocabulary",
+        "outcome_rows",
+        "outcome_summary",
+        "native_outcomes",
+        "replay",
+    }
+)
+_PACKET_FIELDS = frozenset({"issue", "packet_id", "path", "self_digest"})
+_SOURCE_FIELDS = frozenset(
+    {"base_ref", "base_commit", "inputs", "scenario_template_digest", "variable_order"}
+)
+_SOURCE_INPUT_FIELDS = frozenset({"id", "path", "role", "sha256"})
+_ZERO_OVERLAY_FIELDS = frozenset(
+    {"status", "source_digest", "materialized_digest", "patch_digest", "simulation_executed"}
+)
+_FEASIBILITY_FIELDS = frozenset(
+    {
+        "owner",
+        "pre_simulation_rejection_ledger",
+        "native_predicates_executed",
+        "simulator_validity",
+    }
+)
+_EXECUTION_FIELDS = frozenset(
+    {
+        "compute_authorized_by_packet",
+        "simulator_executed",
+        "planner_executed",
+        "optimizer_instantiated",
+        "campaign_launched",
+        "default_disabled",
+    }
+)
+_GATE_FIELDS = frozenset({"status", "authorized", "blocking_reasons"})
+_ARM_FIELDS = frozenset(
+    {
+        "search_seed",
+        "manifest_digest",
+        "candidate_budget",
+        "prepared_count",
+        "rejected_count",
+        "preparation",
+    }
+)
+_CMA_ES_FIELDS = frozenset(
+    {
+        "role",
+        "algorithm",
+        "owner",
+        "implementation_owner",
+        "search_seeds",
+        "candidate_budget_per_seed",
+        "execution_status",
+        "reason",
+    }
+)
+_OUTCOME_ROW_FIELDS = frozenset(
+    {
+        "arm",
+        "candidate_id",
+        "candidate",
+        "search_seed",
+        "status",
+        "reason",
+        "simulation_executed",
+        "overlay_materialized_digest",
+        "native_outcome_digest",
+        "replay_digest",
+        "rejection",
+    }
+)
+_NATIVE_OUTCOMES_FIELDS = frozenset({"status", "rows", "digest"})
+_REPLAY_FIELDS = frozenset({"status", "rows", "digest", "reason"})
 
 
 class BoundedFalsificationError(ValueError):
@@ -59,6 +144,54 @@ class _PreflightSource:
     inputs: tuple[dict[str, Any], ...]
     scenario_template: Mapping[str, Any]
     source_overlay: ImmutableScenarioOverlay
+
+
+def _assert_exact_fields(
+    value: Any,
+    expected_fields: frozenset[str],
+    *,
+    path: str,
+) -> None:
+    """Reject missing, unknown, or non-string fields at one report mapping boundary."""
+    if not isinstance(value, Mapping):
+        raise BoundedFalsificationError(f"{path} must be a mapping")
+    actual_fields = set(value)
+    if any(not isinstance(field, str) for field in actual_fields):
+        raise BoundedFalsificationError(f"{path} fields must be strings")
+    missing = expected_fields - actual_fields
+    unknown = actual_fields - expected_fields
+    if missing or unknown:
+        details: list[str] = []
+        if missing:
+            details.append(f"missing fields {sorted(missing)}")
+        if unknown:
+            details.append(f"unknown fields {sorted(unknown)}")
+        raise BoundedFalsificationError(f"{path} schema: " + "; ".join(details))
+
+
+def _strictly_equal(actual: Any, expected: Any) -> bool:
+    """Compare JSON-shaped values without Python's bool/int or int/float coercion."""
+    if isinstance(expected, Mapping):
+        if not isinstance(actual, Mapping):
+            return False
+        actual_fields = set(actual)
+        if any(not isinstance(field, str) for field in actual_fields):
+            return False
+        if actual_fields != set(expected):
+            return False
+        return all(_strictly_equal(actual[field], expected[field]) for field in expected)
+    if isinstance(expected, list):
+        return (
+            isinstance(actual, list)
+            and len(actual) == len(expected)
+            and all(
+                _strictly_equal(actual_item, expected_item)
+                for actual_item, expected_item in zip(actual, expected, strict=True)
+            )
+        )
+    if expected is None:
+        return actual is None
+    return type(actual) is type(expected) and actual == expected
 
 
 def _sha256_file(path: Path) -> str:
@@ -445,6 +578,17 @@ def _expected_native_status(packet: Mapping[str, Any]) -> str:
     return "blocked" if not bool(packet["compute_authorization"]["authorized"]) else "not_requested"
 
 
+def _canonical_feasibility(packet: Mapping[str, Any]) -> dict[str, Any]:
+    """Recompute the report-level feasibility declaration from the validated packet."""
+    rejection_accounting = packet["feasibility"]["rejection_accounting"]
+    return {
+        "owner": rejection_accounting["owner"],
+        "pre_simulation_rejection_ledger": rejection_accounting["pre_simulation"],
+        "native_predicates_executed": False,
+        "simulator_validity": "unavailable",
+    }
+
+
 def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
     report: Mapping[str, Any],
     *,
@@ -457,11 +601,12 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
     packet = source.packet
     if not isinstance(report, Mapping):
         raise BoundedFalsificationError("preflight report must be a mapping")
-    if report.get("schema_version") != VERTICAL_SLICE_SCHEMA_VERSION:
+    _assert_exact_fields(report, _REPORT_FIELDS, path="preflight report")
+    if not _strictly_equal(report["schema_version"], VERTICAL_SLICE_SCHEMA_VERSION):
         raise BoundedFalsificationError("preflight schema_version is unsupported")
-    if report.get("issue") != 8571:
+    if not _strictly_equal(report["issue"], 8571):
         raise BoundedFalsificationError("preflight issue must be 8571")
-    if report.get("claim_boundary") != CLAIM_BOUNDARY:
+    if not _strictly_equal(report["claim_boundary"], CLAIM_BOUNDARY):
         raise BoundedFalsificationError("preflight claim boundary drifted")
 
     expected_packet = {
@@ -470,7 +615,8 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
         "path": _repo_relative(source.packet_file, source.repo_root),
         "self_digest": packet["self_digest"],
     }
-    if report.get("packet") != expected_packet:
+    _assert_exact_fields(report["packet"], _PACKET_FIELDS, path="preflight packet")
+    if not _strictly_equal(report["packet"], expected_packet):
         raise BoundedFalsificationError("preflight packet identity is not bound to canonical #8570")
     expected_source = {
         "base_ref": packet["source"]["base_ref"],
@@ -479,14 +625,29 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
         "scenario_template_digest": source.source_overlay.source_digest,
         "variable_order": list(packet["variable_order"]),
     }
-    if report.get("source") != expected_source:
+    _assert_exact_fields(report["source"], _SOURCE_FIELDS, path="preflight source")
+    source_inputs = report["source"]["inputs"]
+    if not isinstance(source_inputs, list):
+        raise BoundedFalsificationError("preflight source.inputs must be a list")
+    for index, source_input in enumerate(source_inputs):
+        _assert_exact_fields(
+            source_input,
+            _SOURCE_INPUT_FIELDS,
+            path=f"preflight source.inputs[{index}]",
+        )
+    if not _strictly_equal(report["source"], expected_source):
         raise BoundedFalsificationError(
             "preflight source identity is not bound to canonical #8570 inputs"
         )
 
-    execution = report.get("execution")
-    if not isinstance(execution, Mapping):
-        raise BoundedFalsificationError("preflight execution must be a mapping")
+    feasibility = report["feasibility"]
+    _assert_exact_fields(feasibility, _FEASIBILITY_FIELDS, path="preflight feasibility")
+    expected_feasibility = _canonical_feasibility(packet)
+    if not _strictly_equal(feasibility, expected_feasibility):
+        raise BoundedFalsificationError("preflight feasibility is not canonical")
+
+    execution = report["execution"]
+    _assert_exact_fields(execution, _EXECUTION_FIELDS, path="preflight execution")
     for field in (
         "simulator_executed",
         "planner_executed",
@@ -503,9 +664,8 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
             "preflight execution.compute_authorized_by_packet is not bound to canonical packet"
         )
 
-    gate = report.get("gate")
-    if not isinstance(gate, Mapping):
-        raise BoundedFalsificationError("preflight gate must be a mapping")
+    gate = report["gate"]
+    _assert_exact_fields(gate, _GATE_FIELDS, path="preflight gate")
     if gate.get("authorized") is not expected_authorized:
         raise BoundedFalsificationError(
             "preflight gate.authorized is not bound to canonical packet"
@@ -516,40 +676,57 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
             f"preflight gate.status must be {expected_gate_status!r} for canonical packet"
         )
     expected_blocking_reasons = list(packet["compute_authorization"]["blocking_reasons"])
-    if gate.get("blocking_reasons") != expected_blocking_reasons:
+    if not _strictly_equal(gate.get("blocking_reasons"), expected_blocking_reasons):
         raise BoundedFalsificationError(
             "preflight gate.blocking_reasons are not bound to canonical packet"
         )
 
-    zero_overlay = report.get("zero_overlay_equivalence")
-    if not isinstance(zero_overlay, Mapping):
-        raise BoundedFalsificationError("preflight zero_overlay_equivalence must be a mapping")
-    for field, expected in expected_zero_overlay.items():
-        if zero_overlay.get(field) != expected:
-            raise BoundedFalsificationError(
-                f"preflight zero_overlay_equivalence.{field} disagrees with canonical source"
-            )
-
-    arms = report.get("arms")
-    if not isinstance(arms, Mapping):
-        raise BoundedFalsificationError("preflight arms must be a mapping")
-    expected_cma_es = _cma_es_arm(packet)
-    if set(arms) != {PRIMARY_ARM, *CONTROL_ARMS}:
+    zero_overlay = report["zero_overlay_equivalence"]
+    _assert_exact_fields(
+        zero_overlay,
+        _ZERO_OVERLAY_FIELDS,
+        path="preflight zero_overlay_equivalence",
+    )
+    if not _strictly_equal(zero_overlay, expected_zero_overlay):
         raise BoundedFalsificationError(
-            "preflight arms must contain canonical cma_es, random, and halton ledgers"
+            "preflight zero_overlay_equivalence disagrees with canonical source"
         )
-    if arms.get(PRIMARY_ARM) != expected_cma_es:
+
+    arms = report["arms"]
+    _assert_exact_fields(
+        arms,
+        frozenset({PRIMARY_ARM, *CONTROL_ARMS}),
+        path="preflight arms",
+    )
+    expected_cma_es = _cma_es_arm(packet)
+    _assert_exact_fields(arms[PRIMARY_ARM], _CMA_ES_FIELDS, path="preflight arms.cma_es")
+    if not _strictly_equal(arms[PRIMARY_ARM], expected_cma_es):
         raise BoundedFalsificationError("preflight CMA-ES arm is not canonical")
     for arm in CONTROL_ARMS:
-        if arms.get(arm) != expected_control_arms[arm]:
+        actual_entries = arms[arm]
+        expected_entries = expected_control_arms[arm]
+        if not isinstance(actual_entries, list):
+            raise BoundedFalsificationError(
+                f"preflight {arm} candidate ledger is empty, altered, or not source-bound"
+            )
+        if len(actual_entries) != len(expected_entries):
+            raise BoundedFalsificationError(
+                f"preflight {arm} candidate ledger is empty, altered, or not source-bound"
+            )
+        for index, entry in enumerate(actual_entries):
+            _assert_exact_fields(entry, _ARM_FIELDS, path=f"preflight arms.{arm}[{index}]")
+        if not _strictly_equal(actual_entries, expected_entries):
             raise BoundedFalsificationError(
                 f"preflight {arm} candidate ledger is empty, altered, or not source-bound"
             )
 
     for section in ("native_outcomes", "replay"):
-        outputs = report.get(section)
-        if not isinstance(outputs, Mapping):
-            raise BoundedFalsificationError(f"preflight {section} must be a mapping")
+        outputs = report[section]
+        _assert_exact_fields(
+            outputs,
+            _NATIVE_OUTCOMES_FIELDS if section == "native_outcomes" else _REPLAY_FIELDS,
+            path=f"preflight {section}",
+        )
         expected_status = (
             _expected_native_status(packet) if section == "native_outcomes" else "blocked"
         )
@@ -567,12 +744,11 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
         ):
             raise BoundedFalsificationError("preflight replay.reason is not canonical")
 
-    rows = report.get("outcome_rows")
+    rows = report["outcome_rows"]
     if not isinstance(rows, list):
         raise BoundedFalsificationError("preflight outcome_rows must be a list")
     for index, row in enumerate(rows):
-        if not isinstance(row, Mapping):
-            raise BoundedFalsificationError(f"preflight outcome row {index} must be a mapping")
+        _assert_exact_fields(row, _OUTCOME_ROW_FIELDS, path=f"preflight outcome_rows[{index}]")
         if row.get("simulation_executed") is not False:
             raise BoundedFalsificationError(
                 f"preflight outcome row {index} simulation_executed must be false"
@@ -583,7 +759,7 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
                     f"preflight outcome row {index} {field} must be null"
                 )
         status = row.get("status")
-        if status not in OUTCOME_STATUSES:
+        if not isinstance(status, str) or status not in OUTCOME_STATUSES:
             raise BoundedFalsificationError(
                 f"preflight outcome row {index} has unsupported status {status!r}"
             )
@@ -597,17 +773,27 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
                 f"preflight non-invalid outcome row {index} cannot carry rejection metadata"
             )
     expected_summary = _summary(rows)
-    if report.get("outcome_summary") != expected_summary:
+    _assert_exact_fields(
+        report["outcome_summary"],
+        frozenset(OUTCOME_STATUSES),
+        path="preflight outcome_summary",
+    )
+    if not _strictly_equal(report["outcome_summary"], expected_summary):
         raise BoundedFalsificationError("preflight outcome summary disagrees with outcome rows")
     if any(row["status"] in {"result", "null"} for row in rows):
         raise BoundedFalsificationError("preflight cannot emit result or null outcomes")
-    if rows != expected_outcome_rows:
+    if not _strictly_equal(rows, expected_outcome_rows):
         raise BoundedFalsificationError(
             "preflight outcome ledger is empty, altered, or not source-bound"
         )
 
     expected_vocabulary = {key: packet["outcome_vocabulary"][key] for key in OUTCOME_STATUSES}
-    if report.get("outcome_vocabulary") != expected_vocabulary:
+    _assert_exact_fields(
+        report["outcome_vocabulary"],
+        frozenset(OUTCOME_STATUSES),
+        path="preflight outcome_vocabulary",
+    )
+    if not _strictly_equal(report["outcome_vocabulary"], expected_vocabulary):
         raise BoundedFalsificationError("preflight outcome vocabulary is not canonical")
 
 
@@ -670,12 +856,7 @@ def build_bounded_falsification_preflight(
             "random": arm_records["random"],
             "halton": arm_records["halton"],
         },
-        "feasibility": {
-            "owner": packet["feasibility"]["rejection_accounting"]["owner"],
-            "pre_simulation_rejection_ledger": True,
-            "native_predicates_executed": False,
-            "simulator_validity": "unavailable",
-        },
+        "feasibility": _canonical_feasibility(packet),
         "execution": {
             "compute_authorized_by_packet": bool(gate["authorized"]),
             "simulator_executed": False,

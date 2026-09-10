@@ -137,3 +137,180 @@ def test_preflight_validator_rejects_executed_cma_es_arm() -> None:
 
     with pytest.raises(BoundedFalsificationError, match="CMA-ES"):
         validate_bounded_falsification_preflight(report)
+
+
+def test_preflight_validator_binds_coordinated_gate_mutation_to_packet() -> None:
+    """A coordinated report-field mutation cannot authorize the canonical blocked packet."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["gate"].update({"authorized": True, "status": "not_requested"})
+    report["execution"]["compute_authorized_by_packet"] = True
+
+    with pytest.raises(BoundedFalsificationError, match="canonical packet"):
+        validate_bounded_falsification_preflight(report)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("native_outcomes", "status", "available"),
+        ("replay", "status", "completed"),
+    ],
+)
+def test_preflight_validator_rejects_noncanonical_execution_status(
+    section: str, field: str, value: str
+) -> None:
+    """Disabled native and replay sections cannot be relabeled as completed evidence."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report[section][field] = value
+
+    with pytest.raises(BoundedFalsificationError, match=section):
+        validate_bounded_falsification_preflight(report)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("status", "failed"),
+        ("source_digest", "a" * 64),
+        ("materialized_digest", "b" * 64),
+        ("patch_digest", "c" * 64),
+    ],
+)
+def test_preflight_validator_rejects_zero_overlay_identity_mutation(field: str, value: str) -> None:
+    """The zero-overlay verdict and all source digests must match the recomputed source."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["zero_overlay_equivalence"][field] = value
+
+    with pytest.raises(BoundedFalsificationError, match="zero_overlay_equivalence"):
+        validate_bounded_falsification_preflight(report)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda report: report["arms"].pop("random"),
+        lambda report: report["arms"].update({"halton": []}),
+        lambda report: report["arms"].update({"random": report["arms"]["random"][:-1]}),
+    ],
+)
+def test_preflight_validator_rejects_missing_empty_or_shrunk_control_arm(mutate) -> None:
+    """Every canonical control seed and candidate row must remain in the arm ledger."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    mutate(report)
+
+    with pytest.raises(BoundedFalsificationError, match="arms|ledger"):
+        validate_bounded_falsification_preflight(report)
+
+
+def test_preflight_validator_rejects_empty_outcome_ledger() -> None:
+    """An internally consistent empty outcome ledger cannot replace the canonical rows."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["outcome_rows"] = []
+    report["outcome_summary"] = dict.fromkeys(
+        ("result", "null", "inconclusive", "invalid", "unavailable", "blocked"), 0
+    )
+
+    with pytest.raises(BoundedFalsificationError, match="outcome ledger"):
+        validate_bounded_falsification_preflight(report)
+
+
+def test_preflight_validator_rejects_shrunk_outcome_ledger() -> None:
+    """Removing a row while repairing the summary still fails canonical ledger comparison."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["outcome_rows"].pop()
+    report["outcome_summary"]["blocked"] -= 1
+
+    with pytest.raises(BoundedFalsificationError, match="outcome ledger"):
+        validate_bounded_falsification_preflight(report)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda report: report["packet"].update({"packet_id": "forged-packet"}),
+            "packet identity",
+        ),
+        (
+            lambda report: report["source"].update({"scenario_template_digest": "d" * 64}),
+            "source identity",
+        ),
+        (
+            lambda report: report["arms"]["random"][0].update({"search_seed": 123}),
+            "candidate ledger",
+        ),
+        (
+            lambda report: report["arms"]["random"][0]["preparation"]["candidates"][0][
+                "candidate"
+            ].update({"candidate_id": "forged-candidate"}),
+            "candidate ledger",
+        ),
+        (
+            lambda report: report["arms"]["random"][0]["preparation"]["candidates"][0][
+                "overlay"
+            ].update({"materialized_digest": "e" * 64}),
+            "candidate ledger",
+        ),
+        (
+            lambda report: report["arms"]["random"][0]["preparation"]["candidates"][0][
+                "overlay"
+            ].update({"source_digest": "f" * 64}),
+            "candidate ledger",
+        ),
+        (
+            lambda report: report["arms"]["random"][0]["preparation"]["provenance"].update(
+                {"source_digest": "0" * 64}
+            ),
+            "candidate ledger",
+        ),
+        (
+            lambda report: report["outcome_rows"][0].update(
+                {"candidate_id": "forged-outcome-candidate"}
+            ),
+            "outcome ledger",
+        ),
+        (
+            lambda report: report["outcome_rows"][0].update(
+                {"overlay_materialized_digest": "f" * 64}
+            ),
+            "outcome ledger",
+        ),
+        (
+            lambda report: report["outcome_rows"][0]["candidate"].update(
+                {"candidate_id": "forged-nested-candidate"}
+            ),
+            "outcome ledger",
+        ),
+    ],
+)
+def test_preflight_validator_rejects_forged_packet_source_candidate_or_overlay_identity(
+    mutation, message: str
+) -> None:
+    """Ledger identities are checked against canonical recomputation, not report assertions."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    mutation(report)
+
+    with pytest.raises(BoundedFalsificationError, match=message):
+        validate_bounded_falsification_preflight(report)
+
+
+def test_preflight_validator_rejects_invalid_outcome_without_rejection_metadata() -> None:
+    """An invalid row must retain the pre-simulation rejection record that explains it."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["outcome_rows"][0]["status"] = "invalid"
+    report["outcome_summary"]["blocked"] -= 1
+    report["outcome_summary"]["invalid"] += 1
+
+    with pytest.raises(BoundedFalsificationError, match="rejection metadata"):
+        validate_bounded_falsification_preflight(report)
+
+
+def test_preflight_validator_accepts_explicit_source_binding_arguments() -> None:
+    """The source-bound validator remains compatible with the public one-argument fixture call."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+
+    validate_bounded_falsification_preflight(
+        report,
+        packet_path=PACKET,
+        repo_root=REPO_ROOT,
+    )

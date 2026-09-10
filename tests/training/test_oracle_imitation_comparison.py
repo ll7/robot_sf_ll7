@@ -241,6 +241,251 @@ def test_consumer_manifest_rejects_paths_that_escape_the_artifact_root(tmp_path:
         validate_dataset_consumer_manifest(path, repo_root=tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("mutation", "error"),
+    [
+        (lambda payload: payload.__setitem__("schema_version", "wrong.v1"), "schema_version"),
+        (lambda payload: payload.__setitem__("dataset_id", "Not-Lowercase"), "dataset_id"),
+        (lambda payload: payload.__setitem__("dataset_digest", "short"), "dataset_digest"),
+        (lambda payload: payload.__setitem__("artifact", []), "artifact must be a mapping"),
+        (
+            lambda payload: payload["artifact"].__setitem__("availability", "maybe"),
+            "artifact.availability",
+        ),
+        (lambda payload: payload.__setitem__("splits", {}), "splits must contain exactly"),
+        (lambda payload: payload["splits"].__setitem__("train", []), "splits.train must be"),
+        (
+            lambda payload: payload["splits"]["train"].__setitem__("sample_ids", []),
+            "splits.train.sample_ids",
+        ),
+        (
+            lambda payload: payload["splits"]["validation"]["sample_ids"].append(
+                "validation__sample1"
+            ),
+            "splits.validation.sample_ids contains duplicates",
+        ),
+        (
+            lambda payload: payload["splits"]["validation"]["sample_ids"].__setitem__(
+                0, "train__sample1"
+            ),
+            "split sample IDs overlap",
+        ),
+        (
+            lambda payload: payload["splits"]["train"].__setitem__("shards", []),
+            "splits.train.shards",
+        ),
+        (
+            lambda payload: payload["splits"]["train"]["shards"].__setitem__(0, []),
+            r"splits.train.shards\[0\] must be a mapping",
+        ),
+        (
+            lambda payload: payload["splits"]["train"]["shards"][0].__setitem__(
+                "sample_ids", ["train__sample1", "train__sample1"]
+            ),
+            "sample_ids contains duplicates",
+        ),
+        (
+            lambda payload: payload["splits"]["train"]["shards"][0].__setitem__("size_bytes", -1),
+            "size_bytes must be a non-negative integer",
+        ),
+        (
+            lambda payload: payload["splits"]["train"]["shards"][0].__setitem__(
+                "uri", "private-artifact://unit/train.jsonl"
+            ),
+            "needs exactly one of path or uri",
+        ),
+        (
+            lambda payload: payload["sample_inventory"].__setitem__("status", "unknown"),
+            "sample_inventory.status",
+        ),
+        (
+            lambda payload: payload["sample_inventory"].__setitem__("rows", []),
+            "complete sample_inventory requires non-empty rows",
+        ),
+        (
+            lambda payload: (
+                payload["sample_inventory"]["rows"].__getitem__(0).__setitem__("split", "other")
+            ),
+            "split must be one of",
+        ),
+        (
+            lambda payload: (
+                payload["sample_inventory"]["rows"]
+                .__getitem__(0)
+                .__setitem__("features", ["not-a-number"])
+            ),
+            r"features\[0\] must be numeric",
+        ),
+        (
+            lambda payload: payload["feature_contract"].__setitem__("dimension", 3),
+            "feature dimension mismatch",
+        ),
+        (
+            lambda payload: payload["sample_inventory"]["rows"].pop(),
+            "complete sample_inventory does not match",
+        ),
+        (
+            lambda payload: payload.__setitem__("feature_contract", []),
+            "feature_contract and action_contract",
+        ),
+        (
+            lambda payload: payload["feature_contract"].__setitem__("dimension", 0),
+            "feature_contract.dimension",
+        ),
+        (
+            lambda payload: payload.__setitem__("normalization", []),
+            "normalization must be a mapping",
+        ),
+        (
+            lambda payload: payload.__setitem__("quality", []),
+            "quality must be a mapping",
+        ),
+        (
+            lambda payload: payload["quality"].__setitem__("admitted_statuses", ["fallback"]),
+            "quality must admit only",
+        ),
+        (lambda payload: payload.__setitem__("manifest_digest", "0" * 64), "manifest_digest"),
+    ],
+)
+def test_consumer_manifest_rejects_malformed_declarations(
+    tmp_path: Path,
+    mutation: Any,
+    error: str,
+) -> None:
+    """Malformed public declarations fail before any loader can consume them."""
+    path, original = _write_consumer_manifest(tmp_path)
+    manifest = copy.deepcopy(original)
+    mutation(manifest)
+    _rewrite_manifest(path, manifest)
+
+    with pytest.raises(ComparisonPacketError, match=error):
+        validate_dataset_consumer_manifest(path, repo_root=tmp_path)
+
+
+def test_consumer_manifest_handles_deferred_private_uris_and_inventory_states(
+    tmp_path: Path,
+) -> None:
+    """Contract-only URI checks remain public-safe while strict loading fails closed."""
+    path, manifest = _write_consumer_manifest(tmp_path)
+    train_shard = manifest["splits"]["train"]["shards"][0]
+    train_shard.pop("path")
+    train_shard["uri"] = "private-artifact://unit/train.jsonl"
+    _rewrite_manifest(path, manifest)
+
+    declared = validate_dataset_consumer_manifest(path, repo_root=tmp_path)
+    assert len(declared["artifact_checks"]) == 2
+    assert all(check["status"] == "not_checked" for check in declared["artifact_checks"])
+
+    with pytest.raises(ComparisonArtifactBlockedError, match="train shard"):
+        validate_dataset_consumer_manifest(
+            path,
+            repo_root=tmp_path,
+            require_artifacts=True,
+        )
+
+    manifest["splits"]["train"]["shards"][0]["uri"] = "private-artifact://../escape"
+    _rewrite_manifest(path, manifest)
+    with pytest.raises(ComparisonPacketError, match="invalid private-artifact URI"):
+        validate_dataset_consumer_manifest(
+            path,
+            repo_root=tmp_path,
+            artifact_root=tmp_path,
+            require_artifacts=True,
+        )
+
+    manifest["splits"]["train"]["shards"][0]["uri"] = "private-artifact://unit/train.jsonl"
+    manifest["sample_inventory"] = None
+    _rewrite_manifest(path, manifest)
+    report = validate_dataset_consumer_manifest(path, repo_root=tmp_path)
+    assert report["sample_inventory"] == {"status": "unavailable", "row_count": None}
+
+
+@pytest.mark.parametrize(
+    ("mutation", "error"),
+    [
+        (lambda config: config.__setitem__("schema_version", "wrong.v1"), "schema_version"),
+        (
+            lambda config: config.__setitem__(
+                "dataset_launch_packet", "configs/does-not-exist.yaml"
+            ),
+            "comparison.dataset_launch_packet does not exist",
+        ),
+        (lambda config: config.__setitem__("budget", []), "budget must be a mapping"),
+        (
+            lambda config: config["budget"].__setitem__("environment_steps", 0),
+            "budget.environment_steps",
+        ),
+        (lambda config: config.__setitem__("evaluation", []), "evaluation must be a mapping"),
+        (
+            lambda config: config["evaluation"].__setitem__("cadence_steps", [1, 0]),
+            "evaluation.cadence_steps",
+        ),
+        (
+            lambda config: config["evaluation"].__setitem__("checkpoint_selection", []),
+            "checkpoint_selection must be a mapping",
+        ),
+        (
+            lambda config: config["evaluation"]["checkpoint_selection"].__setitem__(
+                "validation_split", "evaluation"
+            ),
+            "validation_split",
+        ),
+        (
+            lambda config: config["evaluation"]["checkpoint_selection"].__setitem__(
+                "retained", ["final"]
+            ),
+            "retained",
+        ),
+        (lambda config: config.__setitem__("arms", {}), "arms must contain exactly"),
+        (
+            lambda config: config["arms"].__setitem__("rl_only", []),
+            "arms.rl_only must be a mapping",
+        ),
+        (
+            lambda config: config["arms"]["rl_only"].__setitem__("environment_steps", 0),
+            "arms.rl_only.environment_steps",
+        ),
+        (
+            lambda config: config["arms"]["rl_only"].__setitem__(
+                "evaluation_scenario_config", "configs/scenarios/sets/other.yaml"
+            ),
+            "evaluation_scenario_config",
+        ),
+        (lambda config: config.__setitem__("estimands", []), "estimands must be a mapping"),
+        (
+            lambda config: config["estimands"].__setitem__("sample_efficiency", []),
+            "estimands.sample_efficiency must be a mapping",
+        ),
+        (
+            lambda config: config["estimands"]["sample_efficiency"].__setitem__(
+                "result_status", "available"
+            ),
+            "result_status must be pending",
+        ),
+        (
+            lambda config: config.__setitem__("out_of_scope_actions", []),
+            "out_of_scope_actions must be a mapping",
+        ),
+    ],
+)
+def test_comparison_packet_rejects_malformed_evaluation_declarations(
+    tmp_path: Path,
+    mutation: Any,
+    error: str,
+) -> None:
+    """Budget, evaluation, arm, and claim-scope changes fail closed."""
+    consumer_path, _ = _write_consumer_manifest(tmp_path)
+    config = yaml.safe_load(COMPARISON_CONFIG.read_text(encoding="utf-8"))
+    assert isinstance(config, dict)
+    config["dataset_consumer_manifest"] = str(consumer_path)
+    mutation(config)
+    config_path = tmp_path / "comparison-invalid.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ComparisonPacketError, match=error):
+        build_comparison_packet(config_path, repo_root=REPO_ROOT)
+
+
 def test_comparison_packet_freezes_matched_arms_and_public_claim_boundary(tmp_path: Path) -> None:
     """The packet links canonical sources and creates deterministic per-seed identities."""
     consumer_path, _ = _write_consumer_manifest(tmp_path)

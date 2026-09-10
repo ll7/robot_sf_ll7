@@ -787,6 +787,14 @@ def run_force_coupled_comparator(
             all_results.append(result)
 
     summary_table = compute_summary_table(all_results)
+    receipt_status = (
+        "failed"
+        if any(
+            result.status == "error" or result.failure_class == FAILURE_CLASS_SIMULATOR
+            for result in all_results
+        )
+        else "ok"
+    )
 
     env_info = {
         "python_version": sys.version.split()[0],
@@ -797,7 +805,7 @@ def run_force_coupled_comparator(
     # Deterministic receipt body for digest computation (excluding wall-clock latency)
     digest_payload = {
         "schema_version": SCHEMA_VERSION,
-        "status": "ok",
+        "status": receipt_status,
         "claim_boundary": CLAIM_BOUNDARY,
         "config_digest": config_digest,
         "config_sha256": config_sha256,
@@ -817,7 +825,7 @@ def run_force_coupled_comparator(
     receipt: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "receipt_digest": receipt_digest,
-        "status": "ok",
+        "status": receipt_status,
         "claim_boundary": CLAIM_BOUNDARY,
         "config_digest": config_digest,
         "config_sha256": config_sha256,

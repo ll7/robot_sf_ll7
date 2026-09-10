@@ -499,6 +499,36 @@ def test_cli_runner_smoke_mode(tmp_path: Path) -> None:
     assert saved_receipt["schema_version"] == SCHEMA_VERSION
 
 
+def test_comparator_receipt_fails_closed_on_simulator_error_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A handled simulator error cannot leave the receipt root status at ``ok``."""
+
+    def fail_clearance(*args: object) -> tuple[float | None, bool, bool]:
+        del args
+        raise RuntimeError("fixture clearance failure")
+
+    monkeypatch.setattr(comparator, "_update_clearance", fail_clearance)
+    receipt = run_force_coupled_comparator()
+
+    assert receipt["status"] == "failed"
+    assert any(
+        row["status"] == "error" and row["failure_class"] == FAILURE_CLASS_SIMULATOR
+        for row in receipt["results"]
+    )
+
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    jsonschema.validate(
+        instance=receipt, schema=json.loads(schema_path.read_text(encoding="utf-8"))
+    )
+
+
 def test_cli_smoke_rejects_simulator_error_rows(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

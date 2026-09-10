@@ -25,6 +25,12 @@ structured as `status="error"`, `degraded=true`, with a `simulator_<phase>_failu
 reason with the `planner_diagnostic:` prefix. Combined collision or simulator signals from either
 kind of planner-owned diagnostic still follow the base taxonomy precedence below.
 
+At receipt level, `run_force_coupled_comparator` sets `status="failed"` whenever any emitted row is
+an error or carries `failure_class="simulator"`. This prevents a handled simulator exception from
+looking like a successful comparator invocation to consumers that do not run the smoke helper.
+Expected planner-owned collision or timeout rows remain explicit `status="degraded"` diagnostic
+rows; neither root status nor row metrics is benchmark-success evidence.
+
 The base taxonomy precedence is preserved for combined signals. An explicit simulator flag or
 simulator reason text is checked first, followed by social compliance, tracking, and path
 generation:

@@ -209,7 +209,7 @@ exclude = [
 allow-direct-references = true
 
 [tool.ruff]
-required-version = "==0.16.5"
+required-version = "==0.16.6"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
@@ -684,7 +684,7 @@ dev = [
     "pytest-timeout>=2.4.0",
     "pytest-cov>=7.1.0",
     "scalene>=2.3.0",
-    "ruff==0.16.5",
+    "ruff==0.16.6",
     "pre-commit>=4.6.1",
     "setuptools>=83.0.0",
     "pylint>=4.0.6",
@@ -707,6 +707,15 @@ carla = [
 ]
 imitation = [
     "imitation>=1.0.0",
+]
+# Dependencies exercised by the manifest-driven examples smoke lane. Keep this
+# CI-only group narrower than the published ``all`` extra: hosted examples must
+# not hydrate unrelated GPU, distributed-RL, external-runtime, or browser stacks.
+examples = [
+    "robot_sf[viz,benchmark]",
+    "scikit-learn>=1.9.0",
+    "stable-baselines3>=2.9.0",
+    "torch>=2.13.0,<2.14.0",
 ]
 
 [project.scripts]

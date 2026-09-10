@@ -22,6 +22,7 @@ from scripts.tools.project_priority_score import (
     MissingProjectScopeError,
     ProjectItemFetchStats,
     ProjectQuotaBlockedError,
+    ProjectRateLimitError,
     ScoreInputs,
     SyncOptions,
     SyncPreview,
@@ -1198,9 +1199,56 @@ def test_gh_project_client_classifies_missing_read_project_scope(
     assert exc_info.value.command[:3] == ("gh", "project", "field-list")
 
 
+@pytest.mark.parametrize(
+    "details",
+    ["GraphQL: API rate limit already exceeded", "secondary rate limit"],
+)
+def test_gh_project_client_classifies_explicit_api_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    details: str,
+) -> None:
+    """The known owner fallback preserves an explicit GitHub rate-limit diagnostic."""
+
+    calls: list[list[str]] = []
+
+    def _raise(
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        owner = args[args.index("--owner") + 1]
+        if owner == "ll7":
+            raise subprocess.CalledProcessError(
+                1,
+                args,
+                output="",
+                stderr="unknown owner type",
+            )
+        raise subprocess.CalledProcessError(
+            1,
+            args,
+            output="",
+            stderr=details,
+        )
+
+    monkeypatch.setattr(subprocess, "run", _raise)
+
+    with pytest.raises(ProjectRateLimitError) as exc_info:
+        GhProjectClient().field_list(owner="ll7", project_number=5)
+
+    assert exc_info.value.command[:3] == ("gh", "project", "field-list")
+    assert exc_info.value.details == details
+    assert [call[call.index("--owner") + 1] for call in calls] == ["ll7", "@me"]
+
+
 def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     """The autopilot auto-fill path reports a blocker and leaves score writes untouched."""
 
@@ -1219,7 +1267,19 @@ def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
         lambda self, **kwargs: updates.append(float(kwargs["number"])),
     )
 
-    assert main(["sync", "--only-empty", "--ensure-fields"]) == 0
+    summary_file = tmp_path / "priority-summary.json"
+    assert (
+        main(
+            [
+                "sync",
+                "--only-empty",
+                "--ensure-fields",
+                "--summary-file",
+                str(summary_file),
+            ]
+        )
+        == 0
+    )
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "blocked"
@@ -1230,6 +1290,164 @@ def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
     assert payload["writes_performed"] is False
     assert payload["items"] == []
     assert updates == []
+    persisted = json.loads(summary_file.read_text(encoding="utf-8"))
+    assert persisted["items"] == []
+    assert persisted["eligibility_plan"]["schema"] == "project_priority_eligibility_plan.v1"
+    assert persisted["eligibility_plan"]["counts"] == {
+        "eligible": 0,
+        "skipped": 0,
+        "blocked": 0,
+    }
+    assert persisted["eligibility_plan"]["status"] == "blocked"
+    assert persisted["eligibility_plan"]["reason"] == "missing_project_scope"
+
+    ordinary_summary = tmp_path / "ordinary-priority-summary.json"
+    with pytest.raises(MissingProjectScopeError):
+        main(
+            [
+                "sync",
+                "--ensure-fields",
+                "--summary-file",
+                str(ordinary_summary),
+            ]
+        )
+    assert capsys.readouterr().out == ""
+    ordinary_persisted = json.loads(ordinary_summary.read_text(encoding="utf-8"))
+    assert ordinary_persisted["eligibility_plan"]["schema"] == (
+        "project_priority_eligibility_plan.v1"
+    )
+    assert ordinary_persisted["eligibility_plan"]["reason"] == "missing_project_scope"
+    assert ordinary_persisted["eligibility_plan"]["non_fatal"] is False
+
+
+def test_main_only_empty_rate_limit_is_non_fatal_json_without_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """The autopilot auto-fill path preserves an explicit rate-limit blocker."""
+
+    def _raise(*args: object, **kwargs: object) -> list[dict]:
+        raise ProjectRateLimitError(
+            command=("gh", "project", "field-list", "5"),
+            details="GraphQL: API rate limit already exceeded",
+        )
+
+    updates: list[float] = []
+    monkeypatch.setattr(GhProjectClient, "field_list", _raise)
+    monkeypatch.setattr(
+        GhProjectClient,
+        "update_number_field",
+        lambda self, **kwargs: updates.append(float(kwargs["number"])),
+    )
+
+    summary_file = tmp_path / "rate-limit-summary.json"
+    assert (
+        main(
+            [
+                "sync",
+                "--only-empty",
+                "--ensure-fields",
+                "--summary-file",
+                str(summary_file),
+            ]
+        )
+        == 0
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "blocked"
+    assert payload["reason"] == "project_api_rate_limit"
+    assert payload["command"][:3] == ["gh", "project", "field-list"]
+    assert payload["details"] == "GraphQL: API rate limit already exceeded"
+    assert payload["retryable"] is True
+    assert payload["fallback"] == "live-label ordering"
+    assert payload["non_fatal"] is True
+    assert payload["writes_performed"] is False
+    assert updates == []
+    persisted = json.loads(summary_file.read_text(encoding="utf-8"))
+    assert persisted["eligibility_plan"]["schema"] == "project_priority_eligibility_plan.v1"
+    assert persisted["eligibility_plan"]["status"] == "blocked"
+    assert persisted["eligibility_plan"]["reason"] == "project_api_rate_limit"
+
+    ordinary_summary = tmp_path / "ordinary-rate-limit-summary.json"
+    with pytest.raises(ProjectRateLimitError):
+        main(["sync", "--ensure-fields", "--summary-file", str(ordinary_summary)])
+    ordinary_persisted = json.loads(ordinary_summary.read_text(encoding="utf-8"))
+    assert ordinary_persisted["eligibility_plan"]["non_fatal"] is False
+
+
+def test_main_only_empty_rate_limit_reports_prior_field_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A rate limit after schema writes cannot be reported as a no-write result."""
+
+    def _raise(client: GhProjectClient, **kwargs: object) -> dict[str, dict[str, object]]:
+        client._field_creation_progress = {
+            "attempted_field_names": list(REQUIRED_NUMBER_FIELDS[:2]),
+            "created_field_names": [REQUIRED_NUMBER_FIELDS[0]],
+            "completed_write_count": 1,
+            "writes_performed_count": 1,
+            "write_ambiguity": False,
+        }
+        raise ProjectRateLimitError(
+            command=("gh", "project", "field-create", "5"),
+            details="GraphQL: API rate limit already exceeded",
+        )
+
+    monkeypatch.setattr(project_priority_score, "ensure_required_fields", _raise)
+
+    with pytest.raises(ProjectRateLimitError) as exc_info:
+        main(["sync", "--only-empty", "--ensure-fields"])
+
+    assert exc_info.value.writes_performed_count == 1
+    assert exc_info.value.completed_write_count == 1
+    assert capsys.readouterr().out == ""
+
+
+def test_main_only_empty_ambiguous_rate_limit_remains_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An unconfirmed first write cannot be presented as a proven no-write fallback."""
+
+    def _raise(*args: object, **kwargs: object) -> list[SyncPreview]:
+        error = ProjectRateLimitError(
+            command=("gh", "api", "graphql"),
+            details="GraphQL: API rate limit already exceeded",
+            phase="write",
+        )
+        error.write_ambiguity = True
+        raise error
+
+    monkeypatch.setattr(project_priority_score, "sync_scores", _raise)
+
+    with pytest.raises(ProjectRateLimitError):
+        main(["sync", "--only-empty"])
+
+    assert capsys.readouterr().out == ""
+
+
+def test_main_only_empty_write_phase_rate_limit_remains_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A write-phase rate limit remains fail closed even without telemetry flags."""
+
+    def _raise(*args: object, **kwargs: object) -> list[SyncPreview]:
+        raise ProjectRateLimitError(
+            command=("gh", "api", "graphql"),
+            details="GraphQL: API rate limit already exceeded",
+            phase="write",
+        )
+
+    monkeypatch.setattr(project_priority_score, "sync_scores", _raise)
+
+    with pytest.raises(ProjectRateLimitError):
+        main(["sync", "--only-empty"])
+
+    assert capsys.readouterr().out == ""
 
 
 def test_main_non_empty_scope_failure_remains_fail_closed(
@@ -1250,6 +1468,26 @@ def test_main_non_empty_scope_failure_remains_fail_closed(
     )
 
     with pytest.raises(MissingProjectScopeError):
+        main(["sync"])
+
+
+def test_main_non_empty_rate_limit_remains_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only auto-fill mode converts an explicit rate-limit error to a non-fatal result."""
+
+    monkeypatch.setattr(
+        GhProjectClient,
+        "field_list",
+        lambda self, **kwargs: (_ for _ in ()).throw(
+            ProjectRateLimitError(
+                command=("gh", "project", "field-list", "5"),
+                details="GraphQL: API rate limit already exceeded",
+            )
+        ),
+    )
+
+    with pytest.raises(ProjectRateLimitError):
         main(["sync"])
 
 
@@ -1307,6 +1545,7 @@ def test_gh_project_client_rejects_non_positive_or_non_finite_timeout() -> None:
 def test_main_only_empty_timeout_is_non_fatal_json_without_writes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     """The autopilot auto-fill path reports a timeout and leaves score writes untouched."""
 
@@ -1325,7 +1564,19 @@ def test_main_only_empty_timeout_is_non_fatal_json_without_writes(
         lambda self, **kwargs: updates.append(float(kwargs["number"])),
     )
 
-    assert main(["sync", "--only-empty", "--ensure-fields"]) == 0
+    summary_file = tmp_path / "timeout-summary.json"
+    assert (
+        main(
+            [
+                "sync",
+                "--only-empty",
+                "--ensure-fields",
+                "--summary-file",
+                str(summary_file),
+            ]
+        )
+        == 0
+    )
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "timeout_blocked"
@@ -1340,6 +1591,16 @@ def test_main_only_empty_timeout_is_non_fatal_json_without_writes(
     assert payload["write_ambiguity"] is False
     assert payload["items"] == []
     assert updates == []
+    persisted = json.loads(summary_file.read_text(encoding="utf-8"))
+    assert persisted["eligibility_plan"]["schema"] == "project_priority_eligibility_plan.v1"
+    assert persisted["eligibility_plan"]["status"] == "timeout_blocked"
+    assert persisted["eligibility_plan"]["reason"] == "gh_subprocess_timeout"
+
+    ordinary_summary = tmp_path / "ordinary-timeout-summary.json"
+    with pytest.raises(GhProjectTimeoutError):
+        main(["sync", "--ensure-fields", "--summary-file", str(ordinary_summary)])
+    ordinary_persisted = json.loads(ordinary_summary.read_text(encoding="utf-8"))
+    assert ordinary_persisted["eligibility_plan"]["non_fatal"] is False
 
 
 def test_main_non_empty_timeout_remains_fail_closed(
@@ -1597,6 +1858,53 @@ def test_ensure_required_fields_reports_partial_field_creation_timeout(
     assert payload["write_ambiguity"] is True
 
 
+def test_ensure_required_fields_reports_partial_field_creation_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later rate-limit failure retains earlier schema mutations."""
+
+    def _run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        command = list(args[0])  # type: ignore[arg-type]
+        if command[1:3] == ["project", "field-list"]:
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout=json.dumps({"fields": []}),
+            )
+        field_name = command[command.index("--name") + 1]
+        if field_name == REQUIRED_NUMBER_FIELDS[1]:
+            raise subprocess.CalledProcessError(
+                1,
+                command,
+                output="",
+                stderr="GraphQL: API rate limit already exceeded",
+            )
+        return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    with pytest.raises(ProjectRateLimitError) as exc_info:
+        project_priority_score.ensure_required_fields(
+            GhProjectClient(timeout_seconds=5.0),
+            owner="ll7",
+            project_number=5,
+        )
+
+    error = exc_info.value
+    assert error.attempted_field_names == list(REQUIRED_NUMBER_FIELDS[:2])
+    assert error.created_field_names == [REQUIRED_NUMBER_FIELDS[0]]
+    assert error.completed_write_count == 1
+    assert error.writes_performed_count == 1
+    assert error.write_ambiguity is True
+    payload = project_priority_score._blocked_project_rate_limit_payload(
+        owner="ll7", project_number=5, error=error
+    )
+    assert payload["completed_field_names"] == [REQUIRED_NUMBER_FIELDS[0]]
+    assert payload["completed_write_count"] == 1
+    assert payload["writes_performed"] is True
+    assert payload["write_ambiguity"] is True
+
+
 def test_ensure_required_fields_reports_completed_fields_when_final_read_times_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1794,6 +2102,73 @@ def test_apply_score_updates_reraises_write_phase_timeout() -> None:
     assert plan["writes_performed_count"] == 1
 
 
+def test_apply_score_updates_reraises_write_phase_rate_limit() -> None:
+    """A partial rate-limited write reports progress and write ambiguity."""
+    from types import SimpleNamespace
+
+    calls = 0
+
+    def _update(**kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise ProjectRateLimitError(
+                command=("gh", "api", "graphql"),
+                details="secondary rate limit",
+                phase="write",
+            )
+
+    plan: dict[str, object] = {}
+    client = SimpleNamespace(
+        current_phase="read",
+        last_eligibility_plan=plan,
+        update_number_field=_update,
+    )
+    options = SyncOptions(
+        owner="ll7",
+        project_number=5,
+        ensure_fields=False,
+        limit=10,
+        alpha=0.8,
+        round_digits=6,
+        issue_number=None,
+        dry_run=False,
+        skip_statuses=set(),
+    )
+    previews = [
+        SimpleNamespace(issue_number=1, new_score=3.0),
+        SimpleNamespace(issue_number=2, new_score=4.0),
+    ]
+
+    with pytest.raises(ProjectRateLimitError) as exc_info:
+        project_priority_score._apply_score_updates(
+            client,
+            options,
+            [(previews[0], {"id": "item-1"}), (previews[1], {"id": "item-2"})],
+            issue_snapshots={},
+            score_field_id="field-1",
+            project_id="project-1",
+        )
+    assert exc_info.value.attempted_rows == [
+        {"issue_number": 1, "item_id": "item-1", "written": True},
+        {"issue_number": 2, "item_id": "item-2", "written": False},
+    ]
+    assert exc_info.value.phase == "write"
+    assert exc_info.value.writes_performed_count == 1
+    payload = project_priority_score._blocked_project_rate_limit_payload(
+        owner="ll7",
+        project_number=5,
+        error=exc_info.value,
+    )
+    assert payload["attempted_rows"] == exc_info.value.attempted_rows
+    assert payload["writes_performed_count"] == 1
+    assert payload["writes_performed"] is True
+    assert payload["write_ambiguity"] is True
+    assert "1 score write(s) completed" in payload["message"]
+    assert plan["status"] == "rate_limit_blocked"
+    assert plan["writes_performed_count"] == 1
+
+
 def test_main_reports_complete_item_fetch_stats(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1823,6 +2198,7 @@ def test_main_reports_complete_item_fetch_stats(
 def test_main_quota_block_is_explicit_and_performs_no_project_writes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     """A low quota blocks before schema/item reads or score writes and can be resumed later."""
     monkeypatch.setattr(
@@ -1843,7 +2219,8 @@ def test_main_quota_block_is_explicit_and_performs_no_project_writes(
         lambda self, **kwargs: project_reads.append("field-list") or [],
     )
 
-    assert main(["sync", "--only-empty"]) == 0
+    summary_file = tmp_path / "quota-summary.json"
+    assert main(["sync", "--only-empty", "--summary-file", str(summary_file)]) == 0
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["status"] == "quota_blocked"
@@ -1851,11 +2228,24 @@ def test_main_quota_block_is_explicit_and_performs_no_project_writes(
     assert payload["non_fatal"] is True
     assert payload["resume_after"] == 1_800_000_123
     assert project_reads == []
+    persisted = json.loads(summary_file.read_text(encoding="utf-8"))
+    assert persisted["items"] == []
+    assert persisted["eligibility_plan"]["schema"] == "project_priority_eligibility_plan.v1"
+    assert persisted["eligibility_plan"]["counts"] == {
+        "eligible": 0,
+        "skipped": 0,
+        "blocked": 0,
+    }
+    assert persisted["eligibility_plan"]["status"] == "quota_blocked"
+    assert persisted["eligibility_plan"]["non_fatal"] is True
 
-    assert main(["sync"]) == 2
+    ordinary_summary = tmp_path / "ordinary-quota-summary.json"
+    assert main(["sync", "--summary-file", str(ordinary_summary)]) == 2
     second_payload = json.loads(capsys.readouterr().out)
     assert second_payload["status"] == "quota_blocked"
     assert second_payload["non_fatal"] is False
+    ordinary_persisted = json.loads(ordinary_summary.read_text(encoding="utf-8"))
+    assert ordinary_persisted["eligibility_plan"]["non_fatal"] is False
     assert project_reads == []
 
 

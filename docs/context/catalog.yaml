@@ -20,6 +20,14 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/simulator_typed_snapshot_contract.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/simulator_state_inventory.v1.json
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/issue_8222_obstacle_force_compatibility.md
   status: current
   freshness: policy
@@ -67,6 +75,14 @@ entries:
 - path: docs/context/issue_8015_force_coupled_comparator.md
   status: current
   freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/issue_8619_constrained_mpc_baseline_spec.md
+  status: proposal
+  freshness: maintained
+  area: planner
+- path: docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json
+  status: evidence
+  freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_8063_goal_belief_contract_receipt.v1.json
   status: evidence
@@ -7539,3 +7555,19 @@ entries:
   status: evidence
   freshness: evidence
   area: release_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/source_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/verification.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8568_replay_noop/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

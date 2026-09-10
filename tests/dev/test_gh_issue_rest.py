@@ -9,6 +9,10 @@ and the CLI render modes.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -713,3 +717,19 @@ def test_validate_issue_identity_rejects_non_canonical_authority(invalid_url: st
             repo="ll7/robot_sf_ll7",
             number=12,
         )
+
+
+def test_direct_invocation_without_ambient_pythonpath(tmp_path: Path) -> None:
+    """Direct CLI invocation must succeed from an arbitrary working directory without PYTHONPATH."""
+    entrypoint = Path(__file__).resolve().parents[2] / "scripts/dev/gh_issue_rest.py"
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
+    proc = subprocess.run(
+        [sys.executable, "-B", "-I", str(entrypoint), "--help"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert "usage:" in proc.stdout.lower()

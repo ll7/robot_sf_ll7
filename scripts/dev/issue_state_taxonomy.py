@@ -33,6 +33,7 @@ STATE_QUALIFIER_LABELS = frozenset(
         "state:blocked-no-code-slice",
         "state:deferred",
         "state:needs-artifact-promotion",
+        "state:needs-interpretation",
         "state:parked",
         "state:review",
         "state:working",

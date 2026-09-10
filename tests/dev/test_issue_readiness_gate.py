@@ -2,13 +2,293 @@
 
 from __future__ import annotations
 
+import hashlib
+import importlib
 import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from subprocess import CompletedProcess
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from scripts.dev import issue_readiness_gate
-from scripts.dev.issue_implementability import READY_LABEL
+from scripts.dev.issue_implementability import READY_LABEL, preflight_body_text
+from scripts.tools.issue_template_audit import audit_archetype_metadata
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+COMPLETE_BODY = (
+    "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
+    "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n"
+)
+CANONICAL_METADATA = (
+    "## Archetype Metadata\n\n```yaml\narchetype: workflow\n"
+    "evidence_tier: smoke\nlinked_policy: []\n```\n\n"
+)
+
+
+def test_preflight_cli_accepts_valid_body_without_transport(tmp_path: Path, capsys) -> None:
+    """The reusable offline entrypoint reports a digest but performs no live operations."""
+    body = CANONICAL_METADATA + COMPLETE_BODY
+    path = tmp_path / "body.md"
+    path.write_text(body, encoding="utf-8")
+    with patch.object(issue_readiness_gate.subprocess, "run") as run:
+        code = issue_readiness_gate.main(["preflight", "--body-file", str(path)])
+    assert code == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "schema": "issue_creation_preflight.v1",
+        "ready": True,
+        "missing_fields": [],
+        "heading_suggestions": {},
+        "metadata_findings": [],
+        "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+    }
+    run.assert_not_called()
+
+
+def test_create_rejects_invalid_metadata_before_transport(tmp_path: Path) -> None:
+    """A complete five-field body with invalid taxonomy must never reach creation."""
+    body_file = tmp_path / "invalid.md"
+    body_file.write_text(
+        "## Archetype Metadata\n\n```yaml\narchetype: bug\n"
+        "evidence_tier: reproducible_bug\nlinked_policy: []\n```\n\n" + COMPLETE_BODY,
+        encoding="utf-8",
+    )
+    with (
+        patch.object(
+            issue_readiness_gate.subprocess,
+            "run",
+            return_value=CompletedProcess(["fake-gh"], 1, "", "offline stop"),
+        ) as run,
+        patch.object(issue_readiness_gate.goal_issue_admission, "admit_issue") as admit,
+        patch.object(issue_readiness_gate.gh_pr_label_rest, "add_label") as label,
+    ):
+        result = issue_readiness_gate.create_issue(
+            title="fixture",
+            body_file=str(body_file),
+            labels=[],
+            repo="ll7/robot_sf_ll7",
+        )
+    assert run.call_count == 0, f"invalid metadata reached {run.call_count} fake create call(s)"
+    assert result["outcome"] == "preflight_rejected"
+    admit.assert_not_called()
+    label.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "",
+        "## Archetype Metadata\narchetype: workflow\n",
+        "## Archetype Metadata\n```yaml\n{}\n```\n",
+        CANONICAL_METADATA.replace("archetype: workflow\n", ""),
+        CANONICAL_METADATA.replace("evidence_tier: smoke\n", ""),
+        CANONICAL_METADATA.replace("linked_policy: []\n", ""),
+        CANONICAL_METADATA.replace("workflow", "bug"),
+        CANONICAL_METADATA.replace("smoke", "reproducible_bug"),
+        "## Archetype Metadata\n```yaml\narchetype: [\n```\n",
+        "## Archetype Metadata\n```yaml\n- workflow\n```\n",
+    ],
+    ids=[
+        "no-heading",
+        "no-fence",
+        "no-keys",
+        "no-archetype",
+        "no-tier",
+        "no-policy",
+        "invalid-archetype",
+        "invalid-tier",
+        "malformed",
+        "non-mapping",
+    ],
+)
+def test_precreate_reports_canonical_findings_without_writes(
+    tmp_path: Path,
+    capsys,
+    metadata: str,
+) -> None:
+    """Both public routes forward the existing auditor's findings without policy forks."""
+    body = metadata + "\n" + COMPLETE_BODY
+    path = tmp_path / "body.md"
+    path.write_text(body, encoding="utf-8")
+    expected = list(audit_archetype_metadata(body).findings)
+    assert expected
+    assert preflight_body_text(body)["ready"] is True
+    with (
+        patch.object(issue_readiness_gate.subprocess, "run") as run,
+        patch.object(issue_readiness_gate.gh_issue_rest, "fetch_issue") as fetch,
+        patch.object(issue_readiness_gate.goal_issue_admission, "admit_issue") as admit,
+        patch.object(issue_readiness_gate.gh_pr_label_rest, "add_label") as label,
+    ):
+        code = issue_readiness_gate.main(["preflight", "--body-file", str(path)])
+        preflight = json.loads(capsys.readouterr().out)
+        created = issue_readiness_gate.create_issue(
+            title="fixture",
+            body_file=str(path),
+            labels=[],
+            repo="ll7/robot_sf_ll7",
+        )
+    assert code == 2
+    assert preflight["ready"] is False
+    assert preflight["missing_fields"] == created["missing_fields"] == []
+    assert preflight["metadata_findings"] == created["metadata_findings"] == expected
+    assert (
+        preflight["body_sha256"]
+        == created["body_sha256"]
+        == hashlib.sha256(body.encode()).hexdigest()
+    )
+    assert created["outcome"] == "preflight_rejected"
+    for boundary in (run, fetch, admit, label):
+        boundary.assert_not_called()
+    assert path.read_text(encoding="utf-8") == body
+
+
+def test_preflight_cli_preserves_heading_suggestions(tmp_path: Path, capsys) -> None:
+    """The higher-level creation preflight exposes the canonical heading hint."""
+    body = (
+        CANONICAL_METADATA
+        + "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n"
+        + "## Input contract\n\n## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n"
+    )
+    path = tmp_path / "near-miss.md"
+    path.write_text(body, encoding="utf-8")
+
+    code = issue_readiness_gate.main(["preflight", "--body-file", str(path)])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 2
+    assert payload["heading_suggestions"]["input contract"] == {
+        "field": "inputs",
+        "alias": "inputs",
+        "score": 0.6667,
+    }
+
+
+def test_create_rejection_preserves_heading_suggestions(tmp_path: Path) -> None:
+    """A rejected create preflight retains the repair hint returned by the body check."""
+    body = (
+        CANONICAL_METADATA
+        + "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n"
+        + "## Input contract\n\n- one file\n\n"
+        + "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n"
+    )
+    path = tmp_path / "near-miss.md"
+    path.write_text(body, encoding="utf-8")
+
+    with patch.object(issue_readiness_gate.subprocess, "run") as run:
+        payload = issue_readiness_gate.create_issue(
+            title="t",
+            body_file=str(path),
+            labels=[],
+            repo="ll7/robot_sf_ll7",
+        )
+
+    assert payload["outcome"] == "preflight_rejected"
+    assert payload["heading_suggestions"] == {
+        "input contract": {
+            "field": "inputs",
+            "alias": "inputs",
+            "score": 0.6667,
+        }
+    }
+    run.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "archetype,tier,policy", [("workflow", "smoke", "[]"), ("agent_task", "proposal", "null")]
+)
+def test_precreate_preserves_existing_alias_and_policy_acceptance(
+    tmp_path: Path,
+    archetype: str,
+    tier: str,
+    policy: str,
+) -> None:
+    """Read aliases and linked_policy shape remain owned by the canonical auditor."""
+    body = (
+        CANONICAL_METADATA.replace("workflow", archetype)
+        .replace("smoke", tier)
+        .replace("[]", policy)
+        + COMPLETE_BODY
+    )
+    path = tmp_path / "body.md"
+    path.write_text(body, encoding="utf-8")
+    with patch.object(
+        issue_readiness_gate.subprocess,
+        "run",
+        return_value=CompletedProcess([], 1, "", "offline stop"),
+    ) as run:
+        preflight = issue_readiness_gate.preflight_creation_body(str(path))
+        issue_readiness_gate.create_issue(
+            title="fixture", body_file=str(path), labels=[], repo="ll7/robot_sf_ll7"
+        )
+    assert preflight["ready"] is True
+    assert preflight["metadata_findings"] == []
+    run.assert_called_once()
+    assert path.read_text(encoding="utf-8") == body
+
+
+@pytest.mark.parametrize("case", ["valid", "invalid", "incomplete", "missing", "invalid-utf8"])
+def test_preflight_cli_real_process_is_offline(tmp_path: Path, case: str) -> None:
+    """The published module command has stable exits and cannot call GitHub or provision tools."""
+    path = tmp_path / "body with spaces.md"
+    body = CANONICAL_METADATA + COMPLETE_BODY
+    if case == "invalid":
+        body = body.replace("workflow", "bug").replace("smoke", "reproducible_bug")
+    elif case == "incomplete":
+        body = CANONICAL_METADATA + "## Objective\nOnly the objective.\n"
+    if case == "invalid-utf8":
+        path.write_bytes(b"\xff")
+    elif case != "missing":
+        path.write_text(body, encoding="utf-8")
+    before = path.read_bytes() if path.exists() else None
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    audit = tmp_path / "external-calls"
+    for name in ("gh", "git", "uv", "pip"):
+        command = commands / name
+        command.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$0" >> "$CALL_AUDIT"\nexit 97\n', encoding="utf-8"
+        )
+        command.chmod(0o755)
+    root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "scripts.dev.issue_readiness_gate",
+            "preflight",
+            "--body-file",
+            str(path),
+        ],
+        cwd=root,
+        env={"PATH": str(commands), "CALL_AUDIT": str(audit)},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == (0 if case == "valid" else 2), result.stderr
+    assert result.stderr == ""
+    payload = json.loads(result.stdout)
+    assert payload["schema"] == "issue_creation_preflight.v1"
+    assert payload["ready"] is (case == "valid")
+    if case in {"missing", "invalid-utf8"}:
+        assert payload["body_sha256"] == ""
+        assert "body file unreadable" in payload["error"]
+    else:
+        assert payload["body_sha256"] == hashlib.sha256(body.encode()).hexdigest()
+        assert payload["metadata_findings"] == list(audit_archetype_metadata(body).findings)
+        assert payload["missing_fields"] == preflight_body_text(body)["missing_fields"]
+    assert not audit.exists()
+    assert (path.read_bytes() if path.exists() else None) == before
 
 
 def _issue(
@@ -232,8 +512,7 @@ def test_create_issue_strips_readiness_from_initial_labels(tmp_path) -> None:  #
     """Creation omits state:ready from the initial label set and parses the new number."""
     body_file = tmp_path / "body.md"
     body_file.write_text(
-        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
-        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        CANONICAL_METADATA + COMPLETE_BODY,
         encoding="utf-8",
     )
     created = _issue(8110, labels=["bug"])
@@ -278,8 +557,7 @@ def test_create_issue_fails_closed_when_url_is_unparseable(tmp_path) -> None:  #
     """An unparseable create output is an error with no issue or label write."""
     body_file = tmp_path / "body.md"
     body_file.write_text(
-        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
-        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        CANONICAL_METADATA + COMPLETE_BODY,
         encoding="utf-8",
     )
     with patch.object(issue_readiness_gate.subprocess, "run") as run:
@@ -360,8 +638,7 @@ def test_create_issue_invokes_the_gh_executable(tmp_path) -> None:  # type: igno
     """The create subprocess command starts with the gh executable (live-caught bug)."""
     body_file = tmp_path / "body.md"
     body_file.write_text(
-        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
-        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        CANONICAL_METADATA + COMPLETE_BODY,
         encoding="utf-8",
     )
     with patch.object(issue_readiness_gate.subprocess, "run") as run:
@@ -380,3 +657,232 @@ def test_create_issue_invokes_the_gh_executable(tmp_path) -> None:  # type: igno
     command = run.call_args.args[0]
     assert command[0] == "gh"
     assert command[1:3] == ["issue", "create"]
+
+
+@pytest.fixture
+def isolated_cli_env(tmp_path: Path) -> Iterator[dict[str, str]]:
+    """Stage only declared dependencies and fake commands for isolated CLI probes.
+
+    ``PYTHONPATH`` deliberately names the copied PyYAML dependency, not this
+    repository.  The direct-entrypoint bootstrap is responsible for finding the
+    repository package; the subprocess still has the declared third-party
+    dependency it needs.
+    """
+    dependencies = tmp_path / "dependencies"
+    shutil.copytree(
+        Path(yaml.__file__).parent,
+        dependencies / "yaml",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    audit = tmp_path / "external-calls"
+    for name in ("gh", "git", "uv", "pip"):
+        command = commands / name
+        command.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$0" >> "$CALL_AUDIT"\nexit 97\n', encoding="utf-8"
+        )
+        command.chmod(0o755)
+    env = {"PATH": str(commands), "PYTHONPATH": str(dependencies), "CALL_AUDIT": str(audit)}
+    dependency = subprocess.run(
+        [sys.executable, "-S", "-B", "-c", "import yaml; assert yaml.safe_load('ok: true')['ok']"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert dependency.returncode == 0, dependency.stderr
+    yield env
+    assert not audit.exists(), "Offline CLI invoked an external command"
+    assert not list(tmp_path.rglob("*.pyc"))
+
+
+def _run_readiness_cli(
+    root: Path,
+    *,
+    env: dict[str, str],
+    cwd: Path,
+    args: list[str],
+    direct: bool,
+    script: Path | None = None,
+    flags: tuple[str, ...] = ("-S", "-B"),
+) -> subprocess.CompletedProcess[str]:
+    """Run one direct or module CLI with an explicitly controlled environment."""
+    command = [sys.executable, *flags]
+    if direct:
+        command.append(str(script or root / "scripts/dev/issue_readiness_gate.py"))
+    else:
+        command.extend(["-m", "scripts.dev.issue_readiness_gate"])
+    command.extend(args)
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+
+
+def _assert_repository_is_not_an_ambient_dependency(root: Path, env: dict[str, str]) -> None:
+    """Keep the repository source path distinct from the explicitly staged dependency."""
+    assert str(root) not in env["PYTHONPATH"].split(os.pathsep)
+
+
+@pytest.mark.parametrize("foreign_cwd", [False, True], ids=["checkout", "foreign"])
+def test_direct_help_without_ambient_source_path(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+    foreign_cwd: bool,
+) -> None:
+    """The direct entrypoint works without an ambient source path."""
+    root = Path(__file__).resolve().parents[2]
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+    result = _run_readiness_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=tmp_path if foreign_cwd else root,
+        args=["--help"],
+        direct=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "preflight" in result.stdout
+    assert "gate" in result.stdout
+    assert "create" in result.stdout
+    assert result.stderr == ""
+
+
+def test_direct_preflight_without_ambient_source_path(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """Direct execution of the offline preflight subcommand works from a foreign cwd."""
+    root = Path(__file__).resolve().parents[2]
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+    body_file = tmp_path / "sample.md"
+    body_file.write_text(CANONICAL_METADATA + COMPLETE_BODY, encoding="utf-8")
+    result = _run_readiness_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=tmp_path,
+        args=["preflight", "--body-file", str(body_file)],
+        direct=True,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["schema"] == "issue_creation_preflight.v1"
+    assert payload["ready"] is True
+    assert payload["missing_fields"] == []
+
+
+def test_direct_entrypoint_prefers_worktree_over_hostile_pythonpath(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """Direct execution must put the resolved worktree before an untrusted source path."""
+    root = Path(__file__).resolve().parents[2]
+    hostile = tmp_path / "hostile-source"
+    (hostile / "scripts/dev").mkdir(parents=True)
+    (hostile / "scripts/__init__.py").write_text(
+        "raise RuntimeError('hostile scripts package imported')\n", encoding="utf-8"
+    )
+    (hostile / "scripts/dev/__init__.py").write_text(
+        "raise RuntimeError('hostile scripts.dev package imported')\n", encoding="utf-8"
+    )
+    env = dict(isolated_cli_env)
+    env["PYTHONPATH"] = os.pathsep.join([str(hostile), env["PYTHONPATH"]])
+    _assert_repository_is_not_an_ambient_dependency(root, env)
+
+    result = _run_readiness_cli(
+        root,
+        env=env,
+        cwd=tmp_path,
+        args=["--help"],
+        direct=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "preflight" in result.stdout
+    assert result.stderr == ""
+
+
+def test_direct_entrypoint_resolves_symlinked_worktree_root(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+) -> None:
+    """A symlinked worktree path still resolves imports from the real worktree root."""
+    root = Path(__file__).resolve().parents[2]
+    alias_root = tmp_path / "worktree-alias"
+    alias_root.symlink_to(root, target_is_directory=True)
+    body_file = tmp_path / "sample.md"
+    body_file.write_text(CANONICAL_METADATA + COMPLETE_BODY, encoding="utf-8")
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+
+    result = _run_readiness_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=tmp_path,
+        args=["preflight", "--body-file", str(body_file)],
+        direct=True,
+        script=alias_root / "scripts/dev/issue_readiness_gate.py",
+        flags=("-P", "-S", "-B"),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["ready"] is True
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    "body,expected_returncode",
+    [
+        (CANONICAL_METADATA + COMPLETE_BODY, 0),
+        (
+            CANONICAL_METADATA.replace("archetype: workflow", "archetype: bug").replace(
+                "evidence_tier: smoke", "evidence_tier: reproducible_bug"
+            )
+            + COMPLETE_BODY,
+            2,
+        ),
+    ],
+    ids=["valid", "invalid-metadata"],
+)
+def test_direct_and_module_preflight_outputs_and_exit_codes_match(
+    tmp_path: Path,
+    isolated_cli_env: dict[str, str],
+    body: str,
+    expected_returncode: int,
+) -> None:
+    """Direct and module entrypoints share output and exit-code contracts."""
+    root = Path(__file__).resolve().parents[2]
+    _assert_repository_is_not_an_ambient_dependency(root, isolated_cli_env)
+    body_file = tmp_path / "parity.md"
+    body_file.write_text(body, encoding="utf-8")
+    direct = _run_readiness_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=tmp_path,
+        args=["preflight", "--body-file", str(body_file)],
+        direct=True,
+    )
+    module = _run_readiness_cli(
+        root,
+        env=isolated_cli_env,
+        cwd=root,
+        args=["preflight", "--body-file", str(body_file)],
+        direct=False,
+    )
+
+    assert direct.returncode == module.returncode == expected_returncode
+    assert direct.stderr == module.stderr == ""
+    assert json.loads(direct.stdout) == json.loads(module.stdout)
+
+
+def test_module_import_preserves_sys_path() -> None:
+    """Package imports do not apply the direct-entrypoint path bootstrap."""
+    before = list(sys.path)
+    importlib.reload(issue_readiness_gate)
+    assert sys.path == before

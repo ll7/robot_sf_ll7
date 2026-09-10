@@ -75,7 +75,7 @@ Every preregistration must satisfy all six fields above. The shared checker
 the section is present and well-formed:
 
 ```bash
-python scripts/validation/check_preregistration_inference_contract.py \
+uv run python scripts/validation/check_preregistration_inference_contract.py \
   configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml
 ```
 

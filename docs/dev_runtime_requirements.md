@@ -64,9 +64,12 @@ full virtual environment per worker. Use
 `scripts/dev/bootstrap_worktree.sh` only when a worktree-local environment is
 explicitly required; inspect reclaim candidates with
 `scripts/dev/check_worktree_capacity.py --inventory` before manually pruning
-ignored output, caches, or scratch worktrees. Inventory sizing is bounded to five seconds per
-candidate by default; use `--size-timeout-seconds N` to choose another positive timeout. A timeout
-or unavailable size is explicit evidence, not a claim that the path is empty.
+ignored output, caches, or scratch worktrees. Ordinary inventory sizing is bounded to five seconds
+per candidate by default. The shared worktree container sizes immediate children concurrently with
+up to 16 workers and a fleet budget capped at 60 seconds at the default setting; incomplete fleets
+return an explicit partial lower-bound estimate. Use `--size-timeout-seconds N` to choose another
+positive base timeout. A timeout, partial estimate, or unavailable size is explicit evidence, not a
+claim that the path is empty.
 
 When using the linked-worktree bootstrap helper for a training or vectorized-environment
 (VecEnv) validation path, name the required optional dependency explicitly:
@@ -114,19 +117,34 @@ sudo apt-get install -y --no-install-recommends libglib2.0-0 libgl1 fonts-dejavu
 mandatory rendered-page quality assurance.
 
 The shared CI helper `scripts/dev/ci_install_headless_packages.sh` skips packages already present
-on the runner and bounds both the apt-update and apt-install phases to 300 seconds by default
-(600 seconds maximum per phase). The two-phase default budget is therefore 600 seconds, inside
-the outer 1,200-second CI step budget. Set `CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS` only when
-diagnosing a runner-specific problem; values must be integer seconds from 1 through 600.
+on the runner and bounds the primary apt-update and apt-install phases to 300 seconds by default
+(600 seconds maximum per phase). Its bounded official-mirror fallback uses
+`CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS`, which defaults to 60 seconds and is clamped to
+the primary phase timeout. The normal two-phase default budget is 600 seconds; an initial update
+timeout followed by a fallback and install can consume at most 660 seconds (`300 + 60 + 300`),
+inside the outer 1,200-second CI step budget. The helper rejects custom values when the worst-case
+recovery budget (`2 * phase timeout + fallback timeout`) would exceed the enclosing
+`CI_STEP_TIMEOUT_SECONDS` budget (1,200 seconds in this action). Set either timeout variable only
+when diagnosing a runner-specific problem; values must be integer seconds from 1 through 600 and
+must fit that combined budget. Unsupported fallback-source preparation is reported explicitly as
+unavailable with its preparation status and output; it is not relabeled as an apt command failure.
 
 When a phase times out or fails, the helper exits nonzero and reports the phase, required package
 set, observed apt source hosts, timeout budget, and elapsed seconds. A third-party apt 403 remains
 a warning-only exception; official-source failures, package-resolution failures, and timeouts
 remain fail-closed.
 
+For a bounded hosted-runner recovery, a `Hash Sum mismatch` attributed only to the Google Chrome
+APT source (`dl.google.com`) triggers one official Ubuntu mirror-isolation attempt. The helper logs
+the failed source and `retry_count`, and uses the isolated official source list for installation
+only after that update succeeds. A mismatch combined with any unrelated source failure, or a
+failed recovery attempt, remains a terminal setup failure.
+
 The promoted-planner and nightly performance workflows use the same headless stack, without `jq`
 where it is not needed.
 
+
+See also the [Platform Setup Profiles](./quickstart_platforms.md) for the Linux, macOS, and headless onboarding paths.
 ## Headless Rendering
 
 Use these environment values for local GUI/rendering tests on headless machines:
@@ -170,6 +188,23 @@ It does not replace GitHub CI or:
 ```bash
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
+
+## Platform Receipt And Startup Smoke
+
+`scripts/validation/platform_receipt.py` captures a sanitized `platform_receipt.v1` record for the
+CARLA/Unreal/ROS/bridge platform, validates it against optional expectations, and runs a bounded
+server startup smoke. Missing components stay explicit as `unavailable` with reason codes, and
+nothing is installed or downloaded by the tool.
+
+```bash
+uv run python scripts/validation/platform_receipt.py capture --json --output output/platform_receipt.json
+uv run python scripts/validation/platform_receipt.py check --receipt output/platform_receipt.json --json
+uv run python scripts/validation/platform_receipt.py startup-smoke --server-command "<server argv>" --timeout-sec 120 --json
+```
+`check` fails closed on server/client version mismatch, missing ROS/bridge packages, map digest
+mismatch, and missing display or headless EGL capability; `startup-smoke` fails with
+`carla_unavailable` when no server command is provided, and `capture --comparator-host-out <path>`
+writes a `cross_host_environment.v1` projection for the cross-host comparator.
 
 ## Optional Machine Capabilities
 

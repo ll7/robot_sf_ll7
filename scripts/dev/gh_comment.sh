@@ -18,7 +18,148 @@ Notes:
   - Both PR and issue comments use the REST issue-comments endpoint
     (POST repos/<owner>/<repo>/issues/<number>/comments) with REST target
     validation, so publication is independent of GraphQL comment quotas.
+  - GitHub CLI calls use GH_COMMENT_TIMEOUT_SECONDS (default: 30) and fail
+    closed when the finite timeout is reached.
 EOF
+}
+
+DEFAULT_GH_COMMENT_TIMEOUT_SECONDS="30"
+GH_COMMENT_TIMEOUT_SECONDS="${GH_COMMENT_TIMEOUT_SECONDS:-$DEFAULT_GH_COMMENT_TIMEOUT_SECONDS}"
+
+gh_api() {
+  python3 - "$GH_COMMENT_TIMEOUT_SECONDS" gh "$@" <<'PY'
+import math
+import os
+import signal
+import subprocess
+import sys
+import time
+
+TIMEOUT_EXIT_CODE = 124
+BACKEND_ERROR_EXIT_CODE = 125
+PROCESS_GROUP_CLEANUP_GRACE_SECONDS = 5.0
+PROCESS_GROUP_POLL_INTERVAL_SECONDS = 0.01
+
+
+def process_group_exists(process_group_id: int) -> bool:
+    try:
+        os.killpg(process_group_id, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def wait_for_process_group_exit(process: subprocess.Popen[bytes]) -> bool:
+    deadline = time.monotonic() + PROCESS_GROUP_CLEANUP_GRACE_SECONDS
+    while process_group_exists(process.pid):
+        process.poll()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(PROCESS_GROUP_POLL_INTERVAL_SECONDS, remaining))
+    process.wait()
+    return True
+
+
+def terminate_process_group(process: subprocess.Popen[bytes]) -> bool:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        process.wait()
+        return True
+    except OSError:
+        process.terminate()
+        try:
+            process.wait(timeout=PROCESS_GROUP_CLEANUP_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            return False
+        return False
+
+    if wait_for_process_group_exit(process):
+        return True
+
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except OSError:
+        process.kill()
+        process.wait()
+        return False
+    return wait_for_process_group_exit(process)
+
+
+def write_output(stream: object, payload: bytes | None) -> None:
+    if payload:
+        stream.buffer.write(payload)  # type: ignore[attr-defined]
+        stream.buffer.flush()  # type: ignore[attr-defined]
+
+
+def main() -> int:
+    try:
+        timeout_seconds = float(sys.argv[1])
+    except (IndexError, ValueError):
+        print(
+            "gh_comment.sh: GH_COMMENT_TIMEOUT_SECONDS must be a finite positive number",
+            file=sys.stderr,
+        )
+        return BACKEND_ERROR_EXIT_CODE
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        print(
+            "gh_comment.sh: GH_COMMENT_TIMEOUT_SECONDS must be a finite positive number",
+            file=sys.stderr,
+        )
+        return BACKEND_ERROR_EXIT_CODE
+
+    command = sys.argv[2:]
+    if not command:
+        print("gh_comment.sh: bounded GitHub CLI command is missing", file=sys.stderr)
+        return BACKEND_ERROR_EXIT_CODE
+
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except FileNotFoundError:
+        print(f"gh_comment.sh: command not found: {command[0]}", file=sys.stderr)
+        return 127
+    except PermissionError:
+        print(f"gh_comment.sh: command is not executable: {command[0]}", file=sys.stderr)
+        return 126
+
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        cleaned = terminate_process_group(process)
+        try:
+            stdout, stderr = process.communicate(timeout=PROCESS_GROUP_CLEANUP_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            stdout = exc.stdout or b""
+            stderr = exc.stderr or b""
+            cleaned = False
+        write_output(sys.stdout, stdout)
+        write_output(sys.stderr, stderr)
+        print(
+            f"gh_comment.sh: GitHub CLI command timed out after {timeout_seconds:g} seconds",
+            file=sys.stderr,
+        )
+        return TIMEOUT_EXIT_CODE if cleaned else BACKEND_ERROR_EXIT_CODE
+
+    write_output(sys.stdout, stdout)
+    write_output(sys.stderr, stderr)
+    returncode = process.returncode
+    return 128 - returncode if returncode < 0 else returncode
+
+
+raise SystemExit(main())
+PY
 }
 
 if [ "$#" -gt 0 ] && { [ "$1" = "--help" ] || [ "$1" = "-h" ]; }; then
@@ -117,7 +258,13 @@ if [ "$use_current_pr" = true ]; then
     api_repo="$repo_arg"
     head_owner="${repo_arg%%/*}"
   fi
-  if ! target_id="$(gh api "repos/$api_repo/pulls?state=open&head=$head_owner:$branch_name&per_page=100" --jq '.[0].number // empty')"; then
+  if target_id="$(gh_api api "repos/$api_repo/pulls?state=open&head=$head_owner:$branch_name&per_page=100" --jq '.[0].number // empty')"; then
+    :
+  else
+    gh_api_rc=$?
+    if [[ "$gh_api_rc" -eq 124 || "$gh_api_rc" -eq 125 ]]; then
+      exit "$gh_api_rc"
+    fi
     echo "Error: could not resolve an open PR for branch '$branch_name'." >&2
     exit 1
   fi
@@ -156,14 +303,19 @@ if [ "$target_type" = "pr" ]; then
   if [ -n "$repo_arg" ]; then
     api_repo="$repo_arg"
   fi
-  if ! gh api "repos/$api_repo/pulls/$target_id" --silent; then
+  gh_api_rc=0
+  gh_api api "repos/$api_repo/pulls/$target_id" --silent || gh_api_rc=$?
+  if [[ "$gh_api_rc" -ne 0 ]]; then
+    if [[ "$gh_api_rc" -eq 124 || "$gh_api_rc" -eq 125 ]]; then
+      exit "$gh_api_rc"
+    fi
     echo "Error: PR '$target_id' could not be resolved through the REST API." >&2
     exit 1
   fi
   # Use gh's silent mode so a successful POST with an empty/malformed response
   # body cannot surface as a client-side JSON parse failure (issue #6891).
   gh_api_rc=0
-  gh api --method POST "repos/$api_repo/issues/$target_id/comments" \
+  gh_api api --method POST "repos/$api_repo/issues/$target_id/comments" \
     --silent -F "body=@$body_file" || gh_api_rc=$?
   exit "$gh_api_rc"
 else
@@ -175,14 +327,19 @@ else
   # then post through the REST issue-comments endpoint. This keeps the issue
   # path independent of the GraphQL-backed ``gh issue comment`` command, which
   # fails under exhausted GraphQL comment quota even when REST is available.
-  if ! gh api "repos/$api_repo/issues/$target_id" --silent; then
+  gh_api_rc=0
+  gh_api api "repos/$api_repo/issues/$target_id" --silent || gh_api_rc=$?
+  if [[ "$gh_api_rc" -ne 0 ]]; then
+    if [[ "$gh_api_rc" -eq 124 || "$gh_api_rc" -eq 125 ]]; then
+      exit "$gh_api_rc"
+    fi
     echo "Error: Issue '$target_id' could not be resolved through the REST API." >&2
     exit 1
   fi
   # Use gh's silent mode so a successful POST with an empty/malformed response
   # body cannot surface as a client-side JSON parse failure (issue #6891).
   gh_api_rc=0
-  gh api --method POST "repos/$api_repo/issues/$target_id/comments" \
+  gh_api api --method POST "repos/$api_repo/issues/$target_id/comments" \
     --silent -F "body=@$body_file" || gh_api_rc=$?
   exit "$gh_api_rc"
 fi

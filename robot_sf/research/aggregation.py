@@ -27,6 +27,14 @@ import numpy as np
 import pandas as pd
 
 from robot_sf.common.logging import get_logger
+from robot_sf.research.exceptions import ValidationError
+from robot_sf.research.tracker_manifest import (
+    coerce_nonnegative_tracker_float,
+    coerce_tracker_float,
+    coerce_tracker_int,
+    validate_tracker_payload,
+    validate_tracker_payload_records,
+)
 
 logger = get_logger(__name__)
 
@@ -51,6 +59,12 @@ def aggregate_metrics(
         List of aggregated metric dicts (see AggregatedMetrics in data model)
     """
     # Group by condition and metric
+    for record in metric_records:
+        timestep_value = record.get("timesteps_to_convergence")
+        if timestep_value is not None:
+            coerce_nonnegative_tracker_float(
+                timestep_value, "metric_records.timesteps_to_convergence"
+            )
     df = pd.DataFrame(metric_records)
     if df.empty or group_by not in df.columns:
         return []
@@ -66,6 +80,7 @@ def aggregate_metrics(
     for condition, group in df.groupby(group_by):
         for metric_name in metric_cols:
             values = group[metric_name].dropna().to_numpy()
+            values = values[np.isfinite(values)]
             if len(values) == 0:
                 continue
             mean = float(np.mean(values))
@@ -150,10 +165,13 @@ def bootstrap_ci(
         Uses percentile method. Returns None for single-value inputs.
     """
     np.random.seed(seed)
-    if len(values) < 2:
+    finite_values = np.asarray(values, dtype=float)
+    finite_values = finite_values[np.isfinite(finite_values)]
+    if len(finite_values) < 2:
         return None, None
     boot_samples = [
-        np.mean(np.random.choice(values, size=len(values), replace=True)) for _ in range(ci_samples)
+        np.mean(np.random.choice(finite_values, size=len(finite_values), replace=True))
+        for _ in range(ci_samples)
     ]
     alpha = 1 - ci_confidence
     ci_low = float(np.percentile(boot_samples, 100 * alpha / 2))
@@ -183,8 +201,42 @@ def _load_manifest_payload(manifest_path: Path) -> dict[str, Any]:
         lines = [line for line in text.splitlines() if line.strip()]
         if not lines:
             raise ValueError(f"Empty manifest file: {manifest_path}")
-        return json.loads(lines[-1])
-    return json.loads(text)
+        payload = validate_tracker_payload_records(
+            [json.loads(line) for line in lines], manifest_path
+        )
+    else:
+        payload = json.loads(text)
+
+    if manifest_path.suffix != ".jsonl":
+        validate_tracker_payload(payload, manifest_path)
+    return payload
+
+
+def _first_timestep_metric(metrics: dict[str, Any]) -> object | None:
+    """Select the first timestep alias while preserving the zero/fallback contract.
+
+    The aliases are considered in priority order: ``timesteps_to_convergence``,
+    ``avg_timesteps``, then ``total_timesteps``. Numeric zero is a valid value;
+    null or malformed falsy values in earlier aliases retain legacy fall-through,
+    while values that reach coercion retain the existing validation behavior.
+
+    Returns:
+        The selected alias value, or ``None`` when no alias is present.
+    """
+    for field in ("timesteps_to_convergence", "avg_timesteps"):
+        candidate = metrics.get(field)
+        # Keep the legacy fallback for malformed falsy values while treating
+        # numeric zero as a real metric rather than an absent value.
+        if candidate or _is_numeric_zero(candidate):
+            return candidate
+    # The old ``or`` chain leaves the final alias intact, even when it is a
+    # malformed falsy value, so let the existing coercion report that error.
+    return metrics.get("total_timesteps")
+
+
+def _is_numeric_zero(value: object) -> bool:
+    """Return whether a value is a non-boolean numeric zero."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
 
 
 def extract_seed_metrics(
@@ -205,9 +257,14 @@ def extract_seed_metrics(
 
     for raw_path in manifest_paths:
         manifest_path = Path(raw_path)
+        payload: dict[str, Any] | None = None
         try:
             payload = _load_manifest_payload(manifest_path)
-            seed = int(payload.get("seed")) if payload.get("seed") is not None else None
+            seed = (
+                coerce_tracker_int(payload.get("seed"), "seed")
+                if payload.get("seed") is not None
+                else None
+            )
             metrics = payload.get("metrics") or payload.get("summary", {}).get("metrics")
             if metrics is None:
                 raise KeyError("metrics not found")
@@ -220,29 +277,45 @@ def extract_seed_metrics(
             }
 
             if "success_rate" in metrics:
-                record["success_rate"] = float(metrics["success_rate"])
+                record["success_rate"] = coerce_tracker_float(
+                    metrics["success_rate"], "metrics.success_rate"
+                )
             if "collision_rate" in metrics:
-                record["collision_rate"] = float(metrics["collision_rate"])
+                record["collision_rate"] = coerce_tracker_float(
+                    metrics["collision_rate"], "metrics.collision_rate"
+                )
 
-            timesteps = metrics.get("timesteps_to_convergence")
-            timesteps = timesteps or metrics.get("avg_timesteps")
-            timesteps = timesteps or metrics.get("total_timesteps")
+            timesteps = _first_timestep_metric(metrics)
             if timesteps is not None:
-                record["timesteps_to_convergence"] = float(timesteps)
+                record["timesteps_to_convergence"] = coerce_nonnegative_tracker_float(
+                    timesteps, "metrics.timesteps"
+                )
 
             if "final_reward_mean" in metrics:
-                record["final_reward_mean"] = float(metrics["final_reward_mean"])
+                record["final_reward_mean"] = coerce_tracker_float(
+                    metrics["final_reward_mean"], "metrics.final_reward_mean"
+                )
             if "run_duration_seconds" in metrics:
-                record["run_duration_seconds"] = float(metrics["run_duration_seconds"])
+                record["run_duration_seconds"] = coerce_tracker_float(
+                    metrics["run_duration_seconds"], "metrics.run_duration_seconds"
+                )
 
             if len(record.keys() - {"seed", "policy_type", "variant_id"}) == 0:
                 raise ValueError("no numeric metrics found")
 
             records.append(record)
-        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        except (
+            OSError,
+            OverflowError,
+            TypeError,
+            ValueError,
+            KeyError,
+            ValidationError,
+            json.JSONDecodeError,
+        ) as exc:
             failure = {
-                "seed": payload.get("seed") if "payload" in locals() else None,
-                "policy_type": payload.get("policy_type") if "payload" in locals() else None,
+                "seed": payload.get("seed") if payload is not None else None,
+                "policy_type": payload.get("policy_type") if payload is not None else None,
                 "path": str(manifest_path),
                 "reason": str(exc),
             }

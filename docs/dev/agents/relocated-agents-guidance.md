@@ -132,8 +132,10 @@ When working in a linked Git worktree, detect bootstrap state before running exp
   cycle (`git fetch origin main && git merge origin/main`) so the branch benefits from repository-wide
   fixes before local changes diverge. For read-only review worktrees/passes, record target/base/head
   SHAs and inspect or fetch as needed; never merge `origin/main` into the implementation branch or
-  push to it during review (relying on the machine-enforced read-only guard in
-  `scripts/dev/review_worktree_guard.py` / issue #8321).
+  push to it during review. Ordinary Git invocations rely on the machine Git guard in
+  `scripts/dev/review_worktree_guard.py` / issue #8321; deliberate override or alternate
+  receive-pack probes must run as descendants of its Linux Landlock `run` boundary because raw
+  commands launched outside that process are not adversarially isolated.
 - Do not create divergent per-worktree machine context files unless the worktree really needs
   machine-specific behavior that should not be inherited from the main checkout.
 
@@ -170,16 +172,28 @@ artifact classification as blockers; the report is read-only and never grants de
 - Preserve every relevant tracked, untracked, and ignored-but-important local change before removal
   by committing it, stashing it, saving a patch, promoting a durable artifact, or recording an
   explicit handoff.
+- Repository-owned automatic cleanup must fail closed for dirty or unreadable status, ignored
+  content, unpushed or unverifiable push state, open PR coverage, active leases, and lifecycle-lock
+  failures. Use `scripts/dev/stale_worktree_reaper.py --apply --json`; its refusal metadata records
+  reason codes, path/branch/HEAD identity, lease ownership when available, and the recovery action.
 - Do not remove a dirty worktree or a worktree with unpushed commits unless the preservation record
-  says exactly what was kept or why nothing needed preservation.
+  says exactly what was kept or why nothing needed preservation. A direct cleanup caller that is not
+  routed through the reaper is outside the repository contract and is unsafe until its ownership
+  and integration are located; issue #8699 documents that external boundary explicitly.
 - Inspect large ignored directories such as `output/` before removal. Classify them as disposable,
   ignored cache, tracked manifest/evidence, durable-required, or handoff-needed; never treat
   worktree-local `output/` contents as durable artifact storage.
 - For routine validation leftovers such as `output/coverage/`, `output/validation/pr_ready/`, and
   hydrated model caches, record only the category and count unless a file is being promoted or used
   as durable evidence.
-- Prefer `git worktree remove <path>` for clean worktrees and `git worktree prune` only after
-  verifying stale administrative entries no longer point at useful local state.
+- For repository-owned automation, route cleanup through
+  `scripts/dev/stale_worktree_reaper.py --apply --json`; a direct `git worktree remove <path>` is
+  operator-only after independently verifying a clean, pushed worktree, and `git worktree prune`
+  is allowed only after verifying stale administrative entries no longer point at useful local state.
+- If a registered worktree is already missing, `scripts/dev/gate_worktree_guard.py ensure --json`
+  may recreate its branch checkout from lease metadata, but its recovery record must retain
+  `loss_boundary=dirty_untracked_ignored_state_not_recoverable` and
+  `local_state_restored=false`: dirty, untracked, and ignored state is not restored by recreation.
 - Stash safety: `refs/stash` lives in the common Git dir, so all linked worktrees share one stash
   namespace. Never run a bare `git stash pop` in a linked worktree — it can apply another session's
   WIP into this checkout (issue #7700). Prefer temp commits (`git commit -m "WIP <branch>"`), or
@@ -491,6 +505,13 @@ freshness guard. A self-authored request returns `review_skipped_self_authored` 
 explicit `COMMENT` guidance; it never auto-downgrades the event. If the caller chooses that
 fallback, rerun with `--event COMMENT` and preserve the blocking marker (for example, the
 `gate-verdict` evidence); a comment is not an approval or a merge-gate acceptance by itself.
+When the caller has already reconciled the final title/body, also pass
+`--expected-metadata-digest <digest>`; the helper re-reads the live title/body
+under the write lock and returns a stale-state skip without POSTing when the
+digest differs. An uncertain metadata read, or a present review-body
+`pr-metadata` trailer that disagrees with the expected digest, fails closed
+with an error (exit code 1); the live metadata mismatch is the stale-state
+skip (exit code 2).
 
 Canonical note:
 

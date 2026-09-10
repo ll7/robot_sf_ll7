@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
-from typing import TYPE_CHECKING
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from scripts.dev.gh_pr_body_rest import main, reconcile_pr_metadata, update_pr_body
 from scripts.dev.pr_metadata import metadata_digest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _proc(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> MagicMock:
@@ -516,3 +515,19 @@ def test_reconcile_pr_metadata_accepts_live_head_carrier(tmp_path: Path) -> None
 
     assert result["status"] == "ok"
     mock_patch.assert_called_once()
+
+
+def test_direct_invocation_without_ambient_pythonpath(tmp_path: Path) -> None:
+    """Direct CLI invocation must succeed from an arbitrary working directory without PYTHONPATH."""
+    entrypoint = Path(__file__).resolve().parents[2] / "scripts/dev/gh_pr_body_rest.py"
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
+    proc = subprocess.run(
+        [sys.executable, "-B", "-I", str(entrypoint), "--help"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert "reconcile" in proc.stdout

@@ -33,6 +33,7 @@ from robot_sf.adversarial.config import (
 from robot_sf.adversarial.samplers import build_sampler
 from robot_sf.adversarial.search import run_adversarial_search
 from robot_sf.common.artifact_paths import get_artifact_root, get_repository_root
+from robot_sf.common.validation import finite_float as _finite_float
 
 WARM_START_SCHEMA_VERSION = "adversarial-warm-start.v1"
 
@@ -240,15 +241,6 @@ def _pose_from_mapping(payload: object, *, name: str) -> Pose2D | None:
     else:
         theta = 0.0
     return Pose2D(x, y, theta)
-
-
-def _finite_float(value: Any) -> float | None:
-    """Return a finite float or None."""
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed if math.isfinite(parsed) else None
 
 
 def _finite_int(value: Any) -> int | None:

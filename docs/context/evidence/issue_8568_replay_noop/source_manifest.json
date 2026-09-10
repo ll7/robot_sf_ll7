@@ -1,0 +1,593 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "source_intake.v1",
+  "issue": 8654,
+  "parent_issue": 8568,
+  "classification": "diagnostic-only",
+  "counts_as_success_evidence": false,
+  "inspection_commit": "807606a35ffb23f5d5749316fd75387e2ca30cd5",
+  "scientific_source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+  "metadata_orchestration_commit": "09f6b1beeff71b4ee30deae7cc2504c0c7310729",
+  "case": {
+    "scenario_id": "classic_head_on_corridor_medium",
+    "seed": 115,
+    "kinematics": "differential_drive",
+    "first_supported_pair": null,
+    "selection_status": "unavailable",
+    "reason": "No source-complete replay pair: all 14 retained rows disable both trace recorders and no durable continuation payload is retained. Native compatibility was not executed."
+  },
+  "release": {
+    "tag": "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1",
+    "version_doi": "10.5281/zenodo.22265925",
+    "archive": "september-erratum-derived-build-v2_publication_bundle.tar.gz",
+    "archive_size_bytes": 54222465,
+    "archive_sha256": "405494247b78569a87a20b34ec5668e01b85f4631a64737d781b32cd77abd3a1",
+    "checksums_sha256": "19113dfcf8e1f1b77c774197fb4882bed8b1b4d7b96efa7a7fb65850f5963102",
+    "publication_manifest_sha256": "4fd82d51adc150efb716d761d89a21a0c92f057712ef64579bac24f3d8393a1e",
+    "publication_custody_sha256": "86f08b2b8d107f2f79efccc1cc8822fdb062b4ec2b930b085c4b70a38411ef2e",
+    "license": "GPL-3.0-only",
+    "rights_source": "payload/release_metadata/rights_provenance.md",
+    "rights_boundary": "External checkpoints/datasets not listed in the bundle receive no rights grant. No raw payload is redistributed here."
+  },
+  "source_objects": [
+    {
+      "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml",
+      "raw_sha256": "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd"
+    },
+    {
+      "path": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "raw_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+    },
+    {
+      "path": "maps/svg_maps/classic_head_on_corridor.svg",
+      "raw_sha256": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b"
+    },
+    {
+      "path": "uv.lock",
+      "raw_sha256": "de2b22de6327164a9abda93f9d0a1fdb38316471f17ab6428ebc52ed7da603c6"
+    },
+    {
+      "path": "configs/algos/prediction_planner_camera_ready.yaml",
+      "raw_sha256": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481"
+    },
+    {
+      "path": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+      "raw_sha256": "e30d3b799d07467794c736b5a18ab13bed376ce201b714a14701c8cab5edf7b6"
+    }
+  ],
+  "config_identity_note": "The resolved release binds the *_template.yaml bytes, not the *_2026_08.yaml contextual input. Both are verified at scientific source; scientific fields/planner order match. Their name, release_tag and doi values differ. Raw SHA-256 values are not the short runtime config hashes.",
+  "planner_evaluation": [
+    {
+      "order": 1,
+      "planner": "prediction_planner",
+      "source_path": "payload/runs/prediction_planner__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "40e43074ac5760c4d6b5d897a41683acf8ec8f9325dcc5c18ebb4f2bd73b1392",
+      "episode_id": "classic_head_on_corridor_medium--115--01769919710c38b8",
+      "row_config_hash": "01769919710c38b8",
+      "planner_config_hash": "3a0e3451ff557f7e",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "322ac8eab92d558a7e5164eba2c2b3d66095da62b5201ce54a7ccc07fbb76be1",
+      "sidecar_member_sha256": "6a9478cdebb302b5aa26177c25429b247f4764e8db59642d5665757bb0e8bafc",
+      "run_id": "a1560ed7bac448d6b9970beb487f44ed",
+      "planner_config_source": {
+        "algo": "prediction_planner",
+        "key": "prediction_planner",
+        "path": "configs/algos/prediction_planner_camera_ready.yaml",
+        "config_sha256": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481"
+      },
+      "checkpoint_identity_fields": {
+        "/algorithm_metadata/foresight_prediction/observed_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+        "/algorithm_metadata/foresight_prediction/requested_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+        "/algorithm_metadata/planner_runtime/foresight_prediction/observed_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+        "/algorithm_metadata/planner_runtime/foresight_prediction/requested_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1"
+      },
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 2,
+      "planner": "goal",
+      "source_path": "payload/runs/goal__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "9bc7ee50210112ae1037c10f1a02e6043c1316160dbeab5765f4ca393719ca0c",
+      "episode_id": "classic_head_on_corridor_medium--115--1cfb9906e2997c96",
+      "row_config_hash": "1cfb9906e2997c96",
+      "planner_config_hash": "44136fa355b3678a",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "69e849bb56ada67438b4bfd5f999b9ebb01bdbee3a0b339a4a3157d2eab9f219",
+      "sidecar_member_sha256": "43284663997fa8f4cf131f155a116b59b8abf57f5dad208da58e677640c67e87",
+      "run_id": "e7f06867cf6f47ea84b20a50d301cddb",
+      "planner_config_source": {
+        "algo": "goal",
+        "key": "goal",
+        "path": null,
+        "config_sha256": null
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 3,
+      "planner": "social_force",
+      "source_path": "payload/runs/social_force__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "91847094631c5fae76597c7fa3fa0a6334d800b0e9c9059a0b4f4b54fc860932",
+      "episode_id": "classic_head_on_corridor_medium--115--46de3caccf04d572",
+      "row_config_hash": "46de3caccf04d572",
+      "planner_config_hash": "44136fa355b3678a",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "f18e875e59c4bc42c29db4bd6e86478ac1761d4500e4bdf3cdd1142af8d98efd",
+      "sidecar_member_sha256": "e610a617bdced1e96a14cd6602d5ff22c536781961081459d9ed380bb7b7fbfe",
+      "run_id": "1d3fc357a9a34776954bad9733c0f9b1",
+      "planner_config_source": {
+        "algo": "social_force",
+        "key": "social_force",
+        "path": null,
+        "config_sha256": null
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 4,
+      "planner": "orca",
+      "source_path": "payload/runs/orca__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "686fdfe07e2bba5d579abbf154748674caa6bfdbc1a3cb5dbbb29dca88b30354",
+      "episode_id": "classic_head_on_corridor_medium--115--b02f360a637fd986",
+      "row_config_hash": "b02f360a637fd986",
+      "planner_config_hash": "44136fa355b3678a",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "07d9e52f69e90effca4da94991ad68db3421f4dde0471598b65636a19a72678c",
+      "sidecar_member_sha256": "48cdf913a015c4858b4cc9de39b93d703932e96eff4d6871c3b85d213b447cf9",
+      "run_id": "81245f29e40944539f0e0bda28b0283d",
+      "planner_config_source": {
+        "algo": "orca",
+        "key": "orca",
+        "path": null,
+        "config_sha256": null
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 5,
+      "planner": "ppo",
+      "source_path": "payload/runs/ppo__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "8918884cf7c17ea85e6781a0b79adee3daecde93f574e22efa3d41643e815621",
+      "episode_id": "classic_head_on_corridor_medium--115--0acbcddc8cd2fdcf",
+      "row_config_hash": "0acbcddc8cd2fdcf",
+      "planner_config_hash": "fbce0d9c233a7ed5",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "1626cd2948a7b936944f2b9ea31e6b16d9c602dbe1cb04f36ed2e3c82b052533",
+      "sidecar_member_sha256": "3b12dae57a40f7a81aa9b4af95678df025ac3e81bb8c9a8adf7b5230ec258751",
+      "run_id": "7602fab2985b4460bb46f8042835fbbf",
+      "planner_config_source": {
+        "algo": "ppo",
+        "key": "ppo",
+        "path": "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml",
+        "config_sha256": "51ccfbf4400a306b355e2c3f0f46eda3489d5ce3bc85beaa023a6a1da9c9fb41"
+      },
+      "checkpoint_identity_fields": {
+        "/algorithm_metadata/foresight_prediction/observed_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+        "/algorithm_metadata/foresight_prediction/requested_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+        "/algorithm_metadata/planner_runtime/foresight_prediction/observed_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1",
+        "/algorithm_metadata/planner_runtime/foresight_prediction/requested_checkpoint_sha256": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1"
+      },
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 6,
+      "planner": "socnav_sampling",
+      "source_path": "payload/runs/socnav_sampling__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "8e811701ffc3a1c6e4b977e16df5bbc7865aa116922d0a20bed11e302c416c8e",
+      "episode_id": "classic_head_on_corridor_medium--115--92d800e53b31cf48",
+      "row_config_hash": "92d800e53b31cf48",
+      "planner_config_hash": "44136fa355b3678a",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "011e4ec5edc8a08f53e16f1406780a1d21e8961c800316d881c35c71a75dd537",
+      "sidecar_member_sha256": "2009584584808a55e66bdbd97074e3b50276d50bdb7b55b934c689b9ee0c09b8",
+      "run_id": "50c74f3b072949a4a7c6b2b45edf3ba8",
+      "planner_config_source": {
+        "algo": "socnav_sampling",
+        "key": "socnav_sampling",
+        "path": null,
+        "config_sha256": null
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 7,
+      "planner": "sacadrl",
+      "source_path": "payload/runs/sacadrl__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "9a4b567c0fee748d13cb91a6aa46f7cf0943327c4cbf500fba8be2505c7d8f9f",
+      "episode_id": "classic_head_on_corridor_medium--115--993a37018f61c680",
+      "row_config_hash": "993a37018f61c680",
+      "planner_config_hash": "44136fa355b3678a",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "5a8a1792766131f2ca4f6ac4410ecdf53468db175b1b9804c2c6d131538b7f7d",
+      "sidecar_member_sha256": "6ae51678b77183a19c5015b5257b5f979cc1c472e16807629b2ec89e418ba745",
+      "run_id": "9564daf4379248dea5728efba88e873b",
+      "planner_config_source": {
+        "algo": "sacadrl",
+        "key": "sacadrl",
+        "path": null,
+        "config_sha256": null
+      },
+      "checkpoint_identity_fields": {
+        "/algorithm_metadata/planner_runtime/checkpoint_provenance/checkpoint_sha256": "a7f9c1b5d4b54173862af75b9606cbead8625a0b526655ad2e8bf32dec31aa96"
+      },
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 8,
+      "planner": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
+      "source_path": "payload/runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "921fc2fb6962c754ec69277b9e7b60afb3c3b7da2a56a614b564323c0b4d5f77",
+      "episode_id": "classic_head_on_corridor_medium--115--41c1721d361a110f",
+      "row_config_hash": "41c1721d361a110f",
+      "planner_config_hash": "6e11c2273949a35f",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "96d32a93e02f16ff7bd4bc8a976ac8bbb921897502e9a83d45a172280c73f728",
+      "sidecar_member_sha256": "b96bf84661d1880cd355d70f818cc054bb9b800bab265100ec23a4df44961b4f",
+      "run_id": "15955641ff3f4b00a4eb32e369829bbc",
+      "planner_config_source": {
+        "algo": "hybrid_rule_local_planner",
+        "key": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
+        "path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml",
+        "config_sha256": "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d"
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 9,
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "source_path": "payload/runs/scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "3d3bdb637823a41106dd8719a12a03db6090e16f5b1d3f0148c95e62162fba6f",
+      "episode_id": "classic_head_on_corridor_medium--115--41c1721d361a110f",
+      "row_config_hash": "41c1721d361a110f",
+      "planner_config_hash": "6e11c2273949a35f",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "51c200b165fb93d056ea03f0981f901f9ddb896ee3bd82fd65472f5d3dcbdfa5",
+      "sidecar_member_sha256": "df669d6faee7b59cb3f6e6f9359b372564dc6b8a30502693acf10241f2c79bb9",
+      "run_id": "6735b1bdb5d6482686d4ea212d797750",
+      "planner_config_source": {
+        "algo": "hybrid_rule_local_planner",
+        "key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml",
+        "config_sha256": "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3"
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 10,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape",
+      "source_path": "payload/runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "16ef130a41d137bea534c67a26f247a75a5690d141ee8b1db8154bc5c2c63bff",
+      "episode_id": "classic_head_on_corridor_medium--115--c6e2f5a23772b062",
+      "row_config_hash": "c6e2f5a23772b062",
+      "planner_config_hash": "162aad53d01014f0",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "6baaa416d864dc7d20d42e5f96d24203ef9904037191b9c2bd840603775abead",
+      "sidecar_member_sha256": "29e7c247fc500d918d0b6880c2d92cab1b4169a5dfee7450b25c732b1a920372",
+      "run_id": "084c7fb24f4143bdba4f299cc7774e0c",
+      "planner_config_source": {
+        "algo": "hybrid_rule_local_planner",
+        "key": "hybrid_rule_v3_fast_progress_static_escape",
+        "path": "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml",
+        "config_sha256": "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935"
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 11,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "source_path": "payload/runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "2eedf352968b6658115bf3468011b04c3037cc263f6ee14b693e170e67231842",
+      "episode_id": "classic_head_on_corridor_medium--115--cca25708b9ab05a6",
+      "row_config_hash": "cca25708b9ab05a6",
+      "planner_config_hash": "bf3838e35c29606a",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "ed2f9f58f2c0166e3dbf6042564dedd96a7d0df03634b8ac0e44d32d46d1cbca",
+      "sidecar_member_sha256": "10a9c009320e4984386120d317811d91f2a92c0162905ce7f24d0f63061bc2ac",
+      "run_id": "000657c98ad74b86899778becb0696ac",
+      "planner_config_source": {
+        "algo": "hybrid_rule_local_planner",
+        "key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "path": "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml",
+        "config_sha256": "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd"
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 12,
+      "planner": "guarded_ppo",
+      "source_path": "payload/runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "c4b9cde83de5996e84823944d49e4aa472612299cdf3301f8e390884c24428d8",
+      "episode_id": "classic_head_on_corridor_medium--115--c0a034470376eec0",
+      "row_config_hash": "c0a034470376eec0",
+      "planner_config_hash": "c69166635bd79639",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "fd7dd0058ea4403b638954667116ca47d56bd967099c1e5944d9d239ff2de9c9",
+      "sidecar_member_sha256": "f406132c66c24311392d1ff4e76f8da35c6afb5761b34e6754094ac317ef08b5",
+      "run_id": "da8e4521653f4501939c4f990432812b",
+      "planner_config_source": {
+        "algo": "guarded_ppo",
+        "key": "guarded_ppo",
+        "path": "configs/algos/guarded_ppo_camera_ready_cpu.yaml",
+        "config_sha256": "69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772"
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 13,
+      "planner": "predictive_mppi",
+      "source_path": "payload/runs/predictive_mppi__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "41b525d3e929941b5b29d420480e029ecedd8eb90da41b2f5e1f6f37af18d547",
+      "episode_id": "classic_head_on_corridor_medium--115--1c2bd33551b9fb0a",
+      "row_config_hash": "1c2bd33551b9fb0a",
+      "planner_config_hash": "e961cd0c8d8ab7c1",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "506b8370bc40b56f2612fec121a887ac52be717f827cad5e819b6150e2411b17",
+      "sidecar_member_sha256": "2553d74e285bd09aa730fed769d2abb4e4bf3c8308c851fe651ed3a0c13faa09",
+      "run_id": "a36d633704a24711a81e68a2d52507a6",
+      "planner_config_source": {
+        "algo": "predictive_mppi",
+        "key": "predictive_mppi",
+        "path": "configs/algos/predictive_mppi_camera_ready.yaml",
+        "config_sha256": "5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb"
+      },
+      "checkpoint_identity_fields": {
+        "/algorithm_metadata/foresight_prediction/observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+        "/algorithm_metadata/foresight_prediction/requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+        "/algorithm_metadata/planner_runtime/foresight_prediction/observed_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+        "/algorithm_metadata/planner_runtime/foresight_prediction/requested_checkpoint_sha256": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc"
+      },
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    },
+    {
+      "order": 14,
+      "planner": "risk_dwa",
+      "source_path": "payload/runs/risk_dwa__differential_drive/episodes.jsonl",
+      "line": 455,
+      "row_bytes_sha256": "c7a4cb80bf04b926090c126a689850f550c7cc992c2d0e6830760f21169bbee2",
+      "episode_id": "classic_head_on_corridor_medium--115--203e2e1668323137",
+      "row_config_hash": "203e2e1668323137",
+      "planner_config_hash": "d1a89de6c0b46223",
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "artifact_uri": null,
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_member_sha256": "35deaa26daa6fbbb5e5c73481d8b973619411c018502c2febe88748e7f3299e8",
+      "sidecar_member_sha256": "41cfa77afae978270035eef40833eddfe9a15f5988b47214602dcabf04662ba4",
+      "run_id": "d4c40182958a4892a3d12f89c2b195cd",
+      "planner_config_source": {
+        "algo": "risk_dwa",
+        "key": "risk_dwa",
+        "path": "configs/algos/risk_dwa_camera_ready.yaml",
+        "config_sha256": "1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c"
+      },
+      "checkpoint_identity_fields": {},
+      "source_completeness": "unavailable",
+      "native_runtime_support": "unverified",
+      "reason_codes": [
+        "simulation_step_trace_disabled",
+        "planner_decision_trace_disabled",
+        "artifact_uri_null",
+        "no_retained_restart_bundle"
+      ]
+    }
+  ],
+  "channel_inventory": [
+    {
+      "channel": "identity/configuration",
+      "status": "present_partial",
+      "source": "selected row /episode_id,/git_hash,/scenario_params,/result_provenance; sidecar /inputs and /run",
+      "limitation": "Row map/scenario digests and planner commit are null; source Git blobs supply separately labeled source-code identities, not captured runtime map hashes."
+    },
+    {
+      "channel": "clock",
+      "status": "present_partial",
+      "source": "/steps,/horizon,/scenario_params/run_dt,/timestamps",
+      "limitation": "Episode counters and wall timestamps only; no per-step simulation clock or restart budget."
+    },
+    {
+      "channel": "terminal/events",
+      "status": "present_partial",
+      "source": "/termination_reason,/outcome,/event_ledger/collision_events,/event_ledger/exact_events",
+      "limitation": "Terminal/sparse event evidence is not a complete stepwise event history or restored accumulator."
+    },
+    {
+      "channel": "metrics",
+      "status": "present_partial",
+      "source": "/metrics,/metric_parameters,/safety_predicates",
+      "limitation": "Aggregate/derived metrics only; no full stepwise accumulator state. No recomputation or interpretation performed."
+    },
+    {
+      "channel": "state/actor identity/frame/units",
+      "status": "unavailable",
+      "source": "/scenario_params/record_simulation_step_trace=false; no simulation-step-trace payload or URI",
+      "limitation": "Map/config and sparse collision actor references do not supply a complete ordered actor state or coordinate-frame-bound trace."
+    },
+    {
+      "channel": "applied action/decision/observation",
+      "status": "unavailable",
+      "source": "/scenario_params/record_planner_decision_trace=false; /scenario_params/record_simulation_step_trace=false",
+      "limitation": "Planner configuration and diagnostic command counts are not action sequences or observation history."
+    },
+    {
+      "channel": "RNG/planner memory/sensor history",
+      "status": "unavailable",
+      "source": "Complete selected rows, sidecar raw_artifacts lists, and archive member inventory",
+      "limitation": "Seed values are not RNG state; no stateful continuation payload retained."
+    },
+    {
+      "channel": "durable snapshot/nonempty aligned trace",
+      "status": "unavailable",
+      "source": "All 124 regular archive members and the 14 selected rows/sidecars",
+      "limitation": "No supported restart metadata/numeric payload pair or complete continuation trace; no equality comparison attempted."
+    }
+  ],
+  "compatibility": {
+    "main_owner": "robot_sf/benchmark/simulator_counterfactual_adapter.py",
+    "candidate_pr": 8620,
+    "candidate_head": "ff70195f96a3bcb64e92d1403f5de14c877ac4d5",
+    "candidate_parent_pr": 8612,
+    "candidate_parent_head": "1ec583b8ab19b5389dfd88ec2ec7c3c8573b86f7",
+    "candidate_status": "open_unmerged_reference_only",
+    "inventory_path": "docs/context/simulator_state_inventory.v1.json",
+    "unsupported_candidate_classes": [
+      "controller.planner_memory",
+      "observation.sensor_history",
+      "metrics.events"
+    ],
+    "no_op_fidelity": "not_evaluated",
+    "benchmark_admission": false
+  },
+  "next_action": "Parent8568 retains acquisition/replay authority; coordinate snapshot owner and prove complete capture before a new diagnostic run. Historical fidelity is unavailable from this retained publication payload. No parent closure or new scientific claim."
+}

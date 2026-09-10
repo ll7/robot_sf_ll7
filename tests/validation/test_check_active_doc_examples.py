@@ -82,6 +82,20 @@ def test_scan_file_allows_marked_and_historical_lines(tmp_path: Path) -> None:
     assert diagnostics == []
 
 
+def test_scan_file_allows_marked_legacy_output_path(tmp_path: Path) -> None:
+    """An intentional compatibility path must carry an explicit allow marker."""
+    doc = tmp_path / "docs" / "README.md"
+    doc.parent.mkdir()
+    doc.write_text(
+        "`output/results/old-example.json` <!-- active-docs-check: allow -->\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = checker.scan_file(Path("docs/README.md"), tmp_path)
+
+    assert diagnostics == []
+
+
 def test_default_paths_exclude_context_notes_and_include_spec_quickstarts(tmp_path: Path) -> None:
     """Default path selection should separate active docs from historical context notes."""
     (tmp_path / "docs" / "context").mkdir(parents=True)

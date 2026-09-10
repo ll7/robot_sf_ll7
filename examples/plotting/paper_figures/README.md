@@ -26,7 +26,7 @@ Each script takes a bundle/source path; run with `--help` for the exact flags.
 For example, the trade-off figure:
 
 ```bash
-.venv/bin/python examples/plotting/paper_figures/build_planner_tradeoff_figure.py \
+uv run python examples/plotting/paper_figures/build_planner_tradeoff_figure.py \
     --bundle-path output/benchmarks/publication/<your_publication_bundle>
 ```
 

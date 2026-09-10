@@ -182,7 +182,12 @@ fi
 # package that works only because the source checkout happens to be importable.
 console_scripts_path="${WORK_DIR}/console-scripts.json"
 console_probes_path="${WORK_DIR}/console-script-probes.json"
-PYTHONPATH= PYTHONNOUSERSITE=1 "${PYTHON_BIN}" - "${console_scripts_path}" <<'PY'
+(
+  # Keep the metadata lookup outside the source/build checkout.  Python puts
+  # the current directory on sys.path even when PYTHONPATH is empty, so a
+  # local ``robot_sf.egg-info`` can otherwise shadow the wheel under test.
+  cd /tmp
+  PYTHONPATH= PYTHONNOUSERSITE=1 "${PYTHON_BIN}" - "${console_scripts_path}" <<'PY'
 import importlib.metadata as metadata
 import json
 import sys
@@ -232,8 +237,13 @@ output_path.write_text(
     encoding="utf-8",
 )
 PY
+)
 
-PYTHONPATH= PYTHONNOUSERSITE=1 "${PYTHON_BIN}" - "${console_scripts_path}" "${console_probes_path}" "${WORK_DIR}/probe-cwd" <<'PY'
+(
+  # The probe already uses an unrelated cwd for each console command; keep
+  # this metadata/probe driver unrelated as well for the same reason.
+  cd /tmp
+  PYTHONPATH= PYTHONNOUSERSITE=1 "${PYTHON_BIN}" - "${console_scripts_path}" "${console_probes_path}" "${WORK_DIR}/probe-cwd" <<'PY'
 import json
 import os
 import subprocess
@@ -307,6 +317,7 @@ payload = {
 payload["ok"] = payload["failed"] == 0 and payload["passed"] == len(rows)
 probes_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
+)
 
 extras_status_json="[]"
 if [[ -n "${EXTRAS_SMOKE}" ]]; then

@@ -310,6 +310,30 @@ def test_transferability_matrix_rejects_missing_required_aggregate_fields() -> N
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        ("value", float("nan"), r"aggregate_rows\[0\]\.value must be finite"),
+        ("value", float("inf"), r"aggregate_rows\[0\]\.value must be finite"),
+        ("value", float("-inf"), r"aggregate_rows\[0\]\.value must be finite"),
+        ("horizon_s", float("-inf"), r"aggregate_rows\[0\]\.horizon_s must be finite"),
+        ("value", "not-a-number", r"aggregate_rows\[0\]\.value must be numeric"),
+    ],
+)
+def test_transferability_matrix_rejects_invalid_aggregate_numbers(
+    field: str, value: object, error: str
+) -> None:
+    """Invalid aggregate values and horizons must not become transfer evidence."""
+    report = _metric_report(transfer_dimensions=_complete_transfer_dimensions())
+    report["aggregate_rows"][0][field] = value
+
+    with pytest.raises(ValueError, match=error):
+        build_forecast_transferability_stress_matrix(
+            [report],
+            report_id="invalid-number",
+        )
+
+
 def test_transferability_markdown_includes_limitations() -> None:
     """Markdown should carry the recommendation and unavailable-row caveats."""
     report = build_forecast_transferability_stress_matrix(

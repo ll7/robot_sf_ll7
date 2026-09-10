@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,11 +16,232 @@ from scripts.dev.gh_pr_label_rest import (
     LABEL_PAGE_SIZE,
     _get_label_names,
     add_label,
+    check_merge_ready_carriers,
     get_label_names,
     main,
     remove_label,
     validate_result_envelope,
 )
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_ENTRYPOINT = _REPO_ROOT / "scripts/dev/gh_pr_label_rest.py"
+_LABEL_GET_ARGS = [
+    "api",
+    "repos/ll7/robot_sf_ll7/issues/5220/labels?per_page=100&page=1",
+]
+
+
+@pytest.fixture
+def offline_cli(tmp_path: Path) -> tuple[dict[str, str], Path]:
+    """Expose only a read-only fake gh, without credentials or ambient Python paths."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    log = tmp_path / "gh-calls.jsonl"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "with open(os.environ['LABEL_FAKE_LOG'], 'a', encoding='utf-8') as stream:\n"
+        "    stream.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+        "if sys.argv[1:] != json.loads(os.environ['LABEL_FAKE_EXPECTED_ARGS']):\n"
+        "    sys.exit('unexpected transport request; only the fixture GET is allowed')\n"
+        "print(os.environ['LABEL_FAKE_RESPONSE'])\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    return {
+        "PATH": str(fake_bin),
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "LABEL_FAKE_LOG": str(log),
+        "LABEL_FAKE_EXPECTED_ARGS": json.dumps(_LABEL_GET_ARGS),
+        "LABEL_FAKE_RESPONSE": json.dumps([{"name": "state:ready"}, {"name": "technical-debt"}]),
+    }, log
+
+
+def _run_cli(
+    args: list[str], *, cwd: Path, env: dict[str, str], module: bool = False
+) -> subprocess.CompletedProcess[str]:
+    """Run the actual entrypoint without site packages; isolate direct execution fully."""
+    entry = ["-m", "scripts.dev.gh_pr_label_rest"] if module else ["-I", str(_ENTRYPOINT)]
+    return subprocess.run(
+        [sys.executable, "-S", "-B", *entry, *args],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+
+
+@pytest.mark.parametrize("from_root", [True, False])
+def test_isolated_direct_help_makes_no_transport_call(
+    tmp_path: Path, offline_cli: tuple[dict[str, str], Path], from_root: bool
+) -> None:
+    """The documented script starts without editable imports from either directory."""
+    env, log = offline_cli
+    result = _run_cli(["--help"], cwd=_REPO_ROOT if from_root else tmp_path, env=env)
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout
+    assert not result.stderr
+    assert not log.exists()
+
+
+@pytest.mark.parametrize("response", [None, "not-json", '{"name":"not-a-list"}'])
+def test_isolated_direct_and_module_list_parity(
+    tmp_path: Path, offline_cli: tuple[dict[str, str], Path], response: str | None
+) -> None:
+    """Real direct/module startup shares read-only JSON and fail-closed transport semantics."""
+    env, log = offline_cli
+    if response is not None:
+        env["LABEL_FAKE_RESPONSE"] = response
+    results = [
+        _run_cli(["list", "5220"], cwd=_REPO_ROOT, env=env),
+        _run_cli(["list", "5220"], cwd=tmp_path, env=env),
+        _run_cli(["list", "5220"], cwd=_REPO_ROOT, env=env, module=True),
+    ]
+    expected_status = 0 if response is None else 1
+    for result in results:
+        assert result.returncode == expected_status, result.stderr
+        assert (result.stdout, result.stderr) == (results[0].stdout, results[0].stderr)
+        payload = json.loads(result.stdout if expected_status == 0 else result.stderr)
+        if response is None:
+            assert payload == {
+                "status": "ok",
+                "number": 5220,
+                "action": "list",
+                "repo": "ll7/robot_sf_ll7",
+                "labels": ["state:ready", "technical-debt"],
+            }
+        else:
+            assert payload["status"] == "error"
+            assert "labels" not in payload
+            assert not result.stdout
+    assert [json.loads(line) for line in log.read_text().splitlines()] == [_LABEL_GET_ARGS] * 3
+
+
+@pytest.mark.parametrize("module", [False, True])
+@pytest.mark.parametrize("args", [["add", "5220"], ["list", "not-a-number"]])
+def test_isolated_cli_invalid_arguments_never_reach_transport(
+    offline_cli: tuple[dict[str, str], Path], module: bool, args: list[str]
+) -> None:
+    """Both entrypoints reject invalid arguments before any GitHub operation."""
+    env, log = offline_cli
+    result = _run_cli(args, cwd=_REPO_ROOT, env=env, module=module)
+    assert result.returncode == 2, result.stderr
+    assert "error:" in result.stderr
+    assert not result.stdout
+    assert not log.exists()
+
+
+@pytest.mark.parametrize("via_symlink", [False, True])
+def test_direct_entrypoint_rejects_hostile_checkout_shadowing(
+    tmp_path: Path, offline_cli: tuple[dict[str, str], Path], via_symlink: bool
+) -> None:
+    """The resolved invoking checkout wins even when already later on PYTHONPATH."""
+    env, log = offline_cli
+    shadow = tmp_path / "hostile-checkout"
+    package = shadow / "scripts" / "dev"
+    package.mkdir(parents=True)
+    (shadow / "scripts" / "__init__.py").write_text("", encoding="utf-8")
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    for name in ("_gh_rest", "github_transport_policy", "pr_carrier_gate", "pr_write_guard"):
+        (package / f"{name}.py").write_text(
+            "raise RuntimeError('hostile checkout imported')\n", encoding="utf-8"
+        )
+    env["PYTHONPATH"] = os.pathsep.join((str(shadow), str(_REPO_ROOT)))
+    env["PYTHONSAFEPATH"] = "1"
+    entrypoint = _ENTRYPOINT
+    if via_symlink:
+        entrypoint = tmp_path / "label-helper.py"
+        entrypoint.symlink_to(_ENTRYPOINT)
+    result = subprocess.run(
+        [sys.executable, "-S", "-B", str(entrypoint), "list", "5220"],
+        cwd=shadow,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["labels"] == ["state:ready", "technical-debt"]
+    assert not result.stderr
+    assert [json.loads(line) for line in log.read_text().splitlines()] == [_LABEL_GET_ARGS]
+
+
+def test_isolated_merge_ready_missing_carrier_dependency_prevents_post(
+    tmp_path: Path, offline_cli: tuple[dict[str, str], Path]
+) -> None:
+    """A real no-site invocation cannot write when the canonical carrier import fails."""
+    env, log = offline_cli
+    head, base = "a" * 40, "b" * 40
+    read_args = ["api", "repos/ll7/robot_sf_ll7/pulls/5220"]
+    env["LABEL_FAKE_EXPECTED_ARGS"] = json.dumps(read_args)
+    env["LABEL_FAKE_RESPONSE"] = json.dumps(
+        {"state": "open", "head": {"sha": head}, "base": {"sha": base}, "merged_at": None}
+    )
+    env["ROBOT_SF_PR_WRITE_LOCK_DIR"] = str(tmp_path / "write-locks")
+    result = _run_cli(
+        [
+            "add",
+            "5220",
+            "--label",
+            "merge-ready",
+            "--expected-head-sha",
+            head,
+            "--expected-base-sha",
+            base,
+        ],
+        cwd=tmp_path,
+        env=env,
+    )
+    assert result.returncode == 1, result.stderr
+    assert not result.stdout
+    payload = json.loads(result.stderr)
+    assert payload["status"] == "error"
+    assert "carrier" in payload["error"]
+    assert "No module named 'yaml'" in payload["error"]
+    assert [json.loads(line) for line in log.read_text().splitlines()] == [read_args]
+
+
+@pytest.mark.parametrize("status", ["ok", "error"])
+def test_lazy_carrier_checker_forwards_exact_arguments_and_result(status: str) -> None:
+    """Delay only import timing; retain the canonical guard's inputs and verdict verbatim."""
+    verdict = {"status": status, "reason": "canonical verdict"}
+    with patch(
+        "scripts.dev.pr_carrier_gate.check_merge_ready_carriers", return_value=verdict
+    ) as checker:
+        result = check_merge_ready_carriers(5220, repo="owner/repo", live_head="a", live_base="b")
+    assert result is verdict
+    checker.assert_called_once_with(5220, repo="owner/repo", live_head="a", live_base="b")
+
+
+def test_module_import_preserves_sys_path_without_loading_carrier_dependency(
+    offline_cli: tuple[dict[str, str], Path],
+) -> None:
+    """Normal imports must not run the direct-only bootstrap or load write-only dependencies."""
+    env, log = offline_cli
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-B",
+            "-c",
+            "import sys; before = list(sys.path); "
+            "import scripts.dev.gh_pr_label_rest; "
+            "assert sys.path == before; "
+            "assert 'scripts.dev.pr_carrier_gate' not in sys.modules",
+        ],
+        cwd=_REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not log.exists()
 
 
 def _proc(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> MagicMock:

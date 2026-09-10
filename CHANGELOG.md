@@ -354,8 +354,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`robot_sf/benchmark/last_avoidable_fixtures.py`), the `last_avoidable_replay.v1` output schema, an
   offline report CLI (`scripts/analysis/run_last_avoidable_replay_issue_5442.py`), and a context note
   (`docs/context/issue_5442_last_avoidable_replay.md`). Controlled-fixture diagnostic evidence only;
-  `normative_fault` is always `not_assessed`. No production-simulator snapshot seam (that would be a
-  broad change — see the note), no benchmark/Slurm run, no metric/paper claim.
+  `normative_fault` is always `not_assessed`. The narrow in-memory production-simulator adapter is
+  diagnostic-only and does not provide durable, verified native-continuation provenance. No
+  benchmark/Slurm run, no metric/paper claim.
 * **issue #5441 `collision_causal_report.v1` fail-closed cause-report contract.** Adds
   `robot_sf/benchmark/schemas/collision_causal_report.v1.json` and validator
   `robot_sf/benchmark/collision_causal_report.py` that separate observed reconstruction, proximate
@@ -887,7 +888,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `check_artifact_root`, `preflight_scenario_perturbations`, `preflight_adversarial_package_b`) now
   end `--help` with an `Example:` block showing the copy-pasteable
   `uv run python scripts/tools/<name>.py <required-arg>` command, so a new contributor no longer has
-  to guess the invocation (the bare `python scripts/tools/<name>.py ...` path still dies with
+  to guess the invocation (the bare `python scripts/tools/<name>.py ...` path still dies with <!-- active-docs-check: allow historical changelog entry -->
   `ModuleNotFoundError: No module named 'scripts'` because these tools import `scripts.tools.*`).
   Help-text only: each parser gained an `epilog` plus `RawDescriptionHelpFormatter`; no runtime
   behavior, exit codes, or non-`--help` output changed. New
@@ -917,7 +918,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Verified `README.md` and `docs/*.md` top-level docs against the current codebase and fixed incorrect
   statements in place across 13 files: renamed module path `robot_sf/sim/FastPysfWrapper.py` →
   `fast_pysf_wrapper.py` (SUBTREE_MIGRATION, dev_guide); fixed the `02_trained_model.py` JSONL output path
-  `output/benchmarks/` → `output/results/` and the `tests/test_gym_env.py` → `tests/test_gymnasium_env_contracts.py`
+  `output/benchmarks/` → `output/results/` and the `tests/test_gym_env.py` → `tests/test_gymnasium_env_contracts.py` <!-- active-docs-check: allow historical changelog entry -->
   example (dev_guide); corrected the `robot_sf_bench` CLI subcommand count 15 → 30 top-level commands (docs/README); corrected the
   benchmark scenario-schema location (`schema/` singular holds `scenarios.schema.json`, `schemas/` holds the
   episode schema); fixed OSM API examples to real kwargs (`osm_to_map_definition`/`render_osm_background`),

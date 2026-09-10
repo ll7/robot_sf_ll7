@@ -25,6 +25,7 @@ The script will:
 from __future__ import annotations
 
 import datetime
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -150,14 +151,15 @@ def _compute_aggregates_payload(
     *,
     expected_algorithms: set[str] | None,
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Compute grouped bootstrap aggregates, optionally validating expected algorithms.
 
     Args:
-        records: TODO docstring.
-        expected_algorithms: TODO docstring.
+        records: Episode metric records read from completed baseline runs.
+        expected_algorithms: Optional algorithm names that must appear in the
+            aggregation; forwarded only when the callee accepts the parameter.
 
     Returns:
-        TODO docstring.
+        The aggregate payload produced by :func:`compute_aggregates_with_ci`.
     """
     aggregate_kwargs: dict[str, Any] = {
         "records": records,
@@ -166,30 +168,37 @@ def _compute_aggregates_payload(
         "bootstrap_confidence": 0.95,
     }
     if expected_algorithms:
-        aggregate_kwargs["expected_algorithms"] = set(expected_algorithms)
-
-    try:
-        return compute_aggregates_with_ci(**aggregate_kwargs)
-    except TypeError as exc:
-        if "expected_algorithms" not in aggregate_kwargs:
-            raise
-        logger.debug(
-            "compute_aggregates_with_ci missing expected_algorithms support, falling back: {}",
-            exc,
+        try:
+            parameters = inspect.signature(compute_aggregates_with_ci).parameters.values()
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                "compute_aggregates_with_ci must expose an inspectable signature when "
+                "expected_algorithms validation is requested"
+            ) from exc
+        expected_parameter = next(
+            (parameter for parameter in parameters if parameter.name == "expected_algorithms"),
+            None,
         )
-        aggregate_kwargs.pop("expected_algorithms", None)
-        return compute_aggregates_with_ci(**aggregate_kwargs)
+        accepts_expected_algorithms = (
+            expected_parameter is not None
+            and expected_parameter.kind
+            in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+        ) or any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters)
+        if accepts_expected_algorithms:
+            aggregate_kwargs["expected_algorithms"] = set(expected_algorithms)
+
+    return compute_aggregates_with_ci(**aggregate_kwargs)
 
 
 def _write_aggregates_file(output_root: str, aggregates: dict[str, Any]) -> Path:
-    """TODO docstring. Document this function.
+    """Write the aggregate payload to ``aggregated_results.json`` under the output root.
 
     Args:
-        output_root: TODO docstring.
-        aggregates: TODO docstring.
+        output_root: Directory containing the benchmark run artifacts.
+        aggregates: Aggregate payload to serialize as indented JSON.
 
     Returns:
-        TODO docstring.
+        Path to the written JSON file.
     """
     aggregates_file = Path(output_root) / "aggregated_results.json"
     with open(aggregates_file, "w", encoding="utf-8") as f:

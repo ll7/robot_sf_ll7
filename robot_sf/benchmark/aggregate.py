@@ -25,7 +25,11 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 from loguru import logger
 
-from robot_sf.benchmark.errors import AggregationMetadataError, EpisodeRecordInputError
+from robot_sf.benchmark.errors import (
+    AggregationInputError,
+    AggregationMetadataError,
+    EpisodeRecordInputError,
+)
 from robot_sf.benchmark.grouping import EFFECTIVE_REPORT_GROUP_KEY, resolve_report_group_key
 from robot_sf.benchmark.metrics import snqi as snqi_fn
 from robot_sf.benchmark.thresholds import validate_threshold_parameter_consistency
@@ -872,6 +876,30 @@ def compute_aggregates(  # noqa: PLR0913
 # --- Optional bootstrap confidence intervals ---
 
 
+def _validate_bootstrap_confidence(confidence: float) -> float:
+    """Validate and normalize a bootstrap confidence level.
+
+    Returns:
+        The finite confidence level as a float.
+
+    Raises:
+        AggregationInputError: If the confidence level is non-finite or outside ``(0, 1)``.
+    """
+    try:
+        normalized = float(confidence)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise AggregationInputError(
+            "bootstrap_confidence must be finite and strictly between 0 and 1 when "
+            f"bootstrap CI is enabled; got {confidence!r}"
+        ) from exc
+    if not math.isfinite(normalized) or not 0.0 < normalized < 1.0:
+        raise AggregationInputError(
+            "bootstrap_confidence must be finite and strictly between 0 and 1 when "
+            f"bootstrap CI is enabled; got {confidence!r}"
+        )
+    return normalized
+
+
 def _bootstrap_ci(
     data: np.ndarray,
     stat_fn: Callable[[np.ndarray], float],
@@ -894,6 +922,7 @@ def _bootstrap_ci(
     """
     if samples <= 0:
         return (float("nan"), float("nan"))
+    confidence = _validate_bootstrap_confidence(confidence)
     x = np.asarray(data, dtype=float)
     x = x[~np.isnan(x)]
     n = x.size
@@ -1040,6 +1069,9 @@ def _bootstrap_delta_stats(
     Returns:
         Pairwise contrast statistics, or an empty mapping when no pairs are available.
     """
+    if bootstrap_samples <= 0:
+        return {}
+    bootstrap_confidence = _validate_bootstrap_confidence(bootstrap_confidence)
     clean = np.asarray(differences, dtype=float)
     clean = clean[~np.isnan(clean)]
     n_pairs = int(clean.size)
@@ -1106,6 +1138,7 @@ def _compute_pairwise_contrasts(
     """
     if bootstrap_samples <= 0 or len(groups) < 2:
         return {}
+    bootstrap_confidence = _validate_bootstrap_confidence(bootstrap_confidence)
 
     contrasts: dict[str, Any] = {
         "_meta": {
@@ -1179,6 +1212,9 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
     Returns:
         Nested dictionary mapping group names to metric names to aggregate statistics.
     """
+    if return_ci and bootstrap_samples > 0:
+        bootstrap_confidence = _validate_bootstrap_confidence(bootstrap_confidence)
+
     # Start from base aggregates (no CI) for consistency
     base = compute_aggregates(
         records,

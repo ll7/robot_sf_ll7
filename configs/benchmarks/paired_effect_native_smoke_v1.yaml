@@ -1,0 +1,57 @@
+# Bounded native producer smoke for issue #8567.
+#
+# This is a diagnostic trace-receipt config only: one frozen scenario candidate, one seed, and
+# the two wrapper arms. It does not reference the six-arm retained-row gate because run_batch
+# validates each arm independently; the pair is evaluated only after both native rows exist.
+name: paired_effect_native_smoke_v1
+paper_facing: false
+claim_boundary: >
+  Native paired-effect producer smoke only. This run is not benchmark evidence, a safety result,
+  a paper claim, or authorization to launch the frozen campaign.
+
+scenario_matrix: configs/scenarios/archetypes/classic_head_on_corridor.yaml
+scenario_candidates:
+  - classic_head_on_corridor_medium
+seed_policy:
+  mode: fixed-list
+  seeds: [111]
+
+workers: 1
+horizon: 100
+dt: 0.1
+record_forces: true
+record_simulation_step_trace: true
+record_planner_decision_trace: false
+resume: false
+stop_on_failure: true
+arm_isolation: subprocess
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+
+kinematics_matrix:
+  - differential_drive
+
+planners:
+  - key: social_force__wrapper_off
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+    safety_wrapper:
+      enabled: false
+      arm_key: wrapper_off
+      record_step_trace: true
+
+  - key: social_force__wrapper_on
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+    safety_wrapper:
+      enabled: true
+      arm_key: wrapper_on
+      pedestrian_caution_radius_m: 2.0
+      capped_speed_m_s: 0.5
+      ttc_veto_threshold_s: 1.0
+      clearance_veto_m: 0.3
+      record_step_trace: true

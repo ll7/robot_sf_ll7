@@ -41,6 +41,21 @@ GRAPHQL_REST_FALLBACK_MARKERS = (
     "is unsupported",
 )
 MANUAL_OVERRIDE_ERROR = "manual_override_required"
+WORKTREE_MODE_KEY = "robot-sf.worktree-mode"
+IMPLEMENTATION_WORKTREE_MODE = "implementation"
+REVIEW_WORKTREE_MODE = "review"
+REVIEW_WORKTREE_RELEASE_ERROR = (
+    "review_worktree_release_blocked; retain the claim and retry issue-claim release "
+    "from an implementation-capable linked worktree"
+)
+WORKTREE_MODE_UNAVAILABLE_ERROR = (
+    "worktree_mode_unavailable; retain the claim and retry issue-claim release "
+    "from an implementation-capable linked worktree"
+)
+UNSUPPORTED_WORKTREE_MODE_ERROR = (
+    "unsupported_worktree_mode; retain the claim and retry issue-claim release "
+    "from an implementation-capable linked worktree"
+)
 
 
 @dataclass(frozen=True)
@@ -84,6 +99,11 @@ def _run(command: list[str]) -> CommandResult:
 def build_status_command(issue_number: int, *, remote: str) -> list[str]:
     """Build the command that checks whether a claim ref exists."""
     return ["git", "ls-remote", "--heads", remote, claim_ref(issue_number)]
+
+
+def build_worktree_mode_command() -> list[str]:
+    """Build the read-only query for the current linked worktree mode."""
+    return ["git", "config", "--worktree", "--get", WORKTREE_MODE_KEY]
 
 
 def build_resolve_source_command(*, source_ref: str) -> list[str]:
@@ -551,6 +571,43 @@ def _all_prs_covering_issue_with_fallback(*, repo: str, issue_number: int) -> di
     return fallback
 
 
+def _read_worktree_mode() -> CommandResult:
+    """Read the worktree-local mode marker without changing Git configuration."""
+    return _run(build_worktree_mode_command())
+
+
+def _release_worktree_guard() -> dict[str, Any] | None:
+    """Block terminal release when the current worktree cannot safely push.
+
+    A missing mode marker is the historical implementation-capable path. Review mode and any
+    unreadable or unsupported marker fail closed before PR coverage or compare-and-delete runs.
+    """
+    result = _read_worktree_mode()
+    if result.returncode == 1:
+        return None
+    if result.returncode != 0:
+        return {
+            "error": WORKTREE_MODE_UNAVAILABLE_ERROR,
+            "mode": None,
+            "stderr": (result.stderr or result.stdout).strip(),
+        }
+
+    mode = result.stdout.strip() or None
+    if mode in (None, IMPLEMENTATION_WORKTREE_MODE):
+        return None
+    if mode == REVIEW_WORKTREE_MODE:
+        return {
+            "error": REVIEW_WORKTREE_RELEASE_ERROR,
+            "mode": mode,
+            "stderr": "",
+        }
+    return {
+        "error": UNSUPPORTED_WORKTREE_MODE_ERROR,
+        "mode": mode,
+        "stderr": f"configured worktree mode: {mode}",
+    }
+
+
 def _classify_reconciliation_row(
     claim: dict[str, Any], *, issue: dict[str, Any], prs: dict[str, Any]
 ) -> dict[str, Any]:
@@ -629,6 +686,21 @@ def _release_reconciled_claim(
             "ok": False,
             "issue": issue_number,
             "error": "claim SHA changed during reconciliation; retain the claim",
+        }
+    worktree_guard = _release_worktree_guard()
+    if worktree_guard is not None:
+        return {
+            "ok": False,
+            "issue": issue_number,
+            "claim_ref": row["claim_ref"],
+            "expected_sha": status["sha"],
+            "reason": reason,
+            "claimed": True,
+            "command": list(status["command"]),
+            "stdout": "",
+            "stderr": worktree_guard["stderr"],
+            "error": worktree_guard["error"],
+            "worktree_mode": worktree_guard["mode"],
         }
 
     issue = _issue_state_from_result(
@@ -979,6 +1051,26 @@ def release_issue(
             "error": "claim_status_missing_sha; do not release an unknown claim",
             "release_class": None,
             "reason": reason,
+        }
+
+    worktree_guard = _release_worktree_guard()
+    if worktree_guard is not None:
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": True,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": worktree_guard["stderr"],
+            "error": worktree_guard["error"],
+            "release_class": None,
+            "reason": reason,
+            "worktree_mode": worktree_guard["mode"],
         }
 
     coverage = _open_prs_covering_issue_with_fallback(repo=repo, issue_number=issue_number)

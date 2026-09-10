@@ -62,8 +62,21 @@ Robot SF grades every claim by how strong its evidence is. Always label results 
 | **fallback** | A required input was missing, so the run dropped to a weaker substitute path (a caveat, not success). |
 | **degraded** | The run completed but under reduced fidelity or partial inputs (a caveat, not success). |
 
+## Workflow and review
+
+| Term | Plain-language meaning |
+| --- | --- |
+| **Fast lane** | The quick pull-request feedback path: the repository routes tests by configured directory/path fragments, filename prefixes, or explicit filenames, with slow-file overrides, and its fast-feedback shards run the routed non-slow tests plus lint and type checks. A changed-coverage gate then verifies the exact changed lines. |
+| **Merge-ready** | A pull-request label meaning the guarded admission checks are current: the pull request is non-draft, its exact head and base match the reviewed evidence, its title/body metadata is reconciled, required checks are green, and exact-head review has accepted the linked contract with no unresolved actionable threads or requested reviewers. The label is applied only with fresh evidence; the [guarded merger policy](../.agents/skills/gh-pr-merger/SKILL.md) performs the final merge. |
+| **Residual** | Work a completed change deliberately leaves behind: accepted follow-ups, known limitations, or the next concrete slice — recorded explicitly so nothing silently drops. A residual audit verifies which acceptance bullets remain open and records that slice or any follow-up issues. |
+| **Provenance** | The recorded lineage appropriate to a result or artifact and its claim: for example, the relevant code, config, seed, checkpoint, inputs, runtime, or generation command, pinned so someone else can reproduce or audit it. Required fields depend on the artifact and claim; benchmark and paper-facing claims require complete provenance, and missing required provenance fails closed. |
+| **Preregistration** | A frozen, timestamped statement of what an experiment or campaign will do and how its results will be judged — written *before* running, so outcomes can't be reframed after the fact. A larger campaign requires one before execution. |
+| **Receipt** | A small machine-readable record proving a step happened as claimed (exact head SHAs, validation results, artifact digests). Reviews publish them so later automation can verify instead of re-running everything. |
+| **Packet** | A bundled handoff for one decision or workflow step: the question, the evidence, the options, and the exact expected outcome — e.g. a launch packet that freezes a campaign's inputs, or a decision packet an author rules on. |
+| **Replay** | Re-executing a recorded episode or trace (same seed, same inputs) to verify a result deterministically or to diagnose what happened step by step — the basis of exact-repeat and counterfactual analysis. |
+
 ---
 
-**Last updated**: 2026-09-03
+**Last updated**: 2026-09-09
 **Source of truth for**: acronyms and project-specific terms on human-facing surfaces (see the
 `## Clarity` rule in [`maintainer_values.md`](./maintainer_values.md#clarity)).

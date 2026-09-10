@@ -115,7 +115,12 @@ opt into `--group carla` only for CARLA-capable worktrees and prove runtime with
 
 If the current branch is not `main`, branch synchronization is mode-specific:
 - For implementation worktrees, fetch latest `origin/main` and merge it early: `git fetch origin main && git merge origin/main`.
-- For read-only review worktrees/passes, record target/base/head SHAs and inspect or fetch as needed; never merge `origin/main` into the implementation branch or push to it during review. Review worktrees rely on the machine-enforced read-only guard (issue #8321, `scripts/dev/review_worktree_guard.py`) to fail closed on write attempts.
+- For read-only review worktrees/passes, record target/base/head SHAs and inspect or fetch as
+  needed; never merge `origin/main` into the implementation branch or push to it during review.
+  Ordinary Git invocations use the machine Git guard (issue #8321,
+  `scripts/dev/review_worktree_guard.py`); deliberate override or alternate receive-pack probes
+  must run as descendants of its Linux Landlock `run` boundary, because raw commands launched
+  outside that process are not adversarially isolated.
 Do not create divergent per-worktree machine contexts unless the worktree truly needs machine-specific behavior.
 
 ## Worktree Teardown And Artifacts

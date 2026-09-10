@@ -1,0 +1,6 @@
+# Unknown or invalid structure fixture
+- id: invalid_item_type
+  density: 12345
+  flow: not_a_valid_flow
+  obstacle: not_a_valid_obstacle
+  unknown_contract_field: true

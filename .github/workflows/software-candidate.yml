@@ -2,6 +2,11 @@ name: Build Immutable Software Candidate
 
 on:
   workflow_dispatch:
+    inputs:
+      requested_source_sha:
+        description: Exact lowercase 40-hex commit SHA bound by the dispatch helper
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -33,6 +38,22 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Require the requested source SHA to equal the workflow commit
+        env:
+          REQUESTED_SOURCE_SHA: ${{ inputs.requested_source_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${REQUESTED_SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "requested_source_sha must be one exact lowercase 40-hex commit identity" >&2
+            exit 1
+          fi
+          if [[ "${REQUESTED_SOURCE_SHA}" != "${GITHUB_SHA}" ]]; then
+            echo "requested source SHA does not match the workflow commit" >&2
+            echo "requested=${REQUESTED_SOURCE_SHA} observed=${GITHUB_SHA}" >&2
+            exit 1
+          fi
+          printf 'REQUESTED_SOURCE_SHA=%s\n' "${REQUESTED_SOURCE_SHA}" >> "${GITHUB_ENV}"
 
       - name: Set up Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -95,6 +116,7 @@ jobs:
             printf 'artifact-name=%s\n' "${ARTIFACT_NAME}"
             printf 'rights-artifact-name=%s\n' "${RIGHTS_ARTIFACT_NAME}"
             printf 'source-sha=%s\n' "${GITHUB_SHA}"
+            printf 'requested-source-sha=%s\n' "${REQUESTED_SOURCE_SHA}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Require hermetic exact source identity before build
@@ -214,6 +236,7 @@ jobs:
           --raw-sbom "${RAW_SBOM}"
           --bundle-dir "${BUNDLE_DIR}"
           --source-sha "${GITHUB_SHA}"
+          --requested-source-sha "${REQUESTED_SOURCE_SHA}"
           --candidate-source-root "${CANDIDATE_SOURCE}"
           --materialization-report "${MATERIALIZATION_REPORT}"
           --repository "${GITHUB_REPOSITORY}"

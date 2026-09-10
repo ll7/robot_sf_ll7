@@ -34,8 +34,8 @@ CI_JOB_TIMEOUTS = {
     "scenario-validation": 15,
     "reproducibility-check": 20,
     "reproducibility-check-reconciliation": 5,
-    "xdist-scratch-isolation": 15,
-    "wheel-smoke-install": 20,
+    "xdist-scratch-isolation": 30,
+    "wheel-smoke-install": 30,
     "examples-smoke": 30,
     "notebooks-smoke": 30,
     "determinism-gate": 30,
@@ -457,6 +457,36 @@ def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
     assert "${{ inputs.sync-args }}" in sync_step["run"]
 
 
+def test_examples_smoke_uses_narrow_lock_backed_dependency_group() -> None:
+    """Keep examples setup bounded to dependencies exercised by its smoke lane."""
+    workflow = yaml.safe_load(_workflow_text())
+    setup_step = next(
+        (
+            step
+            for step in workflow["jobs"]["examples-smoke"]["steps"]
+            if step.get("uses") == "./.github/actions/setup-ci-python"
+        ),
+        None,
+    )
+
+    assert setup_step is not None, "examples-smoke setup step not found"
+    assert setup_step["with"] == {"sync-args": "--group examples --frozen"}
+
+    dependency_groups = _pyproject()["dependency-groups"]
+    assert dependency_groups["examples"] == [
+        "robot_sf[viz,benchmark]",
+        "scikit-learn>=1.9.0",
+        "stable-baselines3>=2.9.0",
+        "torch>=2.13.0,<2.14.0",
+    ]
+    optional_dependencies = _pyproject()["project"]["optional-dependencies"]
+    all_extras = (
+        "robot_sf[viz,maps,benchmark,training,gpu,recurrent,progress,"
+        "analytics,browser,sacadrl,socnav,criticality]"
+    )
+    assert all_extras in optional_dependencies["all"]
+
+
 def test_ci_setup_action_installs_rendered_page_qa_dependency() -> None:
     """Keep the shared Linux setup aligned with the evidence builder's PDF QA contract."""
     action = yaml.safe_load(CI_SETUP_ACTION.read_text(encoding="utf-8"))
@@ -706,6 +736,20 @@ def test_wheel_console_scripts_have_an_installed_package_boundary() -> None:
     assert '"console_script_probes": console_probes["entries"]' in smoke_text
 
 
+def test_wheel_console_metadata_lookup_avoids_source_checkout_cwd() -> None:
+    """The installed-wheel metadata probe must not be shadowed by checkout metadata."""
+    smoke_text = WHEEL_INSTALL_SMOKE.read_text(encoding="utf-8")
+    console_block = smoke_text.split('console_scripts_path="${WORK_DIR}/console-scripts.json"', 1)[
+        1
+    ]
+    console_block = console_block.split('extras_status_json="[]"', 1)[0]
+
+    assert console_block.count("cd /tmp") == 2
+    assert 'PYTHONPATH= PYTHONNOUSERSITE=1 "${PYTHON_BIN}" - "${console_scripts_path}"' in (
+        console_block
+    )
+
+
 def test_wheel_metadata_vendors_compatible_fast_pysf_package() -> None:
     """Clean wheel installs must not resolve the incompatible PyPI pysocialforce package."""
     project = _pyproject()
@@ -751,7 +795,10 @@ def test_ci_driver_test_phase_excludes_separately_timed_examples() -> None:
     """Keep example smoke timing out of the fast-feedback pytest phase."""
     driver_text = CI_DRIVER.read_text(encoding="utf-8")
 
-    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples' in driver_text
+    assert (
+        '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples/test_examples_run.py'
+        in driver_text
+    )
     assert "uv run python scripts/validation/run_examples_smoke.py --skip-perf-tests" in driver_text
 
 

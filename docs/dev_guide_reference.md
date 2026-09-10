@@ -190,7 +190,7 @@ Use the shared main-checkout environment by default for a fresh worktree:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- \
-  python scripts/dev/check_worktree_optional_deps.py --profile all-extras
+  uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
 
 The shared-venv wrapper pins imports to the current worktree, sets `UV_NO_SYNC=1`, and checks
@@ -230,11 +230,14 @@ The inventory covers ignored generated `output/`, the uv cache, repository workt
 and recognizable agent worktrees under `/dev/shm`. It is a review aid only. Preserve durable
 evidence before pruning `output/`; remove only clean, pushed Git worktrees with
 `git worktree remove`; and remove only task-owned, no-longer-running `/dev/shm` scratch. No
-automated cleanup is performed. Each existing candidate is sized with a five-second per-path
-timeout by default. Override it with `--size-timeout-seconds N` for a deliberately bounded local
-diagnostic. A timeout or unavailable `du` result is reported as `size_status` with a
-machine-readable `size_reason`; it never becomes a zero-size or cleanup recommendation and does
-not change the separate capacity verdict.
+automated cleanup is performed. Each ordinary candidate is sized with a five-second per-path
+timeout by default. The shared worktree container is measured by sizing its immediate children
+concurrently (up to 16 workers) with a bounded fleet budget of at most 12 times that timeout,
+capped at 60 seconds at the default setting. If some children do not finish, the inventory emits
+a clearly labeled partial lower-bound estimate and reason. Override the base timeout with
+`--size-timeout-seconds N` for a deliberately bounded local diagnostic. A timeout or unavailable
+`du` result is reported as `size_status` with a machine-readable `size_reason`; it never becomes a
+zero-size or cleanup recommendation and does not change the separate capacity verdict.
 
 ### Local CI scratch capacity
 
@@ -294,16 +297,24 @@ For a compact first pass, run
 `uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retirement-plan --json`.
 The retirement projection is a read-only review aid: it can classify rows as `preserve`, `review`,
 or `removable`, but it never deletes worktrees and does not replace human approval before any later
-`git worktree remove` command.
+cleanup action. Automatic or agent-driven cleanup must use the guarded repository reaper so
+protected worktrees are refused and the refusal is recorded:
+
+```bash
+scripts/dev/stale_worktree_reaper.py --apply --json
+```
+
+Treat a direct `git worktree remove <path>` as an operator-only final action for a separately
+verified clean, pushed, closed-PR candidate; it is not an automation integration point and must not
+replace the guarded reaper.
 
 Only remove a worktree after preserving relevant tracked, untracked, and ignored-but-important
 changes through a commit, stash, patch, durable artifact promotion, or explicit handoff note. Do not
 delete dirty or unpushed worktrees unless the cleanup record states what was preserved or why nothing
 needed preservation. Classify large ignored directories such as `output/` before removal as
 disposable, ignored cache, tracked manifest/evidence, durable-required, or handoff-needed; do not let
-worktree-local `output/` become durable artifact storage. Use `git worktree remove <path>` for clean
-worktrees; reserve `git worktree prune` for stale administrative entries after local state is
-checked.
+worktree-local `output/` become durable artifact storage. Use the guarded reaper for supported
+cleanup; reserve `git worktree prune` for stale administrative entries after local state is checked.
 
 ### Targeted shared-venv worktree validation
 
@@ -316,7 +327,7 @@ imports to the current worktree:
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
 scripts/dev/run_worktree_shared_venv.sh --venv ../robot_sf_ll7/.venv -- ruff check scripts/dev
 scripts/dev/run_worktree_shared_venv.sh --standalone -- \
-  python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
+  uv run python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
 ```
 
 The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the selected
@@ -427,8 +438,10 @@ uv run python examples/quickstart/03_custom_map.py
 ```
 
 - `01_basic_robot.py` introduces the environment factory pattern and headless rollouts.
-- `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to
-  `output/results/episodes_demo_ppo.jsonl`.
+- `02_trained_model.py` replays the bundled PPO baseline and writes JSONL metrics to the legacy
+  `output/results/episodes_demo_ppo.jsonl`. <!-- active-docs-check: allow current quickstart path matches the executable example -->
+  This quickstart output is retained for compatibility; new benchmark artifacts use
+  `output/benchmarks/`.
 - `03_custom_map.py` shows how to load `maps/svg_maps/debug_06.svg` via
   `RobotSimulationConfig.map_pool` for custom layouts.
 
@@ -1004,7 +1017,7 @@ wrapper so uv reuses the owning checkout's environment and does not create or pr
 `.venv`:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \
   <pr-number> \
   --expected-head-sha <head-sha> \
   --poll-attempts 40 \
@@ -1052,7 +1065,7 @@ default stale warning threshold is 900 seconds; set it explicitly when a differe
 window is appropriate:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_pr_ci_status.py \
   <pr-number> \
   --expected-head-sha <head-sha> \
   --actions-stale-after-seconds 900 \
@@ -1064,15 +1077,22 @@ timestamp source, run/job IDs, and exact-head matching. When a job is actively r
 in environment setup (such as Python runtime or dependency provisioning) beyond
 `--actions-stale-after-seconds`, the payload emits `checks.setup_starvation: true`,
 `checks.pending_reason: "setup_starvation"`, and `checks.diagnostic: "actions_gate_setup_starvation"`.
-Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`. Cancellation
-or rerun requires explicit operator authorization, and merge admission stays strictly blocked until
-a fresh exact-head run succeeds. `checks.age_warnings` marks gates that exceed the configured
+Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`.
+`scripts/dev/recover_stale_ci_run.py` is the repository-owned, exact-head-guarded operator recovery
+path: it is report-only by default, and `--apply` requires an explicit `--reason`, re-reads the live
+PR CI state under the host-local PR write lock, then requests exactly one `gh run rerun` only after
+every fail-closed guard passes. Cancellation or rerun still requires explicit operator
+authorization, and merge admission stays strictly blocked until a fresh exact-head run succeeds.
+A requested rerun is route evidence only and is never implementation proof.
+`checks.age_warnings` marks gates that exceed the configured
 threshold without changing the fail-closed `checks.overall: "pending"` result.
 `checks.superseded_runs` names an older exact-head run and its newer same-workflow replacement
 rather than hiding the replacement relationship behind a count. When a stale run has an
-independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
-monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
-and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
+independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, guarded recovery,
+and bounded monitor commands. These are explicit suggestions only: the monitor itself does not
+cancel or rerun Actions, and it never authorizes a merge. The `guarded_recovery_command` names the
+repository-owned exact-head-guarded path (`scripts/dev/recover_stale_ci_run.py`), whose `--apply`
+remains explicit operator authorization. Missing REST metadata or a mismatching run head suppresses
 mutation commands and leaves the route evidence incomplete.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
@@ -1095,8 +1115,35 @@ the job from the log archive), recover its retained check-run annotations with:
 uv run python scripts/dev/diagnose_actions_job.py <job-id>
 ```
 
-The helper prints normal logs when they are available and otherwise prints the annotations linked
-from the job metadata. It exits nonzero if neither source provides diagnostics.
+The helper verifies the requested job's metadata and prints its exact REST job logs when available;
+otherwise it prints the linked check-run annotations. It never substitutes a later run attempt's
+logs through `gh run view`. Missing or mismatched job identity, unusable evidence, and incomplete
+annotation pagination fail closed.
+
+For machine-readable classification without changing the job or rerunning anything:
+
+```bash
+uv run python scripts/dev/diagnose_actions_job.py <job-id> --repo ll7/robot_sf_ll7 --json
+```
+
+The `actions_job_diagnostic.v1` envelope preserves repository, job ID, run ID, run attempt, head SHA
+(commit identifier), and the original `job_status` / `job_conclusion`. Its separate
+`diagnostic_status` is `matched`, `unmatched`, or `unavailable`. Only the observed
+`Failed to FinalizeArtifact: ... (403) Forbidden: Error from intermediary ...` error signature within
+one log line or annotation message line yields `artifact_finalization_403`; separate records are
+never joined. Other failures remain unmatched, and the external cause remains unknown.
+
+`evidence` identifies the source endpoint, one-based log-line or annotation record number, and an
+excerpt capped at 2,000 characters with a truncation flag. Annotation requests are limited to 100
+pages and must remain on the same check run. `artifact_publication` is always `unconfirmed`:
+neither successful tests nor this error proves an artifact is present or absent. No classification
+makes a retry decision, changes required checks, or establishes that other work passed.
+
+Without `--json`, output remains log text or an annotation JSON array. In either mode, exit 0 means
+diagnostic evidence was retrieved, **not that continuous integration (CI) passed**; exit 1 means
+diagnostics are unavailable, and invalid CLI syntax retains argparse's exit 2. JSON-mode failures
+include an explicit `reason`; additional retrieval details go to stderr. Logs and excerpts can
+contain repository-sensitive material: sanitize them before sharing publicly.
 
 For routine goal-autopilot orientation, prefer the compact state snapshot helper before broad parent
 thread reads:
@@ -2611,6 +2658,12 @@ distinctly so the gate can hold for a *fresh run* rather than treat it as a main
 regression. The `--quiet` flag suppresses the human line; the existing
 exit-code contract is unchanged.
 
+The gate's default fetch is deliberately one bounded `gh run list --limit`
+window (default 5 runs, 30s timeout) so merge-hold evaluation stays fast; when
+cancellation churn fills that window it fails closed to `stale` instead of
+reading further back. Callers that need the decisive verdict behind a
+cancelled-run flood use the paginated reader below.
+
 ### Scheduled main-CI incident reconciliation
 
 Open issues carrying the canonical `ll7-main-red-incident:v1` body marker (or
@@ -2630,13 +2683,23 @@ incidents instead of GitHub's semantic closing keywords (`Closes`, `Fixes`, or
 the canonical body marker or its compatibility label, leaving the scheduled
 reconciler as the sole closer after the two-green criterion is met.
 
-The Actions run evidence window is paginated. The reconciler reads full
-workflow-run pages and stops only after two decisive completed green/red runs
-are visible, so a cancellation-saturated newest page cannot hide the decisive
-history. The default page budget is ten; `--max-run-pages N` changes it, and
-the legacy `--run-limit N` option is retained as an alias for that page budget.
-If the budget is exhausted before two decisive runs are found, the helper
-fails closed instead of classifying an incomplete window.
+The Actions run evidence window is paginated in both consumers through the
+shared reader `main_ci_is_green.fetch_run_window`, so a cancellation-saturated
+newest page cannot hide the decisive history. The classifier behind
+`main_ci_incident_reconcile.py` stops after one decisive completed green/red
+run and defaults to a ten-page budget (`--max-pages N` changes it); passing a
+raw `--limit N` keeps the legacy single `gh run list` window instead. When the
+page budget is exhausted without a decisive run, the classifier stays
+fail-closed `pending` and reports `window_exhausted: true` with
+`decisive_run_found: false`, which cannot be confused with a genuine red
+(`active`).
+
+The scheduled reconciler requires two decisive runs and stops only after two
+completed green/red runs are visible. Its default page budget is ten;
+`--max-run-pages N` changes it, and the legacy `--run-limit N` option is
+retained as an alias for that page budget. If the budget is exhausted before
+two decisive runs are found, the helper fails closed instead of classifying an
+incomplete window.
 
 The helper is report-only unless `--apply` is supplied, so an offline or local
 inspection can use:

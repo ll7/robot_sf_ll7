@@ -1,0 +1,201 @@
+# Scenario-window research dossier — 2026-09-08
+
+Plain-language summary: this packet prepares dormant tools for finding interesting
+moments in robot runs. It changes no benchmark results, planner rankings, or
+manuscript claims. See the [glossary](../glossary.md) for project terms.
+
+Status: preparation-only terminal packet. The complete machine-readable record is
+[scenario_window_research_dossier_2026-09-08.json](scenario_window_research_dossier_2026-09-08.json).
+This work follows the live #7381 programme and the preparation rulings in #7383
+and #7384; the attached packet is guidance/evidence, not a replacement authority.
+
+The receipt provenance below records the historical `origin/main` at dossier capture,
+`d6a41ba2395b19eb604978836f6c35735df45460`; it is not the current `origin/main` and is
+not the child PR base. The dossier-capture tips for #8612 and #8620 were
+`db1215d6e5d1a19598d4f6a4ba10b119229f66b7` and
+`4ef0858d33c91291129098c08975525a54fb0121`; the child remains scoped against that
+stacked parent rather than `main`. The published #8622 code-bearing
+commit is `40c33c26068cee38cbf59a5ff9a889736eff86e1`. The dossier binds its receipts
+to that code-bearing commit; this receipt/docs-only follow-up's final SHA is reported
+at handoff rather than embedded in this self-containing dossier. The stack is
+refreshed for inspection, but live domain authority and native campaign admission
+remain blocked.
+
+## Outcome
+
+The bounded result is an auditable implementation seam, not a shortened benchmark:
+
+- RW-01/RW-02 source and native-contract repairs are in [PR #8612](https://github.com/ll7/robot_sf_ll7/pull/8612).
+- RW-03/RW-04 typed state inventory, JSON+NPZ snapshot prototype, and no-op
+  comparator are in [PR #8620](https://github.com/ll7/robot_sf_ll7/pull/8620).
+- RW-05 deterministic relevance selection and the RW-06/RW-07 gated plan are in
+  [PR #8622](https://github.com/ll7/robot_sf_ll7/pull/8622).
+- No campaign, planner ranking, manuscript, release artifact, or new mainline
+  evidence was produced. RW-06 and RW-07 remain `BLOCKED_ADMISSION`.
+
+The supported snapshot subset is one-robot native `SimulatorCounterfactualModel`
+state at a pre-step/action boundary. It preserves absolute world time and remaining
+budget, uses stable actor/behavior identities, validates map/config/code/planner/
+checkpoint/platform/timestep compatibility before mutation, and loads numeric NPZ
+payloads with pickle disabled. Planner/controller memory, sensor history, and
+metric/event accumulators remain explicit unsupported modes; this is not a fresh
+environment checkpoint for those modes.
+
+## Three preparation timelines
+
+All rows below are synthetic/native preparation fixtures, not production findings.
+The complete parent remains the authority and all actors/static geometry remain
+retained.
+
+| timeline | candidate signals | proposed interval | evidence grade |
+| --- | --- | --- | --- |
+| no event | clearance 3 m, closing speed 0 m/s, TTC 10 s, no conflict/fallback/contact | none | synthetic preparation |
+| doorway interaction | precursor/visibility at step 2; clearance 0.8/0.7 m and closing speed 0.3 m/s at steps 4–5; one hysteresis hold | steps 2–8 (pre 2, post 2) | synthetic preparation |
+| multi-stage interaction | precursor at 1; clearance at 3; path conflict at 5; contact at 8 | steps 1–11 after merge | synthetic preparation |
+
+The selector records clearance, closing velocity, TTC (time to collision),
+closest approach, braking
+margin, visibility latency, path conflict, fallback/saturation, progress, stall,
+discomfort, and collision. Every signal carries units, provenance, availability
+timing, prediction assumptions, missingness, and an explicit hindsight flag.
+Missing values are unknown, never safe zeroes.
+
+Configuration reconciliation (fixture versus pilot): the checked-in 2/2/1/1
+pre/post-roll, merge-gap, and hysteresis values are short synthetic-fixture
+parameters only. They reproduce the dossier timelines and unit tests and must not
+be labelled proposed canonical or approved rules. The initial native-pilot
+structure from the delegated #7383 ruling is pre-roll 10 steps, post-roll 10
+steps, merge gap 5 steps, and minimum interval 1 step. `approved_rules` remains
+null. The JSON record keeps `proposed_rules` only as a deprecated fixture alias;
+use `configuration_reconciliation.fixture_rules` and
+`configuration_reconciliation.pilot_structure` instead.
+
+Signal eligibility: the JSON `signal_threshold_source_table` lists every signal
+with producer, unit, direction of risk, candidate trigger, release, availability
+timing, hindsight status, canonical source or rationale, missingness/refusal
+behaviour, and eligibility. All current numeric values (for example 1 m
+clearance, 3 s TTC, 0.2 m/s closing velocity) remain fixture candidates, not
+canonical thresholds. Every listed signal is currently
+`diagnostic_only_excluded`. Force and jerk have no identified canonical producer
+in the current inventory and remain non-triggering diagnostics; discomfort must
+not silently substitute for either quantity. A signal becomes an active pilot
+trigger only after all nine fields are recorded, including separate trigger and
+release thresholds.
+
+Trigger and release: the fixed one-step hysteresis hold is a fixture mechanism
+only. It is not a substitute for per-signal release thresholds. Pilot use
+requires separately frozen trigger and release values before held-out outcomes
+are inspected. Release thresholds are currently unfrozen (null).
+
+Pilot configuration digest: the JSON `pilot_configuration` freezes the interval
+structure plus the trigger-release-required policy
+(`5c261133eb25a6912d34dc231f6b8a9a7a03b18174aa0511d103b1e5fd94f3e9`).
+The digest is recomputable with
+`robot_sf.benchmark.relevance_windows.compute_pilot_config_digest()`, and the
+test suite asserts that the recorded value matches that function. Per-signal
+numeric thresholds remain unfrozen. The digest must be frozen before inspecting
+held-out outcomes.
+
+Parent selection (Stage E1): 30 independent, provenance-complete native parents
+not used for fixtures or threshold selection, held out by parent/scenario/seed
+lineage and, where available, scenario-geometry family. Fixture parents,
+incomplete provenance, fallback/degraded/unknown execution, missing precursors,
+and unsupported provenance are excluded. Any missed declared event or precursor
+blocks admission. Zero failures among 30 is feasibility only (about a 9.5%
+one-sided 95% upper bound).
+
+Terminal result rules: `admitted_for_next_stage` means post-hoc inspection only,
+never benchmark or executable-scenario admission; `rejected` means unsafe crop or
+failed fidelity with fallback to the full parent; `not_evaluable` means missing
+or unsupported evidence.
+
+Answerability gate: any decision-capable simulation or replay execution must
+route through the `research_answerability.v1` gate owned by #7031. Preparation
+plans remain `execution_allowed=false` and `BLOCKED_ADMISSION`.
+
+Retained vectors and manifests carry explicit execution-mode provenance; an absent
+row mode is represented as `unknown`. Fallback and degraded rows may remain visible
+in this proposal-only diagnostic lane, but they cannot validate as paper-grade or
+other evidence-ready output.
+
+## Unsafe crop and refusal boundary
+
+For the multi-stage timeline, a deliberately late crop containing steps 6–11 drops
+the precursor at step 1 and earlier decisions at steps 3 and 5. The immutable
+manifest validator rejects it with `unsafe crop: selected excerpt omits required
+precursor steps`. The validator recomputes selector windows and precursor ownership
+from the complete parent, so a forged manifest cannot erase the precursor from both
+its required-step and window fields. The full parent digest, actor IDs, original step
+indices, and complete rows remain linked in the proposal. This is a fidelity refusal, not a
+claim that the physical event is impossible.
+
+Precursor ownership is keyed by typed/untyped event type and event identity. Hysteresis-only
+active rows remain ownership-bearing, so an untyped safe row never inherits a typed
+precursor; a trigger run containing both ownership types is refused as ambiguous.
+
+## Proposed fidelity vector
+
+These are candidate rules for a later author decision, not frozen acceptance
+thresholds.
+
+| property | unit | proposed direction | approval |
+| --- | --- | --- | --- |
+| state/observation/action equivalence | native values per step | exact equality | proposed |
+| verdict agreement | categorical | exact category | proposed |
+| failure-mechanism agreement | categorical trace label | exact when labels exist; otherwise not evaluable | proposed |
+| primary metric error | metric-specific units | bound absolute or relative error before validation | not frozen |
+| planner ranking | ordering/rank correlation | only with full metric support and independent parents | blocked until transfer |
+| replay determinism | state/RNG stream | exact same-platform continuation for the typed snapshot/no-op subset; the last-avoidable engine remains contact-presence/step only | subset with explicit limitation |
+| precursor/avoidability event | step/event identity | zero missing declared precursor; finite search failure is unknown | proposed |
+
+## Dependency and gated experiment plan
+
+The state inventory is [simulator_state_inventory.v1.json](simulator_state_inventory.v1.json).
+RW-01/RW-02 establish route, horizon, action, collision, and response contracts;
+RW-03/RW-04 establish the supported snapshot/no-op seam; RW-05 consumes retained
+parent rows. RW-06 (capability-conditioned avoidability witnesses) and RW-07
+(paired transfer/cost break-even) require stage-specific live authority and remain
+blocked. The checked-in plan keeps the four required modes together:
+
+1. full parent;
+2. same-policy exact restart;
+3. pose/velocity-only reset as a negative control;
+4. deliberately late/no-preroll crop as a negative control.
+
+It does not launch any of them. Cross-planner prefixes, recurrent hidden state,
+spatial actor removal, and full-episode metric recomposition are not silently
+assumed valid.
+
+## Cost and sample-size boundary
+
+The native doorway fixture measured 19,657 bytes of JSON metadata plus 3,893 bytes
+of compressed numeric payload (23,550 bytes total; seven pedestrians). This is an
+engineering receipt only. The accounting used by the plan is:
+
+```text
+C_plain = K * C(T)
+C_window = C_parent + C_selection + C_validation + K * (C_load + C(W))
+```
+
+The cost helper rejects negative, non-finite, and boolean cost inputs before arithmetic. No
+positive break-even was measured because no admitted pilot ran.
+
+A proposed validation design uses 30 independent parents to expose feasibility bugs and 300
+independent parents for a roughly 1% one-sided 95% upper bound after zero observed
+failures; both are held out by parent/scenario/seed lineage and are not executed in
+this lane.
+
+## Terminal hypothesis ledger
+
+The JSON dossier gives every hypothesis an allowed terminal status. In brief:
+
+- `supported`: route restoration, horizon refusal, the native typed subset's
+  same-object round trip, and the deterministic preparation selector.
+- `rejected`: a late crop that omits a declared precursor is safe.
+- `not_evaluable`: shortened continuation's compute break-even.
+- `blocked`: fresh-process/recurrent coverage, planner transfer/ranking, and
+  PELT/learned selector comparison.
+
+The remaining action is review of this preparation packet and, only if authority
+changes, a separate admission check. There is no pending autonomous loop and no
+manuscript-submission change in this branch.

@@ -189,7 +189,7 @@ def _find_scenario_in_manifests(
 
 
 def load_scenario(scenario_id: str | Path) -> dict[str, Any]:
-    """Resolve and load a scenario definition from configs/scenarios/*.yaml.
+    """Resolve and load a scenario definition from ``configs/scenarios/*.yaml``.
 
     Args:
         scenario_id: Either a direct file path, a path relative to configs/scenarios,

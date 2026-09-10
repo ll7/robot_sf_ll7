@@ -28,6 +28,24 @@ HEAD_SHA = "b" * 40
 NEW_HEAD_SHA = "c" * 40
 CONTRACT = "Completion condition: merged PR #9000\n"
 BRANCH = "issue-7614-completion-receipt"
+HEALTHY_AUDIT_QUOTA = {
+    "available": True,
+    "status": "ok",
+    "core_remaining": 500,
+    "core_reset_at": 1_800_000_100,
+    "available_budget": 490,
+    "min_core_remaining": 10,
+    "retry_command": "uv run python scripts/dev/issue_audit_core.py plan",
+    "next_action": "none",
+    "reason": "sufficient core quota available",
+    "errors": [],
+    "quota_exhausted": False,
+    "quota_uncertain": False,
+    "budget_exhausted": False,
+    "request_budget": 490,
+    "requests_attempted": 1,
+    "requests_remaining": 489,
+}
 
 
 def _payload(*, artifact_root: Path | None = None) -> dict[str, Any]:
@@ -243,6 +261,49 @@ def test_git_verifier_checks_exact_diff_and_pull_request_snapshot() -> None:
     assert result["git"]["diff"] == receipt["diff"]
 
 
+def test_git_subprocess_timeout_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stalled default Git command becomes structured verification failure."""
+    receipt = _receipt()
+
+    def timeout(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs.get("timeout") == 30
+        raise subprocess.TimeoutExpired(command, 30)
+
+    monkeypatch.setattr("scripts.dev.issue_completion_receipt.subprocess.run", timeout)
+
+    result = verify_receipt_against_git(
+        receipt,
+        repo_root=Path("/tmp/receipt-test-repo"),
+        repository="ll7/robot_sf_ll7",
+        issue_contract=CONTRACT,
+    )
+
+    assert result["ok"] is False
+    assert any("git command timed out after" in error for error in result["errors"])
+
+
+def test_github_subprocess_timeout_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stalled default GitHub command becomes structured verification failure."""
+    receipt = _receipt()
+
+    def timeout(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs.get("timeout") == 30
+        raise subprocess.TimeoutExpired(command, 30)
+
+    monkeypatch.setattr("scripts.dev.issue_completion_receipt.subprocess.run", timeout)
+
+    result = verify_receipt_against_git(
+        receipt,
+        repo_root=Path("/tmp/receipt-test-repo"),
+        repository="ll7/robot_sf_ll7",
+        issue_contract=CONTRACT,
+        git_runner=_git_runner(),
+    )
+
+    assert result["ok"] is False
+    assert any("gh command timed out after" in error for error in result["errors"])
+
+
 def test_git_verifier_rejects_a_later_branch_head() -> None:
     """A branch that moved after review cannot reuse the earlier receipt."""
     receipt = _receipt()
@@ -429,7 +490,9 @@ def test_audit_plan_accepts_issue_number_keyed_receipt_inventory() -> None:
                 {
                     "number": 7614,
                     "title": "Require completion receipt",
+                    "url": "https://github.com/ll7/robot_sf_ll7/issues/7614",
                     "state": "open",
+                    "updated_at": "2026-08-20T00:00:00Z",
                     "body": CONTRACT,
                     "labels": [],
                     "comments": [],
@@ -451,7 +514,28 @@ def test_audit_plan_accepts_issue_number_keyed_receipt_inventory() -> None:
             "completion_receipts": {
                 "7614": {"receipt": receipt, "verification": _verification(receipt)}
             },
-            "inventory": {},
+            "inventory": {
+                "quota": dict(HEALTHY_AUDIT_QUOTA),
+                "issues": {
+                    "source": "repos/ll7/robot_sf_ll7/issues?state=open",
+                    "source_kind": "canonical_open_issues",
+                    "source_status": "complete",
+                    "source_proof": "canonical_issue_rows",
+                    "source_status_reason": "canonical open-issue response is complete",
+                    "available": True,
+                    "truncated": False,
+                    "errors": [],
+                    "pages_read": 1,
+                    "requests_attempted": 1,
+                    "per_page": 100,
+                    "page_budget": 10,
+                    "row_count": 1,
+                    "raw_row_count": 1,
+                    "canonical_row_count": 1,
+                    "non_object_row_count": 0,
+                    "malformed_object_row_count": 0,
+                },
+            },
         }
     )
 

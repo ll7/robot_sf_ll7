@@ -1,0 +1,24 @@
+# Valid scenario fixture for CLI tests
+scenarios:
+  - name: fixture_valid_crossing
+    map_file: ../../../maps/svg_maps/classic_crossing.svg
+    simulation_config:
+      max_episode_steps: 100
+      time_step: 0.1
+      ped_density: 0.05
+    robot_config:
+      type: differential_drive
+    observation_visibility:
+      enabled: true
+      fov_degrees: 120.0
+      max_range_m: 8.0
+    single_pedestrians:
+      - id: ped_1
+        goal_poi: goal_1
+    metadata:
+      archetype: crossing
+      family: crossing
+      density: low
+    seeds:
+      - 101
+      - 102

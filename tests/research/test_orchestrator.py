@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from robot_sf.research.orchestrator import AblationOrchestrator, ReportOrchestrator
@@ -24,6 +26,60 @@ def test_multi_seed_execution(tmp_path):
     assert len(records) == 6  # 3 seeds × 2 conditions
     assert completeness["score"] == 100.0
     assert completeness["missing_seeds"] == []
+    assert all(entry["baseline_status"] == "completed" for entry in seed_status)
+    assert all(entry["pretrained_status"] == "completed" for entry in seed_status)
+
+
+@pytest.mark.parametrize(
+    "metrics",
+    [
+        pytest.param({"timesteps_to_convergence": 0}, id="convergence-only"),
+        pytest.param({"avg_timesteps": 0.0}, id="average-only"),
+        pytest.param({"total_timesteps": 0}, id="total-only"),
+        pytest.param(
+            {"timesteps_to_convergence": 0, "avg_timesteps": 100, "total_timesteps": 200},
+            id="convergence-before-both-aliases",
+        ),
+        pytest.param(
+            {"timesteps_to_convergence": 0, "total_timesteps": 200},
+            id="convergence-before-total",
+        ),
+        pytest.param({"avg_timesteps": 0, "total_timesteps": 200}, id="average-before-total"),
+        pytest.param(
+            {"timesteps_to_convergence": None, "avg_timesteps": 0, "total_timesteps": 200},
+            id="null-convergence",
+        ),
+        pytest.param(
+            {"timesteps_to_convergence": None, "avg_timesteps": None, "total_timesteps": 0},
+            id="null-convergence-and-average",
+        ),
+    ],
+)
+def test_multi_seed_execution_preserves_zero_timesteps(tmp_path, metrics):
+    """Zero timesteps retain alias priority and count as a completed seed."""
+    baseline_manifests = create_seed_set("baseline", [1, 2], tmp_path / "baseline")
+    pretrained_manifests = create_seed_set("pretrained", [1, 2], tmp_path / "pretrained")
+    for manifest in (baseline_manifests[0], pretrained_manifests[0]):
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["metrics"] = metrics
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    records, completeness, seed_status = ReportOrchestrator(
+        output_dir=tmp_path / "reports"
+    ).orchestrate_multi_seed(baseline_manifests, pretrained_manifests, expected_seeds=[1, 2])
+
+    assert len(records) == 4
+    zero_records = [record for record in records if record["seed"] == 1]
+    assert {record["policy_type"] for record in zero_records} == {"baseline", "pretrained"}
+    assert all(record["timesteps_to_convergence"] == 0.0 for record in zero_records)
+    assert completeness == {
+        "score": 100.0,
+        "expected": 2,
+        "completed": 2,
+        "missing_seeds": [],
+        "failed_seeds": [],
+        "status": "PASS",
+    }
     assert all(entry["baseline_status"] == "completed" for entry in seed_status)
     assert all(entry["pretrained_status"] == "completed" for entry in seed_status)
 

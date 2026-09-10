@@ -1,0 +1,90 @@
+version: 1
+entries:
+  robot-sf:
+    purpose: Top-level user workflow entry point (doctor, demo, examples, gallery, models,
+      datasets, envs, scenarios, planners, recipe, release).
+    profile: core
+    availability: Always available after `uv sync --all-extras` (core dependencies only);
+      `--help` is local-only with no network, simulator, scheduler, or artifact mutation.
+    guide: docs/adoption_path.md
+    subcommands:
+      doctor: docs/adoption_path.md
+      models: docs/model_registry_publication.md
+      datasets: docs/external_data_setup.md
+      envs: docs/ENVIRONMENT.md
+      scenarios: docs/scenario_zoo/index.md
+      planners: docs/planner_zoo/index.md
+      examples: docs/adoption_path.md
+      demo: docs/adoption_path.md
+      gallery: docs/gallery.md
+      recipe: docs/recipes/README.md
+      release: docs/benchmark_artifact_publication.md
+  robot-sf-carla-docker-runtime:
+    purpose: Preflight or smoke-test the pinned CARLA 0.9.16 Docker runtime.
+    profile: carla
+    availability: Preflight is host-local; `smoke` and `live-replay` need the Docker
+      daemon, the pinned `carlasim/carla:0.9.16` image, and the `carla` client group;
+      `--help` is local-only.
+    guide: docs/dev_runtime_requirements.md
+  robot-sf-carla-parity-bundle-preflight:
+    purpose: Read-only readiness preflight for the compact CARLA native/aligned parity
+      bundle.
+    profile: carla
+    availability: Local-only; does not run CARLA, needs no network or simulator, and
+      never asserts metric parity.
+    guide: docs/dev_runtime_requirements.md
+  robot-sf-carla-replay-diagnostics:
+    purpose: Build conservative CARLA replay diagnostics from Robot-SF and CARLA JSON
+      inputs.
+    profile: carla
+    availability: Local-only diagnostics over supplied JSON files; no CARLA server,
+      network, scheduler, or artifact mutation for `--help`.
+    guide: docs/dev_runtime_requirements.md
+  robot-sf-carla-t1-oracle-smoke:
+    purpose: Prepare one CARLA T1 oracle replay smoke from a T0 export manifest.
+    profile: carla
+    availability: Setup is local-only; live replay needs the external CARLA 0.9.16
+      Docker runtime and the `carla` client group.
+    guide: docs/dev_runtime_requirements.md
+  robot-sf-catalog-carla-schemas:
+    purpose: Print CARLA bridge schema catalog metadata.
+    profile: carla
+    availability: Local-only; no CARLA server, network, or simulator required.
+    guide: docs/dev_runtime_requirements.md
+  robot-sf-check-carla:
+    purpose: Check optional CARLA Python API availability.
+    profile: carla
+    availability: Local-only check; reports `not-available` when the `carla` client
+      group is absent and never requires the simulator for `--help`.
+    guide: docs/dev_runtime_requirements.md
+  robot-sf-export-carla-t0:
+    purpose: Export Robot-SF scenarios to CARLA T0 neutral JSON.
+    profile: carla
+    availability: Help and `--schema` are local-only; export reads local scenario
+      files only and needs no CARLA server or network.
+    guide: docs/dev_runtime_requirements.md
+  robot-sf-migrate-artifacts:
+    purpose: Consolidate legacy artifacts under the canonical `output/` root.
+    profile: core
+    availability: Always available (core dependencies only); `--help` and `--dry-run`
+      are read-only, migration writes only under `output/` when actually run.
+    guide: docs/dev_guide_reference.md
+  robot-sf-validate-carla-t0-batch:
+    purpose: Validate a CARLA T0 export manifest and every referenced payload.
+    profile: carla
+    availability: Local-only validation; no CARLA server, network, or simulator
+      required.
+    guide: docs/dev_runtime_requirements.md
+  robot-sf-validate-carla-t0-manifest:
+    purpose: Validate a CARLA T0 export manifest.
+    profile: carla
+    availability: Local-only validation; no CARLA server, network, or simulator
+      required.
+    guide: docs/dev_runtime_requirements.md
+  robot_sf_bench:
+    purpose: Social-navigation benchmark toolkit (run, aggregate, validate, plot, SNQI,
+      doctor).
+    profile: benchmark
+    availability: Requires the `benchmark` extra (included in `uv sync --all-extras`);
+      `--help` is local-only with no network, simulator, scheduler, or artifact mutation.
+    guide: docs/benchmark.md

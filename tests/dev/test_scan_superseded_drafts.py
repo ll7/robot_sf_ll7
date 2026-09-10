@@ -729,6 +729,83 @@ def test_fetch_issue_state_does_not_hide_api_failures(
         scanner.fetch_issue_state(repo="ll7/robot_sf_ll7", number=42)
 
 
+def test_fetch_issue_state_accepts_merged_pull_request_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A merged pull-request reference is a valid supersession state."""
+    monkeypatch.setattr(scanner, "_run_json", lambda *_args, **_kwargs: {"state": "MERGED"})
+
+    assert scanner.fetch_issue_state(repo="ll7/robot_sf_ll7", number=8686) == "MERGED"
+
+
+def test_fetch_issue_state_classifies_unknown_reference_separately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing issue/PR number is skippable, unlike an API failure."""
+
+    def failed_run_json(*_args: object, **_kwargs: object) -> Any:
+        raise RuntimeError("GraphQL: Could not resolve to an Issue with the number of 999")
+
+    monkeypatch.setattr(scanner, "_run_json", failed_run_json)
+    with pytest.raises(scanner.ReferenceLookupError, match="#999"):
+        scanner.fetch_issue_state(repo="ll7/robot_sf_ll7", number=999)
+
+
+def test_unresolvable_reference_is_reported_without_stopping_other_drafts() -> None:
+    """One malformed reference must not suppress candidates from later drafts."""
+    prs = [
+        _draft(number=1, body="Refs #999"),
+        _draft(number=2, body="Closes #42"),
+    ]
+    warnings: list[dict[str, Any]] = []
+
+    def get_issue_state(*, repo: str, number: int) -> str:
+        if number == 999:
+            raise scanner.ReferenceLookupError("reference does not resolve")
+        return "CLOSED"
+
+    candidates = scanner.scan_drafts(
+        prs,
+        repo="ll7/robot_sf_ll7",
+        get_issue_state=get_issue_state,
+        get_merged_prs=lambda *, repo, issue_number, limit=30: [],
+        get_modified_files=lambda *, repo, pr_number: [],
+        warnings=warnings,
+    )
+
+    assert [candidate.pr.number for candidate in candidates] == [2]
+    assert warnings == [
+        {
+            "type": "skipped_reference",
+            "draft_pr": 1,
+            "reference": 999,
+            "reason": "reference does not resolve",
+        }
+    ]
+
+
+def test_report_and_markdown_include_reference_warnings() -> None:
+    """Expected reference skips are visible without making the report fail."""
+    warnings = [
+        {
+            "type": "skipped_reference",
+            "draft_pr": 1,
+            "reference": 999,
+            "reason": "reference does not resolve",
+        }
+    ]
+    report = scanner.build_report(
+        repo="ll7/robot_sf_ll7",
+        candidates=[],
+        scanned_count=1,
+        warnings=warnings,
+    )
+
+    assert report["ok"] is True
+    assert report["warnings"] == warnings
+    assert "reference #999 skipped" in scanner.build_markdown(report)
+
+
 # ---------------------------------------------------------------------------
 # fetch_draft_prs
 # ---------------------------------------------------------------------------

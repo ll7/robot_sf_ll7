@@ -15,6 +15,7 @@ from scripts.dev.check_curated_doc_links import (  # noqa: E402
     check_curated,
     check_target,
     github_slug,
+    iter_links,
 )
 
 
@@ -94,6 +95,32 @@ def test_generated_alias_drift_fails_closed(
     assert finding is not None and finding.reason == "alias_drift"
 
 
+def test_broken_toctree_entry_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import scripts.dev.check_curated_doc_links as checker
+
+    monkeypatch.setattr(checker, "CURATED_PAGES", ("index.rst",))
+    source = tmp_path / "index.rst"
+    source.write_text(
+        ".. toctree::\n   :maxdepth: 1\n\n   present\n   Section <section>\n   Missing <missing>\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "present.rst").write_text("Present\n", encoding="utf-8")
+    section = tmp_path / "section"
+    section.mkdir()
+    (section / "index.md").write_text("Section\n", encoding="utf-8")
+
+    assert iter_links(source) == [(4, "present"), (5, "section"), (6, "missing")]
+    assert [finding.as_dict() for finding in check_curated(tmp_path)] == [
+        {
+            "source": "index.rst",
+            "line": 6,
+            "target": "missing",
+            "resolved": "missing",
+            "reason": "missing_file",
+        }
+    ]
+
+
 def test_curated_surface_has_zero_findings() -> None:
     assert check_curated() == []
 
@@ -102,10 +129,56 @@ def test_checker_cli_reports_json() -> None:
     proc = subprocess.run(
         [sys.executable, str(CHECKER), "--format", "json"],
         capture_output=True,
-        text=True,
         cwd=CHECKER.parents[2],
         check=False,
     )
     assert proc.returncode == 0
-    payload = json.loads("\n".join(proc.stdout.splitlines()[:-1]))
+    payload = json.loads(proc.stdout)
     assert payload == []
+    assert proc.stdout == (json.dumps([], indent=2, sort_keys=False) + "\n").encode()
+    assert proc.stderr == b""
+
+    repeat = subprocess.run(
+        [sys.executable, str(CHECKER), "--format", "json"],
+        capture_output=True,
+        cwd=CHECKER.parents[2],
+        check=False,
+    )
+    assert repeat.returncode == 0
+    assert repeat.stdout == proc.stdout
+
+
+def test_findings_are_deterministic_across_repository_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import scripts.dev.check_curated_doc_links as checker
+
+    monkeypatch.setattr(checker, "CURATED_PAGES", ("index.rst",))
+    roots = [tmp_path / "worktree-a", tmp_path / "worktree-with-a-longer-name"]
+    for root in roots:
+        root.mkdir()
+        (root / "index.rst").write_text(
+            "`Broken <./target.rst#missing>`_\n`Escaped <../outside.md>`_\n",
+            encoding="utf-8",
+        )
+        (root / "target.rst").write_text(".. _real:\n", encoding="utf-8")
+
+    reports = [[finding.as_dict() for finding in check_curated(root)] for root in roots]
+
+    assert reports[0] == reports[1]
+    assert reports[0] == [
+        {
+            "source": "index.rst",
+            "line": 1,
+            "target": "./target.rst#missing",
+            "resolved": "target.rst",
+            "reason": "missing_fragment",
+        },
+        {
+            "source": "index.rst",
+            "line": 2,
+            "target": "../outside.md",
+            "resolved": "../outside.md",
+            "reason": "path_escape",
+        },
+    ]

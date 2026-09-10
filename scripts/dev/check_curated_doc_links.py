@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,7 @@ MD_LINK_RE = re.compile(r"(?<!!)\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 RST_LINK_RE = re.compile(r"`[^`<]*<([^`>]+)>`_")
 RST_LABEL_RE = re.compile(r"^\s*\.\.\s+_([^:]+):")
 RST_REF_RE = re.compile(r":(?:doc|ref):`([^`]+)`")
+RST_TOCTREE_RE = re.compile(r"^(?P<indent>[ \t]*)\.\.\s+toctree::\s*(?:#.*)?$")
 MD_ATX_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 MD_ANCHOR_RE = re.compile(r'<a\s+(?:name|id)\s*=\s*["\']([^"\']+)["\']', re.IGNORECASE)
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
@@ -81,12 +83,56 @@ def rst_labels(path: Path) -> set[str]:
     return labels
 
 
+def _toctree_target(entry: str) -> str:
+    """Return the target from one Sphinx toctree entry."""
+    if entry.endswith(">") and "<" in entry:
+        return entry[entry.rfind("<") + 1 : -1].strip()
+    return entry
+
+
+def _toctree_entries(
+    lines: list[str], directive_line: int, directive_indent: int
+) -> tuple[list[tuple[int, str]], int]:
+    """Return entries after one toctree directive and the first unconsumed line."""
+    entries: list[tuple[int, str]] = []
+    number = directive_line + 1
+    while number < len(lines):
+        line = lines[number]
+        if not line.strip():
+            number += 1
+            continue
+        indent = len(line) - len(line.lstrip(" \t"))
+        if indent <= directive_indent:
+            break
+        entry = line.strip()
+        if not entry.startswith((":", "..")):
+            target = _toctree_target(entry)
+            if target:
+                entries.append((number + 1, target))
+        number += 1
+    return entries, number
+
+
 def iter_links(source: Path) -> list[tuple[int, str]]:
     """Return ``(line_number, target)`` pairs for one curated page."""
     links: list[tuple[int, str]] = []
     suffix = source.suffix.lower()
     in_fence = False
-    for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
+    lines = source.read_text(encoding="utf-8").splitlines()
+    if suffix == ".rst":
+        number = 0
+        while number < len(lines):
+            line = lines[number]
+            toctree = RST_TOCTREE_RE.match(line)
+            if toctree:
+                entries, number = _toctree_entries(lines, number, len(toctree.group("indent")))
+                links.extend(entries)
+                continue
+            links.extend((number + 1, target) for target in RST_LINK_RE.findall(line))
+            links.extend((number + 1, f"#{target}") for target in RST_REF_RE.findall(line))
+            number += 1
+        return links
+    for number, line in enumerate(lines, 1):
         if suffix == ".md" and FENCE_RE.match(line):
             in_fence = not in_fence
             continue
@@ -94,9 +140,6 @@ def iter_links(source: Path) -> list[tuple[int, str]]:
             continue
         if suffix == ".md":
             links.extend((number, target) for _, target in MD_LINK_RE.findall(line))
-        elif suffix == ".rst":
-            links.extend((number, target) for target in RST_LINK_RE.findall(line))
-            links.extend((number, f"#{target}") for target in RST_REF_RE.findall(line))
     return links
 
 
@@ -121,17 +164,47 @@ class Finding:
         }
 
 
-def _resolve_file(
-    source: Path, line: int, target: str, path_part: str
-) -> tuple[Path | None, str | None]:
-    """Resolve the file part of one link; return (path, reason) with path None on failure."""
-    candidate = (source.parent / path_part).resolve()
+def _repository_relative(path: Path) -> str | None:
+    """Return a normalized repository-relative path, or None when outside the repository."""
     try:
-        candidate.relative_to(REPO_ROOT)
-    except ValueError:
+        return path.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def _stable_unresolved_path(source: Path, path_part: str) -> str:
+    """Return a root-independent path for a failed resolution attempt."""
+    relative = _repository_relative(source.parent / path_part)
+    if relative is not None:
+        return relative
+    if Path(path_part).is_absolute():
+        return Path(path_part).as_posix()
+    return posixpath.normpath(path_part)
+
+
+def _resolve_candidates(source: Path, path_part: str) -> list[Path]:
+    """Return exact and extensionless Sphinx candidates in deterministic order."""
+    candidate = source.parent / path_part
+    candidates = [candidate]
+    path = Path(path_part)
+    if not path_part.endswith(("/", "\\")) and path.suffix == "" and path.name not in {".", ".."}:
+        candidates.extend(
+            (
+                candidate.with_name(f"{candidate.name}.rst"),
+                candidate.with_name(f"{candidate.name}.md"),
+            )
+        )
+    return candidates
+
+
+def _resolve_candidate(candidate: Path) -> tuple[Path | None, str | None]:
+    """Resolve one candidate and return a stable failure reason when it is unusable."""
+    candidate = candidate.resolve()
+    if _repository_relative(candidate) is None:
         return None, "path_escape"
-    if not candidate.exists() and _has_case_mismatch(candidate):
-        return None, "case_mismatch"
+    if not candidate.exists():
+        reason = "case_mismatch" if _has_case_mismatch(candidate) else "missing_file"
+        return None, reason
     if candidate.is_dir():
         for index in ("README.md", "index.rst", "index.md"):
             if (candidate / index).is_file():
@@ -139,25 +212,39 @@ def _resolve_file(
         return None, "missing_file"
     if not candidate.is_file():
         return None, "missing_file"
-    if str(candidate.relative_to(REPO_ROOT)) in GENERATED_ALIASES:
+    if _repository_relative(candidate) in GENERATED_ALIASES:
         manifest = REPO_ROOT / "examples" / "examples_manifest.yaml"
         if not manifest.is_file():
             return None, "alias_drift"
     return candidate, None
 
 
+def _resolve_file(
+    source: Path, line: int, target: str, path_part: str
+) -> tuple[Path | None, str | None]:
+    """Resolve one file or directory-index target; return its path and failure reason."""
+    saw_case_mismatch = False
+    for raw_candidate in _resolve_candidates(source, path_part):
+        resolved, reason = _resolve_candidate(raw_candidate)
+        if resolved is not None:
+            return resolved, None
+        if reason in {"path_escape", "alias_drift"}:
+            return None, reason
+        saw_case_mismatch |= reason == "case_mismatch"
+    if saw_case_mismatch:
+        return None, "case_mismatch"
+    return None, "missing_file"
+
+
 def _source_label(source: Path) -> str:
     """Return the repository-relative source label for stable reports."""
-    try:
-        return str(source.relative_to(REPO_ROOT))
-    except ValueError:
-        return str(source)
+    return _repository_relative(source) or source.as_posix()
 
 
 def _has_case_mismatch(candidate: Path) -> bool:
     """Return whether a missing path differs only by case from an existing path."""
-    current = REPO_ROOT
-    for component in candidate.relative_to(REPO_ROOT).parts:
+    current = REPO_ROOT.resolve()
+    for component in candidate.relative_to(current).parts:
         if not current.is_dir():
             return False
         names = {entry.name for entry in current.iterdir()}
@@ -178,9 +265,13 @@ def _check_fragment(source: Path, line: int, target: str, resolved: Path) -> Fin
     elif resolved.suffix.lower() == ".rst":
         anchors = rst_labels(resolved)
     else:
-        return Finding(_source_label(source), line, target, str(resolved), "missing_fragment")
+        return Finding(
+            _source_label(source), line, target, _source_label(resolved), "missing_fragment"
+        )
     if fragment not in anchors:
-        return Finding(_source_label(source), line, target, str(resolved), "missing_fragment")
+        return Finding(
+            _source_label(source), line, target, _source_label(resolved), "missing_fragment"
+        )
     return None
 
 
@@ -194,26 +285,37 @@ def check_target(source: Path, line: int, target: str) -> Finding | None:
     resolved, reason = _resolve_file(source, line, target, path_part)
     if resolved is None:
         assert reason is not None
-        return Finding(_source_label(source), line, target, path_part, reason)
+        return Finding(
+            _source_label(source),
+            line,
+            target,
+            _stable_unresolved_path(source, path_part),
+            reason,
+        )
     return _check_fragment(source, line, target, resolved)
 
 
-def check_curated(root: Path = REPO_ROOT) -> list[Finding]:
+def check_curated(root: Path | None = None) -> list[Finding]:
     """Check every curated page; findings sort by (source, line, target)."""
     global REPO_ROOT
+    previous_root = REPO_ROOT
+    root = (REPO_ROOT if root is None else Path(root)).resolve()
     REPO_ROOT = root
-    findings: list[Finding] = []
-    for page in CURATED_PAGES:
-        source = root / page
-        if not source.is_file():
-            findings.append(Finding(page, 0, page, page, "missing_file"))
-            continue
-        for line, target in iter_links(source):
-            finding = check_target(source, line, target)
-            if finding is not None:
-                findings.append(finding)
-    findings.sort(key=lambda f: (f.source, f.line, f.target))
-    return findings
+    try:
+        findings: list[Finding] = []
+        for page in CURATED_PAGES:
+            source = root / page
+            if not source.is_file():
+                findings.append(Finding(page, 0, page, page, "missing_file"))
+                continue
+            for line, target in iter_links(source):
+                finding = check_target(source, line, target)
+                if finding is not None:
+                    findings.append(finding)
+        findings.sort(key=lambda f: (f.source, f.line, f.target))
+        return findings
+    finally:
+        REPO_ROOT = previous_root
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -231,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"{finding.source}:{finding.line}: {finding.target} "
                 f"-> {finding.resolved} [{finding.reason}]"
             )
-    print(f"{len(findings)} finding(s) across {len(CURATED_PAGES)} curated pages.")
+        print(f"{len(findings)} finding(s) across {len(CURATED_PAGES)} curated pages.")
     if args.check and findings:
         return 1
     return 0

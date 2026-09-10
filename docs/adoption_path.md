@@ -12,6 +12,8 @@ worktree-local convenience artifacts unless they are separately promoted through
 provenance workflow. A single run or an estimated runtime must not be used to rank planners or
 support a paper-facing claim.
 
+
+> Platform notes (Linux, macOS, headless): [Platform Setup Profiles](./quickstart_platforms.md).
 ## 1. Install and check the host
 
 From the repository root, install the standard development dependencies and ask the readiness
@@ -25,17 +27,22 @@ uv run robot-sf doctor
 For a quick host-only check that does not execute the environment or manifest quickstarts, use:
 
 ```bash exec-doc-root
-uv run robot-sf doctor --skip-env-smoke --skip-quickstart-smoke
+uv run --offline --no-sync robot-sf doctor --skip-env-smoke --skip-quickstart-smoke
 ```
 
 Check the installed entry point first:
 
 ```bash exec-doc-root
-uv run robot-sf --help
+uv run --offline --no-sync robot-sf --help
 ```
 
 The doctor report is the first fail-closed boundary: fix reported missing tools, imports, model
-artifacts, or quickstart failures before interpreting later output.
+artifacts, or quickstart failures before interpreting later output. Every check identifier is
+mapped to a remedy in [doctor troubleshooting](./troubleshooting/doctor.md).
+
+The machine-checkable examples above deliberately use `uv` in offline, no-sync mode and require a
+prepared environment. The documentation runner constrains command and environment resolution, but
+it is not a sandbox: commands still have the invoking user's operating-system permissions.
 
 ## 2. Run one visible episode
 
@@ -64,9 +71,9 @@ Use the manifest-backed example catalog when you want source-level examples, and
 catalog when you want a copy-pasteable workflow without learning repository paths first:
 
 ```bash exec-doc-root
-uv run robot-sf examples list
-uv run robot-sf recipe list
-uv run robot-sf recipe explain first-demo
+uv run --offline --no-sync robot-sf examples list
+uv run --offline --no-sync robot-sf recipe list
+uv run --offline --no-sync robot-sf recipe explain first-demo
 ```
 
 ```bash

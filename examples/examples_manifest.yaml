@@ -10,6 +10,12 @@ exclusions:
   - path: demo_utils.py
     kind: helper
     reason: "Shared helper module (fast_demo_enabled) imported by examples; not a runnable example entry point."
+  - path: fixtures/snqi/v1/loader.py
+    kind: helper
+    reason: "Shared semantic loader imported by the SNQI fixture examples; not a runnable example entry point."
+  - path: advanced/trajectory_viz_fixture.py
+    kind: helper
+    reason: "Shared fixture builder and headless-run helper imported by 14_trajectory_visualization.py and its tests; not a runnable example entry point."
 categories:
   - slug: uncategorized
     title: "Uncategorized Examples"
@@ -252,6 +258,15 @@ examples:
     ci_reason: null
     doc_reference: docs/SCENARIOS.md#programmatic-python-api
     tags: [scenarios, authoring, validation, tutorial]
+  - path: advanced/37_custom_planner_protocol.py
+    name: "37 Custom Planner Protocol"
+    summary: "Implement and run the smallest planner compatible with LocalPlannerProtocol."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/contributing_planner.md#minimal-example-path
+    tags: [tutorial, planner, protocol, validation]
   - path: advanced/08_multi_pedestrian.py
     name: "08 Multi-Pedestrian"
     summary: "Build a multi-pedestrian scenario using map definitions."
@@ -385,22 +400,22 @@ examples:
     expected_runtime: "~5s"
   - path: plotting/snqi_figures_example.py
     name: "SNQI Figures Example"
-    summary: "Generate publication-ready SNQI figures via the orchestrator script."
+    summary: "Generate SNQI figures from real episodes or a diagnostic fixture."
     category_slug: plotting
     prerequisites: []
-    ci_enabled: false
-    ci_reason: "Requires --episodes CLI input and benchmark outputs."
+    ci_enabled: true
+    ci_reason: null
     doc_reference: null
-    tags: [visualization, snqi]
+    tags: [fixture, visualization, snqi]
   - path: benchmarks/snqi_full_flow.py
     name: "SNQI Full Flow"
-    summary: "End-to-end SNQI figure generation flow."
+    summary: "Run the SNQI figure flow from real inputs or a diagnostic fixture."
     category_slug: benchmarks
     prerequisites: []
-    ci_enabled: false
-    ci_reason: "Full CLI workflow expects episode/baseline JSON arguments."
+    ci_enabled: true
+    ci_reason: null
     doc_reference: null
-    tags: [benchmark, snqi]
+    tags: [benchmark, fixture, snqi]
   - path: advanced/13_svg_map_validation.py
     name: "13 SVG Map Validation"
     summary: "Validate and summarize SVG maps from the repository."
@@ -414,10 +429,9 @@ examples:
     name: "14 Trajectory Visualization"
     summary: "Visualize trajectories during interactive playback sessions."
     category_slug: advanced
-    prerequisites:
-      - recordings/<file>.pkl
-    ci_enabled: false
-    ci_reason: "Interactive playback; requires user input to exit."
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
     doc_reference: docs/SIM_VIEW.md
     tags: [visualization, playback]
   - path: advanced/15_view_recording.py

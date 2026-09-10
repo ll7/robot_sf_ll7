@@ -16,6 +16,11 @@ The issue #8619 constrained-MPC baseline specification is documented in
 lane-2 design-only handoff context and establishes no implementation, safety, comparison,
 benchmark, ranking, or source-paper claim.
 
+The preparation-only typed simulator snapshot continuation contract and its state inventory are
+documented in [simulator_typed_snapshot_contract.md](simulator_typed_snapshot_contract.md) and
+[simulator_state_inventory.v1.json](simulator_state_inventory.v1.json); they define diagnostic
+continuation evidence, not benchmark or paper-facing evidence.
+
 The route-side and homotopy observability contract is documented in
 [issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md); it is an
 analysis-only diagnostic for planner-route observability, not evidence of human preference or

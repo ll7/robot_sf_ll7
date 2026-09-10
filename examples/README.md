@@ -9,6 +9,10 @@ runtime evaluation tooling lives under **Benchmarks**, and plotting resources
 reside in **Plotting & Analysis**. Archived scripts remain available for
 reference but are excluded from CI by default.
 
+The SNQI (Social Navigation Quality Index) fixture mode is diagnostic-only:
+its synthetic outputs verify example plumbing and are not benchmark or
+scientific evidence.
+
 ## Quickstart Decision Path
 
 1. **Need a five-minute tour?** Run the quickstart trio in order:
@@ -84,7 +88,7 @@ Feature-focused demos for developers exploring capabilities.
 | [11 Ego Pedestrian Policy](./advanced/11_ego_pedestrian_policy.py) | Run ego pedestrian simulation with recording playback. | maps/svg_maps/narrow_corridor2.svg<br>model/run_043 | pedestrian, recording | ⚠️ Requires external PPO checkpoint and long recording playback. |
 | [12 Social Force Planner](./advanced/12_social_force_planner_demo.py) | Explore Social Force planner scenarios and options. | uv sync --all-extras<br>fast-pysf subtree (bundled) | planner, social-force | ✅ |
 | [13 SVG Map Validation](./advanced/13_svg_map_validation.py) | Validate and summarize SVG maps from the repository. | _None_ | maps, tooling | ✅ |
-| [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | recordings/<file>.pkl | visualization, playback | ⚠️ Interactive playback; requires user input to exit. |
+| [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | _None_ | visualization, playback | ✅ |
 | [15 View Recording](./advanced/15_view_recording.py) | Record a simulation from an SVG map and replay it. | maps/svg_maps/02_simple_maps.svg | recording, maps | ✅ |
 | [16 Imitation Learning Pipeline](./advanced/16_imitation_learning_pipeline.py) | Imitation Learning Pipeline - End-to-End Example. | uv sync --all-extras<br>configs/training/ppo_imitation/*.yaml | training, imitation, ppo, behavioral-cloning | ⚠️ Long-running pipeline (30-60 min); requires extensive compute for full training cycles. |
 | [17 Research Report Demo](./advanced/17_research_report_demo.py) | Programmatic demo for research report + ablation generation (Phase 7). | _None_ | research, report, ablation | ⚠️ Generates research reports to an --out directory; requires manual output inspection. |
@@ -108,6 +112,7 @@ Feature-focused demos for developers exploring capabilities.
 | [33 Three.js Recording Viewer](./advanced/33_threejs_recording_viewer.py) | Export a JSONL or pickle recording to a static browser viewer. | _None_ | visualization, recording, threejs | ✅ |
 | [34 Trace Three.js Viewer](./advanced/34_trace_threejs_viewer.py) | Export a simulation_trace_export.v1 trace to a static browser viewer. | _None_ | visualization, trace, annotation, threejs | ✅ |
 | [35 Custom Scenario Authoring](./advanced/35_custom_scenario_authoring.py) | Author a custom corridor scenario programmatically, validate, reload, and smoke-test it. | maps/svg_maps/classic_head_on_corridor.svg | scenarios, authoring, validation, tutorial | ✅ |
+| [37 Custom Planner Protocol](./advanced/37_custom_planner_protocol.py) | Implement and run the smallest planner compatible with LocalPlannerProtocol. | _None_ | tutorial, planner, protocol, validation | ✅ |
 
 ## Benchmarks
 
@@ -119,7 +124,7 @@ Benchmark runners and evaluation workflows.
 | [Demo Full Classic Benchmark](./benchmarks/demo_full_classic_benchmark.py) | Run the full classic interaction benchmark via programmatic helper. | _None_ | benchmark | ✅ |
 | [Demo Social Nav Scenarios](./benchmarks/demo_social_nav_scenarios.py) | Run social navigation SVG scenarios sequentially. | _None_ | benchmark, scenario | ✅ |
 | [Per-Ped Force Quantiles Demo](./benchmarks/per_ped_force_quantiles_demo.py) | Demo: per-pedestrian vs aggregated force quantiles. | _None_ | benchmark, metrics, force | ✅ |
-| [SNQI Full Flow](./benchmarks/snqi_full_flow.py) | End-to-end SNQI figure generation flow. | _None_ | benchmark, snqi | ⚠️ Full CLI workflow expects episode/baseline JSON arguments. |
+| [SNQI Full Flow](./benchmarks/snqi_full_flow.py) | Run the SNQI figure flow from real inputs or a diagnostic fixture. | _None_ | benchmark, fixture, snqi | ✅ |
 
 ## Plotting & Analysis
 
@@ -141,4 +146,4 @@ Visualization and analysis scripts built atop benchmark outputs.
 | [Plot Micro Pedestrian Scene](./plotting/plot_micro_pedestrian_scene.py) | Render a static micro-scale pedestrian-simulation snapshot for publications. | _None_ | visualization, pedestrian, publication | ⚠️ Publication figure workflow; requires manual figure inspection. |
 | [Plot Pareto](./plotting/plot_pareto.py) | Generate Pareto front plots from benchmark episodes or synthetic data. | _None_ | visualization, pareto | ⚠️ CLI expects --in dataset argument; no default input for CI. |
 | [Plot Pedestrian Position KDE](./plotting/plot_pedestrian_position_kde.py) | Plot a KDE of pedestrian positions on top of the source map. | _None_ | visualization, pedestrian | ✅ |
-| [SNQI Figures Example](./plotting/snqi_figures_example.py) | Generate publication-ready SNQI figures via the orchestrator script. | _None_ | visualization, snqi | ⚠️ Requires --episodes CLI input and benchmark outputs. |
+| [SNQI Figures Example](./plotting/snqi_figures_example.py) | Generate SNQI figures from real episodes or a diagnostic fixture. | _None_ | fixture, visualization, snqi | ✅ |

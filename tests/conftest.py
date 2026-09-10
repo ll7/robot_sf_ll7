@@ -377,6 +377,15 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    # Differential-drive kinematics tests are deterministic unit coverage for
+    # the changed robot motion module; keep them in the exact-head fast lane.
+    "differential_drive_test.py",
+    # Native replay adapter and engine tests are deterministic fixture contracts
+    # for the exact-head changed-coverage gate (issue #5442).
+    "test_simulator_counterfactual_adapter_issue_5442.py",
+    "test_last_avoidable_replay_issue_5442.py",
+    "test_collision_causal_report.py",
+    "test_collision_causal_report_join_5442.py",
     # Deterministic examples metadata, CLI, and tutorial contracts belong in
     # the fast coverage shards; only the subprocess-heavy example runner stays
     # in the dedicated examples-smoke phase.
@@ -421,6 +430,9 @@ _FAST_FILES = {
     # Distribution plotting tests use Agg and deterministic fixtures; keep their
     # changed-line coverage in the exact-head fast lane.
     "test_distributions.py",
+    # Pareto plotting tests use Agg and deterministic fixtures; keep the
+    # save_pareto_png SVG output branch in the exact-head fast lane.
+    "test_plots_pareto.py",
     # CLI distribution-control regressions are deterministic input-boundary
     # contracts and exercise the benchmark error path in PR fast shards.
     "test_cli_plot_distributions_ci.py",
@@ -563,6 +575,10 @@ _FAST_FILES = {
     "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
+    # Doctor JSON and top-level CLI tests are deterministic readiness contracts;
+    # keep both source-adjacent owners in the exact-head changed-coverage lane.
+    "test_doctor.py",
+    "test_cli_doctor.py",
     "test_post_execution_release_doctor.py",
     # Checkpoint provenance and Predictive MPPI adapter tests are deterministic
     # contract coverage for release-smoke producer changes; keep them in the
@@ -719,6 +735,9 @@ _FAST_FILES = {
     # shells, no environments) for the changed recording-save path; keep them in
     # PR fast shards for the exact-head changed-coverage gate (issue #8422).
     "test_recording_save_policy.py",
+    # Typed simulator snapshots are deterministic serialization and compatibility
+    # contracts for the preparation-only continuation prototype (issue #8620).
+    "test_typed_snapshot.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

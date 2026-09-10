@@ -14,10 +14,11 @@ changed body, label set, or state causes the item to be skipped or reported as
 failed.  Malformed incidents, active incidents, incomplete green evidence, and
 API failures never close an issue.
 
-The Actions run reader paginates past cancellation-heavy raw pages and stops
-only after two decisive completed runs are visible, subject to a bounded page
-budget.  It fails closed when that budget is exhausted before the evidence
-window is complete.
+The Actions run reader delegates to the shared paginated reader
+``main_ci_is_green.fetch_run_window`` (issue #8810): it pages past
+cancellation-heavy raw pages and stops only after two decisive completed runs
+are visible, subject to a bounded page budget.  It fails closed when that
+budget is exhausted before the evidence window is complete.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ from scripts.dev.main_ci_incident_reconcile import (
     build_incident_signal,
     incident_reconcile_status,
 )
-from scripts.dev.main_ci_is_green import classify
+from scripts.dev.main_ci_is_green import classify, fetch_run_window
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_WORKFLOW = "CI"
@@ -145,85 +146,6 @@ def _paginate_collection(
     )
 
 
-def _resolve_workflow_selector(
-    *,
-    repo: str,
-    workflow: str,
-    max_pages: int,
-    runner: Runner,
-) -> str:
-    """Resolve a workflow display name to a stable REST workflow selector."""
-    selector = workflow.strip()
-    if not selector:
-        raise ReconciliationError("workflow must not be empty")
-    if selector.isdecimal() or selector.lower().endswith((".yml", ".yaml")):
-        return selector
-
-    rows: list[Mapping[str, Any]] = []
-    for page in range(1, max_pages + 1):
-        endpoint = (
-            f"repos/{quote(repo, safe='/')}/actions/workflows?per_page={PER_PAGE}&page={page}"
-        )
-        payload = _api_json(
-            endpoint,
-            runner=runner,
-            operation="Actions workflow inventory",
-        )
-        if not isinstance(payload, Mapping):
-            raise ReconciliationError("Actions workflow inventory returned a non-object payload")
-        page_rows = payload.get("workflows")
-        if not isinstance(page_rows, list) or any(
-            not isinstance(row, Mapping) for row in page_rows
-        ):
-            raise ReconciliationError("Actions workflow inventory returned malformed rows")
-        rows.extend(row for row in page_rows if isinstance(row, Mapping))
-        if len(page_rows) < PER_PAGE:
-            break
-    else:
-        raise ReconciliationError(
-            f"Actions workflow inventory exceeded the {max_pages}-page budget; "
-            "refusing an ambiguous workflow selector"
-        )
-
-    matches = [
-        row
-        for row in rows
-        if row.get("name") == selector
-        or row.get("path") == selector
-        or str(row.get("path") or "").rsplit("/", 1)[-1] == selector
-    ]
-    if not matches:
-        raise ReconciliationError(f"workflow {workflow!r} was not found")
-    if len(matches) > 1:
-        raise ReconciliationError(f"workflow {workflow!r} resolved to multiple workflows")
-    workflow_id = _positive_int(matches[0].get("id"), field="workflow id")
-    return str(workflow_id)
-
-
-def _normalize_actions_run(row: Mapping[str, Any], *, index: int) -> dict[str, Any]:
-    """Normalize one Actions REST run to the existing classifier schema."""
-    run_id = _positive_int(row.get("id"), field=f"Actions run row {index} id")
-    status = row.get("status")
-    if not isinstance(status, str) or not status:
-        raise ReconciliationError(f"Actions run row {index} has no usable status")
-    conclusion = row.get("conclusion")
-    if conclusion is not None and not isinstance(conclusion, str):
-        raise ReconciliationError(f"Actions run row {index} has a malformed conclusion")
-    created_at = row.get("created_at")
-    if not isinstance(created_at, str) or not created_at:
-        raise ReconciliationError(f"Actions run row {index} has no usable created_at")
-    head_sha = row.get("head_sha")
-    if head_sha is not None and not isinstance(head_sha, str):
-        raise ReconciliationError(f"Actions run row {index} has a malformed head_sha")
-    return {
-        "databaseId": run_id,
-        "status": status,
-        "conclusion": conclusion,
-        "headSha": head_sha,
-        "createdAt": created_at,
-    }
-
-
 def _fetch_main_ci_runs(
     repo: str,
     workflow: str,
@@ -233,54 +155,27 @@ def _fetch_main_ci_runs(
 ) -> list[dict[str, Any]]:
     """Fetch a bounded Actions window until two decisive runs are visible.
 
-    GitHub's latest-main-wins concurrency can make the newest raw pages almost
-    entirely cancelled.  A raw ``--limit`` therefore does not identify a
-    sufficient evidence window.  Read full REST pages and stop only after the
-    window contains two completed green/red runs; a complete short final page
-    is also a valid stopping point.  Hitting the page budget before finding
-    two decisive runs fails closed instead of silently classifying a partial
-    history.
+    Thin scheduled-reconciler wrapper over the shared paginated reader in
+    :mod:`scripts.dev.main_ci_is_green` (one pagination implementation).  The
+    reconciler needs two decisive completed runs before it can render
+    two-green evidence, so it asks the shared reader for that stop condition
+    and fails closed when the page budget is exhausted first.
     """
     if max_pages <= 0:
         raise ValueError("max_run_pages must be positive")
-    selector = _resolve_workflow_selector(
-        repo=repo,
-        workflow=workflow,
+    window = fetch_run_window(
+        repo,
+        workflow,
         max_pages=max_pages,
+        stop_after_decisive=2,
         runner=runner,
     )
-    endpoint_base = (
-        f"repos/{quote(repo, safe='/')}/actions/workflows/{quote(selector, safe='')}/runs"
-        f"?{urlencode({'branch': 'main'})}"
-    )
-    runs: list[dict[str, Any]] = []
-    for page in range(1, max_pages + 1):
-        endpoint = f"{endpoint_base}&per_page={PER_PAGE}&page={page}"
-        payload = _api_json(
-            endpoint,
-            runner=runner,
-            operation=f"main-CI runs page {page}",
+    if window.window_exhausted:
+        raise ReconciliationError(
+            f"main-CI run search exceeded the {max_pages}-page budget before "
+            "finding two decisive runs; refusing a partial evidence window"
         )
-        if not isinstance(payload, Mapping):
-            raise ReconciliationError(f"main-CI runs page {page} returned a non-object payload")
-        page_rows = payload.get("workflow_runs")
-        if not isinstance(page_rows, list) or any(
-            not isinstance(row, Mapping) for row in page_rows
-        ):
-            raise ReconciliationError(f"main-CI runs page {page} returned malformed rows")
-        runs.extend(
-            _normalize_actions_run(row, index=index)
-            for index, row in enumerate(page_rows, start=len(runs))
-            if isinstance(row, Mapping)
-        )
-        if len(_ordered_decisive_runs(runs)) >= 2:
-            return runs
-        if len(page_rows) < PER_PAGE:
-            return runs
-    raise ReconciliationError(
-        f"main-CI run search exceeded the {max_pages}-page budget before "
-        "finding two decisive runs; refusing a partial evidence window"
-    )
+    return window.runs
 
 
 def _label_names(row: Mapping[str, Any], *, issue: int) -> set[str]:

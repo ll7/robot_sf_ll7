@@ -286,6 +286,7 @@
     "socnavbench_canary.py",
     "step_trace_comparator.py",
     "stress_uncertainty_coverage.py",
+    "typed_snapshot.py",
     "summary.py",
     "sustained_flow_preflight.py",
     "sustained_flow_revival_gate.py",

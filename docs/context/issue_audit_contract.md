@@ -69,7 +69,10 @@ validated before normalization: title and `updated_at` must be non-empty valid
 strings, and fields used from nested users, labels, assignees, and comments must
 have their expected scalar or object shape. The open-issues endpoint's integer
 `comments` count is accepted as a row summary and normalized to an empty comment
-list until optional comment enrichment runs. A non-empty plan row must retain a
+list until optional comment enrichment runs. Optional comment enrichment
+validates each nested `user` as an object or null with a non-empty `login`;
+malformed comment rows are excluded and make the comment evidence unavailable. A
+non-empty plan row must retain a
 positive issue number, open state, repository-bound URL, title, non-empty valid
 update version, and normalized label list; every mutation or pending decision
 must reference one of those exact canonical rows. The plan copies this result to
@@ -125,6 +128,22 @@ collection, failed source read, or uncertain quota result sets
 top-level and per-issue mutations. A mid-run rate limit also records the core
 reset time, retry-after timestamp, retry command, and a human-readable handoff
 so the next run can resume only after a fresh inventory.
+
+Any plan that contains mutations or pending decisions, and any decision-envelope
+path that could lead to a write, must carry a present, complete, healthy quota
+object. The required fields are `available: true`, `status: "ok"`,
+`core_remaining`, `core_reset_at` (an integer or null), `available_budget`,
+`min_core_remaining`, `retry_command`, `next_action: "none"`, `reason`, an
+empty `errors` list, false `quota_exhausted`, `quota_uncertain`, and
+`budget_exhausted` flags, and complete `request_budget`,
+`requests_attempted`, and `requests_remaining` accounting. The accounting must
+be consistent (`available_budget = core_remaining - min_core_remaining`,
+`request_budget = available_budget`, and
+`requests_attempted + requests_remaining = request_budget`). Omitted, empty,
+partial, inconsistent, or unhealthy quota metadata fails closed before any
+REST mutation or decision answer can be admitted. A read-only no-op diagnostic
+plan may omit quota only when it contains no write-capable mutation or pending
+decision; generated write-capable plans always include the complete contract.
 
 Issue bodies and comments are evidence sources for decisions and gates. They
 are not permission to infer missing provenance, rights, compute authorization,
@@ -333,6 +352,24 @@ Every plan has schema issue_audit_plan.v1 and contains:
       "repo": "ll7/robot_sf_ll7",
       "mode": "autonomous",
       "project5": {"writes": false, "owner": "gh-issue-sequencer"},
+      "quota": {
+        "available": true,
+        "status": "ok",
+        "core_remaining": 500,
+        "core_reset_at": 1800000100,
+        "available_budget": 490,
+        "min_core_remaining": 10,
+        "retry_command": "uv run python scripts/dev/issue_audit_core.py plan",
+        "next_action": "none",
+        "reason": "sufficient core quota available",
+        "errors": [],
+        "quota_exhausted": false,
+        "quota_uncertain": false,
+        "budget_exhausted": false,
+        "request_budget": 490,
+        "requests_attempted": 1,
+        "requests_remaining": 489
+      },
       "inventory": {
         "issues": {
           "available": true,

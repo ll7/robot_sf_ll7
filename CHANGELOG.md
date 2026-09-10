@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Software release preparation
+
+* **Planned v0.0.6 software metadata (#8019).** Staged non-authorizing citation, version-alignment,
+  README, and release-note preparation for the sanitized software surface: `all` plus the twelve
+  supported extras. `rllib` remains development-only, ORCA/`pyrvo2` remains external, and
+  repository-level `examples/`, `model/`, and `maps/` payloads remain outside the candidate surface.
+  This preparation does not claim rights clearance, cold-install/runtime proof, a tag, package
+  upload, GitHub Release, Zenodo deposit, DOI, or publication.
+
 ### Added
 
 * **September 2026 benchmark-data erratum successor (#8350, #8353, #8357).**

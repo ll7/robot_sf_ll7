@@ -35,7 +35,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CITATION = REPO_ROOT / "CITATION.cff"
-DEFAULT_RELEASE_PREPARATION = REPO_ROOT / "configs/releases/release_0_0_5_preparation.yaml"
+DEFAULT_RELEASE_PREPARATION = REPO_ROOT / "configs/releases/release_0_0_6_preparation.yaml"
 
 # Release-line version tags only: plain X.Y.Z, vX.Y.Z, or rcX.Y.Z. This is
 # deliberately stricter than the hatch-vcs tag_regex so that unrelated tags

@@ -1231,6 +1231,7 @@ class SimulatorCounterfactualModel:
         """Restore the live simulator atomically to a captured snapshot."""
         before = self.snapshot()
         before_residual = getattr(self.sim, "_residual_adversary", _MISSING)
+        # Arbitrary simulator restore failures require rollback before re-raising.
         try:
             self._restore_unchecked(snapshot)
         except Exception:
@@ -1240,6 +1241,7 @@ class SimulatorCounterfactualModel:
                         delattr(self.sim, "_residual_adversary")
                 else:
                     self.sim._residual_adversary = deepcopy(before_residual)
+                # Rollback itself must catch any ordinary failure to report partial state.
                 self._restore_unchecked(before)
             except Exception as rollback_exc:
                 raise RuntimeError(

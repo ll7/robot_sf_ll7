@@ -649,6 +649,7 @@ def _model_metadata(model: CounterfactualModel, field_name: str) -> str | None:
         The normalized metadata value, or ``None`` when the model does not
         declare the requested field.
     """
+    # Model-owned hooks may raise arbitrary ordinary exceptions; provenance must fail closed.
     try:
         value = getattr(model, field_name, None)
         if callable(value):
@@ -673,11 +674,12 @@ def _snapshot_state_is_complete(model: CounterfactualModel) -> bool | None:
         ``True`` or ``False`` when the model declares completeness; ``None`` when
         the legacy protocol has no completeness declaration.
     """
+    # Any model-owned completeness failure means completeness cannot be established.
     try:
         declared = getattr(model, "replay_state_complete", None)
         if callable(declared):
             declared = declared()
-    except Exception:  # noqa: BLE001 - malformed completeness declarations fail closed
+    except Exception:  # noqa: BLE001 - completeness failure must fail closed.
         return False
     if declared is None:
         return None

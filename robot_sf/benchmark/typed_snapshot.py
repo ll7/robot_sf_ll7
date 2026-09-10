@@ -1317,10 +1317,12 @@ def restore_typed_snapshot(
             "destination model must expose callable snapshot and restore methods"
         )
     before = snapshot_method()
+    # Arbitrary adapter failures must be wrapped and rolled back.
     try:
         restore_method(runtime_snapshot)
     except Exception as exc:
         try:
+            # Rollback itself must catch any ordinary failure to report partial state.
             restore_method(before)
         except Exception as rollback_exc:
             raise SnapshotContractError(

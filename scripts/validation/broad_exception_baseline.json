@@ -8,6 +8,7 @@
       "robot_sf/benchmark/forecast/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/issue_6412_real_reexport.py": 2,
+      "robot_sf/benchmark/last_avoidable_replay.py": 2,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
       "robot_sf/benchmark/map_runner/map_runner.py": 2,
       "robot_sf/benchmark/map_runner/map_runner_batch_runner.py": 3,
@@ -15,7 +16,9 @@
       "robot_sf/benchmark/published_release_audit.py": 6,
       "robot_sf/benchmark/runner.py": 9,
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
+      "robot_sf/benchmark/simulator_counterfactual_adapter.py": 2,
       "robot_sf/benchmark/snqi/cli.py": 3,
+      "robot_sf/benchmark/typed_snapshot.py": 2,
       "scripts/analysis/amv_timeout_trace_analyzer.py": 1,
       "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py": 2,
       "scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py": 2,
@@ -107,7 +110,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 185
+    "total": 191
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -209,6 +212,24 @@
       "lineno": 969,
       "path": "robot_sf/benchmark/issue_6412_real_reexport.py",
       "source": "except Exception:  # cleanup boundary: remove staging on any failure, then re-raise (#6690)"
+    },
+    {
+      "col_offset": 4,
+      "context": "_model_metadata",
+      "fingerprint": "33da90e8b20b01c4",
+      "handler": "Exception",
+      "lineno": 657,
+      "path": "robot_sf/benchmark/last_avoidable_replay.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "_snapshot_state_is_complete",
+      "fingerprint": "1d3761ff964b79fb",
+      "handler": "Exception",
+      "lineno": 682,
+      "path": "robot_sf/benchmark/last_avoidable_replay.py",
+      "source": "except Exception:  # noqa: BLE001 - completeness failure must fail closed."
     },
     {
       "col_offset": 4,
@@ -418,6 +439,24 @@
       "source": "except Exception as exc:  # jsonschema failures wrap into the documented error (#6690)"
     },
     {
+      "col_offset": 8,
+      "context": "SimulatorCounterfactualModel.restore",
+      "fingerprint": "1c3f85c3c4e03e51",
+      "handler": "Exception",
+      "lineno": 1237,
+      "path": "robot_sf/benchmark/simulator_counterfactual_adapter.py",
+      "source": "except Exception:"
+    },
+    {
+      "col_offset": 12,
+      "context": "SimulatorCounterfactualModel.restore",
+      "fingerprint": "c71c47980076b858",
+      "handler": "Exception",
+      "lineno": 1246,
+      "path": "robot_sf/benchmark/simulator_counterfactual_adapter.py",
+      "source": "except Exception as rollback_exc:"
+    },
+    {
       "col_offset": 4,
       "context": "cmd_recompute_weights",
       "fingerprint": "e7ad3d5797bafa46",
@@ -443,6 +482,24 @@
       "lineno": 305,
       "path": "robot_sf/benchmark/snqi/cli.py",
       "source": "except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)"
+    },
+    {
+      "col_offset": 4,
+      "context": "restore_typed_snapshot",
+      "fingerprint": "27b48e89c6277225",
+      "handler": "Exception",
+      "lineno": 1323,
+      "path": "robot_sf/benchmark/typed_snapshot.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 8,
+      "context": "restore_typed_snapshot",
+      "fingerprint": "6554ea23cc45b9ca",
+      "handler": "Exception",
+      "lineno": 1327,
+      "path": "robot_sf/benchmark/typed_snapshot.py",
+      "source": "except Exception as rollback_exc:"
     },
     {
       "col_offset": 4,

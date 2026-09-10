@@ -1,0 +1,28 @@
+# Shared base for the resolved-config drift example.
+# Every value here is inherited by left.yaml and right.yaml unless overridden.
+algo: ppo
+seed: 7
+seed_policy: fixed
+scenario_schema_version: scenario_contract.v1
+action_semantics: delta
+
+training:
+  total_timesteps: 1000
+  learning_rate: 0.0003
+  hidden_sizes: [64, 64]
+  batch_size: 256
+
+scenario:
+  map_file: maps/svg_maps/debug_06.svg
+  ped_density_by_difficulty: [0.01, 0.02]
+
+execution:
+  device: cpu
+  num_workers: 2
+  output_dir: output/train/shared
+
+# Bookkeeping and presentation fields never change simulation semantics.
+commit: 0000000000000000000000000000000000000000
+wandb_project: robot-sf-fixture
+notes: base notes
+display_name: Base run

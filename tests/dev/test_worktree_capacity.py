@@ -19,6 +19,7 @@ import pytest
 
 from scripts.dev import check_worktree_capacity as capacity
 from scripts.dev import worktree_creation_lock
+from scripts.dev.pr_gate_lease import lease_path
 from tests.support.environment_guards import git_identity_environment
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -1360,6 +1361,83 @@ def test_create_worktree_without_flock_cli_clears_inherited_worktree_config(
             check=False,
             env=git_identity_environment(),
         )
+
+
+def test_create_worktree_without_flock_cli_cleans_failed_task_lease(
+    tmp_path: Path,
+) -> None:
+    """Portable rollback removes a task lease when the normal release command fails."""
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    for tool in ("bash", "sh", "git", "git-lfs", "dirname", "cat", "grep", "du"):
+        resolved = shutil.which(tool)
+        assert resolved is not None, f"test host is missing required tool: {tool}"
+        (stub_bin / tool).symlink_to(resolved)
+    python_stub = stub_bin / "python3"
+    python_stub.write_text(
+        f"#!{sys.executable}\n"
+        "import os\n"
+        "import sys\n"
+        "if (\n"
+        "    len(sys.argv) > 2\n"
+        "    and sys.argv[1].endswith('/pr_gate_lease.py')\n"
+        "    and sys.argv[2] == 'release'\n"
+        "):\n"
+        "    print('injected lease release failure', file=sys.stderr)\n"
+        "    raise SystemExit(74)\n"
+        f"os.execv({sys.executable!r}, [{sys.executable!r}, '-S', *sys.argv[1:]])\n",
+        encoding="utf-8",
+    )
+    python_stub.chmod(0o755)
+    assert shutil.which("flock", path=str(stub_bin)) is None
+    assert shutil.which("rm", path=str(stub_bin)) is None
+
+    branch = _unique_branch(tmp_path, "no-flock-failed-task-lease")
+    target = _worktree_target(tmp_path, branch)
+    lease_file = lease_path(target)
+    receipt_parent = tmp_path / "receipt-parent-file"
+    receipt_parent.write_text("not a directory\n", encoding="utf-8")
+    receipt_path = receipt_parent / "receipt.json"
+    environment = {**git_identity_environment(os.environ), "PATH": str(stub_bin)}
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--base",
+                "HEAD",
+                "--minimum-free-bytes",
+                "0",
+                "--task-id",
+                "issue-8820-lease-cleanup",
+                "--receipt",
+                str(receipt_path),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=environment,
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "injected lease release failure" in result.stderr
+        assert "rollback was incomplete" not in result.stderr
+        assert not target.exists()
+        assert not lease_file.exists()
+        assert not subprocess.run(
+            ["git", "branch", "--list", branch],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            env=git_identity_environment(),
+        ).stdout.strip()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+        lease_file.unlink(missing_ok=True)
 
 
 def test_create_worktree_python_fallback_runs_exec_exactly_once(tmp_path: Path) -> None:

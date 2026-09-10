@@ -403,9 +403,7 @@ def run_checks(root: Path = REPO_ROOT) -> dict[str, object]:
         "optional_references": graph_result.optional_skipped,
         "precedence_errors": precedence_errors,
         "task_scope_errors": task_scope_errors,
-        "errors": (
-            graph_result.errors + ownership_errors + precedence_errors + task_scope_errors
-        ),
+        "errors": (graph_result.errors + ownership_errors + precedence_errors + task_scope_errors),
     }
 
 

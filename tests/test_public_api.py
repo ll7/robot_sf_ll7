@@ -118,6 +118,12 @@ def test_make_env_and_run_episode_roundtrip(tmp_path: Path):
         assert loaded.seed == record.seed
         assert loaded.horizon == record.horizon
         assert loaded.metrics.values == record.metrics.values
+
+        canonical = record.canonical_payload()
+        assert canonical["episode_id"] == record.episode_id
+        assert "timing" not in canonical
+        assert "raw" not in canonical
+        assert loaded.canonical_digest() == record.canonical_digest()
     finally:
         env.close()
 

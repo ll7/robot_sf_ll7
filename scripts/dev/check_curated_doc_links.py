@@ -130,6 +130,8 @@ def _resolve_file(
         candidate.relative_to(REPO_ROOT)
     except ValueError:
         return None, "path_escape"
+    if not candidate.exists() and _has_case_mismatch(candidate):
+        return None, "case_mismatch"
     if candidate.is_dir():
         for index in ("README.md", "index.rst", "index.md"):
             if (candidate / index).is_file():
@@ -137,8 +139,6 @@ def _resolve_file(
         return None, "missing_file"
     if not candidate.is_file():
         return None, "missing_file"
-    if candidate.name not in {p.name for p in candidate.parent.iterdir()}:
-        return None, "case_mismatch"
     if str(candidate.relative_to(REPO_ROOT)) in GENERATED_ALIASES:
         manifest = REPO_ROOT / "examples" / "examples_manifest.yaml"
         if not manifest.is_file():
@@ -152,6 +152,20 @@ def _source_label(source: Path) -> str:
         return str(source.relative_to(REPO_ROOT))
     except ValueError:
         return str(source)
+
+
+def _has_case_mismatch(candidate: Path) -> bool:
+    """Return whether a missing path differs only by case from an existing path."""
+    current = REPO_ROOT
+    for component in candidate.relative_to(REPO_ROOT).parts:
+        if not current.is_dir():
+            return False
+        names = {entry.name for entry in current.iterdir()}
+        if component in names:
+            current /= component
+            continue
+        return any(name.casefold() == component.casefold() for name in names)
+    return False
 
 
 def _check_fragment(source: Path, line: int, target: str, resolved: Path) -> Finding | None:
@@ -185,7 +199,6 @@ def check_target(source: Path, line: int, target: str) -> Finding | None:
 
 
 def check_curated(root: Path = REPO_ROOT) -> list[Finding]:
-    """Check every curated page; findings sort by (source, line, target)."""
     """Check every curated page; findings sort by (source, line, target)."""
     global REPO_ROOT
     REPO_ROOT = root

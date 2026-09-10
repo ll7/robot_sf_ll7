@@ -64,7 +64,7 @@ def test_case_mismatch_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     source = tmp_path / "page.md"
     source.write_text("[case](readme.md)\n", encoding="utf-8")
     finding = check_target(source, 1, "readme.md")
-    assert finding is not None and finding.reason in {"missing_file", "case_mismatch"}
+    assert finding is not None and finding.reason == "case_mismatch"
 
 
 def test_path_escape_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

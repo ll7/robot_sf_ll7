@@ -66,6 +66,9 @@ _TAG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_\-]*$")
 #: Allowed exclusion kinds for versioned non-example files on disk.
 EXCLUSION_KINDS = frozenset({"archive", "mirror", "helper"})
 
+#: Top-level fields required by every manifest version supported by this loader.
+REQUIRED_MANIFEST_FIELDS = frozenset({"version", "categories", "examples"})
+
 
 class ManifestValidationError(RobotSfError, ValueError):
     """Raised when the manifest data fails structural or semantic validation."""
@@ -331,6 +334,20 @@ def _check_exclusions(
             )
 
 
+def _check_unique_category_orders(categories: Sequence[ExampleCategory]) -> None:
+    """Reject category-order collisions that would make rendering ambiguous."""
+
+    seen_orders: dict[int, str] = {}
+    for category in categories:
+        if category.order in seen_orders:
+            raise ManifestValidationError(
+                f"Duplicate category order '{category.order}' for categories "
+                f"'{seen_orders[category.order]}' and '{category.slug}' "
+                "(E_DUPLICATE_CATEGORY_ORDER)."
+            )
+        seen_orders[category.order] = category.slug
+
+
 @dataclass(frozen=True, slots=True)
 class ExampleManifest:
     """Container object holding parsed manifest data."""
@@ -371,6 +388,7 @@ class ExampleManifest:
                     f"Duplicate category slug '{category.slug}' detected in manifest."
                 )
             categories_by_slug[category.slug] = category
+        _check_unique_category_orders(self.categories)
         object.__setattr__(
             self,
             "categories",
@@ -469,6 +487,10 @@ def load_manifest(
 
     resolved_manifest = _resolve_manifest_path(manifest_path)
     raw_data = _read_manifest_yaml(resolved_manifest)
+    missing_fields = sorted(REQUIRED_MANIFEST_FIELDS.difference(raw_data))
+    if missing_fields:
+        fields = ", ".join(missing_fields)
+        raise ManifestValidationError(f"Manifest is missing required field(s): {fields}.")
     categories = _parse_categories(raw_data.get("categories", []))
     examples = _parse_examples(raw_data.get("examples", []), categories)
 
@@ -544,7 +566,7 @@ def _parse_categories(raw_categories: Any) -> dict[str, ExampleCategory]:
     Raises:
         ManifestValidationError: If any category fails validation.
     """
-    if not isinstance(raw_categories, Sequence):
+    if isinstance(raw_categories, str) or not isinstance(raw_categories, Sequence):
         raise ManifestValidationError("Manifest 'categories' must be a list.")
 
     categories: dict[str, ExampleCategory] = {}
@@ -586,7 +608,7 @@ def _parse_examples(
     Raises:
         ManifestValidationError: If any example fails validation.
     """
-    if not isinstance(raw_examples, Sequence):
+    if isinstance(raw_examples, str) or not isinstance(raw_examples, Sequence):
         raise ManifestValidationError("Manifest 'examples' must be a list.")
 
     parsed: list[ExampleScript] = []
@@ -716,7 +738,7 @@ def _expect_int(value: Any, field_name: str) -> int:
     Raises:
         ManifestValidationError: If the value is not an integer.
     """
-    if not isinstance(value, int):
+    if isinstance(value, bool) or not isinstance(value, int):
         raise ManifestValidationError(f"Field '{field_name}' must be an integer.")
     return value
 

@@ -199,7 +199,7 @@ examples:
     prerequisites: []
     ci_enabled: true
     ci_reason: null
-    doc_reference: docs/performance_notes.md#fast-pysf-speed-fix
+    doc_reference: docs/performance_notes.md#known-performance-bottlenecks
     tags: [analysis, fast-pysf]
   - path: advanced/11_ego_pedestrian_policy.py
     name: "11 Ego Pedestrian Policy"
@@ -244,7 +244,7 @@ examples:
     tags: [visualization, trace, annotation, threejs]
   - path: advanced/35_custom_scenario_authoring.py
     name: "35 Custom Scenario Authoring"
-    summary: "Author a custom corridor scenario programmatically, validate, reload, and smoke-test it."
+    summary: "Author a custom scenario programmatically and validate it through canonical owners."
     category_slug: advanced
     prerequisites:
       - maps/svg_maps/classic_head_on_corridor.svg

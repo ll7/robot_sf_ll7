@@ -20,7 +20,8 @@ Every error is deterministic and reported as ``<path>: [<REASON_CODE>] message``
 - ``E_EXCLUSION_OVERLAP`` — exclusion path that duplicates a registered example.
 - ``E_CATEGORY_MISMATCH`` — leading directory does not match ``category_slug``.
 - ``E_DOCSTRING_MISSING`` / ``E_DOCSTRING_MISMATCH`` — docstring contract.
-- ``E_DOC_REFERENCE_MISSING`` — ``doc_reference`` file target absent.
+- ``E_DOCSTRING_PARSE`` — registered example has invalid Python syntax.
+- ``E_DOC_REFERENCE_MISSING`` — ``doc_reference`` file target or anchor absent.
 - ``E_TAG_NOT_NORMALIZED`` — tag not in normalized lowercase form.
 - ``E_RUNTIME_CLASS_INVALID`` — ``expected_runtime`` sentinel/un-normalized.
 - ``E_CI_REASON_MISSING`` / ``E_CI_REASON_CONTRADICTION`` — CI consistency.
@@ -36,10 +37,14 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
 import sys
 from pathlib import Path
 
 from robot_sf.examples import ExampleManifest, ManifestValidationError, load_manifest
+
+_MARKDOWN_HEADING = re.compile(r"^#{1,6}[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+_HTML_ANCHOR = re.compile(r'<a\b[^>]*\bid=["\']([^"\']+)["\'][^>]*>', re.IGNORECASE)
 
 
 def parse_args() -> argparse.Namespace:
@@ -83,7 +88,7 @@ def main() -> int:
     manifest_path: Path | None = args.manifest
 
     try:
-        manifest = load_manifest(manifest_path, validate_paths=True)
+        manifest = load_manifest(manifest_path, validate_paths=False)
     except ManifestValidationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -323,7 +328,7 @@ def _check_runtime_class(manifest: ExampleManifest) -> list[str]:
 
 
 def _check_doc_references(manifest: ExampleManifest) -> list[str]:
-    """Check that every ``doc_reference`` file target exists in the repo."""
+    """Check that every ``doc_reference`` target and optional anchor exists."""
 
     repo_root = manifest.manifest_path.parents[1]
     errors: list[str] = []
@@ -353,7 +358,43 @@ def _check_doc_references(manifest: ExampleManifest) -> list[str]:
                     f"doc_reference target '{target}' was not found.",
                 )
             )
+            continue
+
+        if "#" not in example.doc_reference:
+            continue
+        anchor = example.doc_reference.split("#", 1)[1].strip()
+        if not anchor or anchor not in _read_markdown_anchors(candidate):
+            errors.append(
+                _coded(
+                    example.path.as_posix(),
+                    "E_DOC_REFERENCE_MISSING",
+                    f"doc_reference anchor '{anchor}' was not found in '{target}'.",
+                )
+            )
     return errors
+
+
+def _read_markdown_anchors(path: Path) -> set[str]:
+    """Return explicit and heading-derived anchors from a readable Markdown file."""
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+
+    anchors = {match.group(1) for match in _HTML_ANCHOR.finditer(text)}
+    occurrences: dict[str, int] = {}
+    for match in _MARKDOWN_HEADING.finditer(text):
+        heading = re.sub(r"<[^>]+>", "", match.group(1)).strip()
+        heading = re.sub(r"[ \t]+#+[ \t]*$", "", heading).strip().lower()
+        slug = re.sub(r"[^\w\s-]", "", heading)
+        slug = re.sub(r"[\s-]+", "-", slug).strip("-")
+        if not slug:
+            continue
+        occurrence = occurrences.get(slug, 0)
+        anchors.add(slug if occurrence == 0 else f"{slug}-{occurrence}")
+        occurrences[slug] = occurrence + 1
+    return anchors
 
 
 def _check_docstrings(
@@ -371,7 +412,13 @@ def _check_docstrings(
         try:
             docstring = _read_module_docstring(module_path)
         except ManifestValidationError as exc:
-            errors.append(str(exc))
+            errors.append(
+                _coded(
+                    example.path.as_posix(),
+                    "E_DOCSTRING_PARSE",
+                    str(exc),
+                )
+            )
             continue
 
         if docstring is None:

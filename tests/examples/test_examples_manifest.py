@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from textwrap import dedent
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -21,6 +22,7 @@ from robot_sf.examples.manifest_loader import (
     ManifestValidationError,
     load_manifest,
 )
+from scripts.validation import render_examples_readme as readme_renderer
 from scripts.validation import validate_examples_manifest as validator
 from scripts.validation.render_examples_readme import build_markdown
 
@@ -104,6 +106,24 @@ def test_schema_version_defaults_to_one() -> None:
 
     manifest = load_manifest()
     assert manifest.schema_version == MANIFEST_SCHEMA_VERSION == 1
+
+
+@pytest.mark.parametrize("missing", ["version", "categories", "examples"])
+def test_required_manifest_fields_rejected(tmp_path: Path, missing: str) -> None:
+    """Required top-level manifest fields cannot silently default away."""
+
+    _write_example(tmp_path / "examples", "quickstart/demo.py")
+    payload = {
+        "version": "0.1.0",
+        "categories": _BASE_CATEGORIES,
+        "examples": [_demo_entry()],
+    }
+    payload.pop(missing)
+    manifest_path = tmp_path / "examples" / "examples_manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+
+    with pytest.raises(ManifestValidationError, match=rf"missing required field.*{missing}"):
+        load_manifest(manifest_path)
 
 
 def test_unsupported_schema_version_rejected(tmp_path: Path) -> None:
@@ -255,6 +275,31 @@ def test_unregistered_file_detected(tmp_path: Path) -> None:
     assert any("E_UNREGISTERED_FILE" in error and "stowaway" in error for error in errors)
 
 
+def test_validator_main_reports_missing_paths_with_stable_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The validator reaches its coded coverage check for missing manifest paths."""
+
+    _write_example(tmp_path / "examples", "quickstart/demo.py")
+    manifest_path = _write_manifest(
+        tmp_path,
+        examples=[_demo_entry(path="quickstart/missing.py")],
+    )
+    monkeypatch.setattr(
+        validator,
+        "parse_args",
+        lambda: SimpleNamespace(
+            manifest=manifest_path,
+            skip_docstring_checks=True,
+            allow_missing_docstrings=False,
+            examples_root=None,
+        ),
+    )
+
+    assert validator.main() == 1
+    assert "[E_MISSING_PATH]" in capsys.readouterr().err
+
+
 def test_exclusion_covers_mirror_file(tmp_path: Path) -> None:
     """Versioned exclusions with rationale silence coverage for mirrors/helpers."""
 
@@ -296,6 +341,40 @@ def test_doc_reference_missing_detected(tmp_path: Path) -> None:
     assert any("E_DOC_REFERENCE_MISSING" in error for error in errors)
 
 
+def test_doc_reference_missing_anchor_detected(tmp_path: Path) -> None:
+    """Document fragments must resolve to a heading or explicit HTML anchor."""
+
+    _write_example(tmp_path / "examples", "quickstart/demo.py")
+    docs_path = tmp_path / "docs" / "guide.md"
+    docs_path.parent.mkdir(parents=True)
+    docs_path.write_text("# Existing section\n", encoding="utf-8")
+    manifest_path = _write_manifest(
+        tmp_path,
+        examples=[_demo_entry(doc_reference="docs/guide.md#missing-section")],
+    )
+    manifest = load_manifest(manifest_path)
+
+    errors = validator._check_doc_references(manifest)
+
+    assert any("E_DOC_REFERENCE_MISSING" in error and "anchor" in error for error in errors)
+
+
+def test_validator_codes_module_syntax_errors(tmp_path: Path) -> None:
+    """Invalid Python in a registered entry has a stable docstring error code."""
+
+    _write_example(tmp_path / "examples", "quickstart/demo.py")
+    (tmp_path / "examples" / "quickstart" / "demo.py").write_text(
+        "def broken(:\n", encoding="utf-8"
+    )
+    manifest_path = _write_manifest(tmp_path, examples=[_demo_entry()])
+    manifest = load_manifest(manifest_path)
+
+    errors, warnings = validator._check_docstrings(manifest, allow_missing=False)
+
+    assert warnings == []
+    assert errors and errors[0].startswith("quickstart/demo.py: [E_DOCSTRING_PARSE]")
+
+
 def test_every_maintained_file_registered_or_excluded() -> None:
     """Zero unregistered maintained examples in the real repository."""
 
@@ -332,20 +411,42 @@ def test_real_manifest_coverage_counts() -> None:
     assert len({example.path.as_posix() for example in manifest.examples}) == len(manifest.examples)
 
 
-def test_validator_output_is_deterministic() -> None:
+def test_validator_output_is_deterministic(tmp_path: Path) -> None:
     """Validator errors carry ``path: [CODE]`` and sort deterministically."""
 
-    manifest = load_manifest()
-    first = sorted(validator._check_ci_consistency(manifest))
-    second = sorted(validator._check_ci_consistency(manifest))
+    _write_example(tmp_path / "examples", "quickstart/demo.py", "Wrong summary.")
+    _write_example(tmp_path / "examples", "other/other.py", "Other.")
+    manifest_path = _write_manifest(
+        tmp_path,
+        examples=[
+            _demo_entry(doc_reference="docs/does-not-exist-xyz.md"),
+            _demo_entry(
+                path="other/other.py",
+                name="Other",
+                summary="Other.",
+                category_slug="quickstart",
+            ),
+        ],
+    )
+    manifest = load_manifest(manifest_path)
+
+    def collect_errors() -> list[str]:
+        """Collect the deterministic validator error surfaces for one fixture."""
+
+        doc_errors, _ = validator._check_docstrings(manifest, allow_missing=False)
+        return sorted(
+            validator._check_manifest_coverage(manifest, manifest.examples_root)
+            + validator._check_category_directory_alignment(manifest)
+            + validator._check_doc_references(manifest)
+            + doc_errors
+        )
+
+    first = collect_errors()
+    second = collect_errors()
     assert first == second
-    for error in (
-        validator._check_category_directory_alignment(manifest)
-        + validator._check_doc_references(manifest)
-        + validator._check_tags_normalized(manifest)
-        + validator._check_runtime_class(manifest)
-    ):
-        assert ": [E_" in error
+    assert first
+    assert sorted(first) == first
+    assert all(": [E_" in error for error in first)
 
 
 def test_generator_is_byte_stable() -> None:
@@ -366,6 +467,42 @@ def test_generated_readme_matches_committed_file() -> None:
     generated = build_markdown(manifest, include_archived=False, include_ci_column=True)
     committed = (REPO_ROOT / "examples" / "README.md").read_text(encoding="utf-8")
     assert generated == committed
+
+
+def test_generator_renders_archived_section_once() -> None:
+    """The opt-in archived output has one section and one row per archived entry."""
+
+    manifest = load_manifest()
+    markdown = build_markdown(manifest, include_archived=True, include_ci_column=True)
+
+    assert markdown.count("## Archived") == 1
+    for example in manifest.examples_for_category("_archived"):
+        assert markdown.count(f"](./{example.path.as_posix()})") == 1
+
+
+def test_generator_dry_run_writes_exact_generated_bytes(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The dry-run CLI emits the same bytes as the generator function."""
+
+    expected = build_markdown(load_manifest(), include_archived=False, include_ci_column=True)
+    monkeypatch.setattr(
+        readme_renderer,
+        "parse_args",
+        lambda: SimpleNamespace(
+            manifest=None,
+            output=None,
+            dry_run=True,
+            include_archived=False,
+            skip_ci_column=False,
+            validate_paths=True,
+        ),
+    )
+
+    assert readme_renderer.main() == 0
+    captured = capsys.readouterr()
+    assert captured.out == expected
+    assert captured.err == ""
 
 
 def test_canonical_readme_has_no_sentinel_cells() -> None:
@@ -442,6 +579,7 @@ def _category_entry(**overrides) -> dict:
         ("slug", "a/b", "path separators"),
         ("slug", " quickstart", "leading or trailing whitespace"),
         ("order", "1", "must be an integer"),
+        ("order", True, "must be an integer"),
         ("ci_default", "yes", "ci_default"),
     ],
 )
@@ -457,6 +595,24 @@ def test_malformed_category_fields_rejected(
         categories=[_category_entry(**{field: value})],
     )
     with pytest.raises(ManifestValidationError, match=match):
+        load_manifest(manifest_path)
+
+
+def test_duplicate_category_orders_rejected(tmp_path: Path) -> None:
+    """Category order collisions cannot make generated section order ambiguous."""
+
+    _write_example(tmp_path / "examples", "quickstart/demo.py")
+    categories = [
+        _category_entry(),
+        _category_entry(slug="advanced", title="Advanced", order=1),
+    ]
+    manifest_path = _write_manifest(
+        tmp_path,
+        examples=[_demo_entry()],
+        categories=categories,
+    )
+
+    with pytest.raises(ManifestValidationError, match="E_DUPLICATE_CATEGORY_ORDER"):
         load_manifest(manifest_path)
 
 

@@ -109,6 +109,14 @@ uv run python scripts/dev/check_dependency_coherence.py --base-ref origin/main -
 
 The first command is the root-project check; the second is the standalone fast-pysf check. A maintainer update that touches only one declaration should not rewrite the other lock. If both declarations intentionally change a shared package, retain both lock updates and the report's independent-owner classification. The report is dependency-routing and continuous-integration integrity evidence only; it does not approve a package version, license, release, benchmark, or merge.
 
+## Pinned Action References
+
+When changing a pinned external GitHub Action (`uses: owner/action@<40-hex-SHA>`) in
+`.github/workflows/`, search for the old exact action reference and update coupled workflow or test
+references in the same change. Then run
+`uv run python scripts/dev/check_dependabot_update_policy.py --base-ref origin/main --json` and the
+focused policy tests before handoff; this is the canonical guard for base-to-head action-pin drift.
+
 ## Rollback
 
 Close or revert one update lane and regenerate only the affected lockfile rows. The exact dependency diff and the policy report identify the smallest lane, so unrelated updates do not need to be discarded. If a new package needs a broader compatibility family, update the manifest and policy together with focused proof before grouping it.

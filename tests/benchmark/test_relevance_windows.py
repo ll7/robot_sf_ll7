@@ -146,6 +146,39 @@ def test_too_late_crop_is_rejected_as_unsafe() -> None:
         validate_excerpt_manifest(late, selection.parent_rows)
 
 
+def test_manifest_cannot_remove_precursor_from_selection_and_window() -> None:
+    """A forged crop cannot erase the precursor requirement from every manifest field."""
+    rows = _parent_rows()
+    rows[1].update({"event_id": "doorway", "precursor": True})
+    rows[4].update({"event_id": "doorway", "clearance_m": 0.5})
+    selection = select_relevance_windows(rows, parent_digest=_parent_digest())
+    window = selection.windows[0]
+    forged_window = replace(
+        window,
+        start_step=4,
+        end_step=6,
+        row_indices=(4, 5, 6),
+        original_step_indices=(4, 5, 6),
+        precursor_steps=(),
+    )
+    forged = replace(
+        selection.manifest,
+        selected_step_indices=(4, 5, 6),
+        windows=(forged_window,),
+        required_precursor_steps=(),
+    )
+    with pytest.raises(ExcerptContractError, match="deterministic selector"):
+        validate_excerpt_manifest(forged, selection.parent_rows)
+
+
+def test_precursor_without_event_identity_is_rejected() -> None:
+    """A precursor without an event identity cannot be safely associated later."""
+    rows = _parent_rows(2)
+    rows[0]["precursor"] = True
+    with pytest.raises(ExcerptContractError, match="precursor must declare an event_id"):
+        select_relevance_windows(rows, parent_digest=_parent_digest())
+
+
 def test_missing_signal_is_unknown_not_a_safe_zero() -> None:
     """Unavailable TTC remains in the vector and cannot trigger or clear a latch."""
     rows = _parent_rows(3)

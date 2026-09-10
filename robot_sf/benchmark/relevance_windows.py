@@ -84,6 +84,26 @@ def _finite(value: Any, name: str) -> float:
     return result
 
 
+def _strict_bool(value: Any, name: str) -> bool:
+    """Return a JSON boolean without coercing truthy strings or numbers."""
+    if not isinstance(value, bool):
+        raise RelevanceContractError(f"{name} must be boolean")
+    return value
+
+
+def _event_id(value: Any, name: str) -> str | None:
+    """Normalize an optional event identity and reject ambiguous text.
+
+    Returns:
+        The stripped event identity, or ``None`` when no event is declared.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise RelevanceContractError(f"{name} must be a non-empty string or null")
+    return value.strip()
+
+
 @dataclass(frozen=True, slots=True)
 class RelevanceSignal:
     """One typed signal with units, provenance, availability, and hindsight."""
@@ -113,6 +133,7 @@ class RelevanceSignal:
             not isinstance(self.available_at_step, int) or self.available_at_step < 0
         ):
             raise RelevanceContractError("signal available_at_step must be a non-negative integer")
+        _strict_bool(self.hindsight, "signal hindsight")
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe signal record."""
@@ -403,6 +424,9 @@ def _normalize_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
             raise RelevanceContractError(f"parent row {index}.step must be a non-negative integer")
         if previous_step is not None and step <= previous_step:
             raise RelevanceContractError("parent rows must have strictly increasing step values")
+        _strict_bool(copied.get("precursor", False), f"parent row {index}.precursor")
+        _strict_bool(copied.get("hindsight", False), f"parent row {index}.hindsight")
+        _event_id(copied.get("event_id"), f"parent row {index}.event_id")
         previous_step = step
         normalized.append(copied)
     return normalized
@@ -419,7 +443,15 @@ def _actor_ids(row: Mapping[str, Any]) -> tuple[str, ...]:
         values = ()
     else:
         values = (value,)
-    return tuple(sorted({str(item) for item in values}))
+    normalized: set[str] = set()
+    for item in values:
+        if isinstance(item, bool):
+            raise RelevanceContractError("actor IDs must not be boolean values")
+        text = str(item).strip()
+        if not text:
+            raise RelevanceContractError("actor IDs must be non-empty")
+        normalized.add(text)
+    return tuple(sorted(normalized))
 
 
 def _row_signal_value(row: Mapping[str, Any], name: str) -> tuple[Any, Mapping[str, Any]]:
@@ -486,6 +518,8 @@ def _signal_from_row(row: Mapping[str, Any], name: str) -> RelevanceSignal:
             raw = None
             missingness = "not_available"
             value = None
+    signal_hindsight = metadata.get("hindsight", row.get("hindsight", False))
+    _strict_bool(signal_hindsight, f"signals.{name}.hindsight")
     return RelevanceSignal(
         name=name,
         value=value,
@@ -494,7 +528,7 @@ def _signal_from_row(row: Mapping[str, Any], name: str) -> RelevanceSignal:
         available_at_step=availability,
         prediction_assumptions=str(metadata.get("prediction_assumptions", assumptions)),
         missingness=missingness,
-        hindsight=bool(metadata.get("hindsight", row.get("hindsight", False))),
+        hindsight=signal_hindsight,
     )
 
 
@@ -551,7 +585,9 @@ def _vector_for_row(
     active_reasons.clear()
     active_reasons.update(current)
     time_s = _finite(row.get("time_s", row["step"]), f"row[{row['step']}].time_s")
-    event_id = row.get("event_id")
+    event_id = _event_id(row.get("event_id"), f"row[{row['step']}].event_id")
+    row_hindsight = _strict_bool(row.get("hindsight", False), f"row[{row['step']}].hindsight")
+    row_precursor = _strict_bool(row.get("precursor", False), f"row[{row['step']}].precursor")
     return RelevanceVector(
         step=int(row["step"]),
         time_s=time_s,
@@ -559,9 +595,9 @@ def _vector_for_row(
         signals=signals,
         active_reasons=tuple(sorted(current)),
         unknown_signals=tuple(sorted(unknown)),
-        precursor=bool(row.get("precursor", False)),
-        event_id=None if event_id is None else str(event_id),
-        hindsight=bool(row.get("hindsight", False)) or any(signal.hindsight for signal in signals),
+        precursor=row_precursor,
+        event_id=event_id,
+        hindsight=row_hindsight or any(signal.hindsight for signal in signals),
     )
 
 
@@ -575,13 +611,17 @@ def _required_precursor_indices(
     """
     required: set[int] = set()
     for trigger_index in trigger_indices:
-        event_id = rows[trigger_index].get("event_id")
+        event_id = _event_id(
+            rows[trigger_index].get("event_id"),
+            f"row[{rows[trigger_index]['step']}].event_id",
+        )
         if event_id is None:
             continue
         required.update(
             index
             for index, row in enumerate(rows[: trigger_index + 1])
-            if row.get("event_id") == event_id and bool(row.get("precursor", False))
+            if _event_id(row.get("event_id"), f"row[{row['step']}].event_id") == event_id
+            and _strict_bool(row.get("precursor", False), f"row[{row['step']}].precursor")
         )
     return required
 
@@ -596,6 +636,7 @@ def _build_windows(
     Returns:
         ``(windows, required_precursor_row_indices)``.
     """
+    _validate_precursor_rows(rows)
     trigger_indices = [index for index, vector in enumerate(vectors) if vector.active_reasons]
     if not trigger_indices:
         return (), set()
@@ -610,15 +651,8 @@ def _build_windows(
     for run in runs:
         start = max(0, run[0] - thresholds.pre_roll_steps)
         end = min(len(rows) - 1, run[-1] + thresholds.post_roll_steps)
-        run_event_ids = {
-            str(rows[index]["event_id"]) for index in run if rows[index].get("event_id") is not None
-        }
-        relevant_precursors = [
-            index
-            for index in required_precursors
-            if index <= run[-1]
-            and (not run_event_ids or str(rows[index].get("event_id")) in run_event_ids)
-        ]
+        run_event_ids = _run_event_ids(rows, run)
+        relevant_precursors = _precursors_for_run(rows, required_precursors, run, run_event_ids)
         if relevant_precursors:
             start = min([start, *relevant_precursors])
         expanded.append((start, end, run, run_event_ids, set(relevant_precursors)))
@@ -665,6 +699,130 @@ def _build_windows(
     return tuple(windows), required_precursors
 
 
+def _validate_precursor_rows(rows: Sequence[Mapping[str, Any]]) -> None:
+    """Reject precursor markers that cannot be associated with an event."""
+    for row in rows:
+        if _strict_bool(row.get("precursor", False), f"row[{row['step']}].precursor"):
+            if _event_id(row.get("event_id"), f"row[{row['step']}].event_id") is None:
+                raise ExcerptContractError(f"row[{row['step']}] precursor must declare an event_id")
+
+
+def _run_event_ids(rows: Sequence[Mapping[str, Any]], run: Sequence[int]) -> set[str]:
+    """Return normalized event identities carried by one trigger run."""
+    event_ids: set[str] = set()
+    for index in run:
+        event_id = _event_id(rows[index].get("event_id"), f"row[{rows[index]['step']}].event_id")
+        if event_id is not None:
+            event_ids.add(event_id)
+    return event_ids
+
+
+def _precursors_for_run(
+    rows: Sequence[Mapping[str, Any]],
+    required_precursors: set[int],
+    run: Sequence[int],
+    run_event_ids: set[str],
+) -> list[int]:
+    """Return precursor row indices owned by one trigger run."""
+    relevant: list[int] = []
+    for index in required_precursors:
+        if index > run[-1]:
+            continue
+        event_id = _event_id(rows[index].get("event_id"), f"row[{rows[index]['step']}].event_id")
+        if not run_event_ids or event_id in run_event_ids:
+            relevant.append(index)
+    return relevant
+
+
+def _evaluate_rows(
+    rows: Sequence[Mapping[str, Any]], thresholds: RelevanceThresholds
+) -> tuple[tuple[RelevanceVector, ...], tuple[RelevanceWindow, ...], set[int]]:
+    """Recompute vectors, windows, and precursor ownership deterministically.
+
+    Returns:
+        Vectors, deterministic windows, and required precursor row indices.
+    """
+    vectors: list[RelevanceVector] = []
+    active_reasons: set[str] = set()
+    safe_counts: dict[str, int] = {}
+    for row in rows:
+        vectors.append(_vector_for_row(row, thresholds, active_reasons, safe_counts))
+    windows, required_precursors = _build_windows(rows, vectors, thresholds)
+    return tuple(vectors), windows, required_precursors
+
+
+def _thresholds_from_selector_config(
+    selector_config: Mapping[str, Any],
+) -> tuple[RelevanceThresholds, bool]:
+    """Parse and canonicalize the selector contract stored in a manifest.
+
+    Returns:
+        The declared thresholds and the selector-level hindsight flag.
+    """
+    expected_keys = {"schema_version", "thresholds", "hindsight", "actor_policy", "parent_rows"}
+    config = dict(selector_config)
+    if set(config) != expected_keys:
+        raise ExcerptContractError("selector_config has unexpected or missing fields")
+    if config["schema_version"] != RELEVANCE_SCHEMA:
+        raise ExcerptContractError("selector_config schema_version does not match manifest schema")
+    selector_hindsight = _strict_bool(config["hindsight"], "selector_config.hindsight")
+    if config["actor_policy"] != "all_parent_actors":
+        raise ExcerptContractError("selector_config actor_policy is not supported")
+    if config["parent_rows"] != "complete_parent_retained":
+        raise ExcerptContractError("selector_config parent_rows policy is not supported")
+    return _thresholds_from_payload(config["thresholds"]), selector_hindsight
+
+
+def _thresholds_from_payload(value: Any) -> RelevanceThresholds:
+    """Parse the canonical nested threshold payload from a selector config.
+
+    Returns:
+        The validated threshold configuration.
+    """
+    threshold_payload = value
+    if not isinstance(threshold_payload, Mapping):
+        raise ExcerptContractError("selector_config.thresholds must be an object")
+    threshold_payload = dict(threshold_payload)
+    if set(threshold_payload) != {"approval_status", "proposed", "approved"}:
+        raise ExcerptContractError("selector_config.thresholds has unexpected or missing fields")
+    proposed = threshold_payload["proposed"]
+    if not isinstance(proposed, Mapping):
+        raise ExcerptContractError("selector_config.thresholds.proposed must be an object")
+    proposed = dict(proposed)
+    required_proposed = {
+        "clearance_m",
+        "closing_velocity_m_s",
+        "ttc_s",
+        "closest_approach_m",
+        "braking_margin_m",
+        "visibility_latency_s",
+        "stall_s",
+        "discomfort",
+        "pre_roll_steps",
+        "post_roll_steps",
+        "merge_gap_steps",
+        "hysteresis_steps",
+    }
+    if set(proposed) != required_proposed:
+        raise ExcerptContractError(
+            "selector_config.thresholds.proposed has unexpected or missing fields"
+        )
+    approved = threshold_payload["approved"]
+    if approved is not None and not isinstance(approved, Mapping):
+        raise ExcerptContractError("selector_config.thresholds.approved must be an object or null")
+    try:
+        thresholds = RelevanceThresholds(
+            **proposed,
+            approval_status=threshold_payload["approval_status"],
+            approved_thresholds=approved,
+        )
+    except (RelevanceContractError, TypeError) as exc:
+        raise ExcerptContractError(f"invalid selector thresholds: {exc}") from exc
+    if thresholds.to_dict() != threshold_payload:
+        raise ExcerptContractError("selector_config.thresholds is not canonical")
+    return thresholds
+
+
 def select_relevance_windows(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -687,12 +845,8 @@ def select_relevance_windows(
     """
     normalized = _normalize_rows(rows)
     effective = thresholds or RelevanceThresholds()
-    vectors: list[RelevanceVector] = []
-    active_reasons: set[str] = set()
-    safe_counts: dict[str, int] = {}
-    for row in normalized:
-        vectors.append(_vector_for_row(row, effective, active_reasons, safe_counts))
-    windows, required_precursors = _build_windows(normalized, vectors, effective)
+    selector_hindsight = _strict_bool(hindsight, "hindsight")
+    vectors, windows, required_precursors = _evaluate_rows(normalized, effective)
     row_actor_ids = tuple(sorted({actor for vector in vectors for actor in vector.actor_ids}))
     effective_actor_ids = (
         tuple(sorted({str(item) for item in actor_ids})) if actor_ids else row_actor_ids
@@ -706,7 +860,7 @@ def select_relevance_windows(
     selector_config = {
         "schema_version": RELEVANCE_SCHEMA,
         "thresholds": effective.to_dict(),
-        "hindsight": bool(hindsight),
+        "hindsight": selector_hindsight,
         "actor_policy": "all_parent_actors",
         "parent_rows": "complete_parent_retained",
     }
@@ -719,7 +873,7 @@ def select_relevance_windows(
         windows=windows,
         selector_config=selector_config,
         missing_signals=missing_signals,
-        hindsight=bool(hindsight) or any(vector.hindsight for vector in vectors),
+        hindsight=selector_hindsight or any(vector.hindsight for vector in vectors),
         required_precursor_steps=tuple(
             sorted(normalized[index]["step"] for index in required_precursors)
         ),
@@ -765,6 +919,32 @@ def _validate_manifest_selection(
     return selected, step_by_index
 
 
+def _validate_manifest_semantics(
+    manifest: ExcerptManifest, normalized: Sequence[Mapping[str, Any]]
+) -> None:
+    """Recompute the selector contract so a forged manifest cannot redefine it."""
+    thresholds, selector_hindsight = _thresholds_from_selector_config(manifest.selector_config)
+    vectors, expected_windows, required_precursors = _evaluate_rows(normalized, thresholds)
+    expected_selected = tuple(
+        sorted({step for window in expected_windows for step in window.original_step_indices})
+    )
+    expected_required = tuple(sorted(normalized[index]["step"] for index in required_precursors))
+    expected_missing = tuple(
+        sorted({name for vector in vectors for name in vector.unknown_signals})
+    )
+    expected_hindsight = selector_hindsight or any(vector.hindsight for vector in vectors)
+    if tuple(manifest.selected_step_indices) != expected_selected:
+        raise ExcerptContractError("manifest selected steps do not match deterministic selector")
+    if tuple(manifest.required_precursor_steps) != expected_required:
+        raise ExcerptContractError("manifest precursor steps do not match parent events")
+    if tuple(manifest.windows) != expected_windows:
+        raise ExcerptContractError("manifest windows do not match deterministic selector")
+    if tuple(manifest.missing_signals) != expected_missing:
+        raise ExcerptContractError("manifest missing signals do not match parent rows")
+    if manifest.hindsight != expected_hindsight:
+        raise ExcerptContractError("manifest hindsight does not match selector and parent rows")
+
+
 def _validate_manifest_windows(
     manifest: ExcerptManifest, selected: set[int], step_by_index: Mapping[int, int]
 ) -> None:
@@ -802,6 +982,7 @@ def validate_excerpt_manifest(manifest: ExcerptManifest, rows: Sequence[Mapping[
     _validate_manifest_parent(manifest, normalized)
     selected, step_by_index = _validate_manifest_selection(manifest, normalized)
     _validate_manifest_windows(manifest, selected, step_by_index)
+    _validate_manifest_semantics(manifest, normalized)
 
 
 def write_selection_manifest(selection: RelevanceSelection, path: str | Path) -> None:

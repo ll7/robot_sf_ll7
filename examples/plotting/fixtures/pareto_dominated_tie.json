@@ -1,0 +1,12 @@
+{
+  "description": "Deterministic pareto fixture: dominated, nondominated, and exact-tie groups. Fixture output demonstrates plotting mechanics only and is not benchmark evidence.",
+  "records": [
+    {"scenario_id": "pareto-a1", "scenario_params": {"algo": "A"}, "metrics": {"collisions": 1.0, "comfort_exposure": 0.55}},
+    {"scenario_id": "pareto-a2", "scenario_params": {"algo": "A"}, "metrics": {"collisions": 1.0, "comfort_exposure": 0.55}},
+    {"scenario_id": "pareto-b1", "scenario_params": {"algo": "B"}, "metrics": {"collisions": 0.8, "comfort_exposure": 0.9}},
+    {"scenario_id": "pareto-c1", "scenario_params": {"algo": "C"}, "metrics": {"collisions": 1.5, "comfort_exposure": 0.4}},
+    {"scenario_id": "pareto-d1", "scenario_params": {"algo": "D"}, "metrics": {"collisions": 1.0, "comfort_exposure": 0.55}},
+    {"scenario_id": "pareto-d2", "scenario_params": {"algo": "D"}, "metrics": {"collisions": 1.0, "comfort_exposure": 0.55}},
+    {"scenario_id": "pareto-e1", "scenario_params": {"algo": "E"}, "metrics": {"collisions": 1.2, "comfort_exposure": 0.7}}
+  ]
+}

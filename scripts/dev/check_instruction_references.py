@@ -56,6 +56,10 @@ ROUTE_IDS = (
     "scientific-benchmark-interpretation",
     "environment-worktree-repair",
 )
+MAINTAINER_VALUES = "docs/maintainer_values.md"
+VALUES_ALLOWED_HEADINGS = frozenset(
+    {"# Maintainer Values", "## Principles", "## Procedure Owners"}
+)
 
 REPO_ROOT_SEGMENTS = frozenset(
     {
@@ -389,12 +393,31 @@ def check_task_scope_manifest(
     return errors
 
 
+def check_maintainer_values(root: Path = REPO_ROOT) -> list[str]:
+    """Keep maintainer values principle-only; procedure lives with its task owners."""
+    path = root / MAINTAINER_VALUES
+    if not path.is_file():
+        return [f"{MAINTAINER_VALUES} is missing"]
+    text = path.read_text(encoding="utf-8")
+    errors: list[str] = []
+    if "```" in text:
+        errors.append(f"{MAINTAINER_VALUES} must not embed command or code blocks")
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") and stripped not in VALUES_ALLOWED_HEADINGS:
+            errors.append(
+                f"{MAINTAINER_VALUES}: procedure section heading is not allowed: {stripped}"
+            )
+    return errors
+
+
 def run_checks(root: Path = REPO_ROOT) -> dict[str, object]:
     """Run all instruction-reference checks and return a JSON-ready report."""
     graph_result = check_instruction_graph(root)
     ownership_errors = check_routing_ownership(root)
     precedence_errors = check_precedence_contract(root)
     task_scope_errors = check_task_scope_manifest(root)
+    values_errors = check_maintainer_values(root)
     return {
         "schema": "instruction_references.v1",
         "root": str(root),
@@ -405,8 +428,13 @@ def run_checks(root: Path = REPO_ROOT) -> dict[str, object]:
         "optional_references": graph_result.optional_skipped,
         "precedence_errors": precedence_errors,
         "task_scope_errors": task_scope_errors,
+        "values_errors": values_errors,
         "errors": (
-            graph_result.errors + ownership_errors + precedence_errors + task_scope_errors
+            graph_result.errors
+            + ownership_errors
+            + precedence_errors
+            + task_scope_errors
+            + values_errors
         ),
     }
 

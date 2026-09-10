@@ -1,21 +1,9 @@
 # Claude Code Project Configuration
 
-**Canonical repository instruction sources**: `AGENTS.md` is the top-level instruction source for
-repository rules, `docs/maintainer_values.md` is the compact source for current values and hard
-contracts, and `docs/dev_guide.md` is the contributor workflow reference. This file is the
-Claude-facing entrypoint and contains only Claude-specific pointers not already covered there.
-
-## Instruction Hierarchy
-
-For all work in this repository, consult sources in this order:
-
-1. **Current maintainer direction** in an active issue, PR, or thread — supersedes all else.
-2. **[`docs/maintainer_values.md`](../docs/maintainer_values.md)** — compact values, hard rules,
-   and validation hierarchy.
-3. **[`AGENTS.md`](../AGENTS.md)** — repository execution rules, structure, workflow defaults,
-   and conflict precedence.
-4. **[`docs/dev_guide.md`](../docs/dev_guide.md)** — contributor workflow and validation.
-5. **[`.agents/skills/README.md`](../.agents/skills/README.md)** — skill landscape and decision tree.
+**Canonical repository instruction sources**: `AGENTS.md` owns the boot contract and the
+`Instruction Precedence` contract, `docs/maintainer_values.md` records maintainer principles, and
+`docs/dev_guide.md` is the contributor workflow reference. This file is the Claude-facing entrypoint
+and contains only Claude-specific mechanics not already covered there.
 
 ## Tool-Specific Entry Points
 
@@ -50,4 +38,4 @@ When using a specific tool or agent, read these first:
 All workflow policy, validation tiers, evidence grading, and publication rules live in the
 canonical sources above — do not duplicate them here.
 
-**Last Updated**: 2026-08-22
+**Last Updated**: 2026-09-10

@@ -1,7 +1,9 @@
 # Planning Convention
 
 Use this file when the work is large enough that an agent should externalize its plan before or
-during implementation.
+during implementation. A plan records intent, decisions, and intended proof; it never outranks
+current code, evidence, or repository invariants. Repository-internal precedence is owned by the
+`Instruction Precedence` contract in `AGENTS.md`.
 
 ## When To Write A Plan
 

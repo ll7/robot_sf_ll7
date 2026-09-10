@@ -227,6 +227,24 @@ rerun with `--write-manifest` and review the manifest diff. A raw full-tree
 `sphinx-build docs <out>` is unsupported: `docs/conf.py` no longer suppresses broad warning
 classes, so it reports the historical corpus warnings by design.
 
+### Quickstart notebooks
+
+The three beginner notebooks under `notebooks/` are generated, not hand-edited:
+
+```bash
+scripts/dev/generate_quickstart_notebooks.py
+scripts/dev/generate_quickstart_notebooks.py --check --json
+scripts/validation/run_notebooks_smoke.py
+```
+
+`--check` rebuilds each notebook in memory, strips execution counts, outputs, transient cell ids,
+widget state, and environment-specific metadata, and compares canonical JSON to the committed file.
+It fails closed on source drift, stable-metadata drift, missing committed notebooks, and any
+committed executed output or execution count; the JSON report names exact mismatch paths and stable
+reason codes. The smoke owner runs the same parity check before executing the notebooks, so CI
+rejects manually edited or executed notebooks without running them. Do not hand-edit `.ipynb`
+files; change the generator and regenerate.
+
 ### External review routing
 
 CodeRabbit reviews pull requests that change simulator code, tests, scripts, or GitHub Actions.

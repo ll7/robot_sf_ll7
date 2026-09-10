@@ -23,6 +23,11 @@ later.
 `output/` is the git-ignored worktree artifact root. It is useful for local runs, smoke checks,
 coverage, temporary exports, videos, and caches, but it is not a durable dependency by itself.
 
+For operational retention classes, preservation proof, and cleanup-eligibility workflows, see the
+[Artifact Retention, Preservation, and Cleanup Guide](artifact_retention_and_cleanup.md).
+For the check-only guard that decides when one artifact or output identity may be deleted, see the
+[Cleanup Eligibility Guard](cleanup_eligibility.md).
+
 ## Vocabulary
 
 | Category | Meaning | May cite `output/`? | Acceptable reference |
@@ -54,6 +59,26 @@ coverage, temporary exports, videos, and caches, but it is not a durable depende
   so the run that produced the evidence is auditable. Start from
   [`docs/templates/agent_run_manifest.yaml`](../templates/agent_run_manifest.yaml).
 
+## Durable Artifact Locality Audit
+
+`scripts/validation/check_durable_artifact_locality.py` joins the public `references`
+inventory in a sanitized locality packet (`durable_artifact_locator_projection.v1`)
+to its locator-class `artifacts` projection by artifact ID, version, and digest.
+`--check` exits non-zero when an active durable-required reference has no verified
+non-institutional locator, or a release-facing reference lacks its configured
+independent failure-domain copies. It reads sanitized inputs only and never emits
+locator values; historical inactive references stay recorded with outcome `inactive`
+and never satisfy an active custody requirement.
+
+Locator classes: `public_release`, `cloud_durable`, `personal_durable`,
+`institutional_durable`, `institutional_cache`, `local_scratch`, `unknown`,
+`unavailable`. Only the first three count as non-institutional custody. Stable
+reason codes include `missing_projection_row`, `version_mismatch`, `digest_mismatch`,
+`stale_verification`, `mutable_alias`, `institutional_only`, `cache_only`,
+`non_durable_custody`, `no_verified_locator`, `same_failure_domain`, and `insufficient_redundancy`.
+
+Validate with `uv run python scripts/validation/check_durable_artifact_locality.py --projection tests/validation/fixtures/durable_artifact_locality/compliant.json --check`.
+
 ## Chunk Manifests for Large Result Trees
 
 [`scripts/tools/chunk_manifest.py`](../../scripts/tools/chunk_manifest.py) writes a
@@ -63,6 +88,51 @@ large members, an order/worker-invariant `tree_sha256`, and a `manifest_id` sema
 preservation and transfer receipts reference without rewriting producer manifests. `verify` fails
 closed with exact file/chunk locations on mutation, truncation, sparse/symlink/hardlink/special
 file, path, collision, and partial-manifest conditions.
+
+## Compute-Window Readiness Dashboard
+
+[`scripts/tools/compute_window_readiness_dashboard.py`](../../scripts/tools/compute_window_readiness_dashboard.py)
+renders one deterministic JSON plus Markdown dashboard from versioned canonical input reports
+(`robot_sf.compute_window_dashboard_input.v1`; sanitized fixtures under
+`tests/tools/fixtures/compute_window_dashboard/`). Rows show campaign identity, owner,
+priority/tier, resource class, prerequisite, source/config/checkpoint status, job state,
+expected/observed rows, harvest/preservation/environment/restore state, copies, deadline fit,
+and next owner, with implementation/compute/scheduler/artifact/evidence/review/claim kept
+separate. No scientific score or admission decision is computed; stale, missing, contradictory,
+duplicate, wrong-schema, or unsanitized input masks affected rows as explicit `unavailable`, and
+output carries no private paths, hostnames, accounts, credentials, or signed URLs.
+
+## Sanitized Lineage Index
+
+[`scripts/tools/lineage_index.py`](../../scripts/tools/lineage_index.py) joins compact sanitized
+records (`sanitized_lineage_input.v1`) into one deterministic `robot_sf.lineage_index.v1` JSON
+plus Markdown index keyed by stable semantic identity (`kind:id`), never filename proximity or
+timestamps. Records are `{"kind", "id", "refs": {"<kind>_ids": [...]}, ...scalars}` over
+`issue`, `pull_request`, `commit`, `campaign`, `config`, `manifest`, `job`, `checkpoint`,
+`model`, `environment`, `artifact`, `analysis`, and `claim`, with scalars `digest`, `owner`,
+`attempt_index`, `relation`, `submission_receipt`, `predecessor_job_id`, `artifact_kind`,
+`locator_class`, `claim_state`, and `not_applicable`; optional `private_projection` lists
+withheld locators as `{"target", "digest", "withheld": true}` only. Each row is rooted at one
+job attempt, or at an unreachable record, so retries and resumed shards stay separate rows
+linked by `predecessor_job_id`, `attempt_index`, and `relation`; missing links classify as
+`not_applicable`, `not_recorded`, `private_unavailable`, `conflict`, or `dangling`, and
+duplicate IDs, contradictory digests, orphaned artifact pointers, projection drift, or absent
+references fail closed. Query with `lineage_index.py query --input <path>` and
+`--issue/--job/--campaign/--artifact-digest/--commit/--config` (exit 0 match, 2 otherwise).
+Validate with `uv run python scripts/tools/lineage_index.py --input
+tests/tools/fixtures/lineage_index/complete.json --check --format json`.
+
+## Expiring-Resource Deadline Feasibility
+
+[`scripts/validation/check_expiring_resource_feasibility.py`](../../scripts/validation/check_expiring_resource_feasibility.py)
+evaluates the optional `expiring_resource` block of a campaign manifest (`expiring_resource_contract.v1`)
+and returns one deterministic verdict: `fits_conservative`, `fits_expected`, `too_late`, or
+`unknown`. It budgets expected/conservative runtime plus retrieval, verification, and preservation
+reserves into a latest safe submission time, never guesses a scheduler start, and requires non-zero
+retrieval/preservation reserves for durable-required outputs. Manifests without the block stay
+non-applicable and non-blocking. See
+[Expiring-Resource Deadline Feasibility](expiring_resource_deadlines.md); the case pack lives under
+`tests/validation/fixtures/expiring_resource_feasibility/`.
 
 ## Learned-Policy Artifact Manifests
 

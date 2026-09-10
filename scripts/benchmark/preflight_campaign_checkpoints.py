@@ -24,7 +24,14 @@ Exit codes are distinct so an sbatch wrapper can branch mechanically:
 
 - ``0`` -- all arm checkpoints resolvable (``--stage`` also means staged + verified).
 - ``2`` -- the campaign config file is missing or unreadable (cannot be evaluated).
-- ``3`` -- one or more arm checkpoints are unresolvable (fail-closed; do not submit).
+- ``3`` -- one or more arm checkpoints are unresolvable (fail-closed; do not submit), or an
+  optional ``expiring_resource`` contract blocks the run per its declared ``admission_policy``.
+
+When the campaign manifest carries the optional expiring-resource contract (#8905), the gate also
+runs the deterministic deadline feasibility check before touching checkpoints: a ``too_late`` or
+``unknown`` verdict blocks when the contract's ``admission_policy`` is ``block`` (the default).
+Manifests without the block keep their previous behavior, and the check never guesses a scheduler
+start time. See ``docs/context/expiring_resource_deadlines.md``.
 
 See ``docs/context/issue_4613_camera_ready_checkpoint_provisioning.md`` for the runbook.
 """
@@ -34,8 +41,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -106,7 +115,29 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def expiring_resource_gate(config_path: Path) -> dict[str, Any] | None:
+    """Evaluate the optional expiring-resource contract in *config_path*.
+
+    Returns the deterministic feasibility report when the campaign manifest declares the
+    ``expiring_resource`` block, otherwise ``None`` so historical manifests keep their behavior.
+    Real manifests evaluate at the current UTC time; fixtures may pin ``as_of`` for reproducibility.
+    """
+    from scripts.validation.check_expiring_resource_feasibility import evaluate_manifest
+
+    try:
+        payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(payload, Mapping) or "expiring_resource" not in payload:
+        return None
+    # Only an explicit ``as_of`` pins the clock for reproducible fixtures. Real manifests are
+    # evaluated at the current UTC time; a stale ``generated_at`` must not make an expired window
+    # look feasible.
+    as_of = None if payload.get("as_of") else datetime.now(UTC)
+    return evaluate_manifest(payload, as_of=as_of).to_dict()
+
+
+def main(argv: list[str] | None = None) -> int:  # noqa: C901 - gate plus checkpoint failure paths
     """Run the campaign checkpoint preflight CLI.
 
     Returns:
@@ -117,6 +148,24 @@ def main(argv: list[str] | None = None) -> int:
     if not args.config.is_file():
         print(f"error: campaign config not found: {args.config}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
+    deadline = expiring_resource_gate(args.config)
+    if deadline is not None and deadline["blocking"]:
+        blocked = {
+            "status": "blocked",
+            "reason": "expiring_resource_deadline_gate",
+            "expiring_resource": deadline,
+        }
+        print(
+            f"error: expiring-resource deadline gate blocked ({deadline['verdict']}); "
+            "do not submit.",
+            file=sys.stderr,
+        )
+        if args.json:
+            print(json.dumps(blocked, indent=2))
+        if args.report_path is not None:
+            args.report_path.parent.mkdir(parents=True, exist_ok=True)
+            args.report_path.write_text(json.dumps(blocked, indent=2), encoding="utf-8")
+        return EXIT_BLOCKED
     try:
         summary = check_campaign_arm_checkpoints_preflight_from_config(
             args.config,
@@ -170,6 +219,8 @@ def main(argv: list[str] | None = None) -> int:
         "checkpoint_registry_sha256": registry_sha256,
         **summary,
     }
+    if deadline is not None:
+        payload["expiring_resource"] = deadline
     if args.json:
         print(json.dumps(payload, indent=2))
     else:

@@ -8,6 +8,8 @@ official [dev_guide](../docs/dev_guide.md) as the primary reference.
 
 ## Copilot-Specific Instructions
 
+- Task-to-guidance routing is owned by `docs/ai/agent_workflow_entrypoints.md`; select the matching
+  route there and load only its required context.
 - Use scriptable interfaces instead of CLI interfaces when possible.
 - Source the environment before using python or uv: `source .venv/bin/activate`.
 - For GitHub issue batches and Project #5 writes, follow the batch-first workflow in

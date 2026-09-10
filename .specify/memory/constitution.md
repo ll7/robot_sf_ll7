@@ -127,7 +127,7 @@ Rationale: Test suites grow over time but not all tests age well. Without explic
 Implementation Guidance:
 - On test failure in CI/PR: reviewer asks "Is this test worth fixing?" before assigning work.
 - Quarterly test audit: sort tests by runtime and failure frequency; challenge bottom 10% on value.
-- Documentation: `tests/README.md` or test module docstrings should explain test categories and priority tiers.
+- Documentation: test module docstrings, or `tests/README.md` when present, should explain test categories and priority tiers.
 
 Non-compliance Handling:
 - Fixing every test failure without questioning value violates this principle (wasted effort).

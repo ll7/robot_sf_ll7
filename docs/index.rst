@@ -86,6 +86,7 @@ references.
 
    Developer Guide <dev_guide>
    Public API <public_api>
+   CLI Reference <cli_reference>
    API Reference <api/index>
    Environment API <ENVIRONMENT>
    Reward Profiles Reference <training/reward_profiles>

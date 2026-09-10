@@ -268,3 +268,99 @@ def test_check_pointer_file_allows_provider_specific_section(
         forbidden_sections=("test failure evaluation",),
     )
     assert sync_ai_config._check_pointer_file(spec) == []
+
+
+def _write_pointer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> None:
+    """Create a temporary claude adapter file for scope-boundary fixtures."""
+    monkeypatch.setattr(sync_ai_config, "REPO_ROOT", tmp_path)
+    pointer = tmp_path / ".claude" / "CLAUDE.md"
+    pointer.parent.mkdir()
+    pointer.write_text(body, encoding="utf-8")
+
+
+def test_check_pointer_file_rejects_unknown_renamed_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A renamed policy section cannot bypass the adapter boundary."""
+    _write_pointer(
+        tmp_path,
+        monkeypatch,
+        "Follow AGENTS.md.\n\n## Repository Rules\n\nNever push directly.\n",
+    )
+    spec = sync_ai_config.PointerSpec(
+        ".claude/CLAUDE.md", "AGENTS.md", allowed_sections=("provider mechanics",)
+    )
+
+    errors = sync_ai_config._check_pointer_file(spec)
+
+    assert any("not an allowed provider-mechanics section" in error for error in errors)
+
+
+def test_check_pointer_file_rejects_validation_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A generic validation section is not provider mechanics."""
+    _write_pointer(
+        tmp_path,
+        monkeypatch,
+        "Follow AGENTS.md.\n\n## Validation\n\nRun the full suite.\n",
+    )
+    spec = sync_ai_config.PointerSpec(
+        ".claude/CLAUDE.md", "AGENTS.md", allowed_sections=("provider mechanics",)
+    )
+
+    errors = sync_ai_config._check_pointer_file(spec)
+
+    assert any("'validation'" in error for error in errors)
+
+
+def test_check_pointer_file_rejects_arbitrary_renamed_equivalent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An invented heading receives the same treatment as a known policy heading."""
+    _write_pointer(
+        tmp_path,
+        monkeypatch,
+        "Follow AGENTS.md.\n\n## Project Directives\n\nNo force pushes.\n",
+    )
+    spec = sync_ai_config.PointerSpec(
+        ".claude/CLAUDE.md", "AGENTS.md", allowed_sections=("provider mechanics",)
+    )
+
+    errors = sync_ai_config._check_pointer_file(spec)
+
+    assert any("'project directives'" in error for error in errors)
+
+
+def test_check_pointer_file_allows_headings_inside_code_fences(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fenced examples may show headings without becoming adapter policy."""
+    _write_pointer(
+        tmp_path,
+        monkeypatch,
+        "Follow AGENTS.md.\n\n## Provider Mechanics\n\n```md\n## Validation\n```\n",
+    )
+    spec = sync_ai_config.PointerSpec(
+        ".claude/CLAUDE.md", "AGENTS.md", allowed_sections=("provider mechanics",)
+    )
+
+    assert sync_ai_config._check_pointer_file(spec) == []
+
+
+def test_live_adapters_pass_provider_scope() -> None:
+    """The shipped provider adapters satisfy the enforced allowed-section contract."""
+    manifest = sync_ai_config.load_manifest()
+    errors: list[str] = []
+    for spec in manifest.pointer_files:
+        errors.extend(sync_ai_config._check_pointer_file(spec))
+
+    assert errors == []
+
+
+def test_live_adapters_contain_no_volatile_model_ids() -> None:
+    """Adapter prose does not pin provider model versions."""
+    claude = (sync_ai_config.REPO_ROOT / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
+    lowered = claude.lower()
+    for token in ("opus 4", "sonnet 4", "gpt-4", "gpt-5", "gemini 2"):
+        assert token not in lowered, token

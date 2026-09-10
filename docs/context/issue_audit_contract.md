@@ -54,14 +54,48 @@ The core inventories, with bounded pagination:
 
 The canonical open-issue source reports a machine-readable `source_status`:
 `complete` when canonical issue rows are present, `empty` only when a
-successful REST response explicitly contains no rows, `unavailable` when the
-read is failed or partial, and `anomalous` when a successful response contains
-only non-canonical or malformed rows. A zero-row source without this contract
-is also anomalous. The plan copies this result to `issue_inventory_status`;
-`unavailable` and `anomalous` add `issues` to `truncation_or_errors`, suppress
-mutations, and make the plan command return non-zero. Apply refuses those
-plans before any REST mutation. An explicit `--max-wall-seconds 0` remains the
-separate no-budget timeout path and is not treated as a proven empty source.
+successful REST response explicitly contains no rows and proves the complete
+successful-empty contract, `unavailable` when the read is failed or partial,
+and `anomalous` when a successful response contains only non-canonical or
+malformed rows. The successful-empty contract includes the exact canonical
+source and source kind, `source_proof: successful_empty_response`,
+`available: true`, `truncated: false`, an empty `errors` list, positive page
+and request counts within the page budget, and zero raw, canonical, non-object,
+malformed-object, and normalized row counts. A zero-row source without this
+contract is also anomalous. Canonical issue URLs must use HTTPS on the expected
+`github.com` host and the exact requested `owner/repository/issues/<number>` path;
+the numeric `/issues/<number>` suffix alone is not identity. REST rows are
+validated before normalization: title and `updated_at` must be non-empty valid
+strings, and fields used from nested users, labels, assignees, and comments must
+have their expected scalar or object shape. The open-issues endpoint's integer
+`comments` count is accepted as a row summary and normalized to an empty comment
+list until optional comment enrichment runs. Optional comment enrichment
+validates each nested `user` as an object or null with a non-empty `login`;
+malformed comment rows are excluded and make the comment evidence unavailable. A
+non-empty plan row must retain a
+positive issue number, open state, repository-bound URL, title, non-empty valid
+update version, and normalized label list; every mutation or pending decision
+must reference one of those exact canonical rows. The plan copies this result to
+`issue_inventory_status`; `unavailable` and `anomalous` add `issues` to
+`truncation_or_errors`, suppress mutations, and make the plan command return
+non-zero. Apply and decision-envelope admission refuse an inadmissible source
+or a row/reference mismatch regardless of the number of rows or mutations in a
+forged plan. An empty canonical inventory cannot carry mutations or pending
+decisions. A pending decision must also match its canonical row's number, title,
+URL, state, labels, classification, decision evidence, evidence sources, and
+documented options; only the apply-produced `safe_mutations_applied` field is
+dynamic. The top-level `legacy_issue_inventory: true` marker is retained and
+round-tripped for pre-contract callers, but it never proves missing source
+metadata, an empty inventory, or a quota state. A marker-bearing plan still
+needs the complete source contract before it can authorize mutations or an
+envelope; the marker does not excuse a partial metadata mapping, an omitted or
+null `source_status`, or malformed typed fields. Explicit quota uncertainty or
+unavailable status is not admissible even when the issue source otherwise looks
+complete. Request and page counts must be non-negative and satisfy
+`pages_read <= requests_attempted <= page_budget`; impossible values are
+anomalous. The current planner never emits the marker for live discovery.
+An explicit `--max-wall-seconds 0` remains the separate no-budget timeout path
+and is not treated as a proven empty source.
 
 An inventory page cap, failed read, unavailable SLURM query for a
 resource:slurm issue, or failed readback is an uncertainty. The plan records it
@@ -94,6 +128,22 @@ collection, failed source read, or uncertain quota result sets
 top-level and per-issue mutations. A mid-run rate limit also records the core
 reset time, retry-after timestamp, retry command, and a human-readable handoff
 so the next run can resume only after a fresh inventory.
+
+Any plan that contains mutations or pending decisions, and any decision-envelope
+path that could lead to a write, must carry a present, complete, healthy quota
+object. The required fields are `available: true`, `status: "ok"`,
+`core_remaining`, `core_reset_at` (an integer or null), `available_budget`,
+`min_core_remaining`, `retry_command`, `next_action: "none"`, `reason`, an
+empty `errors` list, false `quota_exhausted`, `quota_uncertain`, and
+`budget_exhausted` flags, and complete `request_budget`,
+`requests_attempted`, and `requests_remaining` accounting. The accounting must
+be consistent (`available_budget = core_remaining - min_core_remaining`,
+`request_budget = available_budget`, and
+`requests_attempted + requests_remaining = request_budget`). Omitted, empty,
+partial, inconsistent, or unhealthy quota metadata fails closed before any
+REST mutation or decision answer can be admitted. A read-only no-op diagnostic
+plan may omit quota only when it contains no write-capable mutation or pending
+decision; generated write-capable plans always include the complete contract.
 
 Issue bodies and comments are evidence sources for decisions and gates. They
 are not permission to infer missing provenance, rights, compute authorization,
@@ -302,13 +352,48 @@ Every plan has schema issue_audit_plan.v1 and contains:
       "repo": "ll7/robot_sf_ll7",
       "mode": "autonomous",
       "project5": {"writes": false, "owner": "gh-issue-sequencer"},
+      "quota": {
+        "available": true,
+        "status": "ok",
+        "core_remaining": 500,
+        "core_reset_at": 1800000100,
+        "available_budget": 490,
+        "min_core_remaining": 10,
+        "retry_command": "uv run python scripts/dev/issue_audit_core.py plan",
+        "next_action": "none",
+        "reason": "sufficient core quota available",
+        "errors": [],
+        "quota_exhausted": false,
+        "quota_uncertain": false,
+        "budget_exhausted": false,
+        "request_budget": 490,
+        "requests_attempted": 1,
+        "requests_remaining": 489
+      },
       "inventory": {
         "issues": {
+          "available": true,
+          "pages_read": 1,
+          "requests_attempted": 1,
+          "per_page": 100,
+          "page_budget": 10,
+          "row_count": 0,
+          "canonical_row_count": 0,
+          "raw_row_count": 0,
+          "non_object_row_count": 0,
+          "truncated": false,
+          "errors": [],
+          "source": "repos/ll7/robot_sf_ll7/issues?state=open",
+          "source_kind": "canonical_open_issues",
           "source_status": "empty",
-          "source_proof": "successful_empty_response"
+          "source_proof": "successful_empty_response",
+          "source_status_reason": "successful empty response from the canonical open-issue source"
         }
       },
       "issue_inventory_status": {
+        "source": "repos/ll7/robot_sf_ll7/issues?state=open",
+        "source_kind": "canonical_open_issues",
+        "canonical_row_count": 0,
         "status": "empty",
         "admissible": true,
         "source_proof": "successful_empty_response"
@@ -412,6 +497,11 @@ interactive skill may ask one focused clarification question but must not
 invent a policy option or apply an answer. A truncated inventory, a relevant
 unavailable SLURM inventory, a stale plan digest, or changed live issue state
 is fail-closed.
+
+Envelope validation independently binds the selected issue projection to one
+current pending decision row and its canonical issue row in the supplied plan;
+a matching plan digest alone is not enough. A validator call without the
+current plan is therefore not admissible for answer application.
 
 The answer format is `#<issue-number>: <option-token>`. The token must be one
 of the source-backed options in the envelope. Before applying it, the

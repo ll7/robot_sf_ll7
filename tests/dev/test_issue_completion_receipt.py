@@ -28,6 +28,24 @@ HEAD_SHA = "b" * 40
 NEW_HEAD_SHA = "c" * 40
 CONTRACT = "Completion condition: merged PR #9000\n"
 BRANCH = "issue-7614-completion-receipt"
+HEALTHY_AUDIT_QUOTA = {
+    "available": True,
+    "status": "ok",
+    "core_remaining": 500,
+    "core_reset_at": 1_800_000_100,
+    "available_budget": 490,
+    "min_core_remaining": 10,
+    "retry_command": "uv run python scripts/dev/issue_audit_core.py plan",
+    "next_action": "none",
+    "reason": "sufficient core quota available",
+    "errors": [],
+    "quota_exhausted": False,
+    "quota_uncertain": False,
+    "budget_exhausted": False,
+    "request_budget": 490,
+    "requests_attempted": 1,
+    "requests_remaining": 489,
+}
 
 
 def _payload(*, artifact_root: Path | None = None) -> dict[str, Any]:
@@ -472,7 +490,9 @@ def test_audit_plan_accepts_issue_number_keyed_receipt_inventory() -> None:
                 {
                     "number": 7614,
                     "title": "Require completion receipt",
+                    "url": "https://github.com/ll7/robot_sf_ll7/issues/7614",
                     "state": "open",
+                    "updated_at": "2026-08-20T00:00:00Z",
                     "body": CONTRACT,
                     "labels": [],
                     "comments": [],
@@ -494,7 +514,28 @@ def test_audit_plan_accepts_issue_number_keyed_receipt_inventory() -> None:
             "completion_receipts": {
                 "7614": {"receipt": receipt, "verification": _verification(receipt)}
             },
-            "inventory": {},
+            "inventory": {
+                "quota": dict(HEALTHY_AUDIT_QUOTA),
+                "issues": {
+                    "source": "repos/ll7/robot_sf_ll7/issues?state=open",
+                    "source_kind": "canonical_open_issues",
+                    "source_status": "complete",
+                    "source_proof": "canonical_issue_rows",
+                    "source_status_reason": "canonical open-issue response is complete",
+                    "available": True,
+                    "truncated": False,
+                    "errors": [],
+                    "pages_read": 1,
+                    "requests_attempted": 1,
+                    "per_page": 100,
+                    "page_budget": 10,
+                    "row_count": 1,
+                    "raw_row_count": 1,
+                    "canonical_row_count": 1,
+                    "non_object_row_count": 0,
+                    "malformed_object_row_count": 0,
+                },
+            },
         }
     )
 

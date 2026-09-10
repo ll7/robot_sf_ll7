@@ -1,0 +1,8 @@
+# Invalid schema fixture
+scenarios:
+  - name: invalid_schema_scenario
+    map_file: ../../../maps/svg_maps/classic_crossing.svg
+    simulation_config:
+      ped_density: -0.5
+      max_episode_steps: 100
+    repeats: 0

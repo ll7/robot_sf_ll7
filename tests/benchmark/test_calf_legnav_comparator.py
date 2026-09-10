@@ -479,9 +479,9 @@ def test_runtime_checkpoint_refs_require_a_paired_registry_match() -> None:
     refs = comparator_runner._runtime_checkpoint_refs(traces, expected_sha256="b" * 64)
     assert refs["checkpoint_sha256_matches_declared"] == "false"
 
-    traces["perfect_perception"]["planner_summary"]["checkpoint_provenance"][
-        "hash_source"
-    ] = "declared_registry_digest"
+    traces["perfect_perception"]["planner_summary"]["checkpoint_provenance"]["hash_source"] = (
+        "declared_registry_digest"
+    )
     refs = comparator_runner._runtime_checkpoint_refs(traces, expected_sha256=digest)
     assert refs["checkpoint_sha256_runtime"] == "unavailable"
     error = comparator_runner._runtime_provenance_error(refs)

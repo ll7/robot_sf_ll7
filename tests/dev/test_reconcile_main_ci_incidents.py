@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from scripts.dev import reconcile_main_ci_incidents as reconciler
+from scripts.dev.main_ci_is_green import MainCiRunWindow
 
 REPO = "owner/repo"
 INCIDENT_LABEL = reconciler.INCIDENT_LABEL
@@ -210,6 +211,62 @@ def test_paginated_actions_fetch_fails_closed_at_page_budget() -> None:
         )
 
     assert any(path.endswith("page=2") for path in fake.calls)
+
+
+def test_scheduled_reader_delegates_to_shared_pagination_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scheduled reader wraps the shared reader with its two-decisive target."""
+    observed: dict[str, Any] = {}
+    shared_runs = [
+        _run(500, "success", "2026-09-01T02:00:00Z"),
+        _run(400, "success", "2026-09-01T01:00:00Z"),
+    ]
+    sentinel_runner = object()
+
+    def fake_window(
+        repo: str,
+        workflow: str,
+        *,
+        max_pages: int,
+        stop_after_decisive: int,
+        runner: object,
+    ) -> MainCiRunWindow:
+        observed.update(
+            repo=repo,
+            workflow=workflow,
+            max_pages=max_pages,
+            stop_after_decisive=stop_after_decisive,
+            runner=runner,
+        )
+        return MainCiRunWindow(runs=shared_runs, window_exhausted=False)
+
+    monkeypatch.setattr(reconciler, "fetch_run_window", fake_window)
+
+    runs = reconciler._fetch_main_ci_runs(REPO, "CI", max_pages=3, runner=sentinel_runner)
+
+    assert runs == shared_runs
+    assert observed == {
+        "repo": REPO,
+        "workflow": "CI",
+        "max_pages": 3,
+        "stop_after_decisive": 2,
+        "runner": sentinel_runner,
+    }
+
+
+def test_scheduled_reader_fails_closed_when_shared_window_is_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exhausted shared window becomes the scheduled reader's hard error."""
+    monkeypatch.setattr(
+        reconciler,
+        "fetch_run_window",
+        lambda *a, **k: MainCiRunWindow(runs=[], window_exhausted=True),
+    )
+
+    with pytest.raises(reconciler.ReconciliationError, match="two decisive runs"):
+        reconciler._fetch_main_ci_runs(REPO, "CI", max_pages=3, runner=object())
 
 
 def test_parse_deciding_run_requires_one_canonical_field() -> None:

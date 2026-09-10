@@ -26,7 +26,14 @@ Verify:
 uv run robot-sf doctor --skip-env-smoke --skip-quickstart-smoke
 ```
 
-Then run one visible episode as shown in [Adoption path](./adoption_path.md).
+Smoke:
+
+```bash
+uv run robot-sf examples run quickstart/01_basic_robot --fast
+```
+
+The manifest-backed `quickstart/01_basic_robot` example resolves to
+`examples/quickstart/01_basic_robot.py` and runs a short CPU episode.
 
 ## macOS
 
@@ -47,8 +54,18 @@ Verify:
 uv run robot-sf doctor --skip-env-smoke --skip-quickstart-smoke
 ```
 
+Smoke:
+
+```bash
+uv run robot-sf examples run quickstart/01_basic_robot --fast
+```
+
+The macOS path is verified for the compatibility setup; interactive windowing remains outside
+the CI coverage described below.
+
 Core setup only: visualization extras install the same way as Linux, but windowing behavior
-on macOS is not covered by repository CI beyond the compatibility test subset.
+on macOS is not covered by repository CI beyond the compatibility test subset. If a visualization
+workflow needs a window and the host cannot open one, use the headless profile instead.
 
 ## Headless (servers and CI)
 
@@ -63,9 +80,31 @@ export PYTHONUNBUFFERED=1
 export PYGAME_HIDE_SUPPORT_PROMPT=1
 ```
 
-Then follow the Linux profile (`uv sync --all-extras`, doctor with skips) and run headless
-checks. GPU, Docker, CARLA, SLURM, model downloads, and external data are explicitly out of
-scope here; see `docs/dev_runtime_requirements.md` for those lanes.
+Setup:
+
+```bash
+git clone https://github.com/ll7/robot_sf_ll7
+cd robot_sf_ll7
+scripts/dev/check_runtime_requirements.sh
+uv sync --all-extras
+```
+
+Verify:
+
+```bash
+uv run robot-sf doctor --skip-env-smoke --skip-quickstart-smoke
+```
+
+Smoke:
+
+```bash
+uv run robot-sf examples run quickstart/01_basic_robot --fast
+```
+
+The manifest-backed example is the headless first-episode smoke; the exported variables above
+keep its rendering dependencies off-screen. GPU, Docker, CARLA, SLURM, model downloads, and
+external data are explicitly out of scope here; see `docs/dev_runtime_requirements.md` for
+those lanes.
 
 ## What is not covered
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import tomllib
 from pathlib import Path
@@ -148,6 +149,85 @@ def test_entry_point_help_smoke_and_byte_stable_render() -> None:
     committed = OUTPUT_PATH.read_text(encoding="utf-8")
     assert committed == rendered
     assert committed.endswith("\n") and not committed.endswith("\n\n")
+
+
+def test_entry_point_help_ignores_ambient_terminal_and_carla_environment(
+    monkeypatch,
+) -> None:
+    """Fixed probe settings keep generated help stable across ambient host variables."""
+    gen = _load_generator()
+    probe_results = []
+    for columns, lines, carla_host in (
+        ("40", "3", "ambient-first.invalid:2000"),
+        ("120", "200", "ambient-second.invalid:3000"),
+    ):
+        monkeypatch.setenv("COLUMNS", columns)
+        monkeypatch.setenv("LINES", lines)
+        monkeypatch.setenv("CARLA_HOST", carla_host)
+        probe_results.append(
+            gen.probe_help(
+                "robot-sf",
+                "robot_sf.cli:main",
+                REPO_ROOT,
+                timeout_s=gen.HELP_TIMEOUT_S,
+            )
+        )
+    first, second = probe_results
+    assert first.help_ok, first.help_error
+    assert second.help_ok, second.help_error
+    assert first.help_text == second.help_text
+    assert first.synopsis == second.synopsis
+    assert first.subcommands == second.subcommands
+    assert first.subcommand_help == second.subcommand_help
+
+
+def test_entry_point_probe_bounds_import_and_parser_side_effects(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Callable import and parser construction happen only in the bounded child."""
+    gen = _load_generator()
+    module_name = f"cli_probe_side_effect_{os.getpid()}"
+    marker = tmp_path / "probe-events.txt"
+    module_path = tmp_path / f"{module_name}.py"
+    module_path.write_text(
+        "import argparse\n"
+        "import os\n"
+        "import time\n"
+        "from pathlib import Path\n"
+        f"_marker = Path({str(marker)!r})\n"
+        "with _marker.open('a', encoding='utf-8') as handle:\n"
+        "    handle.write(f'import:{os.getpid()}\\n')\n"
+        "if os.getpid() == int(os.environ['CLI_PROBE_PARENT_PID']):\n"
+        "    time.sleep(2)\n"
+        "def _build_parser():\n"
+        "    with _marker.open('a', encoding='utf-8') as handle:\n"
+        "        handle.write(f'parser:{os.getpid()}\\n')\n"
+        "    return argparse.ArgumentParser(description='side-effect probe')\n"
+        "def main(argv):\n"
+        "    if argv != ['--help']:\n"
+        "        return 1\n"
+        "    print('usage: side-effect [--help]')\n"
+        "    print('side-effect help')\n"
+        "    return 0\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    monkeypatch.setenv("CLI_PROBE_PARENT_PID", str(os.getpid()))
+
+    result = gen.probe_help(
+        "side-effect",
+        f"{module_name}:main",
+        REPO_ROOT,
+        timeout_s=1,
+    )
+
+    assert result.help_ok, result.help_error
+    events = marker.read_text(encoding="utf-8").splitlines()
+    assert events
+    event_pids = [event.rsplit(":", 1)[1] for event in events]
+    assert all(pid != str(os.getpid()) for pid in event_pids)
+    assert [event.split(":", 1)[0] for event in events] == ["import", "parser"]
 
 
 def test_entry_point_negative_unimportable_callable() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -160,6 +161,41 @@ def test_broad_exception_ratchet_fails_on_unapproved_replacement(tmp_path: Path)
     assert "Broad exception count increased" not in result.stderr
     assert "Unapproved broad exception handlers were added:" in result.stderr
     assert "scripts/demo/tool.py:4: except Exception:" in result.stderr
+
+
+def test_broad_exception_ratchet_rejects_stale_summary_counts(tmp_path: Path) -> None:
+    """A stale counts summary must fail even when entry fingerprints are unchanged."""
+    repo = _make_repo(tmp_path)
+    baseline = Path("scripts/validation/broad_exception_baseline.json")
+    (repo / baseline.parent).mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--root",
+            str(repo),
+            "--baseline",
+            str(baseline),
+            "--write-baseline",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    baseline_path = repo / baseline
+    payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+    payload["counts"]["total"] = 99
+    baseline_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--root", str(repo), "--baseline", str(baseline)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "Broad exception baseline summary is stale" in result.stderr
 
 
 def test_ratchet_is_wired_into_ci_lint_phase() -> None:

@@ -5,10 +5,11 @@ Usage:
     uv run python scripts/dev/generate_cli_reference.py [--check]
 
 Reads every ``[project.scripts]`` entry from ``pyproject.toml`` in deterministic
-order, runs a bounded isolated ``--help`` smoke for each import-safe callable,
-and renders ``docs/cli_reference.md`` from ``docs/cli_reference_meta.yaml``
-plus live parser help. With ``--check``, exits 1 when the committed reference
-differs from the deterministic render instead of writing it.
+order, runs a bounded isolated ``--help`` smoke for each callable, and renders
+``docs/cli_reference.md`` from ``docs/cli_reference_meta.yaml`` plus live parser
+help. Entry-point imports, signatures, and parser introspection all stay inside
+the bounded child. With ``--check``, exits 1 when the committed reference differs
+from the deterministic render instead of writing it.
 
 The ``--help`` smoke is local-only: it never touches the network, a simulator,
 a scheduler, or repository artifacts beyond reading help text.
@@ -18,14 +19,14 @@ from __future__ import annotations
 
 import argparse
 import difflib
-import importlib
-import inspect
+import json
 import os
 import re
 import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass, field
+from io import StringIO
 from pathlib import Path
 
 import yaml
@@ -38,6 +39,8 @@ OUTPUT_REL = Path("docs/cli_reference.md")
 ALLOWED_PROFILES = ("core", "benchmark", "carla")
 HELP_TIMEOUT_S = 15
 HELP_COLUMNS = 80
+PROBE_FLAG = "--_probe-help"
+PROBE_RESULT_PREFIX = "__robot_sf_cli_reference_probe__:"
 
 PARSER_GETTERS = ("get_parser", "_build_parser", "_configure_parser", "build_parser")
 
@@ -61,6 +64,7 @@ class ProbeResult:
     help_text: str = ""
     synopsis: str = ""
     subcommands: list[str] = field(default_factory=list)
+    subcommand_help: dict[str, str] = field(default_factory=dict)
 
     @property
     def status(self) -> str:
@@ -230,7 +234,7 @@ def validate_metadata_entries(
 
 
 def _parser_subcommands(parser: object) -> list[str]:
-    """Extract sorted subcommand names from a live argparse parser."""
+    """Extract sorted subcommand names from a live argparse parser in the child."""
     subcommands: set[str] = set()
     actions = getattr(parser, "_actions", [])
     for action in actions:
@@ -243,34 +247,41 @@ def _parser_subcommands(parser: object) -> list[str]:
     return sorted(subcommands)
 
 
-def get_live_parser_info(module_name: str) -> tuple[str, list[str]]:
-    """Return ``(description, subcommands)`` from an import-safe parser getter.
+def _parser_subcommand_help(parser: object) -> dict[str, str]:
+    """Extract one-line subcommand help from a live parser in the child."""
+    helps: dict[str, str] = {}
+    for action in getattr(parser, "_actions", []):
+        if type(action).__name__ != "_SubParsersAction":
+            continue
+        choices = getattr(action, "choices", {}) or {}
+        for key, subparser in choices.items():
+            if not isinstance(key, str):
+                continue
+            text = str(getattr(subparser, "description", "") or getattr(action, "help", ""))
+            help_text = ""
+            for sub_action in getattr(action, "_choices_actions", []):
+                if getattr(sub_action, "dest", None) == key or sub_action.metavar == key:
+                    help_text = str(getattr(sub_action, "help", "") or "")
+                    break
+            candidate = help_text or text
+            helps[key] = " ".join(candidate.split())[:200] or "-"
+    return helps
 
-    Args:
-        module_name: Dotted module owning the console script callable.
 
-    Returns:
-        Parser description (possibly empty) and sorted subcommand names. Both
-        are empty when no known parser getter exists.
-    """
-    try:
-        module = importlib.import_module(module_name)
-    except Exception:  # noqa: BLE001 - probe path; import errors handled by help smoke
-        return "", []
+def _child_parser_info(module: object) -> tuple[str, list[str], dict[str, str]]:
+    """Return parser metadata; callers run this only inside the bounded child."""
     for getter in PARSER_GETTERS:
-        factory = getattr(module, getter, None)
-        if not callable(factory):
-            continue
         try:
+            factory = getattr(module, getter, None)
+            if not callable(factory):
+                continue
             parser = factory()
-        except Exception:  # noqa: BLE001 - factory may need args; fall back to help text
+            description = str(getattr(parser, "description", "") or "").strip()
+            description = " ".join(description.split())
+            return description, _parser_subcommands(parser), _parser_subcommand_help(parser)
+        except Exception:  # noqa: BLE001 - arbitrary parser factories stay child-bounded
             continue
-        description = str(getattr(parser, "description", "") or "").strip()
-        description = " ".join(description.split())
-        return description, _parser_subcommands(parser)
-    # robot_sf.cli exposes only _build_parser (covered above); keep the direct
-    # fallback for modules that build the parser under a private name.
-    return "", []
+    return "", [], {}
 
 
 def extract_subcommands_from_help(help_text: str) -> list[str]:
@@ -329,19 +340,201 @@ def extract_synopsis(help_text: str, fallback_description: str = "") -> str:
     return ""
 
 
-def _help_call_code(script: str, module_name: str, attr: str, takes_argv: bool) -> str:
-    """Build the isolated ``--help`` snippet for a subprocess."""
-    if takes_argv:
+def _child_exit_code(value: object) -> int:
+    """Normalize a console callable return value to a process exit code."""
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    return 1
+
+
+def _child_import_target(module_name: str, attr: str) -> tuple[object | None, object | None, str]:
+    """Import one entry point in the child and return a fail-closed error string."""
+    import importlib
+
+    try:
+        module = importlib.import_module(module_name)
+        return module, getattr(module, attr), ""
+    except Exception as exc:  # noqa: BLE001 - arbitrary import failures stay child-bounded
+        return None, None, f"{type(exc).__name__}: {exc}".strip()[:300]
+
+
+def _child_takes_argv(target: object) -> bool:
+    """Determine the callable convention inside the bounded child."""
+    import inspect
+
+    try:
+        return len(inspect.signature(target).parameters) > 0
+    except Exception:  # noqa: BLE001 - custom signatures stay child-bounded
+        return True
+
+
+def _child_invoke(
+    script: str, target: object, stdout: StringIO, stderr: StringIO
+) -> tuple[object | None, str]:
+    """Invoke a help callable in the child and return its value or error."""
+    try:
+        if _child_takes_argv(target):
+            sys.argv = [script]
+            return target(["--help"]), ""
+        sys.argv = [script, "--help"]
+        return target(), ""
+    except SystemExit as exc:
+        return exc.code, ""
+    except Exception as exc:  # noqa: BLE001 - arbitrary help failures stay fail-closed
+        return None, f"{type(exc).__name__}: {exc}".strip()[:300]
+
+
+def _child_help_payload(
+    script: str,
+    module: object,
+    target: object,
+    stdout: StringIO,
+    stderr: StringIO,
+) -> dict[str, object]:
+    """Build the successful or fail-closed help payload inside the child."""
+    returned, invocation_error = _child_invoke(script, target, stdout, stderr)
+    if invocation_error:
+        return {"help_error": invocation_error}
+    exit_code = _child_exit_code(returned)
+    if exit_code != 0:
+        detail = ""
+        if not isinstance(returned, (type(None), int, bool)):
+            detail = str(returned).strip()
+        if not detail:
+            output = (stderr.getvalue() or stdout.getvalue()).strip().splitlines()
+            detail = " ".join(output[0].split()) if output else "exit nonzero"
+        return {"help_error": f"--help exit {exit_code}: {detail}"[:300]}
+
+    help_text = stdout.getvalue()
+    normalized = "\n".join(line.rstrip() for line in help_text.splitlines()).strip() + "\n"
+    if not normalized.strip():
+        return {"help_error": "--help produced no output"}
+    description, subcommands, subcommand_help = _child_parser_info(module)
+    return {
+        "help_ok": True,
+        "help_text": normalized,
+        "description": description,
+        "subcommands": subcommands,
+        "subcommand_help": subcommand_help,
+    }
+
+
+def _run_probe_child(script: str, module_name: str, attr: str, repo_root: Path) -> int:
+    """Import, introspect, and invoke one entry point inside the bounded child."""
+    import contextlib
+
+    payload: dict[str, object] = {
+        "import_ok": False,
+        "import_error": "",
+        "help_ok": False,
+        "help_error": "",
+        "help_text": "",
+        "description": "",
+        "subcommands": [],
+        "subcommand_help": {},
+    }
+    stdout = StringIO()
+    stderr = StringIO()
+    sys.path.insert(0, str(repo_root))
+    # Keep import-time argv conservative. The exact callable invocation argv is
+    # selected after the bounded child has inspected the target signature.
+    sys.argv = [script]
+    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        module, target, import_error = _child_import_target(module_name, attr)
+        if import_error:
+            payload["import_error"] = import_error
+        else:
+            payload["import_ok"] = True
+            payload.update(_child_help_payload(script, module, target, stdout, stderr))
+
+    sys.__stdout__.write(PROBE_RESULT_PREFIX + json.dumps(payload, sort_keys=True) + "\n")
+    return 0
+
+
+def _run_probe_subprocess(
+    command: list[str], repo_root: Path, env: dict[str, str], timeout_s: int
+) -> tuple[subprocess.CompletedProcess[str] | None, str]:
+    """Run one bounded child process and return a launch/timeout error separately."""
+    try:
         return (
-            "import sys; sys.argv=[sys.argv[1]]; "
-            f"from {module_name} import {attr} as _fn; "
-            "raise SystemExit(_fn(['--help']))"
+            subprocess.run(
+                command,
+                cwd=str(repo_root),
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                check=False,
+            ),
+            "",
         )
-    return (
-        "import sys; sys.argv=[sys.argv[1], '--help']; "
-        f"from {module_name} import {attr} as _fn; "
-        "raise SystemExit(_fn())"
+    except subprocess.TimeoutExpired:
+        return None, f"--help timed out after {timeout_s}s"
+    except (OSError, ValueError) as exc:  # subprocess launch failures only
+        return None, f"--help launch failed: {exc}".strip()[:300]
+
+
+def _decode_probe_payload(
+    completed: subprocess.CompletedProcess[str],
+) -> tuple[dict[str, object] | None, str]:
+    """Decode the structured result emitted by the bounded child."""
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip().splitlines()
+        first = " ".join(detail[0].split()) if detail else "exit nonzero"
+        return None, f"--help exit {completed.returncode}: {first}"[:300]
+    payload_lines = [
+        line[len(PROBE_RESULT_PREFIX) :]
+        for line in (completed.stdout or "").splitlines()
+        if line.startswith(PROBE_RESULT_PREFIX)
+    ]
+    if len(payload_lines) != 1:
+        return None, "--help probe returned malformed child output"
+    try:
+        payload = json.loads(payload_lines[0])
+    except (json.JSONDecodeError, TypeError) as exc:
+        return None, f"--help probe returned invalid child payload: {exc}"[:300]
+    if not isinstance(payload, dict):
+        return None, "--help probe returned a non-object child payload"
+    return payload, ""
+
+
+def _apply_probe_payload(result: ProbeResult, payload: dict[str, object]) -> None:
+    """Apply a decoded child result to its parent-side probe record."""
+    if not payload.get("import_ok"):
+        result.import_error = str(payload.get("import_error") or "unknown import failure")[:300]
+        return
+    result.import_ok = True
+    if not payload.get("help_ok"):
+        result.help_error = str(payload.get("help_error") or "unknown help failure")[:300]
+        return
+    help_text = payload.get("help_text")
+    if not isinstance(help_text, str) or not help_text.strip():
+        result.help_error = "--help probe returned empty child help text"
+        return
+    result.help_ok = True
+    result.help_text = help_text
+    live_description = str(payload.get("description") or "")
+    result.synopsis = extract_synopsis(help_text, live_description)
+    raw_subcommands = payload.get("subcommands")
+    live_subs = (
+        sorted({value for value in raw_subcommands if isinstance(value, str) and value.strip()})
+        if isinstance(raw_subcommands, list)
+        else []
     )
+    # Prefer parser subcommands when available; help-text braces also match
+    # option choices, so text extraction is only a fallback.
+    result.subcommands = live_subs or extract_subcommands_from_help(help_text)
+    raw_subcommand_help = payload.get("subcommand_help")
+    if isinstance(raw_subcommand_help, dict):
+        result.subcommand_help = {
+            key: value
+            for key, value in raw_subcommand_help.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
 
 
 def probe_help(
@@ -351,6 +544,10 @@ def probe_help(
     timeout_s: int = HELP_TIMEOUT_S,
 ) -> ProbeResult:
     """Run a bounded isolated ``--help`` smoke for one console script.
+
+    The child owns entry-point imports, signature detection, parser construction,
+    and subcommand introspection; the parent only launches it and decodes the
+    structured result.
 
     Args:
         script: Console script name (used as ``sys.argv[0]`` for stable help).
@@ -368,61 +565,39 @@ def probe_help(
         return result
     module_name, attr = spec.split(":", 1)
     module_name, attr = module_name.strip(), attr.strip()
-    try:
-        module = importlib.import_module(module_name)
-        target = getattr(module, attr)
-    except Exception as exc:  # noqa: BLE001 - fail-closed probe records the reason
-        result.import_error = f"{type(exc).__name__}: {exc}".strip()[:300]
-        return result
-    result.import_ok = True
-
-    try:
-        takes_argv = len(inspect.signature(target).parameters) > 0
-    except (TypeError, ValueError):
-        takes_argv = True
-    code = _help_call_code(script, module_name, attr, takes_argv)
     env = dict(os.environ)
     env["COLUMNS"] = str(HELP_COLUMNS)
     env["LINES"] = "24"
     # Keep the smoke read-only: --help must never need credentials or remotes.
     env.pop("CARLA_HOST", None)
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-c", code, script],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        result.help_error = f"--help timed out after {timeout_s}s"
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        PROBE_FLAG,
+        "--repo-root",
+        str(repo_root),
+        "--script",
+        script,
+        "--module",
+        module_name,
+        "--attr",
+        attr,
+    ]
+    completed, process_error = _run_probe_subprocess(command, repo_root, env, timeout_s)
+    if process_error:
+        result.help_error = process_error
         return result
-    except (OSError, ValueError) as exc:  # subprocess launch failures only
-        result.help_error = f"--help launch failed: {exc}".strip()[:300]
+    if completed is None:
+        result.help_error = "--help probe did not return a child result"
         return result
-    if completed.returncode != 0:
-        detail = (completed.stderr or completed.stdout or "").strip().splitlines()
-        first = " ".join(detail[0].split()) if detail else "exit nonzero"
-        result.help_error = f"--help exit {completed.returncode}: {first}"[:300]
+    payload, payload_error = _decode_probe_payload(completed)
+    if payload_error:
+        result.help_error = payload_error
         return result
-    stdout = completed.stdout or ""
-    # Normalize for byte-stability: strip trailing spaces, enforce LF ending.
-    normalized = "\n".join(line.rstrip() for line in stdout.splitlines()).strip() + "\n"
-    if not normalized.strip():
-        result.help_error = "--help produced no output"
+    if payload is None:
+        result.help_error = "--help probe did not return a child payload"
         return result
-    result.help_ok = True
-    result.help_text = normalized
-    live_description, live_subs = get_live_parser_info(module_name)
-    result.synopsis = extract_synopsis(normalized, live_description)
-    # Prefer the import-safe parser subcommands when available; help-text braces
-    # also match option choices (e.g. --log-level {CRITICAL,...}), so text
-    # extraction is only a fallback for parsers without an exposed getter.
-    if live_subs:
-        result.subcommands = live_subs
-    else:
-        result.subcommands = extract_subcommands_from_help(normalized)
+    _apply_probe_payload(result, payload)
     return result
 
 
@@ -564,7 +739,7 @@ def render_markdown(
             lines.append("")
             lines.append("| Subcommand | Help | Guide |")
             lines.append("| --- | --- | --- |")
-            sub_help = _robot_sf_subcommand_help()
+            sub_help = probe.subcommand_help if probe is not None else {}
             sub_guides: dict[str, str] = meta.get("subcommands", {})
             for sub in sorted(subcommands):
                 help_text = sub_help.get(sub, "-")
@@ -590,36 +765,6 @@ def render_markdown(
     lines.append("- CI fails on drift: run the generator without `--check` to refresh this file.")
     lines.append("")
     return "\n".join(lines).rstrip() + "\n"
-
-
-def _robot_sf_subcommand_help() -> dict[str, str]:
-    """Return one-line help for each live ``robot-sf`` subcommand."""
-    try:
-        from robot_sf import cli as robot_cli
-    except Exception:  # noqa: BLE001 - fall back to empty; probe still records subcommands
-        return {}
-    try:
-        parser = robot_cli._build_parser()
-    except Exception:  # noqa: BLE001 - defensive; help smoke remains authoritative
-        return {}
-    helps: dict[str, str] = {}
-    for action in getattr(parser, "_actions", []):
-        if type(action).__name__ != "_SubParsersAction":
-            continue
-        choices = getattr(action, "choices", {}) or {}
-        for key, subparser in choices.items():
-            if not isinstance(key, str):
-                continue
-            text = str(getattr(subparser, "description", "") or getattr(action, "help", ""))
-            # Prefer the per-subcommand help registered on the subparsers action.
-            help_text = ""
-            for sub_action in getattr(action, "_choices_actions", []):
-                if getattr(sub_action, "dest", None) == key or sub_action.metavar == key:
-                    help_text = str(getattr(sub_action, "help", "") or "")
-                    break
-            candidate = help_text or text
-            helps[key] = " ".join(candidate.split())[:200] or "-"
-    return helps
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -716,5 +861,23 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _run_probe_child_cli(argv: list[str]) -> int:
+    """Parse the private child command used by :func:`probe_help`."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--repo-root", type=Path, required=True)
+    parser.add_argument("--script", required=True)
+    parser.add_argument("--module", required=True)
+    parser.add_argument("--attr", required=True)
+    args = parser.parse_args(argv)
+    return _run_probe_child(args.script, args.module, args.attr, args.repo_root.resolve())
+
+
+def _dispatch(argv: list[str]) -> int:
+    """Dispatch normal generator or the private bounded probe child."""
+    if argv and argv[0] == PROBE_FLAG:
+        return _run_probe_child_cli(argv[1:])
+    return main(argv)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_dispatch(sys.argv[1:]))

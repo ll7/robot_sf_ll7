@@ -37,8 +37,8 @@ The accepted handoff input and the checkout-based dispatch command are documente
 Route output never substitutes for repository-local artifact, diff, validation, benchmark,
 evidence-admission, or paper-facing acceptance proof.
 
-When canonical and compatibility surfaces disagree, follow the precedence rule in `AGENTS.md`.
-Patch the canonical source first, then update generated or mirrored compatibility surfaces when a
+When canonical and compatibility surfaces disagree, follow the `Instruction Precedence` contract in
+`AGENTS.md`. Patch the canonical source first, then update generated or mirrored compatibility surfaces when a
 sync command exists. If a broad mirror update would be risky, keep the canonical change bounded and
 open a follow-up issue that names the affected compatibility entry points.
 

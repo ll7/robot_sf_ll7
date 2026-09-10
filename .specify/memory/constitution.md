@@ -1,15 +1,15 @@
 <!--
 Sync Impact Report
-Previous Version: 1.4.2 -> New Version: 1.4.3 (PATCH bump)
-Rationale: Clarified that maintainer_values.md is higher-priority current guidance while the constitution remains strict for benchmark, metric, schema, reproducibility, and paper-facing contracts.
-Modified Principles: Governance
-Added Sections: None
+Previous Version: 1.4.3 -> New Version: 1.5.0 (MINOR bump)
+Rationale: Removed the constitution's claim to independent runtime authority. Repository-internal instruction precedence is now owned by the Instruction Precedence contract in AGENTS.md; stable WHAT contracts and governance remain.
+Modified Principles: Governance (authority relationship)
+Added Sections: Relationship To Operational Procedure
 Removed Sections: None
 Templates Updated:
- - ✅ AGENTS.md: Authority order now puts maintainer_values.md first
- - ✅ maintainer_values.md: Narrowed uncertainty labeling to substantive claims and added paper-grade checklist guidance
- - ✅ docs/context/INDEX.md: Relaxed pruning guidance for unambiguously stale context notes
- - ✅ gemini analyze command mirror: Matched softened constitution authority wording
+ - ✅ AGENTS.md: Owns the single Instruction Precedence contract
+ - ✅ .claude/CLAUDE.md: Local instruction numbering replaced by a link to the canonical contract
+ - ✅ docs/maintainer_values.md: Role stated as principles and tie-breakers, not a parallel authority
+ - ✅ docs/ai/agent_workflow_entrypoints.md: Precedence link only
 Pending Template Updates: None
 Deferred TODOs: None
 All placeholder tokens resolved; no bracketed ALL_CAPS identifiers remaining.
@@ -21,8 +21,16 @@ This Constitution specifies WHAT the Robot SF repository delivers: a cohesive, r
 and engineering platform for social navigation of a robot among pedestrians. Treat it as contributor
 guidance plus hard contract notes. Benchmark, metric, schema, reproducibility, and paper-facing
 contracts remain strict; softer workflow guidance should support maintainer-directed research
-progress rather than override it. `docs/maintainer_values.md` is the highest-priority current
-maintainer-values entry point when workflow guidance conflicts.
+progress rather than override it. It does not define a runtime agent precedence: repository-internal
+instruction resolution is owned by the `Instruction Precedence` contract in
+[`AGENTS.md`](../../AGENTS.md).
+
+### Relationship To Operational Procedure
+
+Operational workflow (who runs what, worktree and delivery steps, review mechanics, and agent
+routing) is owned by `AGENTS.md` and the procedure owners it routes to, not by this document. The
+principles below state platform contracts and contributor rationale; where they describe procedure,
+the canonical owner governs execution.
 
 ## Core Principles
 
@@ -191,6 +199,9 @@ Reliability Targets:
 
 ## Development Workflow & Compliance Gates (WHAT must exist)
 
+Operational procedure for these gates is owned by `AGENTS.md` and the procedure owners it routes to;
+this section states only the contract the platform must satisfy.
+
 Artifacts Required Before Merge:
 1. Updated documentation entries for any new public surface (factory, metric, baseline, figure type).
 2. Tests covering new or changed behaviors (smoke + logic assertions).
@@ -214,13 +225,13 @@ Traceability Requirements:
 
 ## Governance
 
-This Constitution is the default contributor guide for repository contracts and values. It
-supersedes stale ad-hoc practices, but current maintainer direction can override softer workflow
-guidance when the conflict is stated and the docs are updated or flagged. Amendments that affect
+This Constitution states the repository's stable contracts and values. It does not define a runtime
+agent precedence or supersede the repository instruction system; repository-internal resolution is
+owned by the `Instruction Precedence` contract in `AGENTS.md`. Amendments that affect
 benchmark, environment, config, metric, schema, reproducibility, or paper-facing contracts require:
 (1) written proposal in `docs/dev/issues/<topic>/design.md`, (2) explicit enumeration of affected
 contracts, (3) migration guidance or deprecation plan, (4) version/date update below. Any
 introduction of out-of-scope functionality must include justification aligning with Core Principles
 I-X or be rejected.
 
-**Version**: 1.4.3 | **Ratified**: 2025-09-19 | **Last Amended**: 2026-05-31
+**Version**: 1.5.0 | **Ratified**: 2025-09-19 | **Last Amended**: 2026-09-10

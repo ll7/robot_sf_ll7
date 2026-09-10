@@ -34,6 +34,9 @@ CANONICAL_INSTRUCTION_GRAPH = (
 
 ROUTING_OWNER = "docs/ai/agent_workflow_entrypoints.md"
 ROUTE_TABLE_MARKER = "| Route | Purpose | Required context / evidence |"
+PRECEDENCE_OWNER = "AGENTS.md"
+PRECEDENCE_START_MARKER = "<!-- instruction-precedence:start -->"
+PRECEDENCE_END_MARKER = "<!-- instruction-precedence:end -->"
 
 REPO_ROOT_SEGMENTS = frozenset(
     {
@@ -227,18 +230,52 @@ def check_routing_ownership(root: Path = REPO_ROOT) -> list[str]:
     return errors
 
 
+def check_precedence_contract(
+    root: Path = REPO_ROOT,
+    graph: tuple[str, ...] = CANONICAL_INSTRUCTION_GRAPH,
+) -> list[str]:
+    """Require exactly one marked normative precedence block, owned by ``AGENTS.md``."""
+    errors: list[str] = []
+    owners: list[str] = []
+    for source in graph:
+        source_path = root / source
+        if not source_path.is_file():
+            continue
+        text = source_path.read_text(encoding="utf-8")
+        starts = text.count(PRECEDENCE_START_MARKER)
+        ends = text.count(PRECEDENCE_END_MARKER)
+        if starts == 0 and ends == 0:
+            continue
+        if (
+            starts != 1
+            or ends != 1
+            or text.index(PRECEDENCE_START_MARKER) > text.index(PRECEDENCE_END_MARKER)
+        ):
+            errors.append(f"{source}: precedence markers must appear exactly once and in order")
+        owners.append(source)
+    if owners != [PRECEDENCE_OWNER]:
+        found = ", ".join(owners) if owners else "no surface"
+        errors.append(
+            f"precedence contract must be owned by {PRECEDENCE_OWNER}; found in {found}"
+        )
+    return errors
+
+
 def run_checks(root: Path = REPO_ROOT) -> dict[str, object]:
     """Run all instruction-reference checks and return a JSON-ready report."""
     graph_result = check_instruction_graph(root)
     ownership_errors = check_routing_ownership(root)
+    precedence_errors = check_precedence_contract(root)
     return {
         "schema": "instruction_references.v1",
         "root": str(root),
         "routing_owner": ROUTING_OWNER,
+        "precedence_owner": PRECEDENCE_OWNER,
         "files": list(graph_result.files),
         "references_checked": graph_result.checked,
         "optional_references": graph_result.optional_skipped,
-        "errors": graph_result.errors + ownership_errors,
+        "precedence_errors": precedence_errors,
+        "errors": graph_result.errors + ownership_errors + precedence_errors,
     }
 
 

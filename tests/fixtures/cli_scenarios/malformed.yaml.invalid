@@ -1,0 +1,5 @@
+# Malformed YAML fixture
+scenarios:
+  - name: broken
+    map_file: [unclosed list
+    simulation_config:

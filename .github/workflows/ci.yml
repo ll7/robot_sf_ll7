@@ -596,7 +596,7 @@ jobs:
           # The examples manifest needs plotting/benchmark/PPO dependencies,
           # not the unrelated all-extras GPU, Ray, TensorFlow, SocNav, or
           # browser stacks that can exhaust the setup timeout before tests run.
-          sync-args: "--extra examples --frozen"
+          sync-args: "--group examples --frozen"
 
       - name: Example smoke tests
         run: scripts/dev/ci_driver.sh examples-smoke

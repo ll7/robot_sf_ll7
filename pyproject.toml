@@ -111,15 +111,6 @@ socnav = [
 criticality = [
     "cma>=3.3.0",
 ]
-# Dependencies exercised by the manifest-driven examples smoke lane. Keep this
-# profile narrower than ``all``: hosted examples must not hydrate unrelated
-# GPU, distributed-RL, external-runtime, or browser stacks before tests run.
-examples = [
-    "robot_sf[viz,benchmark]",
-    "scikit-learn>=1.9.0",
-    "stable-baselines3>=2.9.0",
-    "torch>=2.13.0,<2.14.0",
-]
 all = [
     "robot_sf[viz,maps,benchmark,training,gpu,recurrent,progress,analytics,browser,sacadrl,socnav,criticality]",
 ]
@@ -716,6 +707,15 @@ carla = [
 ]
 imitation = [
     "imitation>=1.0.0",
+]
+# Dependencies exercised by the manifest-driven examples smoke lane. Keep this
+# CI-only group narrower than the published ``all`` extra: hosted examples must
+# not hydrate unrelated GPU, distributed-RL, external-runtime, or browser stacks.
+examples = [
+    "robot_sf[viz,benchmark]",
+    "scikit-learn>=1.9.0",
+    "stable-baselines3>=2.9.0",
+    "torch>=2.13.0,<2.14.0",
 ]
 
 [project.scripts]

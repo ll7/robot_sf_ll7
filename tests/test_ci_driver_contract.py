@@ -457,7 +457,7 @@ def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
     assert "${{ inputs.sync-args }}" in sync_step["run"]
 
 
-def test_examples_smoke_uses_narrow_lock_backed_dependency_profile() -> None:
+def test_examples_smoke_uses_narrow_lock_backed_dependency_group() -> None:
     """Keep examples setup bounded to dependencies exercised by its smoke lane."""
     workflow = yaml.safe_load(_workflow_text())
     setup_step = next(
@@ -470,15 +470,16 @@ def test_examples_smoke_uses_narrow_lock_backed_dependency_profile() -> None:
     )
 
     assert setup_step is not None, "examples-smoke setup step not found"
-    assert setup_step["with"] == {"sync-args": "--extra examples --frozen"}
+    assert setup_step["with"] == {"sync-args": "--group examples --frozen"}
 
-    optional_dependencies = _pyproject()["project"]["optional-dependencies"]
-    assert optional_dependencies["examples"] == [
+    dependency_groups = _pyproject()["dependency-groups"]
+    assert dependency_groups["examples"] == [
         "robot_sf[viz,benchmark]",
         "scikit-learn>=1.9.0",
         "stable-baselines3>=2.9.0",
         "torch>=2.13.0,<2.14.0",
     ]
+    optional_dependencies = _pyproject()["project"]["optional-dependencies"]
     all_extras = (
         "robot_sf[viz,maps,benchmark,training,gpu,recurrent,progress,"
         "analytics,browser,sacadrl,socnav,criticality]"

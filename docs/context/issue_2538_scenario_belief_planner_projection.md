@@ -57,9 +57,10 @@ explicitly labelled as adapter-derived and unavailable-as-modelled in the diagno
 Safe claim: this is a deterministic, entity-ID-keyed projection of one `ScenarioBelief` snapshot
 that prevents joining uncertainty metadata by visible-row position. It proves only that
 ScenarioBelief uncertainty metadata can reach one planner-compatible local observation shape and
-can be consumed by the existing stream-gap uncertainty gate on a fixture. It does not prove
-cross-lifecycle identity continuity, better navigation, safety, SNQI, planner performance,
-perception calibration, or benchmark movement.
+that a fixture exercises the existing opt-in stream-gap uncertainty-sidecar interface. It does not
+prove that the stream-gap gate was enabled or consumed the sidecar, cross-lifecycle identity
+continuity, better navigation, safety, SNQI, planner performance, perception calibration, or
+benchmark movement.
 
 ## Validation
 

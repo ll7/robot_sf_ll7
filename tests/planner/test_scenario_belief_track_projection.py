@@ -543,6 +543,26 @@ def test_projection_invalid_belief_fallbacks_and_alias(monkeypatch) -> None:
     assert legacy_failure.diagnostics["fallback_reason"] == "legacy_observation_unavailable"
 
 
+def test_projection_rejects_finite_but_malformed_legacy_observation(monkeypatch) -> None:
+    """A finite mapping without the complete SOCNAV shape must fail closed."""
+    belief = _belief_fixture()
+    monkeypatch.setattr(
+        type(belief),
+        "to_socnav_struct",
+        lambda _belief: {"not_a_socnav_observation": 1.0},
+    )
+
+    rejected = project_belief_aware_planner_input(
+        belief,
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+
+    assert rejected.diagnostics["status"] == "invalid_belief"
+    assert rejected.diagnostics["fallback_reason"] == "malformed_legacy_observation"
+    assert rejected.legacy_observation == {}
+    assert rejected.tracks == {}
+
+
 def test_projection_rejects_nonfinite_time_ratios_as_invalid_belief() -> None:
     """Overflowing finite time ratios fail closed before integer conversion."""
     belief = _belief_fixture()
@@ -746,6 +766,38 @@ def test_track_field_and_time_validation_edges() -> None:
     assert adapter._age_steps(0.0, 0.0) == 0
     assert adapter._age_steps(5e-10, 1.0) == 1
     assert adapter._age_steps(0.21, 0.1) == 3
+
+
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        ({"visibility": False, "visibility_state": "visible"}, "visibility=True"),
+        ({"visibility": True, "visibility_state": "occluded"}, "visibility=False"),
+        (
+            {
+                "confidence": 0.9,
+                "position_confidence": 0.8,
+                "velocity_confidence": 0.7,
+            },
+            "minimum supplied component confidence",
+        ),
+    ],
+    ids=["visible-state-contradiction", "occluded-state-contradiction", "confidence-minimum"],
+)
+def test_standalone_track_rejects_contradictory_semantic_fields(overrides, match) -> None:
+    """Typed records fail closed when visibility or aggregate confidence disagrees."""
+    with pytest.raises(ValueError, match=match):
+        _standalone_track(**overrides)
+
+
+def test_standalone_track_accepts_matching_component_confidence() -> None:
+    """A matching aggregate preserves the documented minimum-confidence invariant."""
+    valid = _standalone_track(
+        confidence=0.7,
+        position_confidence=0.8,
+        velocity_confidence=0.7,
+    )
+    assert valid.confidence == pytest.approx(0.7)
 
 
 def test_entity_projection_rejects_malformed_public_fields() -> None:

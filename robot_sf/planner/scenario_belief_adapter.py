@@ -28,6 +28,8 @@ SUPPORTED_PROJECTION_TARGETS = frozenset({"BeliefGuidedLocalPlanner"})
 # Keep the existing names discoverable for callers that use the initial adapter vocabulary.
 SUPPORTED_BELIEF_AWARE_PLANNER_NAMES = SUPPORTED_PROJECTION_TARGETS
 SUPPORTED_BELIEF_AWARE_PLANNER_KEYS = SUPPORTED_PROJECTION_TARGETS
+_LEGACY_SOCNAV_SECTIONS = ("robot", "goal", "pedestrians", "map", "sim")
+_NON_VISIBLE_VISIBILITY_STATES = frozenset({"occluded", "out_of_range", "outside_fov", "unknown"})
 
 
 def _load_scenario_belief_types() -> tuple[type[Any], type[Any]] | None:
@@ -70,6 +72,94 @@ def _pedestrian_count(observation: dict[str, Any]) -> int | None:
     if count < 0.0 or count != round(count):
         return None
     return int(count)
+
+
+def _validate_legacy_numeric_field(
+    section: Mapping[str, Any],
+    *,
+    section_name: str,
+    field_name: str,
+    shape: tuple[int, ...] | None,
+) -> np.ndarray:
+    """Validate one finite numeric field in the legacy SOCNAV observation.
+
+    Returns:
+        The validated numeric array.
+    """
+    try:
+        value = section[field_name]
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f"legacy observation is missing {section_name}.{field_name}") from exc
+    try:
+        array = np.asarray(value)
+    except Exception as exc:
+        raise ValueError(
+            f"legacy observation field {section_name}.{field_name} is malformed"
+        ) from exc
+    if shape is not None and array.shape != shape:
+        raise ValueError(
+            f"legacy observation field {section_name}.{field_name} must have shape {shape}"
+        )
+    if shape is None and (array.ndim != 2 or array.shape[1] != 2):
+        raise ValueError(
+            f"legacy observation field {section_name}.{field_name} must have shape (N, 2)"
+        )
+    if not np.issubdtype(array.dtype, np.number) or np.iscomplexobj(array):
+        raise ValueError(
+            f"legacy observation field {section_name}.{field_name} must be real numeric"
+        )
+    if not np.all(np.isfinite(array)):
+        raise ValueError(f"legacy observation field {section_name}.{field_name} must be finite")
+    return array
+
+
+def _validate_legacy_observation_shape(observation: Mapping[str, Any]) -> None:
+    """Validate the required nested keys and shapes of one SOCNAV_STRUCT observation.
+
+    The validator intentionally permits additive fields, but every field required by the
+    current structured-observation contract must be present, finite, and correctly shaped.
+    """
+    sections: dict[str, Mapping[str, Any]] = {}
+    for section_name in _LEGACY_SOCNAV_SECTIONS:
+        section = observation.get(section_name)
+        if not isinstance(section, Mapping):
+            raise ValueError(f"legacy observation section {section_name} is malformed")
+        sections[section_name] = section
+
+    required_fields = (
+        ("robot", "position", (2,)),
+        ("robot", "heading", (1,)),
+        ("robot", "speed", (2,)),
+        ("robot", "velocity_xy", (2,)),
+        ("robot", "angular_velocity", (1,)),
+        ("robot", "radius", (1,)),
+        ("goal", "current", (2,)),
+        ("goal", "next", (2,)),
+        ("pedestrians", "positions", None),
+        ("pedestrians", "velocities", None),
+        ("pedestrians", "radius", (1,)),
+        ("pedestrians", "count", (1,)),
+        ("map", "size", (2,)),
+        ("sim", "timestep", (1,)),
+    )
+    arrays = {
+        (section_name, field_name): _validate_legacy_numeric_field(
+            sections[section_name],
+            section_name=section_name,
+            field_name=field_name,
+            shape=shape,
+        )
+        for section_name, field_name, shape in required_fields
+    }
+    positions = arrays[("pedestrians", "positions")]
+    velocities = arrays[("pedestrians", "velocities")]
+    if velocities.shape != positions.shape:
+        raise ValueError(
+            "legacy observation pedestrian positions and velocities must have matching shapes"
+        )
+    count = float(arrays[("pedestrians", "count")][0])
+    if count < 0.0 or count != round(count) or count > positions.shape[0]:
+        raise ValueError("legacy observation pedestrian count is outside the positions bound")
 
 
 def _compatibility_payload(
@@ -283,6 +373,45 @@ def _validate_probability(name: str, value: Any) -> float:
     return normalized
 
 
+def _normalize_component_confidences(
+    *,
+    aggregate_confidence: float,
+    position_confidence: float | None,
+    velocity_confidence: float | None,
+) -> tuple[float | None, float | None]:
+    """Validate component confidences and preserve their aggregate minimum invariant.
+
+    Returns:
+        The normalized position and velocity confidence values.
+    """
+    normalized_position = (
+        None
+        if position_confidence is None
+        else _validate_probability("position_confidence", position_confidence)
+    )
+    normalized_velocity = (
+        None
+        if velocity_confidence is None
+        else _validate_probability("velocity_confidence", velocity_confidence)
+    )
+    supplied = [value for value in (normalized_position, normalized_velocity) if value is not None]
+    if supplied and aggregate_confidence != min(supplied):
+        raise ValueError("confidence must equal the minimum supplied component confidence")
+    return normalized_position, normalized_velocity
+
+
+def _validate_visibility_consistency(visibility: bool, visibility_state: Any) -> None:
+    """Reject contradictions between the boolean and canonical visibility state."""
+    if visibility_state is not None and (
+        not isinstance(visibility_state, str) or not visibility_state
+    ):
+        raise ValueError("visibility_state must be a non-empty string when provided")
+    if visibility_state == "visible" and not visibility:
+        raise ValueError("visibility_state='visible' requires visibility=True")
+    if visibility_state in _NON_VISIBLE_VISIBILITY_STATES and visibility:
+        raise ValueError("non-visible visibility_state requires visibility=False")
+
+
 def _validate_nonnegative_int(name: str, value: Any) -> int:
     """Return a non-negative integer without truncating fractional input."""
     if isinstance(value, (bool, np.bool_)):
@@ -398,10 +527,17 @@ class PlannerTrackBelief:
     the radius block is zero because radius uncertainty is unavailable as
     modelled, not because it is known to be zero.
 
-    The aggregate ``confidence`` is adapter-derived as the minimum of position
-    and velocity confidence. Stateful consumers must reset at an externally
-    supplied lifecycle boundary until the representation owner supplies a
-    generation or retirement epoch.
+    The aggregate ``confidence`` is adapter-derived as the minimum of all supplied
+    component confidences. When ``position_confidence`` or ``velocity_confidence``
+    is present, the aggregate must equal the minimum of the supplied values. With
+    no component values, ``confidence`` is an independently supplied aggregate.
+    Stateful consumers must reset at an externally supplied lifecycle boundary
+    until the representation owner supplies a generation or retirement epoch.
+
+    ``visibility`` is authoritative when ``visibility_state`` is omitted or uses an
+    extension value. The canonical ``visible`` state requires ``visibility=True``;
+    canonical non-visible states (``occluded``, ``out_of_range``, ``outside_fov``,
+    and ``unknown``) require ``visibility=False``.
 
     ``frame_id``, units, sensor IDs, and calibration status retain source-owned
     provenance that is otherwise lost when the state vector is flattened. An
@@ -464,22 +600,14 @@ class PlannerTrackBelief:
         )
         for field_name, value in provenance.items():
             object.__setattr__(self, field_name, value)
-        if self.position_confidence is not None:
-            object.__setattr__(
-                self,
-                "position_confidence",
-                _validate_probability("position_confidence", self.position_confidence),
-            )
-        if self.velocity_confidence is not None:
-            object.__setattr__(
-                self,
-                "velocity_confidence",
-                _validate_probability("velocity_confidence", self.velocity_confidence),
-            )
-        if self.visibility_state is not None and (
-            not isinstance(self.visibility_state, str) or not self.visibility_state
-        ):
-            raise ValueError("visibility_state must be a non-empty string when provided")
+        position_confidence, velocity_confidence = _normalize_component_confidences(
+            aggregate_confidence=self.confidence,
+            position_confidence=self.position_confidence,
+            velocity_confidence=self.velocity_confidence,
+        )
+        object.__setattr__(self, "position_confidence", position_confidence)
+        object.__setattr__(self, "velocity_confidence", velocity_confidence)
+        _validate_visibility_consistency(self.visibility, self.visibility_state)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a deterministic JSON-safe track mapping."""
@@ -856,7 +984,7 @@ def _planner_track_from_entity(
 
 
 def _safe_legacy_observation(belief: Any) -> tuple[dict[str, Any], str | None]:
-    """Build a finite legacy fallback, or an empty non-authoritative mapping.
+    """Build a validated legacy fallback, or an empty non-authoritative mapping.
 
     Returns:
         A legacy observation and an optional fail-closed reason.
@@ -865,9 +993,15 @@ def _safe_legacy_observation(belief: Any) -> tuple[dict[str, Any], str | None]:
         observation = belief.to_socnav_struct()
     except Exception:  # noqa: BLE001 - fail closed at the planner adapter boundary
         return {}, "legacy_observation_unavailable"
-    if not isinstance(observation, Mapping) or not _runtime_value_is_finite(observation):
+    if not isinstance(observation, Mapping):
+        return {}, "malformed_legacy_observation"
+    if not _runtime_value_is_finite(observation):
         return {}, "legacy_observation_nonfinite"
-    return dict(observation), None
+    try:
+        _validate_legacy_observation_shape(observation)
+        return dict(observation), None
+    except (TypeError, ValueError):
+        return {}, "malformed_legacy_observation"
 
 
 def _belief_projection_diagnostics(

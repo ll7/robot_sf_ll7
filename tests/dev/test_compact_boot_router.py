@@ -13,6 +13,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 AGENTS_MD = REPO_ROOT / "AGENTS.md"
 CODE_REVIEW = REPO_ROOT / "docs" / "code_review.md"
 DEPENDABOT_POLICY = REPO_ROOT / "docs" / "dev" / "dependabot_update_policy.md"
+MAINTAINER_VALUES = REPO_ROOT / "docs" / "maintainer_values.md"
+ROUTE_ENTRYPOINTS = REPO_ROOT / "docs" / "ai" / "agent_workflow_entrypoints.md"
+RELOCATED_INDEX = REPO_ROOT / "docs" / "dev" / "agents" / "relocated-agents-guidance.md"
 
 AUDIT_BASELINE_NONBLANK = 228
 AUDIT_BASELINE_CHARS = 20402
@@ -45,13 +48,30 @@ def test_root_keeps_required_router_sections() -> None:
 
 
 def test_moved_procedure_has_canonical_backlinks() -> None:
-    """Validation depth and pinned-action procedure moved to their owners."""
+    """Moved procedures and index entries point to current canonical owners."""
     code_review = CODE_REVIEW.read_text(encoding="utf-8")
     assert "## Validation Depth And Delivery Contract" in code_review
-    assert "gh_pr_body_rest.py" in code_review
+    assert "gh_pr_body_rest.py <pr-number>" in code_review
+    assert "--body-file <final-body.md>" in code_review
     dependabot = DEPENDABOT_POLICY.read_text(encoding="utf-8")
-    assert "## Pinned Action References" in dependabot
+    assert "## Workflow action-pin coupling" in dependabot
+    assert "## Pinned Action References" not in dependabot
     assert "check_dependabot_update_policy.py" in dependabot
+
+    maintainer_values = MAINTAINER_VALUES.read_text(encoding="utf-8")
+    assert "docs/code_review.md" in maintainer_values
+    assert "validation matrix in `AGENTS.md`" not in maintainer_values
+
+    route_entrypoints = ROUTE_ENTRYPOINTS.read_text(encoding="utf-8")
+    assert "docs/maintainer_values.md" in route_entrypoints
+    assert "maintainer value hierarchy in `AGENTS.md`" not in route_entrypoints
+
+    relocated_index = RELOCATED_INDEX.read_text(encoding="utf-8")
+    assert "docs/ai/repo_overview.md" in relocated_index
+    assert "docs/maintainer_values.md" in relocated_index
+    assert "`AGENTS.md` Project Structure And Ownership" not in relocated_index
+    assert "`AGENTS.md` Planning And Communication" not in relocated_index
+    assert "`AGENTS.md` Delivery And Communication" in relocated_index
 
 
 def test_root_contains_no_environment_specific_bootstrap() -> None:

@@ -368,7 +368,12 @@ result uses the stronger tier for that claim.
 
 PR delivery contract: a PR states intent, linked issues, validation commands, artifact disposition,
 and downstream propagation. Because merges squash, after every revision push rebuild the title and
-body from the final diff and run `uv run python scripts/dev/gh_pr_body_rest.py --reconcile` with the
-final title; a trusted exact-head review must carry `pr-metadata: reconciled @ <digest>`. Pass
-Markdown-heavy comments through `scripts/dev/gh_comment.sh` or a body file, never through an inline
-shell string.
+body from the final diff and run:
+
+```bash
+uv run python scripts/dev/gh_pr_body_rest.py <pr-number> \
+  --reconcile --title "<final title>" --repo <owner>/<repo> --body-file <final-body.md>
+```
+
+A trusted exact-head review must carry `pr-metadata: reconciled @ <digest>`. Pass Markdown-heavy
+comments through `scripts/dev/gh_comment.sh` or a body file, never through an inline shell string.

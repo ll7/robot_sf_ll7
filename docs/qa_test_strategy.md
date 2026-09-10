@@ -15,7 +15,7 @@ Quality Assurance (QA) in `robot_sf_ll7` ensures that code changes preserve simu
 ## Maintainer Value Hierarchy & Governance
 
 This QA runbook operates under the maintainer governance rules defined in:
-- **[Maintainer Values And Hard Contracts](./maintainer_values.md)** — Proof must be proportional to risk. Substantive or paper-facing claims require reproducible executable evidence. Fallback or degraded execution is never success evidence.
+- **[Maintainer Values](./maintainer_values.md)** — Stable principles support proportional proof; the `AGENTS.md` readiness matrix and benchmark owners define the procedures. Fallback or degraded execution is never success evidence.
 - **[CI Reproducibility & Flaky Acceptance Policy](./context/issue_1436_reproducibility_flaky_acceptance.md)** — Canonical failure-classification criteria and explicit CI rerun boundaries. Its reproducibility-job mapping is reconciled below against the live workflow.
 - **[Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** — Fail-closed evaluation rules for `fallback`, `degraded`, and `not_available` execution modes.
 - **[Coverage Guide](./coverage_guide.md)** — Code coverage collection, baseline comparison, and reporting rules.
@@ -134,7 +134,7 @@ When presenting test results, contributors and AI agents must adhere to the foll
 
 ## Related Documentation
 
-- **[Maintainer Values And Hard Contracts](./maintainer_values.md)** — Core project values and claim evidence hierarchy.
+- **[Maintainer Values](./maintainer_values.md)** — Core trade-off principles; see `AGENTS.md` and benchmark owners for claim evidence procedures.
 - **[Development Guide](./dev_guide.md)** — Primary developer onboarding, setup, and unified test suite commands.
 - **[Coverage Guide](./coverage_guide.md)** — Detailed guide to coverage collection, HTML reports, and baseline comparison.
 - **[Code Review Guidelines](./code_review.md)** — Review standards for PRs, benchmark code, and test verification.

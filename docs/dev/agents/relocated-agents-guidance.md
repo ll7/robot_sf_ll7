@@ -461,7 +461,8 @@ When referencing files in PRs, issue comments, docs, and agent responses, use re
 
 ## Planning Convention
 
-For non-trivial work, follow `.agents/PLANS.md`:
+When the route selects the Coordinated or Evidence-critical profile, or inspection requires
+escalation, follow `.agents/PLANS.md`:
 - restate the goal and boundaries first,
 - list evidence sources before implementation,
 - keep validation commands explicit,

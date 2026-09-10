@@ -43,11 +43,12 @@ CLAIM_BOUNDARY = (
 OUTCOME_STATUSES = ("result", "null", "inconclusive", "invalid", "unavailable", "blocked")
 CONTROL_ARMS = ("random", "halton")
 PRIMARY_ARM = "cma_es"
+CANONICAL_CMA_ES_OWNER = "robot_sf.adversarial.samplers.CmaEsCandidateSampler"
 CANONICAL_PACKET_RELATIVE_PATH = (
     "configs/adversarial/issue_8570_bounded_falsification_answerability_v1.yaml"
 )
-CANONICAL_PACKET_SELF_DIGEST = "060fcd95d00bdeeabfc1697bb378e606188a4fa678b8375f937831914ca65395"
-CANONICAL_PACKET_FILE_SHA256 = "7a6d3d7eb25b7de47e735630c2f47c0ccff131f9301f6eb07f4fa694e73d0197"
+CANONICAL_PACKET_SELF_DIGEST = "e8c9c66e6e7fc39ecfb14175348e7b486d169be8e7ac7f46116f2c9c9970af64"
+CANONICAL_PACKET_FILE_SHA256 = "ee5606bc5766f42149cec32a9c771eec5018fc6673f77262dc42848cf8e03e45"
 _ROUTE_PROPOSAL_REASON = (
     "This diagnostic preflight does not write candidate route files; materialize a "
     "route_overrides.yaml artifact through robot_sf.adversarial.bundle.write_candidate_inputs "
@@ -369,6 +370,11 @@ def _validate_source_contract(
     scenario_template: Mapping[str, Any],
 ) -> None:
     """Cross-check packet semantics against the parsed #7340 source files."""
+    primary = packet["search_methods"]["primary"]
+    if primary["owner"] != CANONICAL_CMA_ES_OWNER:
+        raise BoundedFalsificationError(
+            "primary CMA-ES owner must be the canonical single-objective sampler"
+        )
     variable_map = packet["variable_map"]
     source_variables = packet["source"]["search_space"]["semantic"]["variables"]
     for name in packet["variable_order"]:
@@ -575,7 +581,7 @@ def _cma_es_arm(packet: Mapping[str, Any]) -> dict[str, Any]:
         "role": primary["role"],
         "algorithm": primary["algorithm"],
         "owner": primary["owner"],
-        "implementation_owner": "robot_sf.adversarial.samplers.CmaEsCandidateSampler",
+        "implementation_owner": CANONICAL_CMA_ES_OWNER,
         "search_seeds": [int(seed) for seed in packet["seed_policy"]["search_seeds"]],
         "candidate_budget_per_seed": packet["budget"]["candidate_budget_per_arm_per_seed"],
         "execution_status": "declared_not_executed",

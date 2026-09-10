@@ -12,6 +12,7 @@ import yaml
 
 import scripts.adversarial.run_issue_8571_bounded_falsification_slice as preflight_cli
 from robot_sf.adversarial.bounded_falsification import (
+    CANONICAL_CMA_ES_OWNER,
     CLAIM_BOUNDARY,
     VERTICAL_SLICE_SCHEMA_VERSION,
     BoundedFalsificationError,
@@ -61,6 +62,38 @@ def test_preflight_prepares_equal_budget_controls_without_compute() -> None:
     assert all(row["simulation_executed"] is False for row in report["outcome_rows"])
     assert all(row["native_outcome_digest"] is None for row in report["outcome_rows"])
     assert all(row["replay_digest"] is None for row in report["outcome_rows"])
+
+
+def test_packet_preserves_issue_references_and_cma_es_custody() -> None:
+    """YAML parsing keeps issue references and binds the declared primary owner."""
+    packet = yaml.safe_load(PACKET.read_text(encoding="utf-8"))
+
+    assert packet["source"]["inputs"]["search_space"]["role"] == (
+        "frozen #7340 search-space bytes and bounds"
+    )
+    assert packet["source"]["inputs"]["scenario_template"]["role"] == (
+        "frozen #7340 scenario-template bytes and actor binding"
+    )
+    assert packet["answerability"]["question"]["research_question"].endswith(
+        "the frozen #7340 source contract?"
+    )
+    assert packet["compute_authorization"]["blocking_reasons"][0].endswith(
+        "in #7340 template mode; metadata or provenance cannot authorize compute."
+    )
+    assert packet["search_methods"]["primary"]["owner"] == CANONICAL_CMA_ES_OWNER
+
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    assert report["arms"]["cma_es"]["owner"] == CANONICAL_CMA_ES_OWNER
+    assert report["arms"]["cma_es"]["implementation_owner"] == CANONICAL_CMA_ES_OWNER
+
+
+def test_preflight_validator_rejects_cma_es_owner_mismatch() -> None:
+    """The primary arm cannot carry separate or ambiguous owner identities."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["arms"]["cma_es"]["implementation_owner"] = "robot_sf.adversarial.cma_me"
+
+    with pytest.raises(BoundedFalsificationError, match="CMA-ES arm"):
+        validate_bounded_falsification_preflight(report)
 
 
 def test_preflight_is_deterministic_and_persisted_report_round_trips(tmp_path: Path) -> None:

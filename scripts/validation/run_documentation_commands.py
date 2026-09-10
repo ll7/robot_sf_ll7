@@ -15,7 +15,9 @@ Execution has a finite wall-clock budget, a process-group cleanup path, and a
 bounded combined stdout/stderr capture. ``--format json`` emits a canonical
 sorted-key receipt without wall-clock fields; output digests are reproducible
 when the normalized command output is identical, not a blanket claim about
-arbitrary runtime output.
+arbitrary runtime output. This is not a sandbox: approved commands still run
+with the invoking user's OS permissions and a detached process created after
+the cleanup snapshot may outlive the runner.
 """
 
 from __future__ import annotations
@@ -29,10 +31,14 @@ import re
 import selectors
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+if os.name == "posix":
+    import pwd
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -74,15 +80,19 @@ INTERPRETER_RE = re.compile(
 )
 SEED_RE = re.compile(r"-?\d{1,10}\Z")
 SLEEP_RE = re.compile(r"(?:0|[1-9]\d*)(?:\.\d*)?\Z")
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+LOGURU_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} \| ")
 
 LOG_PREFIX_RE = re.compile(
-    r"^(WARNING: All log messages.*|I\d{4} \S+ \S+ .*port\.cc.*|I\d{4} \S+ \S+ .*cpu_feature_guard\.cc.*|"
+    r"^(WARNING: All log messages.*|I\d{4} \S+ \S+ .*|"
     r"To enable the following instructions:.*|W\d{4} \S+ .*|E\d{4} \S+ .*)$"
 )
 
 # These small utilities are side-effect free and keep the process supervisor
 # directly testable. The documentation-facing commands are listed separately
-# below so ``uv run`` cannot be used to launch an arbitrary program.
+# below so ``uv run`` cannot be used to launch an arbitrary program. The uv forms
+# intentionally require offline, no-sync execution and are also forced through
+# the corresponding environment variables below.
 SAFE_UTILITY_ARGV = frozenset(
     {
         ("cat", "/dev/null"),
@@ -94,22 +104,68 @@ SAFE_UTILITY_ARGV = frozenset(
 )
 APPROVED_UV_ARGV = frozenset(
     {
-        ("uv", "run", "robot-sf", "--help"),
-        ("uv", "run", "robot-sf", "--version"),
-        ("uv", "run", "robot-sf", "doctor", "--skip-env-smoke", "--skip-quickstart-smoke"),
-        ("uv", "run", "robot-sf", "examples", "list"),
-        ("uv", "run", "robot-sf", "recipe", "list"),
-        ("uv", "run", "robot-sf", "recipe", "explain", "first-demo"),
+        ("uv", "run", "--offline", "--no-sync", "robot-sf", "--help"),
+        ("uv", "run", "--offline", "--no-sync", "robot-sf", "--version"),
+        (
+            "uv",
+            "run",
+            "--offline",
+            "--no-sync",
+            "robot-sf",
+            "doctor",
+            "--skip-env-smoke",
+            "--skip-quickstart-smoke",
+        ),
+        ("uv", "run", "--offline", "--no-sync", "robot-sf", "examples", "list"),
+        ("uv", "run", "--offline", "--no-sync", "robot-sf", "recipe", "list"),
+        (
+            "uv",
+            "run",
+            "--offline",
+            "--no-sync",
+            "robot-sf",
+            "recipe",
+            "explain",
+            "first-demo",
+        ),
     }
 )
 
 
+def _account_home() -> Path:
+    """Return the OS account home without trusting an inherited HOME value."""
+    if os.name == "posix":
+        try:
+            return Path(pwd.getpwuid(os.getuid()).pw_dir)
+        except (KeyError, OSError):
+            pass
+    return Path(sys.executable).resolve().parent
+
+
+TRUSTED_EXECUTABLE_DIRS = tuple(
+    Path(directory)
+    for directory in (
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        _account_home() / ".local" / "bin",
+        Path(sys.prefix) / "bin",
+    )
+)
+TRUSTED_PATH = os.pathsep.join(str(directory) for directory in TRUSTED_EXECUTABLE_DIRS)
+
+
 def normalize_output(text: str, tmpdir: str, *, repo_root: Path = REPO_ROOT) -> str:
-    """Replace machine-specific paths and drop known runtime log prefixes."""
+    """Canonicalize bounded child output before it contributes to a receipt digest."""
+    text = ANSI_ESCAPE_RE.sub("", text).replace("\r\n", "\n").replace("\r", "\n")
     text = text.replace(tmpdir, "<tmp>")
     text = text.replace(str(repo_root), "<repo>")
     text = text.replace(os.path.expanduser("~"), "<home>")
-    kept = [line for line in text.splitlines() if not LOG_PREFIX_RE.match(line)]
+    kept = [
+        LOGURU_TIMESTAMP_RE.sub("<timestamp> | ", line)
+        for line in text.splitlines()
+        if not LOG_PREFIX_RE.match(line)
+    ]
     return "\n".join(kept).strip() + "\n"
 
 
@@ -147,9 +203,18 @@ def _is_approved_argv(argv: list[str]) -> bool:
     if len(argv) == 2 and argv[0] == "sleep" and SLEEP_RE.fullmatch(argv[1]):
         return float(argv[1]) <= MAX_TIMEOUT_S
     if (
-        len(argv) == 6
-        and argv[:5] == ["uv", "run", "robot-sf", "demo", "--seed"]
-        and SEED_RE.fullmatch(argv[5]) is not None
+        len(argv) == 8
+        and argv[:7]
+        == [
+            "uv",
+            "run",
+            "--offline",
+            "--no-sync",
+            "robot-sf",
+            "demo",
+            "--seed",
+        ]
+        and SEED_RE.fullmatch(argv[7]) is not None
     ):
         return True
     return False
@@ -224,6 +289,76 @@ class _ProcessResult:
     reason: str
 
 
+@dataclass(frozen=True)
+class _LinuxProcessIdentity:
+    """PID plus Linux start time, preventing accidental signaling after PID reuse."""
+
+    pid: int
+    start_time: int
+
+
+def _read_linux_process_stat(pid: int) -> tuple[int, int] | None:
+    """Read a Linux process's parent PID and start time, if it still exists."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+        fields = stat.rsplit(")", 1)[1].split()
+        return int(fields[1]), int(fields[19])
+    except (FileNotFoundError, IndexError, OSError, ValueError):
+        return None
+
+
+def _linux_process_descendants(pid: int) -> tuple[_LinuxProcessIdentity, ...]:
+    """Snapshot descendants before termination so detached sessions can be signaled."""
+    if sys.platform != "linux":
+        return ()
+    processes: dict[int, tuple[int, int]] = {}
+    try:
+        entries = tuple(Path("/proc").iterdir())
+    except OSError:
+        return ()
+    for entry in entries:
+        if not entry.name.isdecimal():
+            continue
+        stat = _read_linux_process_stat(int(entry.name))
+        if stat is not None:
+            processes[int(entry.name)] = stat
+    children: dict[int, list[int]] = {}
+    for child_pid, (parent_pid, _) in processes.items():
+        children.setdefault(parent_pid, []).append(child_pid)
+    descendants: list[_LinuxProcessIdentity] = []
+    pending = list(children.get(pid, ()))
+    seen: set[int] = set()
+    while pending:
+        child_pid = pending.pop()
+        if child_pid in seen:
+            continue
+        seen.add(child_pid)
+        parent_pid, start_time = processes.get(child_pid, (0, 0))
+        if parent_pid != 0:
+            descendants.append(_LinuxProcessIdentity(child_pid, start_time))
+            pending.extend(children.get(child_pid, ()))
+    return tuple(descendants)
+
+
+def _linux_process_identity_exists(identity: _LinuxProcessIdentity) -> bool:
+    """Return whether a captured PID still refers to the same process."""
+    stat = _read_linux_process_stat(identity.pid)
+    return stat is not None and stat[1] == identity.start_time
+
+
+def _signal_linux_processes(
+    processes: tuple[_LinuxProcessIdentity, ...], signum: signal.Signals
+) -> None:
+    """Signal captured detached descendants without following reused PIDs."""
+    for identity in processes:
+        if not _linux_process_identity_exists(identity):
+            continue
+        try:
+            os.kill(identity.pid, signum)
+        except (ProcessLookupError, PermissionError):
+            continue
+
+
 def _process_group_exists(pid: int) -> bool:
     """Return whether a POSIX process group still exists."""
     try:
@@ -236,7 +371,11 @@ def _process_group_exists(pid: int) -> bool:
 
 
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
-    """Terminate a child and its descendants, escalating after a short grace period."""
+    """Terminate a child tree, with best-effort Linux cleanup for detached descendants.
+
+    A process that forks after the snapshot, or escapes the host's process visibility, may
+    still survive. This is process cleanup rather than a sandbox boundary.
+    """
     if os.name != "posix":
         process.terminate()
         try:
@@ -246,6 +385,7 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
             process.wait()
         return
 
+    detached_descendants = _linux_process_descendants(process.pid)
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -253,8 +393,13 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     except OSError:
         process.terminate()
 
+    _signal_linux_processes(detached_descendants, signal.SIGTERM)
+
     deadline = time.monotonic() + PROCESS_GROUP_GRACE_S
-    while _process_group_exists(process.pid) and time.monotonic() < deadline:
+    while (
+        _process_group_exists(process.pid)
+        or any(_linux_process_identity_exists(item) for item in detached_descendants)
+    ) and time.monotonic() < deadline:
         time.sleep(0.01)
 
     if _process_group_exists(process.pid):
@@ -264,7 +409,57 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
             pass
         except OSError:
             process.kill()
+    _signal_linux_processes(detached_descendants, signal.SIGKILL)
     process.wait()
+
+
+def _resolve_executable(name: str) -> str | None:
+    """Resolve an allowlisted executable only from fixed, trusted directories."""
+    if not name:
+        return None
+    candidate_paths = [Path(name)] if Path(name).is_absolute() else []
+    if not candidate_paths and Path(name).name == name:
+        candidate_paths = [directory / name for directory in TRUSTED_EXECUTABLE_DIRS]
+    for candidate_path in candidate_paths:
+        try:
+            executable = candidate_path.resolve(strict=True)
+        except (FileNotFoundError, OSError, RuntimeError, ValueError):
+            continue
+        if not any(_path_is_within(executable, directory) for directory in TRUSTED_EXECUTABLE_DIRS):
+            continue
+        if executable.is_file() and os.access(executable, os.X_OK):
+            return str(executable)
+    return None
+
+
+def _path_is_within(path: Path, directory: Path) -> bool:
+    """Return whether a resolved executable remains below a trusted directory."""
+    try:
+        path.relative_to(directory.resolve(strict=True))
+    except (FileNotFoundError, OSError, RuntimeError, ValueError):
+        return False
+    return True
+
+
+def _sanitized_environment(temp_root: Path) -> dict[str, str]:
+    """Build a minimal child environment without inherited credentials or search paths."""
+    temp_root = temp_root.resolve()
+    return {
+        "HOME": str(temp_root),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "NO_COLOR": "1",
+        "PATH": TRUSTED_PATH,
+        "PYTHONNOUSERSITE": "1",
+        "TMPDIR": str(temp_root),
+        "TZ": "UTC",
+        "UV_CACHE_DIR": str(temp_root / "uv-cache"),
+        "UV_NO_CONFIG": "1",
+        "UV_NO_SYNC": "1",
+        "UV_OFFLINE": "1",
+        "XDG_CACHE_HOME": str(temp_root / "xdg-cache"),
+        "XDG_CONFIG_HOME": str(temp_root / "xdg-config"),
+    }
 
 
 def _close_process_pipes(process: subprocess.Popen[bytes]) -> None:
@@ -345,14 +540,20 @@ def _run_process(
     cwd: Path,
     timeout_s: float,
     max_output_bytes: int,
+    environment_root: Path | None = None,
 ) -> _ProcessResult:
-    """Run one argv with a process-group timeout and bounded combined output."""
+    """Run one argv with explicit executable resolution and a sanitized environment."""
     if not argv:
         return _ProcessResult(None, b"", b"", "process_error")
+    executable = _resolve_executable(argv[0])
+    if executable is None:
+        return _ProcessResult(None, b"", b"", "process_error")
+    child_env = _sanitized_environment(cwd if environment_root is None else environment_root)
     try:
         process = subprocess.Popen(
-            argv,
+            [executable, *argv[1:]],
             shell=False,
+            env=child_env,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -482,6 +683,7 @@ def run_block(
                 cwd=cwd,
                 timeout_s=remaining,
                 max_output_bytes=max_output_bytes - captured_bytes,
+                environment_root=Path(tmpdir),
             )
             if process_result.reason != "completed":
                 return BlockResult(

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -26,8 +25,8 @@ from scripts.validation.run_documentation_commands import (
 def test_only_tagged_blocks_execute(tmp_path: Path) -> None:
     page = tmp_path / "page.md"
     page.write_text(
-        "```bash\nuv run robot-sf --help\n```\n\n"
-        "```bash exec-doc-root\nuv run robot-sf --version\n```\n",
+        "```bash\nuv run --offline --no-sync robot-sf --help\n```\n\n"
+        "```bash exec-doc-root\nuv run --offline --no-sync robot-sf --version\n```\n",
         encoding="utf-8",
     )
     blocks = iter_tagged_blocks(page)
@@ -35,8 +34,11 @@ def test_only_tagged_blocks_execute(tmp_path: Path) -> None:
 
 
 def test_screen_rejects_placeholders() -> None:
-    assert screen_command("uv run robot-sf demo --seed <SEED>") == "placeholder_token"
-    assert screen_command("uv run robot-sf demo --seed 270") is None
+    assert (
+        screen_command("uv run --offline --no-sync robot-sf demo --seed <SEED>")
+        == "placeholder_token"
+    )
+    assert screen_command("uv run --offline --no-sync robot-sf demo --seed 270") is None
 
 
 def test_screen_rejects_network() -> None:
@@ -56,12 +58,16 @@ def test_screen_rejects_shell_wrappers_and_composition() -> None:
     )
     assert screen_command("bash -c 'echo unsafe'") == "shell_wrapper"
     assert screen_command("printf safe | nc example.com 443") == "shell_syntax"
-    assert screen_command("uv run robot-sf --help") is None
+    assert screen_command("uv run --offline --no-sync robot-sf --help") is None
 
 
 @pytest.mark.parametrize(
     "command",
-    [r"r\m -rf work", r"sour\ce payload", r"u\v run robot-sf --help"],
+    [
+        r"r\m -rf work",
+        r"sour\ce payload",
+        r"u\v run --offline --no-sync robot-sf --help",
+    ],
 )
 def test_screen_rejects_escaped_command_spellings(command: str) -> None:
     """Backslash-obfuscated commands cannot reach shell execution."""
@@ -104,7 +110,9 @@ def test_multiline_block_stops_at_first_nonzero_command() -> None:
 def test_unterminated_tagged_fence_fails_closed(tmp_path: Path) -> None:
     """Malformed tagged Markdown is rejected instead of executing through EOF."""
     page = tmp_path / "page.md"
-    page.write_text("```bash exec-doc-root\nuv run robot-sf --help\n", encoding="utf-8")
+    page.write_text(
+        "```bash exec-doc-root\nuv run --offline --no-sync robot-sf --help\n", encoding="utf-8"
+    )
     with pytest.raises(ValueError, match="Unterminated tagged fence"):
         iter_tagged_blocks(page)
 
@@ -112,7 +120,8 @@ def test_unterminated_tagged_fence_fails_closed(tmp_path: Path) -> None:
 def test_fence_closer_must_match_opening_length(tmp_path: Path) -> None:
     page = tmp_path / "page.md"
     page.write_text(
-        "````bash exec-doc-root\nuv run robot-sf --help\n```\nuv run robot-sf --version\n````\n",
+        "````bash exec-doc-root\nuv run --offline --no-sync robot-sf --help\n```\n"
+        "uv run --offline --no-sync robot-sf --version\n````\n",
         encoding="utf-8",
     )
     blocks = iter_tagged_blocks(page)
@@ -120,7 +129,8 @@ def test_fence_closer_must_match_opening_length(tmp_path: Path) -> None:
         (
             2,
             "exec-doc-root",
-            "uv run robot-sf --help\n```\nuv run robot-sf --version",
+            "uv run --offline --no-sync robot-sf --help\n```\n"
+            "uv run --offline --no-sync robot-sf --version",
         )
     ]
 
@@ -138,6 +148,13 @@ def test_run_block_timeout_is_bounded() -> None:
     assert receipt.reason == "timeout"
 
 
+def test_approved_uv_commands_require_offline_no_sync_flags() -> None:
+    assert screen_command("uv run robot-sf --help") == "unsupported_command"
+    assert screen_command("uv run --offline --no-sync robot-sf --help") is None
+    assert screen_command("uv run --offline robot-sf --help") == "unsupported_command"
+    assert screen_command("uv run --no-sync robot-sf --help") == "unsupported_command"
+
+
 def test_run_block_rejects_unbounded_timeout() -> None:
     receipt = run_block("page.md", 1, "true", "exec-doc", float("inf"))
     assert receipt.reason == "invalid_timeout"
@@ -149,10 +166,18 @@ def test_run_block_bounds_combined_output() -> None:
     assert receipt.exit_code is None
 
 
-@pytest.mark.skipif(os.name != "posix", reason="process-group cleanup requires POSIX")
-def test_process_timeout_reaps_descendants(tmp_path: Path) -> None:
+@pytest.mark.skipif(sys.platform != "linux", reason="detached process cleanup requires Linux")
+def test_process_timeout_reaps_descendants(monkeypatch, tmp_path: Path) -> None:
+    import scripts.validation.run_documentation_commands as command_runner
+
+    real_resolve_executable = command_runner._resolve_executable
+    monkeypatch.setattr(
+        command_runner,
+        "_resolve_executable",
+        lambda name: sys.executable if name == sys.executable else real_resolve_executable(name),
+    )
     child_pid_file = tmp_path / "child.pid"
-    child_code = "import time; time.sleep(30)"
+    child_code = "import os, time; os.setsid(); time.sleep(30)"
     parent_code = (
         "import pathlib, subprocess, sys, time; "
         "child = subprocess.Popen([sys.executable, '-c', sys.argv[2]]); "
@@ -204,6 +229,63 @@ def test_normalize_output_replaces_machine_paths(tmp_path: Path) -> None:
     assert "<tmp>/out/episode.jsonl" in normalized
     assert "port.cc" not in normalized
     assert normalized.endswith("ok\n")
+
+
+def test_normalize_output_canonicalizes_stderr_formatting(tmp_path: Path) -> None:
+    text = (
+        f"\x1b[31merror\x1b[0m at {tmp_path}\\\r\n"
+        "I0000 00:00:1789035762.286829 2763162 cudart_stub.cc:31] noise\n"
+        "2026-09-10 10:22:42.958 | DEBUG    | module:function:1 - detail\r"
+        "next\rline\n"
+    )
+    normalized = normalize_output(text, str(tmp_path))
+    assert (
+        normalized
+        == "error at <tmp>\\\n<timestamp> | DEBUG    | module:function:1 - detail\nnext\nline\n"
+    )
+
+
+def test_run_process_uses_fixed_executable_and_sanitized_environment(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import scripts.validation.run_documentation_commands as command_runner
+
+    captured: dict[str, object] = {}
+    real_popen = command_runner.subprocess.Popen
+
+    def recording_popen(argv, **kwargs):
+        captured["argv"] = argv
+        captured["env"] = kwargs["env"]
+        return real_popen(argv, **kwargs)
+
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "malicious-home"))
+    monkeypatch.setenv("DOC_RUNNER_SECRET", "must-not-leak")
+    monkeypatch.setenv("UV_OFFLINE", "0")
+    monkeypatch.setenv("UV_NO_SYNC", "0")
+    monkeypatch.setattr(command_runner.subprocess, "Popen", recording_popen)
+
+    result = _run_process(["true"], cwd=tmp_path, timeout_s=5.0, max_output_bytes=4096)
+
+    assert result.reason == "completed"
+    assert Path(captured["argv"][0]).is_absolute()
+    child_env = captured["env"]
+    assert child_env["PATH"] == command_runner.TRUSTED_PATH
+    assert child_env["HOME"] == str(tmp_path.resolve())
+    assert child_env["TMPDIR"] == str(tmp_path.resolve())
+    assert child_env["UV_OFFLINE"] == "1"
+    assert child_env["UV_NO_SYNC"] == "1"
+    assert "DOC_RUNNER_SECRET" not in child_env
+
+
+def test_run_process_rejects_untrusted_absolute_executable(tmp_path: Path) -> None:
+    executable = tmp_path / "true"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    result = _run_process([str(executable)], cwd=tmp_path, timeout_s=5.0, max_output_bytes=4096)
+
+    assert result.reason == "process_error"
 
 
 def test_run_block_true_command_receipt(tmp_path: Path) -> None:

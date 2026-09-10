@@ -21,8 +21,12 @@ deterministic controlled fixture that validates it end to end on CPU:
 - `robot_sf/benchmark/last_avoidable_fixtures.py` — a 2D kinematic robot/pedestrian
   fixture implementing the engine's `CounterfactualModel` seam. It holds its own
   `numpy.random.Generator` and snapshots the RNG bit-generator state alongside
-  actor state, so replays are bit-for-bit deterministic.
+  actor state, so the fixture's observable contact outcome and tick replay
+  deterministically. The engine's generic determinism gate does not prove equality
+  of arbitrary opaque simulator state.
 - `robot_sf/benchmark/schemas/last_avoidable_replay.v1.json` — the output contract.
+- `ReplayConfig.to_dict`/`from_dict` — preserves an omitted pedestrian-response
+  declaration with a reserved JSON marker, distinct from explicit `unknown`.
 - `scripts/analysis/run_last_avoidable_replay_issue_5442.py` — offline report CLI.
 - `tests/benchmark/test_last_avoidable_replay_issue_5442.py` — acceptance tests.
 
@@ -63,8 +67,9 @@ narrow snapshot seam for the global RNG, actor/behavior state, public grouping, 
 the backend group list; it does not replace the simulator. The engine's determinism
 check is the safeguard: if a replay diverges, it abstains to `unknown` rather than
 guessing. Each baseline replay also records typed `NoOpStep` state receipts and
-compares them with `compare_continuation_traces`; equal collision/contact ticks
-alone are not determinism evidence.
+compares their declared no-op trace fields with `compare_continuation_traces`; equal
+collision/contact ticks alone are not determinism evidence. Opaque simulator state
+outside the declared no-op trace fields remains out of scope.
 
 ## Determination vocabulary (fail-closed)
 
@@ -113,8 +118,8 @@ causal claim; divergence still abstains to `unknown`.
 | Acceptance criterion | Where satisfied |
 | --- | --- |
 | Snapshot/restore includes RNG + actor state | `KinematicCollisionModel.snapshot/restore`; `test_snapshot_includes_rng_and_actor_state`, `test_snapshot_without_rng_diverges` |
-| Baseline branching reproduces the fixture within tolerance | `_verify_determinism` (20 replays) plus typed no-op trace comparison; determinism check in each avoidable/unavoidable test |
-| Action set, declared action-set coverage, horizon, collision predicate, pedestrian response versioned in output | `ReplayConfig.to_dict` → `config` block; schema `config` required fields |
+| Baseline branching reproduces the fixture within tolerance | `_verify_determinism` (20 replays) compares collision outcomes, contact ticks, and declared typed no-op trace fields; opaque state outside those fields is out of scope |
+| Action set, declared action-set coverage, horizon, collision predicate, pedestrian response versioned in output | `ReplayConfig.to_dict` → `config` block; new producers emit `source_kind`, while the v1 schema keeps that field optional for legacy payload compatibility |
 | `t_inevitable` and `t_uca` computed for preventable late braking, already-unavoidable, two-action interaction | `test_preventable_late_braking_is_avoidable`, `test_already_unavoidable_contact`, `test_two_action_interaction_closed_loop_avoidable` |
 | Missing feasible set or nondeterministic baseline → `unknown`, never `unavoidable` | `test_missing_feasible_action_returns_unknown`, `test_nondeterministic_baseline_returns_unknown` |
 | Output conforms to a report contract and preserves every branch result | `last_avoidable_replay.v1.json`; `branches` preserved; `test_report_conforms_to_schema_and_records_provenance` |
@@ -152,19 +157,10 @@ Native live-simulator replays are additionally rejected by the causal join until
 the adapter carries a verified episode/map/seed/software provenance receipt. They
 remain valid diagnostic replay evidence, but the join emits an explicit
 `native_simulator_causal_join_unsupported` abstention rather than relabelling the
-result as `synthetic_fixture`.
-
-Replays whose `source_kind` remains `unspecified` are also rejected by the causal
-join with `unspecified_replay_provenance`; controlled fixtures must declare
-`synthetic_fixture` explicitly. This preserves diagnostic compatibility while
-preventing provenance-free output from entering the causal report.
-
-An explicit `synthetic_fixture` label is necessary but not sufficient: the causal
-join also requires non-native replay provenance for `action_set_id`,
-`feasibility_filter`, `collision_predicate`, and a known `pedestrian_response`
-(`replayed` or `closed_loop`). Missing, `unspecified`, `unknown`, or malformed
-values produce `incomplete_replay_provenance` and a fully abstaining report.
-The replay engine may still emit its schema-safe omitted-response/unspecified
+result as `synthetic_fixture`. Legacy or otherwise unverified `source_kind` values
+such as `unspecified` and `unknown` also abstain; only an explicit
+`synthetic_fixture` declaration is accepted for this controlled-fixture join. The
+replay engine may still emit its schema-safe omitted-response/unspecified
 configuration for diagnostic inspection; that legacy behavior does not authorize a
 causal join.
 
@@ -187,10 +183,17 @@ causal join.
 ## Validation
 
 ```bash
-uv run pytest -q tests/benchmark -k 'counterfactual or snapshot or avoidable'   # 38 passed
+uv run pytest -q tests/benchmark -k 'counterfactual or snapshot or avoidable'   # 119 passed, 10545 deselected (2026-09-10)
 uv run python scripts/analysis/run_last_avoidable_replay_issue_5442.py          # 5 controlled fixtures
 git diff --check
 ```
+
+Repair receipt (2026-09-10, current `origin/main`): the focused replay/join/adapter
+suite passed 74 tests, the related causal-report suite passed 46 tests, and the
+broader matching collection above passed 119 tests. Ruff check/format, JSON-schema
+parsing, targeted compilation, broad-exception policy, and changed-docs/evidence
+integrity checks passed. These are implementation-integrity and controlled-fixture
+diagnostics only; no benchmark, fallback, or degraded execution result is claimed.
 
 Observed CLI determinations: `preventable_late_braking` → avoidable (t_uca=0,
 t_inevitable=7); `two_action_interaction` → avoidable (t_uca=0, t_inevitable=8);

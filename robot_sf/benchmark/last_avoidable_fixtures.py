@@ -832,6 +832,7 @@ def already_unavoidable_01_fixture() -> CollisionCauseFixture:
         horizon=28,
         substitution_mode=SUBSTITUTION_HOLD,
         pedestrian_response=PED_RESPONSE_REPLAYED,
+        source_kind="synthetic_fixture",
     )
     return CollisionCauseFixture(
         fixture_id="already_unavoidable_01",

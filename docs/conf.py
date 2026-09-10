@@ -13,8 +13,12 @@ copyright = "2026, Robot SF contributors"
 extensions = [
     "myst_parser",
     "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
     "sphinx.ext.napoleon",
 ]
+
+# Only test explicit doctest/testcode directives in documentation, not unmanaged docstring examples.
+doctest_test_doctest_blocks = ""
 
 source_suffix = {
     ".rst": "restructuredtext",
@@ -51,6 +55,7 @@ autodoc_default_options = {
 
 # Keep docs import-time light-weight when optional extras are missing.
 autodoc_mock_imports = [
+    "pandas",
     "stable_baselines3",
     "tensorboard",
     "torch",

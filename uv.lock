@@ -5426,6 +5426,12 @@ docs = [
     { name = "sphinx", version = "9.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-8-robot-sf-rllib' and extra == 'group-8-robot-sf-imitation')" },
     { name = "sphinx-rtd-theme" },
 ]
+examples = [
+    { name = "robot-sf", extra = ["benchmark", "viz"] },
+    { name = "scikit-learn" },
+    { name = "stable-baselines3" },
+    { name = "torch" },
+]
 imitation = [
     { name = "imitation" },
 ]
@@ -5535,6 +5541,12 @@ docs = [
     { name = "myst-parser", specifier = ">=4.0.0" },
     { name = "sphinx", specifier = ">=7.0.0" },
     { name = "sphinx-rtd-theme", specifier = ">=2.0.0" },
+]
+examples = [
+    { name = "robot-sf", extras = ["viz", "benchmark"] },
+    { name = "scikit-learn", specifier = ">=1.9.0" },
+    { name = "stable-baselines3", specifier = ">=2.9.0" },
+    { name = "torch", specifier = ">=2.13.0,<2.14.0" },
 ]
 imitation = [{ name = "imitation", specifier = ">=1.0.0" }]
 

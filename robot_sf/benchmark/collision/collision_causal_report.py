@@ -96,12 +96,6 @@ CAUSE_LOCATIONS = frozenset(
 
 CAUSAL_VERDICTS = frozenset({"avoidable", "unavoidable", "unknown"})
 PEDESTRIAN_RESPONSE_ASSUMPTIONS = frozenset({"replayed", "closed_loop", "unknown"})
-_NON_NATIVE_REPLAY_PROVENANCE_FIELDS = (
-    "action_set_id",
-    "feasibility_filter",
-    "collision_predicate",
-    "pedestrian_response",
-)
 
 #: The four incident timestamps, ordered as they occur along one timeline.
 CRITICAL_TIMESTAMP_KEYS = ("t_danger", "t_uca", "t_inevitable", "t_contact")
@@ -260,6 +254,7 @@ _LAST_AVOIDABLE_TO_CAUSAL_VERDICT = {
     VERDICT_ALREADY_UNAVOIDABLE: "unavoidable",
     VERDICT_UNKNOWN: "unknown",
 }
+_SYNTHETIC_REPLAY_SOURCE_KINDS = frozenset({"synthetic_fixture"})
 
 
 @dataclass(frozen=True)
@@ -330,45 +325,25 @@ def collide_causal_report_from_last_avoidable(
 
     _validate_join_metadata(metadata)
 
-    # Only an explicit controlled-fixture source label may enter this join. Native,
-    # unspecified, and otherwise unknown sources must not be relabelled as synthetic
-    # evidence by a downstream wrapper.
+    # Only an explicitly declared controlled fixture may enter this join. Native,
+    # unknown, and unspecified sources do not have the verified provenance needed
+    # by the causal-report source contract; never silently relabel them as a
+    # synthetic fixture.
     source_kind = getattr(replay.config, "source_kind", "unspecified")
-    if not (type(source_kind) is str and source_kind == "synthetic_fixture"):
-        is_unspecified = source_kind is None or (
-            isinstance(source_kind, str) and source_kind in {"", "unspecified"}
-        )
+    if source_kind not in _SYNTHETIC_REPLAY_SOURCE_KINDS:
+        is_native = source_kind == "live_episode"
         return validate_collision_causal_report(
             abstained_collision_causal_report(
                 report_id=report_id,
                 case_id=case_id,
                 reason=(
-                    "unspecified_replay_provenance"
-                    if is_unspecified
-                    else "native_simulator_causal_join_unsupported"
+                    "native_simulator_causal_join_unsupported"
+                    if is_native
+                    else "unverified_replay_source_provenance"
                 ),
                 source_kind="unknown",
                 missing_fields=[
-                    (
-                        "replay_source_provenance"
-                        if is_unspecified
-                        else "native_simulator_provenance"
-                    ),
-                    "causal_join_contract",
-                ],
-            )
-        )
-
-    incomplete_provenance = _incomplete_non_native_replay_provenance(replay.config)
-    if incomplete_provenance:
-        return validate_collision_causal_report(
-            abstained_collision_causal_report(
-                report_id=report_id,
-                case_id=case_id,
-                reason="incomplete_replay_provenance",
-                source_kind="unknown",
-                missing_fields=[
-                    *(f"replay_provenance.{field}" for field in incomplete_provenance),
+                    "native_simulator_provenance" if is_native else "replay_source_kind",
                     "causal_join_contract",
                 ],
             )
@@ -423,7 +398,7 @@ def collide_causal_report_from_last_avoidable(
         "case_id": case_id,
         "normative_fault": "not_assessed",
         "data_source": {
-            "source_kind": "synthetic_fixture",
+            "source_kind": source_kind,
             "provenance_uri": "last_avoidable_replay.v1+frozen_state_counterfactual_branch",
             "software_commit": None,
             "replay_determinism": replay_determinism,
@@ -494,25 +469,6 @@ def _validate_join_metadata(metadata: CausalJoinMetadata) -> None:
         raise CollisionCausalReportError(
             f"cause_location {metadata.cause_location!r} is not in CAUSE_LOCATIONS"
         )
-
-
-def _incomplete_non_native_replay_provenance(config: Any) -> tuple[str, ...]:
-    """Return non-native replay fields that cannot support a causal join."""
-    missing: list[str] = []
-    for field_name in _NON_NATIVE_REPLAY_PROVENANCE_FIELDS:
-        value = getattr(config, field_name, None)
-        if type(value) is not str or not value.strip():
-            missing.append(field_name)
-            continue
-        normalized = value.strip().lower()
-        if normalized in {"unspecified", "unknown"}:
-            missing.append(field_name)
-        elif field_name == "pedestrian_response" and normalized not in {
-            "replayed",
-            "closed_loop",
-        }:
-            missing.append(field_name)
-    return tuple(missing)
 
 
 def _join_rationale(replay: LastAvoidableReport, abstained: bool) -> str:

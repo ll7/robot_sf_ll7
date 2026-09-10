@@ -509,6 +509,15 @@ def test_report_conforms_to_schema_and_records_provenance() -> None:
         assert cfg["pedestrian_response"] in {"replayed", "closed_loop"}
 
 
+def test_v1_schema_accepts_legacy_config_without_source_kind() -> None:
+    """The v1 schema remains readable when older payloads omit source_kind."""
+    report = _run(fx.preventable_late_braking_scenario())
+    payload = report.to_dict()
+    del payload["config"]["source_kind"]
+
+    jsonschema.validate(payload, _SCHEMA)
+
+
 def test_runner_smoke(tmp_path) -> None:
     """The offline CLI runs a fixture and writes a schema-valid report."""
     from scripts.analysis.run_last_avoidable_replay_issue_5442 import main

@@ -33,6 +33,43 @@ def test_import_weight_fresh_process():
     )
 
 
+def test_import_weight_fresh_process_with_inventory():
+    """Verify that inventorying all public exports in a fresh process does not pull in heavy modules."""
+    code = (
+        "import sys, robot_sf; "
+        "[getattr(robot_sf, name) for name in robot_sf.__all__]; "
+        "heavy = [m for m in ('pygame', 'torch', 'stable_baselines3', 'carla', 'playwright', 'ray', 'tensorflow') if m in sys.modules]; "
+        "assert not heavy, f'Heavy modules imported during inventory: {heavy}'"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, (
+        f"Import weight inventory failure:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+    )
+
+
+def test_import_weight_negative_fixture_heavy_import():
+    """Verify that import-weight check detects injected heavy modules."""
+    code = (
+        "import sys, robot_sf; "
+        "sys.modules['torch'] = object(); "
+        "heavy = [m for m in ('pygame', 'torch', 'stable_baselines3', 'carla', 'playwright', 'ray', 'tensorflow') if m in sys.modules]; "
+        "assert not heavy, f'Heavy modules imported: {heavy}'"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "Heavy modules imported: ['torch']" in result.stderr
+
+
 def test_public_api_exports_and_dir():
     """Verify __all__, __dir__, and lazy attribute resolution."""
     expected_exports = {
@@ -50,6 +87,10 @@ def test_public_api_exports_and_dir():
         "telemetry",
     }
     assert set(robot_sf.__all__) == expected_exports
+    assert (
+        robot_sf._TELEMETRY_EXPORTS | robot_sf._API_EXPORTS | {"api", "telemetry"}
+        == expected_exports
+    )
 
     dir_names = set(dir(robot_sf))
     for name in expected_exports:

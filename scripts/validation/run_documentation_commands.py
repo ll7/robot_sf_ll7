@@ -53,6 +53,12 @@ DESTRUCTIVE_RE = re.compile(
 )
 ABSOLUTE_PATH_RE = re.compile(r"(?:^|\s)(/(?!dev/null\b)[A-Za-z0-9_][^\s\"']*)")
 ESCAPE_RE = re.compile(r"(?:^|\s)(\.\.|~)(?:/|\s|$)")
+# Tagged blocks run in CI, so shell composition and alternate interpreters are not a safe
+# execution boundary even when their nested text does not contain one of the blocked tokens.
+SHELL_CONTROL_RE = re.compile(r"[;&|<>`$()]")
+INTERPRETER_RE = re.compile(
+    r"\b(?:bash|dash|fish|ksh|perl|php|python(?:\d+(?:\.\d+)?)?|ruby|sh|zsh|node|deno)\b"
+)
 
 LOG_PREFIX_RE = re.compile(
     r"^(WARNING: All log messages.*|I\d{4} \S+ \S+ .*port\.cc.*|I\d{4} \S+ \S+ .*cpu_feature_guard\.cc.*|"
@@ -88,6 +94,10 @@ def screen_command(command: str) -> str | None:
         return "absolute_path"
     if ESCAPE_RE.search(command):
         return "output_escape"
+    if SHELL_CONTROL_RE.search(command):
+        return "shell_syntax"
+    if INTERPRETER_RE.search(command):
+        return "shell_wrapper"
     return None
 
 
@@ -106,7 +116,11 @@ class BlockResult:
     reason: str
 
     def as_dict(self) -> dict[str, object]:
-        """Return the JSON-serializable receipt record."""
+        """Return the canonical JSON receipt record.
+
+        Wall-clock duration is intentionally omitted because it is diagnostic rather than
+        reproducibility evidence and would make otherwise identical receipts differ between runs.
+        """
         return {
             "source": self.source,
             "line": self.line,
@@ -115,7 +129,6 @@ class BlockResult:
             "exit_code": self.exit_code,
             "stdout_digest": self.stdout_digest,
             "stderr_digest": self.stderr_digest,
-            "duration_s": self.duration_s,
             "reason": self.reason,
         }
 
@@ -135,6 +148,8 @@ def iter_tagged_blocks(page: Path) -> list[tuple[int, str, str]]:
                 end = start
                 while end < len(lines) and not FENCE_RE.match(lines[end]):
                     end += 1
+                if end == len(lines):
+                    raise ValueError(f"Unterminated tagged fence at line {index + 1}")
                 command = "\n".join(lines[start:end]).strip()
                 if command:
                     blocks.append((start + 1, mode, command))
@@ -210,8 +225,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         for result in results:
             print(f"{result.source}:{result.line}: exit={result.exit_code} [{result.reason}]")
+        failed = sum(1 for r in results if r.reason != "ok")
+        print(f"{len(results) - failed}/{len(results)} tagged block(s) passed.")
     failed = sum(1 for r in results if r.reason != "ok")
-    print(f"{len(results) - failed}/{len(results)} tagged block(s) passed.")
     if args.check and (failed or not results):
         return 1
     return 0

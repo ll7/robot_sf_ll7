@@ -55,11 +55,20 @@ def test_collect_grouped_values_requires_explicit_cross_track_mode() -> None:
 
 
 def test_save_distributions_writes_pngs(tmp_path: Path) -> None:
-    """Verify distribution plots are saved to disk for each metric."""
+    """Verify distribution plots are saved to disk in raster and vector formats."""
     grouped = {"algoA": {"success_rate": [0.1, 0.2, 0.3, 0.4, 0.5]}}
-    meta = save_distributions(grouped, tmp_path, bins=5, kde=False, out_pdf=False, ci=True)
+    meta = save_distributions(
+        grouped,
+        tmp_path,
+        bins=5,
+        kde=False,
+        out_pdf=False,
+        out_svg=True,
+        ci=True,
+    )
     assert meta.wrote
     assert Path(meta.wrote[0]).exists()
+    assert (tmp_path / "dist_success_rate.svg").is_file()
 
 
 def test_save_distributions_skips_ci_control_validation_when_disabled(tmp_path: Path) -> None:

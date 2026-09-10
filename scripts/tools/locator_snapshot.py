@@ -289,6 +289,9 @@ def _resolve_locators(
     overlay_locator = _optional_text(overlay_entry.get("locator")) if overlay_entry else None
     declared_class = str(entry["locator_class"])
     overlay_class = _optional_text(overlay_entry.get("locator_class")) if overlay_entry else None
+    if overlay_class is not None and overlay_class not in LOCATOR_CLASSES:
+        issues.append(_issue("invalid_overlay_entry", logical_id, "overlay class is invalid"))
+        overlay_class = None
     if declared_class == "private_overlay":
         if overlay_locator is None:
             issues.append(_issue("missing_private_overlay", logical_id, "overlay locator required"))

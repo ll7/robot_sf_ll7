@@ -723,3 +723,13 @@ examples:
     ci_reason: "Publication figure workflow; requires manual figure inspection."
     doc_reference: null
     tags: [visualization, pedestrian, publication]
+  - path: advanced/38_compare_resolved_configs.py
+    name: "38 Compare Resolved Configs"
+    summary: "Compare two resolved training configurations and explain semantic drift."
+    category_slug: advanced
+    prerequisites:
+      - uv sync --all-extras
+    ci_enabled: false
+    ci_reason: "Imports the canonical training-config resolver, which pulls the training stack; run locally with the fixture pair."
+    doc_reference: examples/advanced/README_compare_resolved_configs.md
+    tags: [config, provenance, analysis]

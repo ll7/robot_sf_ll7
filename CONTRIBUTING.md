@@ -209,6 +209,24 @@ scripts/dev/ruff_fix_format.sh
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
 
+### Documentation site build
+
+The canonical documentation build is the curated strict build:
+
+```bash
+scripts/dev/sphinx_strict_build.sh                 # HTML into output/docs-strict/html
+scripts/dev/sphinx_strict_build.sh --builder dummy --json
+```
+
+It builds only the `docs/index.rst` toctree closure, promotes warnings to errors, and allows
+exactly one non-blocking case: cross-references that resolve to an existing repository document
+outside the curated set (the curated site intentionally does not build the historical corpus).
+Every other warning, including broken links to nonexistent targets, fails the build. The curated
+source set is pinned in `docs/sphinx_curated_sources.json`; after an intentional toctree change,
+rerun with `--write-manifest` and review the manifest diff. A raw full-tree
+`sphinx-build docs <out>` is unsupported: `docs/conf.py` no longer suppresses broad warning
+classes, so it reports the historical corpus warnings by design.
+
 ### External review routing
 
 CodeRabbit reviews pull requests that change simulator code, tests, scripts, or GitHub Actions.

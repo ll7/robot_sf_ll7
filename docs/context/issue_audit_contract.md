@@ -234,6 +234,17 @@ present. An existing unexplained blocker label is reported for repair review;
 absence of a reason is not treated as proof that the underlying blocker has
 resolved.
 
+Ready and triage are mutually exclusive labels. `state:ready` records that the
+issue already passed contract triage, so neither the audit core nor the blocker
+transition may add `needs-triage` to an issue that carries `state:ready`. When a
+blocker is otherwise detectable but its reason is unrecorded on a ready issue,
+the planner reports the blocker as a finding for maintainer review instead of
+writing the triage label; the same rule prevents a later bulk label sweep from
+silently removing an already-admitted issue from the claimable queue. If the
+readiness label is stale, the audit must remove or re-evaluate `state:ready`
+through its normal readiness evidence path before triage can block the issue
+again.
+
 A stale state:running label is preserved when no active record is observable;
 absence of evidence is not evidence of completion. Multiple states without a
 decisive signal become a decision gate.

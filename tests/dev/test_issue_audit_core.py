@@ -5977,3 +5977,20 @@ def test_ruled_issues_produce_no_decision_required_mutations(issue_num: int) -> 
         m["operation"] == "add_label" and m["value"] == "decision-required"
         for m in classification.mutations
     )
+
+
+def test_ready_issue_never_gains_needs_triage_for_an_unrecorded_blocker() -> None:
+    """Issue #8837: an already-ready issue must not be re-blocked by triage routing."""
+
+    classification = classify_issue(
+        _issue(
+            8837,
+            labels=["state:ready"],
+            body="Rights: license missing pending permission review.",
+        ),
+        available_labels={"state:ready", "state:blocked", "needs-triage"},
+    )
+
+    values = {mutation["value"] for mutation in classification.mutations}
+    assert "needs-triage" not in values
+    assert any("declined needs-triage" in finding for finding in classification.findings)

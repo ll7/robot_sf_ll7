@@ -336,3 +336,23 @@ def test_apply_aborts_on_concurrent_label_drift() -> None:
             authorized=True,
             runner=runner,
         )
+
+
+def test_ready_issue_never_gains_needs_triage_from_a_conflict() -> None:
+    """Issue #8837: a readiness label records triage; the sweep must not re-block it."""
+
+    plan = plan_transition(_issue("state:ready", "state:blocked"))
+
+    assert plan["blocker_class"] == "invalid_or_conflicting_state"
+    assert "needs-triage" not in plan["proposed_label_delta"]["add"]
+
+
+def test_ready_ruling_without_child_never_gains_needs_triage() -> None:
+    """Issue #8837: a ready issue already passed triage even when a child is pending."""
+
+    plan = plan_transition(
+        _issue("state:ready", "state:blocked-no-code-slice"),
+        ruling={"valid": True, "token": "ruling-8837", "carrier": "issue-comment-1"},
+    )
+
+    assert "needs-triage" not in plan["proposed_label_delta"]["add"]

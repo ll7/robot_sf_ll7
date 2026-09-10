@@ -61,7 +61,7 @@ def test_save_png_creates_file(tmp_path):
     assert "front_size" in meta
 
 
-def test_save_pdf_option(tmp_path):
+def test_save_vector_options(tmp_path):
     """TODO docstring. Document this function.
 
     Args:
@@ -88,3 +88,41 @@ def test_save_pdf_option(tmp_path):
     assert out_pdf.exists() and out_pdf.stat().st_size > 0
     assert out_svg.exists() and out_svg.stat().st_size > 0
     assert meta.get("pdf") == str(out_pdf)
+    assert meta.get("svg") == str(out_svg)
+
+
+def test_save_pareto_png_preserves_positional_observation_track_mode(tmp_path):
+    """The pre-existing positional observation-track mode remains effective."""
+    records = [
+        {
+            "scenario_id": "scn-a",
+            "benchmark_track": "track-a",
+            "scenario_params": {"algo": "A"},
+            "metrics": {"collisions": 1.0, "comfort_exposure": 0.5},
+        },
+        {
+            "scenario_id": "scn-b",
+            "benchmark_track": "track-b",
+            "scenario_params": {"algo": "A"},
+            "metrics": {"collisions": 0.8, "comfort_exposure": 0.9},
+        },
+    ]
+    out = tmp_path / "diagnostic-pareto.png"
+
+    meta = save_pareto_png(
+        records,
+        str(out),
+        "collisions",
+        "comfort_exposure",
+        "scenario_params.algo",
+        "scenario_id",
+        "mean",
+        False,
+        False,
+        None,
+        None,
+        "diagnostic-cross-track",
+    )
+
+    assert out.exists()
+    assert meta["count"] == 2

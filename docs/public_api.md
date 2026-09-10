@@ -20,6 +20,25 @@ The `robot_sf` top-level package provides lightweight, lazily resolved exports f
 
 All symbols in `robot_sf.__all__` are part of the `stable` public facade:
 
+### Top-Level Facade Manifest
+
+<!-- public-api-manifest:start -->
+| Symbol | Stability | Kind | Source |
+| --- | --- | --- | --- |
+| `EpisodeRecord` | stable | class | `robot_sf.api` |
+| `ManifestWriter` | stable | class | `robot_sf.telemetry` |
+| `PlannerProtocol` | stable | protocol | `robot_sf.api` |
+| `RunRegistry` | stable | class | `robot_sf.telemetry` |
+| `RunTrackerConfig` | stable | class | `robot_sf.telemetry` |
+| `ScenarioSpec` | stable | class | `robot_sf.api` |
+| `api` | stable | module | `robot_sf.api` |
+| `generate_run_id` | stable | function | `robot_sf.telemetry` |
+| `load_scenario` | stable | function | `robot_sf.api` |
+| `make_env` | stable | function | `robot_sf.api` |
+| `run_episode` | stable | function | `robot_sf.api` |
+| `telemetry` | stable | module | `robot_sf.telemetry` |
+<!-- public-api-manifest:end -->
+
 ### Environment Creation
 
 - **`robot_sf.make_env(*, scenario=None, seed=None, **kwargs)`**:
@@ -44,7 +63,7 @@ All symbols in `robot_sf.__all__` are part of the `stable` public facade:
 - **`robot_sf.PlannerProtocol`**:
   Protocol defining the standard interface for navigation planners (`step`, `reset`, `configure`, `close`).
 - **`robot_sf.api`**:
-  Module re-exporting the public facade functions and types.
+  Module re-exporting the public facade functions and types. For complete runnable first-episode examples and exception contracts, see the [Sphinx API Facade Reference](api/robot_sf.api.rst).
 
 ### Telemetry Surface
 

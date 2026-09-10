@@ -377,6 +377,12 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    # Deterministic examples metadata, CLI, and tutorial contracts belong in
+    # the fast coverage shards; only the subprocess-heavy example runner stays
+    # in the dedicated examples-smoke phase.
+    "test_examples_manifest.py",
+    "test_examples_cli.py",
+    "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
     "test_global_route.py",
     "test_open_coverage_report.py",

@@ -24,8 +24,14 @@ uv run robot-sf doctor
 
 For a quick host-only check that does not execute the environment or manifest quickstarts, use:
 
-```bash
+```bash exec-doc-root
 uv run robot-sf doctor --skip-env-smoke --skip-quickstart-smoke
+```
+
+Check the installed entry point first:
+
+```bash exec-doc-root
+uv run robot-sf --help
 ```
 
 The doctor report is the first fail-closed boundary: fix reported missing tools, imports, model
@@ -57,12 +63,14 @@ These artifacts answer “does the install run and produce something visible?”
 Use the manifest-backed example catalog when you want source-level examples, and the curated recipe
 catalog when you want a copy-pasteable workflow without learning repository paths first:
 
-```bash
+```bash exec-doc-root
 uv run robot-sf examples list
-uv run robot-sf examples run quickstart/01_basic_robot --fast
-
 uv run robot-sf recipe list
 uv run robot-sf recipe explain first-demo
+```
+
+```bash
+uv run robot-sf examples run quickstart/01_basic_robot --fast
 uv run robot-sf recipe run first-demo
 ```
 

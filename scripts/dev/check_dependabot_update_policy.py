@@ -55,6 +55,7 @@ PACKAGE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 WORKFLOW_ACTION_VALUE = re.compile(
     r"^(?P<action>(?!\.)[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+)@(?P<sha>[0-9a-fA-F]{40})$"
 )
+CI_SETUP_ACTION = "./.github/actions/setup-ci-python"
 WORKFLOW_PATH_PREFIX = ".github/workflows/"
 WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 
@@ -97,6 +98,128 @@ def _as_string_list(value: Any, label: str) -> list[str]:
     return list(value)
 
 
+def _requirement_name_and_extras(value: Any) -> tuple[str | None, tuple[str, ...]]:
+    """Return a requirement's normalized project name and extras."""
+    if not isinstance(value, str):
+        return None, ()
+    match = re.match(
+        r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)(?:\[(?P<extras>[^\]]*)\])?",
+        value,
+    )
+    if match is None:
+        return None, ()
+    extras = tuple(
+        sorted(
+            normalize_package_name(extra)
+            for extra in (part.strip() for part in (match.group("extras") or "").split(","))
+            if extra
+        )
+    )
+    return normalize_package_name(match.group("name")), extras
+
+
+def _validated_ci_only_group(group_name: str, value: Any) -> dict[str, Any]:  # noqa: C901, PLR0912
+    """Validate and normalize one explicitly supported CI-only profile."""
+    profile = _as_mapping(value, f"ci_only_dependency_groups.{group_name}")
+    required = {
+        "declaration",
+        "lockfile",
+        "root_project",
+        "root_requirement",
+        "allowed_packages",
+        "requirements",
+        "required_jobs",
+    }
+    missing = sorted(required - set(profile))
+    if missing:
+        raise PolicyError(
+            f"ci_only_dependency_groups.{group_name} is missing: {', '.join(missing)}"
+        )
+    if profile["declaration"] != "pyproject.toml":
+        raise PolicyError(
+            f"ci_only_dependency_groups.{group_name}.declaration must be pyproject.toml"
+        )
+    if profile["lockfile"] != "uv.lock":
+        raise PolicyError(f"ci_only_dependency_groups.{group_name}.lockfile must be uv.lock")
+
+    root_project = profile["root_project"]
+    if not isinstance(root_project, str) or not root_project:
+        raise PolicyError(f"ci_only_dependency_groups.{group_name}.root_project must be a package")
+    normalized_root = normalize_package_name(root_project)
+    root_requirement = profile["root_requirement"]
+    requirement_root, root_extras = _requirement_name_and_extras(root_requirement)
+    if requirement_root != normalized_root:
+        raise PolicyError(
+            f"ci_only_dependency_groups.{group_name}.root_requirement must name {root_project!r}"
+        )
+
+    allowed_packages = _as_string_list(
+        profile["allowed_packages"],
+        f"ci_only_dependency_groups.{group_name}.allowed_packages",
+    )
+    normalized_packages = [normalize_package_name(package) for package in allowed_packages]
+    if not normalized_packages or any(not package for package in normalized_packages):
+        raise PolicyError(
+            f"ci_only_dependency_groups.{group_name}.allowed_packages must be non-empty"
+        )
+    if len(set(normalized_packages)) != len(normalized_packages):
+        raise PolicyError(
+            f"ci_only_dependency_groups.{group_name}.allowed_packages contains duplicates"
+        )
+    if normalized_root in normalized_packages:
+        raise PolicyError(
+            f"ci_only_dependency_groups.{group_name}.allowed_packages must exclude the root project"
+        )
+
+    requirements = _as_mapping(
+        profile["requirements"], f"ci_only_dependency_groups.{group_name}.requirements"
+    )
+    normalized_requirements: dict[str, str] = {}
+    for package, requirement in requirements.items():
+        if not isinstance(package, str) or not package:
+            raise PolicyError(
+                f"ci_only_dependency_groups.{group_name}.requirements keys must be packages"
+            )
+        normalized_package = normalize_package_name(package)
+        if normalized_package in normalized_requirements:
+            raise PolicyError(
+                f"ci_only_dependency_groups.{group_name}.requirements contains duplicates"
+            )
+        if not isinstance(requirement, str) or not requirement:
+            raise PolicyError(
+                f"ci_only_dependency_groups.{group_name}.requirements.{package} must be a requirement"
+            )
+        if requirement_package_name(requirement) != normalized_package:
+            raise PolicyError(
+                f"ci_only_dependency_groups.{group_name}.requirements.{package} names another package"
+            )
+        normalized_requirements[normalized_package] = requirement
+    if set(normalized_requirements) != set(normalized_packages):
+        raise PolicyError(
+            f"ci_only_dependency_groups.{group_name}.requirements must match allowed_packages"
+        )
+
+    required_jobs = _as_string_list(
+        profile["required_jobs"], f"ci_only_dependency_groups.{group_name}.required_jobs"
+    )
+    if not required_jobs or any(not job for job in required_jobs):
+        raise PolicyError(f"ci_only_dependency_groups.{group_name} requires a CI job")
+    if len(set(required_jobs)) != len(required_jobs):
+        raise PolicyError(
+            f"ci_only_dependency_groups.{group_name}.required_jobs contains duplicates"
+        )
+    return {
+        "declaration": "pyproject.toml",
+        "lockfile": "uv.lock",
+        "root_project": normalized_root,
+        "root_requirement": root_requirement,
+        "root_extras": root_extras,
+        "allowed_packages": tuple(sorted(normalized_packages)),
+        "requirements": normalized_requirements,
+        "required_jobs": required_jobs,
+    }
+
+
 def load_policy(path: Path = DEFAULT_POLICY) -> dict[str, Any]:
     """Load the JSON policy and perform the executable shape checks."""
     try:
@@ -117,6 +240,7 @@ def validate_policy(policy: Mapping[str, Any]) -> None:  # noqa: C901, PLR0912
         "dependabot_config",
         "ci_workflow",
         "aggregate_job",
+        "ci_only_dependency_groups",
         "classes",
         "transitive_fallback",
         "security_updates",
@@ -178,6 +302,14 @@ def validate_policy(policy: Mapping[str, Any]) -> None:  # noqa: C901, PLR0912
         raise PolicyError("security updates must remain independently actionable")
     _as_string_list(security.get("required_jobs"), "security_updates.required_jobs")
 
+    profile_groups = _as_mapping(policy["ci_only_dependency_groups"], "ci_only_dependency_groups")
+    if not profile_groups:
+        raise PolicyError("ci_only_dependency_groups must define at least one group")
+    for group_name, raw_profile in profile_groups.items():
+        if not isinstance(group_name, str) or not group_name:
+            raise PolicyError("ci_only_dependency_groups keys must be non-empty strings")
+        _validated_ci_only_group(group_name, raw_profile)
+
 
 def _workflow_strings(value: Any) -> Iterable[str]:
     if isinstance(value, str):
@@ -188,6 +320,41 @@ def _workflow_strings(value: Any) -> Iterable[str]:
     elif isinstance(value, list):
         for child in value:
             yield from _workflow_strings(child)
+
+
+def _setup_action_sync_args(job_name: str, job: Mapping[str, Any]) -> list[Any]:
+    """Return sync arguments from every shared CI setup action in one job."""
+    steps = job.get("steps", [])
+    if not isinstance(steps, list):
+        raise PolicyError(f"CI jobs.{job_name}.steps must be a list")
+    sync_args: list[Any] = []
+    for index, raw_step in enumerate(steps):
+        step = _as_mapping(raw_step, f"CI jobs.{job_name}.steps[{index}]")
+        if step.get("uses") != CI_SETUP_ACTION:
+            continue
+        with_block = step.get("with", {})
+        if not isinstance(with_block, Mapping):
+            raise PolicyError(f"CI jobs.{job_name}.steps[{index}].with must be an object")
+        sync_args.append(with_block.get("sync-args"))
+    return sync_args
+
+
+def _validate_ci_only_profile_jobs(
+    jobs: Mapping[str, Any], profile_groups: Mapping[str, Any]
+) -> None:
+    """Require each CI-only profile job to materialize its exact dependency group."""
+    for group_name, raw_profile in profile_groups.items():
+        profile = _validated_ci_only_group(str(group_name), raw_profile)
+        expected_sync_args = f"--group {group_name} --frozen"
+        for job_name in profile["required_jobs"]:
+            job = _as_mapping(jobs.get(job_name), f"CI jobs.{job_name}")
+            observed_sync_args = _setup_action_sync_args(job_name, job)
+            if observed_sync_args != [expected_sync_args]:
+                raise PolicyError(
+                    f"CI-only dependency group {group_name!r} job {job_name!r} must contain "
+                    f"exactly one {CI_SETUP_ACTION!r} step with sync-args "
+                    f"{expected_sync_args!r}; observed {observed_sync_args!r}"
+                )
 
 
 def _root_uv_update(document: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -274,7 +441,7 @@ def validate_dependabot_config(path: Path = DEFAULT_DEPENDABOT_CONFIG) -> None: 
 
 
 def validate_ci_workflow(policy: Mapping[str, Any], path: Path = DEFAULT_CI_WORKFLOW) -> None:  # noqa: C901
-    """Ensure policy evidence points at jobs the CI aggregate requires."""
+    """Ensure policy evidence points at jobs and exact setup invocations."""
     try:
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
@@ -289,11 +456,18 @@ def validate_ci_workflow(policy: Mapping[str, Any], path: Path = DEFAULT_CI_WORK
         aggregate_needs = [aggregate_needs]
     aggregate_needs = set(_as_string_list(aggregate_needs, f"CI jobs.{aggregate_name}.needs"))
 
+    profile_groups = _as_mapping(policy["ci_only_dependency_groups"], "ci_only_dependency_groups")
     required_jobs: set[str] = set()
     policy_items = list(policy["classes"]) + [
         _as_mapping(policy["transitive_fallback"], "transitive_fallback"),
         _as_mapping(policy["security_updates"], "security_updates"),
     ]
+    policy_items.extend(
+        _as_mapping(profile, "ci-only dependency group")
+        for profile in _as_mapping(
+            policy["ci_only_dependency_groups"], "ci_only_dependency_groups"
+        ).values()
+    )
     for item in policy_items:
         required_jobs.update(_as_string_list(item["required_jobs"], "required_jobs"))
     missing_jobs = sorted(required_jobs - set(jobs))
@@ -304,6 +478,7 @@ def validate_ci_workflow(policy: Mapping[str, Any], path: Path = DEFAULT_CI_WORK
         raise PolicyError(
             f"CI aggregate {aggregate_name!r} does not require policy jobs: {', '.join(missing_needs)}"
         )
+    _validate_ci_only_profile_jobs(jobs, profile_groups)
 
     compatibility_text = "\n".join(_workflow_strings(jobs["compat-matrix"]))
     for raw_class in policy["classes"]:
@@ -318,7 +493,49 @@ def validate_ci_workflow(policy: Mapping[str, Any], path: Path = DEFAULT_CI_WORK
                 )
 
 
+def _toml_document(text: str, label: str) -> Mapping[str, Any]:
+    """Parse one TOML document for policy comparisons."""
+    if not text:
+        return {}
+    try:
+        document = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PolicyError(f"invalid {label}: {exc}") from exc
+    if not isinstance(document, Mapping):
+        raise PolicyError(f"{label} must be an object")
+    return document
+
+
+def _dependency_groups_from_text(text: str) -> Mapping[str, Any]:
+    """Return the PEP 735 dependency-group table from a project document."""
+    groups = _toml_document(text, "pyproject.toml").get("dependency-groups", {})
+    if groups is None:
+        return {}
+    if not isinstance(groups, Mapping):
+        raise PolicyError("pyproject.toml dependency-groups must be an object")
+    return groups
+
+
+def _dependency_group_requirements_from_text(text: str, group_name: str) -> list[str] | None:
+    """Return one group's literal requirements, rejecting unresolved includes."""
+    groups = _dependency_groups_from_text(text)
+    if group_name not in groups:
+        return None
+    source = groups[group_name]
+    if not isinstance(source, list) or not all(isinstance(item, str) for item in source):
+        raise PolicyError(f"dependency-groups.{group_name} must contain requirement strings")
+    return list(source)
+
+
+def _project_document_without_groups(text: str) -> Any:
+    """Return project TOML identity after removing only PEP 735 groups."""
+    document = dict(_toml_document(text, "pyproject.toml"))
+    document.pop("dependency-groups", None)
+    return canonical_lock_value(document)
+
+
 def _project_dependency_names(document: Mapping[str, Any]) -> set[str]:
+    """Return direct package names from project declarations and optional groups."""
     project = document.get("project", {})
     if not isinstance(project, Mapping):
         return set()
@@ -352,6 +569,280 @@ def dependency_names_from_text(text: str) -> set[str]:
     return _project_dependency_names(document)
 
 
+def _project_dependency_rows_from_text(text: str) -> dict[str, tuple[str, ...]]:
+    """Return published project dependency requirements grouped by package name."""
+    if not text:
+        return {}
+    try:
+        document = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PolicyError(f"invalid pyproject.toml while comparing dependencies: {exc}") from exc
+    project = document.get("project", {})
+    if not isinstance(project, Mapping):
+        return {}
+    sources: list[Any] = [project.get("dependencies", [])]
+    optional = project.get("optional-dependencies", {})
+    if isinstance(optional, Mapping):
+        sources.extend(optional.values())
+    rows: dict[str, list[str]] = {}
+    for source in sources:
+        if not isinstance(source, list):
+            continue
+        for requirement in source:
+            name = requirement_package_name(requirement)
+            if name is not None and isinstance(requirement, str):
+                rows.setdefault(name, []).append(requirement)
+    return {name: tuple(sorted(values)) for name, values in rows.items()}
+
+
+def dependency_group_names_from_text(text: str, group_names: Iterable[str]) -> set[str]:
+    """Return package names declared in the selected PEP 735 dependency groups."""
+    if not text:
+        return set()
+    document = _toml_document(text, "pyproject.toml while classifying dependency groups")
+    project = document.get("project", {})
+    project_name = (
+        normalize_package_name(str(project.get("name", ""))) if isinstance(project, Mapping) else ""
+    )
+    names: set[str] = set()
+    for group_name in sorted(set(group_names)):
+        requirements = _dependency_group_requirements_from_text(text, group_name)
+        if requirements is None:
+            continue
+        for requirement in requirements:
+            name = requirement_package_name(requirement)
+            if name and name != project_name:
+                names.add(name)
+    return names
+
+
+def _raw_lock_rows(text: str) -> dict[str, list[Mapping[str, Any]]]:
+    """Return parsed lock rows grouped by normalized package name."""
+    if not text:
+        return {}
+    try:
+        document = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PolicyError("invalid uv.lock while checking CI-only profile") from exc
+    rows = document.get("package", [])
+    if not isinstance(rows, list):
+        raise PolicyError("uv.lock package table must be a list")
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for row in rows:
+        if not isinstance(row, Mapping) or not isinstance(row.get("name"), str):
+            raise PolicyError("uv.lock contains a package row without a name")
+        grouped.setdefault(normalize_package_name(row["name"]), []).append(row)
+    return grouped
+
+
+def _lock_requirement_entry(requirement: str) -> dict[str, Any] | None:
+    """Translate a plain profile requirement to uv's lock metadata shape."""
+    match = re.match(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[^\]]*\])?(?P<rest>.*)$", requirement)
+    if match is None:
+        return None
+    name, extras = _requirement_name_and_extras(requirement)
+    if name is None or ";" in match.group("rest"):
+        return None
+    entry: dict[str, Any] = {"name": name}
+    if extras:
+        entry["extras"] = list(extras)
+    specifier = match.group("rest").strip()
+    if specifier:
+        entry["specifier"] = specifier
+    return entry
+
+
+def _profile_lock_change_is_declaration_only(  # noqa: C901, PLR0912
+    profile: Mapping[str, Any],
+    group_name: str,
+    base_lock_text: str,
+    head_lock_text: str,
+    resolution_evidence: Mapping[str, Any],
+) -> bool:
+    """Prove a profile lock change only adds its declared root dev edge."""
+    lock_report = _as_mapping(
+        _as_mapping(resolution_evidence.get("locks"), "resolution_evidence.locks").get(
+            str(profile["lockfile"])
+        ),
+        f"resolution_evidence.locks.{profile['lockfile']}",
+    )
+    root_name = str(profile["root_project"])
+    root_changed = normalize_package_name(root_name)
+    changed_packages = {
+        normalize_package_name(str(name)) for name in lock_report.get("changed_packages", [])
+    }
+    material_packages = {
+        normalize_package_name(str(name)) for name in lock_report.get("material_packages", [])
+    }
+    if lock_report.get("material_fields"):
+        return False
+    if changed_packages - {root_changed} or material_packages - {root_changed}:
+        return False
+
+    base_rows = _raw_lock_rows(base_lock_text).get(root_changed, [])
+    head_rows = _raw_lock_rows(head_lock_text).get(root_changed, [])
+    if len(base_rows) != 1 or len(head_rows) != 1:
+        return False
+    base_root = base_rows[0]
+    head_root = head_rows[0]
+
+    def without_profile_edges(row: Mapping[str, Any]) -> dict[str, Any] | None:
+        """Remove only the profile's expected root edges before identity comparison."""
+        result = dict(row)
+        result.pop("dev-dependencies", None)
+        metadata = result.get("metadata")
+        if metadata is None:
+            return result
+        if not isinstance(metadata, Mapping):
+            return None
+        metadata_without_profile = dict(metadata)
+        requires_dev = metadata_without_profile.get("requires-dev")
+        if requires_dev is not None:
+            if not isinstance(requires_dev, Mapping):
+                return None
+            requires_dev_without_profile = {
+                key: value for key, value in requires_dev.items() if key != group_name
+            }
+            if requires_dev_without_profile:
+                metadata_without_profile["requires-dev"] = requires_dev_without_profile
+            else:
+                metadata_without_profile.pop("requires-dev", None)
+        result["metadata"] = metadata_without_profile
+        return result
+
+    base_without_profile = without_profile_edges(base_root)
+    head_without_profile = without_profile_edges(head_root)
+    if base_without_profile is None or head_without_profile is None:
+        return False
+    if canonical_lock_value(base_without_profile) != canonical_lock_value(head_without_profile):
+        return False
+
+    base_dev = base_root.get("dev-dependencies", {})
+    head_dev = head_root.get("dev-dependencies", {})
+    if not isinstance(base_dev, Mapping) or not isinstance(head_dev, Mapping):
+        return False
+    if group_name in base_dev or set(head_dev) != set(base_dev) | {group_name}:
+        return False
+    for existing_group, entries in base_dev.items():
+        if canonical_lock_value(entries) != canonical_lock_value(head_dev[existing_group]):
+            return False
+
+    def requires_dev(row: Mapping[str, Any]) -> Mapping[str, Any] | None:
+        """Return the lock metadata's development groups, if present and valid."""
+        metadata = row.get("metadata", {})
+        if not isinstance(metadata, Mapping):
+            return None
+        value = metadata.get("requires-dev", {})
+        return value if isinstance(value, Mapping) else None
+
+    base_requires_dev = requires_dev(base_root)
+    head_requires_dev = requires_dev(head_root)
+    if base_requires_dev is None or head_requires_dev is None:
+        return False
+    if group_name in base_requires_dev or set(head_requires_dev) != (
+        set(base_requires_dev) | {group_name}
+    ):
+        return False
+    for existing_group, entries in base_requires_dev.items():
+        if canonical_lock_value(entries) != canonical_lock_value(head_requires_dev[existing_group]):
+            return False
+    expected_metadata_entries = []
+    root_entry: dict[str, Any] = {"name": root_name}
+    if profile["root_extras"]:
+        root_entry["extras"] = list(profile["root_extras"])
+    expected_metadata_entries.append(root_entry)
+    for requirement in profile["requirements"].values():
+        entry = _lock_requirement_entry(str(requirement))
+        if entry is None:
+            return False
+        expected_metadata_entries.append(entry)
+    if canonical_lock_value(head_requires_dev[group_name]) != canonical_lock_value(
+        expected_metadata_entries
+    ):
+        return False
+
+    expected_entries: list[dict[str, Any]] = [
+        {
+            "name": root_name,
+            **({"extra": list(profile["root_extras"])} if profile["root_extras"] else {}),
+        }
+    ]
+    expected_entries.extend({"name": name} for name in profile["allowed_packages"])
+    return canonical_lock_value(head_dev[group_name]) == canonical_lock_value(expected_entries)
+
+
+def changed_dependency_group_names(  # noqa: C901
+    repo_root: Path,
+    base_ref: str,
+    files: Iterable[str],
+    *,
+    profile_groups: Mapping[str, Any],
+    resolution_evidence: Mapping[str, Any],
+) -> set[str]:
+    """Identify exact, allow-listed CI-profile additions without hiding updates."""
+    file_set = set(files)
+    if not {"pyproject.toml", "uv.lock"} <= file_set:
+        return set()
+    base_text = git_file_at_ref(repo_root, base_ref, "pyproject.toml") or ""
+    head_path = repo_root / "pyproject.toml"
+    head_text = head_path.read_text(encoding="utf-8") if head_path.is_file() else ""
+    if not profile_groups:
+        return set()
+    profiles = {
+        group_name: _validated_ci_only_group(group_name, raw_profile)
+        for group_name, raw_profile in profile_groups.items()
+    }
+    base_groups = _dependency_groups_from_text(base_text)
+    head_groups = _dependency_groups_from_text(head_text)
+    if _project_document_without_groups(base_text) != _project_document_without_groups(head_text):
+        return set()
+    changed_groups = {
+        group_name
+        for group_name in set(base_groups) | set(head_groups)
+        if canonical_lock_value(base_groups.get(group_name))
+        != canonical_lock_value(head_groups.get(group_name))
+    }
+    if not changed_groups or not changed_groups <= set(profiles):
+        return set()
+
+    if _project_dependency_rows_from_text(base_text) != _project_dependency_rows_from_text(
+        head_text
+    ):
+        return set()
+
+    profile_only_names: set[str] = set()
+    for group_name in sorted(changed_groups):
+        if group_name in base_groups or group_name not in head_groups:
+            return set()
+        profile = profiles[group_name]
+        requirements = _dependency_group_requirements_from_text(head_text, group_name)
+        if requirements is None:
+            return set()
+        expected_requirements = {
+            str(profile["root_requirement"]),
+            *(str(requirement) for requirement in profile["requirements"].values()),
+        }
+        if (
+            len(requirements) != len(expected_requirements)
+            or set(requirements) != expected_requirements
+        ):
+            return set()
+        if dependency_group_names_from_text(head_text, [group_name]) != set(
+            profile["allowed_packages"]
+        ):
+            return set()
+        if not _profile_lock_change_is_declaration_only(
+            profile,
+            group_name,
+            git_file_at_ref(repo_root, base_ref, str(profile["lockfile"])) or "",
+            (repo_root / str(profile["lockfile"])).read_text(encoding="utf-8"),
+            resolution_evidence,
+        ):
+            return set()
+        profile_only_names.update(profile["allowed_packages"])
+    return profile_only_names
+
+
 def direct_dependency_names(repo_root: Path = REPO_ROOT) -> set[str]:
     """Return direct names from the root and standalone fast-pysf projects."""
     names: set[str] = set()
@@ -360,6 +851,39 @@ def direct_dependency_names(repo_root: Path = REPO_ROOT) -> set[str]:
         if path.is_file():
             names.update(dependency_names_from_text(path.read_text(encoding="utf-8")))
     return names
+
+
+def validate_ci_only_dependency_groups(repo_root: Path, policy: Mapping[str, Any]) -> None:
+    """Ensure configured CI-only profiles still match the live project declaration."""
+    project_path = repo_root / "pyproject.toml"
+    if not project_path.is_file():
+        raise PolicyError("configured CI-only dependency groups require pyproject.toml")
+    text = project_path.read_text(encoding="utf-8")
+    profile_groups = _as_mapping(policy["ci_only_dependency_groups"], "ci_only_dependency_groups")
+    for group_name, raw_profile in profile_groups.items():
+        profile = _validated_ci_only_group(str(group_name), raw_profile)
+        requirements = _dependency_group_requirements_from_text(text, str(group_name))
+        if requirements is None:
+            raise PolicyError(
+                f"configured CI-only dependency group {group_name!r} is absent from pyproject.toml"
+            )
+        expected_requirements = {
+            str(profile["root_requirement"]),
+            *(str(requirement) for requirement in profile["requirements"].values()),
+        }
+        if (
+            len(requirements) != len(expected_requirements)
+            or set(requirements) != expected_requirements
+        ):
+            raise PolicyError(
+                f"configured CI-only dependency group {group_name!r} does not match its policy metadata"
+            )
+        if dependency_group_names_from_text(text, [str(group_name)]) != set(
+            profile["allowed_packages"]
+        ):
+            raise PolicyError(
+                f"configured CI-only dependency group {group_name!r} has an unapproved package"
+            )
 
 
 def lock_package_rows(text: str) -> dict[str, list[str]]:
@@ -401,7 +925,12 @@ def classify_package_names(
     direct_names: set[str],
     policy: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
-    """Classify changed packages and fail closed for unknown direct names."""
+    """Classify changed packages and fail closed for unknown direct names.
+
+    Packages newly introduced by a PEP 735 dependency group remain direct and
+    retain their package risk class. The guarded profile exception is applied
+    only by ``evaluate_update`` after the complete group and lock proof passes.
+    """
     package_owners = {
         normalize_package_name(package): item["id"]
         for item in policy["classes"]
@@ -422,16 +951,15 @@ def classify_package_names(
             item = fallback
         else:
             item = classes[class_id]
-        classifications.append(
-            {
-                "name": name,
-                "direct": direct,
-                "class": item["id"],
-                "risk": item["risk"],
-                "update_lane": item["update_lane"],
-                "required_jobs": list(item["required_jobs"]),
-            }
-        )
+        row = {
+            "name": name,
+            "direct": direct,
+            "class": item["id"],
+            "risk": item["risk"],
+            "update_lane": item["update_lane"],
+            "required_jobs": list(item["required_jobs"]),
+        }
+        classifications.append(row)
     return classifications
 
 
@@ -450,9 +978,11 @@ def validate_direct_dependency_coverage(direct_names: set[str], policy: Mapping[
 
 
 def validate_direct_update_lanes(classifications: Iterable[Mapping[str, Any]]) -> list[str]:
-    """Reject one update that combines multiple direct risk classes."""
+    """Reject one version update that combines multiple direct risk classes."""
     direct_class_ids = {
-        str(item["class"]) for item in classifications if item.get("direct") and item.get("class")
+        str(item["class"])
+        for item in classifications
+        if item.get("direct") and not item.get("profile_only") and item.get("class")
     }
     if len(direct_class_ids) > 1:
         raise PolicyError(
@@ -862,7 +1392,7 @@ def annotate_resolution_evidence(
                 {
                     str(item["class"])
                     for item in profile["changed_package_classifications"]
-                    if item.get("direct") is True
+                    if item.get("direct") is True and not item.get("profile_only")
                 }
             )
     return evidence
@@ -880,6 +1410,7 @@ def validate_repository_structure(
     validate_ci_workflow(policy, ci_workflow_path)
     direct_names = direct_dependency_names(repo_root)
     validate_direct_dependency_coverage(direct_names, policy)
+    validate_ci_only_dependency_groups(repo_root, policy)
     return policy
 
 
@@ -920,6 +1451,14 @@ def evaluate_update(
         repo_root, base_ref, dependency_files, all_direct
     )
     resolution_evidence = build_resolution_evidence(repo_root, base_ref, dependency_files)
+    profile_groups = _as_mapping(policy["ci_only_dependency_groups"], "ci_only_dependency_groups")
+    profile_only_names = changed_dependency_group_names(
+        repo_root,
+        base_ref,
+        dependency_files,
+        profile_groups=profile_groups,
+        resolution_evidence=resolution_evidence,
+    )
     changed_names.update(resolution_evidence["changed_packages"])
     if not changed_names and not resolution_evidence["material_fields"]:
         if not (set(dependency_files) & set(LOCK_FILES)):
@@ -930,7 +1469,14 @@ def evaluate_update(
         raise PolicyError(
             "dependency files changed but no package rows or direct declarations could be identified"
         )
-    classifications = classify_package_names(changed_names, all_direct, policy)
+    classifications = classify_package_names(
+        changed_names,
+        all_direct,
+        policy,
+    )
+    for item in classifications:
+        if item["name"] in profile_only_names:
+            item["profile_only"] = True
     resolution_evidence = annotate_resolution_evidence(
         resolution_evidence,
         classifications,
@@ -944,6 +1490,12 @@ def evaluate_update(
         )
     )
     direct_class_ids = validate_direct_update_lanes(effective_classifications)
+    material_fields = resolution_evidence["material_fields"]
+    if material_fields:
+        raise PolicyError(
+            "top-level uv.lock metadata changes are not approved by the dependency policy: "
+            + ", ".join(str(field) for field in material_fields)
+        )
     required_jobs = sorted(
         {job for item in effective_classifications for job in item["required_jobs"]}
     )
@@ -953,6 +1505,9 @@ def evaluate_update(
             "changed_packages": classifications,
             "effective_changed_packages": effective_classifications,
             "normalization_only_packages": normalization_only_packages,
+            "profile_only_packages": sorted(
+                name for name in profile_only_names if name in changed_names
+            ),
             "resolution_evidence": resolution_evidence,
             "required_jobs": required_jobs,
             "direct_risk_classes": sorted(direct_class_ids),

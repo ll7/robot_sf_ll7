@@ -1291,7 +1291,10 @@ def test_ci_driver_test_phase_runs_benchmark_reconciliation_guard() -> None:
     assert '[[ "$shard_index" != "1" ]]' in script_text
     assert "$SCRIPT_DIR/check_event_ledger_reconciliation_guard.sh" in script_text
     assert "run_fast_feedback_benchmark_reconciliation_guard" in script_text
-    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples' in script_text
+    assert (
+        '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples/test_examples_run.py'
+        in script_text
+    )
 
 
 def test_run_ci_local_loads_default_phases_from_ci_driver() -> None:
@@ -1930,6 +1933,7 @@ def _make_freshness_fixture_repo(
     fake_uv.write_text(
         '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\n'
         'printf "venv=%s\\n" "${UV_PROJECT_ENVIRONMENT-}" >&2\n'
+        'printf "virtual_env=%s\\n" "${VIRTUAL_ENV-}" >&2\n'
         'printf "pythonpath=%s\\n" "${PYTHONPATH-}" >&2\nexit 7\n',
         encoding="utf-8",
     )
@@ -2225,6 +2229,76 @@ def test_worktree_shared_venv_marks_explicit_override_for_nested_helpers() -> No
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
 
     assert 'export ROBOT_SF_EXPLICIT_VENV_OVERRIDE="$venv_path"' in script_text
+    assert 'export VIRTUAL_ENV="$venv_path"' in script_text
+
+
+def test_worktree_shared_venv_updates_interpreter_after_automatic_recovery(
+    tmp_path: Path,
+) -> None:
+    """Automatic stale-package recovery must replace an inherited owning env (issue #8772)."""
+    stale_scene = "# stale install without normalize_integration_scheme\n"
+    repo, main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=stale_scene)
+
+    recovery_script = repo / "scripts" / "dev" / "recover_fast_pysf_worktree.sh"
+    recovery_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "mkdir -p .venv/bin\n"
+        "cat > .venv/bin/python <<'PY'\n"
+        "#!/usr/bin/env bash\n"
+        "exit 0\n"
+        "PY\n"
+        "chmod +x .venv/bin/python\n",
+        encoding="utf-8",
+    )
+    recovery_script.chmod(0o755)
+    subprocess.run(
+        ["git", "add", str(recovery_script.relative_to(repo))],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture recovery helper"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    env = {
+        **env,
+        "VIRTUAL_ENV": str(main_venv),
+        "UV_PROJECT_ENVIRONMENT": str(main_venv),
+    }
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    local_venv = worktree / ".venv"
+    assert result.returncode == 7
+    assert f"Automatic fast-pysf recovery selected worktree environment: {local_venv}" in (
+        result.stderr
+    )
+    assert f"venv={local_venv}" in result.stderr
+    assert f"virtual_env={local_venv}" in result.stderr
+    assert f"virtual_env={main_venv}" not in result.stderr
 
 
 def test_worktree_shared_venv_falls_back_to_main_env_without_local_env(tmp_path: Path) -> None:

@@ -45,7 +45,13 @@ canonical helper surface and expected usage pattern.
 
 Pending classification into the new tiered structure.
 
-_No examples assigned yet._
+| Example | Summary | Prerequisites | Tags | CI |
+| --- | --- | --- | --- | --- |
+| [Example OSM SVG to Obstacle SVG](./example_osm_svg_to_obstacle_svg.py) | example svg conversion | _None_ | maps, osm, conversion | ⚠️ Requires OSM SVG source asset and writes an obstacle map; no default CI input. |
+| [Occupancy Reward Shaping](./occupancy_reward_shaping.py) | Demo: occupancy-based reward shaping for RL-friendly observations. | _None_ | occupancy, reward, grid | ✅ |
+| [OSM Map Editor Demo](./osm_map_editor_demo.py) | OSM Zones Editor interactive demonstration (T034). | _None_ | maps, osm, interactive, editor | ⚠️ Interactive zone-editor session; requires a display and manual input. |
+| [OSM Map Quickstart](./osm_map_quickstart.py) | OSM PBF to MapDefinition quickstart example. | _None_ | maps, osm, quickstart | ⚠️ Requires an OSM PBF fixture and background rendering; no default CI input. |
+| [OSM Programmatic Scenario](./osm_programmatic_scenario.py) | Example: Programmatic scenario creation using OSM zones and routes (Phase 3, T042). | _None_ | maps, osm, scenario | ⚠️ Programmatic OSM scenario workflow; requires manual YAML output inspection. |
 
 ## Quickstart
 
@@ -56,7 +62,8 @@ Foundational walkthroughs for first-time users.
 | [01 Basic Robot Rollout](./quickstart/01_basic_robot.py) | Run a basic Robot SF environment with a random policy. | _None_ | quickstart | ✅ |
 | [02 Trained PPO Benchmark](./quickstart/02_trained_model.py) | Run the Robot SF benchmark with the pre-trained PPO baseline. | configs/baselines/example_matrix.yaml<br>configs/baselines/ppo.yaml | quickstart, benchmark | ✅ |
 | [03 Custom SVG Map](./quickstart/03_custom_map.py) | Load an SVG map into Robot SF and simulate random navigation. | maps/svg_maps/debug_06.svg | quickstart, maps | ✅ |
-| [04 Occupancy Grid](./quickstart/04_occupancy_grid.py) | Enable occupancy grid observations, run a center query, and step a short rollout. | _None_ | quickstart, occupancy, grid | ✅ |
+| [04 Occupancy Grid](./quickstart/04_occupancy_grid.py) | Quickstart: enable occupancy grid observations and run a spawn-safety query. | _None_ | quickstart, occupancy, grid | ✅ |
+| [05 Public API Facade](./quickstart/05_public_api.py) | Demonstrate the stable public API facade with EpisodeRecord persistence. | _None_ | quickstart, public-api, facade | ✅ |
 
 ## Advanced Features
 
@@ -66,7 +73,7 @@ Feature-focused demos for developers exploring capabilities.
 | --- | --- | --- | --- | --- |
 | [01 Backend Selection](./advanced/01_backend_selection.py) | Switch Robot SF backends using unified config. | _None_ | backend | ✅ |
 | [02 Factory Options](./advanced/02_factory_options.py) | Compare environment factory options for rendering and recording. | _None_ | factory | ✅ |
-| [03 Image Observations](./advanced/03_image_observations.py) | Enable image-based observations in the robot environment. | None | image | ✅ |
+| [03 Image Observations](./advanced/03_image_observations.py) | Enable image-based observations in the robot environment. | _None_ | image | ✅ |
 | [04 Feature Extractors](./advanced/04_feature_extractors.py) | Run PPO demos with different feature extractors. | uv sync --all-extras | training, feature-extractor | ⚠️ Needs optional extras and lengthy PPO rollout; exceeds smoke timeout. |
 | [05 Fast-pysf Speed Fix](./advanced/05_fast_pysf_speed_fix.py) | Inspect the fast-pysf pedestrian speed fix output. | _None_ | analysis, fast-pysf | ✅ |
 | [06 Pedestrian Env Factory](./advanced/06_pedestrian_env_factory.py) | Compare factory and legacy pedestrian environment creation. | maps/svg_maps/debug_06.svg<br>model/pedestrian/ppo_ped_02.zip<br>model/run_043 | pedestrian, factory | ⚠️ Depends on external models (model/run_043, model/pedestrian/ppo_ped_02.zip). |
@@ -76,22 +83,31 @@ Feature-focused demos for developers exploring capabilities.
 | [10 Offensive Policy](./advanced/10_offensive_policy.py) | Replay offensive PPO policy in the robot environment. | model/run_043 | policy, ppo | ⚠️ Requires offline PPO checkpoint (model/run_043). |
 | [11 Ego Pedestrian Policy](./advanced/11_ego_pedestrian_policy.py) | Run ego pedestrian simulation with recording playback. | maps/svg_maps/narrow_corridor2.svg<br>model/run_043 | pedestrian, recording | ⚠️ Requires external PPO checkpoint and long recording playback. |
 | [12 Social Force Planner](./advanced/12_social_force_planner_demo.py) | Explore Social Force planner scenarios and options. | uv sync --all-extras<br>fast-pysf subtree (bundled) | planner, social-force | ✅ |
-| [13 SVG Map Validation](./advanced/13_svg_map_validation.py) | Validate and summarize SVG maps from the repository. | None | maps, tooling | ✅ |
+| [13 SVG Map Validation](./advanced/13_svg_map_validation.py) | Validate and summarize SVG maps from the repository. | _None_ | maps, tooling | ✅ |
 | [14 Trajectory Visualization](./advanced/14_trajectory_visualization.py) | Visualize trajectories during interactive playback sessions. | recordings/<file>.pkl | visualization, playback | ⚠️ Interactive playback; requires user input to exit. |
 | [15 View Recording](./advanced/15_view_recording.py) | Record a simulation from an SVG map and replay it. | maps/svg_maps/02_simple_maps.svg | recording, maps | ✅ |
-| [16 Imitation Learning Pipeline](./advanced/16_imitation_learning_pipeline.py) | End-to-end imitation learning workflow: expert training → trajectory collection → BC pre-training → PPO fine-tuning. | uv sync --all-extras<br>configs/training/ppo_imitation/*.yaml | training, imitation, ppo, behavioral-cloning | ⚠️ Long-running pipeline (30-60 min); requires extensive compute for full training cycles. |
-| [20 Global Planner Demo](./advanced/20_global_planner_demo.py) | Demonstration of global planner integration with environment factory. | _None_ | planning, routing, poi | ⚠️ pyvisgraph numerical instability on default maps; use in interactive testing only. |
-| [21 Occupancy Grid Workflow](./advanced/21_occupancy_grid_workflow.py) | Standalone grid generation, spawn validation queries, and occupancy-based reward shaping. | _None_ | occupancy, reward, observation | ✅ |
-| [22 Occupancy Grid Playthrough](./advanced/22_occupancy_grid_playthrough.py) | Interactive occupancy grid playthrough demonstration. | _None_ | occupancy, interactive | ⚠️ Long interactive pygame session, not relevant for CI. |
-| [23 POI Routing Demo](./advanced/23_poi_routing_demo.py) | Sample POIs and route through them with the global planner on an SVG map. | _None_ | planning, routing, poi, sampling | ⚠️ pyvisgraph numerical instability on default maps; use in interactive testing only. |
-| [24 Planner Bottleneck Test](./advanced/24_planner_bottleneck_test.py) | Analyze planner clearance behavior on a bottleneck corridor map. | maps/svg_maps/planner_test_corridor.svg | planning, diagnostics, clearance | ⚠️ Diagnostic plotting workflow intended for manual planner debugging. |
-| [25 Planner Diagnostic](./advanced/25_planner_diagnostic.py) | Visualize inflation and visibility-graph internals for planner debugging. | maps/svg_maps/planner_test_corridor.svg | planning, diagnostics, visualization | ⚠️ Produces large diagnostic plots and is intended for manual analysis. |
-| [26 Telemetry Pane](./advanced/26_telemetry_pane.py) | Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance. | _None_ | telemetry, visualization, pygame, interactive | ⚠️ Interactive pygame session not reliable for CI; use headless variant instead. |
-| [27 Telemetry Headless Smoke](./advanced/27_telemetry_headless_smoke.py) | Headless telemetry smoke test producing JSONL and summary PNG/JSON artifacts without rendering. | _None_ | telemetry, visualization, headless, ci | ⚠️ Requires file output inspection; not suitable for smoke tests. |
-| [32 Demo Adversarial Pedestrian](./advanced/32_demo_adversarial_pedestrian.py) | Run a modernized debug rollout for pedestrian PPO policies with factory-based setup. | maps/svg_maps/masterthesis/intersection.svg<br>model/run_043<br>model/pedestrian/ppo_intersection.zip | pedestrian, policy, debug, ppo | ⚠️ Interactive pygame debug demo with offline checkpoints. |
+| [16 Imitation Learning Pipeline](./advanced/16_imitation_learning_pipeline.py) | Imitation Learning Pipeline - End-to-End Example. | uv sync --all-extras<br>configs/training/ppo_imitation/*.yaml | training, imitation, ppo, behavioral-cloning | ⚠️ Long-running pipeline (30-60 min); requires extensive compute for full training cycles. |
+| [17 Research Report Demo](./advanced/17_research_report_demo.py) | Programmatic demo for research report + ablation generation (Phase 7). | _None_ | research, report, ablation | ⚠️ Generates research reports to an --out directory; requires manual output inspection. |
+| [18 Socnav Structured Observation](./advanced/18_socnav_structured_observation.py) | Example: run RobotEnv with SocNavBench-style structured observations and a simple planner. | _None_ | socnav, observation, planner | ⚠️ Short rollout demo; requires manual trajectory inspection, not wired to smoke assertions. |
+| [19 Planner Visual Comparison](./advanced/19_planner_visual_comparison.py) | Compare SocNav planner adapters with a side-by-side trajectory overlay. | _None_ | planner, comparison, visualization | ⚠️ Produces a matplotlib overlay for manual planner comparison; requires plot inspection. |
+| [20 Global Planner Demo](./advanced/20_global_planner_demo.py) | Global planner demo: show integration with environment factory. | _None_ | planning, routing, poi | ⚠️ pyvisgraph numerical instability on default maps; use in interactive testing only. |
+| [21 Occupancy Grid Workflow](./advanced/21_occupancy_grid_workflow.py) | Advanced occupancy grid workflow: standalone grids, queries, and reward shaping. | _None_ | occupancy, reward, observation | ✅ |
+| [22 Occupancy Grid Playthrough](./advanced/22_occupancy_grid_playthrough.py) | Occupancy grid visualization with a pretrained defensive policy. | _None_ | occupancy, interactive | ⚠️ Long interactive pygame session, not relevant for CI. |
+| [23 POI Routing Demo](./advanced/23_poi_routing_demo.py) | POI routing demo using GlobalPlanner and POISampler with live visualization. | _None_ | planning, routing, poi, sampling | ⚠️ pyvisgraph numerical instability on default maps; use in interactive testing only. |
+| [24 Planner Bottleneck Test](./advanced/24_planner_bottleneck_test.py) | Test global planner with POI routing on a simple bottleneck map. | maps/svg_maps/planner_test_corridor.svg | planning, diagnostics, clearance | ⚠️ Diagnostic plotting workflow intended for manual planner debugging. |
+| [25 Planner Diagnostic](./advanced/25_planner_diagnostic.py) | Diagnose global planner inflation and visibility graph construction. | maps/svg_maps/planner_test_corridor.svg | planning, diagnostics, visualization | ⚠️ Produces large diagnostic plots and is intended for manual analysis. |
+| [26 Telemetry Pane](./advanced/26_telemetry_pane.py) | Live telemetry pane docked in the Pygame window. | _None_ | telemetry, visualization, pygame, interactive | ⚠️ Interactive pygame session not reliable for CI; use headless variant instead. |
+| [Visibility Graph Visualization](./advanced/26_visibility_graph_visualization.py) | Visualize the visibility graph structure used by GlobalPlanner. | _None_ | planning, visibility-graph, visualization | ⚠️ Interactive visibility-graph visualization; requires a display. |
+| [Motion Planning Adapter Test](./advanced/27_motion_planning_adapter_test.py) | Test the classic global planner with grid-based planning. | _None_ | planning, grid, visualization | ⚠️ Interactive grid-planning visualization; requires a display. |
+| [27 Telemetry Headless Smoke](./advanced/27_telemetry_headless_smoke.py) | Headless telemetry smoke: run without rendering and emit telemetry artifacts. | _None_ | telemetry, visualization, headless, ci | ⚠️ Requires file output inspection; not suitable for smoke tests. |
+| [28 Planner Comparison](./advanced/28_planner_comparison.py) | Comparison demo of VisibilityPlanner vs ClassicGlobalPlanner. | _None_ | planning, comparison, visualization | ⚠️ Side-by-side planner comparison; requires manual plot inspection. |
+| [29 OSM Global Planner Test](./advanced/29_osm_global_planner_test.py) | Test the classic global planner with grid-based planning. | _None_ | planning, osm, grid | ⚠️ Interactive OSM grid-planning visualization; requires a display. |
+| [30 Random Global Planner Random Path](./advanced/30_random_global_planner_random_path.py) | Plan and visualize a random path on the uni campus map. | _None_ | planning, osm, visualization | ⚠️ Interactive campus-map visualization; requires a display. |
+| [31 Classic Planner ORCA Demo](./advanced/31_classic_planner_orca_demo.py) | Demonstrate classic global + ORCA-style local planning on the lake map. | _None_ | planning, orca, visualization | ⚠️ Interactive pygame session with lake-map assets; not reliable for CI. |
+| [32 Demo Adversarial Pedestrian](./advanced/32_demo_adversarial_pedestrian.py) | Demo for running a trained adversarial pedestrian policy. | maps/svg_maps/masterthesis/intersection.svg<br>model/run_043<br>model/pedestrian/ppo_intersection.zip | pedestrian, policy, debug, ppo | ⚠️ Interactive pygame debug demo with offline checkpoints. |
 | [33 Three.js Recording Viewer](./advanced/33_threejs_recording_viewer.py) | Export a JSONL or pickle recording to a static browser viewer. | _None_ | visualization, recording, threejs | ✅ |
 | [34 Trace Three.js Viewer](./advanced/34_trace_threejs_viewer.py) | Export a simulation_trace_export.v1 trace to a static browser viewer. | _None_ | visualization, trace, annotation, threejs | ✅ |
-| [Occupancy Reward Shaping](./occupancy_reward_shaping.py) | Derive a clearance penalty from occupancy grid observations in a short rollout. | _None_ | occupancy, reward, grid | ✅ |
+| [35 Custom Scenario Authoring](./advanced/35_custom_scenario_authoring.py) | Author a custom corridor scenario programmatically, validate, reload, and smoke-test it. | maps/svg_maps/classic_head_on_corridor.svg | scenarios, authoring, validation, tutorial | ✅ |
 
 ## Benchmarks
 
@@ -102,6 +118,7 @@ Benchmark runners and evaluation workflows.
 | [Demo Aggregate](./benchmarks/demo_aggregate.py) | Aggregate episode metrics with optional bootstrap confidence intervals. | _None_ | benchmark, aggregation | ✅ |
 | [Demo Full Classic Benchmark](./benchmarks/demo_full_classic_benchmark.py) | Run the full classic interaction benchmark via programmatic helper. | _None_ | benchmark | ✅ |
 | [Demo Social Nav Scenarios](./benchmarks/demo_social_nav_scenarios.py) | Run social navigation SVG scenarios sequentially. | _None_ | benchmark, scenario | ✅ |
+| [Per-Ped Force Quantiles Demo](./benchmarks/per_ped_force_quantiles_demo.py) | Demo: per-pedestrian vs aggregated force quantiles. | _None_ | benchmark, metrics, force | ✅ |
 | [SNQI Full Flow](./benchmarks/snqi_full_flow.py) | End-to-end SNQI figure generation flow. | _None_ | benchmark, snqi | ⚠️ Full CLI workflow expects episode/baseline JSON arguments. |
 
 ## Plotting & Analysis
@@ -120,6 +137,8 @@ Visualization and analysis scripts built atop benchmark outputs.
 | [Plot Force Field](./plotting/plot_force_field.py) | Plot a sampled social-force field using matplotlib. | _None_ | visualization, force-field | ✅ |
 | [Plot Force Field Normalized](./plotting/plot_force_field_normalized.py) | Plot normalized force vectors with a magnitude colormap and save PNG+PDF. | _None_ | visualization, force-field | ✅ |
 | [Plot Force Field Save](./plotting/plot_force_field_save.py) | Generate and save static images of the force field for documentation. | _None_ | visualization, force-field | ✅ |
+| [Plot Map](./plotting/plot_map.py) | Plot a MapDefinition as a quick visual sanity check. | _None_ | maps, visualization | ✅ |
+| [Plot Micro Pedestrian Scene](./plotting/plot_micro_pedestrian_scene.py) | Render a static micro-scale pedestrian-simulation snapshot for publications. | _None_ | visualization, pedestrian, publication | ⚠️ Publication figure workflow; requires manual figure inspection. |
 | [Plot Pareto](./plotting/plot_pareto.py) | Generate Pareto front plots from benchmark episodes or synthetic data. | _None_ | visualization, pareto | ⚠️ CLI expects --in dataset argument; no default input for CI. |
 | [Plot Pedestrian Position KDE](./plotting/plot_pedestrian_position_kde.py) | Plot a KDE of pedestrian positions on top of the source map. | _None_ | visualization, pedestrian | ✅ |
 | [SNQI Figures Example](./plotting/snqi_figures_example.py) | Generate publication-ready SNQI figures via the orchestrator script. | _None_ | visualization, snqi | ⚠️ Requires --episodes CLI input and benchmark outputs. |

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -94,6 +95,33 @@ def test_fixture_mode_writes_png_svg_summary(
     assert main(["--fixture", "--out-dir", str(out_dir)]) == 0
     second = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
     assert second == first
+
+
+def test_fixture_svg_bytes_are_deterministic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Repeated independent fixture renders produce identical SVG bytes."""
+    monkeypatch.setenv("MPLBACKEND", "Agg")
+    first_dir = tmp_path / "first"
+    second_dir = tmp_path / "second"
+    command = [sys.executable, str(_REPO_ROOT / "examples/plotting/plot_pareto.py"), "--fixture"]
+    subprocess.run([*command, "--out-dir", str(first_dir)], check=True, cwd=_REPO_ROOT)
+    subprocess.run([*command, "--out-dir", str(second_dir)], check=True, cwd=_REPO_ROOT)
+    assert (first_dir / "pareto_fixture.svg").read_bytes() == (
+        second_dir / "pareto_fixture.svg"
+    ).read_bytes()
+
+
+def test_fixture_json_path_must_stay_inside_output_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An escaping fixture summary path fails before writing outside ``--out-dir``."""
+    monkeypatch.setenv("MPLBACKEND", "Agg")
+    out_dir = tmp_path / "smoke"
+    escaped = tmp_path / "escape.json"
+    with pytest.raises(SystemExit, match="inside --out-dir"):
+        main(["--fixture", "--out-dir", str(out_dir), "--out-json", "../escape.json"])
+    assert not escaped.exists()
 
 
 def test_bare_invocation_defaults_to_fixture(

@@ -21,7 +21,8 @@ Prerequisites:
 Expected Output:
     - PNG chart at the path passed via `--out`
     - Optional PDF when `--out-pdf` is supplied
-    - Fixture mode: PNG, SVG, and JSON summary inside `--out-dir`
+    - Fixture mode: PNG, SVG, and JSON summary inside `--out-dir`; `--out-json`
+      must resolve inside that directory.
 
 Limitations:
     - CLI expects valid metric names; refer to `robot_sf.benchmark.aggregate` outputs.
@@ -40,6 +41,18 @@ from robot_sf.benchmark.plots import save_pareto_png
 from robot_sf.common.artifact_paths import resolve_artifact_path
 
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "pareto_dominated_tie.json"
+
+
+def _resolve_fixture_json_path(out_dir: Path, requested: str | None) -> Path:
+    """Resolve a fixture summary path and reject paths outside ``out_dir``."""
+    if requested is None:
+        return out_dir / "summary.json"
+    candidate = resolve_artifact_path(Path(requested))
+    try:
+        candidate.relative_to(out_dir)
+    except ValueError as exc:
+        raise SystemExit("--out-json must resolve inside --out-dir") from exc
+    return candidate
 
 
 def _synthetic_records():
@@ -121,7 +134,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out-pdf", default=None, help="Optional vector PDF path (LaTeX-ready)")
     ap.add_argument("--out-svg", default=None, help="Optional vector SVG path")
     ap.add_argument("--out-dir", default=None, help="Fixture-mode output directory")
-    ap.add_argument("--out-json", default=None, help="Fixture-mode JSON summary path")
+    ap.add_argument(
+        "--out-json",
+        default=None,
+        help="Fixture-mode JSON summary path; must resolve inside --out-dir",
+    )
     args = ap.parse_args(argv)
 
     if args.fixture or (not args.in_path and not args.synthetic):
@@ -167,9 +184,8 @@ def _run_fixture(args: argparse.Namespace) -> int:
     _validate_fixture_records(records, args.x_metric, args.y_metric)
     out_png = out_dir / "pareto_fixture.png"
     out_svg = out_dir / "pareto_fixture.svg"
-    out_json = Path(args.out_json) if args.out_json else out_dir / "summary.json"
+    out_json = _resolve_fixture_json_path(out_dir, args.out_json)
     if args.out_json:
-        out_json = resolve_artifact_path(out_json)
         out_json.parent.mkdir(parents=True, exist_ok=True)
     meta = save_pareto_png(
         records,

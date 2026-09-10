@@ -44,6 +44,10 @@ print(meta)
 
 `meta` includes keys like `count`, `front_size`, and `front_labels`.
 
+Fixture mode writes its JSON summary inside `--out-dir`. An explicit `--out-json` path is
+accepted only when its canonical path remains inside that directory; paths that escape it are
+rejected before any summary is written.
+
 ## Tips
 - Lower‑is‑better is assumed by default. Use the `--*-higher-better` flags to invert when needed (e.g., SNQI).
 - If you see “No points available” errors, check your metric names and grouping keys.

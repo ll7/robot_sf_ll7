@@ -34,8 +34,9 @@ Repository-internal sources, highest first:
 
 Resolution rules:
 
-- Platform and system instructions outrank repository documents; this contract governs
-  repository-owned documents only.
+- Platform and system instructions outrank repository documents. An applicable user task request
+  sets task intent within those higher-level constraints; it cannot waive a repository invariant or
+  authorize an unproven claim. This contract governs repository-owned documents only.
 - A task plan, issue comment, or historical record never outranks current code and evidence; stale
   plans are re-validated before use, and scoped guidance cannot weaken a root invariant.
 - Provider adapters configure tools and link to canonical policy; they never create repository

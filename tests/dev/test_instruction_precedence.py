@@ -90,5 +90,6 @@ def test_contract_documents_conflict_resolutions() -> None:
         "never outranks current code and evidence",
         "never create repository policy",
         "does not define a competing runtime precedence",
+        "applicable user task request",
     ):
         assert clause in block, f"precedence contract lacks conflict resolution: {clause}"

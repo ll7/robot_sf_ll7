@@ -41,7 +41,6 @@ pointer_files:
     description: Claude Code instruction pointer.
     max_nonblank_lines: 60
     allowed_sections:
-      - instruction hierarchy
       - tool-specific entry points
       - machine context
       - claude code model and mode selection

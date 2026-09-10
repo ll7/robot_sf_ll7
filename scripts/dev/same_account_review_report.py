@@ -83,7 +83,9 @@ def _validate_report_shape(body: str, match: re.Match[str]) -> None:
     marker_start = match.start()
     report_text = body[:marker_start].strip()
     missing_headings = [
-        heading for heading in (REPORT_HEADING, *REPORT_SECTION_HEADINGS) if heading not in report_text
+        heading
+        for heading in (REPORT_HEADING, *REPORT_SECTION_HEADINGS)
+        if heading not in report_text
     ]
     if missing_headings:
         joined = ", ".join(missing_headings)
@@ -194,9 +196,32 @@ def _comment_order(comment: Mapping[str, Any]) -> tuple[datetime, int] | None:
     return created_at, comment_id
 
 
-def _custody_reason(
-    comment: Mapping[str, Any], *, repository: str, pr_number: int
+def _custody_url_reason(
+    comment: Mapping[str, Any],
+    *,
+    owner: str,
+    name: str,
+    pr_number: int,
+    comment_id: int,
 ) -> str | None:
+    """Validate immutable GitHub comment/issue URL bindings."""
+    api_root = f"https://api.github.com/repos/{owner}/{name}"
+    expected = (
+        ("url", f"{api_root}/issues/comments/{comment_id}", "static_report_comment_url_mismatch"),
+        ("issue_url", f"{api_root}/issues/{pr_number}", "static_report_pr_url_mismatch"),
+        (
+            "html_url",
+            f"https://github.com/{owner}/{name}/pull/{pr_number}#issuecomment-{comment_id}",
+            "static_report_html_url_mismatch",
+        ),
+    )
+    for field, expected_value, reason in expected:
+        if _string(comment.get(field)).lower() != expected_value:
+            return reason
+    return None
+
+
+def _custody_reason(comment: Mapping[str, Any], *, repository: str, pr_number: int) -> str | None:
     """Validate immutable GitHub source/custody fields for one app report."""
     owner, name = _repository_parts(repository)
     comment_id = comment.get("id")
@@ -211,18 +236,11 @@ def _custody_reason(
     if _string(publisher.get("login")).lower() != owner:
         return "static_report_publisher_not_repository_owner"
 
-    api_root = f"https://api.github.com/repos/{owner}/{name}"
-    expected_api_url = f"{api_root}/issues/comments/{comment_id}"
-    expected_issue_url = f"{api_root}/issues/{pr_number}"
-    expected_html_url = (
-        f"https://github.com/{owner}/{name}/pull/{pr_number}#issuecomment-{comment_id}"
+    url_reason = _custody_url_reason(
+        comment, owner=owner, name=name, pr_number=pr_number, comment_id=comment_id
     )
-    if _string(comment.get("url")).lower() != expected_api_url:
-        return "static_report_comment_url_mismatch"
-    if _string(comment.get("issue_url")).lower() != expected_issue_url:
-        return "static_report_pr_url_mismatch"
-    if _string(comment.get("html_url")).lower() != expected_html_url:
-        return "static_report_html_url_mismatch"
+    if url_reason is not None:
+        return url_reason
 
     created_at = _parse_timestamp(comment.get("created_at"))
     updated_at = _parse_timestamp(comment.get("updated_at"))
@@ -392,8 +410,7 @@ def _fetch_rest_comments(
     rows: list[Mapping[str, Any]] = []
     for page in range(1, _MAX_COMMENT_PAGES + 1):
         endpoint = (
-            f"repos/{repository}/issues/{pr_number}/comments?"
-            f"per_page={_PAGE_SIZE}&page={page}"
+            f"repos/{repository}/issues/{pr_number}/comments?per_page={_PAGE_SIZE}&page={page}"
         )
         result = gh(["api", endpoint], timeout=45)
         if getattr(result, "returncode", 1) != 0:

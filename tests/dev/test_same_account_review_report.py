@@ -51,7 +51,7 @@ Inspected the changed source and exercised the focused deterministic verificatio
 
 single-account-review: {verdict} @ {head}
 metadata: {metadata}
-evidence: {'0' * 64}
+evidence: {"0" * 64}
 unresolved-correctness-findings: {findings}
 """
     return bind_report_evidence(body=body, repository=REPO, pr_number=PR)
@@ -188,9 +188,7 @@ def test_findings_bearing_report_refuses() -> None:
 
 
 def test_latest_invalid_report_supersedes_older_acceptance() -> None:
-    accepted = _app_comment(
-        _report_body(), comment_id=100, created_at="2026-09-10T10:00:00Z"
-    )
+    accepted = _app_comment(_report_body(), comment_id=100, created_at="2026-09-10T10:00:00Z")
     tampered = _app_comment(
         _report_body().replace("focused tests", "tampered tests"),
         comment_id=101,
@@ -221,14 +219,10 @@ def test_fetch_uses_complete_rest_comment_route() -> None:
         calls.append(args)
         return _Result(stdout=json.dumps([_app_comment(_report_body())]))
 
-    reports, provenance = fetch_same_account_static_reports(
-        gh, repository=REPO, pr_number=PR
-    )
+    reports, provenance = fetch_same_account_static_reports(gh, repository=REPO, pr_number=PR)
     assert _classify(reports)["status"] == "accepted"
     assert provenance["status"] == "accepted"
-    assert calls == [
-        ["api", f"repos/{REPO}/issues/{PR}/comments?per_page=100&page=1"]
-    ]
+    assert calls == [["api", f"repos/{REPO}/issues/{PR}/comments?per_page=100&page=1"]]
 
 
 def test_rest_unavailability_does_not_create_approval() -> None:
@@ -236,9 +230,7 @@ def test_rest_unavailability_does_not_create_approval() -> None:
         assert timeout == 45
         return _Result(stdout="", stderr="network unavailable", returncode=1)
 
-    reports, provenance = fetch_same_account_static_reports(
-        gh, repository=REPO, pr_number=PR
-    )
+    reports, provenance = fetch_same_account_static_reports(gh, repository=REPO, pr_number=PR)
     assert reports == []
     assert provenance["status"] == "unavailable"
     assert provenance["reason_codes"] == ["network unavailable"]

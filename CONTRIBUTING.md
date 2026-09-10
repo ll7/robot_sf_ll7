@@ -209,6 +209,42 @@ scripts/dev/ruff_fix_format.sh
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
 
+### Documentation site build
+
+The canonical documentation build is the curated strict build:
+
+```bash
+scripts/dev/sphinx_strict_build.sh                 # HTML into output/docs-strict/html
+scripts/dev/sphinx_strict_build.sh --builder dummy --json
+```
+
+It builds only the `docs/index.rst` toctree closure, promotes warnings to errors, and allows
+exactly one non-blocking case: cross-references that resolve to an existing repository document
+outside the curated set (the curated site intentionally does not build the historical corpus).
+Every other warning, including broken links to nonexistent targets, fails the build. The curated
+source set is pinned in `docs/sphinx_curated_sources.json`; after an intentional toctree change,
+rerun with `--write-manifest` and review the manifest diff. A raw full-tree
+`sphinx-build docs <out>` is unsupported: `docs/conf.py` no longer suppresses broad warning
+classes, so it reports the historical corpus warnings by design.
+
+### Quickstart notebooks
+
+The three beginner notebooks under `notebooks/` are generated, not hand-edited:
+
+```bash
+scripts/dev/generate_quickstart_notebooks.py
+scripts/dev/generate_quickstart_notebooks.py --check --json
+scripts/validation/run_notebooks_smoke.py
+```
+
+`--check` rebuilds each notebook in memory, strips execution counts, outputs, transient cell ids,
+widget state, and environment-specific metadata, and compares canonical JSON to the committed file.
+It fails closed on source drift, stable-metadata drift, missing committed notebooks, and any
+committed executed output or execution count; the JSON report names exact mismatch paths and stable
+reason codes. The smoke owner runs the same parity check before executing the notebooks, so CI
+rejects manually edited or executed notebooks without running them. Do not hand-edit `.ipynb`
+files; change the generator and regenerate.
+
 ### External review routing
 
 CodeRabbit reviews pull requests that change simulator code, tests, scripts, or GitHub Actions.

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import json
 import os
 import subprocess
 import sys
@@ -40,6 +41,11 @@ from robot_sf.examples.manifest_loader import (
     ManifestValidationError,
     load_manifest,
 )
+from robot_sf.examples.prerequisites import (
+    check_example_prerequisites,
+    format_report_text,
+    report_to_dict,
+)
 
 __all__ = [
     "ExampleIdentityError",
@@ -47,6 +53,7 @@ __all__ = [
     "build_examples_parser",
     "example_id",
     "examples_cli_main",
+    "examples_to_payload",
     "find_example",
     "format_examples_table",
     "run_example",
@@ -259,6 +266,50 @@ def format_examples_table(
     return "\n".join(lines)
 
 
+def examples_to_payload(
+    manifest: ExampleManifest,
+    *,
+    tag: str | None = None,
+    category: str | None = None,
+) -> list[dict[str, object]]:
+    """Return the catalog as a stable JSON-serializable payload.
+
+    Args:
+        manifest: The loaded examples manifest.
+        tag: Optional tag filter (case-insensitive, exact match on a tag).
+        category: Optional category slug filter (case-insensitive).
+
+    Returns:
+        A list of per-example dictionaries in manifest order.
+    """
+
+    entries, _ = _build_lookup(manifest)
+    tag_filter = tag.lower() if tag else None
+    category_filter = category.lower() if category else None
+    payload: list[dict[str, object]] = []
+    for entry in entries:
+        example = entry.example
+        if tag_filter is not None and tag_filter not in {t.lower() for t in example.tags}:
+            continue
+        if category_filter is not None and example.category_slug.lower() != category_filter:
+            continue
+        payload.append(
+            {
+                "id": entry.identifier,
+                "path": example.path.as_posix(),
+                "name": example.name,
+                "summary": example.summary,
+                "category": example.category_slug,
+                "tags": list(example.tags),
+                "expected_runtime": example.expected_runtime,
+                "ci_enabled": example.ci_enabled,
+                "ci_reason": example.ci_reason,
+                "prerequisites": list(example.prerequisites),
+            }
+        )
+    return payload
+
+
 def _headless_env(base: dict[str, str], *, fast: bool) -> dict[str, str]:
     """Return an environment suitable for running an example.
 
@@ -409,6 +460,29 @@ def build_examples_parser() -> argparse.ArgumentParser:
         help="Only show examples in this category slug (case-insensitive).",
     )
     list_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format for the catalog (default: text).",
+    )
+    list_parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="Path to the manifest file (defaults to examples/examples_manifest.yaml).",
+    )
+
+    check_parser = sub.add_parser(
+        "check", help="Validate an example's prerequisites without running it."
+    )
+    check_parser.add_argument("id", help="Example id, path, or unique filename stem.")
+    check_parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format for the prerequisite report (default: text).",
+    )
+    check_parser.add_argument(
         "--manifest",
         type=Path,
         default=None,
@@ -463,9 +537,25 @@ def examples_cli_main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     if command == "list":
+        if args.format == "json":
+            payload = examples_to_payload(manifest, tag=args.tag, category=args.category)
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
         table = format_examples_table(manifest, tag=args.tag, category=args.category)
         print(table)
         return 0
+
+    if command == "check":
+        try:
+            report = check_example_prerequisites(manifest, args.id)
+        except ExampleIdentityError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        if args.format == "json":
+            print(json.dumps(report_to_dict(report), indent=2, sort_keys=True))
+        else:
+            print(format_report_text(report))
+        return 0 if report.ready else 1
 
     if command == "run":
         try:

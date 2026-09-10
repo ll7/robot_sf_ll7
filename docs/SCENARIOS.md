@@ -272,3 +272,11 @@ print(f"Map file: {desc['map_reference']['map_file']}")
 report = validate_scenario_payload("configs/scenarios/single/quickstart_demo.yaml")
 assert report["valid"] is True
 ```
+
+## Authoring tutorial
+
+New to scenario authoring? Work through
+[`examples/advanced/35_custom_scenario_authoring.py`](../examples/advanced/35_custom_scenario_authoring.py):
+it builds one compact corridor scenario programmatically, serializes it to a caller-owned file,
+validates and reloads it through the canonical loader with digest comparison, runs a short
+headless smoke, and demonstrates how invalid geometry/identity inputs fail (or warn).

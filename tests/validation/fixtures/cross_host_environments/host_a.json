@@ -1,0 +1,6 @@
+{"schema_version": "cross_host_environment.v1", "host_label": "runner-a",
+ "os": {"system": "Linux", "architecture_class": "linux-x86_64"},
+ "python": {"implementation": "CPython", "version": "3.12.7"}, "distributions": {"numpy": {"version": "2.2.1", "build": "cp312-manylinux_x86_64"}},
+ "threading": {"blas_backend": "openblas-pthreads", "omp_num_threads": "1"},
+ "accelerators": {"torch": {"version": "2.6.0", "cuda_runtime": "12.6", "driver": "560.35.05"}},
+ "locale": {"lc_all": "C.UTF-8", "timezone": "UTC"}}

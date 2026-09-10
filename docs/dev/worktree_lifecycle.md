@@ -310,6 +310,9 @@ uv run python scripts/dev/stale_worktree_reaper.py \
 git worktree prune
 ```
 
+See also: [Artifact Retention, Preservation, and Cleanup Guide](../context/artifact_retention_and_cleanup.md)
+for retention classes, preservation proof, and cleanup-eligibility gates.
+
 The targeted reaper retains the existing dirty/unpushed/open-PR/ignored-output checks. Immediately
 before removal it reacquires the shared lifecycle lock and re-reads the lease. If another task
 claimed the worktree after planning, cleanup refuses it and the audit log names the live task/owner.

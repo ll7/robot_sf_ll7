@@ -2,8 +2,10 @@
 
 [Back to Documentation Index](./README.md)
 
-This is the compact source of truth for current maintainer preferences. Other agent docs should
-link here instead of repeating the full value hierarchy.
+This file records stable maintainer principles and the tie-breakers for applying them. It is not a
+second authority hierarchy: repository-internal precedence is owned by the `Instruction Precedence`
+contract in [`AGENTS.md`](../AGENTS.md), and other agent docs link here for rationale instead of
+restating rules.
 
 ## Hard Rule
 

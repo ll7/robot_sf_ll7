@@ -63,6 +63,8 @@ software/package release.
 - **Repo-native contributor workflow:** setup, validation, and shared `scripts/dev/` entry points
   are documented in [`docs/dev_guide.md`](docs/dev_guide.md).
 
+
+> Platform-specific paths (Linux, macOS, headless): [Platform Setup Profiles](docs/quickstart_platforms.md).
 ## Quickstart
 
 The repository uses `uv` for dependency management and keeps generated artifacts under the
@@ -88,6 +90,9 @@ uv run python examples/quickstart/03_custom_map.py
 (`thumbnail.png`), and a plain-English summary under `output/demo/latest/`. It is the
 fastest install → run → *see something* path and is CPU-only. Open
 `output/demo/latest/viewer/index.html` in a browser to replay the episode.
+
+If setup misbehaves, run `uv run robot-sf doctor` and follow the per-check remedies in
+[`docs/troubleshooting/doctor.md`](docs/troubleshooting/doctor.md).
 
 ### Beginner notebooks
 
@@ -206,7 +211,7 @@ The framework is designed to be extended. Common extension points:
 
 ### Adding a New Planner
 
-Planner adapters usually live under [`robot_sf/planner/`](robot_sf/planner/), with metadata and
+Planner adapters usually live under [`robot_sf/planner/`](robot_sf/planner/__init__.py), with metadata and
 benchmark wiring described in [`docs/contributing_planner.md`](docs/contributing_planner.md).
 
 ### Adding Scenario Families
@@ -218,7 +223,7 @@ and [`examples/README.md`](examples/README.md) for how to load and customize sce
 ### Custom Maps
 
 Maps are SVG files under [`maps/svg_maps/`](maps/svg_maps/) and related map assets under
-[`maps/`](maps/). To add a new map, create valid SVG geometry, update the relevant map/scenario
+[`maps/`](maps/registry.yaml). To add a new map, create valid SVG geometry, update the relevant map/scenario
 config, and test with `examples/quickstart/03_custom_map.py`.
 
 ## Acknowledgments and provenance

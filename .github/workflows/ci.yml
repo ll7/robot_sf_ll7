@@ -592,6 +592,11 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          # The examples manifest needs plotting/benchmark/PPO dependencies,
+          # not the unrelated all-extras GPU, Ray, TensorFlow, SocNav, or
+          # browser stacks that can exhaust the setup timeout before tests run.
+          sync-args: "--group examples --frozen"
 
       - name: Example smoke tests
         run: scripts/dev/ci_driver.sh examples-smoke

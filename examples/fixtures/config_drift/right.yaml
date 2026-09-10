@@ -1,0 +1,19 @@
+# Right fixture: changes one declared semantic key (seed), one unknown training
+# value (hidden_sizes), one unknown scenario list (list replacement), and the
+# provenance/presentation/execution fields.
+base_config: base.yaml
+
+seed: 11
+
+training:
+  batch_size: 256
+  hidden_sizes: [128, 128]
+
+scenario:
+  ped_density_by_difficulty: [0.02, 0.04]
+
+execution:
+  output_dir: output/train/right
+
+notes: right notes
+display_name: Right run

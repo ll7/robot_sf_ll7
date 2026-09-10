@@ -39,11 +39,11 @@ def _resolve_manifest_path(run_id: str) -> tuple[Path, str]:
     base_runs_dir = canonical.parent
 
     def _manifest_summary() -> Path | None:
-        """TODO docstring. Document this function.
-
+        """Look up the run's per-run ``summary.json`` in the imitation report directory.
 
         Returns:
-            TODO docstring.
+            Existing summary path under ``<imitation_report_dir>/<run_id>/``,
+            or ``None`` when it is absent.
         """
         candidate = get_imitation_report_dir() / run_id / "summary.json"
         return candidate if candidate.exists() else None

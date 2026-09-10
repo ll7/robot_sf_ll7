@@ -79,14 +79,20 @@ def to_rank_rows(
 
 
 def write_csv(rows: list[dict[str, Any]], out_csv: str | Path) -> str:
-    """TODO docstring. Document this function.
+    """Write ranking rows to a CSV file, creating parent directories as needed.
+
+    Column order follows the keys of the first row. When ``rows`` is empty, a
+    placeholder ``group,rank`` header is written instead. Existing files are
+    overwritten.
 
     Args:
-        rows: TODO docstring.
-        out_csv: TODO docstring.
+        rows: Ranking rows, typically from :func:`to_rank_rows`. Rows are expected
+            to share the first row's keys; keys missing from a row are written as
+            empty cells.
+        out_csv: Destination CSV path.
 
     Returns:
-        TODO docstring.
+        The written path as a string.
     """
     import csv
 
@@ -106,14 +112,20 @@ def write_csv(rows: list[dict[str, Any]], out_csv: str | Path) -> str:
 
 
 def write_markdown(rows: list[dict[str, Any]], out_md: str | Path) -> str:
-    """TODO docstring. Document this function.
+    """Write ranking rows as a Markdown table file, creating parent directories as needed.
+
+    Column order follows the keys of the first row. When ``rows`` is empty, a
+    placeholder ``| group | rank |`` header is written instead. Existing files
+    are overwritten.
 
     Args:
-        rows: TODO docstring.
-        out_md: TODO docstring.
+        rows: Ranking rows, typically from :func:`to_rank_rows`. Rows are expected
+            to share the first row's keys; keys missing from a row are rendered as
+            empty cells.
+        out_md: Destination Markdown path.
 
     Returns:
-        TODO docstring.
+        The written path as a string.
     """
     if not rows:
         Path(out_md).parent.mkdir(parents=True, exist_ok=True)

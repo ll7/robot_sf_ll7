@@ -47,7 +47,9 @@ Range = tuple[float, float]
 """Type alias for a range represented as a tuple of two floats"""
 
 # Robot types
-DifferentialDriveAction = tuple[float, float]  # (linear velocity, angular velocity)
+# Differential-drive actions are accelerations integrated over the simulator
+# timestep: (linear acceleration in m/s^2, angular acceleration in rad/s^2).
+DifferentialDriveAction = tuple[float, float]
 BicycleAction = tuple[float, float]  # (acceleration, steering angle)
 HolonomicAction = tuple[float, float]  # (vx, vy) or (v, omega) based on command mode
 RobotAction = Union[DifferentialDriveAction, BicycleAction, HolonomicAction]

@@ -24,7 +24,17 @@ _RUN_TRACKER_CATEGORY = "run-tracker"
 
 @dataclass(frozen=True)
 class ArtifactCategory:
-    """Metadata describing an artifact subdirectory managed by the project."""
+    """Metadata describing one managed artifact subdirectory.
+
+    Attributes:
+        name: Stable category key accepted by :func:`get_artifact_category`.
+        relative_path: Relative path appended to the artifact root; never
+            absolute and never a parent traversal.
+        description: Human-readable purpose of the directory contents.
+        retention_hint: Advisory lifecycle class such as ``keep-latest`` or
+            ``short-lived``. It documents intent and never triggers deletion.
+        producers: Known commands or entry points that write into this category.
+    """
 
     name: str
     relative_path: Path
@@ -44,6 +54,9 @@ def _canonical_repository_root() -> Path:
 
 def get_repository_root() -> Path:
     """Expose the repository root path for tooling consumers.
+
+    The value is derived from this source file and is independent of the current
+    working directory. The call is read-only and performs no filesystem writes.
 
     Returns:
         Path: Absolute path to the repository root.
@@ -150,6 +163,10 @@ LEGACY_MIGRATION_TARGETS: dict[Path, Path] = {
 def get_artifact_override_root() -> Path | None:
     """Return the artifact override root when configured via the environment.
 
+    Reads ``ROBOT_SF_ARTIFACT_ROOT``, expands ``~``, and resolves the result to
+    an absolute path. The call is read-only: it creates no directories and
+    returns ``None`` when the variable is unset or empty.
+
     Returns:
         Path | None: Expanded and resolved override path, or None when unset.
     """
@@ -163,8 +180,13 @@ def get_artifact_override_root() -> Path | None:
 def get_artifact_root() -> Path:
     """Return the canonical artifact root, respecting overrides when present.
 
+    Honors ``ROBOT_SF_ARTIFACT_ROOT`` when set; otherwise returns the repository
+    ``output/`` directory. The call is read-only and does not create the
+    directory; callers that need the tree to exist should use
+    :func:`ensure_canonical_tree`.
+
     Returns:
-        Path: Artifact root path (override when set, else default).
+        Path: Artifact root path (override when set, else default output root).
     """
 
     override = get_artifact_override_root()
@@ -176,8 +198,14 @@ def get_artifact_root() -> Path:
 def get_artifact_category(name: str) -> ArtifactCategory:
     """Look up artifact category metadata by name.
 
+    Args:
+        name: Category key such as ``"benchmarks"`` or ``"run-tracker"``.
+
     Returns:
         ArtifactCategory: Metadata record for the requested category.
+
+    Raises:
+        KeyError: If ``name`` is not a known default category.
     """
 
     try:
@@ -189,8 +217,17 @@ def get_artifact_category(name: str) -> ArtifactCategory:
 def get_artifact_category_path(name: str) -> Path:
     """Return the absolute path for the given artifact category.
 
+    The result is ``get_artifact_root() / category.relative_path``, resolved.
+    The call is read-only; the directory may not exist yet.
+
+    Args:
+        name: Category key accepted by :func:`get_artifact_category`.
+
     Returns:
         Path: Resolved absolute path to the category directory.
+
+    Raises:
+        KeyError: If ``name`` is not a known default category.
     """
 
     category = get_artifact_category(name)
@@ -203,8 +240,20 @@ def ensure_canonical_tree(
 ) -> Path:
     """Create the canonical artifact tree and return the root path.
 
+    Filesystem-mutating but idempotent: creates the target root and each
+    selected category directory with ``parents=True, exist_ok=True``.
+
+    Args:
+        root: Optional target root. Defaults to :func:`get_artifact_root`.
+            Supplied paths are expanded and resolved.
+        categories: Optional iterable of category keys. Defaults to every
+            category in ``DEFAULT_ARTIFACT_CATEGORIES``.
+
     Returns:
         Path: Resolved root path where categories were ensured.
+
+    Raises:
+        KeyError: If any requested category key is unknown.
     """
 
     target_root = Path(root).expanduser().resolve() if root is not None else get_artifact_root()
@@ -221,6 +270,16 @@ def ensure_run_tracker_tree(
     base_root: Path | None = None,
 ) -> Path:
     """Ensure the run-tracker directory exists and optionally create a child run folder.
+
+    Filesystem-mutating but idempotent. ``run_id`` is used verbatim as a single
+    directory name, so callers own its sanitization. The returned directory is
+    task-owned output and is not benchmark evidence by itself.
+
+    Args:
+        run_id: Optional run identifier for a child directory under the tracker
+            root.
+        base_root: Optional artifact root override; defaults to the configured
+            artifact root.
 
     Returns:
         Path: Path to the tracker root or the specific run directory.
@@ -240,6 +299,14 @@ def ensure_run_tracker_tree(
 def find_legacy_artifact_paths(base_root: Path | None = None) -> list[Path]:
     """Return a list of legacy artifact paths that still exist under ``base_root``.
 
+    Read-only: the function only probes ``Path.exists()`` and never creates,
+    moves, or deletes files. Matching entries are resolved and returned in the
+    declaration order of ``LEGACY_ARTIFACT_PATHS``.
+
+    Args:
+        base_root: Optional root to inspect. Defaults to the repository root, not
+            the artifact override root.
+
     Returns:
         list[Path]: Existing legacy paths detected under the given base root.
     """
@@ -256,6 +323,9 @@ def find_legacy_artifact_paths(base_root: Path | None = None) -> list[Path]:
 def get_legacy_migration_plan() -> dict[Path, Path]:
     """Return a copy of the legacy path migration mapping.
 
+    The returned dictionary is a defensive copy; mutating it does not change the
+    module constant. The call performs no filesystem access and moves nothing.
+
     Returns:
         dict[Path, Path]: Mapping from legacy path to its canonical destination.
     """
@@ -266,8 +336,26 @@ def get_legacy_migration_plan() -> dict[Path, Path]:
 def resolve_artifact_path(path: str | Path) -> Path:
     """Resolve ``path`` to its on-disk location, honoring overrides when set.
 
+    Resolution rules:
+
+    * Absolute paths are returned unchanged when no override is configured. With
+      an override, paths inside the repository are rebased under the override
+      root; paths outside the repository are left untouched.
+    * Relative paths resolve under the override root when one is configured.
+    * Relative paths matching a legacy migration source resolve to their
+      canonical destination under the artifact root.
+    * Relative paths whose first component is a known category resolve under the
+      artifact root.
+    * All other relative paths resolve under the repository root.
+
+    The function only normalizes and probes paths; it performs no writes and
+    creates no directories.
+
+    Args:
+        path: Absolute or relative path to resolve.
+
     Returns:
-        Path: Absolute path after applying override and legacy rules.
+        Path: Absolute path after override, legacy, and category rules.
     """
 
     candidate = Path(path)
@@ -311,6 +399,10 @@ def iter_artifact_categories() -> Iterable[ArtifactCategory]:
 def get_expert_policy_dir() -> Path:
     """Return the directory that stores expert policy manifests and checkpoints.
 
+    Filesystem-mutating: creates
+    ``<artifact root>/benchmarks/expert_policies`` when missing. Files written
+    there are task-owned output and are not benchmark evidence by themselves.
+
     Returns:
         Path: Directory path ensured to exist.
     """
@@ -323,6 +415,14 @@ def get_expert_policy_dir() -> Path:
 def get_expert_policy_manifest_path(policy_id: str, extension: str = ".json") -> Path:
     """Return the manifest path for a given expert policy identifier.
 
+    ``policy_id`` is used verbatim as the file stem, so callers own path
+    containment. The parent directory is created as a side effect of
+    :func:`get_expert_policy_dir`; the manifest file itself is not written.
+
+    Args:
+        policy_id: Expert policy identifier used as the file stem.
+        extension: File extension including the leading dot.
+
     Returns:
         Path: File path under the expert policy directory.
     """
@@ -332,6 +432,11 @@ def get_expert_policy_manifest_path(policy_id: str, extension: str = ".json") ->
 
 def get_trajectory_dataset_dir() -> Path:
     """Return the directory that stores curated trajectory datasets.
+
+    Filesystem-mutating: creates
+    ``<artifact root>/benchmarks/expert_trajectories`` when missing. Dataset
+    files written there remain task-owned output until a separate evidence
+    decision promotes them.
 
     Returns:
         Path: Directory path ensured to exist.
@@ -345,6 +450,14 @@ def get_trajectory_dataset_dir() -> Path:
 def get_trajectory_dataset_path(dataset_id: str, extension: str = ".npz") -> Path:
     """Return the storage path for a trajectory dataset identifier.
 
+    ``dataset_id`` is used verbatim as the file stem, so callers own path
+    containment. The parent directory is created as a side effect of
+    :func:`get_trajectory_dataset_dir`; the dataset file itself is not written.
+
+    Args:
+        dataset_id: Dataset identifier used as the file stem.
+        extension: File extension including the leading dot.
+
     Returns:
         Path: File path under the trajectory dataset directory.
     """
@@ -354,6 +467,10 @@ def get_trajectory_dataset_path(dataset_id: str, extension: str = ".npz") -> Pat
 
 def get_imitation_report_dir() -> Path:
     """Return the directory for comparative imitation reports.
+
+    Filesystem-mutating: creates ``<artifact root>/benchmarks/ppo_imitation``
+    when missing. Report files written there are task-owned diagnostics unless a
+    separate evidence decision says otherwise.
 
     Returns:
         Path: Directory path ensured to exist.

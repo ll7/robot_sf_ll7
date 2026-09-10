@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -217,3 +218,29 @@ def test_preflight_uses_current_time_not_stale_generated_at(
     # The deadline is evaluated against the current time, not the stale generated_at, so the
     # past deadline is detected even though the manifest was generated before it.
     assert "deadline_expired" in payload["expiring_resource"]["reason_codes"]
+
+
+def test_standalone_checker_uses_current_time_not_stale_generated_at(tmp_path: Path) -> None:
+    """The direct checker must not treat historical generated_at as its evaluation clock."""
+    now = datetime.now(UTC)
+    manifest = _case()
+    manifest["generated_at"] = (now - timedelta(days=30)).isoformat().replace("+00:00", "Z")
+    manifest.pop("as_of", None)
+    manifest["expiring_resource"]["deadline"]["timestamp"] = (
+        (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
+    )
+    path = tmp_path / "stale-generated-at.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(TOOL), "--manifest", str(path), "--check", "--json"],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["verdict"] == "too_late"
+    assert "deadline_expired" in payload["reason_codes"]

@@ -288,12 +288,15 @@ def evaluate_manifest(  # noqa: C901, PLR0912 - one bounded decision per manifes
     if retention is None:
         problems.append("unknown_retention_class")
     effective_as_of = as_of
-    if effective_as_of is None:
-        effective_as_of, code = _parse_timestamp(
-            manifest.get("as_of") or manifest.get("generated_at")
-        )
+    if effective_as_of is None and manifest.get("as_of") is not None:
+        effective_as_of, code = _parse_timestamp(manifest.get("as_of"))
         if effective_as_of is None:
             problems.append(code or "missing_as_of")
+    elif effective_as_of is None:
+        # A historical generated_at timestamp is provenance, not the evaluation clock. Without
+        # an explicit manifest/CLI as_of, real callers must evaluate against the present so an
+        # expired deadline cannot appear feasible simply because the manifest is old.
+        effective_as_of = datetime.now(UTC)
     deadline, kind = _parse_deadline(
         contract.get("deadline"), effective_as_of, max_evidence_age_seconds, problems
     )

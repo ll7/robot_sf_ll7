@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import inspect
 import json
 import os
 import shlex
+import subprocess
 import sys
+import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -41,6 +43,12 @@ from robot_sf.benchmark.camera_ready_campaign import (  # noqa: E402
 )
 from robot_sf.benchmark.fallback_policy import campaign_exit_code  # noqa: E402
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError  # noqa: E402
+from robot_sf.benchmark.research_answerability import (  # noqa: E402
+    DECISION_REQUIRED_PROOF_SURFACES,
+    PROOF_BINDING_SCHEMA,
+    PROOF_SURFACE_KINDS,
+    PROOF_SURFACES,
+)
 from scripts.tools.record_post_campaign_stage_status import build_stage_status  # noqa: E402
 from scripts.validation.run_research_campaign_manifest import (  # noqa: E402
     evaluate_research_manifest_answerability,
@@ -159,6 +167,114 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _research_admission_proof_error(  # noqa: C901, PLR0912 - ordered admission guards
+    *,
+    answerability: Mapping[str, Any],
+    proof: Mapping[str, Any],
+    expected_campaign_id: str,
+    expected_config_sha256: str | None,
+    expected_execution_inventory: dict[str, Any] | None,
+) -> str | None:
+    """Reject a weak or mismatched report at the production launch boundary."""
+    if answerability.get("decision_capable") is not True:
+        return "answerability report did not mark the admitted state as decision_capable"
+    if proof.get("executed") is not True or proof.get("status") != "completed":
+        return "answerability admission requires a completed executable proof report"
+    binding = proof.get("binding")
+    if not isinstance(binding, Mapping):
+        return "answerability admission omitted its exact proof binding"
+    if binding.get("schema_version") != PROOF_BINDING_SCHEMA:
+        return f"answerability proof binding schema must be {PROOF_BINDING_SCHEMA}"
+    proof_digest = binding.get("proof_digest")
+    if (
+        not isinstance(proof_digest, str)
+        or len(proof_digest) != 64
+        or any(character not in "0123456789abcdef" for character in proof_digest.lower())
+    ):
+        return "answerability admission proof binding has no valid 64-hex proof digest"
+    if binding.get("campaign_id") != expected_campaign_id:
+        return "answerability proof binding campaign_id does not match the effective campaign"
+    if (
+        expected_config_sha256 is not None
+        and binding.get("config_sha256") != expected_config_sha256
+    ):
+        return "answerability proof binding config digest does not match the loaded config"
+    if (
+        expected_execution_inventory is not None
+        and binding.get("execution_inventory") != expected_execution_inventory
+    ):
+        return "answerability proof binding execution inventory does not match the campaign"
+    try:
+        current_head = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parents[2],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "answerability admission could not verify the current committed HEAD"
+    if binding.get("head_commit") != current_head:
+        return "answerability proof binding head_commit does not match the launcher HEAD"
+    for field in ("manifest_sha256", "config_sha256"):
+        value = binding.get(field)
+        if (
+            not isinstance(value, str)
+            or len(value) != 64
+            or any(character not in "0123456789abcdef" for character in value.lower())
+        ):
+            return f"answerability proof binding {field} is not a valid 64-hex SHA-256"
+    for field in ("manifest_blob", "config_blob", "head_commit"):
+        value = binding.get(field)
+        if (
+            not isinstance(value, str)
+            or len(value) != 40
+            or any(character not in "0123456789abcdef" for character in value.lower())
+        ):
+            return f"answerability proof binding {field} is not a valid 40-hex Git identity"
+    surfaces = proof.get("surfaces")
+    bound_surfaces = binding.get("proof_results")
+    if not isinstance(surfaces, Mapping) or not isinstance(bound_surfaces, Mapping):
+        return "answerability admission proof must include all bound proof surfaces"
+    if set(surfaces) != set(PROOF_SURFACES) or set(bound_surfaces) != set(PROOF_SURFACES):
+        return "answerability admission proof must name exactly the six proof surfaces"
+    for surface in PROOF_SURFACES:
+        result = surfaces.get(surface)
+        bound_result = bound_surfaces.get(surface)
+        if not isinstance(result, Mapping) or not isinstance(bound_result, Mapping):
+            return f"answerability proof surface {surface} result must be a mapping"
+        if dict(result) != dict(bound_result):
+            return f"answerability proof surface {surface} differs from its bound result"
+        allowed_kinds = PROOF_SURFACE_KINDS[surface]
+        result_kind = result.get("kind")
+        if result_kind is not None and result_kind not in allowed_kinds:
+            return f"answerability proof surface {surface} has a non-canonical proof kind"
+        if result.get("status") == "passed" and result_kind not in allowed_kinds:
+            return f"passed answerability proof surface {surface} must identify its canonical kind"
+        if result.get("status") not in {
+            "passed",
+            "unavailable",
+            "failed",
+            "not_run",
+        } or not isinstance(result.get("required"), bool):
+            return f"answerability proof surface {surface} has malformed status metadata"
+        if result.get("status") == "passed":
+            input_path = result.get("proof_input_path")
+            input_sha256 = result.get("proof_input_sha256")
+            if not isinstance(input_path, str) or not input_path.strip():
+                return f"passed answerability proof surface {surface} omitted its input path"
+            if (
+                not isinstance(input_sha256, str)
+                or len(input_sha256) != 64
+                or any(character not in "0123456789abcdef" for character in input_sha256.lower())
+            ):
+                return f"passed answerability proof surface {surface} omitted its input digest"
+    for surface in DECISION_REQUIRED_PROOF_SURFACES:
+        result = surfaces[surface]
+        if result.get("required") is not True or result.get("status") != "passed":
+            return f"required answerability proof surface {surface} did not pass"
+    return None
+
+
 def _research_answerability_block(  # noqa: C901
     *,
     manifest_path: Path | None,
@@ -204,23 +320,13 @@ def _research_answerability_block(  # noqa: C901
             evaluation_kwargs: dict[str, Any] = {
                 "execute_validation": True,
                 "expected_campaign_config": expected_campaign_config,
+                "expected_config_sha256": expected_config_sha256,
+                "expected_campaign_id": expected_campaign_id,
+                "expected_execution_inventory": expected_execution_inventory,
             }
-            if (
-                "expected_config_sha256"
-                in inspect.signature(evaluate_research_manifest_answerability).parameters
-            ):
-                evaluation_kwargs["expected_config_sha256"] = expected_config_sha256
-            if (
-                "expected_campaign_id"
-                in inspect.signature(evaluate_research_manifest_answerability).parameters
-            ):
-                evaluation_kwargs["expected_campaign_id"] = expected_campaign_id
-            if (
-                "expected_execution_inventory"
-                in inspect.signature(evaluate_research_manifest_answerability).parameters
-            ):
-                evaluation_kwargs["expected_execution_inventory"] = expected_execution_inventory
             report = evaluate_research_manifest_answerability(manifest_path, **evaluation_kwargs)
+            if not isinstance(report, dict):
+                raise TypeError("answerability evaluator did not return a mapping")
         except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
             reason = f"research answerability admission could not be evaluated: {exc}"
             proof = {}
@@ -242,8 +348,14 @@ def _research_answerability_block(  # noqa: C901
                 f"{answerability.get('state', 'unknown')}: {reasons}"
             )
             if answerability.get("state") == "answerable":
-                binding = proof.get("binding")
-                if isinstance(binding, dict) and binding.get("proof_digest"):
+                proof_error = _research_admission_proof_error(
+                    answerability=answerability,
+                    proof=proof,
+                    expected_campaign_id=expected_campaign_id,
+                    expected_config_sha256=expected_config_sha256,
+                    expected_execution_inventory=expected_execution_inventory,
+                )
+                if proof_error is None:
                     return {
                         "mode": mode,
                         "status": "research_answerability_admitted",
@@ -254,7 +366,7 @@ def _research_answerability_block(  # noqa: C901
                         "benchmark_success": False,
                         "evidence_status": "not_run",
                     }
-                reason = "answerability admission omitted its exact proof binding"
+                reason = proof_error
                 answerability = {
                     **answerability,
                     "state": "blocked_missing_proof",
@@ -302,49 +414,264 @@ def _execution_inventory(cfg: Any) -> dict[str, Any]:
     }
 
 
-def _persist_answerability_admission(result: dict[str, Any]) -> None:
-    """Persist the successful admission beside, and by digest in, the campaign summary."""
+def _campaign_contained_path(path: Path, *, campaign_root: Path, field: str) -> Path:
+    """Resolve a persistence path and require it to stay below the campaign root."""
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError) as exc:
+        raise ValueError(f"{field} cannot be resolved safely") from exc
+    if resolved == campaign_root or campaign_root not in resolved.parents:
+        raise ValueError(f"{field} must resolve within campaign_root")
+    return resolved
+
+
+def _stable_persistence_bytes(path: Path, *, field: str) -> bytes:
+    """Read one persistence file twice so concurrent mutation fails closed."""
+    first = path.read_bytes()
+    second = path.read_bytes()
+    if first != second:
+        raise RuntimeError(f"{field} changed while it was being persisted")
+    return first
+
+
+def _write_new_or_verify(path: Path, payload: bytes, *, field: str) -> None:
+    """Create a receipt without overwriting a different concurrent receipt."""
+    try:
+        with path.open("xb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except FileExistsError:
+        existing = _stable_persistence_bytes(path, field=field)
+        if existing != payload:
+            raise RuntimeError(f"{field} already exists with different bytes") from None
+        return
+    observed = _stable_persistence_bytes(path, field=field)
+    if observed != payload:
+        raise RuntimeError(f"{field} changed immediately after it was written")
+
+
+def _replace_if_unchanged(
+    path: Path,
+    *,
+    expected: bytes,
+    replacement: bytes,
+    field: str,
+) -> None:
+    """Atomically replace a summary only when its observed bytes are unchanged."""
+    if _stable_persistence_bytes(path, field=field) != expected:
+        raise RuntimeError(f"{field} changed before its admission reference was written")
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(replacement)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if _stable_persistence_bytes(path, field=field) != expected:
+            raise RuntimeError(f"{field} changed during admission persistence")
+        os.replace(temporary_path, path)
+        temporary_path = None
+        if _stable_persistence_bytes(path, field=field) != replacement:
+            raise RuntimeError(f"{field} changed immediately after atomic replacement")
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def _acquire_admission_lock(campaign_root: Path) -> tuple[Path, int]:
+    """Acquire a fail-closed per-campaign admission persistence lock."""
+    lock_path = campaign_root / ".research_answerability_admission.lock"
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        lock_fd = os.open(lock_path, flags, 0o600)
+    except FileExistsError as exc:
+        raise RuntimeError(
+            "another admission receipt writer is active, or a stale admission lock remains"
+        ) from exc
+    try:
+        os.write(lock_fd, f"pid={os.getpid()}\n".encode("ascii"))
+    except OSError:
+        os.close(lock_fd)
+        lock_path.unlink(missing_ok=True)
+        raise
+    return lock_path, lock_fd
+
+
+def _release_admission_lock(lock_path: Path, lock_fd: int) -> None:
+    """Release a lock only when its path still names this writer's lock file."""
+    try:
+        owned = os.fstat(lock_fd)
+        current = os.stat(lock_path, follow_symlinks=False)
+        if (owned.st_dev, owned.st_ino) == (current.st_dev, current.st_ino):
+            lock_path.unlink()
+    except FileNotFoundError:
+        pass
+    finally:
+        os.close(lock_fd)
+
+
+def _build_admission_sidecar(
+    admission: dict[str, Any], *, sidecar_path: Path, campaign_root: Path
+) -> tuple[bytes, dict[str, str]]:
+    """Encode one admission sidecar and its stable receipt identity."""
+    encoded = json.dumps(
+        admission,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    admission_sha256 = hashlib.sha256(encoded).hexdigest()
+    sidecar = {
+        "schema_version": "research_answerability_admission.v1",
+        "admission": admission,
+        "admission_sha256": admission_sha256,
+    }
+    sidecar_bytes = (json.dumps(sidecar, allow_nan=False, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+    receipt = {
+        "sidecar": str(sidecar_path.relative_to(campaign_root)),
+        "sidecar_sha256": hashlib.sha256(sidecar_bytes).hexdigest(),
+        "admission_sha256": admission_sha256,
+    }
+    return sidecar_bytes, receipt
+
+
+def _prepare_summary_admission(
+    summary_path: Path, *, receipt: Mapping[str, str]
+) -> tuple[bytes, bytes]:
+    """Validate an existing summary before any sidecar mutation is attempted."""
+    summary_bytes = _stable_persistence_bytes(summary_path, field="campaign summary")
+    summary = json.loads(summary_bytes.decode("utf-8"))
+    if not isinstance(summary, dict):
+        raise ValueError("campaign summary must be a JSON object")
+    artifacts = summary.get("artifacts")
+    if artifacts is None:
+        artifacts = {}
+    elif not isinstance(artifacts, dict):
+        raise ValueError("campaign summary artifacts must be a JSON object")
+    existing_receipt = summary.get("research_answerability_admission")
+    if existing_receipt is not None and existing_receipt != receipt:
+        raise RuntimeError("campaign summary already contains a different admission receipt")
+    existing_sidecar = artifacts.get("research_answerability_admission")
+    if existing_sidecar is not None and existing_sidecar != receipt["sidecar"]:
+        raise RuntimeError("campaign summary already contains a different admission sidecar")
+    summary["research_answerability_admission"] = dict(receipt)
+    artifacts["research_answerability_admission"] = receipt["sidecar"]
+    summary["artifacts"] = artifacts
+    replacement = (json.dumps(summary, allow_nan=False, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+    return summary_bytes, replacement
+
+
+def _persist_answerability_admission(  # noqa: C901
+    result: dict[str, Any],
+) -> None:
+    """Persist a successful admission without path escape or receipt overwrite."""
     admission = result.get("research_answerability_admission")
     summary_value = result.get("summary_json")
     campaign_root_value = result.get("campaign_root")
-    if not isinstance(admission, dict) or not campaign_root_value:
-        return
-    summary_path = Path(str(summary_value)).resolve() if summary_value else None
-    campaign_root = Path(str(campaign_root_value)).resolve()
+    if not isinstance(admission, dict):
+        raise RuntimeError("research answerability admission payload is missing")
+    if not campaign_root_value:
+        raise RuntimeError("campaign_root is required to persist research answerability admission")
     try:
-        encoded = json.dumps(admission, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        admission_sha256 = hashlib.sha256(encoded).hexdigest()
-        sidecar_path = (
+        campaign_root = Path(str(campaign_root_value)).resolve()
+        if not campaign_root.is_dir():
+            raise ValueError("campaign_root must be an existing directory")
+        lock_path, lock_fd = _acquire_admission_lock(campaign_root)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise RuntimeError(f"could not persist research answerability admission: {exc}") from exc
+
+    try:
+        summary_path = None
+        if summary_value:
+            summary_path = _campaign_contained_path(
+                Path(str(summary_value)),
+                campaign_root=campaign_root,
+                field="summary_json",
+            )
+            if not summary_path.is_file():
+                raise ValueError("summary_json must name an existing file")
+        sidecar_candidate = (
             summary_path.parent if summary_path is not None else campaign_root / "reports"
         ) / "research_answerability_admission.json"
-        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
-        sidecar = {
-            "schema_version": "research_answerability_admission.v1",
-            "admission": admission,
-            "admission_sha256": admission_sha256,
-        }
-        sidecar_path.write_text(
-            json.dumps(sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        sidecar_path = _campaign_contained_path(
+            sidecar_candidate,
+            campaign_root=campaign_root,
+            field="admission sidecar",
         )
-        receipt = {
-            "sidecar": str(sidecar_path.relative_to(campaign_root)),
-            "sidecar_sha256": hashlib.sha256(sidecar_path.read_bytes()).hexdigest(),
-            "admission_sha256": admission_sha256,
-        }
+        if summary_path is not None and sidecar_path == summary_path:
+            raise ValueError("summary_json cannot be the admission sidecar")
+        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+        sidecar_path = _campaign_contained_path(
+            sidecar_path,
+            campaign_root=campaign_root,
+            field="admission sidecar",
+        )
+        sidecar_bytes, receipt = _build_admission_sidecar(
+            admission,
+            sidecar_path=sidecar_path,
+            campaign_root=campaign_root,
+        )
+        summary_update = (
+            _prepare_summary_admission(summary_path, receipt=receipt)
+            if summary_path is not None
+            else None
+        )
+        _write_new_or_verify(sidecar_path, sidecar_bytes, field="admission sidecar")
+        if summary_update is not None:
+            summary_bytes, summary_replacement = summary_update
+            if summary_replacement != summary_bytes:
+                _replace_if_unchanged(
+                    summary_path,
+                    expected=summary_bytes,
+                    replacement=summary_replacement,
+                    field="campaign summary",
+                )
         result["research_answerability_admission_receipt"] = receipt
-        if summary_path is not None:
-            summary = json.loads(summary_path.read_text(encoding="utf-8"))
-            if not isinstance(summary, dict):
-                raise ValueError("campaign summary must be a JSON object")
-            summary["research_answerability_admission"] = receipt
-            artifacts = summary.setdefault("artifacts", {})
-            if isinstance(artifacts, dict):
-                artifacts["research_answerability_admission"] = receipt["sidecar"]
-            summary_path.write_text(
-                json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-            )
-    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, TypeError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"could not persist research answerability admission: {exc}") from exc
+    finally:
+        _release_admission_lock(lock_path, lock_fd)
+
+
+def _finalize_research_admission(
+    result: dict[str, Any],
+    *,
+    research_admission: dict[str, Any],
+    expected_campaign_id: str | None,
+) -> None:
+    """Attach and durably persist an admitted research gate result."""
+    result["research_answerability_admission"] = research_admission
+    if research_admission.get("status") != "research_answerability_admitted":
+        return
+    if expected_campaign_id is not None and result.get("campaign_id") != expected_campaign_id:
+        result["status"] = "research_answerability_execution_identity_failed"
+        result["status_reason"] = (
+            "camera-ready result campaign_id does not match the admitted campaign: "
+            f"{result.get('campaign_id')!r} != {expected_campaign_id!r}"
+        )
+        result["benchmark_success"] = False
+        result["exit_code"] = 2
+        return
+    try:
+        _persist_answerability_admission(result)
+    except RuntimeError as exc:
+        logger.error("{}", exc)
+        result["status"] = "research_answerability_receipt_failed"
+        result["status_reason"] = str(exc)
+        result["benchmark_success"] = False
+        result["exit_code"] = 2
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -461,22 +788,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     if result is None:
         result = {}
     if research_admission is not None:
-        result["research_answerability_admission"] = research_admission
-        if research_admission.get("status") == "research_answerability_admitted":
-            try:
-                _persist_answerability_admission(result)
-            except RuntimeError as exc:
-                logger.error("{}", exc)
-                result["status"] = "research_answerability_receipt_failed"
-                result["status_reason"] = str(exc)
-                result["benchmark_success"] = False
-                result["exit_code"] = 2
+        _finalize_research_admission(
+            result,
+            research_admission=research_admission,
+            expected_campaign_id=args.campaign_id,
+        )
     print(json.dumps(result, indent=2))
     if args.mode == "preflight" and result.get("status") not in {
         "orca_preflight_failed",
         "radius_binding_preflight_failed",
         "research_answerability_blocked",
         "research_answerability_receipt_failed",
+        "research_answerability_execution_identity_failed",
     }:
         return 0
     exit_code = campaign_exit_code(result)

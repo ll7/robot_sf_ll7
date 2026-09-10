@@ -106,10 +106,11 @@ Strict admission attaches `answerability.proof_binding` with the declared
 campaign/question/estimand identity, repository-relative tracked source
 manifest and camera-configuration paths plus their SHA-256 digests, and a
 digest of the exact proof results. The binding is checked against the current
-contract's proof-surface declarations before admission. Required file-backed
-proof specs must carry the expected input SHA-256, and fixture/diagnostic-only
-artifact catalogs or dry-run manifest rows cannot satisfy a decision-capable
-proof surface.
+contract's proof-surface declarations before admission. Every passed canonical
+proof result also names its canonical surface kind and the repository-bound
+input path and SHA-256 that it validated. Required file-backed proof specs must
+carry the expected input SHA-256, and fixture/diagnostic-only artifact catalogs
+or dry-run manifest rows cannot satisfy a decision-capable proof surface.
 
 The `durable_path` adapter is deliberately not an artifact admission proof:
 path existence alone cannot establish tracked retention or checksum identity.
@@ -137,12 +138,17 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
 
 The launcher evaluates the manifest before camera-ready preflight or episode
 execution and does not submit compute. A successful gated invocation persists
-the exact answerability receipt and proof binding in its JSON result. The
-issue #3425 wrapper carries `--research-manifest` and `--require-answerable`
-on both preflight and actual run commands, so the gate is re-evaluated after
-any intervening manifest/config mutation. Readiness-only callers may omit
-`--require-answerable`; the existing packet runner remains the owner of packet
-generation.
+the exact answerability receipt and proof binding in its JSON result. When a
+campaign summary is available, the sidecar and summary reference must resolve
+inside the campaign root. Sidecars are created exclusively and repeated writes
+must verify identical bytes; a conflicting or concurrently mutated receipt or
+summary fails closed instead of overwriting prior admission state. This
+persistence records launch authorization only; it is not benchmark or
+scientific evidence. The issue #3425 wrapper carries `--research-manifest` and
+`--require-answerable` on both preflight and actual run commands, so the gate
+is re-evaluated after any intervening manifest/config mutation. Readiness-only
+callers may omit `--require-answerable`; the existing packet runner remains
+the owner of packet generation.
 
 ## Research-Yield Snapshot
 

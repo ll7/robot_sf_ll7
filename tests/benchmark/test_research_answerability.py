@@ -15,6 +15,7 @@ import robot_sf.benchmark.research_answerability as answerability_module
 from robot_sf.benchmark.research_answerability import (
     DECISION_REQUIRED_PROOF_SURFACES,
     PROOF_BINDING_SCHEMA,
+    PROOF_SURFACE_KINDS,
     PROOF_SURFACES,
     answerability_from_manifest,
     compute_proof_digest,
@@ -46,7 +47,17 @@ def _proof_contract() -> dict[str, object]:
     return contract
 
 
-def _proof_binding() -> dict[str, str]:
+_CANONICAL_PROOF_KINDS = {
+    "producer": "producer_receipt",
+    "preregistration": "preregistration",
+    "evidence_contract": "evidence_contract",
+    "analysis": "analysis_receipt",
+    "artifact": "artifact_catalog",
+    "result_packet": "result_packet",
+}
+
+
+def _proof_binding() -> dict[str, object]:
     """Return a deterministic synthetic identity for strict evaluator tests."""
     return {
         "schema_version": PROOF_BINDING_SCHEMA,
@@ -58,6 +69,27 @@ def _proof_binding() -> dict[str, str]:
         "manifest_sha256": "a" * 64,
         "config_sha256": "b" * 64,
         "proof_digest": "c" * 64,
+        "execution_inventory": {
+            "scenario_ids": ["fixture"],
+            "planner_ids": ["fixture"],
+            "seeds": [1],
+            "kinematics": ["differential_drive"],
+        },
+    }
+
+
+def _proof_results(*, path: str, digest: str) -> dict[str, dict[str, object]]:
+    """Build runner-shaped proof results with explicit surface/file identity."""
+    assert set(_CANONICAL_PROOF_KINDS) == set(PROOF_SURFACE_KINDS) == set(PROOF_SURFACES)
+    return {
+        surface: {
+            "status": "passed",
+            "required": True,
+            "kind": _CANONICAL_PROOF_KINDS[surface],
+            "proof_input_path": path,
+            "proof_input_sha256": digest,
+        }
+        for surface in PROOF_SURFACES
     }
 
 
@@ -86,7 +118,10 @@ def _strict_bound_contract() -> dict[str, object]:
             ).strip(),
         }
     )
-    proof_results = {name: {"status": "passed", "required": True} for name in PROOF_SURFACES}
+    proof_results = _proof_results(
+        path=source_manifest,
+        digest=hashlib.sha256(ISSUE_6474_FIXTURE.read_bytes()).hexdigest(),
+    )
     binding["proof_results"] = proof_results
     binding["proof_digest"] = compute_proof_digest(binding, proof_results)
     contract["proof_binding"] = binding
@@ -120,7 +155,10 @@ def _tracked_strict_bound_contract() -> dict[str, object]:
             ).strip(),
         }
     )
-    proof_results = {name: {"status": "passed", "required": True} for name in PROOF_SURFACES}
+    proof_results = _proof_results(
+        path=source_manifest,
+        digest=hashlib.sha256(source_path.read_bytes()).hexdigest(),
+    )
     binding["proof_results"] = proof_results
     binding["proof_digest"] = compute_proof_digest(binding, proof_results)
     contract["proof_binding"] = binding
@@ -299,7 +337,7 @@ def test_strict_admission_requires_repository_root_for_bound_proof() -> None:
 
 def test_strict_admission_rejects_proof_surface_mutation_after_binding() -> None:
     """A status mutation cannot be evaluated as the proof that was bound."""
-    contract = _strict_bound_contract()
+    contract = _tracked_strict_bound_contract()
     contract["proof_surfaces"]["analysis"]["status"] = "failed"
 
     result = evaluate_answerability(
@@ -477,7 +515,7 @@ def test_strict_binding_rejects_malformed_identity_fields(
     field: str, value: str, expected: str
 ) -> None:
     """Strict binding identities use explicit checksum and Git formats."""
-    contract = _strict_bound_contract()
+    contract = _tracked_strict_bound_contract()
     contract["proof_binding"][field] = value
 
     result = evaluate_answerability(
@@ -504,7 +542,7 @@ def test_strict_binding_rejects_claim_identity_mismatches(
     field: str, value: str, expected: str
 ) -> None:
     """Strict binding cannot be reused for another commit, campaign, or claim."""
-    contract = _strict_bound_contract()
+    contract = _tracked_strict_bound_contract()
     contract["proof_binding"][field] = value
 
     result = evaluate_answerability(
@@ -521,7 +559,7 @@ def test_strict_binding_rejects_claim_identity_mismatches(
 @pytest.mark.parametrize("mutation", ["missing", "extra", "non_mapping", "required"])
 def test_strict_binding_requires_matching_proof_result_shapes(mutation: str) -> None:
     """Bound proof results must name and match every declared surface."""
-    contract = _strict_bound_contract()
+    contract = _tracked_strict_bound_contract()
     proof_results = contract["proof_binding"]["proof_results"]
     if mutation == "missing":
         proof_results.pop("analysis")
@@ -547,9 +585,28 @@ def test_strict_binding_requires_matching_proof_result_shapes(mutation: str) -> 
     assert expected in result.reasons[0]
 
 
+def test_strict_binding_requires_input_identity_for_optional_passed_surface() -> None:
+    """Even optional passed proof must identify the bytes that were validated."""
+    contract = _tracked_strict_bound_contract()
+    contract["proof_surfaces"]["result_packet"]["required"] = False
+    result = contract["proof_binding"]["proof_results"]["result_packet"]
+    result["required"] = False
+    result.pop("proof_input_path")
+    result.pop("proof_input_sha256")
+
+    error = answerability_module._proof_binding_error(
+        contract,
+        campaign_id="issue_6474_fixture",
+        repo_root=REPO_ROOT,
+    )
+
+    assert error is not None
+    assert "proof input path" in error
+
+
 def test_strict_binding_rejects_noncanonical_and_stale_digests(monkeypatch) -> None:
     """Strict proof rejects non-canonical proof JSON and stale proof digests."""
-    contract = _strict_bound_contract()
+    contract = _tracked_strict_bound_contract()
 
     def _raise_digest(*args, **kwargs):
         raise TypeError("not canonical")
@@ -564,7 +621,7 @@ def test_strict_binding_rejects_noncanonical_and_stale_digests(monkeypatch) -> N
     assert "not canonical JSON" in result.reasons[0]
 
     monkeypatch.undo()
-    contract = _strict_bound_contract()
+    contract = _tracked_strict_bound_contract()
     contract["proof_binding"]["proof_digest"] = "0" * 64
     result = evaluate_answerability(
         contract,
@@ -614,7 +671,7 @@ def test_strict_binding_validates_committed_blob_identity(blob_failure: str, mon
 
     assert error is not None
     assert (
-        "source_manifest is not present" in error
+        "cannot be bound to the committed HEAD blob" in error
         if blob_failure == "missing"
         else "manifest_blob does not match" in error
     )

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 import sys
 from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -15,7 +18,6 @@ from scripts.tools import run_camera_ready_benchmark
 
 if TYPE_CHECKING:
     from collections.abc import Generator
-    from pathlib import Path
 
 
 @contextmanager
@@ -43,6 +45,65 @@ def _write_config(path: Path, *, algo: str, key: str | None = None) -> None:
         f"    algo: {algo}\n",
         encoding="utf-8",
     )
+
+
+def _valid_admission_report(
+    *, manifest_path: Path, campaign_id: str, config_sha256: str | None
+) -> dict[str, object]:
+    """Build the complete report shape required at the camera-ready launch seam."""
+    repo_root = Path(run_camera_ready_benchmark.__file__).resolve().parents[2]
+    proof_input = repo_root / "configs/benchmarks/research_campaign_manifest.example.yaml"
+    proof_input_path = proof_input.relative_to(repo_root).as_posix()
+    proof_input_sha256 = hashlib.sha256(proof_input.read_bytes()).hexdigest()
+    head_commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo_root, text=True
+    ).strip()
+    surfaces = {
+        surface: {
+            "status": "passed",
+            "required": True,
+            "kind": sorted(run_camera_ready_benchmark.PROOF_SURFACE_KINDS[surface])[0],
+            "proof_input_path": proof_input_path,
+            "proof_input_sha256": proof_input_sha256,
+        }
+        for surface in run_camera_ready_benchmark.PROOF_SURFACES
+    }
+    binding = {
+        "schema_version": run_camera_ready_benchmark.PROOF_BINDING_SCHEMA,
+        "campaign_id": campaign_id,
+        "question": "Which bounded result is being checked?",
+        "estimand": "The bounded fixture estimand",
+        "source_manifest": manifest_path.as_posix(),
+        "campaign_config": "configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml",
+        "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        "config_sha256": config_sha256 or ("b" * 64),
+        "head_commit": head_commit,
+        "manifest_blob": "1" * 40,
+        "config_blob": "2" * 40,
+        "execution_inventory": {
+            "scenario_ids": ["fixture"],
+            "planner_ids": ["fixture"],
+            "seeds": [1],
+            "kinematics": ["differential_drive"],
+        },
+        "proof_results": surfaces,
+        "proof_digest": "a" * 64,
+    }
+    return {
+        "source_manifest": manifest_path.as_posix(),
+        "answerability": {
+            "state": "answerable",
+            "decision_capable": True,
+            "reasons": [],
+            "warnings": [],
+        },
+        "answerability_proof": {
+            "executed": True,
+            "status": "completed",
+            "binding": binding,
+            "surfaces": surfaces,
+        },
+    }
 
 
 def test_main_preflight_mode_emits_preflight_payload(
@@ -169,7 +230,7 @@ def test_main_research_answerability_gate_blocks_before_preflight(
     monkeypatch.setattr(
         run_camera_ready_benchmark,
         "evaluate_research_manifest_answerability",
-        lambda path, execute_validation, expected_campaign_config: {
+        lambda path, **kwargs: {
             "source_manifest": str(path),
             "answerability": {
                 "state": "diagnostic_only",
@@ -177,7 +238,10 @@ def test_main_research_answerability_gate_blocks_before_preflight(
                 "reasons": ["diagnostic manifest"],
                 "warnings": [],
             },
-            "answerability_proof": {"executed": execute_validation, "surfaces": {}},
+            "answerability_proof": {
+                "executed": kwargs["execute_validation"],
+                "surfaces": {},
+            },
         },
     )
     monkeypatch.setattr(
@@ -263,6 +327,83 @@ def test_main_research_answerability_requires_explicit_campaign_id(
     assert "--campaign-id" in payload["status_reason"]
 
 
+def test_main_research_answerability_rejects_weak_completed_proof_report(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """A truthy proof digest cannot bypass the launcher's exact proof-surface contract."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    research_manifest = tmp_path / "research.yaml"
+    research_manifest.write_text("campaign: test\n", encoding="utf-8")
+    called = {"preflight": False}
+
+    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        lambda path, **kwargs: {
+            "source_manifest": str(path),
+            "answerability": {
+                "state": "answerable",
+                "decision_capable": True,
+                "reasons": [],
+                "warnings": [],
+            },
+            "answerability_proof": {
+                "executed": kwargs["execute_validation"],
+                "status": "completed",
+                "binding": {
+                    "schema_version": run_camera_ready_benchmark.PROOF_BINDING_SCHEMA,
+                    "proof_digest": "a" * 64,
+                    "campaign_id": "fixed-campaign",
+                    "manifest_sha256": "b" * 64,
+                    "config_sha256": kwargs["expected_config_sha256"],
+                    "head_commit": subprocess.check_output(
+                        ["git", "rev-parse", "HEAD"],
+                        cwd=Path(run_camera_ready_benchmark.__file__).resolve().parents[2],
+                        text=True,
+                    ).strip(),
+                    "manifest_blob": "1" * 40,
+                    "config_blob": "2" * 40,
+                },
+                "surfaces": {},
+            },
+        },
+    )
+
+    def _unexpected_preflight(*args, **kwargs):
+        del args, kwargs
+        called["preflight"] = True
+        raise AssertionError("camera-ready preflight must not run after proof rejection")
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        _unexpected_preflight,
+    )
+
+    exit_code = run_camera_ready_benchmark.main(
+        [
+            "--config",
+            str(config_path),
+            "--mode",
+            "preflight",
+            "--research-manifest",
+            str(research_manifest),
+            "--require-answerable",
+            "--campaign-id",
+            "fixed-campaign",
+        ]
+    )
+
+    assert exit_code == 2
+    assert called["preflight"] is False
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "research_answerability_blocked"
+    assert payload["answerability"]["state"] == "blocked_missing_proof"
+    assert "all bound proof surfaces" in payload["status_reason"]
+
+
 def test_main_persists_exact_answerability_admission_receipt(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
@@ -275,28 +416,25 @@ def test_main_persists_exact_answerability_admission_receipt(
     monkeypatch.setattr(
         run_camera_ready_benchmark,
         "evaluate_research_manifest_answerability",
-        lambda path, execute_validation, expected_campaign_config: {
-            "source_manifest": str(path),
-            "answerability": {
-                "state": "answerable",
-                "decision_capable": True,
-                "reasons": [],
-                "warnings": [],
-            },
-            "answerability_proof": {
-                "executed": execute_validation,
-                "binding": {"proof_digest": "a" * 64},
-                "surfaces": {},
-            },
-        },
+        lambda path, **kwargs: _valid_admission_report(
+            manifest_path=path,
+            campaign_id="fixed-campaign",
+            config_sha256=kwargs["expected_config_sha256"],
+        ),
     )
-    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "load_campaign_config",
+        lambda _: object(),
+    )
+    campaign_root = tmp_path / "out" / "fixed-campaign"
+    campaign_root.mkdir(parents=True)
     monkeypatch.setattr(
         run_camera_ready_benchmark,
         "prepare_campaign_preflight",
         lambda *args, **kwargs: {
-            "campaign_id": "cid",
-            "campaign_root": tmp_path / "out" / "cid",
+            "campaign_id": "fixed-campaign",
+            "campaign_root": campaign_root,
             "validate_config_path": tmp_path / "validate.json",
             "preview_scenarios_path": tmp_path / "preview.json",
             "matrix_summary_json_path": tmp_path / "matrix.json",
@@ -334,7 +472,7 @@ def test_main_persists_exact_answerability_admission_receipt(
         == "a" * 64
     )
     receipt = payload["research_answerability_admission_receipt"]
-    sidecar_path = tmp_path / "out" / "cid" / receipt["sidecar"]
+    sidecar_path = campaign_root / receipt["sidecar"]
     assert sidecar_path.is_file()
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
     assert sidecar["admission"] == payload["research_answerability_admission"]
@@ -365,8 +503,8 @@ def test_main_preflight_fails_closed_when_answerability_receipt_persistence_fail
         run_camera_ready_benchmark,
         "prepare_campaign_preflight",
         lambda *args, **kwargs: {
-            "campaign_id": "cid",
-            "campaign_root": tmp_path / "out" / "cid",
+            "campaign_id": "fixed-campaign",
+            "campaign_root": tmp_path / "out" / "fixed-campaign",
             "validate_config_path": tmp_path / "validate.json",
             "preview_scenarios_path": tmp_path / "preview.json",
             "matrix_summary_json_path": tmp_path / "matrix.json",
@@ -1117,3 +1255,90 @@ def test_main_persists_admission_sidecar_and_summary_reference(
         persisted["research_answerability_admission"]["admission_sha256"]
         == sidecar["admission_sha256"]
     )
+
+
+def test_admission_persistence_rejects_summary_outside_campaign_root(tmp_path: Path) -> None:
+    """A receipt write must not follow a summary path outside the campaign root."""
+    campaign_root = tmp_path / "campaign"
+    campaign_root.mkdir()
+    outside_summary = tmp_path / "outside" / "campaign_summary.json"
+    outside_summary.parent.mkdir()
+    outside_summary.write_text(json.dumps({"artifacts": {}}), encoding="utf-8")
+    result = {
+        "campaign_root": campaign_root,
+        "summary_json": outside_summary,
+        "research_answerability_admission": {
+            "status": "research_answerability_admitted",
+            "answerability": {"state": "answerable", "decision_capable": True},
+        },
+    }
+
+    with pytest.raises(RuntimeError, match="within campaign_root"):
+        run_camera_ready_benchmark._persist_answerability_admission(result)
+
+    assert not (outside_summary.parent / "research_answerability_admission.json").exists()
+    assert not (campaign_root / ".research_answerability_admission.lock").exists()
+
+
+def test_admission_persistence_is_idempotent_and_rejects_conflicting_receipt(
+    tmp_path: Path,
+) -> None:
+    """A rerun may verify the same receipt but cannot overwrite a different one."""
+    campaign_root = tmp_path / "campaign"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary_path.parent.mkdir(parents=True)
+    summary_path.write_text(json.dumps({"artifacts": {}}), encoding="utf-8")
+    admission = {
+        "status": "research_answerability_admitted",
+        "answerability": {"state": "answerable", "decision_capable": True},
+    }
+    first = {
+        "campaign_root": campaign_root,
+        "summary_json": summary_path,
+        "research_answerability_admission": admission,
+    }
+
+    run_camera_ready_benchmark._persist_answerability_admission(first)
+    sidecar_path = campaign_root / first["research_answerability_admission_receipt"]["sidecar"]
+    original_sidecar = sidecar_path.read_bytes()
+    original_summary = summary_path.read_bytes()
+
+    second = {
+        "campaign_root": campaign_root,
+        "summary_json": summary_path,
+        "research_answerability_admission": dict(admission),
+    }
+    run_camera_ready_benchmark._persist_answerability_admission(second)
+    assert sidecar_path.read_bytes() == original_sidecar
+    assert summary_path.read_bytes() == original_summary
+
+    conflicting = {
+        "campaign_root": campaign_root,
+        "summary_json": summary_path,
+        "research_answerability_admission": {
+            **admission,
+            "answerability": {"state": "diagnostic_only", "decision_capable": False},
+        },
+    }
+    with pytest.raises(RuntimeError, match="different admission"):
+        run_camera_ready_benchmark._persist_answerability_admission(conflicting)
+    assert sidecar_path.read_bytes() == original_sidecar
+    assert summary_path.read_bytes() == original_summary
+    assert not (campaign_root / ".research_answerability_admission.lock").exists()
+
+
+def test_admission_persistence_fails_closed_on_existing_lock(tmp_path: Path) -> None:
+    """A live or stale writer lock blocks a second admission mutation."""
+    campaign_root = tmp_path / "campaign"
+    campaign_root.mkdir()
+    lock_path = campaign_root / ".research_answerability_admission.lock"
+    lock_path.write_text("pid=unknown\n", encoding="ascii")
+    result = {
+        "campaign_root": campaign_root,
+        "research_answerability_admission": {"status": "research_answerability_admitted"},
+    }
+
+    with pytest.raises(RuntimeError, match="active|stale"):
+        run_camera_ready_benchmark._persist_answerability_admission(result)
+
+    assert lock_path.read_text(encoding="ascii") == "pid=unknown\n"

@@ -29,6 +29,7 @@ from robot_sf.benchmark.artifact_catalog import (
     validate_artifact_catalog,
 )
 from robot_sf.benchmark.research_answerability import (
+    PROOF_SURFACE_KINDS,
     PROOF_SURFACES,
     strict_proof_input_provenance_error,
 )
@@ -66,14 +67,6 @@ _DIAGNOSTIC_ARTIFACT_SOURCE_KINDS = {
     "diagnostic",
     "smoke_diagnostic",
     "visualization_fixture",
-}
-_STRICT_SURFACE_RULES: dict[str, dict[str, frozenset[str]]] = {
-    "producer": {"kinds": frozenset({"producer_receipt"})},
-    "preregistration": {"kinds": frozenset({"preregistration"})},
-    "evidence_contract": {"kinds": frozenset({"evidence_contract"})},
-    "analysis": {"kinds": frozenset({"analysis_receipt"})},
-    "artifact": {"kinds": frozenset({"artifact_catalog", "durable_path"})},
-    "result_packet": {"kinds": frozenset({"result_packet"})},
 }
 
 
@@ -260,15 +253,15 @@ def _strict_surface_failure(
     """Reject substitution of a generic validator across decision surfaces."""
     if not _decision_capable(manifest):
         return None
-    rule = _STRICT_SURFACE_RULES[surface]
-    if kind not in rule["kinds"]:
+    allowed_kinds = PROOF_SURFACE_KINDS[surface]
+    if kind not in allowed_kinds:
         return _result(
             status="failed",
             required=required,
             kind=str(kind) if kind is not None else None,
             reason=(
                 f"decision-capable {surface} proof must use its canonical kind; "
-                f"allowed={sorted(rule['kinds'])}"
+                f"allowed={sorted(allowed_kinds)}"
             ),
         )
     _, identity_error = _decision_identity(manifest, surface=surface, spec=spec)
@@ -591,6 +584,8 @@ def _run_preregistration(
         required=required,
         kind="preregistration",
         path=str(path.relative_to(repo_root)),
+        proof_input_path=str(path.relative_to(repo_root)),
+        proof_input_sha256=initial_sha256,
         summary=summary,
         study_id=(identity.get("study_id") if decision_capable and required else None),
     )
@@ -781,6 +776,8 @@ def _run_artifact_catalog(  # noqa: C901, PLR0912
         required=required,
         kind="artifact_catalog",
         path=str(path.relative_to(repo_root)),
+        proof_input_path=str(path.relative_to(repo_root)),
+        proof_input_sha256=initial_sha256,
         issues=[],
     )
 
@@ -967,6 +964,8 @@ def _run_result_packet(  # noqa: C901, PLR0912
         required=required,
         kind="result_packet",
         path=str(path.relative_to(repo_root)),
+        proof_input_path=str(path.relative_to(repo_root)),
+        proof_input_sha256=initial_sha256,
         packet_id=(getattr(packet, "packet_id", None) if decision_capable else None),
     )
 
@@ -1225,6 +1224,8 @@ def _run_receipt(  # noqa: C901, PLR0912
         required=required,
         kind=f"{surface}_receipt",
         path=str(path.relative_to(repo_root)),
+        proof_input_path=str(path.relative_to(repo_root)),
+        proof_input_sha256=initial_sha256,
         identity=dict(identity) if isinstance(identity, Mapping) else {},
         verification=verification_result,
     )
@@ -1349,6 +1350,9 @@ def _run_evidence_contract(  # noqa: C901
         validator_id="evidence_contract",
         expected_json=expected_json,
     )
+    if row_path is not None:
+        result["proof_input_path"] = str(row_path.relative_to(repo_root))
+        result["proof_input_sha256"] = initial_row_sha256
     if row_path is not None:
         drift = _input_drift_failure(
             row_path,

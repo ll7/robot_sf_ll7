@@ -37,6 +37,14 @@ PROOF_SURFACES = (
     "artifact",
     "result_packet",
 )
+PROOF_SURFACE_KINDS = {
+    "producer": frozenset({"producer_receipt"}),
+    "preregistration": frozenset({"preregistration"}),
+    "evidence_contract": frozenset({"evidence_contract"}),
+    "analysis": frozenset({"analysis_receipt"}),
+    "artifact": frozenset({"artifact_catalog", "durable_path"}),
+    "result_packet": frozenset({"result_packet"}),
+}
 # Decision-capable admission requires a claim-specific minimum.  A generic
 # result-packet validator remains optional because the canonical owner is not
 # present in every checkout; optionality is surfaced as a warning rather than
@@ -365,6 +373,71 @@ def _proof_binding_file_error(
     return None
 
 
+def _proof_result_file_error(  # noqa: C901 - ordered fail-closed identity guards
+    result: Mapping[str, Any],
+    *,
+    surface: str,
+    repo_root: Path,
+) -> str | None:
+    """Validate the file identity recorded by one passed proof surface.
+
+    A proof-result status alone is not evidence of execution.  Passed
+    file-backed surfaces therefore carry the exact input path and digest that
+    the collector validated; strict admission rechecks both against the
+    committed worktree before accepting the bound result.
+
+    Returns:
+        An error message, or ``None`` when the recorded input is stable and
+        repository-bound.
+    """
+    path_value = result.get("proof_input_path")
+    if not isinstance(path_value, str) or not path_value.strip():
+        return f"answerability.proof_binding.{surface} proof result must include a proof input path"
+    digest_value = result.get("proof_input_sha256")
+    if not isinstance(digest_value, str) or not _SHA256_RE.fullmatch(digest_value.lower()):
+        return (
+            f"answerability.proof_binding.{surface} proof result must include a 64-hex "
+            "proof input SHA-256"
+        )
+    path = Path(path_value.strip())
+    if path.is_absolute() or ".." in path.parts:
+        return f"answerability.proof_binding.{surface} proof input path must be repository-relative"
+    root = repo_root.resolve()
+    candidate = root / path
+    try:
+        resolved = candidate.resolve()
+    except (OSError, RuntimeError):
+        return f"answerability.proof_binding.{surface} proof input path cannot be resolved safely"
+    if resolved == root or root not in resolved.parents:
+        return (
+            f"answerability.proof_binding.{surface} proof input path must resolve within "
+            "the repository"
+        )
+    if not resolved.is_file():
+        return f"answerability.proof_binding.{surface} proof input path must name an existing file"
+    provenance_error = strict_proof_input_provenance_error(
+        resolved,
+        repo_root=root,
+        field=f"answerability.proof_binding.{surface} proof input",
+    )
+    if provenance_error:
+        return provenance_error
+    try:
+        first = resolved.read_bytes()
+        second = resolved.read_bytes()
+    except OSError as exc:
+        return f"could not read answerability.proof_binding.{surface} proof input: {exc}"
+    if first != second:
+        return f"answerability.proof_binding.{surface} proof input changed while being verified"
+    actual = hashlib.sha256(first).hexdigest()
+    if actual != digest_value.lower():
+        return (
+            f"answerability.proof_binding.{surface} proof input SHA-256 does not match "
+            "the recorded proof result"
+        )
+    return None
+
+
 def _proof_binding_error(  # noqa: C901, PLR0912
     contract: Mapping[str, Any],
     *,
@@ -416,6 +489,26 @@ def _proof_binding_error(  # noqa: C901, PLR0912
         return "answerability.proof_binding.question does not match the contract"
     if binding["estimand"] != contract["estimand"]["primary"]:
         return "answerability.proof_binding.estimand does not match the contract"
+    execution_inventory = binding.get("execution_inventory")
+    if not isinstance(execution_inventory, Mapping):
+        return "answerability.proof_binding.execution_inventory must be a mapping"
+    for field in ("scenario_ids", "planner_ids", "seeds", "kinematics"):
+        values = execution_inventory.get(field)
+        if not isinstance(values, list) or not values:
+            return (
+                f"answerability.proof_binding.execution_inventory.{field} must be a non-empty list"
+            )
+        if field == "seeds":
+            if not all(isinstance(value, int) and not isinstance(value, bool) for value in values):
+                return (
+                    "answerability.proof_binding.execution_inventory.seeds must contain "
+                    "only integers"
+                )
+        elif not all(isinstance(value, str) and value.strip() for value in values):
+            return (
+                "answerability.proof_binding.execution_inventory."
+                f"{field} must contain only non-empty strings"
+            )
     proof_results = binding.get("proof_results")
     proof_surfaces = contract.get("proof_surfaces")
     if not isinstance(proof_results, Mapping) or not isinstance(proof_surfaces, Mapping):
@@ -433,6 +526,26 @@ def _proof_binding_error(  # noqa: C901, PLR0912
             return (
                 f"answerability.proof_binding.{surface} required flag does not match proof results"
             )
+        result_kind = result.get("kind")
+        allowed_kinds = PROOF_SURFACE_KINDS[surface]
+        if result_kind is not None and result_kind not in allowed_kinds:
+            return (
+                f"answerability.proof_binding.{surface} proof result kind does not match "
+                f"the canonical surface; allowed={sorted(allowed_kinds)}"
+            )
+        if result.get("status") == "passed":
+            if result_kind not in allowed_kinds:
+                return (
+                    f"answerability.proof_binding.{surface} passed proof result must carry "
+                    "its canonical kind"
+                )
+            file_error = _proof_result_file_error(
+                result,
+                surface=surface,
+                repo_root=repo_root,
+            )
+            if file_error:
+                return file_error
     try:
         expected_digest = compute_proof_digest(binding, proof_results)
     except (TypeError, ValueError) as exc:
@@ -837,6 +950,7 @@ __all__ = [
     "PROOF_BINDING_SCHEMA",
     "PROOF_STATUSES",
     "PROOF_SURFACES",
+    "PROOF_SURFACE_KINDS",
     "AnswerabilityContractError",
     "AnswerabilityResult",
     "ProofStatus",

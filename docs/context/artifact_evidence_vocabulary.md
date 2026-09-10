@@ -64,6 +64,19 @@ preservation and transfer receipts reference without rewriting producer manifest
 closed with exact file/chunk locations on mutation, truncation, sparse/symlink/hardlink/special
 file, path, collision, and partial-manifest conditions.
 
+## Compute-Window Readiness Dashboard
+
+[`scripts/tools/compute_window_readiness_dashboard.py`](../../scripts/tools/compute_window_readiness_dashboard.py)
+renders one deterministic JSON plus Markdown dashboard from versioned canonical input reports
+(`robot_sf.compute_window_dashboard_input.v1`; sanitized fixtures under
+`tests/tools/fixtures/compute_window_dashboard/`). Rows show campaign identity, owner,
+priority/tier, resource class, prerequisite, source/config/checkpoint status, job state,
+expected/observed rows, harvest/preservation/environment/restore state, copies, deadline fit,
+and next owner, with implementation/compute/scheduler/artifact/evidence/review/claim kept
+separate. No scientific score or admission decision is computed; stale, missing, contradictory,
+duplicate, wrong-schema, or unsanitized input masks affected rows as explicit `unavailable`, and
+output carries no private paths, hostnames, accounts, credentials, or signed URLs.
+
 ## Learned-Policy Artifact Manifests
 
 Learned local-policy checkpoints, normalizers, imitation datasets, and residual-policy artifacts

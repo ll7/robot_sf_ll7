@@ -1,8 +1,8 @@
 """Frozen-state counterfactual replay: locate the last avoidable control action.
 
 This module implements the offline analysis contract of issue #5442 (child of
-#5440, depends on the report contract of #5441): given a controlled fixture that
-can *deterministically* snapshot and restore its full state (including any random
+#5440, depends on the report contract of #5441): given a replay model that can
+*deterministically* snapshot and restore its full state (including any random
 number generator), branch over admissible robot actions at each decision point in
 the danger window and decide whether — and how early — the collision was avoidable.
 
@@ -28,15 +28,21 @@ Determinations (fail-closed):
   coverage over the window is incomplete, so avoidability cannot be tested. Per
   the issue contract this **never** collapses to ``unavoidable``.
 
-The result is controlled-fixture diagnostic evidence only. It assigns no legal or
-moral fault (``normative_fault`` is always ``not_assessed``) and is not a real-
-episode root-cause claim.
+The result is source-tagged diagnostic replay evidence only. The source kind
+identifies whether it came from a controlled fixture or a native simulator
+adapter; it assigns no legal or moral fault (``normative_fault`` is always
+``not_assessed``) and is not a real-episode root-cause claim.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+import numpy as np
+
+from robot_sf.benchmark.typed_snapshot import NoOpStep, compare_continuation_traces
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -51,6 +57,62 @@ VERDICT_UNKNOWN = "unknown"
 SUBSTITUTION_SINGLE_STEP = "single_step"  # substitute at t, then resume baseline commands
 SUBSTITUTION_HOLD = "hold"  # apply the substituted action for the whole frozen horizon
 _SUBSTITUTION_MODES = (SUBSTITUTION_SINGLE_STEP, SUBSTITUTION_HOLD)
+
+
+class _DefaultPedestrianResponse(str):
+    """String-compatible marker for an omitted, model-bindable response mode."""
+
+    def __copy__(self) -> _DefaultPedestrianResponse:
+        """Keep the omission marker stable across shallow copies.
+
+        Returns:
+            This marker instance.
+        """
+        return self
+
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _DefaultPedestrianResponse:
+        """Keep the omission marker stable across deep copies.
+
+        Returns:
+            This marker instance.
+        """
+        return self
+
+    def __reduce__(self) -> tuple[Any, tuple[Any, ...]]:
+        """Reconstruct the module singleton when a config is unpickled.
+
+        Returns:
+            The callable and arguments used to recover the singleton.
+        """
+        return (_get_default_pedestrian_response, ())
+
+
+_DEFAULT_PEDESTRIAN_RESPONSE = _DefaultPedestrianResponse("unknown")
+_REPLAY_PROVENANCE_FIELDS = (
+    "action_set_id",
+    "feasibility_filter",
+    "collision_predicate",
+    "pedestrian_response",
+    "source_kind",
+)
+
+
+class _ReplayProvenanceError(ValueError):
+    """Raised when a model-declared replay provenance field is malformed."""
+
+
+def _get_default_pedestrian_response() -> _DefaultPedestrianResponse:
+    """Return the singleton used for an omitted pedestrian response."""
+    return _DEFAULT_PEDESTRIAN_RESPONSE
+
+
+def _is_omitted_pedestrian_response(value: object) -> bool:
+    """Recognize the omission marker even when older pickles rebuilt it.
+
+    Returns:
+        Whether ``value`` is an omitted-response marker.
+    """
+    return isinstance(value, _DefaultPedestrianResponse)
 
 
 @runtime_checkable
@@ -121,12 +183,17 @@ class ReplayConfig:
         collision_predicate: Provenance label for the collision predicate.
         pedestrian_response: Pedestrian response assumption for this run, e.g.
             ``replayed`` (pedestrian follows its recorded path) or ``closed_loop``
-            (pedestrian reacts to the robot). The default ``unknown`` is schema-safe
-            and must not be interpreted as either response mode.
+            (pedestrian reacts to the robot). An omitted value is serialized as the
+            schema-safe ``unknown`` value when no model declaration is available,
+            but binds to a model-declared response mode when one is available.
+            Explicit ``unknown`` remains an intentional unknown declaration and is
+            not silently rebound to a model mode.
         source_kind: Provenance classification for the replay source. Native live
-            simulator adapters bind this to ``live_episode``; legacy controlled
-            fixtures leave it ``unspecified`` and the causal join treats that as
-            synthetic-fixture evidence.
+            simulator adapters bind this to ``live_episode``; controlled fixtures
+            must use ``synthetic_fixture`` before a causal join. The default
+            ``unspecified`` is retained for diagnostic compatibility but is
+            rejected by the causal join. This is a source label, not a causal or
+            benchmark claim.
     """
 
     t_danger: int
@@ -137,11 +204,17 @@ class ReplayConfig:
     action_set_id: str = "unspecified"
     feasibility_filter: str = "unspecified"
     collision_predicate: str = "unspecified"
-    pedestrian_response: str = "unknown"
+    pedestrian_response: str = _DEFAULT_PEDESTRIAN_RESPONSE
     source_kind: str = "unspecified"
 
     def __post_init__(self) -> None:
         """Validate window, horizon, replay count, and substitution mode."""
+        for field_name in _REPLAY_PROVENANCE_FIELDS:
+            value = getattr(self, field_name)
+            if field_name == "pedestrian_response" and value is _DEFAULT_PEDESTRIAN_RESPONSE:
+                continue
+            if type(value) is not str or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
         if self.t_danger < 0:
             raise ValueError(f"t_danger must be >= 0 (got {self.t_danger})")
         if self.t_contact <= self.t_danger:
@@ -180,11 +253,14 @@ class DeterminismCheck:
     collision_stable: bool
     contact_step_stable: bool
     observed_contact_steps: tuple[int | None, ...]
+    trace_stable: bool = False
+    first_divergence_step: int | None = None
+    first_divergence_field: str | None = None
 
     @property
     def deterministic(self) -> bool:
-        """Return whether both the collision flag and contact step were stable."""
-        return self.collision_stable and self.contact_step_stable
+        """Return whether terminal outcome, contact tick, and trace all agree."""
+        return self.collision_stable and self.contact_step_stable and self.trace_stable
 
     def to_dict(self) -> dict[str, Any]:
         """Return the JSON-safe determinism-check mapping."""
@@ -192,6 +268,9 @@ class DeterminismCheck:
             "replays": self.replays,
             "collision_stable": self.collision_stable,
             "contact_step_stable": self.contact_step_stable,
+            "trace_stable": self.trace_stable,
+            "first_divergence_step": self.first_divergence_step,
+            "first_divergence_field": self.first_divergence_field,
             "deterministic": self.deterministic,
             "observed_contact_steps": [
                 None if s is None else int(s) for s in self.observed_contact_steps
@@ -231,12 +310,15 @@ class TimeBranchResult:
 class LastAvoidableReport:
     """Self-contained ``last_avoidable_replay.v1`` result.
 
-    The field set is deliberately forward-compatible with the
-    ``collision_causal_report.v1`` contract proposed in issue #5441: it exposes
-    ``t_danger``/``t_uca``/``t_inevitable``/``t_contact`` as available/unavailable
-    (``None``) fields, records competing-explanation-relevant provenance, and
-    holds ``normative_fault`` at ``not_assessed``. When #5441 lands this report can
-    be embedded as the counterfactual branch of that contract without re-running.
+    The report is source-tagged diagnostic evidence: controlled fixtures and
+    native simulator adapters can use the same replay contract, but their source
+    and claim boundaries remain distinct. ``config.t_contact`` is the declared
+    contact state tick; ``determinism.observed_contact_steps`` records the replay
+    observations, and a downstream causal join may expose ``t_contact`` as an
+    observed timestamp only when every observation agrees with that declaration.
+    The report records competing-explanation-relevant provenance, holds
+    ``normative_fault`` at ``not_assessed``, and is not a real-episode root-cause,
+    benchmark, or paper-grade claim.
     """
 
     verdict: str
@@ -252,8 +334,9 @@ class LastAvoidableReport:
     abstain_reason: str | None = None
     normative_fault: str = "not_assessed"
     claim_boundary: str = (
-        "controlled-fixture diagnostic evidence; not a real-episode root-cause "
-        "claim; assigns no legal or moral fault"
+        "source-tagged diagnostic replay evidence; interpret using source_kind; "
+        "not a real-episode root-cause, benchmark, or paper-grade claim; assigns "
+        "no legal or moral fault"
     )
     notes: tuple[str, ...] = field(default_factory=tuple)
 
@@ -305,32 +388,130 @@ def _replay_to_contact(
     return None
 
 
+def _trace_value(value: Any) -> Any:
+    """Convert an opaque snapshot into deterministic comparator-friendly values.
+
+    Returns:
+        A nested value containing owned arrays and stable object fields.
+    """
+    if isinstance(value, np.ndarray):
+        return value.copy()
+    if isinstance(value, np.generic):
+        return value.item()
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            "type": f"{type(value).__module__}.{type(value).__qualname__}",
+            "fields": {
+                item.name: (
+                    {"present": getattr(value, item.name) is not None}
+                    if item.name == "residual_adversary"
+                    else _trace_value(getattr(value, item.name))
+                )
+                for item in fields(value)
+            },
+        }
+    if isinstance(value, Mapping):
+        return {key: _trace_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_trace_value(item) for item in value)
+    if isinstance(value, list):
+        return [_trace_value(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        normalized = [_trace_value(item) for item in value]
+        return sorted(normalized, key=repr)
+    if hasattr(value, "__dict__"):
+        return {
+            "type": f"{type(value).__module__}.{type(value).__qualname__}",
+            "fields": {key: _trace_value(item) for key, item in vars(value).items()},
+        }
+    return value
+
+
+def _replay_with_trace(
+    model: CounterfactualModel,
+    initial_snapshot: Any,
+    baseline_actions: Sequence[Any],
+    max_step: int,
+) -> tuple[int | None, list[NoOpStep]]:
+    """Replay baseline actions and retain typed no-op steps for every state tick.
+
+    Returns:
+        The first contact state tick and its typed continuation trace.
+    """
+    model.restore(initial_snapshot)
+    initial_terminal = bool(model.collision())
+    trace = [
+        NoOpStep(
+            step=0,
+            state=_trace_value(model.snapshot()),
+            terminal=initial_terminal,
+        )
+    ]
+    if initial_terminal:
+        return 0, trace
+    limit = min(max_step, len(baseline_actions))
+    for step in range(limit):
+        action = baseline_actions[step]
+        model.step(action)
+        terminal = bool(model.collision())
+        trace.append(
+            NoOpStep(
+                step=step + 1,
+                state=_trace_value(model.snapshot()),
+                applied_action=_trace_value(action),
+                terminal=terminal,
+            )
+        )
+        if terminal:
+            return step + 1, trace
+    return None, trace
+
+
 def _verify_determinism(
     model: CounterfactualModel,
     initial_snapshot: Any,
     baseline_actions: Sequence[Any],
     config: ReplayConfig,
 ) -> DeterminismCheck:
-    """Replay the baseline ``config.determinism_replays`` times and compare outcomes.
+    """Replay the baseline and compare terminal outcomes plus typed traces.
 
     Returns:
-        A :class:`DeterminismCheck` recording whether the collision flag and
-        contact step were stable across all replays.
+        A :class:`DeterminismCheck` recording whether the collision flag, contact
+        step, and every declared no-op trace field were stable across all replays.
     """
     max_step = config.t_contact + config.horizon
     contact_steps: list[int | None] = []
+    traces: list[list[NoOpStep]] = []
     for _ in range(config.determinism_replays):
-        contact_steps.append(
-            _replay_to_contact(model, initial_snapshot, baseline_actions, max_step)
+        contact_step, trace = _replay_with_trace(
+            model, initial_snapshot, baseline_actions, max_step
         )
+        contact_steps.append(contact_step)
+        traces.append(trace)
     collided = [c is not None for c in contact_steps]
     collision_stable = len(set(collided)) == 1
     contact_step_stable = len(set(contact_steps)) == 1
+    trace_stable = True
+    first_divergence_step = None
+    first_divergence_field = None
+    if traces:
+        expected_trace = traces[0]
+        for actual_trace in traces[1:]:
+            comparison = compare_continuation_traces(expected_trace, actual_trace)
+            if comparison.equivalent:
+                continue
+            trace_stable = False
+            first_divergence_step = comparison.first_divergence_step
+            first_divergence_field = comparison.first_divergence_field
+            break
     return DeterminismCheck(
         replays=config.determinism_replays,
         collision_stable=collision_stable,
         contact_step_stable=contact_step_stable,
         observed_contact_steps=tuple(contact_steps),
+        trace_stable=trace_stable,
+        first_divergence_step=first_divergence_step,
+        first_divergence_field=first_divergence_field,
     )
 
 
@@ -468,13 +649,21 @@ def _model_metadata(model: CounterfactualModel, field_name: str) -> str | None:
         The normalized metadata value, or ``None`` when the model does not
         declare the requested field.
     """
-    value = getattr(model, field_name, None)
-    if callable(value):
-        value = value()
+    try:
+        value = getattr(model, field_name, None)
+        if callable(value):
+            value = value()
+    except Exception as exc:
+        raise _ReplayProvenanceError(
+            f"model replay provenance field {field_name!r} could not be read"
+        ) from exc
     if value is None:
         return None
-    text = str(value).strip()
-    return text or None
+    if type(value) is not str or not value.strip():
+        raise _ReplayProvenanceError(
+            f"model replay provenance field {field_name!r} must be a non-empty string"
+        )
+    return value
 
 
 def _snapshot_state_is_complete(model: CounterfactualModel) -> bool | None:
@@ -484,9 +673,18 @@ def _snapshot_state_is_complete(model: CounterfactualModel) -> bool | None:
         ``True`` or ``False`` when the model declares completeness; ``None`` when
         the legacy protocol has no completeness declaration.
     """
-    declared = _model_metadata(model, "replay_state_complete")
+    try:
+        declared = getattr(model, "replay_state_complete", None)
+        if callable(declared):
+            declared = declared()
+    except Exception:  # noqa: BLE001 - malformed completeness declarations fail closed
+        return False
     if declared is None:
         return None
+    if type(declared) is bool:
+        return declared
+    if type(declared) is not str:
+        return False
     normalized = declared.strip().lower()
     if normalized in {"true", "1", "yes", "complete"}:
         return True
@@ -520,7 +718,13 @@ def _bind_model_metadata(
         actual = _model_metadata(model, model_field)
         if actual is None:
             continue
-        if declared == "unspecified":
+        # The omitted pedestrian-response default is a string-compatible marker,
+        # so existing callers still observe/serialize ``unknown`` while native
+        # adapters can bind it to their actual response mode. A caller that
+        # explicitly supplies ``unknown`` remains distinct and fails closed
+        # against a declared native mode. ``unspecified`` retains its legacy
+        # model-binding semantics for all provenance fields.
+        if _is_omitted_pedestrian_response(declared) or declared == "unspecified":
             bound_config = replace(bound_config, **{field_name: actual})
         elif declared != actual:
             mismatches.append(f"{field_name}: declared={declared!r}, actual={actual!r}")
@@ -557,7 +761,29 @@ def locate_last_avoidable(  # noqa: C901 - explicit fail-closed verdict state ma
     Returns:
         A :class:`LastAvoidableReport` preserving every branch result.
     """
-    bound_config, metadata_mismatches = _bind_model_metadata(model, config)
+    try:
+        bound_config, metadata_mismatches = _bind_model_metadata(model, config)
+    except _ReplayProvenanceError as exc:
+        determinism = DeterminismCheck(
+            replays=config.determinism_replays,
+            collision_stable=False,
+            contact_step_stable=False,
+            observed_contact_steps=(None,) * config.determinism_replays,
+        )
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="invalid_replay_provenance",
+            notes=(str(exc),),
+        )
     if metadata_mismatches:
         determinism = DeterminismCheck(
             replays=bound_config.determinism_replays,

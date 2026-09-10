@@ -96,6 +96,12 @@ CAUSE_LOCATIONS = frozenset(
 
 CAUSAL_VERDICTS = frozenset({"avoidable", "unavoidable", "unknown"})
 PEDESTRIAN_RESPONSE_ASSUMPTIONS = frozenset({"replayed", "closed_loop", "unknown"})
+_NON_NATIVE_REPLAY_PROVENANCE_FIELDS = (
+    "action_set_id",
+    "feasibility_filter",
+    "collision_predicate",
+    "pedestrian_response",
+)
 
 #: The four incident timestamps, ordered as they occur along one timeline.
 CRITICAL_TIMESTAMP_KEYS = ("t_danger", "t_uca", "t_inevitable", "t_contact")
@@ -254,7 +260,6 @@ _LAST_AVOIDABLE_TO_CAUSAL_VERDICT = {
     VERDICT_ALREADY_UNAVOIDABLE: "unavoidable",
     VERDICT_UNKNOWN: "unknown",
 }
-_SYNTHETIC_REPLAY_SOURCE_KINDS = frozenset({"unspecified", "synthetic_fixture"})
 
 
 @dataclass(frozen=True)
@@ -325,21 +330,45 @@ def collide_causal_report_from_last_avoidable(
 
     _validate_join_metadata(metadata)
 
-    # The native adapter currently has enough state to run a diagnostic replay,
-    # but not enough verified episode/map/seed/software provenance to support the
-    # causal-report source contract. Do not silently relabel its result as a
-    # synthetic fixture. The explicit abstention is the supported hand-off until
-    # a native provenance receipt is threaded through this join.
+    # Only an explicit controlled-fixture source label may enter this join. Native,
+    # unspecified, and otherwise unknown sources must not be relabelled as synthetic
+    # evidence by a downstream wrapper.
     source_kind = getattr(replay.config, "source_kind", "unspecified")
-    if source_kind not in _SYNTHETIC_REPLAY_SOURCE_KINDS:
+    if not (type(source_kind) is str and source_kind == "synthetic_fixture"):
+        is_unspecified = source_kind is None or (
+            isinstance(source_kind, str) and source_kind in {"", "unspecified"}
+        )
         return validate_collision_causal_report(
             abstained_collision_causal_report(
                 report_id=report_id,
                 case_id=case_id,
-                reason="native_simulator_causal_join_unsupported",
+                reason=(
+                    "unspecified_replay_provenance"
+                    if is_unspecified
+                    else "native_simulator_causal_join_unsupported"
+                ),
                 source_kind="unknown",
                 missing_fields=[
-                    "native_simulator_provenance",
+                    (
+                        "replay_source_provenance"
+                        if is_unspecified
+                        else "native_simulator_provenance"
+                    ),
+                    "causal_join_contract",
+                ],
+            )
+        )
+
+    incomplete_provenance = _incomplete_non_native_replay_provenance(replay.config)
+    if incomplete_provenance:
+        return validate_collision_causal_report(
+            abstained_collision_causal_report(
+                report_id=report_id,
+                case_id=case_id,
+                reason="incomplete_replay_provenance",
+                source_kind="unknown",
+                missing_fields=[
+                    *(f"replay_provenance.{field}" for field in incomplete_provenance),
                     "causal_join_contract",
                 ],
             )
@@ -354,6 +383,7 @@ def collide_causal_report_from_last_avoidable(
     ped_response = config.pedestrian_response
     replay_determinism = "deterministic" if replay.determinism.deterministic else "nondeterministic"
     rationale = _join_rationale(replay, abstained)
+    verified_contact = _verified_contact_tick(replay)
     missing_fields = _join_missing_fields(replay)
     interventions = _join_interventions(replay, ped_response, supported_actual_cause)
 
@@ -405,7 +435,7 @@ def collide_causal_report_from_last_avoidable(
                 "t_danger": _ts(True, config.t_danger),
                 "t_uca": _ts(replay.t_uca is not None, replay.t_uca),
                 "t_inevitable": _ts(replay.t_inevitable is not None, replay.t_inevitable),
-                "t_contact": _ts(True, config.t_contact),
+                "t_contact": _ts(verified_contact is not None, verified_contact),
             },
             "elements": {
                 key: {
@@ -466,6 +496,25 @@ def _validate_join_metadata(metadata: CausalJoinMetadata) -> None:
         )
 
 
+def _incomplete_non_native_replay_provenance(config: Any) -> tuple[str, ...]:
+    """Return non-native replay fields that cannot support a causal join."""
+    missing: list[str] = []
+    for field_name in _NON_NATIVE_REPLAY_PROVENANCE_FIELDS:
+        value = getattr(config, field_name, None)
+        if type(value) is not str or not value.strip():
+            missing.append(field_name)
+            continue
+        normalized = value.strip().lower()
+        if normalized in {"unspecified", "unknown"}:
+            missing.append(field_name)
+        elif field_name == "pedestrian_response" and normalized not in {
+            "replayed",
+            "closed_loop",
+        }:
+            missing.append(field_name)
+    return tuple(missing)
+
+
 def _join_rationale(replay: LastAvoidableReport, abstained: bool) -> str:
     """Return the proximate-mechanism/confidence rationale for the join verdict."""
     if abstained:
@@ -490,18 +539,40 @@ def _join_missing_fields(replay: LastAvoidableReport) -> list[str]:
     The replay summary has no per-element canonical trace, so every
     planner-internal reconstruction element is unavailable for every verdict.
     Unsupported evidence is explicit, never inferred from report-wide coverage.
+    The contact timestamp is listed only when the replay observations verify
+    the declared contact tick.
     """
     missing: list[str] = []
     missing.extend(RECONSTRUCTION_ELEMENT_KEYS)
+    verified_contact = _verified_contact_tick(replay)
     for key in CRITICAL_TIMESTAMP_KEYS:
         is_available = (
-            key in ("t_danger", "t_contact")
+            key == "t_danger"
+            or (key == "t_contact" and verified_contact is not None)
             or (key == "t_uca" and replay.t_uca is not None)
             or (key == "t_inevitable" and replay.t_inevitable is not None)
         )
         if not is_available and key not in missing:
             missing.append(key)
     return missing
+
+
+def _verified_contact_tick(replay: LastAvoidableReport) -> int | None:
+    """Return the declared contact tick only when every replay agrees with it.
+
+    ``ReplayConfig.t_contact`` is a declaration used to bound replay. The
+    determinism observations are the evidence that can promote that
+    declaration to an observed contact timestamp in the causal-report join.
+    """
+    observations = replay.determinism.observed_contact_steps
+    if (
+        not replay.determinism.deterministic
+        or not observations
+        or len(observations) != replay.determinism.replays
+        or any(step != replay.config.t_contact for step in observations)
+    ):
+        return None
+    return replay.config.t_contact
 
 
 def _join_interventions(

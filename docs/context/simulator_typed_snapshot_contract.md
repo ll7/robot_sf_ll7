@@ -27,9 +27,18 @@ Such a mismatch raises `SnapshotCompatibilityError`; malformed metadata, unknown
 versions, missing arrays, descriptor drift, object dtypes, non-finite values, and
 payload digest/size drift raise `SnapshotPayloadError`. If the live adapter fails
 after beginning a restore, the previous adapter snapshot is restored before the
-failure is reported.
+failure is reported, including when the failure is an unexpected ordinary exception
+such as `AssertionError`. The raw adapter preflights each numeric array's exact shape
+and dtype and the obstacle-force flag's exact boolean type before mutating the
+destination; malformed raw snapshots cannot rely on assignment broadcasting or
+truthiness coercion.
 
 The durable pair is a JSON metadata file and a compressed `.npz` numeric payload.
+Each file is replaced atomically, but replacing the two-file pair is not one filesystem
+transaction; the reader's digest and size checks reject a mixed-generation pair,
+including a payload replacement observed after array decoding. This post-load check
+cannot distinguish a replacement with byte-identical contents, so a future
+transactional generation marker remains outside this prototype's scope.
 Loading uses `allow_pickle=False`. JSON values carry typed tuple and array references;
 robot drive state and route-navigator fields are rebuilt into destination-owned
 objects. Behavior and route keys use stable actor/behavior identities rather than
@@ -77,5 +86,9 @@ C_plain = K * C(T)
 C_window = C_parent + C_selection + C_validation
             + K * (C_load + C(W))
 ```
+
+The current `C_load` term includes the payload integrity checks before and after
+numeric-array decoding; no separate timing or byte-size claim is made for that
+additional fail-closed check.
 
 No positive break-even or cross-planner transfer claim is made by this prototype.

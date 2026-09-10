@@ -13,8 +13,12 @@ copyright = "2026, Robot SF contributors"
 extensions = [
     "myst_parser",
     "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
     "sphinx.ext.napoleon",
 ]
+
+# Only test explicit doctest/testcode directives in documentation, not unmanaged docstring examples.
+doctest_test_doctest_blocks = ""
 
 source_suffix = {
     ".rst": "restructuredtext",

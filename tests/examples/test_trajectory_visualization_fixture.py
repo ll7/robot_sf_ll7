@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -151,6 +152,18 @@ def test_example_main_headless_smoke(tmp_path: Path) -> None:
         == 0
     )
     assert (out_dir / "summary.json").is_file()
+
+
+def test_example_main_rejects_output_escape_before_fixture_write() -> None:
+    """An escaped fixture output root is rejected without an outside write."""
+    example = _load_example_module()
+    escaped_root = Path("/dev/shm") / f"robot-sf-trajectory-escape-{os.getpid()}"
+    assert not escaped_root.exists()
+    try:
+        assert example.main(["--fixture", "--headless", "--out-dir", str(escaped_root)]) == 2
+        assert not escaped_root.exists()
+    finally:
+        shutil.rmtree(escaped_root, ignore_errors=True)
 
 
 def test_example_main_refuses_missing_recording(tmp_path: Path) -> None:

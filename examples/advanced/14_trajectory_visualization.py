@@ -27,13 +27,13 @@ References:
 
 import argparse
 import sys
-from pathlib import Path
 
 from loguru import logger
 
 from examples.advanced.trajectory_viz_fixture import (
     REASON_OK,
     build_fixture_recording,
+    resolve_out_dir,
     resolve_recording_path,
     run_headless,
 )
@@ -110,23 +110,33 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     recording = args.recording
+    output_dir = None
+    if recording is None or args.fixture or args.headless:
+        output_dir, reason = resolve_out_dir(args.out_dir)
+        if output_dir is None:
+            logger.error(f"Output directory refused: {reason} (out-dir: {args.out_dir})")
+            return 2
+
     if recording is None:
         # Bare invocation is always the CI-safe fixture smoke path. It never
         # auto-opens interactive playback: a stale recording on disk must not
         # hang headless runs waiting for user input.
-        fixture_path = Path(args.out_dir) / "fixture_recording.pkl"
+        assert output_dir is not None
+        fixture_path = output_dir / "fixture_recording.pkl"
         build_fixture_recording(fixture_path, steps=args.fixture_steps)
         logger.info(f"Generated fixture recording at: {fixture_path}")
         recording = str(fixture_path)
         args.headless = True
     elif args.fixture:
-        fixture_path = Path(args.out_dir) / "fixture_recording.pkl"
+        assert output_dir is not None
+        fixture_path = output_dir / "fixture_recording.pkl"
         build_fixture_recording(fixture_path, steps=args.fixture_steps)
         logger.info(f"Generated fixture recording at: {fixture_path}")
         recording = str(fixture_path)
 
     if args.headless:
-        summary, reason = run_headless(recording, args.out_dir, max_frames=args.max_frames)
+        assert output_dir is not None
+        summary, reason = run_headless(recording, output_dir, max_frames=args.max_frames)
         if reason != REASON_OK:
             logger.error(f"Headless run refused: {reason} (recording: {recording})")
             return 2

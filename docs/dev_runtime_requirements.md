@@ -143,6 +143,8 @@ failed recovery attempt, remains a terminal setup failure.
 The promoted-planner and nightly performance workflows use the same headless stack, without `jq`
 where it is not needed.
 
+
+See also the [Platform Setup Profiles](./quickstart_platforms.md) for the Linux, macOS, and headless onboarding paths.
 ## Headless Rendering
 
 Use these environment values for local GUI/rendering tests on headless machines:

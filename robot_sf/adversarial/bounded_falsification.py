@@ -301,26 +301,104 @@ def _summary(rows: list[Mapping[str, Any]]) -> dict[str, int]:
     return counts
 
 
-def validate_bounded_falsification_preflight(report: Mapping[str, Any]) -> None:
+def validate_bounded_falsification_preflight(  # noqa: C901, PLR0912, PLR0915
+    report: Mapping[str, Any],
+) -> None:
     """Validate the fail-closed invariants of one generated preflight report."""
+    if not isinstance(report, Mapping):
+        raise BoundedFalsificationError("preflight report must be a mapping")
     if report.get("schema_version") != VERTICAL_SLICE_SCHEMA_VERSION:
         raise BoundedFalsificationError("preflight schema_version is unsupported")
     if report.get("claim_boundary") != CLAIM_BOUNDARY:
         raise BoundedFalsificationError("preflight claim boundary drifted")
-    if report.get("execution", {}).get("simulator_executed") is not False:
-        raise BoundedFalsificationError("preflight cannot claim simulator execution")
-    if report.get("execution", {}).get("optimizer_instantiated") is not False:
-        raise BoundedFalsificationError("preflight cannot instantiate an optimizer")
+
+    execution = report.get("execution")
+    if not isinstance(execution, Mapping):
+        raise BoundedFalsificationError("preflight execution must be a mapping")
+    for field in (
+        "simulator_executed",
+        "planner_executed",
+        "optimizer_instantiated",
+        "campaign_launched",
+    ):
+        if execution.get(field) is not False:
+            raise BoundedFalsificationError(f"preflight execution.{field} must be false")
+    if execution.get("default_disabled") is not True:
+        raise BoundedFalsificationError("preflight execution.default_disabled must be true")
+
+    gate = report.get("gate")
+    if not isinstance(gate, Mapping):
+        raise BoundedFalsificationError("preflight gate must be a mapping")
+    gate_authorized = gate.get("authorized")
+    if not isinstance(gate_authorized, bool):
+        raise BoundedFalsificationError("preflight gate.authorized must be boolean")
+    if execution.get("compute_authorized_by_packet") is not gate_authorized:
+        raise BoundedFalsificationError(
+            "preflight execution.compute_authorized_by_packet must mirror gate.authorized"
+        )
+    gate_status = gate.get("status")
+    expected_gate_status = "not_requested" if gate_authorized else "blocked"
+    if gate_status != expected_gate_status:
+        raise BoundedFalsificationError(
+            f"preflight gate.status must be {expected_gate_status!r} for its authorization state"
+        )
+    blocking_reasons = gate.get("blocking_reasons")
+    if not isinstance(blocking_reasons, list):
+        raise BoundedFalsificationError("preflight gate.blocking_reasons must be a list")
+    if not gate_authorized and not blocking_reasons:
+        raise BoundedFalsificationError(
+            "blocked preflight gate must preserve explicit blocking_reasons"
+        )
+
+    zero_overlay = report.get("zero_overlay_equivalence")
+    if not isinstance(zero_overlay, Mapping):
+        raise BoundedFalsificationError("preflight zero_overlay_equivalence must be a mapping")
+    if zero_overlay.get("simulation_executed") is not False:
+        raise BoundedFalsificationError(
+            "preflight zero_overlay_equivalence.simulation_executed must be false"
+        )
+
+    arms = report.get("arms")
+    if not isinstance(arms, Mapping):
+        raise BoundedFalsificationError("preflight arms must be a mapping")
+    cma_es = arms.get(PRIMARY_ARM)
+    if not isinstance(cma_es, Mapping):
+        raise BoundedFalsificationError("preflight CMA-ES arm must be a mapping")
+    if cma_es.get("execution_status") != "declared_not_executed":
+        raise BoundedFalsificationError("preflight CMA-ES arm must remain declared_not_executed")
+
+    for section in ("native_outcomes", "replay"):
+        outputs = report.get(section)
+        if not isinstance(outputs, Mapping):
+            raise BoundedFalsificationError(f"preflight {section} must be a mapping")
+        rows_count = outputs.get("rows")
+        if not isinstance(rows_count, int) or isinstance(rows_count, bool) or rows_count != 0:
+            raise BoundedFalsificationError(f"preflight {section}.rows must be zero")
+        if "digest" not in outputs or outputs["digest"] is not None:
+            raise BoundedFalsificationError(f"preflight {section}.digest must be null")
+
     rows = report.get("outcome_rows")
     if not isinstance(rows, list):
         raise BoundedFalsificationError("preflight outcome_rows must be a list")
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            raise BoundedFalsificationError(f"preflight outcome row {index} must be a mapping")
+        if row.get("simulation_executed") is not False:
+            raise BoundedFalsificationError(
+                f"preflight outcome row {index} simulation_executed must be false"
+            )
+        for field in ("native_outcome_digest", "replay_digest"):
+            if field not in row or row[field] is not None:
+                raise BoundedFalsificationError(
+                    f"preflight outcome row {index} {field} must be null"
+                )
+        if "status" not in row:
+            raise BoundedFalsificationError(f"preflight outcome row {index} status is required")
     expected_summary = _summary(rows)
     if report.get("outcome_summary") != expected_summary:
         raise BoundedFalsificationError("preflight outcome summary disagrees with outcome rows")
     if any(row["status"] in {"result", "null"} for row in rows):
         raise BoundedFalsificationError("preflight cannot emit result or null outcomes")
-    if report.get("replay", {}).get("digest") is not None:
-        raise BoundedFalsificationError("preflight cannot invent a replay digest")
 
 
 def build_bounded_falsification_preflight(

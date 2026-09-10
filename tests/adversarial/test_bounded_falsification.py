@@ -80,3 +80,60 @@ def test_preflight_validator_rejects_claim_result_rows() -> None:
 
     with pytest.raises(BoundedFalsificationError, match="result or null"):
         validate_bounded_falsification_preflight(report)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("simulation_executed", True),
+        ("native_outcome_digest", "a" * 64),
+        ("replay_digest", "b" * 64),
+    ],
+)
+def test_preflight_validator_rejects_outcome_execution_or_digests(
+    field: str, value: object
+) -> None:
+    """No-result rows cannot carry native execution or replay evidence."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["outcome_rows"][0][field] = value
+
+    with pytest.raises(BoundedFalsificationError, match=field):
+        validate_bounded_falsification_preflight(report)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value", "message"),
+    [
+        ("execution", "simulator_executed", True, "simulator_executed"),
+        ("execution", "planner_executed", True, "planner_executed"),
+        ("execution", "optimizer_instantiated", True, "optimizer_instantiated"),
+        ("execution", "campaign_launched", True, "campaign_launched"),
+        ("execution", "default_disabled", False, "default_disabled"),
+        ("execution", "compute_authorized_by_packet", True, "compute_authorized_by_packet"),
+        ("gate", "authorized", True, "gate"),
+        ("gate", "status", "not_requested", "gate"),
+        ("gate", "blocking_reasons", [], "blocking_reasons"),
+        ("native_outcomes", "rows", 1, "native_outcomes"),
+        ("native_outcomes", "digest", "c" * 64, "native_outcomes"),
+        ("replay", "rows", 1, "replay"),
+        ("replay", "digest", "d" * 64, "replay"),
+    ],
+)
+def test_preflight_validator_rejects_report_level_compute_claims(
+    section: str, field: str, value: object, message: str
+) -> None:
+    """Report-level declarations cannot reopen the default-disabled compute path."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report[section][field] = value
+
+    with pytest.raises(BoundedFalsificationError, match=message):
+        validate_bounded_falsification_preflight(report)
+
+
+def test_preflight_validator_rejects_executed_cma_es_arm() -> None:
+    """The declared CMA-ES arm must remain uninstantiated in this preflight."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["arms"]["cma_es"]["execution_status"] = "executed"
+
+    with pytest.raises(BoundedFalsificationError, match="CMA-ES"):
+        validate_bounded_falsification_preflight(report)

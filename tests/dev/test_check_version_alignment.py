@@ -263,6 +263,24 @@ publication_authorized: true
     assert load_release_preparation_version(marker) is None
 
 
+@pytest.mark.parametrize("schema_line", ["", "schema_version: release_preparation.v0\n"])
+def test_load_release_preparation_version_rejects_unknown_schema(
+    tmp_path: Path, schema_line: str
+) -> None:
+    """An active preparation marker must identify the versioned marker contract."""
+    marker = tmp_path / "release_preparation.yaml"
+    marker.write_text(
+        f"""{schema_line}release_tag: \"0.0.6\"\n
+status: awaiting_maintainer_approval
+publication_authorized: false
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="schema_version"):
+        load_release_preparation_version(marker)
+
+
 def test_repo_release_preparation_marker_targets_v0_0_6() -> None:
     """The active marker stages the next software target without publication authority."""
     from scripts.dev.check_version_alignment import DEFAULT_RELEASE_PREPARATION

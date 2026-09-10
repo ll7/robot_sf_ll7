@@ -42,15 +42,20 @@ one-frame smoke baseline rather than calibrated or benchmark evidence.
 ## Static Docs Site
 
 This repository includes a lightweight Sphinx site over the existing Markdown docs. Build it from
-the repository root with:
+the repository root with the curated strict wrapper:
 
 ```bash
-uv run --group docs sphinx-build -b html docs docs/_build/html
+scripts/dev/sphinx_strict_build.sh
 ```
 
-Open `docs/_build/html/index.html` for the browsable navigation layer. The site is intentionally
-thin: existing Markdown files remain the source of truth, and generated HTML under
-`docs/_build/` is disposable local output.
+Open `output/docs-strict/html/index.html` for the browsable navigation layer. The wrapper builds
+only the `docs/index.rst` toctree closure, promotes warnings to errors, and writes generated HTML
+outside the source tree under the git-ignored `output/` directory.
+
+The curated site intentionally does not build the historical corpus under `docs/context/`,
+`docs/dev/`, and similar trees. A raw full-tree `sphinx-build docs <out>` is unsupported: broad
+warning-class suppressions are not configured, so it reports the historical corpus warnings by
+design. See `CONTRIBUTING.md` for the strict-build contract and the curated source manifest.
 
 ## 🚀 Social Navigation Benchmark Platform
 
@@ -60,7 +65,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 * **[Complete Quickstart Guide](../specs/120-social-navigation-benchmark-plan/quickstart.md)** - Step-by-step experiment execution, visualization, and interpretation
 * **[Public API](public_api.md)** - The supported top-level facade (`make_env`, `load_scenario`, `run_episode`), lifecycle guarantees, and deprecation policy
-* **[Scenarios Catalog & CLI](SCENARIOS.md)** - Bundled scenario discovery, property inspection, and single-file validation
+* **[Scenarios Catalog & CLI](./SCENARIOS.md)** - Bundled scenario discovery, property inspection, and single-file validation
 * **[CLI Reference](./dev/issues/social-navigation-benchmark/README.md)** - CLI subcommands with examples
 
 ### Core Capabilities
@@ -97,19 +102,19 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
   - [Performance \& CI](#performance--ci)
   - [Hardware \& Environment](#hardware--environment)
   - [Additional Resources (Legacy Structure)](#additional-resources-legacy-structure)
-  - [🏗️ Architecture \& Development](#️-architecture--development)
-  - [🎮 Simulation \& Environment](#-simulation--environment)
-  - [📊 Analysis \& Tools](#-analysis--tools)
+  - [🏗️ Architecture \& Development](#architecture-development)
+  - [🎮 Simulation \& Environment](#simulation-environment)
+  - [📊 Analysis \& Tools](#analysis-tools)
     - [Social Navigation Benchmark (Overview)](#social-navigation-benchmark-overview)
     - [Figures naming and outputs](#figures-naming-and-outputs)
-    - [LaTeX Table Embedding (SNQI / Benchmark Tables)](#latex-table-embedding-snqi--benchmark-tables)
+    - [LaTeX Table Embedding (SNQI / Benchmark Tables)](#latex-table-embedding-snqi-benchmark-tables)
   - [Per-Test Performance Budget](#per-test-performance-budget)
-  - [⚙️ Setup \& Configuration](#️-setup--configuration)
+  - [⚙️ Setup \& Configuration](#setup-configuration)
   - [📈 Pedestrian Metrics](#-pedestrian-metrics)
   - [📁 Media Resources](#-media-resources)
 - [🚀 Quick Start Guides](#-quick-start-guides)
   - [New Environment Architecture (Recommended)](#new-environment-architecture-recommended)
-  - [Legacy Pattern (Still Supported)](#legacy-pattern-still-supported)
+  - [Legacy Class Pattern](#legacy-class-pattern)
     - [Environment Factory Ergonomics Migration (Feature 130)](#environment-factory-ergonomics-migration-feature-130)
 - [🎯 Key Features](#-key-features)
   - [Environment System](#environment-system)
@@ -775,5 +780,3 @@ When contributing to the project:
 * **Planner selection**: Choose between visibility and classic grid planners in `docs/dev_guide_reference.md#planner-selection-visibility-vs-classic-grid`.
 * **MPC social-navigation spike**: See `docs/context/issue_771_drmpscnav_assessment.md` and `docs/context/issue_771_drmpscnav_implementation_guide.md` for the SICNav / DR-MPC assessment boundary, implementation guardrails, and verified-simple gate plan.
 * **ACMPC learned-MPC feasibility**: See `docs/context/issue_3985_acmpc_feasibility_assessment.md` for the assessment-only boundary for an Actor-Critic Model Predictive Control inspired local planner.
-
----

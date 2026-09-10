@@ -189,27 +189,10 @@ def test_conflicts_overlay_requirements_orphans_and_redaction(tmp_path: Path) ->
     result2 = tool.build_locator_snapshot([registry], overlay_path=kept)
     assert result2.ok and result2.entries[0].locator_source == "private_overlay"
     assert result2.entries[0].verification == "unresolved"
-
-
-def test_invalid_overlay_class_fails_closed(tmp_path: Path) -> None:
-    """Malformed private overlay metadata cannot create an invalid public class."""
-    entry = _entry(
-        "artifact.overlay",
-        "a" * 64,
-        locator=None,
-        locator_class="private_overlay",
-    )
-    registry = _registry(tmp_path, [entry])
-    overlay = _overlay(
-        tmp_path,
-        {"artifact.overlay": {"locator": "s3://private.invalid/x", "locator_class": "bad"}},
-    )
-
-    result = tool.build_locator_snapshot([registry], overlay_path=overlay)
-
-    assert not result.ok
-    assert "invalid_overlay_entry" in _codes(result)
-    assert result.entries[0].locator_class == "private_overlay"
+    bad_class = _overlay(tmp_path, {"owned": {"locator": "s3://x.invalid", "locator_class": "bad"}})
+    invalid = tool.build_locator_snapshot([registry], overlay_path=bad_class)
+    assert not invalid.ok and "invalid_overlay_entry" in _codes(invalid)
+    assert invalid.entries[0].locator_class == "artifact_uri"
 
 
 def test_readable_locator_and_destination_verify_digest(tmp_path: Path) -> None:

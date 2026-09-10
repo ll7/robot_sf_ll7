@@ -63,6 +63,15 @@ def test_report_distinguishes_same_and_changed_seed(
     assert changed_seed["status"] == "different"
     assert changed_seed["first_identity"]["seed"] != changed_seed["second_identity"]["seed"]
     assert "causal" in changed_seed["interpretation"]
+    assert report["input_identity"]["scenario_source"] == (
+        "configs/scenarios/single/quickstart_demo.yaml"
+    )
+    assert len(report["input_identity"]["source_sha256"]) == 64
+    assert len(report["input_identity"]["config_digest"]) == 64
+    assert all(
+        artifact["identity"]["source_sha256"] == report["input_identity"]["source_sha256"]
+        for artifact in report["artifacts"]
+    )
     assert report["canonical_policy"]["excluded_runtime_fields"] == ["raw", "timing"]
     assert (tmp_path / "same_seed_a.json").is_file()
     assert (tmp_path / "same_seed_b.json").is_file()

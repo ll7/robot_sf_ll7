@@ -30,7 +30,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from robot_sf import EpisodeRecord, make_env, run_episode
+from robot_sf import EpisodeRecord, load_scenario, make_env, run_episode
+from robot_sf.benchmark.identity.hash_utils import sha256_file, stable_hash
 from robot_sf.benchmark.types import (
     CANONICAL_EPISODE_RECORD_FIELDS,
     CANONICAL_EPISODE_RUNTIME_FIELDS,
@@ -65,12 +66,38 @@ def _run_record(seed: int, max_steps: int) -> EpisodeRecord:
         env.close()
 
 
+def _input_identity() -> dict[str, str]:
+    """Return source and canonical-config identity for the selected scenario."""
+    scenario = load_scenario(SCENARIO)
+    raw_source_path = scenario.get("__scenario_path__")
+    if not isinstance(raw_source_path, str) or not raw_source_path:
+        raise ValueError("selected scenario did not expose its source path")
+
+    source_path = Path(raw_source_path).resolve()
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        relative_source_path = source_path.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError("selected scenario source must be inside the repository") from exc
+
+    config_payload = {key: value for key, value in scenario.items() if key != "__scenario_path__"}
+    return {
+        "scenario_source": relative_source_path.as_posix(),
+        "source_sha256": sha256_file(source_path),
+        "config_digest": stable_hash(config_payload),
+    }
+
+
 def _identity(record: EpisodeRecord) -> dict[str, Any]:
     """Return the input-bound identity shown in the comparison report."""
+    metadata = record.identity or {}
     return {
         "episode_id": record.episode_id,
         "scenario_id": record.scenario_id,
         "seed": record.seed,
+        "scenario_source": metadata.get("scenario_source"),
+        "source_sha256": metadata.get("source_sha256"),
+        "config_digest": metadata.get("config_digest"),
     }
 
 
@@ -145,6 +172,7 @@ def build_replay_report(output_dir: Path, max_steps: int) -> dict[str, Any]:
     if max_steps <= 0:
         raise ValueError("max_steps must be positive")
     output_dir.mkdir(parents=True, exist_ok=True)
+    input_identity = _input_identity()
 
     cases = (
         ("same_seed_a", SAME_SEED),
@@ -155,6 +183,7 @@ def build_replay_report(output_dir: Path, max_steps: int) -> dict[str, Any]:
     artifacts: list[dict[str, Any]] = []
     for label, seed in cases:
         record = _run_record(seed, max_steps)
+        record.identity = {**input_identity}
         records[label] = record
         record_path = output_dir / f"{label}.json"
         record.save(record_path)
@@ -166,6 +195,7 @@ def build_replay_report(output_dir: Path, max_steps: int) -> dict[str, Any]:
                 "episode_id": record.episode_id,
                 "scenario_id": record.scenario_id,
                 "canonical_digest": record.canonical_digest(),
+                "identity": _identity(record),
             }
         )
 
@@ -206,6 +236,7 @@ def build_replay_report(output_dir: Path, max_steps: int) -> dict[str, Any]:
             "same_seed": SAME_SEED,
             "different_seed": DIFFERENT_SEED,
         },
+        "input_identity": input_identity,
         "canonical_policy": _canonical_policy(),
         "artifacts": artifacts,
         "comparisons": {"same_seed": same_seed, "different_seed": different_seed},

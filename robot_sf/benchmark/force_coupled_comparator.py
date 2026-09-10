@@ -111,9 +111,15 @@ def classify_failure(
 
     reasons_str = " ".join(degradation_reasons).lower()
 
-    # Planner-owned diagnostic text must retain its ownership even when the free-form reason
-    # contains a simulator keyword.
-    if "plan_exception" in reasons_str or "planner_diagnostic" in reasons_str:
+    # Planner-owned diagnostic text must retain its ownership even when the reason text contains
+    # a simulator keyword.  Match only canonical reason prefixes so an incidental mention such as
+    # "simulator_step_failure: plan_exception text" cannot erase simulator ownership.
+    planner_reason_prefixes = ("plan_exception:", "planner_diagnostic:")
+    if any(
+        reason.strip().lower() == prefix[:-1] or reason.strip().lower().startswith(prefix)
+        for reason in degradation_reasons
+        for prefix in planner_reason_prefixes
+    ):
         return FAILURE_CLASS_PATH_GENERATION
 
     # 1. Simulator errors

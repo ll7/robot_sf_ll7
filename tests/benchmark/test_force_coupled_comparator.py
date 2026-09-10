@@ -360,6 +360,13 @@ def test_classify_failure_rejects_unknown_status_and_preserves_path_fallback() -
             },
             FAILURE_CLASS_SIMULATOR,
         ),
+        (
+            {
+                "status": "error",
+                "degradation_reasons": ("simulator_step_failure: plan_exception text",),
+            },
+            FAILURE_CLASS_SIMULATOR,
+        ),
     ],
 )
 def test_classify_failure_preserves_planner_boundary_precedence(

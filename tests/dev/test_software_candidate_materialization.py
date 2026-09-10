@@ -293,6 +293,7 @@ def test_real_materialized_candidate_build_has_only_supported_extras(tmp_path: P
     assert policy["include"].count("scripts/__init__.py") == 1
     assert policy["required"].count("scripts/__init__.py") == 1
     assert "scripts/**" not in policy["include"]
+    report_payload = json.loads(report.read_text(encoding="utf-8"))
     expected_dependency_evidence = {
         "docs/context/evidence/dependency_license_batch_2026-09-01.md": (
             55343,
@@ -326,7 +327,6 @@ def test_real_materialized_candidate_build_has_only_supported_extras(tmp_path: P
     assert rights_selection["allow_globs"].count("scripts/__init__.py") == 1
     assert rights_selection["required_paths"].count("scripts/__init__.py") == 1
     assert "scripts/**" not in rights_selection["allow_globs"]
-    report_payload = json.loads(report.read_text(encoding="utf-8"))
     source_marker = source / "scripts/__init__.py"
     candidate_marker = candidate / "scripts/__init__.py"
     marker_bytes = source_marker.read_bytes()

@@ -55,6 +55,7 @@ autodoc_default_options = {
 
 # Keep docs import-time light-weight when optional extras are missing.
 autodoc_mock_imports = [
+    "pandas",
     "stable_baselines3",
     "tensorboard",
     "torch",

@@ -29,11 +29,20 @@ import sys
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _MISSING_EXTRA = "robot_sf_nonexistent_extra_xyz"
+_MISSING_MODEL_ID = "tutorial_missing_model"
+_UNKNOWN_MODEL_ID = "tutorial_unknown_model"
+_MISSING_DATASET_FILENAME = "absent_annotations.txt"
 _MISSING_BACKEND = "nonexistent_backend_xyz"
+_SYNTHETIC_UNAVAILABLE_MODULES = frozenset({_MISSING_EXTRA})
+_SYNTHETIC_UNAVAILABLE_BACKENDS = frozenset({_MISSING_BACKEND})
 
 
 @dataclass(frozen=True)
@@ -45,6 +54,30 @@ class CapabilityStatus:
     reason_code: str
     detail: str
     remedy: str
+
+
+def _try_import_optional_fixture(module_name: str) -> ModuleType | None:
+    """Use the canonical import guard while isolating reserved synthetic fixtures."""
+    if module_name in _SYNTHETIC_UNAVAILABLE_MODULES:
+        # The fixture must remain unavailable even if an importing application has
+        # inserted the synthetic name into ``sys.modules`` or ``sys.path``.
+        return None
+
+    from robot_sf.common.optional_import import try_import
+
+    return try_import(module_name)
+
+
+def _get_backend_for_fixture(backend_name: str) -> object:
+    """Read the backend registry without allowing a synthetic fixture collision."""
+    if backend_name in _SYNTHETIC_UNAVAILABLE_BACKENDS:
+        # ``get_backend`` reads a process-global registry, so a collision would
+        # otherwise turn this deliberately unavailable fixture into success.
+        raise KeyError(f"Backend '{backend_name}' is unavailable in the tutorial fixture.")
+
+    from robot_sf.sim.registry import get_backend
+
+    return get_backend(backend_name)
 
 
 def check_core_capability() -> CapabilityStatus:
@@ -70,18 +103,21 @@ def check_core_capability() -> CapabilityStatus:
 
 
 def check_optional_extra() -> CapabilityStatus:
-    """Probe a missing optional extra without importing anything absent."""
-    from robot_sf.common.optional_import import try_import
+    """Probe a synthetic missing optional extra without importing anything absent."""
 
-    if try_import(_MISSING_EXTRA) is None:
+    if _try_import_optional_fixture(_MISSING_EXTRA) is None:
         return CapabilityStatus(
             capability="optional_extra",
             available=False,
             reason_code="extra_missing",
-            detail=f"Optional module '{_MISSING_EXTRA}' is not installed.",
-            remedy="Install the documented extra for this capability, then retry.",
+            detail=f"Synthetic optional module '{_MISSING_EXTRA}' is intentionally unavailable.",
+            remedy=(
+                "Fixture-only diagnostic: no documented extra exists for this synthetic module. "
+                "For a real optional module, follow its package documentation to install the "
+                "matching extra, then retry."
+            ),
         )
-    return CapabilityStatus(  # pragma: no cover - fixture module never exists
+    return CapabilityStatus(  # pragma: no cover - reserved fixture is always unavailable
         capability="optional_extra",
         available=True,
         reason_code="extra_available",
@@ -97,22 +133,23 @@ def check_model_artifact() -> CapabilityStatus:
     from robot_sf.models.registry import resolve_model_path
 
     with tempfile.TemporaryDirectory(prefix="tutorial_registry_") as tmpdir:
+        missing_model_path = Path(tmpdir) / "absent_model.zip"
         registry_path = Path(tmpdir) / "registry.yaml"
         registry = {
             "version": 1,
             "models": [
                 {
-                    "model_id": "tutorial_missing_model",
-                    "local_path": str(Path(tmpdir) / "absent_model.zip"),
+                    "model_id": _MISSING_MODEL_ID,
+                    "local_path": str(missing_model_path),
                     "local_only": True,
                 }
             ],
         }
-        registry_path.write_text(yaml.safe_dump(registry))
+        # An explicit temporary registry prevents an ambient model entry from
+        # satisfying the synthetic id, and the absolute path avoids CWD lookup.
+        registry_path.write_text(yaml.safe_dump(registry), encoding="utf-8")
         try:
-            resolve_model_path(
-                "tutorial_missing_model", registry_path=registry_path, allow_download=False
-            )
+            resolve_model_path(_MISSING_MODEL_ID, registry_path=registry_path, allow_download=False)
         except FileNotFoundError as exc:
             return CapabilityStatus(
                 capability="model_artifact",
@@ -139,9 +176,11 @@ def check_unknown_model_id() -> CapabilityStatus:
     registry = {"version": 1, "models": []}
     with tempfile.TemporaryDirectory(prefix="tutorial_registry_") as tmpdir:
         registry_path = Path(tmpdir) / "registry.yaml"
-        registry_path.write_text(yaml.safe_dump(registry))
+        # The explicit empty registry keeps this synthetic id independent of the
+        # repository's ambient model registry.
+        registry_path.write_text(yaml.safe_dump(registry), encoding="utf-8")
         try:
-            get_registry_entry("tutorial_unknown_model", registry_path)
+            get_registry_entry(_UNKNOWN_MODEL_ID, registry_path)
         except KeyError as exc:
             return CapabilityStatus(
                 capability="unknown_model_id",
@@ -167,7 +206,9 @@ def check_dataset_artifact() -> CapabilityStatus:
     )
 
     with tempfile.TemporaryDirectory(prefix="tutorial_dataset_") as tmpdir:
-        missing = Path(tmpdir) / "absent_annotations.txt"
+        # An absolute path in a private temporary directory cannot collide with
+        # a dataset fixture supplied by the caller's CWD.
+        missing = Path(tmpdir) / _MISSING_DATASET_FILENAME
         try:
             load_sdd_track_set(
                 missing, scene="tutorial", split="train", frame_rate_hz=30.0, meters_per_pixel=0.1
@@ -191,19 +232,18 @@ def check_dataset_artifact() -> CapabilityStatus:
 
 def check_external_runtime() -> CapabilityStatus:
     """Probe an unsupported external runtime through the simulator registry."""
-    from robot_sf.sim.registry import get_backend
 
     try:
-        get_backend(_MISSING_BACKEND)
+        _get_backend_for_fixture(_MISSING_BACKEND)
     except KeyError as exc:
         return CapabilityStatus(
             capability="external_runtime",
             available=False,
             reason_code="runtime_unsupported",
-            detail=str(exc),
+            detail=f"{type(exc).__name__}: synthetic backend is intentionally unavailable.",
             remedy="Use a registered backend or install the runtime integration.",
         )
-    return CapabilityStatus(  # pragma: no cover - fixture backend never registers
+    return CapabilityStatus(  # pragma: no cover - reserved fixture is always unavailable
         capability="external_runtime",
         available=True,
         reason_code="runtime_available",

@@ -39,6 +39,14 @@ class ContinuationExperimentPlan:
         """Validate that the plan cannot silently omit a negative-control mode."""
         if not self.plan_id.strip():
             raise ValueError("plan_id must be non-empty")
+        if self.execution_allowed and (
+            not self.authority_issue_ids
+            or any(
+                not isinstance(issue_id, str) or not issue_id.strip()
+                for issue_id in self.authority_issue_ids
+            )
+        ):
+            raise ValueError("execution-enabled plans require non-empty authority_issue_ids")
         if tuple(self.modes) != CONTINUATION_MODES:
             raise ValueError(f"modes must be exactly {CONTINUATION_MODES}")
         if not self.independent_parent_holdout:
@@ -96,6 +104,14 @@ def evaluate_admission(
     granted = tuple(sorted(set(granted_authority)))
     missing = tuple(issue for issue in required if issue not in granted)
     blockers = [f"missing_live_authority:{issue}" for issue in missing]
+    if plan.execution_allowed and (
+        not plan.authority_issue_ids
+        or any(
+            not isinstance(issue_id, str) or not issue_id.strip()
+            for issue_id in plan.authority_issue_ids
+        )
+    ):
+        blockers.append("execution_requires_nonempty_authority_issue_ids")
     if not plan.execution_allowed:
         blockers.append("execution_not_enabled_in_preparation_plan")
     if blockers:

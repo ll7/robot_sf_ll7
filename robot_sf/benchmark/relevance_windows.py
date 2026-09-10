@@ -19,9 +19,32 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+import numpy as np
+
 RELEVANCE_SCHEMA = "scenario_relevance_windows.v1"
 MANIFEST_STATUS = "proposal_only"
 EVIDENCE_GRADE = "synthetic_preparation"
+
+_VALID_EXECUTION_MODES = frozenset(
+    {
+        "native",
+        "adapter",
+        "mixed",
+        "fallback",
+        "degraded",
+        "unknown",
+        "unavailable",
+        "invalid",
+        "rejected",
+    }
+)
+_NON_EVIDENCE_EXECUTION_MODES = frozenset(
+    {"fallback", "degraded", "unknown", "unavailable", "invalid", "rejected"}
+)
+_EVIDENCE_READY_GRADES = frozenset(
+    {"paper_grade", "nominal_benchmark", "benchmark", "evidence_ready", "admitted"}
+)
+_EventOwner = tuple[str, str | None]
 
 _SIGNAL_SPECS: dict[str, tuple[str, str, str]] = {
     "clearance_m": ("m", "trace.geometry", "measured robot/actor clearance"),
@@ -75,6 +98,8 @@ def _require_digest(value: str, name: str) -> str:
 
 def _finite(value: Any, name: str) -> float:
     """Return a finite float or fail closed."""
+    if isinstance(value, (bool, np.bool_)):
+        raise RelevanceContractError(f"{name} must be finite numeric, not boolean")
     try:
         result = float(value)
     except (TypeError, ValueError) as exc:
@@ -82,6 +107,33 @@ def _finite(value: Any, name: str) -> float:
     if not math.isfinite(result):
         raise RelevanceContractError(f"{name} must be finite")
     return result
+
+
+def _execution_mode(value: Any, name: str) -> str:
+    """Return one explicit execution mode, defaulting absent values to unknown."""
+    if value is None:
+        return "unknown"
+    if not isinstance(value, str) or not value.strip():
+        raise RelevanceContractError(f"{name} must be a non-empty execution mode string")
+    normalized = value.strip().lower()
+    if normalized not in _VALID_EXECUTION_MODES:
+        raise RelevanceContractError(f"{name} has unsupported execution mode {value!r}")
+    return normalized
+
+
+def _summarize_execution_modes(modes: Sequence[str]) -> str:
+    """Summarize per-row execution modes without hiding unsafe modes.
+
+    Returns:
+        One mode when uniform, ``mixed`` when multiple modes are present, or
+        ``unknown`` when no rows are present.
+    """
+    normalized = tuple(sorted(set(modes)))
+    if not normalized:
+        return "unknown"
+    if len(normalized) == 1:
+        return normalized[0]
+    return "mixed"
 
 
 def _strict_bool(value: Any, name: str) -> bool:
@@ -127,10 +179,18 @@ class RelevanceSignal:
             raise RelevanceContractError(f"missing signal {self.name!r} cannot be observed")
         if self.value is not None and self.missingness != "observed":
             raise RelevanceContractError(f"signal {self.name!r} has a value and missingness")
+        if (
+            self.value is not None
+            and self.unit != "bool"
+            and isinstance(self.value, (bool, np.bool_))
+        ):
+            raise RelevanceContractError(f"signal {self.name!r} numeric value must not be boolean")
         if isinstance(self.value, float) and not math.isfinite(self.value):
             raise RelevanceContractError(f"signal {self.name!r} contains a non-finite value")
         if self.available_at_step is not None and (
-            not isinstance(self.available_at_step, int) or self.available_at_step < 0
+            not isinstance(self.available_at_step, int)
+            or isinstance(self.available_at_step, (bool, np.bool_))
+            or self.available_at_step < 0
         ):
             raise RelevanceContractError("signal available_at_step must be a non-negative integer")
         _strict_bool(self.hindsight, "signal hindsight")
@@ -246,6 +306,8 @@ class RelevanceVector:
     precursor: bool = False
     event_id: str | None = None
     hindsight: bool = False
+    execution_mode: str = "unknown"
+    triggered_reasons: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe vector record."""
@@ -259,6 +321,8 @@ class RelevanceVector:
             "precursor": self.precursor,
             "event_id": self.event_id,
             "hindsight": self.hindsight,
+            "execution_mode": self.execution_mode,
+            "triggered_reasons": list(self.triggered_reasons),
         }
 
 
@@ -276,6 +340,8 @@ class RelevanceWindow:
     actor_ids: tuple[str, ...]
     missing_signals: tuple[str, ...]
     hindsight: bool
+    event_type: str = "untyped"
+    event_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe interval record."""
@@ -290,6 +356,8 @@ class RelevanceWindow:
             "actor_ids": list(self.actor_ids),
             "missing_signals": list(self.missing_signals),
             "hindsight": self.hindsight,
+            "event_type": self.event_type,
+            "event_id": self.event_id,
         }
 
 
@@ -310,6 +378,8 @@ class ExcerptManifest:
     full_parent_retained: bool = True
     status: str = MANIFEST_STATUS
     evidence_grade: str = EVIDENCE_GRADE
+    execution_mode: str = "unknown"
+    execution_modes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """Validate manifest identity and retention guarantees."""
@@ -323,6 +393,15 @@ class ExcerptManifest:
         )
         if not isinstance(self.source_row_count, int) or self.source_row_count < 0:
             raise RelevanceContractError("source_row_count must be a non-negative integer")
+        if not isinstance(self.evidence_grade, str) or not self.evidence_grade.strip():
+            raise RelevanceContractError("evidence_grade must be a non-empty string")
+        object.__setattr__(
+            self, "execution_mode", _execution_mode(self.execution_mode, "execution_mode")
+        )
+        normalized_modes = tuple(
+            sorted({_execution_mode(mode, "execution_modes") for mode in self.execution_modes})
+        )
+        object.__setattr__(self, "execution_modes", normalized_modes)
         if not isinstance(self.selector_config, Mapping):
             raise RelevanceContractError("selector_config must be an object")
         object.__setattr__(
@@ -354,6 +433,8 @@ class ExcerptManifest:
             "full_parent_retained": self.full_parent_retained,
             "status": self.status,
             "evidence_grade": self.evidence_grade,
+            "execution_mode": self.execution_mode,
+            "execution_modes": list(self.execution_modes),
         }
 
 
@@ -427,6 +508,13 @@ def _normalize_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
         _strict_bool(copied.get("precursor", False), f"parent row {index}.precursor")
         _strict_bool(copied.get("hindsight", False), f"parent row {index}.hindsight")
         _event_id(copied.get("event_id"), f"parent row {index}.event_id")
+        _execution_mode(copied.get("execution_mode"), f"parent row {index}.execution_mode")
+        for signal_name, (unit, _provenance, _assumptions) in _SIGNAL_SPECS.items():
+            raw, _metadata = _row_signal_value(copied, signal_name)
+            if raw is not None and unit != "bool" and isinstance(raw, (bool, np.bool_)):
+                raise RelevanceContractError(
+                    f"signals.{signal_name} numeric value must not be boolean"
+                )
         previous_step = step
         normalized.append(copied)
     return normalized
@@ -538,7 +626,7 @@ def _threshold(thresholds: RelevanceThresholds, name: str) -> float:
     Returns:
         The proposed numeric threshold.
     """
-    return float(getattr(thresholds, name))
+    return _finite(getattr(thresholds, name), f"thresholds.{name}")
 
 
 def _on_trigger(name: str, value: float | bool, thresholds: RelevanceThresholds) -> bool:
@@ -566,6 +654,7 @@ def _vector_for_row(
     signals = tuple(_signal_from_row(row, name) for name in _SIGNAL_SPECS)
     unknown = {signal.name for signal in signals if signal.missingness != "observed"}
     current: set[str] = set()
+    triggered_reasons: set[str] = set()
     for signal in signals:
         name = signal.name
         if signal.missingness != "observed":
@@ -576,6 +665,7 @@ def _vector_for_row(
         triggered = _on_trigger(name, signal.value, thresholds)  # type: ignore[arg-type]
         if triggered:
             current.add(name)
+            triggered_reasons.add(name)
             safe_counts[name] = 0
         elif name in active_reasons:
             count = safe_counts.get(name, 0) + 1
@@ -586,6 +676,9 @@ def _vector_for_row(
     active_reasons.update(current)
     time_s = _finite(row.get("time_s", row["step"]), f"row[{row['step']}].time_s")
     event_id = _event_id(row.get("event_id"), f"row[{row['step']}].event_id")
+    execution_mode = _execution_mode(
+        row.get("execution_mode"), f"row[{row['step']}].execution_mode"
+    )
     row_hindsight = _strict_bool(row.get("hindsight", False), f"row[{row['step']}].hindsight")
     row_precursor = _strict_bool(row.get("precursor", False), f"row[{row['step']}].precursor")
     return RelevanceVector(
@@ -598,29 +691,34 @@ def _vector_for_row(
         precursor=row_precursor,
         event_id=event_id,
         hindsight=row_hindsight or any(signal.hindsight for signal in signals),
+        execution_mode=execution_mode,
+        triggered_reasons=tuple(sorted(triggered_reasons)),
     )
+
+
+def _event_owner(row: Mapping[str, Any]) -> _EventOwner:
+    """Return the typed or untyped owner for one row."""
+    event_id = _event_id(row.get("event_id"), f"row[{row['step']}].event_id")
+    return ("typed", event_id) if event_id is not None else ("untyped", None)
 
 
 def _required_precursor_indices(
     rows: Sequence[Mapping[str, Any]], trigger_indices: Sequence[int]
-) -> set[int]:
-    """Find earlier explicitly marked precursor rows for triggered event IDs.
+) -> dict[_EventOwner, set[int]]:
+    """Find earlier precursors, scoped by typed or untyped event ownership.
 
     Returns:
-        Source-row indices that must remain in a safe excerpt.
+        Source-row indices grouped by their owning event identity and type.
     """
-    required: set[int] = set()
+    required: dict[_EventOwner, set[int]] = {}
     for trigger_index in trigger_indices:
-        event_id = _event_id(
-            rows[trigger_index].get("event_id"),
-            f"row[{rows[trigger_index]['step']}].event_id",
-        )
-        if event_id is None:
+        owner = _event_owner(rows[trigger_index])
+        if owner[0] == "untyped":
             continue
-        required.update(
+        required.setdefault(owner, set()).update(
             index
             for index, row in enumerate(rows[: trigger_index + 1])
-            if _event_id(row.get("event_id"), f"row[{row['step']}].event_id") == event_id
+            if _event_owner(row) == owner
             and _strict_bool(row.get("precursor", False), f"row[{row['step']}].precursor")
         )
     return required
@@ -646,33 +744,32 @@ def _build_windows(
             runs[-1].append(index)
         else:
             runs.append([index])
-    required_precursors = _required_precursor_indices(rows, trigger_indices)
-    expanded: list[tuple[int, int, list[int], set[str], set[int]]] = []
+    required_by_owner = _required_precursor_indices(rows, trigger_indices)
+    expanded: list[tuple[int, int, list[int], _EventOwner, set[int]]] = []
     for run in runs:
         start = max(0, run[0] - thresholds.pre_roll_steps)
         end = min(len(rows) - 1, run[-1] + thresholds.post_roll_steps)
-        run_event_ids = _run_event_ids(rows, run)
-        relevant_precursors = _precursors_for_run(rows, required_precursors, run, run_event_ids)
+        run_owner = _run_owner(rows, vectors, run)
+        relevant_precursors = _precursors_for_run(required_by_owner, run, run_owner)
         if relevant_precursors:
             start = min([start, *relevant_precursors])
-        expanded.append((start, end, run, run_event_ids, set(relevant_precursors)))
-    merged: list[tuple[int, int, list[int], set[str], set[int]]] = []
-    for start, end, run, event_ids, precursor_indices in expanded:
-        same_event = bool(event_ids) and bool(merged) and bool(event_ids & merged[-1][3])
-        untyped_event = not event_ids or (bool(merged) and not merged[-1][3])
-        if merged and start <= merged[-1][1] + 1 and (same_event or untyped_event):
-            old_start, old_end, old_run, old_event_ids, old_precursors = merged[-1]
+        expanded.append((start, end, run, run_owner, set(relevant_precursors)))
+    merged: list[tuple[int, int, list[int], _EventOwner, set[int]]] = []
+    for start, end, run, owner, precursor_indices in expanded:
+        same_owner = bool(merged) and owner == merged[-1][3]
+        if merged and start <= merged[-1][1] + 1 and same_owner:
+            old_start, old_end, old_run, old_owner, old_precursors = merged[-1]
             merged[-1] = (
                 old_start,
                 max(old_end, end),
                 old_run + run,
-                old_event_ids | event_ids,
+                old_owner,
                 old_precursors | precursor_indices,
             )
         else:
-            merged.append((start, end, list(run), set(event_ids), precursor_indices))
+            merged.append((start, end, list(run), owner, precursor_indices))
     windows: list[RelevanceWindow] = []
-    for start, end, run, _event_ids, precursor_indices in merged:
+    for start, end, run, owner, precursor_indices in merged:
         indices = tuple(range(start, end + 1))
         trigger_steps = tuple(sorted(rows[index]["step"] for index in run))
         window_precursors = tuple(sorted(index for index in precursor_indices if index in indices))
@@ -694,8 +791,13 @@ def _build_windows(
                     sorted({name for index in indices for name in vectors[index].unknown_signals})
                 ),
                 hindsight=any(vectors[index].hindsight for index in indices),
+                event_type=owner[0],
+                event_id=owner[1],
             )
         )
+    required_precursors = {
+        index for owner_indices in required_by_owner.values() for index in owner_indices
+    }
     return tuple(windows), required_precursors
 
 
@@ -707,31 +809,31 @@ def _validate_precursor_rows(rows: Sequence[Mapping[str, Any]]) -> None:
                 raise ExcerptContractError(f"row[{row['step']}] precursor must declare an event_id")
 
 
-def _run_event_ids(rows: Sequence[Mapping[str, Any]], run: Sequence[int]) -> set[str]:
-    """Return normalized event identities carried by one trigger run."""
-    event_ids: set[str] = set()
+def _run_owner(
+    rows: Sequence[Mapping[str, Any]], vectors: Sequence[RelevanceVector], run: Sequence[int]
+) -> _EventOwner:
+    """Return one unambiguous owner or reject a mixed trigger run."""
+    owners: set[_EventOwner] = set()
     for index in run:
-        event_id = _event_id(rows[index].get("event_id"), f"row[{rows[index]['step']}].event_id")
-        if event_id is not None:
-            event_ids.add(event_id)
-    return event_ids
+        owner = _event_owner(rows[index])
+        if owner[0] == "typed" or vectors[index].triggered_reasons:
+            owners.add(owner)
+    if len(owners) != 1:
+        trigger_steps = tuple(int(rows[index]["step"]) for index in run)
+        raise ExcerptContractError(
+            f"ambiguous event ownership for trigger steps {trigger_steps}; "
+            "typed and untyped triggers cannot share a run"
+        )
+    return next(iter(owners))
 
 
 def _precursors_for_run(
-    rows: Sequence[Mapping[str, Any]],
-    required_precursors: set[int],
+    required_by_owner: Mapping[_EventOwner, set[int]],
     run: Sequence[int],
-    run_event_ids: set[str],
+    owner: _EventOwner,
 ) -> list[int]:
     """Return precursor row indices owned by one trigger run."""
-    relevant: list[int] = []
-    for index in required_precursors:
-        if index > run[-1]:
-            continue
-        event_id = _event_id(rows[index].get("event_id"), f"row[{rows[index]['step']}].event_id")
-        if not run_event_ids or event_id in run_event_ids:
-            relevant.append(index)
-    return relevant
+    return sorted(index for index in required_by_owner.get(owner, set()) if index <= run[-1])
 
 
 def _evaluate_rows(
@@ -857,6 +959,7 @@ def select_relevance_windows(
         sorted({step for window in windows for step in window.original_step_indices})
     )
     missing_signals = tuple(sorted({name for vector in vectors for name in vector.unknown_signals}))
+    execution_modes = tuple(sorted({vector.execution_mode for vector in vectors}))
     selector_config = {
         "schema_version": RELEVANCE_SCHEMA,
         "thresholds": effective.to_dict(),
@@ -877,6 +980,8 @@ def select_relevance_windows(
         required_precursor_steps=tuple(
             sorted(normalized[index]["step"] for index in required_precursors)
         ),
+        execution_mode=_summarize_execution_modes(execution_modes),
+        execution_modes=execution_modes,
     )
     selection = RelevanceSelection(tuple(normalized), tuple(vectors), windows, manifest)
     validate_excerpt_manifest(selection.manifest, selection.parent_rows)
@@ -933,6 +1038,8 @@ def _validate_manifest_semantics(
         sorted({name for vector in vectors for name in vector.unknown_signals})
     )
     expected_hindsight = selector_hindsight or any(vector.hindsight for vector in vectors)
+    expected_execution_modes = tuple(sorted({vector.execution_mode for vector in vectors}))
+    expected_execution_mode = _summarize_execution_modes(expected_execution_modes)
     if tuple(manifest.selected_step_indices) != expected_selected:
         raise ExcerptContractError("manifest selected steps do not match deterministic selector")
     if tuple(manifest.required_precursor_steps) != expected_required:
@@ -943,6 +1050,24 @@ def _validate_manifest_semantics(
         raise ExcerptContractError("manifest missing signals do not match parent rows")
     if manifest.hindsight != expected_hindsight:
         raise ExcerptContractError("manifest hindsight does not match selector and parent rows")
+    if tuple(manifest.execution_modes) != expected_execution_modes:
+        raise ExcerptContractError("manifest execution modes do not match parent rows")
+    if manifest.execution_mode != expected_execution_mode:
+        raise ExcerptContractError("manifest execution mode summary does not match parent rows")
+
+
+def _validate_manifest_evidence(manifest: ExcerptManifest) -> None:
+    """Keep proposal-only manifests out of evidence-grade interpretation."""
+    unsafe_modes = set(manifest.execution_modes) & _NON_EVIDENCE_EXECUTION_MODES
+    if unsafe_modes and manifest.evidence_grade in _EVIDENCE_READY_GRADES:
+        modes = ", ".join(sorted(unsafe_modes))
+        raise ExcerptContractError(
+            f"{modes} execution cannot be promoted to evidence grade {manifest.evidence_grade!r}"
+        )
+    if manifest.evidence_grade != EVIDENCE_GRADE:
+        raise ExcerptContractError(
+            "only synthetic_preparation evidence is admitted for proposal_only manifests"
+        )
 
 
 def _validate_manifest_windows(
@@ -983,6 +1108,7 @@ def validate_excerpt_manifest(manifest: ExcerptManifest, rows: Sequence[Mapping[
     selected, step_by_index = _validate_manifest_selection(manifest, normalized)
     _validate_manifest_windows(manifest, selected, step_by_index)
     _validate_manifest_semantics(manifest, normalized)
+    _validate_manifest_evidence(manifest)
 
 
 def write_selection_manifest(selection: RelevanceSelection, path: str | Path) -> None:

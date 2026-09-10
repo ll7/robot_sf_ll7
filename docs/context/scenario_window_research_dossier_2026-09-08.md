@@ -54,6 +54,11 @@ proposed only: clearance 1 m, closing speed 0.2 m/s, TTC 3 s, closest approach
 pre/post-roll 2 steps, merge gap 1 step, and one hysteresis step. No rule is marked
 approved.
 
+Retained vectors and manifests carry explicit execution-mode provenance; an absent
+row mode is represented as `unknown`. Fallback and degraded rows may remain visible
+in this proposal-only diagnostic lane, but they cannot validate as paper-grade or
+other evidence-ready output.
+
 ## Unsafe crop and refusal boundary
 
 For the multi-stage timeline, a deliberately late crop containing steps 6–11 drops
@@ -64,6 +69,10 @@ from the complete parent, so a forged manifest cannot erase the precursor from b
 its required-step and window fields. The full parent digest, actor IDs, original step
 indices, and complete rows remain linked in the proposal. This is a fidelity refusal, not a
 claim that the physical event is impossible.
+
+Precursor ownership is keyed by typed/untyped event type and event identity. Untyped
+triggers never inherit typed precursors; a trigger run containing both ownership
+types is refused as ambiguous.
 
 ## Proposed fidelity vector
 

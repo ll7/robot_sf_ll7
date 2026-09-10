@@ -7,6 +7,7 @@ import json
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 
 if TYPE_CHECKING:
@@ -130,6 +131,47 @@ def test_disjoint_event_precursors_do_not_expand_or_merge_each_other() -> None:
     assert selection.windows[1].start_step == 5
 
 
+def test_untyped_trigger_has_no_typed_precursor_or_window_merge() -> None:
+    """Untyped triggers stay separate even when expanded intervals overlap."""
+    rows = _parent_rows()
+    rows[1].update({"event_id": "typed", "precursor": True})
+    rows[3].update({"event_id": "typed", "clearance_m": 0.8})
+    rows[6]["clearance_m"] = 0.8
+    selection = select_relevance_windows(
+        rows,
+        parent_digest=_parent_digest(),
+        thresholds=RelevanceThresholds(
+            pre_roll_steps=2,
+            post_roll_steps=2,
+            merge_gap_steps=0,
+            hysteresis_steps=0,
+        ),
+    )
+
+    assert len(selection.windows) == 2
+    typed_window, untyped_window = selection.windows
+    assert typed_window.event_type == "typed"
+    assert typed_window.event_id == "typed"
+    assert typed_window.precursor_steps == (1,)
+    assert untyped_window.event_type == "untyped"
+    assert untyped_window.event_id is None
+    assert untyped_window.precursor_steps == ()
+
+
+def test_mixed_typed_and_untyped_trigger_run_is_rejected() -> None:
+    """A run with competing ownership cannot be safely assigned a precursor."""
+    rows = _parent_rows()
+    rows[1].update({"event_id": "typed", "precursor": True})
+    rows[3].update({"event_id": "typed", "clearance_m": 0.8})
+    rows[4]["clearance_m"] = 0.8
+    with pytest.raises(ExcerptContractError, match="ambiguous event ownership"):
+        select_relevance_windows(
+            rows,
+            parent_digest=_parent_digest(),
+            thresholds=RelevanceThresholds(hysteresis_steps=0, merge_gap_steps=1),
+        )
+
+
 def test_too_late_crop_is_rejected_as_unsafe() -> None:
     """Dropping a required precursor cannot be presented as a valid excerpt."""
     rows = _parent_rows()
@@ -204,6 +246,52 @@ def test_boolean_signal_rejects_numeric_truthy_values() -> None:
     assert signal.missingness == "invalid"
     assert "path_conflict" in selection.vectors[0].unknown_signals
     assert "path_conflict" not in selection.vectors[0].active_reasons
+
+
+@pytest.mark.parametrize("value", [True, False, np.bool_(True), np.bool_(False)])
+def test_numeric_signal_rejects_boolean_scalars(value: object) -> None:
+    """Boolean scalars cannot become numeric risk signals through float conversion."""
+    rows = _parent_rows(1)
+    rows[0]["ttc_s"] = value
+
+    with pytest.raises(RelevanceContractError, match="numeric value must not be boolean"):
+        select_relevance_windows(rows, parent_digest=_parent_digest())
+
+
+@pytest.mark.parametrize("value", [True, False, np.bool_(True), np.bool_(False)])
+def test_numeric_threshold_rejects_boolean_scalars(value: object) -> None:
+    """Boolean scalars cannot become numeric threshold values through float conversion."""
+    with pytest.raises(RelevanceContractError, match="boolean"):
+        RelevanceThresholds(ttc_s=value)
+
+
+def test_execution_mode_is_retained_for_diagnostic_rows() -> None:
+    """Fallback/degraded provenance is explicit even while selection stays diagnostic."""
+    rows = _parent_rows(2)
+    rows[0]["execution_mode"] = "fallback"
+    selection = select_relevance_windows(rows, parent_digest=_parent_digest())
+
+    assert selection.vectors[0].execution_mode == "fallback"
+    assert selection.manifest.execution_mode == "mixed"
+    assert selection.manifest.execution_modes == ("fallback", "unknown")
+    payload = selection.to_dict()["manifest"]
+    assert payload["execution_mode"] == "mixed"
+    assert payload["execution_modes"] == ["fallback", "unknown"]
+
+
+@pytest.mark.parametrize("execution_mode", ["fallback", "degraded"])
+@pytest.mark.parametrize("evidence_grade", ["paper_grade", "nominal_benchmark"])
+def test_fallback_or_degraded_rows_cannot_be_evidence_grade(
+    execution_mode: str, evidence_grade: str
+) -> None:
+    """Diagnostic execution modes are rejected before an evidence-grade manifest validates."""
+    rows = _parent_rows(1)
+    rows[0]["execution_mode"] = execution_mode
+    selection = select_relevance_windows(rows, parent_digest=_parent_digest())
+    forged = replace(selection.manifest, evidence_grade=evidence_grade)
+
+    with pytest.raises(ExcerptContractError, match=execution_mode):
+        validate_excerpt_manifest(forged, selection.parent_rows)
 
 
 @pytest.mark.parametrize("approved_thresholds", [None, {}])

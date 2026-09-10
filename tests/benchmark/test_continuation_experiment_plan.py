@@ -29,6 +29,16 @@ def test_plan_rejects_dropped_negative_control() -> None:
         ContinuationExperimentPlan("bad", modes=("full_parent", "exact_restart"))
 
 
+def test_execution_enabled_plan_requires_nonempty_authority_ids() -> None:
+    """An execution-enabled plan cannot reach READY_NOT_LAUNCHED without authority IDs."""
+    with pytest.raises(ValueError, match="non-empty authority_issue_ids"):
+        ContinuationExperimentPlan(
+            "missing-authority",
+            authority_issue_ids=(),
+            execution_allowed=True,
+        )
+
+
 def test_cost_table_reports_no_positive_break_even() -> None:
     """When loading plus the window costs more than a full branch, report no break-even."""
     estimate = estimate_continuation_cost(

@@ -91,6 +91,8 @@ internals or research methodology.
   distinguish a missing optional extra, absent model, unavailable dataset, or unsupported runtime
   without fallback or fabricated success.
 
+- **Configuring an environment?** See the [Environment Configuration
+  Reference](./environment_config_reference.md) for all public config fields.
 ## Where to go next
 
 - **Want to publish a trustworthy result?** Move to the [Research & Benchmark Guide](./research-guide.md).

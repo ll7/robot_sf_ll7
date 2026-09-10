@@ -14,6 +14,10 @@ Robot SF uses three explicit stability levels to communicate breaking-change exp
 | `beta` | Supported and usable, but undergoing refinement. | May change within a minor (`MINOR`) release without an extended deprecation window; changes are documented in `CHANGELOG.md`. |
 | `experimental` | Exploratory research surfaces. | Semantics may change at any time, including within a patch release. |
 
+Environment configuration fields are documented separately in the [Environment
+Configuration Reference](./environment_config_reference.md), generated from the typed
+configuration dataclasses.
+
 ## Top-Level Entry Points
 
 The `robot_sf` top-level package provides lightweight, lazily resolved exports for standard simulation workflows. Importing the top-level package (`import robot_sf`) is fast and does not eagerly import heavy visualization or machine learning dependencies (such as Pygame, PyTorch, or Stable-Baselines3).

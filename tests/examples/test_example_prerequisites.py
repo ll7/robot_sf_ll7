@@ -539,3 +539,36 @@ def test_script_check_rejects_paths_outside_examples_tree(tmp_path: Path) -> Non
 
     with pytest.raises(ManifestValidationError):
         check_script_prerequisites(stray)
+
+
+def test_directory_masquerading_as_asset_is_not_ready(tmp_path: Path) -> None:
+    """A directory named like a model or map file must never report ready (review P1)."""
+
+    manifest_path = _write_repo(
+        tmp_path,
+        [_example("advanced/dirs.py", ["model/dir_model.zip", "maps/dir_map.svg"])],
+    )
+    (tmp_path / "model" / "dir_model.zip").mkdir(parents=True)
+    (tmp_path / "maps" / "dir_map.svg").mkdir(parents=True)
+
+    manifest = load_manifest(manifest_path, validate_paths=True)
+    report = check_example_prerequisites(manifest, "advanced/dirs")
+
+    assert report.status == STATUS_MISSING_MODEL
+    assert _missing_ok_checks(report, "model/dir_model.zip").status == STATUS_MISSING_MODEL
+    assert _missing_ok_checks(report, "maps/dir_map.svg").status == STATUS_MISSING_MAP
+
+
+def test_glob_matching_only_directories_is_missing(tmp_path: Path) -> None:
+    """A glob that matches only directories must not report ready (review P1)."""
+
+    manifest_path = _write_repo(
+        tmp_path,
+        [_example("advanced/dir_glob.py", ["configs/*.yaml"])],
+    )
+    (tmp_path / "configs" / "present.yaml").mkdir(parents=True)
+
+    manifest = load_manifest(manifest_path, validate_paths=True)
+    report = check_example_prerequisites(manifest, "advanced/dir_glob")
+
+    assert _missing_ok_checks(report, "configs/*.yaml").status == STATUS_MISSING_FILE

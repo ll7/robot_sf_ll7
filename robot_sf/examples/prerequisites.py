@@ -416,7 +416,7 @@ def _check_path_prerequisite(
         )
 
     if "*" in prerequisite or "?" in prerequisite:
-        matches = sorted(repo_root.glob(prerequisite))
+        matches = sorted(match for match in repo_root.glob(prerequisite) if match.is_file())
         if matches:
             first = matches[0].relative_to(repo_root).as_posix()
             return PrerequisiteCheck(
@@ -436,6 +436,7 @@ def _check_path_prerequisite(
 
     path = repo_root / prerequisite
     exists = path.exists()
+    is_file = path.is_file()
 
     if legacy_reference:
         return _legacy_reference_check(
@@ -447,7 +448,7 @@ def _check_path_prerequisite(
         )
 
     expected_sha = registry_status.get("expected_sha256") if registry_status else None
-    if not exists:
+    if not is_file:
         return _missing_path_check(
             prerequisite,
             kind=kind,

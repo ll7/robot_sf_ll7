@@ -30,6 +30,8 @@ after beginning a restore, the previous adapter snapshot is restored before the
 failure is reported.
 
 The durable pair is a JSON metadata file and a compressed `.npz` numeric payload.
+Each file is replaced atomically, but replacing the two-file pair is not one filesystem
+transaction; the reader's digest and size checks reject a mixed-generation pair.
 Loading uses `allow_pickle=False`. JSON values carry typed tuple and array references;
 robot drive state and route-navigator fields are rebuilt into destination-owned
 objects. Behavior and route keys use stable actor/behavior identities rather than

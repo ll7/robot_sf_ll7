@@ -363,6 +363,50 @@ def test_missing_supported_state_field_fails_before_destination_mutation() -> No
         restore_typed_snapshot(model, malformed, typed.compatibility)
 
 
+@pytest.mark.parametrize(
+    ("mutation", "match"),
+    (
+        ("unknown_state_field", "unknown fields"),
+        ("unknown_rng_field", "global_rng metadata is incomplete or unknown"),
+        ("string_boolean", "peds_have_obstacle_forces must be a boolean"),
+        ("string_rng_integer", "global_rng.pos must be an integer"),
+        ("boolean_rng_integer", "global_rng.has_gauss must be an integer"),
+    ),
+)
+def test_typed_restore_rejects_unknown_and_coercive_state_values(mutation: str, match: str) -> None:
+    """Typed restore rejects unknown fields and scalar values that only look valid."""
+    model = _build_model()
+    typed = capture_typed_snapshot(model, _compatibility(model))
+    state = deepcopy(dict(typed.state))
+    if mutation == "unknown_state_field":
+        state["future_state_field"] = 1
+    else:
+        global_rng = deepcopy(state["global_rng"])
+        if mutation == "unknown_rng_field":
+            global_rng["future_rng_field"] = 1
+            state["global_rng"] = global_rng
+        elif mutation == "string_boolean":
+            state["peds_have_obstacle_forces"] = "false"
+        elif mutation == "string_rng_integer":
+            global_rng["pos"] = "1"
+            state["global_rng"] = global_rng
+        else:
+            global_rng["has_gauss"] = True
+            state["global_rng"] = global_rng
+    malformed = TypedSimulatorSnapshot(
+        compatibility=typed.compatibility,
+        boundary=typed.boundary,
+        state=state,
+        arrays=typed.arrays,
+    )
+    before_step = model._step_index
+    before_state = model.sim.pysf_state.pysf_states().copy()
+    with pytest.raises(SnapshotPayloadError, match=match):
+        restore_typed_snapshot(model, malformed, typed.compatibility)
+    assert model._step_index == before_step
+    np.testing.assert_array_equal(model.sim.pysf_state.pysf_states(), before_state)
+
+
 def test_float32_speed_caps_round_trip_without_dtype_drift() -> None:
     """Typed capture preserves a native float32 speed-cap array."""
     model = _build_model()
@@ -420,6 +464,10 @@ def test_compatibility_and_boundary_round_trip_reject_invalid_metadata() -> None
     invalid_compatibility = compatibility.to_dict()
     invalid_compatibility["dt_s"] = "not-a-number"
     with pytest.raises(SnapshotPayloadError, match="invalid compatibility"):
+        SnapshotCompatibility.from_dict(invalid_compatibility)
+    invalid_compatibility = compatibility.to_dict()
+    invalid_compatibility["future_field"] = 1
+    with pytest.raises(SnapshotPayloadError, match="unknown fields"):
         SnapshotCompatibility.from_dict(invalid_compatibility)
     with pytest.raises(SnapshotContractError, match="checkpoint_sha256"):
         SnapshotCompatibility(

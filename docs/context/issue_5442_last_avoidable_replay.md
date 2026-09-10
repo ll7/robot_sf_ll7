@@ -62,7 +62,9 @@ broad per-object generators the earlier note assumed. The production adapter use
 narrow snapshot seam for the global RNG, actor/behavior state, public grouping, and
 the backend group list; it does not replace the simulator. The engine's determinism
 check is the safeguard: if a replay diverges, it abstains to `unknown` rather than
-guessing.
+guessing. Each baseline replay also records typed `NoOpStep` state receipts and
+compares them with `compare_continuation_traces`; equal collision/contact ticks
+alone are not determinism evidence.
 
 ## Determination vocabulary (fail-closed)
 
@@ -111,7 +113,7 @@ causal claim; divergence still abstains to `unknown`.
 | Acceptance criterion | Where satisfied |
 | --- | --- |
 | Snapshot/restore includes RNG + actor state | `KinematicCollisionModel.snapshot/restore`; `test_snapshot_includes_rng_and_actor_state`, `test_snapshot_without_rng_diverges` |
-| Baseline branching reproduces the fixture within tolerance | `_verify_determinism` (20 replays); determinism check in each avoidable/unavoidable test |
+| Baseline branching reproduces the fixture within tolerance | `_verify_determinism` (20 replays) plus typed no-op trace comparison; determinism check in each avoidable/unavoidable test |
 | Action set, declared action-set coverage, horizon, collision predicate, pedestrian response versioned in output | `ReplayConfig.to_dict` → `config` block; schema `config` required fields |
 | `t_inevitable` and `t_uca` computed for preventable late braking, already-unavoidable, two-action interaction | `test_preventable_late_braking_is_avoidable`, `test_already_unavoidable_contact`, `test_two_action_interaction_closed_loop_avoidable` |
 | Missing feasible set or nondeterministic baseline → `unknown`, never `unavoidable` | `test_missing_feasible_action_returns_unknown`, `test_nondeterministic_baseline_returns_unknown` |
@@ -151,6 +153,11 @@ the adapter carries a verified episode/map/seed/software provenance receipt. The
 remain valid diagnostic replay evidence, but the join emits an explicit
 `native_simulator_causal_join_unsupported` abstention rather than relabelling the
 result as `synthetic_fixture`.
+
+Replays whose `source_kind` remains `unspecified` are also rejected by the causal
+join with `unspecified_replay_provenance`; controlled fixtures must declare
+`synthetic_fixture` explicitly. This preserves diagnostic compatibility while
+preventing provenance-free output from entering the causal report.
 
 `normative_fault` is always `not_assessed`. The join is exercised by
 `tests/benchmark/test_collision_causal_report_join_5442.py`.

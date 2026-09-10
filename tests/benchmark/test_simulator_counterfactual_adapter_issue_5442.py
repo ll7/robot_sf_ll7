@@ -16,6 +16,7 @@ replay diverge, exercising the same guard on production state.
 
 from __future__ import annotations
 
+import random
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -309,6 +310,7 @@ def test_production_fixture_is_avoidable() -> None:
     report = _run_engine(model)
     assert report.verdict == VERDICT_AVOIDABLE
     assert report.determinism.deterministic is True
+    assert report.determinism.trace_stable is True
     assert report.determinism.observed_contact_steps == (_FIXTURE_CONTACT_STEP,) * 5
     assert report.t_uca is not None and report.t_inevitable is not None
     assert report.t_uca <= report.t_inevitable <= report.config.t_contact
@@ -915,6 +917,18 @@ def test_single_runtime_malformed_entries_fail_closed() -> None:
     with pytest.raises(ValueError, match="duplicate runtime"):
         _restore_single_runtimes([two_runtime_behavior], [[fields, fields]])
 
+    unknown_field = dict(fields, unexpected_runtime_field=1)
+    with pytest.raises(ValueError, match="unknown fields"):
+        _restore_single_runtimes([behavior], [[unknown_field]])
+
+    coercive_integer = dict(fields, waypoint_index="1")
+    with pytest.raises(ValueError, match="waypoint_index must be an integer"):
+        _restore_single_runtimes([behavior], [[coercive_integer]])
+
+    coercive_boolean = dict(fields, waiting_for_advance=1)
+    with pytest.raises(ValueError, match="waiting_for_advance must be a boolean"):
+        _restore_single_runtimes([behavior], [[coercive_boolean]])
+
     two_behaviors = [_single_runtime_behavior(3), _single_runtime_behavior(4)]
     two_saved = _capture_single_runtimes(two_behaviors)
     # NOTE: the "omits a destination runtime" guard is unreachable behind the
@@ -955,6 +969,19 @@ def test_behavior_rng_unexpected_identity_fails_closed() -> None:
 
     with pytest.raises(ValueError, match="unknown behavior RNG identities"):
         _restore_behavior_rng_states([behavior], {**captured, "ghost:rng": {}})
+
+
+def test_behavior_rng_unknown_nested_field_fails_closed() -> None:
+    """NumPy's setter must not silently accept an extra nested RNG field."""
+    behavior = SimpleNamespace(rng=np.random.default_rng(7))
+    captured = _capture_behavior_rng_states([behavior])
+    key = next(iter(captured))
+    malformed = dict(captured)
+    malformed[key] = dict(malformed[key])
+    malformed[key]["future_field"] = 1
+
+    with pytest.raises(ValueError, match="incomplete or unknown fields"):
+        _restore_behavior_rng_states([behavior], malformed)
 
 
 def test_pedestrian_groups_plain_cache_attribute_clears() -> None:
@@ -1010,6 +1037,16 @@ def test_residual_adversary_restore_branches_fail_closed() -> None:
     _restore_residual_adversary_state(SimpleNamespace(_residual_adversary=adversary), {field: 2})
     assert adversary._last_residual == 2
 
+    with pytest.raises(ValueError, match="field _last_residual must be an integer"):
+        _restore_residual_adversary_state(
+            SimpleNamespace(_residual_adversary=SimpleNamespace(**{field: 1})),
+            {field: "2"},
+        )
+    with pytest.raises(ValueError, match="unsupported by destination"):
+        _restore_residual_adversary_state(
+            SimpleNamespace(_residual_adversary=SimpleNamespace()), {field: 2}
+        )
+
 
 def test_route_navigator_snapshot_must_be_mapping() -> None:
     """A non-mapping navigator snapshot cannot restore waypoint progress."""
@@ -1028,6 +1065,15 @@ def test_route_navigator_non_mapping_state_fails_closed() -> None:
         _restore_route_navigators([behavior], {identity: "not-a-mapping"})
     with pytest.raises(ValueError, match="is incomplete"):
         _restore_route_navigators([behavior], {identity: {7: "not-a-mapping"}})
+
+    malformed = _capture_route_navigators([behavior])
+    malformed[identity][7]["waypoint_id"] = "1"
+    with pytest.raises(ValueError, match="waypoint_id.*must be an integer"):
+        _restore_route_navigators([behavior], malformed)
+    malformed = _capture_route_navigators([behavior])
+    malformed[identity][7]["unexpected"] = False
+    with pytest.raises(ValueError, match="unknown fields"):
+        _restore_route_navigators([behavior], malformed)
 
 
 def test_restore_missing_robot_velocity_resets_state() -> None:
@@ -1055,6 +1101,56 @@ def test_restore_missing_residual_adversary_state_fails_closed() -> None:
     armed_model = SimulatorCounterfactualModel(armed_sim, collision_radius=_COLLISION_RADIUS)
     with pytest.raises(ValueError, match="missing residual-adversary state"):
         armed_model.restore(snapshot)
+
+
+def test_restore_rolls_back_lazy_residual_creation_and_rng_failure() -> None:
+    """A late stdlib-RNG failure removes a lazily created residual controller."""
+    ped_state = np.zeros((1, 6), dtype=float)
+    robot = SimpleNamespace(
+        pose=((0.0, 0.0), 0.0),
+        state=SimpleNamespace(),
+        config=SimpleNamespace(radius=0.5),
+        pos=(0.0, 0.0),
+    )
+    sim = SimpleNamespace(
+        robots=[robot],
+        robot_navs=[],
+        peds_behaviors=[],
+        groups=None,
+        pysf_sim=SimpleNamespace(peds=SimpleNamespace(max_speeds=None)),
+        pysf_state=SimpleNamespace(pysf_states=lambda: ped_state),
+        ped_headings=np.zeros(1),
+        ped_angular_velocities=np.zeros(1),
+        peds_have_obstacle_forces=False,
+        _residual_adversary=None,
+    )
+    model = SimulatorCounterfactualModel(sim, capture_rng=True)
+    target = model.snapshot()
+    target.residual_adversary_state = dict.fromkeys(_RESIDUAL_STATE_FIELDS, 0)
+    target.python_random_state = ("invalid-python-random-state",)
+    sim._build_residual_adversary = lambda: SimpleNamespace(
+        **dict.fromkeys(_RESIDUAL_STATE_FIELDS, 0)
+    )
+
+    original_python_state = random.getstate()
+    try:
+        np.random.random()
+        random.random()
+        before_numpy = np.random.get_state()
+        before_python = random.getstate()
+
+        with pytest.raises(ValueError, match="state"):
+            model.restore(target)
+
+        assert sim._residual_adversary is None
+        assert model._step_index == 0
+        np.testing.assert_array_equal(sim.pysf_state.pysf_states(), ped_state)
+        assert np.array_equal(before_numpy[1], np.random.get_state()[1])
+        assert before_numpy[0] == np.random.get_state()[0]
+        assert before_numpy[2:] == np.random.get_state()[2:]
+        assert random.getstate() == before_python
+    finally:
+        random.setstate(original_python_state)
 
 
 def test_restore_mismatched_max_speeds_replaces_backend_speeds() -> None:

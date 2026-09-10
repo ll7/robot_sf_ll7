@@ -129,6 +129,7 @@ def run_fixture(name: str, *, determinism_replays: int) -> LastAvoidableReport:
         feasibility_filter="all_admissible_decel",
         collision_predicate="euclidean_distance<=collision_radius",
         pedestrian_response=scenario.pedestrian_response,
+        source_kind="synthetic_fixture",
     )
     model = fx.KinematicCollisionModel(scenario)
     baseline_actions = fx.maintain_baseline_actions(contact_step + horizon + 2)

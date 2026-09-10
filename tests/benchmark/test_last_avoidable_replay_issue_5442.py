@@ -56,6 +56,7 @@ def _run(scenario, *, determinism_replays: int = 20):
         feasibility_filter="all_admissible_decel",
         collision_predicate="euclidean_distance<=collision_radius",
         pedestrian_response=scenario.pedestrian_response,
+        source_kind="synthetic_fixture",
     )
     model = fx.KinematicCollisionModel(scenario)
     baseline = fx.maintain_baseline_actions(contact_step + horizon + 2)
@@ -318,6 +319,55 @@ def test_nondeterministic_baseline_returns_unknown() -> None:
     assert report.abstained is True
     assert report.abstain_reason == "nondeterministic_baseline"
     assert report.verdict != "unavoidable"
+
+
+def test_latent_trace_drift_is_nondeterministic_even_when_contact_matches() -> None:
+    """Equal collision/contact outcomes do not hide a snapshot restore omission."""
+
+    class _LatentDriftModel:
+        """Model whose restore forgets one state field on purpose."""
+
+        def __init__(self) -> None:
+            self.step_index = 0
+            self.latent = 0
+
+        def snapshot(self):
+            return {"step": self.step_index, "latent": self.latent}
+
+        def restore(self, snapshot) -> None:
+            self.step_index = snapshot["step"]
+
+        def step(self, action) -> None:
+            del action
+            self.step_index += 1
+            self.latent += 1
+
+        def collision(self) -> bool:
+            return self.step_index >= 3
+
+        def feasible_actions(self):
+            return (0.0,)
+
+        def action_label(self, action) -> str:
+            return f"action={action:g}"
+
+    config = ReplayConfig(
+        t_danger=0,
+        t_contact=3,
+        horizon=1,
+        substitution_mode=SUBSTITUTION_HOLD,
+        determinism_replays=2,
+        source_kind="synthetic_fixture",
+    )
+    report = locate_last_avoidable(_LatentDriftModel(), [0.0, 0.0, 0.0], config)
+
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstain_reason == "nondeterministic_baseline"
+    assert report.determinism.collision_stable is True
+    assert report.determinism.contact_step_stable is True
+    assert report.determinism.trace_stable is False
+    assert report.determinism.first_divergence_step == 0
+    assert report.determinism.first_divergence_field == "step.state.latent"
 
 
 def test_incomplete_snapshot_state_returns_unknown_before_replay() -> None:

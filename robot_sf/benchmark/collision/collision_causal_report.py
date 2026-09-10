@@ -254,7 +254,6 @@ _LAST_AVOIDABLE_TO_CAUSAL_VERDICT = {
     VERDICT_ALREADY_UNAVOIDABLE: "unavoidable",
     VERDICT_UNKNOWN: "unknown",
 }
-_SYNTHETIC_REPLAY_SOURCE_KINDS = frozenset({"unspecified", "synthetic_fixture"})
 
 
 @dataclass(frozen=True)
@@ -325,21 +324,30 @@ def collide_causal_report_from_last_avoidable(
 
     _validate_join_metadata(metadata)
 
-    # The native adapter currently has enough state to run a diagnostic replay,
-    # but not enough verified episode/map/seed/software provenance to support the
-    # causal-report source contract. Do not silently relabel its result as a
-    # synthetic fixture. The explicit abstention is the supported hand-off until
-    # a native provenance receipt is threaded through this join.
+    # Only an explicit controlled-fixture source label may enter this join. Native,
+    # unspecified, and otherwise unknown sources must not be relabelled as synthetic
+    # evidence by a downstream wrapper.
     source_kind = getattr(replay.config, "source_kind", "unspecified")
-    if source_kind not in _SYNTHETIC_REPLAY_SOURCE_KINDS:
+    if not (type(source_kind) is str and source_kind == "synthetic_fixture"):
+        is_unspecified = source_kind is None or (
+            isinstance(source_kind, str) and source_kind in {"", "unspecified"}
+        )
         return validate_collision_causal_report(
             abstained_collision_causal_report(
                 report_id=report_id,
                 case_id=case_id,
-                reason="native_simulator_causal_join_unsupported",
+                reason=(
+                    "unspecified_replay_provenance"
+                    if is_unspecified
+                    else "native_simulator_causal_join_unsupported"
+                ),
                 source_kind="unknown",
                 missing_fields=[
-                    "native_simulator_provenance",
+                    (
+                        "replay_source_provenance"
+                        if is_unspecified
+                        else "native_simulator_provenance"
+                    ),
                     "causal_join_contract",
                 ],
             )

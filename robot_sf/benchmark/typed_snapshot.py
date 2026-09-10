@@ -34,6 +34,31 @@ from robot_sf.benchmark.simulator_counterfactual_adapter import _SimulatorSnapsh
 SNAPSHOT_SCHEMA = "simulator_typed_snapshot.v2"
 SNAPSHOT_BOUNDARY = "pre_step"
 _DIGEST_FIELDS = ("map_sha256", "config_sha256", "code_revision")
+_COMPATIBILITY_FIELDS = frozenset(
+    {
+        "map_sha256",
+        "config_sha256",
+        "code_revision",
+        "dt_s",
+        "planner_id",
+        "checkpoint_sha256",
+        "platform_tag",
+    }
+)
+_REQUIRED_COMPATIBILITY_FIELDS = _COMPATIBILITY_FIELDS - {"checkpoint_sha256"}
+_BOUNDARY_FIELDS = frozenset(
+    {
+        "step_index",
+        "absolute_time_s",
+        "remaining_budget_steps",
+        "phase",
+        "next_observation_ready",
+    }
+)
+_REQUIRED_BOUNDARY_FIELDS = _BOUNDARY_FIELDS - {
+    "remaining_budget_steps",
+    "next_observation_ready",
+}
 _REQUIRED_STATE_FIELDS = frozenset(
     {
         "actor_order",
@@ -96,6 +121,28 @@ def _finite_float(value: Any, name: str) -> float:
     return result
 
 
+def _strict_float(value: Any, name: str) -> float:
+    """Validate a numeric float without accepting string or boolean coercion.
+
+    Returns:
+        The validated finite float.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise SnapshotContractError(f"{name} must be a finite float")
+    return _finite_float(value, name)
+
+
+def _strict_string(value: Any, name: str) -> str:
+    """Validate one string-valued contract field without string coercion.
+
+    Returns:
+        The validated string.
+    """
+    if type(value) is not str:
+        raise SnapshotContractError(f"{name} must be a string")
+    return value
+
+
 def _payload_int(value: Any, name: str) -> int:
     """Validate one JSON integer without truncating or accepting booleans.
 
@@ -118,6 +165,17 @@ def _payload_float(value: Any, name: str) -> float:
     return _finite_float(value, name)
 
 
+def _payload_bool(value: Any, name: str) -> bool:
+    """Validate one JSON boolean without accepting truthiness coercion.
+
+    Returns:
+        The validated boolean.
+    """
+    if type(value) is not bool:
+        raise SnapshotPayloadError(f"{name} must be a boolean")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class SnapshotCompatibility:
     """Immutable inputs that must match before a snapshot can be restored."""
@@ -133,24 +191,29 @@ class SnapshotCompatibility:
     def __post_init__(self) -> None:
         """Validate required identity and timestep fields."""
         for name in _DIGEST_FIELDS:
-            value = str(getattr(self, name)).strip().lower()
+            value = _strict_string(getattr(self, name), name).strip().lower()
             if not _is_digest(value):
                 raise SnapshotContractError(f"{name} must be a complete lowercase SHA-256 digest")
             object.__setattr__(self, name, value)
         if self.checkpoint_sha256 is not None:
-            checkpoint = str(self.checkpoint_sha256).strip().lower()
+            checkpoint = _strict_string(self.checkpoint_sha256, "checkpoint_sha256").strip().lower()
             if not _is_digest(checkpoint):
                 raise SnapshotContractError(
                     "checkpoint_sha256 must be a complete lowercase SHA-256 digest when set"
                 )
             object.__setattr__(self, "checkpoint_sha256", checkpoint)
-        if not str(self.planner_id).strip():
+        planner_id = _strict_string(self.planner_id, "planner_id")
+        if not planner_id.strip():
             raise SnapshotContractError("planner_id must be non-empty")
-        object.__setattr__(self, "dt_s", _finite_float(self.dt_s, "dt_s"))
-        if self.dt_s <= 0.0:
+        object.__setattr__(self, "planner_id", planner_id)
+        dt_s = _strict_float(self.dt_s, "dt_s")
+        object.__setattr__(self, "dt_s", dt_s)
+        if dt_s <= 0.0:
             raise SnapshotContractError("dt_s must be > 0")
-        if not str(self.platform_tag).strip():
+        platform_tag = _strict_string(self.platform_tag, "platform_tag")
+        if not platform_tag.strip():
             raise SnapshotContractError("platform_tag must be non-empty")
+        object.__setattr__(self, "platform_tag", platform_tag)
 
     def to_dict(self) -> dict[str, Any]:
         """Return JSON-safe compatibility metadata."""
@@ -171,30 +234,23 @@ class SnapshotCompatibility:
         Returns:
             A validated compatibility object.
         """
-        required = {
-            "map_sha256",
-            "config_sha256",
-            "code_revision",
-            "dt_s",
-            "planner_id",
-            "platform_tag",
-        }
-        missing = sorted(required - set(payload))
+        if not isinstance(payload, Mapping):
+            raise SnapshotPayloadError("compatibility must be an object")
+        missing = sorted(_REQUIRED_COMPATIBILITY_FIELDS - set(payload))
         if missing:
             raise SnapshotPayloadError(f"compatibility is missing fields: {missing}")
+        unknown = sorted(set(payload) - _COMPATIBILITY_FIELDS)
+        if unknown:
+            raise SnapshotPayloadError(f"compatibility contains unknown fields: {unknown}")
         try:
             return cls(
-                map_sha256=str(payload["map_sha256"]),
-                config_sha256=str(payload["config_sha256"]),
-                code_revision=str(payload["code_revision"]),
-                dt_s=float(payload["dt_s"]),
-                planner_id=str(payload["planner_id"]),
-                checkpoint_sha256=(
-                    None
-                    if payload.get("checkpoint_sha256") is None
-                    else str(payload["checkpoint_sha256"])
-                ),
-                platform_tag=str(payload["platform_tag"]),
+                map_sha256=_strict_string(payload["map_sha256"], "map_sha256"),
+                config_sha256=_strict_string(payload["config_sha256"], "config_sha256"),
+                code_revision=_strict_string(payload["code_revision"], "code_revision"),
+                dt_s=_payload_float(payload["dt_s"], "dt_s"),
+                planner_id=_strict_string(payload["planner_id"], "planner_id"),
+                checkpoint_sha256=payload.get("checkpoint_sha256"),
+                platform_tag=_strict_string(payload["platform_tag"], "platform_tag"),
             )
         except (TypeError, ValueError, SnapshotContractError) as exc:
             raise SnapshotPayloadError(f"invalid compatibility metadata: {exc}") from exc
@@ -241,7 +297,7 @@ class SnapshotBoundary:
         object.__setattr__(
             self,
             "absolute_time_s",
-            _finite_float(self.absolute_time_s, "boundary.absolute_time_s"),
+            _strict_float(self.absolute_time_s, "boundary.absolute_time_s"),
         )
         if self.absolute_time_s < 0.0:
             raise SnapshotContractError("boundary.absolute_time_s must be >= 0")
@@ -252,6 +308,8 @@ class SnapshotBoundary:
                 raise SnapshotContractError("boundary.remaining_budget_steps must be an integer")
             if self.remaining_budget_steps < 0:
                 raise SnapshotContractError("boundary.remaining_budget_steps must be >= 0")
+        if type(self.phase) is not str:
+            raise SnapshotContractError("boundary.phase must be a string")
         if self.phase != SNAPSHOT_BOUNDARY:
             raise SnapshotContractError(
                 f"unsupported snapshot phase {self.phase!r}; expected {SNAPSHOT_BOUNDARY!r}"
@@ -276,6 +334,14 @@ class SnapshotBoundary:
         Returns:
             A validated snapshot boundary.
         """
+        if not isinstance(payload, Mapping):
+            raise SnapshotPayloadError("snapshot boundary must be an object")
+        missing = sorted(_REQUIRED_BOUNDARY_FIELDS - set(payload))
+        if missing:
+            raise SnapshotPayloadError(f"invalid snapshot boundary: missing fields {missing}")
+        unknown = sorted(set(payload) - _BOUNDARY_FIELDS)
+        if unknown:
+            raise SnapshotPayloadError(f"invalid snapshot boundary: unknown fields {unknown}")
         raw_ready = payload.get("next_observation_ready", False)
         if not isinstance(raw_ready, bool):
             raise SnapshotPayloadError("boundary.next_observation_ready must be a boolean")
@@ -292,7 +358,7 @@ class SnapshotBoundary:
                         payload["remaining_budget_steps"], "boundary.remaining_budget_steps"
                     )
                 ),
-                phase=payload.get("phase", ""),
+                phase=_strict_string(payload["phase"], "boundary.phase"),
                 next_observation_ready=raw_ready,
             )
         except (KeyError, TypeError, ValueError, SnapshotContractError) as exc:
@@ -389,6 +455,10 @@ def _decode_value(value: Any, arrays: Mapping[str, np.ndarray], path: str) -> An
         return [_decode_value(item, arrays, f"{path}[]") for item in value]
     if not isinstance(value, dict):
         return value
+    if "$array" in value and set(value) != {"$array"}:
+        raise SnapshotPayloadError(f"{path} has unknown array-reference fields")
+    if "$tuple" in value and set(value) != {"$tuple"}:
+        raise SnapshotPayloadError(f"{path} has unknown tuple-reference fields")
     if set(value) == {"$array"}:
         name = value["$array"]
         if not isinstance(name, str) or name not in arrays:
@@ -430,8 +500,14 @@ def _deserialize_dataclass(current: Any, payload: Mapping[str, Any]) -> Any:
     Returns:
         A destination-owned state copy with restored fields.
     """
+    if not isinstance(payload, Mapping):
+        raise SnapshotPayloadError("robot state payload must be an object")
     if not is_dataclass(current):
         raise SnapshotCompatibilityError("destination robot state is not a dataclass")
+    if set(payload) != {"type", "fields"}:
+        raise SnapshotPayloadError("robot state contains incomplete or unknown fields")
+    if type(payload["type"]) is not str:
+        raise SnapshotPayloadError("robot state type must be a string")
     if payload.get("type") != _qualified_type(current):
         raise SnapshotCompatibilityError(
             f"robot state type mismatch: snapshot={payload.get('type')!r}, "
@@ -451,20 +527,28 @@ def _deserialize_dataclass(current: Any, payload: Mapping[str, Any]) -> Any:
     return restored
 
 
-def _coerce_like(value: Any, template: Any) -> Any:
-    """Restore JSON tuple/list values using the destination field shape.
+def _coerce_sequence_like(value: Any, template: tuple[Any, ...] | list[Any]) -> Any:
+    """Restore one JSON sequence using the destination field's container shape.
 
     Returns:
-        A value coerced to the destination field's container/scalar shape.
+        A destination-shaped sequence with recursively validated members.
     """
     if isinstance(template, tuple) and isinstance(value, (tuple, list)):
-        return tuple(
-            _coerce_like(item, template[index] if index < len(template) else None)
-            for index, item in enumerate(value)
-        )
+        if len(value) != len(template):
+            raise SnapshotPayloadError("typed tuple field has an unexpected length")
+        return tuple(_coerce_like(item, template[index]) for index, item in enumerate(value))
     if isinstance(template, list) and isinstance(value, (tuple, list)):
         item_template = template[0] if template else None
         return [_coerce_like(item, item_template) for item in value]
+    raise SnapshotPayloadError("typed sequence field has an incompatible shape")
+
+
+def _coerce_scalar_like(value: Any, template: Any) -> Any:
+    """Restore one scalar field without accepting scalar coercion.
+
+    Returns:
+        A value validated against the destination scalar shape.
+    """
     if isinstance(template, bool):
         if not isinstance(value, bool):
             raise SnapshotPayloadError("typed boolean field must be a boolean")
@@ -473,7 +557,28 @@ def _coerce_like(value: Any, template: Any) -> Any:
         return _payload_int(value, "typed integer field")
     if isinstance(template, float):
         return _payload_float(value, "typed float field")
+    if isinstance(template, str):
+        if type(value) is not str:
+            raise SnapshotPayloadError("typed string field must be a string")
+        return value
+    if template is None:
+        if value is not None:
+            raise SnapshotPayloadError("typed null field must be null")
+        return None
     return deepcopy(value)
+
+
+def _coerce_like(value: Any, template: Any) -> Any:
+    """Restore a typed field without accepting scalar coercion.
+
+    Returns:
+        A value validated against the destination field's container/scalar shape.
+    """
+    if isinstance(template, (tuple, list)):
+        if not isinstance(value, (tuple, list)):
+            raise SnapshotPayloadError("typed sequence field has an incompatible shape")
+        return _coerce_sequence_like(value, template)
+    return _coerce_scalar_like(value, template)
 
 
 def _serialize_navigator(navigator: Any) -> dict[str, Any]:
@@ -499,6 +604,8 @@ def _deserialize_navigator(current: Any, payload: Mapping[str, Any]) -> Any:
     Returns:
         A destination-owned navigator copy.
     """
+    if not isinstance(payload, Mapping):
+        raise SnapshotPayloadError("robot navigator payload must be an object")
     required = {"waypoints", "waypoint_id", "proximity_threshold", "pos", "reached_waypoint"}
     if set(payload) != required:
         raise SnapshotPayloadError("robot navigator field set is incomplete or unknown")
@@ -570,12 +677,16 @@ def _deserialize_global_rng(state: Any) -> tuple[Any, ...] | None:
     required = {"kind", "state", "pos", "has_gauss", "cached_gauss"}
     if set(state) != required:
         raise SnapshotPayloadError("global_rng metadata is incomplete or unknown")
+    if type(state["kind"]) is not str:
+        raise SnapshotPayloadError("global_rng.kind must be a string")
+    if not isinstance(state["state"], np.ndarray):
+        raise SnapshotPayloadError("global_rng.state must be a numeric array")
     return (
-        str(state["kind"]),
+        state["kind"],
         _array_copy(state["state"], "global_rng.state"),
-        int(state["pos"]),
-        int(state["has_gauss"]),
-        float(state["cached_gauss"]),
+        _payload_int(state["pos"], "global_rng.pos"),
+        _payload_int(state["has_gauss"], "global_rng.has_gauss"),
+        _payload_float(state["cached_gauss"], "global_rng.cached_gauss"),
     )
 
 
@@ -868,10 +979,14 @@ def _validate_destination_shape(
     actor_order = state.get("actor_order")
     if not isinstance(actor_order, Mapping):
         raise SnapshotPayloadError("snapshot actor order is missing")
+    if set(actor_order) != {"robots", "pedestrians"}:
+        raise SnapshotPayloadError("snapshot actor order contains incomplete or unknown fields")
     robot_order = actor_order.get("robots")
     ped_order = actor_order.get("pedestrians")
     if not isinstance(robot_order, list) or not isinstance(ped_order, list):
         raise SnapshotPayloadError("snapshot actor order must contain robot/pedestrian lists")
+    if any(type(value) is not str for value in (*robot_order, *ped_order)):
+        raise SnapshotPayloadError("snapshot actor order entries must be strings")
     if robot_order != [f"robot:{index}" for index in range(len(sim.robots))]:
         raise SnapshotCompatibilityError("snapshot robot actor identity/order does not match")
     expected_ped_order = [
@@ -905,7 +1020,25 @@ def _restore_robot_payload(
         _deserialize_navigator(navigator, payload)
         for navigator, payload in zip(sim.robot_navs, robot_nav_payload, strict=True)
     ]
-    robot_poses = deepcopy(state.get("robot_poses"))
+    raw_robot_poses = state.get("robot_poses")
+    if not isinstance(raw_robot_poses, list):
+        raise SnapshotPayloadError("snapshot robot poses must be a list")
+    robot_poses = []
+    for index, raw_pose in enumerate(raw_robot_poses):
+        if not isinstance(raw_pose, (tuple, list)) or len(raw_pose) != 2:
+            raise SnapshotPayloadError(f"robot pose {index} must contain position and heading")
+        raw_position, raw_heading = raw_pose
+        if not isinstance(raw_position, (tuple, list)) or len(raw_position) != 2:
+            raise SnapshotPayloadError(f"robot pose {index} position must be a pair")
+        robot_poses.append(
+            (
+                (
+                    _payload_float(raw_position[0], f"robot_poses[{index}][0][0]"),
+                    _payload_float(raw_position[1], f"robot_poses[{index}][0][1]"),
+                ),
+                _payload_float(raw_heading, f"robot_poses[{index}][1]"),
+            )
+        )
     if not isinstance(robot_poses, list) or len(robot_poses) != len(sim.robots):
         raise SnapshotCompatibilityError("snapshot robot pose count does not match destination")
     return robot_poses, robot_states, robot_navigators
@@ -921,8 +1054,12 @@ def _resolve_global_rng(state: Mapping[str, Any], arrays: Mapping[str, np.ndarra
     if not isinstance(global_rng, dict):
         return global_rng
     if "state_ref" in global_rng:
+        if set(global_rng) != {"kind", "state_ref", "pos", "has_gauss", "cached_gauss"}:
+            raise SnapshotPayloadError("global_rng metadata is incomplete or unknown")
         ref = global_rng.pop("state_ref")
     elif isinstance(global_rng.get("state"), dict):
+        if set(global_rng["state"]) != {"$array"}:
+            raise SnapshotPayloadError("global_rng state reference has unknown fields")
         ref = global_rng["state"].get("$array")
     else:
         return global_rng
@@ -949,9 +1086,14 @@ def _validate_rng_capture_state(state: Mapping[str, Any], model: Any) -> None:
 
 def _validate_required_state_fields(state: Mapping[str, Any]) -> None:
     """Reject snapshots that silently omit supported mutable state fields."""
+    if not isinstance(state, Mapping):
+        raise SnapshotPayloadError("snapshot state must be an object")
     missing = sorted(_REQUIRED_STATE_FIELDS - set(state))
     if missing:
         raise SnapshotPayloadError(f"snapshot state is missing supported fields: {missing}")
+    unknown = sorted(set(state) - _REQUIRED_STATE_FIELDS)
+    if unknown:
+        raise SnapshotPayloadError(f"snapshot state contains unknown fields: {unknown}")
 
 
 def _metadata_digest(metadata: Mapping[str, Any]) -> str:
@@ -982,9 +1124,13 @@ class TypedSimulatorSnapshot:
 
     def __post_init__(self) -> None:
         """Own and validate numeric payload arrays."""
-        copied = {
-            str(name): _array_copy(value, f"arrays.{name}") for name, value in self.arrays.items()
-        }
+        if not isinstance(self.state, Mapping):
+            raise SnapshotContractError("snapshot state must be an object")
+        if not isinstance(self.arrays, Mapping):
+            raise SnapshotContractError("snapshot arrays must be an object")
+        if any(type(name) is not str for name in self.arrays):
+            raise SnapshotContractError("snapshot array names must be strings")
+        copied = {name: _array_copy(value, f"arrays.{name}") for name, value in self.arrays.items()}
         object.__setattr__(self, "arrays", copied)
 
     @classmethod
@@ -1131,7 +1277,9 @@ class TypedSimulatorSnapshot:
             pedestrian_groups=pedestrian_groups,
             pedestrian_group_by_ped=pedestrian_group_by_ped,
             global_rng_state=_deserialize_global_rng(_resolve_global_rng(state, self.arrays)),
-            peds_have_obstacle_forces=bool(state.get("peds_have_obstacle_forces")),
+            peds_have_obstacle_forces=_payload_bool(
+                state.get("peds_have_obstacle_forces"), "peds_have_obstacle_forces"
+            ),
             ped_max_speeds=self.arrays.get("ped_max_speeds", np.empty((0,), dtype=float)).copy(),
             python_random_state=deepcopy(state.get("python_random_state")),
             behavior_rng_states=deepcopy(state.get("behavior_rng_states")),
@@ -1214,7 +1362,11 @@ class SnapshotArtifact:
 def write_typed_snapshot(
     snapshot: TypedSimulatorSnapshot, metadata_path: str | Path
 ) -> SnapshotArtifact:
-    """Write JSON metadata and compressed numeric payload atomically.
+    """Write each file of the typed snapshot pair with atomic replacement.
+
+    The metadata and payload are separate files, so their pair replacement is not
+    one filesystem transaction. The reader validates both digests and sizes and
+    rejects a mixed-generation pair.
 
     Returns:
         Artifact paths and measured byte sizes.
@@ -1228,18 +1380,19 @@ def write_typed_snapshot(
     ) as tmp:
         payload_tmp = Path(tmp.name)
         np.savez_compressed(tmp, **arrays)
+    metadata_tmp = metadata_target.with_suffix(metadata_target.suffix + ".tmp")
     try:
         payload_tmp.replace(payload_target)
         metadata["payload_sha256"] = _sha256_file(payload_target)
         metadata["payload_bytes"] = payload_target.stat().st_size
         metadata["metadata_sha256"] = _metadata_digest(metadata)
-        metadata_tmp = metadata_target.with_suffix(metadata_target.suffix + ".tmp")
         metadata_tmp.write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         metadata_tmp.replace(metadata_target)
     finally:
         payload_tmp.unlink(missing_ok=True)
+        metadata_tmp.unlink(missing_ok=True)
     return SnapshotArtifact(
         metadata_path=metadata_target,
         payload_path=payload_target,
@@ -1260,6 +1413,22 @@ def _read_snapshot_metadata(metadata_target: Path) -> Mapping[str, Any]:
         raise SnapshotPayloadError(f"could not read snapshot metadata: {exc}") from exc
     if not isinstance(metadata, Mapping):
         raise SnapshotPayloadError("snapshot metadata must be a JSON object")
+    required = {
+        "schema_version",
+        "compatibility",
+        "boundary",
+        "state",
+        "arrays",
+        "payload_sha256",
+        "payload_bytes",
+        "metadata_sha256",
+    }
+    missing = sorted(required - set(metadata))
+    if missing:
+        raise SnapshotPayloadError(f"snapshot metadata is missing fields: {missing}")
+    unknown = sorted(set(metadata) - required)
+    if unknown:
+        raise SnapshotPayloadError(f"snapshot metadata contains unknown fields: {unknown}")
     if metadata.get("schema_version") != SNAPSHOT_SCHEMA:
         raise SnapshotPayloadError(
             f"unsupported snapshot schema {metadata.get('schema_version')!r}"
@@ -1286,6 +1455,20 @@ def _load_snapshot_arrays(
             for name, descriptor in descriptors.items():
                 if not isinstance(name, str) or not isinstance(descriptor, Mapping):
                     raise SnapshotPayloadError("malformed snapshot array descriptor")
+                if set(descriptor) != {"dtype", "shape"}:
+                    raise SnapshotPayloadError(
+                        f"snapshot array descriptor for {name!r} has unknown fields"
+                    )
+                if type(descriptor["dtype"]) is not str:
+                    raise SnapshotPayloadError(
+                        f"snapshot array descriptor dtype for {name!r} must be a string"
+                    )
+                if type(descriptor["shape"]) is not list or any(
+                    type(dimension) is not int or dimension < 0 for dimension in descriptor["shape"]
+                ):
+                    raise SnapshotPayloadError(
+                        f"snapshot array descriptor shape for {name!r} must be integer list"
+                    )
                 if name not in loaded:
                     raise SnapshotPayloadError(f"snapshot payload is missing array {name!r}")
                 value = _array_copy(loaded[name], f"arrays.{name}")

@@ -35,8 +35,13 @@ episode root-cause claim.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+import numpy as np
+
+from robot_sf.benchmark.typed_snapshot import NoOpStep, compare_continuation_traces
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -124,9 +129,11 @@ class ReplayConfig:
             (pedestrian reacts to the robot). The default ``unknown`` is schema-safe
             and must not be interpreted as either response mode.
         source_kind: Provenance classification for the replay source. Native live
-            simulator adapters bind this to ``live_episode``; legacy controlled
-            fixtures leave it ``unspecified`` and the causal join treats that as
-            synthetic-fixture evidence.
+            simulator adapters bind this to ``live_episode``; controlled fixtures
+            must use ``synthetic_fixture`` before a causal join. The default
+            ``unspecified`` is retained for diagnostic compatibility but is
+            rejected by the causal join. This is a source label, not a causal or
+            benchmark claim.
     """
 
     t_danger: int
@@ -180,11 +187,14 @@ class DeterminismCheck:
     collision_stable: bool
     contact_step_stable: bool
     observed_contact_steps: tuple[int | None, ...]
+    trace_stable: bool = False
+    first_divergence_step: int | None = None
+    first_divergence_field: str | None = None
 
     @property
     def deterministic(self) -> bool:
-        """Return whether both the collision flag and contact step were stable."""
-        return self.collision_stable and self.contact_step_stable
+        """Return whether terminal outcome, contact tick, and trace all agree."""
+        return self.collision_stable and self.contact_step_stable and self.trace_stable
 
     def to_dict(self) -> dict[str, Any]:
         """Return the JSON-safe determinism-check mapping."""
@@ -192,6 +202,9 @@ class DeterminismCheck:
             "replays": self.replays,
             "collision_stable": self.collision_stable,
             "contact_step_stable": self.contact_step_stable,
+            "trace_stable": self.trace_stable,
+            "first_divergence_step": self.first_divergence_step,
+            "first_divergence_field": self.first_divergence_field,
             "deterministic": self.deterministic,
             "observed_contact_steps": [
                 None if s is None else int(s) for s in self.observed_contact_steps
@@ -305,32 +318,130 @@ def _replay_to_contact(
     return None
 
 
+def _trace_value(value: Any) -> Any:
+    """Convert an opaque snapshot into deterministic comparator-friendly values.
+
+    Returns:
+        A nested value containing owned arrays and stable object fields.
+    """
+    if isinstance(value, np.ndarray):
+        return value.copy()
+    if isinstance(value, np.generic):
+        return value.item()
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            "type": f"{type(value).__module__}.{type(value).__qualname__}",
+            "fields": {
+                item.name: (
+                    {"present": getattr(value, item.name) is not None}
+                    if item.name == "residual_adversary"
+                    else _trace_value(getattr(value, item.name))
+                )
+                for item in fields(value)
+            },
+        }
+    if isinstance(value, Mapping):
+        return {key: _trace_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return tuple(_trace_value(item) for item in value)
+    if isinstance(value, list):
+        return [_trace_value(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        normalized = [_trace_value(item) for item in value]
+        return sorted(normalized, key=repr)
+    if hasattr(value, "__dict__"):
+        return {
+            "type": f"{type(value).__module__}.{type(value).__qualname__}",
+            "fields": {key: _trace_value(item) for key, item in vars(value).items()},
+        }
+    return value
+
+
+def _replay_with_trace(
+    model: CounterfactualModel,
+    initial_snapshot: Any,
+    baseline_actions: Sequence[Any],
+    max_step: int,
+) -> tuple[int | None, list[NoOpStep]]:
+    """Replay baseline actions and retain typed no-op steps for every state tick.
+
+    Returns:
+        The first contact state tick and its typed continuation trace.
+    """
+    model.restore(initial_snapshot)
+    initial_terminal = bool(model.collision())
+    trace = [
+        NoOpStep(
+            step=0,
+            state=_trace_value(model.snapshot()),
+            terminal=initial_terminal,
+        )
+    ]
+    if initial_terminal:
+        return 0, trace
+    limit = min(max_step, len(baseline_actions))
+    for step in range(limit):
+        action = baseline_actions[step]
+        model.step(action)
+        terminal = bool(model.collision())
+        trace.append(
+            NoOpStep(
+                step=step + 1,
+                state=_trace_value(model.snapshot()),
+                applied_action=_trace_value(action),
+                terminal=terminal,
+            )
+        )
+        if terminal:
+            return step + 1, trace
+    return None, trace
+
+
 def _verify_determinism(
     model: CounterfactualModel,
     initial_snapshot: Any,
     baseline_actions: Sequence[Any],
     config: ReplayConfig,
 ) -> DeterminismCheck:
-    """Replay the baseline ``config.determinism_replays`` times and compare outcomes.
+    """Replay the baseline and compare terminal outcomes plus typed traces.
 
     Returns:
-        A :class:`DeterminismCheck` recording whether the collision flag and
-        contact step were stable across all replays.
+        A :class:`DeterminismCheck` recording whether the collision flag, contact
+        step, and every declared no-op trace field were stable across all replays.
     """
     max_step = config.t_contact + config.horizon
     contact_steps: list[int | None] = []
+    traces: list[list[NoOpStep]] = []
     for _ in range(config.determinism_replays):
-        contact_steps.append(
-            _replay_to_contact(model, initial_snapshot, baseline_actions, max_step)
+        contact_step, trace = _replay_with_trace(
+            model, initial_snapshot, baseline_actions, max_step
         )
+        contact_steps.append(contact_step)
+        traces.append(trace)
     collided = [c is not None for c in contact_steps]
     collision_stable = len(set(collided)) == 1
     contact_step_stable = len(set(contact_steps)) == 1
+    trace_stable = True
+    first_divergence_step = None
+    first_divergence_field = None
+    if traces:
+        expected_trace = traces[0]
+        for actual_trace in traces[1:]:
+            comparison = compare_continuation_traces(expected_trace, actual_trace)
+            if comparison.equivalent:
+                continue
+            trace_stable = False
+            first_divergence_step = comparison.first_divergence_step
+            first_divergence_field = comparison.first_divergence_field
+            break
     return DeterminismCheck(
         replays=config.determinism_replays,
         collision_stable=collision_stable,
         contact_step_stable=contact_step_stable,
         observed_contact_steps=tuple(contact_steps),
+        trace_stable=trace_stable,
+        first_divergence_step=first_divergence_step,
+        first_divergence_field=first_divergence_field,
     )
 
 

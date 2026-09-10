@@ -51,6 +51,7 @@ def _run_replay(scenario, *, determinism_replays: int = 20):
         feasibility_filter="all_admissible_decel",
         collision_predicate="euclidean_distance<=collision_radius",
         pedestrian_response=scenario.pedestrian_response,
+        source_kind="synthetic_fixture",
     )
     model = fx.KinematicCollisionModel(scenario)
     baseline = fx.maintain_baseline_actions(contact_step + horizon + 2)
@@ -187,6 +188,29 @@ def test_native_live_replay_abstains_without_verified_provenance() -> None:
     validate_collision_causal_report(report)
 
 
+def test_unspecified_replay_provenance_abstains_without_relabeling() -> None:
+    """A replay without an explicit source label cannot enter the causal join."""
+    from dataclasses import replace
+
+    replay = _run_replay(fx.preventable_late_braking_scenario())
+    unspecified = replace(replay, config=replace(replay.config, source_kind="unspecified"))
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id="unspecified-source",
+        case_id="fixture",
+        replay=unspecified,
+        metadata=_METADATA,
+    )
+
+    assert report["abstained"] is True
+    assert report["abstention_reason"] == "unspecified_replay_provenance"
+    assert report["data_source"]["source_kind"] == "unknown"
+    assert report["causal_contribution"]["verdict"] == "unknown"
+    assert report["causal_contribution"]["supported_actual_cause"] is False
+    assert "replay_source_provenance" in report["missing_fields"]
+    validate_collision_causal_report(report)
+
+
 def test_two_action_interaction_joins_as_avoidable() -> None:
     """A closed-loop two-body interaction replay joins as an avoidable report."""
     scenario = fx.two_action_interaction_scenario()
@@ -212,6 +236,7 @@ def test_default_pedestrian_response_is_schema_safe() -> None:
             action_set_id="decel_lattice",
             feasibility_filter="all_admissible_decel",
             collision_predicate="euclidean_distance<=collision_radius",
+            source_kind="synthetic_fixture",
         ),
     )
 

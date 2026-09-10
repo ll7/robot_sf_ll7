@@ -218,6 +218,74 @@ def test_process_timeout_reaps_descendants(monkeypatch, tmp_path: Path) -> None:
         pytest.fail(f"descendant process {child_pid} survived timeout cleanup")
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="detached process cleanup requires Linux")
+def test_process_timeout_reaps_orphaned_descendant_before_cleanup_snapshot(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A detached child observed while supervised is still reaped after its parent exits."""
+    import scripts.validation.run_documentation_commands as command_runner
+
+    real_resolve_executable = command_runner._resolve_executable
+    monkeypatch.setattr(
+        command_runner,
+        "_resolve_executable",
+        lambda name: sys.executable if name == sys.executable else real_resolve_executable(name),
+    )
+    child_pid_file = tmp_path / "child.pid"
+    child_ready_file = tmp_path / "child.ready"
+    parent_done_file = tmp_path / "parent.done"
+    child_code = (
+        "import os, pathlib, sys, time; "
+        "os.setsid(); "
+        "pathlib.Path(sys.argv[1]).write_text(str(os.getpid()), encoding='ascii'); "
+        "time.sleep(30)"
+    )
+    parent_code = (
+        "import pathlib, subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[3]])\n"
+        "pathlib.Path(sys.argv[1]).write_text(str(child.pid), encoding='ascii')\n"
+        "deadline = time.monotonic() + 0.5\n"
+        "while not pathlib.Path(sys.argv[3]).exists() and time.monotonic() < deadline:\n"
+        "    time.sleep(0.001)\n"
+        "time.sleep(0.25)\n"
+        "pathlib.Path(sys.argv[4]).write_text('exited', encoding='ascii')"
+    )
+    result = _run_process(
+        [
+            sys.executable,
+            "-c",
+            parent_code,
+            str(child_pid_file),
+            child_code,
+            str(child_ready_file),
+            str(parent_done_file),
+        ],
+        cwd=tmp_path,
+        timeout_s=1.0,
+        max_output_bytes=4096,
+    )
+    assert result.reason == "timeout"
+    assert parent_done_file.exists()
+    assert child_ready_file.exists()
+    assert child_pid_file.exists()
+    child_pid = int(child_pid_file.read_text(encoding="ascii"))
+
+    def child_is_live() -> bool:
+        try:
+            state = Path(f"/proc/{child_pid}/stat").read_text(encoding="ascii")
+        except FileNotFoundError:
+            return False
+        return state.rsplit(")", 1)[1].split()[0] != "Z"
+
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        if not child_is_live():
+            break
+        time.sleep(0.01)
+    else:
+        pytest.fail(f"orphaned descendant process {child_pid} survived timeout cleanup")
+
+
 def test_normalize_output_replaces_machine_paths(tmp_path: Path) -> None:
     text = (
         f"wrote {tmp_path}/out/episode.jsonl\n"

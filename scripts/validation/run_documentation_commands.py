@@ -16,8 +16,8 @@ bounded combined stdout/stderr capture. ``--format json`` emits a canonical
 sorted-key receipt without wall-clock fields; output digests are reproducible
 when the normalized command output is identical, not a blanket claim about
 arbitrary runtime output. This is not a sandbox: approved commands still run
-with the invoking user's OS permissions and a detached process created after
-the cleanup snapshot may outlive the runner.
+with the invoking user's OS permissions, and an unobserved detached descendant
+or one created after the final cleanup scan may outlive the runner.
 """
 
 from __future__ import annotations
@@ -57,6 +57,7 @@ DEFAULT_TIMEOUT_S = 120.0
 MAX_TIMEOUT_S = 300.0
 MAX_OUTPUT_BYTES = 1024 * 1024
 PROCESS_GROUP_GRACE_S = 0.5
+PROCESS_TRACKING_INTERVAL_S = 0.05
 READ_CHUNK_BYTES = 64 * 1024
 
 FENCE_OPEN_RE = re.compile(r"^ {0,3}(?P<fence>`{3,})(?P<info>.*)$")
@@ -340,6 +341,11 @@ def _linux_process_descendants(pid: int) -> tuple[_LinuxProcessIdentity, ...]:
     return tuple(descendants)
 
 
+def _refresh_linux_process_identities(pid: int, identities: set[_LinuxProcessIdentity]) -> None:
+    """Retain Linux descendant identities observed while the root is still visible."""
+    identities.update(_linux_process_descendants(pid))
+
+
 def _linux_process_identity_exists(identity: _LinuxProcessIdentity) -> bool:
     """Return whether a captured PID still refers to the same process."""
     stat = _read_linux_process_stat(identity.pid)
@@ -370,11 +376,15 @@ def _process_group_exists(pid: int) -> bool:
     return True
 
 
-def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
-    """Terminate a child tree, with best-effort Linux cleanup for detached descendants.
+def _terminate_process_group(
+    process: subprocess.Popen[bytes],
+    descendant_identities: set[_LinuxProcessIdentity] | None = None,
+) -> None:
+    """Terminate a child tree, retaining observed Linux descendants across reparenting.
 
-    A process that forks after the snapshot, or escapes the host's process visibility, may
-    still survive. This is process cleanup rather than a sandbox boundary.
+    Descendants not observed before reparenting, descendants created after the final scan, or
+    processes outside the host's process visibility may still survive. This is process cleanup
+    rather than a sandbox boundary.
     """
     if os.name != "posix":
         process.terminate()
@@ -385,7 +395,8 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
             process.wait()
         return
 
-    detached_descendants = _linux_process_descendants(process.pid)
+    detached_descendants = descendant_identities if descendant_identities is not None else set()
+    _refresh_linux_process_identities(process.pid, detached_descendants)
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -393,15 +404,20 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     except OSError:
         process.terminate()
 
-    _signal_linux_processes(detached_descendants, signal.SIGTERM)
+    _signal_linux_processes(tuple(detached_descendants), signal.SIGTERM)
 
     deadline = time.monotonic() + PROCESS_GROUP_GRACE_S
     while (
         _process_group_exists(process.pid)
         or any(_linux_process_identity_exists(item) for item in detached_descendants)
     ) and time.monotonic() < deadline:
-        time.sleep(0.01)
+        _refresh_linux_process_identities(process.pid, detached_descendants)
+        _signal_linux_processes(tuple(detached_descendants), signal.SIGTERM)
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(remaining, PROCESS_TRACKING_INTERVAL_S))
 
+    _refresh_linux_process_identities(process.pid, detached_descendants)
     if _process_group_exists(process.pid):
         try:
             os.killpg(process.pid, signal.SIGKILL)
@@ -409,7 +425,7 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
             pass
         except OSError:
             process.kill()
-    _signal_linux_processes(detached_descendants, signal.SIGKILL)
+    _signal_linux_processes(tuple(detached_descendants), signal.SIGKILL)
     process.wait()
 
 
@@ -495,8 +511,11 @@ def _capture_process(
     *,
     timeout_s: float,
     max_output_bytes: int,
+    descendant_identities: set[_LinuxProcessIdentity] | None = None,
 ) -> _ProcessResult:
     """Capture a process's output until it completes, times out, or reaches its cap."""
+    tracked_descendants = descendant_identities if descendant_identities is not None else set()
+    _refresh_linux_process_identities(process.pid, tracked_descendants)
     selector = selectors.DefaultSelector()
     stdout = bytearray()
     stderr = bytearray()
@@ -509,25 +528,27 @@ def _capture_process(
         while selector.get_map():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                _terminate_process_group(process)
+                _terminate_process_group(process, tracked_descendants)
                 return _ProcessResult(None, bytes(stdout), bytes(stderr), "timeout")
-            events = selector.select(remaining)
+            events = selector.select(min(remaining, PROCESS_TRACKING_INTERVAL_S))
+            _refresh_linux_process_identities(process.pid, tracked_descendants)
             if not events:
-                _terminate_process_group(process)
-                return _ProcessResult(None, bytes(stdout), bytes(stderr), "timeout")
+                continue
             remaining_output = max_output_bytes - len(stdout) - len(stderr)
             for key, _ in events:
                 if _capture_ready_pipe(selector, key, remaining_output):
-                    _terminate_process_group(process)
+                    _terminate_process_group(process, tracked_descendants)
                     return _ProcessResult(None, bytes(stdout), bytes(stderr), "output_limit")
                 remaining_output = max_output_bytes - len(stdout) - len(stderr)
 
-        remaining = max(0.0, deadline - time.monotonic())
-        try:
-            returncode = process.wait(timeout=remaining)
-        except subprocess.TimeoutExpired:
-            _terminate_process_group(process)
-            return _ProcessResult(None, bytes(stdout), bytes(stderr), "timeout")
+        while process.poll() is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _terminate_process_group(process, tracked_descendants)
+                return _ProcessResult(None, bytes(stdout), bytes(stderr), "timeout")
+            _refresh_linux_process_identities(process.pid, tracked_descendants)
+            time.sleep(min(remaining, PROCESS_TRACKING_INTERVAL_S))
+        returncode = process.wait()
         return _ProcessResult(returncode, bytes(stdout), bytes(stderr), "completed")
     finally:
         selector.close()
@@ -563,14 +584,17 @@ def _run_process(
         )
     except OSError:
         return _ProcessResult(None, b"", b"", "process_error")
+    descendant_identities: set[_LinuxProcessIdentity] = set()
+    _refresh_linux_process_identities(process.pid, descendant_identities)
     try:
         return _capture_process(
             process,
             timeout_s=timeout_s,
             max_output_bytes=max_output_bytes,
+            descendant_identities=descendant_identities,
         )
     except (OSError, ValueError):
-        _terminate_process_group(process)
+        _terminate_process_group(process, descendant_identities)
         return _ProcessResult(None, b"", b"", "process_error")
 
 

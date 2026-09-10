@@ -18,6 +18,12 @@ The repository separates automated dependency updates by compatibility risk so a
 
 The checker also covers the standalone fast-pysf project files. A new direct package must be added to the manifest with a reviewed class before it can pass the policy check. Unknown transitive lock rows remain visible and route through the conservative compatibility jobs.
 
+CI-only PEP 735 dependency groups are reported as profile declarations rather than Dependabot
+version-update lanes. Their packages still require canonical risk classes and existing CI evidence,
+but a group may compose high-impact and optional runtimes when that is necessary for a bounded
+workflow environment. This exception does not apply to changes in published project dependencies
+or to package version updates; those remain subject to the mixed-risk fail-closed guard.
+
 ## Workflow action-pin coupling
 
 For each changed workflow YAML file, the checker compares `uses: owner/action@<40-hex-SHA>` entries

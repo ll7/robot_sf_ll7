@@ -318,7 +318,10 @@ def validate_ci_workflow(policy: Mapping[str, Any], path: Path = DEFAULT_CI_WORK
                 )
 
 
-def _project_dependency_names(document: Mapping[str, Any]) -> set[str]:
+def _project_dependency_names(
+    document: Mapping[str, Any], *, include_groups: bool = True
+) -> set[str]:
+    """Return direct package names from project declarations and optional groups."""
     project = document.get("project", {})
     if not isinstance(project, Mapping):
         return set()
@@ -328,9 +331,10 @@ def _project_dependency_names(document: Mapping[str, Any]) -> set[str]:
     optional = project.get("optional-dependencies", {})
     if isinstance(optional, Mapping):
         sources.extend(optional.values())
-    groups = document.get("dependency-groups", {})
-    if isinstance(groups, Mapping):
-        sources.extend(groups.values())
+    if include_groups:
+        groups = document.get("dependency-groups", {})
+        if isinstance(groups, Mapping):
+            sources.extend(groups.values())
     for source in sources:
         if not isinstance(source, list):
             continue
@@ -350,6 +354,95 @@ def dependency_names_from_text(text: str) -> set[str]:
     except tomllib.TOMLDecodeError as exc:
         raise PolicyError(f"invalid pyproject.toml while classifying dependencies: {exc}") from exc
     return _project_dependency_names(document)
+
+
+def project_dependency_names_from_text(text: str) -> set[str]:
+    """Return names from published project dependencies and extras, excluding uv groups."""
+    if not text:
+        return set()
+    try:
+        document = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PolicyError(f"invalid pyproject.toml while classifying dependencies: {exc}") from exc
+    return _project_dependency_names(document, include_groups=False)
+
+
+def _project_dependency_rows_from_text(text: str) -> dict[str, tuple[str, ...]]:
+    """Return published project dependency requirements grouped by package name."""
+    if not text:
+        return {}
+    try:
+        document = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PolicyError(f"invalid pyproject.toml while comparing dependencies: {exc}") from exc
+    project = document.get("project", {})
+    if not isinstance(project, Mapping):
+        return {}
+    sources: list[Any] = [project.get("dependencies", [])]
+    optional = project.get("optional-dependencies", {})
+    if isinstance(optional, Mapping):
+        sources.extend(optional.values())
+    rows: dict[str, list[str]] = {}
+    for source in sources:
+        if not isinstance(source, list):
+            continue
+        for requirement in source:
+            name = requirement_package_name(requirement)
+            if name is not None and isinstance(requirement, str):
+                rows.setdefault(name, []).append(requirement)
+    return {name: tuple(sorted(values)) for name, values in rows.items()}
+
+
+def dependency_group_names_from_text(text: str) -> set[str]:
+    """Return package names declared only through PEP 735 dependency groups."""
+    if not text:
+        return set()
+    try:
+        document = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PolicyError(
+            f"invalid pyproject.toml while classifying dependency groups: {exc}"
+        ) from exc
+    project = document.get("project", {})
+    project_name = (
+        normalize_package_name(str(project.get("name", ""))) if isinstance(project, Mapping) else ""
+    )
+    groups = document.get("dependency-groups", {})
+    if not isinstance(groups, Mapping):
+        return set()
+    names: set[str] = set()
+    for source in groups.values():
+        if not isinstance(source, list):
+            continue
+        for requirement in source:
+            name = requirement_package_name(requirement)
+            if name and name != project_name:
+                names.add(name)
+    return names
+
+
+def changed_dependency_group_names(
+    repo_root: Path,
+    base_ref: str,
+    files: Iterable[str],
+) -> set[str]:
+    """Identify packages newly introduced through uv groups, not project extras."""
+    if "pyproject.toml" not in set(files):
+        return set()
+    base_text = git_file_at_ref(repo_root, base_ref, "pyproject.toml") or ""
+    head_path = repo_root / "pyproject.toml"
+    head_text = head_path.read_text(encoding="utf-8") if head_path.is_file() else ""
+    added_to_groups = dependency_group_names_from_text(
+        head_text
+    ) - dependency_group_names_from_text(base_text)
+    base_published = _project_dependency_rows_from_text(base_text)
+    head_published = _project_dependency_rows_from_text(head_text)
+    changed_published = {
+        name
+        for name in set(base_published) | set(head_published)
+        if base_published.get(name, ()) != head_published.get(name, ())
+    }
+    return added_to_groups - changed_published
 
 
 def direct_dependency_names(repo_root: Path = REPO_ROOT) -> set[str]:
@@ -400,8 +493,17 @@ def classify_package_names(
     package_names: Iterable[str],
     direct_names: set[str],
     policy: Mapping[str, Any],
+    *,
+    profile_only_names: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Classify changed packages and fail closed for unknown direct names."""
+    """Classify changed packages and fail closed for unknown direct names.
+
+    Packages newly introduced by a private PEP 735 dependency group remain direct
+    and retain their package risk class, but do not represent one Dependabot
+    version-update lane. This lets a CI profile compose existing runtime classes
+    without weakening version-update separation.
+    """
+    profile_only_names = profile_only_names or set()
     package_owners = {
         normalize_package_name(package): item["id"]
         for item in policy["classes"]
@@ -422,16 +524,17 @@ def classify_package_names(
             item = fallback
         else:
             item = classes[class_id]
-        classifications.append(
-            {
-                "name": name,
-                "direct": direct,
-                "class": item["id"],
-                "risk": item["risk"],
-                "update_lane": item["update_lane"],
-                "required_jobs": list(item["required_jobs"]),
-            }
-        )
+        row = {
+            "name": name,
+            "direct": direct,
+            "class": item["id"],
+            "risk": item["risk"],
+            "update_lane": item["update_lane"],
+            "required_jobs": list(item["required_jobs"]),
+        }
+        if name in profile_only_names:
+            row["profile_only"] = True
+        classifications.append(row)
     return classifications
 
 
@@ -450,9 +553,11 @@ def validate_direct_dependency_coverage(direct_names: set[str], policy: Mapping[
 
 
 def validate_direct_update_lanes(classifications: Iterable[Mapping[str, Any]]) -> list[str]:
-    """Reject one update that combines multiple direct risk classes."""
+    """Reject one version update that combines multiple direct risk classes."""
     direct_class_ids = {
-        str(item["class"]) for item in classifications if item.get("direct") and item.get("class")
+        str(item["class"])
+        for item in classifications
+        if item.get("direct") and not item.get("profile_only") and item.get("class")
     }
     if len(direct_class_ids) > 1:
         raise PolicyError(
@@ -862,7 +967,7 @@ def annotate_resolution_evidence(
                 {
                     str(item["class"])
                     for item in profile["changed_package_classifications"]
-                    if item.get("direct") is True
+                    if item.get("direct") is True and not item.get("profile_only")
                 }
             )
     return evidence
@@ -919,6 +1024,7 @@ def evaluate_update(
     changed_direct_names = changed_project_dependency_names(
         repo_root, base_ref, dependency_files, all_direct
     )
+    profile_only_names = changed_dependency_group_names(repo_root, base_ref, dependency_files)
     resolution_evidence = build_resolution_evidence(repo_root, base_ref, dependency_files)
     changed_names.update(resolution_evidence["changed_packages"])
     if not changed_names and not resolution_evidence["material_fields"]:
@@ -930,7 +1036,12 @@ def evaluate_update(
         raise PolicyError(
             "dependency files changed but no package rows or direct declarations could be identified"
         )
-    classifications = classify_package_names(changed_names, all_direct, policy)
+    classifications = classify_package_names(
+        changed_names,
+        all_direct,
+        policy,
+        profile_only_names=profile_only_names,
+    )
     resolution_evidence = annotate_resolution_evidence(
         resolution_evidence,
         classifications,
@@ -953,6 +1064,9 @@ def evaluate_update(
             "changed_packages": classifications,
             "effective_changed_packages": effective_classifications,
             "normalization_only_packages": normalization_only_packages,
+            "profile_only_packages": sorted(
+                name for name in profile_only_names if name in changed_names
+            ),
             "resolution_evidence": resolution_evidence,
             "required_jobs": required_jobs,
             "direct_risk_classes": sorted(direct_class_ids),

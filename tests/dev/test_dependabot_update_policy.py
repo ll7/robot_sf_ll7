@@ -123,6 +123,20 @@ def test_developer_tooling_lane_can_remain_grouped() -> None:
     assert validate_direct_update_lanes(classified) == ["developer-tooling"]
 
 
+def test_private_dependency_group_can_compose_risk_classes() -> None:
+    """CI-only uv groups do not masquerade as mixed version-update lanes."""
+    policy = load_policy()
+    names = {"scikit-learn", "stable-baselines3", "torch"}
+    classified = classify_package_names(names, names, policy, profile_only_names=names)
+
+    assert {item["class"] for item in classified} == {
+        "high-impact-runtime",
+        "optional-runtime",
+    }
+    assert all(item["profile_only"] is True for item in classified)
+    assert validate_direct_update_lanes(classified) == []
+
+
 def test_unknown_direct_package_fails_closed() -> None:
     """A new direct package must receive an explicit policy classification."""
     policy = load_policy()

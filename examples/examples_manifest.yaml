@@ -13,6 +13,9 @@ exclusions:
   - path: fixtures/snqi/v1/loader.py
     kind: helper
     reason: "Shared semantic loader imported by the SNQI fixture examples; not a runnable example entry point."
+  - path: advanced/trajectory_viz_fixture.py
+    kind: helper
+    reason: "Shared fixture builder and headless-run helper imported by 14_trajectory_visualization.py and its tests; not a runnable example entry point."
 categories:
   - slug: uncategorized
     title: "Uncategorized Examples"
@@ -426,10 +429,9 @@ examples:
     name: "14 Trajectory Visualization"
     summary: "Visualize trajectories during interactive playback sessions."
     category_slug: advanced
-    prerequisites:
-      - recordings/<file>.pkl
-    ci_enabled: false
-    ci_reason: "Interactive playback; requires user input to exit."
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
     doc_reference: docs/SIM_VIEW.md
     tags: [visualization, playback]
   - path: advanced/15_view_recording.py

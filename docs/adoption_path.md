@@ -12,6 +12,8 @@ worktree-local convenience artifacts unless they are separately promoted through
 provenance workflow. A single run or an estimated runtime must not be used to rank planners or
 support a paper-facing claim.
 
+
+> Platform notes (Linux, macOS, headless): [Platform Setup Profiles](./quickstart_platforms.md).
 ## 1. Install and check the host
 
 From the repository root, install the standard development dependencies and ask the readiness

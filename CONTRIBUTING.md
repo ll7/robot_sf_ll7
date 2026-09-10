@@ -234,7 +234,7 @@ The three beginner notebooks under `notebooks/` are generated, not hand-edited:
 ```bash
 scripts/dev/generate_quickstart_notebooks.py
 scripts/dev/generate_quickstart_notebooks.py --check --json
-scripts/dev/run_notebooks_smoke.py
+scripts/validation/run_notebooks_smoke.py
 ```
 
 `--check` rebuilds each notebook in memory, strips execution counts, outputs, transient cell ids,

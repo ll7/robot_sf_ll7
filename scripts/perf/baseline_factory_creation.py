@@ -33,26 +33,39 @@ except Exception as e:  # pragma: no cover - baseline script bootstrap
 
 @runtime_checkable
 class _EnvLike(Protocol):  # minimal protocol to appease static checks
-    """TODO docstring. Document this class."""
+    """Minimal structural type for environments timed by this baseline.
+
+    Only the ``reset`` and ``close`` surface is required so the timing helper
+    stays decoupled from concrete environment implementations.
+    """
 
     def reset(self) -> Any:
-        """TODO docstring. Document this function."""
+        """Reset the environment after construction.
+
+        Returns:
+            The environment's initial observation payload.
+        """
         ...
 
     def close(self) -> None:
-        """TODO docstring. Document this function."""
+        """Release environment resources after the timed sample."""
         ...
 
 
 def _time_creation(fn: Callable[[], _EnvLike], iterations: int) -> dict[str, float]:
-    """TODO docstring. Document this function.
+    """Measure environment construction time across repeated creations.
+
+    Each iteration times factory construction, performs one best-effort
+    ``reset`` to force construction side effects, and closes the environment.
+    Import and process warm-up time fall outside the measured span.
 
     Args:
-        fn: TODO docstring.
-        iterations: TODO docstring.
+        fn: Zero-argument factory returning a freshly constructed environment.
+        iterations: Number of construction samples to collect.
 
     Returns:
-        TODO docstring.
+        Timing statistics with ``mean_ms``, ``p95_ms``, ``std_ms``, and the
+        raw per-iteration millisecond samples under ``raw``.
     """
     times: list[float] = []
     for _ in range(iterations):
@@ -77,14 +90,14 @@ def _time_creation(fn: Callable[[], _EnvLike], iterations: int) -> dict[str, flo
 
 
 def _percentile(values: list[float], p: float) -> float:
-    """TODO docstring. Document this function.
+    """Return the linearly interpolated percentile of a sample.
 
     Args:
-        values: TODO docstring.
-        p: TODO docstring.
+        values: Raw float samples; an empty list yields ``0.0``.
+        p: Percentile in the closed interval ``[0, 100]``.
 
     Returns:
-        TODO docstring.
+        The interpolated percentile value.
     """
     if not values:
         return 0.0

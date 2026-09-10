@@ -15,6 +15,9 @@ Regenerate with:
     uv run python scripts/dev/generate_quickstart_notebooks.py
     uv run python scripts/dev/generate_quickstart_notebooks.py --only \
         01_run_first_episode.ipynb 03_visualize_trace.ipynb
+
+Verify committed notebooks without writing:
+    uv run python scripts/dev/generate_quickstart_notebooks.py --check
 """
 
 from __future__ import annotations
@@ -47,6 +50,73 @@ def _md(src: str) -> nbf.notebooknode:
     return nbf.v4.new_markdown_cell(_dedent(src))
 
 
+#: Comment marker that documents one intentional internal import when the public
+#: facade has no supported equivalent. The notebook contract test verifies that
+#: every ``from robot_sf.<submodule>`` import in a generated notebook carries it.
+INTERNAL_IMPORT_MARKER = "# internal-import-exception:"
+
+
+def _shared_setup_cell(notebook_slug: str, seed: int) -> nbf.notebooknode:
+    """Build the shared headless setup/discovery cell used by every notebook.
+
+    The cell centralizes headless environment variables, quiet logging, the
+    notebook-safe matplotlib helper, repository-root discovery, the git-ignored
+    output directory, and the fixed seed so the three notebooks cannot drift
+    into divergent setup patterns.
+
+    Args:
+        notebook_slug: Output subdirectory name under ``output/notebooks/``.
+        seed: Deterministic seed shared by environment and planner setup.
+
+    Returns:
+        The generated setup code cell.
+    """
+    return _code(
+        f"""
+        import os
+        import sys
+        from IPython import get_ipython
+
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
+
+        def _inline_matplotlib() -> None:
+            # (Re-)arm the notebook inline backend for the next figure.
+            ip = get_ipython()
+            if ip is not None:
+                ip.run_line_magic("matplotlib", "inline")
+
+
+        # Keep log output quiet so the executed notebook stays readable.
+        from loguru import logger
+        logger.remove()
+        logger.add(sys.stderr, level="ERROR")
+
+        from pathlib import Path
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        SEED = {seed}
+
+        # Resolve the repo root robustly regardless of launch directory.
+        def _repo_root() -> Path:
+            here = Path.cwd()
+            for candidate in [here, *here.parents]:
+                if (candidate / "pyproject.toml").exists():
+                    return candidate
+            return here
+
+        REPO_ROOT = _repo_root()
+
+        OUTPUT_DIR = REPO_ROOT / "output/notebooks/{notebook_slug}"
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        print("Repo root:", REPO_ROOT)
+        print("Artifacts will be written to:", OUTPUT_DIR.relative_to(REPO_ROOT))
+        """
+    )
+
+
 # --------------------------------------------------------------------------------------
 # Notebook 01: run a first episode
 # --------------------------------------------------------------------------------------
@@ -76,68 +146,19 @@ def build_notebook_01() -> nbf.notebooknode:
             > `examples/quickstart/01_basic_robot.py`.
             """
         ),
-        _code(
-            """
-            # Headless setup: no GUI window. We deliberately do NOT force a matplotlib
-            # backend here, because several robot_sf modules call matplotlib.use("Agg",
-            # force=True) at import time and would clobber an inline backend set now.
-            # Instead each plotting cell re-enables the inline backend right before it
-            # draws, so figures still render into the notebook output under nbconvert.
-            import os
-            import sys
-            from IPython import get_ipython
-
-            os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-
-
-            def _inline_matplotlib() -> None:
-                # (Re-)arm the notebook inline backend for the next figure.
-                ip = get_ipython()
-                if ip is not None:
-                    ip.run_line_magic("matplotlib", "inline")
-
-
-            # Keep log output quiet so the executed notebook stays readable.
-            from loguru import logger
-            logger.remove()
-            logger.add(sys.stderr, level="ERROR")
-
-            from pathlib import Path
-
-            import matplotlib.pyplot as plt
-
-            from robot_sf.gym_env.environment_factory import make_robot_env
-
-            # Resolve the repo root robustly regardless of the working directory this
-            # notebook is launched from (repo root, or its own notebooks/ folder).
-            def _repo_root() -> Path:
-                here = Path.cwd()
-                for candidate in [here, *here.parents]:
-                    if (candidate / "pyproject.toml").exists():
-                        return candidate
-                return here
-
-            REPO_ROOT = _repo_root()
-
-            # Where this notebook writes its small artifact (git-ignored).
-            OUTPUT_DIR = REPO_ROOT / "output/notebooks/01_run_first_episode"
-            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-            print("Repo root:", REPO_ROOT)
-            print("Artifacts will be written to:", OUTPUT_DIR.relative_to(REPO_ROOT))
-            """
-        ),
+        _shared_setup_cell("01_run_first_episode", 87234),
         _md(
-            "## 1. Build and reset the environment\n\n`make_robot_env()` is the ergonomic entry point. We seed the factory, the reset, and the action space explicitly so the action/reward trace is reproducible."
+            "## 1. Build and reset the environment\n\n`robot_sf.make_env()` is the public facade entry point. We seed the factory, the reset, and the action space explicitly so the action/reward trace is reproducible."
         ),
         _code(
             """
-            SEED = 87234
+            from robot_sf import make_env
 
             # Seed the factory (Python random + NumPy + env RNGs), the reset, and the
             # action space explicitly. We deliberately avoid set_global_seed here: it
             # also seeds the private Torch/TensorFlow RNGs, which can crash the kernel
             # on the installed stack, and it does NOT seed Gymnasium's action_space RNG.
-            env = make_robot_env(debug=False, seed=SEED)
+            env = make_env(debug=False, seed=SEED)
             observation, info = env.reset(seed=SEED)
             env.action_space.seed(SEED)
             print("Environment created and reset.")
@@ -163,14 +184,18 @@ def build_notebook_01() -> nbf.notebooknode:
             rewards = []
             collisions = 0
 
-            for step in range(1, N_STEPS + 1):
-                action = env.action_space.sample()  # random policy
-                observation, reward, terminated, truncated, info = env.step(action)
-                rewards.append(float(reward))
-                if bool(info.get("collision")):
-                    collisions += 1
-                if terminated or truncated:
-                    observation, info = env.reset()
+            try:
+                for step in range(1, N_STEPS + 1):
+                    action = env.action_space.sample()  # random policy
+                    observation, reward, terminated, truncated, info = env.step(action)
+                    rewards.append(float(reward))
+                    if bool(info.get("collision")):
+                        collisions += 1
+                    if terminated or truncated:
+                        observation, info = env.reset()
+            finally:
+                # Release environment resources on normal and exceptional paths.
+                env.close()
 
             print(f"Stepped {N_STEPS} times.")
             print(f"Total reward: {sum(rewards):.3f}")
@@ -203,16 +228,10 @@ def build_notebook_01() -> nbf.notebooknode:
             ## Done
 
             You built an environment, ran a deterministic episode, and inspected the
-            reward signal. Next, try **02 — Compare two planners** to see how two
-            different navigation strategies behave, or **03 — Visualize a trace** to
+            reward signal. The environment is closed as soon as the rollout finishes,
+            including on error paths. Next, try **02 — Compare two planners** to see how
+            two different navigation strategies behave, or **03 — Visualize a trace** to
             watch an episode as an interactive viewer + trajectory plot.
-            """
-        ),
-        _code(
-            """
-            # Always release the environment's resources when finished.
-            env.close()
-            print("Environment closed. Notebook 01 complete.")
             """
         ),
     ]
@@ -256,62 +275,22 @@ def build_notebook_02() -> nbf.notebooknode:
             > they are **not** a benchmark result.
             """
         ),
-        _code(
-            """
-            import os
-            import sys
-            from IPython import get_ipython
-
-            os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-
-
-            def _inline_matplotlib() -> None:
-                # (Re-)arm the notebook inline backend for the next figure.
-                ip = get_ipython()
-                if ip is not None:
-                    ip.run_line_magic("matplotlib", "inline")
-
-
-            # Keep log output quiet so the executed notebook stays readable.
-            from loguru import logger
-            logger.remove()
-            logger.add(sys.stderr, level="ERROR")
-
-            from pathlib import Path
-
-            import matplotlib.pyplot as plt
-            import numpy as np
-
-            from robot_sf.training.scenario_loader import load_scenarios
-            from robot_sf.benchmark.runner import run_episode
-            from robot_sf.baselines import list_baselines
-
-            # Resolve the repo root robustly regardless of launch directory.
-            def _repo_root() -> Path:
-                here = Path.cwd()
-                for candidate in [here, *here.parents]:
-                    if (candidate / "pyproject.toml").exists():
-                        return candidate
-                return here
-
-            REPO_ROOT = _repo_root()
-
-            OUTPUT_DIR = REPO_ROOT / "output/notebooks/02_compare_two_planners"
-            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-            print("Repo root:", REPO_ROOT)
-            print("Artifacts will be written to:", OUTPUT_DIR.relative_to(REPO_ROOT))
-            """
-        ),
+        _shared_setup_cell("02_compare_two_planners", 270),
         _md(
             "## 1. Load the shared scenario\n\nWe use the bundled `quickstart_demo_crossing_basic` scenario so both planners face the identical situation."
         ),
         _code(
             """
-            SCENARIO_PATH = REPO_ROOT / "configs/scenarios/single/quickstart_demo.yaml"
+            from robot_sf import load_scenario
+
+            # internal-import-exception: the facade does not own named-algorithm
+            # episode execution or the baseline planner registry; benchmark owners do.
+            from robot_sf.benchmark.runner import run_episode  # internal-import-exception: named-algorithm episode runner
+            from robot_sf.baselines import list_baselines  # internal-import-exception: baseline planner registry
+
             SCENARIO_NAME = "quickstart_demo_crossing_basic"
 
-            scenarios = load_scenarios(SCENARIO_PATH)
-            scenario = next(s for s in scenarios if s["name"] == SCENARIO_NAME)
+            scenario = load_scenario(SCENARIO_NAME)
             print("Loaded scenario:", scenario["name"])
             print("Map file:", scenario.get("map_file"))
             print("Registered baseline planners:", sorted(list_baselines()))
@@ -329,7 +308,6 @@ def build_notebook_02() -> nbf.notebooknode:
         ),
         _code(
             """
-            SEED = 270
             HORIZON = 60
             DT = 0.1
             PLANNERS = ["simple_policy", "random"]
@@ -479,48 +457,7 @@ def build_notebook_03() -> nbf.notebooknode:
             > CPU-only, headless, deterministic (fixed seed).
             """
         ),
-        _code(
-            """
-            import os
-            import sys
-            from IPython import get_ipython
-
-            os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-
-
-            def _inline_matplotlib() -> None:
-                # (Re-)arm the notebook inline backend for the next figure.
-                ip = get_ipython()
-                if ip is not None:
-                    ip.run_line_magic("matplotlib", "inline")
-
-
-            # Keep log output quiet so the executed notebook stays readable.
-            from loguru import logger
-            logger.remove()
-            logger.add(sys.stderr, level="ERROR")
-
-            from pathlib import Path
-
-            import matplotlib.pyplot as plt
-            import numpy as np
-
-            # Resolve the repo root robustly regardless of launch directory.
-            def _repo_root() -> Path:
-                here = Path.cwd()
-                for candidate in [here, *here.parents]:
-                    if (candidate / "pyproject.toml").exists():
-                        return candidate
-                return here
-
-            REPO_ROOT = _repo_root()
-
-            OUTPUT_DIR = REPO_ROOT / "output/notebooks/03_visualize_trace"
-            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-            print("Repo root:", REPO_ROOT)
-            print("Artifacts will be written to:", OUTPUT_DIR.relative_to(REPO_ROOT))
-            """
-        ),
+        _shared_setup_cell("03_visualize_trace", 270),
         _md(
             """
             ## 1. Run one deterministic, recorded episode
@@ -533,24 +470,17 @@ def build_notebook_03() -> nbf.notebooknode:
         ),
         _code(
             """
-            from robot_sf.gym_env.environment_factory import make_robot_env
-            from robot_sf.gym_env.robot_env import RobotEnv
-            from robot_sf.common.artifact_paths import resolve_artifact_path
-            from robot_sf.training.scenario_loader import load_scenarios, build_robot_config_from_scenario
-            from robot_sf.baselines.random_policy import RandomPlanner
+            from robot_sf import load_scenario, make_env
+            from robot_sf.common.artifact_paths import resolve_artifact_path  # internal-import-exception: artifact path policy helper is not exposed by the facade
+            from robot_sf.baselines.random_policy import RandomPlanner  # internal-import-exception: random baseline planner is not exposed by the facade
 
-            SEED = 270
             SCENARIO_NAME = "quickstart_demo_crossing_basic"
-            SCENARIO_PATH = REPO_ROOT / "configs/scenarios/single/quickstart_demo.yaml"
 
-            scenario = next(
-                s for s in load_scenarios(SCENARIO_PATH) if s["name"] == SCENARIO_NAME
-            )
-            config = build_robot_config_from_scenario(scenario, scenario_path=SCENARIO_PATH)
+            scenario = load_scenario(SCENARIO_NAME)
             recording_dir = resolve_artifact_path(OUTPUT_DIR / "recordings")
 
-            env: RobotEnv = make_robot_env(
-                config=config,
+            env = make_env(
+                scenario=scenario,
                 seed=SEED,
                 debug=False,
                 recording_enabled=True,
@@ -568,16 +498,19 @@ def build_notebook_03() -> nbf.notebooknode:
 
             steps = 0
             terminated = truncated = False
-            while not truncated:
-                decision = planner.step({"dt": 0.1, "robot": {}, "agents": []})
-                action = np.array([float(decision["vx"]), float(decision["vy"])], dtype=np.float32)
-                _obs, _reward, terminated, truncated, _info = env.step(action)
-                steps += 1
-                if terminated:
-                    break
+            try:
+                while not truncated:
+                    decision = planner.step({"dt": 0.1, "robot": {}, "agents": []})
+                    action = np.array([float(decision["vx"]), float(decision["vy"])], dtype=np.float32)
+                    _obs, _reward, terminated, truncated, _info = env.step(action)
+                    steps += 1
+                    if terminated:
+                        break
 
-            env.end_episode_recording()
-            env.close()
+                env.end_episode_recording()
+            finally:
+                # Close the environment and recorder on normal and exceptional paths.
+                env.close()
             print(f"Episode finished after {steps} steps.")
             """
         ),
@@ -614,7 +547,7 @@ def build_notebook_03() -> nbf.notebooknode:
         ),
         _code(
             """
-            from robot_sf.render.jsonl_playback import JSONLPlaybackLoader
+            from robot_sf.render.jsonl_playback import JSONLPlaybackLoader  # internal-import-exception: JSONL playback loader is not exposed by the facade
 
             episode, map_def = JSONLPlaybackLoader().load_single_episode(stable_jsonl)
             states = episode.states
@@ -649,7 +582,7 @@ def build_notebook_03() -> nbf.notebooknode:
         ),
         _code(
             """
-            from robot_sf.maps.map_visualizer import visualize_map_definition
+            from robot_sf.maps.map_visualizer import visualize_map_definition  # internal-import-exception: map thumbnail helper is not exposed by the facade
 
             thumbnail_path = OUTPUT_DIR / "map_thumbnail.png"
             visualize_map_definition(map_def, output_path=thumbnail_path, title=f"{SCENARIO_NAME} (random)")
@@ -667,7 +600,7 @@ def build_notebook_03() -> nbf.notebooknode:
         ),
         _code(
             """
-            from robot_sf.render.threejs_viewer import export_threejs_viewer
+            from robot_sf.render.threejs_viewer import export_threejs_viewer  # internal-import-exception: Three.js viewer export is not exposed by the facade
 
             viewer_dir = OUTPUT_DIR / "viewer"
             result = export_threejs_viewer(stable_jsonl, viewer_dir)
@@ -754,6 +687,42 @@ def _assign_stable_cell_ids(nb: nbf.notebooknode, path: Path) -> None:
         used_ids.add(cell_id)
 
 
+def check(notebook_names: tuple[str, ...] | None = None) -> int:
+    """Verify committed notebooks match the generator without writing files.
+
+    Args:
+        notebook_names: Optional subset of canonical notebook names to check.
+
+    Returns:
+        ``0`` when every checked notebook matches its generated bytes, ``1``
+        when one or more notebooks drifted.
+    """
+
+    names = notebook_names or tuple(NOTEBOOK_BUILDERS)
+    drifted: list[str] = []
+    for name in names:
+        nb = NOTEBOOK_BUILDERS[name]()
+        path = OUT_DIR / name
+        _assign_stable_cell_ids(nb, path)
+        rendered = nbf.writes(nb)
+        committed = path.read_text(encoding="utf-8") if path.is_file() else ""
+        # ``nbformat.write`` appends a trailing newline that ``writes`` omits;
+        # normalize it so the check compares notebook content, not EOF style.
+        if rendered.rstrip("\n") != committed.rstrip("\n"):
+            drifted.append(name)
+            print(f"DRIFT: {name} differs from generated output")
+        else:
+            print(f"OK: {name}")
+    if drifted:
+        print(
+            f"ERROR: {len(drifted)} notebook(s) drifted; rerun "
+            "scripts/dev/generate_quickstart_notebooks.py"
+        )
+        return 1
+    print(f"Notebooks up to date: {len(names)} checked")
+    return 0
+
+
 def main(notebook_names: tuple[str, ...] | None = None) -> int:
     """Generate selected notebooks into ``notebooks/``.
 
@@ -789,5 +758,13 @@ if __name__ == "__main__":
         metavar="NOTEBOOK",
         help="Regenerate only the named canonical notebook(s).",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify committed notebooks match the generator without writing files.",
+    )
     args = parser.parse_args()
-    raise SystemExit(main(tuple(args.only) if args.only else None))
+    selection = tuple(args.only) if args.only else None
+    if args.check:
+        raise SystemExit(check(selection))
+    raise SystemExit(main(selection))

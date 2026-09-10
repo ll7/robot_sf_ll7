@@ -53,7 +53,7 @@ def test_notebooks_write_to_gitignored_output() -> None:
 @pytest.mark.parametrize(
     "name,needle",
     [
-        ("01_run_first_episode.ipynb", "make_robot_env"),
+        ("01_run_first_episode.ipynb", "from robot_sf import make_env"),
         ("02_compare_two_planners.ipynb", "run_episode"),
         ("03_visualize_trace.ipynb", "export_threejs_viewer"),
     ],
@@ -69,8 +69,8 @@ def test_notebook_01_seeds_action_space_explicitly() -> None:
     """Notebook 01 must seed the factory, reset, and action space so the trace is reproducible."""
     nb = _load("01_run_first_episode.ipynb")
     joined = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
-    assert "make_robot_env(debug=False, seed=SEED)" in joined, (
-        "notebook 01 should seed the factory via make_robot_env(seed=SEED)"
+    assert "make_env(debug=False, seed=SEED)" in joined, (
+        "notebook 01 should seed the factory via the public facade make_env(seed=SEED)"
     )
     assert "env.reset(seed=SEED)" in joined, "notebook 01 should seed reset explicitly"
     assert "env.action_space.seed(SEED)" in joined, (
@@ -187,6 +187,43 @@ def test_generator_is_byte_reproducible_in_fresh_directories(tmp_path: Path) -> 
         outputs.append({path.name: path.read_bytes() for path in directory.glob("*.ipynb")})
 
     assert outputs[0] == outputs[1]
+
+
+_FACADE_OWNED_INTERNAL_MODULES = (
+    "robot_sf.gym_env.environment_factory",
+    "robot_sf.gym_env.robot_env",
+    "robot_sf.training.scenario_loader",
+)
+_INTERNAL_IMPORT_MARKER = "# internal-import-exception:"
+
+
+def _code_source(name: str) -> str:
+    """Return the joined code-cell source of one committed notebook."""
+    nb = _load(name)
+    return "\n".join(c.source for c in nb.cells if c.cell_type == "code")
+
+
+@pytest.mark.parametrize("name", EXPECTED_NOTEBOOKS)
+def test_notebooks_use_public_facade_for_owned_operations(name: str) -> None:
+    """Internal modules owned by the public facade must not appear in notebooks."""
+    joined = _code_source(name)
+    for module in _FACADE_OWNED_INTERNAL_MODULES:
+        assert f"from {module} import" not in joined, (
+            f"{name} must use the public facade instead of {module}"
+        )
+    assert "from robot_sf import" in joined, f"{name} should import the supported facade"
+
+
+@pytest.mark.parametrize("name", EXPECTED_NOTEBOOKS)
+def test_notebook_internal_imports_are_documented_exceptions(name: str) -> None:
+    """Every remaining internal import must name why no facade equivalent exists."""
+    for lineno, line in enumerate(_code_source(name).splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped.startswith("from robot_sf."):
+            continue
+        assert _INTERNAL_IMPORT_MARKER in stripped, (
+            f"{name}:{lineno} internal import lacks {_INTERNAL_IMPORT_MARKER!r}: {stripped}"
+        )
 
 
 @pytest.mark.slow

@@ -1,17 +1,18 @@
 """Frozen-state counterfactual replay: locate the last avoidable control action.
 
 This module implements the offline analysis contract of issue #5442 (child of
-#5440, depends on the report contract of #5441): given a controlled fixture that
-can *deterministically* snapshot and restore its full state (including any random
-number generator), branch over admissible robot actions at each decision point in
+#5440, depends on the report contract of #5441): given a replay model that can
+restore enough state to reproduce its observable collision outcome (including any
+random number generator), branch over admissible robot actions at each decision point in
 the danger window and decide whether — and how early — the collision was avoidable.
 
 The engine is intentionally decoupled from any concrete simulator. A caller
 supplies a :class:`CounterfactualModel` — the *smallest snapshot/restore seam* —
 and this module drives it. The controlled kinematic fixture used to validate the
-contract lives in :mod:`robot_sf.benchmark.last_avoidable_fixtures`; a real-
-simulator adapter can implement the same protocol later (see the docs note for
-issue #5442).
+contract lives in :mod:`robot_sf.benchmark.last_avoidable_fixtures`; the
+diagnostic production-simulator implementation lives in
+:mod:`robot_sf.benchmark.simulator_counterfactual_adapter`. Both paths preserve
+the engine's fail-closed, offline-only boundary.
 
 Determinations (fail-closed):
 
@@ -27,18 +28,19 @@ Determinations (fail-closed):
   coverage over the window is incomplete, so avoidability cannot be tested. Per
   the issue contract this **never** collapses to ``unavoidable``.
 
-The result is controlled-fixture diagnostic evidence only. It assigns no legal or
-moral fault (``normative_fault`` is always ``not_assessed``) and is not a real-
-episode root-cause claim.
+The result is source-tagged diagnostic replay evidence only. The source kind
+identifies whether it came from a controlled fixture or a native simulator
+adapter; it assigns no legal or moral fault (``normative_fault`` is always
+``not_assessed``) and is not a real-episode root-cause claim.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 LAST_AVOIDABLE_REPLAY_SCHEMA = "last_avoidable_replay.v1"
 
@@ -46,10 +48,59 @@ VERDICT_AVOIDABLE = "avoidable"
 VERDICT_ALREADY_UNAVOIDABLE = "already_unavoidable"
 VERDICT_UNKNOWN = "unknown"
 
+# Wire value used to preserve the distinction between an omitted response mode
+# and an explicit ``unknown`` declaration across JSON serialization.
+OMITTED_PEDESTRIAN_RESPONSE = "__omitted_pedestrian_response__"
+
 # Substitution modes: how a candidate avoidance action is injected.
 SUBSTITUTION_SINGLE_STEP = "single_step"  # substitute at t, then resume baseline commands
 SUBSTITUTION_HOLD = "hold"  # apply the substituted action for the whole frozen horizon
 _SUBSTITUTION_MODES = (SUBSTITUTION_SINGLE_STEP, SUBSTITUTION_HOLD)
+
+
+class _DefaultPedestrianResponse(str):
+    """String-compatible marker for an omitted, model-bindable response mode."""
+
+    def __copy__(self) -> _DefaultPedestrianResponse:
+        """Keep the omission marker stable across shallow copies.
+
+        Returns:
+            This marker instance.
+        """
+        return self
+
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _DefaultPedestrianResponse:
+        """Keep the omission marker stable across deep copies.
+
+        Returns:
+            This marker instance.
+        """
+        return self
+
+    def __reduce__(self) -> tuple[Any, tuple[Any, ...]]:
+        """Reconstruct the module singleton when a config is unpickled.
+
+        Returns:
+            The callable and arguments used to recover the singleton.
+        """
+        return (_get_default_pedestrian_response, ())
+
+
+_DEFAULT_PEDESTRIAN_RESPONSE = _DefaultPedestrianResponse("unknown")
+
+
+def _get_default_pedestrian_response() -> _DefaultPedestrianResponse:
+    """Return the singleton used for an omitted pedestrian response."""
+    return _DEFAULT_PEDESTRIAN_RESPONSE
+
+
+def _is_omitted_pedestrian_response(value: object) -> bool:
+    """Recognize the omission marker even when older pickles rebuilt it.
+
+    Returns:
+        Whether ``value`` is an omitted-response marker.
+    """
+    return isinstance(value, _DefaultPedestrianResponse)
 
 
 @runtime_checkable
@@ -57,19 +108,19 @@ class CounterfactualModel(Protocol):
     """The smallest deterministic snapshot/restore seam the engine drives.
 
     A model wraps one controlled fixture positioned at step 0 of a recorded
-    baseline episode. Implementations must be *deterministic*: restoring a
-    snapshot and applying the same actions must reproduce the same collision
-    outcome. The snapshot must capture everything that affects future steps,
-    including any RNG state (see the fixture in
-    :mod:`robot_sf.benchmark.last_avoidable_fixtures`).
+    baseline episode. Implementations should capture every state that affects
+    future steps, including any RNG state (see the fixture in
+    :mod:`robot_sf.benchmark.last_avoidable_fixtures`). The engine verifies only
+    the observable collision outcome and contact tick; it does not compare opaque
+    snapshots for full-state equality.
     """
 
     def snapshot(self) -> Any:
-        """Return an opaque, restorable copy of the full simulation state.
+        """Return an opaque, restorable copy of replay-relevant simulation state.
 
-        The snapshot must include actor state (poses, velocities) *and* any RNG
-        state so that :meth:`restore` followed by identical actions is bit-for-bit
-        deterministic.
+        The snapshot should include actor state (poses, velocities) and any RNG
+        state so that :meth:`restore` followed by identical actions can reproduce
+        the observable collision outcome and contact tick.
         """
         ...
 
@@ -105,7 +156,8 @@ class ReplayConfig:
 
     Attributes:
         t_danger: First step of the danger window (inclusive) to search.
-        t_contact: Baseline contact step; the search window is
+        t_contact: Baseline contact state tick (the number of applied actions at
+            which contact is first observed); the search window is
             ``[t_danger, t_contact)`` and ``t_contact`` bounds the replay.
         horizon: Frozen horizon ``H`` (control ticks) simulated forward from each
             candidate step when testing whether an action prevents contact.
@@ -119,7 +171,17 @@ class ReplayConfig:
         collision_predicate: Provenance label for the collision predicate.
         pedestrian_response: Pedestrian response assumption for this run, e.g.
             ``replayed`` (pedestrian follows its recorded path) or ``closed_loop``
-            (pedestrian reacts to the robot).
+            (pedestrian reacts to the robot). An omitted value is serialized as the
+            reserved JSON marker ``__omitted_pedestrian_response__`` and can be
+            restored with :meth:`from_dict`; it binds to a model-declared response
+            mode when one is available. Explicit ``unknown`` remains an intentional
+            unknown declaration and is not silently rebound to a model mode.
+        source_kind: Provenance classification for the replay source. Native live
+            simulator adapters bind this to ``live_episode``; controlled fixtures
+            must explicitly use ``synthetic_fixture`` before the causal join can
+            treat the result as fixture evidence. ``unspecified`` is retained for
+            compatibility but is never promoted by the join. This is a source
+            label, not a causal or benchmark claim.
     """
 
     t_danger: int
@@ -130,7 +192,8 @@ class ReplayConfig:
     action_set_id: str = "unspecified"
     feasibility_filter: str = "unspecified"
     collision_predicate: str = "unspecified"
-    pedestrian_response: str = "unspecified"
+    pedestrian_response: str = _DEFAULT_PEDESTRIAN_RESPONSE
+    source_kind: str = "unspecified"
 
     def __post_init__(self) -> None:
         """Validate window, horizon, replay count, and substitution mode."""
@@ -150,22 +213,53 @@ class ReplayConfig:
 
     def to_dict(self) -> dict[str, Any]:
         """Return the JSON-safe provenance mapping for this config."""
+        pedestrian_response = (
+            OMITTED_PEDESTRIAN_RESPONSE
+            if _is_omitted_pedestrian_response(self.pedestrian_response)
+            else self.pedestrian_response
+        )
         return {
             "t_danger": self.t_danger,
             "t_contact": self.t_contact,
             "horizon": self.horizon,
             "substitution_mode": self.substitution_mode,
             "determinism_replays": self.determinism_replays,
+            "source_kind": self.source_kind,
             "action_set_id": self.action_set_id,
             "feasibility_filter": self.feasibility_filter,
             "collision_predicate": self.collision_predicate,
-            "pedestrian_response": self.pedestrian_response,
+            "pedestrian_response": pedestrian_response,
         }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> ReplayConfig:
+        """Restore a config from its JSON mapping, including omission semantics.
+
+        The reserved wire marker is intentionally distinct from the literal
+        ``"unknown"`` value. This lets a native model bind an omitted response
+        declaration while preserving an explicit unknown declaration as a
+        fail-closed mismatch.
+
+        Args:
+            payload: JSON-decoded ``config`` mapping from a replay report.
+
+        Returns:
+            A validated :class:`ReplayConfig` instance.
+        """
+        values = dict(payload)
+        if values.get("pedestrian_response") == OMITTED_PEDESTRIAN_RESPONSE:
+            values["pedestrian_response"] = _DEFAULT_PEDESTRIAN_RESPONSE
+        return cls(**values)
 
 
 @dataclass(frozen=True)
 class DeterminismCheck:
-    """Result of verifying the baseline replay reproduces the contact outcome."""
+    """Result of checking baseline collision outcome and contact-tick stability.
+
+    This check deliberately does not claim equality of every opaque simulator
+    state field. A model-specific state digest/equality contract would be needed
+    for that stronger claim.
+    """
 
     replays: int
     collision_stable: bool
@@ -222,12 +316,15 @@ class TimeBranchResult:
 class LastAvoidableReport:
     """Self-contained ``last_avoidable_replay.v1`` result.
 
-    The field set is deliberately forward-compatible with the
-    ``collision_causal_report.v1`` contract proposed in issue #5441: it exposes
-    ``t_danger``/``t_uca``/``t_inevitable``/``t_contact`` as available/unavailable
-    (``None``) fields, records competing-explanation-relevant provenance, and
-    holds ``normative_fault`` at ``not_assessed``. When #5441 lands this report can
-    be embedded as the counterfactual branch of that contract without re-running.
+    The report is source-tagged diagnostic evidence: controlled fixtures and
+    native simulator adapters can use the same replay contract, but their source
+    and claim boundaries remain distinct. ``config.t_contact`` is the declared
+    contact state tick; ``determinism.observed_contact_steps`` records the replay
+    observations, and a downstream causal join may expose ``t_contact`` as an
+    observed timestamp only when every observation agrees with that declaration.
+    The report records competing-explanation-relevant provenance, holds
+    ``normative_fault`` at ``not_assessed``, and is not a real-episode root-cause,
+    benchmark, or paper-grade claim.
     """
 
     verdict: str
@@ -243,8 +340,9 @@ class LastAvoidableReport:
     abstain_reason: str | None = None
     normative_fault: str = "not_assessed"
     claim_boundary: str = (
-        "controlled-fixture diagnostic evidence; not a real-episode root-cause "
-        "claim; assigns no legal or moral fault"
+        "source-tagged diagnostic replay evidence; interpret using source_kind; "
+        "not a real-episode root-cause, benchmark, or paper-grade claim; assigns "
+        "no legal or moral fault"
     )
     notes: tuple[str, ...] = field(default_factory=tuple)
 
@@ -280,8 +378,9 @@ def _replay_to_contact(
     """Restore the initial snapshot, replay baseline actions, return the contact step.
 
     Returns:
-        The first step index (0-based, the step whose action produced contact) at
-        which :meth:`CounterfactualModel.collision` becomes true, or ``None`` if no
+        The contact state tick (the number of applied actions, so the action at
+        zero produces state tick one) at which
+        :meth:`CounterfactualModel.collision` becomes true, or ``None`` if no
         contact occurs within ``max_step`` applied actions.
     """
     model.restore(initial_snapshot)
@@ -291,7 +390,7 @@ def _replay_to_contact(
     for step in range(limit):
         model.step(baseline_actions[step])
         if model.collision():
-            return step
+            return step + 1
     return None
 
 
@@ -301,11 +400,12 @@ def _verify_determinism(
     baseline_actions: Sequence[Any],
     config: ReplayConfig,
 ) -> DeterminismCheck:
-    """Replay the baseline ``config.determinism_replays`` times and compare outcomes.
+    """Replay the baseline and compare collision outcomes and contact ticks.
 
     Returns:
-        A :class:`DeterminismCheck` recording whether the collision flag and
-        contact step were stable across all replays.
+        A :class:`DeterminismCheck` recording whether the observable collision
+        flag and contact step were stable across all replays. Opaque simulator
+        state is not compared here.
     """
     max_step = config.t_contact + config.horizon
     contact_steps: list[int | None] = []
@@ -330,18 +430,26 @@ def _capture_window_snapshots(
     baseline_actions: Sequence[Any],
     config: ReplayConfig,
 ) -> dict[int, Any]:
-    """Return snapshots at the start of each step in ``[t_danger, t_contact)``.
+    """Return pre-contact snapshots at the start of each step in the window.
 
     ``snapshots[t]`` is the state from which baseline ``action[t]`` would be
-    applied — i.e. the decision point at step ``t``.
+    applied — i.e. the decision point at step ``t``. If contact is observed
+    before the declared window end, later snapshots are omitted so post-contact
+    states cannot be evaluated as counterfactual starts.
     """
     model.restore(initial_snapshot)
+    if len(baseline_actions) < config.t_contact:
+        raise ValueError(
+            "baseline_actions must contain at least t_contact actions to capture "
+            f"the full decision window (got {len(baseline_actions)}, "
+            f"need {config.t_contact})"
+        )
     snapshots: dict[int, Any] = {}
     for step in range(config.t_contact):
+        if model.collision():
+            break
         if config.t_danger <= step < config.t_contact:
             snapshots[step] = model.snapshot()
-        if step >= len(baseline_actions):
-            break
         model.step(baseline_actions[step])
     return snapshots
 
@@ -356,6 +464,18 @@ def _action_prevents_contact(
 ) -> bool:
     """Return whether substituting ``action`` at ``step`` prevents contact in the horizon."""
     model.restore(step_snapshot)
+    # Keep the literal here so this small contract probe can execute the
+    # function body without importing module-level constants.
+    if config.substitution_mode == "single_step":
+        # The candidate consumes action ``step``.  Every remaining horizon tick
+        # must have a recorded baseline command to resume, including the last
+        # tick at ``step + horizon - 1``.
+        required = step + config.horizon
+        if len(baseline_actions) < required:
+            raise ValueError(
+                "single_step substitution requires a recorded baseline suffix "
+                f"through action {required - 1} (got {len(baseline_actions)} actions)"
+            )
     for offset in range(config.horizon):
         if config.substitution_mode == SUBSTITUTION_HOLD:
             applied = action
@@ -363,8 +483,6 @@ def _action_prevents_contact(
             applied = action
         else:
             resume_index = step + offset
-            if resume_index >= len(baseline_actions):
-                break
             applied = baseline_actions[resume_index]
         model.step(applied)
         if model.collision():
@@ -394,6 +512,15 @@ def _branch_over_window(
             )
             continue
         model.restore(step_snapshot)
+        if model.collision():
+            # A post-contact snapshot is not a decision point from which a
+            # counterfactual intervention can be attributed. Preserve it as a
+            # coverage gap so callers fail closed instead of testing actions
+            # after the baseline has already contacted.
+            branches.append(
+                TimeBranchResult(step=step, feasible_count=0, preventing_action_labels=())
+            )
+            continue
         feasible = list(model.feasible_actions())
         preventing_labels: list[str] = []
         for action in feasible:
@@ -420,7 +547,83 @@ def _branch_over_window(
     return branches, interventions
 
 
-def locate_last_avoidable(
+def _model_metadata(model: CounterfactualModel, field_name: str) -> str | None:
+    """Read an optional model-declared provenance field.
+
+    The protocol intentionally remains small for existing fixture models. Native
+    adapters may expose these fields as properties (or zero-argument methods),
+    allowing the engine to bind report provenance to the contract actually used.
+
+    Returns:
+        The normalized metadata value, or ``None`` when the model does not
+        declare the requested field.
+    """
+    value = getattr(model, field_name, None)
+    if callable(value):
+        value = value()
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _snapshot_state_is_complete(model: CounterfactualModel) -> bool | None:
+    """Read an optional model declaration that its replay snapshot is complete.
+
+    Returns:
+        ``True`` or ``False`` when the model declares completeness; ``None`` when
+        the legacy protocol has no completeness declaration.
+    """
+    declared = _model_metadata(model, "replay_state_complete")
+    if declared is None:
+        return None
+    normalized = declared.strip().lower()
+    if normalized in {"true", "1", "yes", "complete"}:
+        return True
+    if normalized in {"false", "0", "no", "incomplete"}:
+        return False
+    return False
+
+
+def _bind_model_metadata(
+    model: CounterfactualModel, config: ReplayConfig
+) -> tuple[ReplayConfig, tuple[str, ...]]:
+    """Bind optional native provenance fields and report declaration conflicts.
+
+    Returns:
+        A possibly enriched config and a tuple of declaration mismatch messages.
+    """
+    bound_config = config
+    mismatches: list[str] = []
+    # These fields are model-bound rather than caller assertions. In particular,
+    # the native adapter's action lattice and source kind must be reflected in the
+    # report before any replay result can be considered attributable.
+    model_fields = {
+        "source_kind": "replay_source_kind",
+        "action_set_id": "action_set_id",
+        "feasibility_filter": "feasibility_filter",
+        "collision_predicate": "collision_predicate",
+        "pedestrian_response": "pedestrian_response",
+    }
+    for field_name, model_field in model_fields.items():
+        declared = getattr(bound_config, field_name)
+        actual = _model_metadata(model, model_field)
+        if actual is None:
+            continue
+        # ``from_dict`` restores the omitted-response wire marker to the private
+        # singleton, so native adapters can bind it to their actual response mode.
+        # A caller that explicitly supplies ``unknown`` remains distinct and
+        # fails closed against a declared native mode. ``unspecified`` retains
+        # its legacy model-binding semantics for all provenance fields, while the
+        # causal join still requires explicit fixture provenance.
+        if _is_omitted_pedestrian_response(declared) or declared == "unspecified":
+            bound_config = replace(bound_config, **{field_name: actual})
+        elif declared != actual:
+            mismatches.append(f"{field_name}: declared={declared!r}, actual={actual!r}")
+    return bound_config, tuple(mismatches)
+
+
+def locate_last_avoidable(  # noqa: C901 - explicit fail-closed verdict state machine
     model: CounterfactualModel,
     baseline_actions: Sequence[Any],
     config: ReplayConfig,
@@ -450,6 +653,96 @@ def locate_last_avoidable(
     Returns:
         A :class:`LastAvoidableReport` preserving every branch result.
     """
+    bound_config, metadata_mismatches = _bind_model_metadata(model, config)
+    if metadata_mismatches:
+        determinism = DeterminismCheck(
+            replays=bound_config.determinism_replays,
+            collision_stable=False,
+            contact_step_stable=False,
+            observed_contact_steps=(None,) * bound_config.determinism_replays,
+        )
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=bound_config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="metadata_mismatch",
+            notes=(
+                "declared replay provenance does not match the model contract: "
+                + "; ".join(metadata_mismatches),
+            ),
+        )
+    if _snapshot_state_is_complete(model) is False:
+        determinism = DeterminismCheck(
+            replays=config.determinism_replays,
+            collision_stable=False,
+            contact_step_stable=False,
+            observed_contact_steps=(None,) * config.determinism_replays,
+        )
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=bound_config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="incomplete_snapshot_state",
+            notes=(
+                "the model declared that its replay snapshot omits mutable state "
+                "required for deterministic continuation",
+            ),
+        )
+    config = bound_config
+
+    # A baseline shorter than the decision window cannot support branch capture.
+    # Single-step substitutions additionally need the recorded suffix they
+    # resume; hold substitutions do not consume baseline actions after the
+    # decision window.  Report missing support as a fail-closed non-evaluation
+    # rather than treating an empty suffix as a successful avoidance witness.
+    # ``t_contact`` is a state tick / applied-action count. The action at index
+    # ``t_contact - 1`` produces the contact state, so exactly ``t_contact``
+    # recorded actions are required to replay the inclusive contact prefix.
+    contact_prefix = config.t_contact
+    required_baseline = (
+        max(contact_prefix, config.t_contact + config.horizon - 1)
+        if config.substitution_mode == SUBSTITUTION_SINGLE_STEP
+        else contact_prefix
+    )
+    if len(baseline_actions) < required_baseline:
+        determinism = DeterminismCheck(
+            replays=config.determinism_replays,
+            collision_stable=False,
+            contact_step_stable=False,
+            observed_contact_steps=(None,) * config.determinism_replays,
+        )
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="insufficient_baseline_actions",
+            notes=(
+                "baseline action data did not cover the declared contact plus "
+                f"horizon ({len(baseline_actions)} < {required_baseline})",
+            ),
+        )
+
     initial_snapshot = model.snapshot()
 
     determinism = _verify_determinism(model, initial_snapshot, baseline_actions, config)
@@ -469,35 +762,118 @@ def locate_last_avoidable(
             notes=("baseline replay did not reproduce a stable contact outcome",),
         )
 
+    if all(contact_step is None for contact_step in determinism.observed_contact_steps):
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="baseline_no_contact",
+            notes=(
+                "baseline replay did not contact within the configured horizon; "
+                "avoidability is untested",
+            ),
+        )
+
+    observed_contact = determinism.observed_contact_steps[0]
+    if observed_contact == 0:
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="baseline_initial_contact",
+            notes=(
+                "baseline was already in contact at the initial snapshot; "
+                "no pre-contact unsafe control action can be identified",
+            ),
+        )
+    if observed_contact is None or not (config.t_danger <= observed_contact <= config.t_contact):
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="baseline_contact_outside_declared_window",
+            notes=(
+                "baseline contact was observed outside the declared "
+                f"[{config.t_danger}, {config.t_contact}] contact bounds",
+            ),
+        )
+    if observed_contact != config.t_contact:
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="baseline_contact_tick_mismatch",
+            notes=(
+                "baseline contact tick did not match the declared contact tick: "
+                f"observed={observed_contact}, declared={config.t_contact}; "
+                "exact agreement is required before branch evaluation",
+            ),
+        )
+
     snapshots = _capture_window_snapshots(model, initial_snapshot, baseline_actions, config)
-    branches, interventions = _branch_over_window(model, snapshots, baseline_actions, config)
+    try:
+        branches, interventions = _branch_over_window(model, snapshots, baseline_actions, config)
+    except ValueError:
+        # This should be caught by the preflight above for a complete window,
+        # but retaining the guard makes the fail-closed contract robust to a
+        # model-specific horizon requirement.
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="insufficient_replay_horizon_support",
+            notes=("at least one single-step branch lacked a recorded continuation",),
+        )
 
     window_size = config.t_contact - config.t_danger
     with_feasible = sum(1 for b in branches if b.has_feasible_actions)
     feasible_coverage = with_feasible / window_size if window_size else 0.0
 
-    preventable_steps = sorted(b.step for b in branches if b.any_prevented)
-
-    if preventable_steps:
-        t_uca = preventable_steps[0]
-        # Point of no return: after the latest step where avoidance still worked,
-        # contact is inevitable (clamped to the contact step).
-        t_inevitable = min(preventable_steps[-1] + 1, config.t_contact)
-        return LastAvoidableReport(
-            verdict=VERDICT_AVOIDABLE,
-            config=config,
-            determinism=determinism,
-            branches=tuple(branches),
-            t_uca=t_uca,
-            t_inevitable=t_inevitable,
-            feasible_coverage=feasible_coverage,
-            minimal_sufficient_interventions=tuple(interventions),
-            runtime_s=runtime_s,
+    # A preventing witness is not enough to certify avoidability when another
+    # decision point could not be evaluated.  Keep the entire branch table for
+    # diagnosis, but fail closed before emitting any non-unknown verdict.
+    if feasible_coverage < 1.0:
+        witness_note = (
+            "a finite avoidance witness was observed, but incomplete feasible-action "
+            "coverage prevents an avoidability determination"
+            if any(branch.any_prevented for branch in branches)
+            else "at least one decision point lacked a feasible action set; avoidability is untested"
         )
-
-    # No admissible action prevented contact at any decision point.
-    if with_feasible == 0 or feasible_coverage < 1.0:
-        # Coverage gap: we could not test avoidability everywhere -> abstain.
         return LastAvoidableReport(
             verdict=VERDICT_UNKNOWN,
             config=config,
@@ -510,10 +886,24 @@ def locate_last_avoidable(
             runtime_s=runtime_s,
             abstained=True,
             abstain_reason="incomplete_feasible_action_coverage",
-            notes=(
-                "no admissible action prevented contact, but at least one decision "
-                "point lacked a feasible action set; avoidability is untested",
-            ),
+            notes=(witness_note,),
+        )
+
+    preventable_steps = sorted(b.step for b in branches if b.any_prevented)
+
+    if preventable_steps:
+        t_uca = preventable_steps[0]
+        return LastAvoidableReport(
+            verdict=VERDICT_AVOIDABLE,
+            config=config,
+            determinism=determinism,
+            branches=tuple(branches),
+            t_uca=t_uca,
+            t_inevitable=min(preventable_steps[-1] + 1, config.t_contact),
+            feasible_coverage=feasible_coverage,
+            minimal_sufficient_interventions=tuple(interventions),
+            runtime_s=runtime_s,
+            notes=(),
         )
 
     # Full coverage, deterministic baseline, nothing prevents -> already unavoidable.

@@ -1000,6 +1000,13 @@ def _actions_recovery_evidence(
         if job_id is not None:
             inspect += f" --job {job_id}"
         exact_head_matches = item.get("exact_head_sha_matches")
+        guarded_recovery_command = None
+        if exact_head_matches is True and expected_head_sha:
+            guarded_recovery_command = (
+                f"uv run python scripts/dev/recover_stale_ci_run.py --pr {pr_number} "
+                f"--run-id {run_id} --expected-head-sha {expected_head_sha} "
+                '--apply --reason "<reason>"'
+            )
         stale_cmd: dict[str, Any] = {
             "run_id": run_id,
             "job_id": job_id,
@@ -1010,6 +1017,7 @@ def _actions_recovery_evidence(
             "replacement_command": (
                 f"gh run rerun {run_id}" if exact_head_matches is True else None
             ),
+            "guarded_recovery_command": guarded_recovery_command,
             "mutation_authorized": False,
         }
         if item.get("step_name"):
@@ -1026,7 +1034,9 @@ def _actions_recovery_evidence(
         action = "wait_for_replacement"
 
     note = (
-        "Commands are explicit suggestions only; no cancellation or rerun was executed. "
+        "guarded_recovery_command is the repository-owned, exact-head-guarded recovery path; "
+        "running it with --apply is explicit operator authorization and no cancellation or rerun "
+        "was executed here. Cancel/rerun suggestions are informational only. "
         "Cancellation or rerun requires explicit authorization, and merge admission stays blocked "
         "until a fresh exact-head success."
     )

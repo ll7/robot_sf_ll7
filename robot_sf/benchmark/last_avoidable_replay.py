@@ -54,6 +54,13 @@ SUBSTITUTION_HOLD = "hold"  # apply the substituted action for the whole frozen 
 _SUBSTITUTION_MODES = (SUBSTITUTION_SINGLE_STEP, SUBSTITUTION_HOLD)
 
 
+class _DefaultPedestrianResponse(str):
+    """String-compatible marker for an omitted, model-bindable response mode."""
+
+
+_DEFAULT_PEDESTRIAN_RESPONSE = _DefaultPedestrianResponse("unknown")
+
+
 @runtime_checkable
 class CounterfactualModel(Protocol):
     """The smallest deterministic snapshot/restore seam the engine drives.
@@ -122,8 +129,11 @@ class ReplayConfig:
         collision_predicate: Provenance label for the collision predicate.
         pedestrian_response: Pedestrian response assumption for this run, e.g.
             ``replayed`` (pedestrian follows its recorded path) or ``closed_loop``
-            (pedestrian reacts to the robot). The default ``unknown`` is schema-safe
-            and must not be interpreted as either response mode.
+            (pedestrian reacts to the robot). An omitted value is serialized as the
+            schema-safe ``unknown`` value when no model declaration is available,
+            but binds to a model-declared response mode when one is available.
+            Explicit ``unknown`` remains an intentional unknown declaration and is
+            not silently rebound to a model mode.
         source_kind: Provenance classification for the replay source. Native live
             simulator adapters bind this to ``live_episode``; controlled fixtures
             may use ``synthetic_fixture`` (legacy callers may leave it
@@ -139,7 +149,7 @@ class ReplayConfig:
     action_set_id: str = "unspecified"
     feasibility_filter: str = "unspecified"
     collision_predicate: str = "unspecified"
-    pedestrian_response: str = "unknown"
+    pedestrian_response: str = _DEFAULT_PEDESTRIAN_RESPONSE
     source_kind: str = "unspecified"
 
     def __post_init__(self) -> None:
@@ -526,7 +536,13 @@ def _bind_model_metadata(
         actual = _model_metadata(model, model_field)
         if actual is None:
             continue
-        if declared == "unspecified":
+        # The omitted pedestrian-response default is a string-compatible marker,
+        # so existing callers still observe/serialize ``unknown`` while native
+        # adapters can bind it to their actual response mode. A caller that
+        # explicitly supplies ``unknown`` remains distinct and fails closed
+        # against a declared native mode. ``unspecified`` retains its legacy
+        # model-binding semantics for all provenance fields.
+        if declared is _DEFAULT_PEDESTRIAN_RESPONSE or declared == "unspecified":
             bound_config = replace(bound_config, **{field_name: actual})
         elif declared != actual:
             mismatches.append(f"{field_name}: declared={declared!r}, actual={actual!r}")

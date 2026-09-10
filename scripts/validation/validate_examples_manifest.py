@@ -3,9 +3,28 @@
 This script performs a series of structural checks against
 ``examples/examples_manifest.yaml`` to guarantee that documentation tooling and
 CI smoke tests have an accurate view of the available example scripts. It makes
-sure that every example on disk is represented in the manifest, that category
-slugs align with directory layout, and that module docstrings match the metadata
-summaries stored in the manifest.
+sure that every maintained example on disk is represented exactly once (or
+matches an explicit versioned exclusion with rationale), that category slugs
+align with directory layout, that tags/runtime class are normalized, that
+``ci_enabled``/``ci_reason`` are consistent, that documentation references
+exist, and that module docstrings match the metadata summaries stored in the
+manifest.
+
+Every error is deterministic and reported as ``<path>: [<REASON_CODE>] message``
+(or ``manifest: [<REASON_CODE>]`` for file-level issues), sorted by
+``(path, code)`` so repeated runs are byte-identical. Stable reason codes:
+
+- ``E_UNREGISTERED_FILE`` — ``.py`` on disk (minus ``__init__.py``) that is
+  neither a registered example nor a versioned exclusion.
+- ``E_MISSING_PATH`` — manifest example/exclusion path absent from disk.
+- ``E_EXCLUSION_OVERLAP`` — exclusion path that duplicates a registered example.
+- ``E_CATEGORY_MISMATCH`` — leading directory does not match ``category_slug``.
+- ``E_DOCSTRING_MISSING`` / ``E_DOCSTRING_MISMATCH`` — docstring contract.
+- ``E_DOC_REFERENCE_MISSING`` — ``doc_reference`` file target absent.
+- ``E_TAG_NOT_NORMALIZED`` — tag not in normalized lowercase form.
+- ``E_RUNTIME_CLASS_INVALID`` — ``expected_runtime`` sentinel/un-normalized.
+- ``E_CI_REASON_MISSING`` / ``E_CI_REASON_CONTRADICTION`` — CI consistency.
+- ``E_DUPLICATE_NAME`` — duplicate example display name.
 
 Example::
 
@@ -76,6 +95,11 @@ def main() -> int:
 
     errors.extend(_check_manifest_coverage(manifest, examples_root))
     errors.extend(_check_category_directory_alignment(manifest))
+    errors.extend(_check_unique_names(manifest))
+    errors.extend(_check_ci_consistency(manifest))
+    errors.extend(_check_tags_normalized(manifest))
+    errors.extend(_check_runtime_class(manifest))
+    errors.extend(_check_doc_references(manifest))
 
     if not args.skip_docstring_checks:
         doc_errors, doc_warnings = _check_docstrings(
@@ -84,6 +108,9 @@ def main() -> int:
         )
         errors.extend(doc_errors)
         warnings.extend(doc_warnings)
+
+    errors = sorted(errors)
+    warnings = sorted(warnings)
 
     for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
@@ -98,34 +125,59 @@ def main() -> int:
     return 0
 
 
+def _coded(path: str, code: str, message: str) -> str:
+    """Format a deterministic ``path: [CODE] message`` error line."""
+
+    return f"{path}: [{code}] {message}"
+
+
 def _check_manifest_coverage(manifest: ExampleManifest, examples_root: Path) -> list[str]:
-    """Ensure every script on disk appears in the manifest."""
+    """Ensure every maintained script is registered once or explicitly excluded."""
 
     root = examples_root.resolve()
     if not root.is_dir():
-        return [f"Examples root '{root}' is not a directory."]
+        return [_coded(str(root), "E_MISSING_PATH", f"Examples root '{root}' is not a directory.")]
 
     manifest_paths = {example.path.as_posix() for example in manifest.examples}
+    exclusion_paths = {exclusion.path.as_posix() for exclusion in manifest.exclusions}
+    registered = manifest_paths | exclusion_paths
+
+    overlap = sorted(manifest_paths & exclusion_paths)
+    errors: list[str] = [
+        _coded(path, "E_EXCLUSION_OVERLAP", "exclusion overlaps a registered example path.")
+        for path in overlap
+    ]
 
     discovered: set[str] = set()
-    for path in root.rglob("*.py"):
+    for path in sorted(root.rglob("*.py")):
         if _should_ignore_file(path):
             continue
         relative = path.relative_to(root).as_posix()
         discovered.add(relative)
 
-    missing = sorted(discovered - manifest_paths)
-    errors: list[str] = []
-    if missing:
-        errors.append("Scripts missing from manifest: " + ", ".join(missing))
+    for missing in sorted(discovered - registered):
+        errors.append(
+            _coded(missing, "E_UNREGISTERED_FILE", "script on disk is not registered in manifest.")
+        )
 
     # Manifest entries that do not exist on disk will already have triggered
     # ManifestValidationError during load when validate_paths=True, but we
     # defensively highlight any anomalies discovered here as well.
-    undefined = sorted(manifest_paths - discovered)
-    if undefined:
+    for undefined in sorted(manifest_paths - discovered):
         errors.append(
-            "Manifest references scripts that were not found on disk: " + ", ".join(undefined)
+            _coded(
+                undefined,
+                "E_MISSING_PATH",
+                "manifest references a script that was not found on disk.",
+            )
+        )
+    for undefined in sorted(exclusion_paths - discovered):
+        errors.append(
+            _coded(
+                undefined,
+                "E_MISSING_PATH",
+                "manifest exclusion references a script that was not found on disk.",
+            )
         )
 
     return errors
@@ -143,7 +195,7 @@ def _check_category_directory_alignment(manifest: ExampleManifest) -> list[str]:
     """Ensure each entry resides in the directory that matches its category slug."""
 
     errors: list[str] = []
-    for example in manifest.examples:
+    for example in sorted(manifest.examples, key=lambda item: item.path.as_posix()):
         parts = example.path.parts
         slug = example.category_slug
 
@@ -151,19 +203,156 @@ def _check_category_directory_alignment(manifest: ExampleManifest) -> list[str]:
             # Root-level examples remain acceptable during migration.
             if len(parts) > 1:
                 errors.append(
-                    f"{example.path.as_posix()}: expected to be at repository root for 'uncategorized'."
+                    _coded(
+                        example.path.as_posix(),
+                        "E_CATEGORY_MISMATCH",
+                        "expected to be at repository root for 'uncategorized'.",
+                    )
                 )
             continue
 
         if not parts:
-            errors.append(f"{example.path.as_posix()}: example path is empty in manifest.")
+            errors.append(
+                _coded(
+                    example.path.as_posix(),
+                    "E_CATEGORY_MISMATCH",
+                    "example path is empty in manifest.",
+                )
+            )
             continue
 
         if parts[0] != slug:
             errors.append(
-                f"{example.path.as_posix()}: leading directory '{parts[0]}' does not match category slug '{slug}'."
+                _coded(
+                    example.path.as_posix(),
+                    "E_CATEGORY_MISMATCH",
+                    f"leading directory '{parts[0]}' does not match category slug '{slug}'.",
+                )
             )
 
+    return errors
+
+
+def _check_unique_names(manifest: ExampleManifest) -> list[str]:
+    """Defensively re-check display-name uniqueness with a stable code."""
+
+    seen: dict[str, str] = {}
+    errors: list[str] = []
+    for example in sorted(manifest.examples, key=lambda item: item.path.as_posix()):
+        if example.name in seen:
+            errors.append(
+                _coded(
+                    example.path.as_posix(),
+                    "E_DUPLICATE_NAME",
+                    f"duplicate example name '{example.name}' "
+                    f"(also used by '{seen[example.name]}').",
+                )
+            )
+        else:
+            seen[example.name] = example.path.as_posix()
+    return errors
+
+
+def _check_ci_consistency(manifest: ExampleManifest) -> list[str]:
+    """Check ``ci_enabled``/``ci_reason`` consistency with stable codes."""
+
+    errors: list[str] = []
+    for example in sorted(manifest.examples, key=lambda item: item.path.as_posix()):
+        path = example.path.as_posix()
+        if not example.ci_enabled and not example.ci_reason:
+            errors.append(
+                _coded(
+                    path,
+                    "E_CI_REASON_MISSING",
+                    "example is disabled for CI but missing ci_reason.",
+                )
+            )
+        if example.ci_enabled and example.ci_reason:
+            errors.append(
+                _coded(
+                    path,
+                    "E_CI_REASON_CONTRADICTION",
+                    "example is CI-enabled but declares ci_reason.",
+                )
+            )
+    return errors
+
+
+def _check_tags_normalized(manifest: ExampleManifest) -> list[str]:
+    """Defensively re-check tag normalization with a stable code."""
+
+    import re as _re
+
+    pattern = _re.compile(r"^[a-z0-9][a-z0-9_\-]*$")
+    errors: list[str] = []
+    for example in sorted(manifest.examples, key=lambda item: item.path.as_posix()):
+        seen: set[str] = set()
+        for tag in example.tags:
+            if tag.strip() != tag or tag.lower() != tag or not pattern.match(tag) or tag in seen:
+                errors.append(
+                    _coded(
+                        example.path.as_posix(),
+                        "E_TAG_NOT_NORMALIZED",
+                        f"tag {tag!r} is not normalized.",
+                    )
+                )
+                break
+            seen.add(tag)
+    return errors
+
+
+def _check_runtime_class(manifest: ExampleManifest) -> list[str]:
+    """Check the runtime-class surface (``expected_runtime``) with a stable code."""
+
+    from robot_sf.examples.manifest_loader import PREREQUISITE_SENTINELS
+
+    errors: list[str] = []
+    for example in sorted(manifest.examples, key=lambda item: item.path.as_posix()):
+        runtime = example.expected_runtime
+        if runtime is None:
+            continue
+        if not runtime or runtime.strip() != runtime or runtime.lower() in PREREQUISITE_SENTINELS:
+            errors.append(
+                _coded(
+                    example.path.as_posix(),
+                    "E_RUNTIME_CLASS_INVALID",
+                    f"expected_runtime {runtime!r} is not a valid runtime class.",
+                )
+            )
+    return errors
+
+
+def _check_doc_references(manifest: ExampleManifest) -> list[str]:
+    """Check that every ``doc_reference`` file target exists in the repo."""
+
+    repo_root = manifest.manifest_path.parents[1]
+    errors: list[str] = []
+    for example in sorted(manifest.examples, key=lambda item: item.path.as_posix()):
+        if not example.doc_reference:
+            continue
+        target = example.doc_reference.split("#", 1)[0].strip()
+        if not target:
+            errors.append(
+                _coded(
+                    example.path.as_posix(),
+                    "E_DOC_REFERENCE_MISSING",
+                    f"doc_reference '{example.doc_reference}' has no file target.",
+                )
+            )
+            continue
+        candidate = (repo_root / target).resolve(strict=False)
+        try:
+            inside = candidate.is_relative_to(repo_root.resolve(strict=False))
+        except ValueError:
+            inside = False
+        if not inside or not candidate.is_file():
+            errors.append(
+                _coded(
+                    example.path.as_posix(),
+                    "E_DOC_REFERENCE_MISSING",
+                    f"doc_reference target '{target}' was not found.",
+                )
+            )
     return errors
 
 
@@ -177,7 +366,7 @@ def _check_docstrings(
     errors: list[str] = []
     warnings: list[str] = []
 
-    for example in manifest.examples:
+    for example in sorted(manifest.examples, key=lambda item: item.path.as_posix()):
         module_path = manifest.resolve_example_path(example)
         try:
             docstring = _read_module_docstring(module_path)
@@ -186,7 +375,9 @@ def _check_docstrings(
             continue
 
         if docstring is None:
-            message = f"{example.path.as_posix()}: missing module docstring"
+            message = _coded(
+                example.path.as_posix(), "E_DOCSTRING_MISSING", "missing module docstring."
+            )
             if allow_missing:
                 warnings.append(message)
             else:
@@ -197,7 +388,11 @@ def _check_docstrings(
         summary = example.summary.strip()
         if first_line != summary:
             errors.append(
-                f"{example.path.as_posix()}: docstring first line does not match manifest summary."
+                _coded(
+                    example.path.as_posix(),
+                    "E_DOCSTRING_MISMATCH",
+                    "docstring first line does not match manifest summary.",
+                )
             )
 
     return errors, warnings

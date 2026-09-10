@@ -233,9 +233,11 @@ def build_pedestrian_response_observation(
     ``offered_route`` and ``taken_route`` must be reports from the existing
     route-choice observability contract. A ``None`` input is missing; a report
     whose side is ``"unavailable"`` is unavailable. Invalid route-reference
-    metadata and upstream route-reference failure reasons are retained as
-    unavailable rather than repaired into a plausible reference. Invalid
-    scalar encounter values are handled the same way.
+    metadata and upstream route-report failure reasons are retained as
+    unavailable rather than repaired into a plausible side observation. A
+    non-``None`` report reason paired with a non-``unavailable`` side is
+    treated as unavailable. Invalid scalar encounter values are handled the
+    same way.
 
     Returns:
         A typed observation with explicit missing or unavailable fields.
@@ -425,6 +427,10 @@ def _extract_route_side(
 ) -> tuple[str | None, RouteReference | None, str | None]:
     """Extract one route side while retaining route-contract availability.
 
+    A non-``None`` upstream reason cannot be paired with a usable side. Such a
+    malformed report is normalized to ``unavailable`` while retaining valid
+    reference metadata and the failure reason.
+
     Returns:
         The side value, its reference metadata, and an optional field-level
         unavailability reason.
@@ -451,6 +457,9 @@ def _extract_route_side(
             f"{field_name}:{report_reason};route_reference:{reference_reason}",
         )
     if report.side == "unavailable":
+        unavailable.add(field_name)
+        return "unavailable", reference, f"{field_name}:{report.reason or 'unknown'}"
+    if report.reason is not None:
         unavailable.add(field_name)
         return "unavailable", reference, f"{field_name}:{report.reason or 'unknown'}"
     if field_name in unavailable:

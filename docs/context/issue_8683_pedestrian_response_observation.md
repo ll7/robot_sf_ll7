@@ -45,9 +45,11 @@ not overlap and no missing field is filled with a default. A side label is valid
 route reference supports the start-to-goal axis. If that reference is absent or invalid, the
 builder normalizes offered and taken labels to `unavailable`, propagates the upstream
 route-reference reason, and does not construct fallback-looking `RouteReference` metadata. An
-unavailable route side retains the predecessor value `unavailable` and its reason in the
-record-level `unavailable_reason`. The builder fails closed when the offered and taken reports use
-incompatible reference metadata.
+upstream report with any non-`None` failure reason is also unavailable when paired with a
+non-`unavailable` side; the builder normalizes that side to `unavailable` and propagates the
+failure reason. An unavailable route side retains the predecessor value `unavailable` and its
+reason in the record-level `unavailable_reason`. The builder fails closed when the offered and
+taken reports use incompatible reference metadata.
 
 ## Validation commands
 

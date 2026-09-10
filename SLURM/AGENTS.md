@@ -1,102 +1,62 @@
 # SLURM Agent Playbook
 
-Use this file as the canonical SLURM execution playbook for reusable cluster workflows in this
-repository. Pair it with [AGENTS.md](../AGENTS.md), [SLURM/readme.md](readme.md), and
+Durable cluster safeguards for jobs submitted under `SLURM/` or in related training campaigns. Pair
+this with [AGENTS.md](../AGENTS.md), [SLURM/readme.md](readme.md), and
 [docs/dev/slurm_resource_audit.md](../docs/dev/slurm_resource_audit.md).
 
 Auxme-cluster-specific details (node names, partitions, QoS profiles, per-user job limits, and
 host-packing policy) live in the optional private operations overlay. See
-[SLURM/Auxme/README.md](Auxme/README.md) for the public overlay contract.
+[SLURM/Auxme/README.md](Auxme/README.md) for the public overlay contract. Never copy secrets or
+host-specific policy into the repository.
 
-## Scope
+## Configuration And Submission
 
-Apply these rules whenever submitting or reviewing jobs under [SLURM/](.) or related training
-campaigns that run on cluster resources.
+- Use explicit, versioned configuration. Pass required environment and config inputs explicitly; do
+  not rely on wrapper defaults for promotion or long-horizon submissions.
+- Public wrappers validate their required environment and config inputs and fail with an actionable,
+  non-secret message, including when the private operations overlay is absent.
+- Prefer the repository wrappers under `scripts/dev/` over raw `sbatch`. For long jobs, prefer
+  `scripts/dev/sbatch_use_max_time.sh` unless fixed wall time is required.
+- Keep artifact output rooted in the configured artifact root and confirm synchronization on exit.
+  Set `#SBATCH --output=output/slurm/%j-<description>.out` so job logs sort chronologically and stay
+  ignored via the root `output/` rule. Never write `.out` files to the repository root.
 
-## Submission Defaults
+## Custody And Identity
 
-- Prefer repo-local wrappers and config-first commands.
-- Use `ISSUE*_TRAIN_CONFIG`-style environment selection and keep configs under
-  [configs/training/](../configs/training/).
-- For issue-791 wrappers, treat `ISSUE791_TRAIN_CONFIG` as required and always pass it
-  explicitly. Do not rely on wrapper defaults for promotion or long-horizon submissions.
-- For long jobs, prefer `scripts/dev/sbatch_use_max_time.sh` over raw `sbatch` unless the task
-  explicitly requires fixed wall time.
-- For Auxme issue-791 submissions, use `scripts/dev/sbatch_auxme_issue791.sh` only when the private
-  operations overlay is configured. The public wrapper delegates to the private cluster policy and
-  should fail with an actionable setup message when that overlay is absent.
-- Keep artifact output rooted in `output/slurm/` (or the configured mirrored destination) and
-  confirm `ROBOT_SF_ARTIFACT_ROOT` is synced on exit.
-- Set `#SBATCH --output=output/slurm/%j-<description>.out` — job ID first so logs sort
-  chronologically and are gitignored via the root `output/` rule. Never write `.out` files
-  to the repo root.
+- Record job ID, config path, commit SHA, seeds, and artifact root for every submission.
+- Preserve logs and minimal reproduction evidence for failures.
 
-## Tracking Policy (WandB)
+## Failure Classification
 
-- Promotion/follow-up runs must keep `tracking.wandb.enabled: true`.
-- Stage-gate debug runs may allow WandB off only when explicitly justified.
-- For issue-791 style wrappers, use:
-  - `ISSUE791_WANDB_POLICY=require` for promotion/follow-up,
-  - `ISSUE791_WANDB_POLICY=allow-off` only for explicit debug gates.
-- Never submit long runs without verifying run group, job type, and tags in config.
+- Distinguish infrastructure or transient failures (for example an allocation handshake failure)
+  from model or algorithm failures. Classify infrastructure failures as such and follow the
+  campaign's documented resubmission rule; do not treat them as model failure.
+- Missing artifacts in the expected output path: verify the artifact root and cleanup/sync path
+  before concluding a run produced no results; check `/tmp/<user>/<jobid>/results`-style roots.
 
-## Runtime Sanity Checks
+## Evidence Boundary
 
-Before submission:
+- Do not claim performance improvement from short gate runs alone, and do not freeze one campaign's
+  horizon stages as durable repository law; stage progression and baseline anchoring are campaign
+  decisions recorded with the active campaign.
+- Fail closed on unsupported claims: preserve logs and block promotion claims until finite,
+  deterministic evaluation is restored.
+- Promotion and paper-facing claims require the campaign's minimum evidence. Fallback or degraded
+  evidence is never success evidence.
 
-1. Verify the selected YAML exists and is the intended horizon (`32k`, `128k`, `1m`, etc.).
-2. Verify `num_envs` matches the configured host strategy; keep cluster-specific host-packing
-   details in the private operations overlay and choose intentionally.
-3. Verify eval cadence (`evaluation.step_schedule`) is dense enough for decision quality but not so
-   dense that wall-clock is dominated by evaluation.
+## Transient Campaign Guidance
 
-After submission:
+Campaign-specific environment variables, wrappers, trackers, horizons, baselines, and progression
+rules belong to the active campaign configuration and context record, not this file. Keep the
+current owner and review condition here:
 
-1. Check acceptance via `squeue` and record job IDs.
-2. Check job accounting via `sacct` for `COMPLETED` vs infrastructure failure signatures.
-3. Check stdout tail for immediate allocation errors (for example,
-   `Unable to confirm allocation ... Zero Bytes were transmitted or received`).
+| Transient guidance | Owner | Review condition |
+| --- | --- | --- |
+| issue-791 wrapper env vars, WandB policy, horizon stages, resubmission rules | `configs/training/` and the issue-791 campaign context note under `docs/context/` | Re-review when the issue-791 campaign closes or its wrapper contract changes |
 
-## Failure Signatures and Responses
+## Insight Capture
 
-- Allocation handshake failure (`srun` unable to confirm allocation):
-  - classify as infrastructure/transient,
-  - resubmit once with same config,
-  - do not treat as model failure.
-- Missing artifacts in expected output path:
-  - verify `ROBOT_SF_ARTIFACT_ROOT` and cleanup sync path,
-  - do not conclude run had no results before checking `/tmp/<user>/<jobid>/results` style roots.
-- NaN or evaluation instability:
-  - preserve logs and minimal repro evidence,
-  - block promotion claims until finite deterministic evaluation is restored.
-
-## Campaign Progression Rules
-
-- Do not claim performance improvement from short gate runs alone.
-- Use staged progression and baseline anchoring:
-  1. gate (`8k` to `32k`) for feasibility and crash checks,
-  2. promotion (`128k` to `256k`) for early ranking,
-  3. long horizon (`1m+`) for convergence-level decisions.
-- Keep at least one unchanged baseline run in each campaign wave.
-
-## Required Insight Capture (Between Sessions)
-
-Every time a SLURM run yields new evidence, persist it before closing the task.
-
-Required capture targets:
-
-1. Update this file when the insight changes reusable SLURM practice.
-2. Update issue/campaign context notes under [docs/context/](../docs/context/).
-3. Update results ledger files (for example,
-   [output/ai/autoresearch/issue-791/results.tsv](../output/ai/autoresearch/issue-791/results.tsv)).
-
-Examples of insights that must be saved:
-
-- best `num_envs`/CPU pairings by host,
-- wall-clock behavior by training horizon,
-- reliable eval cadence ranges,
-- recurrent failure signatures and the proven mitigations,
-- WandB policy pitfalls and enforcement updates.
-
-A SLURM task is not complete until at least one persistent insight surface was updated when new
-information was discovered.
+Persist reusable findings that change durable practice before closing the task. Examples: reliable
+load-recovery signatures, best `num_envs`/CPU pairings by host, stable eval-cadence ranges, and
+proven mitigations. Do not create a documentation edit when a run produced no material, reusable
+finding; record the negative result instead.

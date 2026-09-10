@@ -5355,6 +5355,17 @@ browser = [
 criticality = [
     { name = "cma" },
 ]
+examples = [
+    { name = "matplotlib" },
+    { name = "moviepy" },
+    { name = "pandas" },
+    { name = "pillow" },
+    { name = "pygame" },
+    { name = "scipy" },
+    { name = "seaborn" },
+    { name = "stable-baselines3" },
+    { name = "torch" },
+]
 gpu = [
     { name = "torch" },
 ]
@@ -5442,8 +5453,10 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "loguru", specifier = ">=0.7.2" },
     { name = "matplotlib", marker = "extra == 'all'", specifier = ">=3.11.1" },
+    { name = "matplotlib", marker = "extra == 'examples'", specifier = ">=3.11.1" },
     { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.11.1" },
     { name = "moviepy", marker = "extra == 'all'", specifier = ">=2.0.0" },
+    { name = "moviepy", marker = "extra == 'examples'", specifier = ">=2.0.0" },
     { name = "moviepy", marker = "extra == 'viz'", specifier = ">=2.0.0" },
     { name = "networkx", specifier = ">=3.6.1,<4.0" },
     { name = "numba", specifier = ">=0.67.0" },
@@ -5459,7 +5472,9 @@ requires-dist = [
     { name = "osmnx", marker = "extra == 'maps'", specifier = ">=2.1.1" },
     { name = "pandas", marker = "extra == 'all'", specifier = ">=3.0.5" },
     { name = "pandas", marker = "extra == 'benchmark'", specifier = ">=3.0.5" },
+    { name = "pandas", marker = "extra == 'examples'", specifier = ">=3.0.5" },
     { name = "pillow", marker = "extra == 'all'", specifier = ">=10.4.0" },
+    { name = "pillow", marker = "extra == 'examples'", specifier = ">=10.4.0" },
     { name = "pillow", marker = "extra == 'viz'", specifier = ">=10.4.0" },
     { name = "playwright", marker = "extra == 'all'", specifier = ">=1.62.0" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.62.0" },
@@ -5469,6 +5484,7 @@ requires-dist = [
     { name = "pyassimp", marker = "extra == 'all'", specifier = "==5.2.5" },
     { name = "pyassimp", marker = "extra == 'socnav'", specifier = "==5.2.5" },
     { name = "pygame", marker = "extra == 'all'", specifier = ">=2.6.1" },
+    { name = "pygame", marker = "extra == 'examples'", specifier = ">=2.6.1" },
     { name = "pygame", marker = "extra == 'viz'", specifier = ">=2.6.1" },
     { name = "pyopengl", marker = "extra == 'all'", specifier = "==3.1.10" },
     { name = "pyopengl", marker = "extra == 'socnav'", specifier = "==3.1.10" },
@@ -5490,10 +5506,13 @@ requires-dist = [
     { name = "scikit-learn", marker = "extra == 'training'", specifier = ">=1.9.0" },
     { name = "scipy", marker = "extra == 'all'", specifier = ">=1.17.1" },
     { name = "scipy", marker = "extra == 'benchmark'", specifier = ">=1.17.1" },
+    { name = "scipy", marker = "extra == 'examples'", specifier = ">=1.17.1" },
     { name = "seaborn", marker = "extra == 'all'", specifier = ">=0.13.2" },
+    { name = "seaborn", marker = "extra == 'examples'", specifier = ">=0.13.2" },
     { name = "seaborn", marker = "extra == 'viz'", specifier = ">=0.13.2" },
     { name = "shapely", specifier = ">=2.1.2" },
     { name = "stable-baselines3", marker = "extra == 'all'", specifier = ">=2.9.0" },
+    { name = "stable-baselines3", marker = "extra == 'examples'", specifier = ">=2.9.0" },
     { name = "stable-baselines3", marker = "extra == 'training'", specifier = ">=2.9.0" },
     { name = "svgelements", specifier = ">=1.9.6" },
     { name = "tensorboard", marker = "extra == 'all'", specifier = ">=2.21.0" },
@@ -5501,6 +5520,7 @@ requires-dist = [
     { name = "tensorflow", marker = "extra == 'all'", specifier = ">=2.15.0" },
     { name = "tensorflow", marker = "extra == 'sacadrl'", specifier = ">=2.15.0" },
     { name = "torch", marker = "extra == 'all'", specifier = ">=2.13.0,<2.14.0" },
+    { name = "torch", marker = "extra == 'examples'", specifier = ">=2.13.0,<2.14.0" },
     { name = "torch", marker = "extra == 'training'", specifier = ">=2.13.0,<2.14.0" },
     { name = "torch", extras = ["cuda"], marker = "extra == 'all'", specifier = ">=2.13.0,<2.14.0" },
     { name = "torch", extras = ["cuda"], marker = "extra == 'gpu'", specifier = ">=2.13.0,<2.14.0" },
@@ -5510,7 +5530,7 @@ requires-dist = [
     { name = "wandb", marker = "extra == 'all'", specifier = ">=0.28.2" },
     { name = "wandb", marker = "extra == 'training'", specifier = ">=0.28.2" },
 ]
-provides-extras = ["all", "analytics", "benchmark", "browser", "criticality", "gpu", "maps", "progress", "recurrent", "rllib", "sacadrl", "socnav", "training", "viz"]
+provides-extras = ["all", "analytics", "benchmark", "browser", "criticality", "examples", "gpu", "maps", "progress", "recurrent", "rllib", "sacadrl", "socnav", "training", "viz"]
 
 [package.metadata.requires-dev]
 carla = [{ name = "carla", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==0.9.16" }]

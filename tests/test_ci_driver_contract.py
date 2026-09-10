@@ -457,6 +457,34 @@ def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
     assert "${{ inputs.sync-args }}" in sync_step["run"]
 
 
+def test_examples_smoke_uses_narrow_lock_backed_dependency_profile() -> None:
+    """Keep examples setup bounded to dependencies exercised by its smoke lane."""
+    workflow = yaml.safe_load(_workflow_text())
+    setup_step = next(
+        (
+            step
+            for step in workflow["jobs"]["examples-smoke"]["steps"]
+            if step.get("uses") == "./.github/actions/setup-ci-python"
+        ),
+        None,
+    )
+
+    assert setup_step is not None, "examples-smoke setup step not found"
+    assert setup_step["with"] == {"sync-args": "--extra examples --frozen"}
+
+    optional_dependencies = _pyproject()["project"]["optional-dependencies"]
+    assert optional_dependencies["examples"] == [
+        "robot_sf[viz,benchmark]",
+        "stable-baselines3>=2.9.0",
+        "torch>=2.13.0,<2.14.0",
+    ]
+    all_extras = (
+        "robot_sf[viz,maps,benchmark,training,gpu,recurrent,progress,"
+        "analytics,browser,sacadrl,socnav,criticality]"
+    )
+    assert all_extras in optional_dependencies["all"]
+
+
 def test_ci_setup_action_installs_rendered_page_qa_dependency() -> None:
     """Keep the shared Linux setup aligned with the evidence builder's PDF QA contract."""
     action = yaml.safe_load(CI_SETUP_ACTION.read_text(encoding="utf-8"))

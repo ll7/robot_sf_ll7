@@ -5,7 +5,8 @@ The repository separates automated dependency updates by compatibility risk so a
 ## Canonical sources
 
 - .github/dependabot.yml defines the root update lanes.
-- scripts/validation/dependabot_update_policy.v1.json maps direct packages to risk, lane, rollback, and existing CI evidence.
+- scripts/validation/dependabot_update_policy.v1.json maps direct packages to risk, lane, rollback,
+  and existing CI evidence, plus the explicitly supported CI-only dependency profiles.
 - scripts/dev/check_dependabot_update_policy.py validates the three surfaces together and reuses
   the coherence helper's frozen supported-profile comparison for lock changes.
 - The same checker owns the workflow action-pin guard: it compares full-SHA external action refs in
@@ -18,11 +19,17 @@ The repository separates automated dependency updates by compatibility risk so a
 
 The checker also covers the standalone fast-pysf project files. A new direct package must be added to the manifest with a reviewed class before it can pass the policy check. Unknown transitive lock rows remain visible and route through the conservative compatibility jobs.
 
-CI-only PEP 735 dependency groups are reported as profile declarations rather than Dependabot
-version-update lanes. Their packages still require canonical risk classes and existing CI evidence,
-but a group may compose high-impact and optional runtimes when that is necessary for a bounded
-workflow environment. This exception does not apply to changes in published project dependencies
-or to package version updates; those remain subject to the mixed-risk fail-closed guard.
+The `ci_only_dependency_groups` metadata is an explicit allow-list for CI-only PEP 735 dependency
+groups. Each entry binds one group to the root declaration and lockfile, names its root project
+requirement, lists every approved external requirement, and names the aggregate CI job. A group
+is profile-only only when it is newly added, matches that metadata exactly, leaves all published
+project requirements unchanged, and changes the lock only by adding the matching root
+`dev-dependencies` and `metadata.requires-dev` profile edges. The root lock row's version, source,
+published dependencies, and all other dev groups must remain unchanged; every other lock package
+row must remain unchanged as well. This permits the bounded `examples` workflow to compose
+high-impact and optional runtimes while keeping their classes visible. Unconfigured groups, changed
+requirements, published dependency changes, material lock changes, and lock-resolution changes
+remain subject to the mixed-risk fail-closed guard.
 
 ## Workflow action-pin coupling
 

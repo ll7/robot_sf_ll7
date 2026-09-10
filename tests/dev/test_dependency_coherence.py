@@ -151,6 +151,34 @@ def test_changed_lock_with_stale_root_dependency_edges_is_a_mismatch() -> None:
     assert any("root dependencies disagree" in reason for reason in report["reasons"])
 
 
+def test_root_self_reference_from_private_extra_is_not_a_dependency_mismatch() -> None:
+    base_files = {
+        "pyproject.toml": _project("robot-sf", "alpha>=1"),
+        "uv.lock": _lock("robot-sf", "alpha"),
+        "fast-pysf/pyproject.toml": _project("pysocialforce", "alpha>=1"),
+        "fast-pysf/uv.lock": _lock("pysocialforce", "alpha"),
+    }
+    head_files = {
+        **base_files,
+        "uv.lock": base_files["uv.lock"].replace(
+            'dependencies = [{ name = "alpha" }]',
+            'dependencies = [{ name = "alpha" }, { name = "robot-sf" }]',
+        ),
+    }
+
+    report = evaluate_coherence(
+        manifest=_manifest(),
+        profile_manifest={"profiles": [{"id": "root"}, {"id": "fast-pysf"}]},
+        base_files=base_files,
+        head_files=head_files,
+        changed_files=["pyproject.toml", "uv.lock"],
+        run_profile_checks=False,
+    )
+
+    assert report["status"] == "coherent"
+    assert report["changed_packages"] == ["robot-sf"]
+
+
 def test_supported_python_range_change_is_material_resolution_evidence() -> None:
     base_files = {
         "pyproject.toml": _project("robot-sf", "alpha>=1"),

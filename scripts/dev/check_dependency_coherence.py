@@ -513,28 +513,35 @@ def compare_lock_resolution(
 
 
 def _lock_dependency_names(text: str, root_package: str) -> set[str] | None:  # noqa: C901
+    """Return external dependencies, excluding uv's editable-project self-edge."""
     rows = _lock_rows(text)
-    row = next(iter(rows.get(normalize_package_name(root_package), [])), None)
+    root_name = normalize_package_name(root_package)
+    row = next(iter(rows.get(root_name, [])), None)
     if row is None:
         return None
     names: set[str] = set()
+
+    def add_dependency(value: Any) -> None:
+        if not isinstance(value, Mapping) or not isinstance(value.get("name"), str):
+            return
+        name = normalize_package_name(value["name"])
+        if name != root_name:
+            names.add(name)
+
     for dependency in row.get("dependencies", []):
-        if isinstance(dependency, Mapping) and isinstance(dependency.get("name"), str):
-            names.add(normalize_package_name(dependency["name"]))
+        add_dependency(dependency)
     optional = row.get("optional-dependencies", {})
     if isinstance(optional, Mapping):
         for values in optional.values():
             if isinstance(values, list):
                 for dependency in values:
-                    if isinstance(dependency, Mapping) and isinstance(dependency.get("name"), str):
-                        names.add(normalize_package_name(dependency["name"]))
+                    add_dependency(dependency)
     development = row.get("dev-dependencies", {})
     if isinstance(development, Mapping):
         for values in development.values():
             if isinstance(values, list):
                 for dependency in values:
-                    if isinstance(dependency, Mapping) and isinstance(dependency.get("name"), str):
-                        names.add(normalize_package_name(dependency["name"]))
+                    add_dependency(dependency)
     return names
 
 

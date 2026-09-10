@@ -244,7 +244,7 @@ def _outcome(reference: Mapping[str, str], status: str, copies: int = 0) -> dict
     }
 
 
-def _evaluate(  # noqa: C901 - one bounded custody decision per reference
+def _evaluate(  # noqa: C901, PLR0912 - one bounded custody decision per reference
     reference: Mapping[str, str],
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -293,7 +293,10 @@ def _evaluate(  # noqa: C901 - one bounded custody decision per reference
     required = 1 if reference["retention_class"] == "durable_required" else min_release_copies
     domains = {locator["failure_domain_id"] for locator in usable}
     if len(domains) >= required:
-        return _outcome(reference, "pass", len(usable))
+        if len(domains) == len(usable):
+            return _outcome(reference, "pass", len(usable))
+        findings.append(_f("same_failure_domain", rid, aid, "copies share a failure domain"))
+        return _outcome(reference, "fail", len(usable))
     if usable:
         if len(domains) < len(usable):
             findings.append(_f("same_failure_domain", rid, aid, "copies share a failure domain"))

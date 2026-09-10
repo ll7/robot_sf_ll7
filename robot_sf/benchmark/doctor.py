@@ -24,22 +24,29 @@ if TYPE_CHECKING:
 CRITICAL_BINARIES = ("git", "uv")
 OPTIONAL_BINARIES = ("ffmpeg", "gh", "docker", "jq")
 OPTIONAL_IMPORTS = ("gymnasium", "pygame", "matplotlib", "numpy")
+CORE_IMPORTS = ("gymnasium", "numpy")
 OPTIONAL_ENV_VARS = ("MPLBACKEND", "SDL_VIDEODRIVER", "DISPLAY")
 DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
-# Optional dependency groups that unlock larger feature slices of the project.
-OPTIONAL_EXTRAS = (
-    "viz",
-    "maps",
-    "benchmark",
-    "training",
-    "gpu",
-    "orca",
-    "socnav",
-    "rllib",
-    "analysis",
-    "analytics",
-)
+# Public project extras that unlock larger feature slices of the project.
+# ``all`` is an aggregate selector and is intentionally not an independent
+# capability probe.
+OPTIONAL_EXTRA_PROBES = {
+    "viz": "pygame",
+    "maps": "geopandas",
+    "benchmark": "pandas",
+    "gpu": "torch",
+    "training": "stable_baselines3",
+    "recurrent": "sb3_contrib",
+    "rllib": "ray",
+    "progress": "tqdm",
+    "analytics": "duckdb",
+    "browser": "playwright",
+    "sacadrl": "tensorflow",
+    "socnav": "cv2",
+    "criticality": "cma",
+}
+OPTIONAL_EXTRAS = tuple(OPTIONAL_EXTRA_PROBES)
 # Map deps are pulled in by osmnx-based OSM map authoring examples.
 MAP_DEP_IMPORTS = ("osmnx", "shapely")
 # Bundled model artifacts the quickstart examples rely on, including the PPO
@@ -53,10 +60,10 @@ MODEL_ARTIFACTS = (
     Path("model/pedestrian/ppo_intersection.zip"),
 )
 UV_BOOTSTRAP_HINT = (
-    "Install uv (https://docs.astral.sh/uv/getting-started/) with one of:\n"
-    "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
+    "Install uv (https://docs.astral.sh/uv/getting-started/) with a platform-appropriate method:\n"
+    "  POSIX shell: curl -LsSf https://astral.sh/uv/install.sh | sh\n"
     "  python -m pip install uv\n"
-    "  brew install uv"
+    "  macOS/Homebrew: brew install uv"
 )
 
 
@@ -139,8 +146,8 @@ def _check_binary(name: str, *, required: bool) -> DoctorCheck:
     )
 
 
-def _check_optional_import(name: str) -> DoctorCheck:
-    """Check whether an optional Python import is available.
+def _check_optional_import(name: str, *, required: bool = False) -> DoctorCheck:
+    """Check whether a Python import is available.
 
     Returns:
         DoctorCheck: Optional import availability check result.
@@ -148,11 +155,17 @@ def _check_optional_import(name: str) -> DoctorCheck:
     spec = importlib_util.find_spec(name)
     details: dict[str, Any] = {"available": spec is not None}
     if spec is None:
-        details["hint"] = f"Install the dependency providing {name} (try: uv sync --all-extras)."
+        remedy = {
+            "gymnasium": "uv sync",
+            "numpy": "uv sync",
+            "pygame": "uv sync --extra viz",
+            "matplotlib": "uv sync --extra viz",
+        }.get(name, f"install the dependency providing {name}")
+        details["hint"] = f"Install the dependency providing {name} (try: {remedy})."
     return DoctorCheck(
         name=f"import:{name}",
-        status="ok" if spec else "missing_optional",
-        required=False,
+        status="ok" if spec else ("failed" if required else "missing_optional"),
+        required=required,
         details=details,
     )
 
@@ -286,20 +299,8 @@ def _check_optional_extras() -> DoctorCheck:
         DoctorCheck: Optional-extras availability check result.
     """
     details: dict[str, Any] = {}
-    for extra in OPTIONAL_EXTRAS:
+    for extra, probe in OPTIONAL_EXTRA_PROBES.items():
         # Each extra is dominated by a flagship import we can probe cheaply.
-        probe = {
-            "viz": "pygame",
-            "maps": "geopandas",
-            "benchmark": "pandas",
-            "training": "stable_baselines3",
-            "gpu": "torch",
-            "orca": "rvo2",
-            "socnav": "cv2",
-            "rllib": "ray",
-            "analysis": "seaborn",
-            "analytics": "duckdb",
-        }[extra]
         available = importlib_util.find_spec(probe) is not None
         details[extra] = {"available": available, "probe": probe}
     map_imports = {name: importlib_util.find_spec(name) is not None for name in MAP_DEP_IMPORTS}
@@ -530,7 +531,7 @@ def collect_doctor_report(
         _check_uv_bootstrap(),
         *[_check_binary(name, required=True) for name in CRITICAL_BINARIES],
         *[_check_binary(name, required=False) for name in OPTIONAL_BINARIES],
-        *[_check_optional_import(name) for name in OPTIONAL_IMPORTS],
+        *[_check_optional_import(name, required=name in CORE_IMPORTS) for name in OPTIONAL_IMPORTS],
         _check_environment_variables(),
         _check_git_worktree(resolved_workspace_root),
         _check_artifact_root(resolved_artifact_root),

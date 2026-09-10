@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -202,10 +203,11 @@ def test_quickstart_check_fails_without_manifest_entries(tmp_path: Path) -> None
     assert check.details["hint"] == "Add at least one manifest-declared quickstart example."
 
 
-def test_optional_import_check_renders_remedy_when_missing(
+def test_core_import_check_is_required_and_has_narrow_remedy(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A missing optional import must carry an actionable install hint."""
+    """A missing core import fails the report and points to the core sync."""
     real_find_spec = doctor.importlib_util.find_spec
 
     def _fake_find_spec(name: str, *args: object, **kwargs: object) -> object:
@@ -215,12 +217,55 @@ def test_optional_import_check_renders_remedy_when_missing(
 
     monkeypatch.setattr(doctor.importlib_util, "find_spec", _fake_find_spec)
 
-    check = doctor._check_optional_import("numpy")
+    payload = doctor.collect_doctor_report(
+        artifact_root=tmp_path / "artifacts",
+        run_env_smoke=False,
+        run_quickstart_smoke=False,
+    )
+    check = _check_by_name(payload)["import:numpy"]
 
-    assert check.status == "missing_optional"
-    assert check.details["available"] is False
-    assert "hint" in check.details
-    assert "uv sync --all-extras" in check.details["hint"]
+    assert check["status"] == "failed"
+    assert check["required"] is True
+    details = check["details"]
+    assert isinstance(details, dict)
+    assert details["available"] is False
+    assert "hint" in details
+    assert "uv sync)." in details["hint"]
+
+
+def test_optional_import_remedies_name_the_declared_extra() -> None:
+    """Optional import remedies do not broaden setup to every extra."""
+    assert (
+        "uv sync --extra viz"
+        in doctor._check_optional_import("pygame", required=False).details["hint"]
+    )
+
+
+def test_doctor_extra_probes_match_public_project_extras() -> None:
+    """Extra probes track pyproject's public names and omit stale labels."""
+    from pathlib import Path as _Path
+
+    pyproject = tomllib.loads(
+        (_Path(doctor.__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    declared = set(pyproject["project"]["optional-dependencies"])
+
+    assert set(doctor.OPTIONAL_EXTRAS) == declared - {"all"}
+    assert {"orca", "analysis"}.isdisjoint(doctor.OPTIONAL_EXTRAS)
+
+
+def test_doctor_docs_use_declared_extra_remedies() -> None:
+    """The troubleshooting page names real selectors and rejects stale ones."""
+    from pathlib import Path as _Path
+
+    page_path = (
+        _Path(doctor.__file__).resolve().parents[2] / "docs" / "troubleshooting" / "doctor.md"
+    )
+    page = page_path.read_text(encoding="utf-8")
+    assert "uv sync --extra orca" not in page
+    assert "uv sync --extra analysis" not in page
+    assert "uv sync --group dev" in page
+    assert "uv sync --extra viz" in page
 
 
 def test_optional_binary_check_renders_remedy_when_missing(

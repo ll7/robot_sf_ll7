@@ -560,6 +560,10 @@ _FAST_FILES = {
     "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
+    # Doctor JSON and top-level CLI tests are deterministic readiness contracts;
+    # keep both source-adjacent owners in the exact-head changed-coverage lane.
+    "test_doctor.py",
+    "test_cli_doctor.py",
     "test_post_execution_release_doctor.py",
     # Checkpoint provenance and Predictive MPPI adapter tests are deterministic
     # contract coverage for release-smoke producer changes; keep them in the

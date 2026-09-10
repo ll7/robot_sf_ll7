@@ -167,6 +167,13 @@ def test_release_checkpoint_producer_tests_are_registered_in_fast_lane() -> None
     } <= policy.fast_files
 
 
+def test_doctor_producer_tests_are_registered_in_fast_lane() -> None:
+    """Doctor source-adjacent and top-level CLI contracts stay in fast shards."""
+    policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
+
+    assert {"test_doctor.py", "test_cli_doctor.py"} <= policy.fast_files
+
+
 def test_simulation_and_campaign_tests_remain_slow() -> None:
     """Simulation-heavy tests are reported as intentional slow coverage, not waived."""
 

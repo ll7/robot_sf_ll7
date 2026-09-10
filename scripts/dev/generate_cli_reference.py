@@ -14,10 +14,12 @@ from the deterministic render instead of writing it.
 The ``--help`` smoke requires Linux Landlock ABI 4+ and seccomp on a supported
 architecture. The child gets read-only source/runtime roots, a task-owned writable
 temporary root, a fixed environment without inherited credential variables, and
-denied network, process, thread, namespace, and scheduler escape syscalls.
-Unsupported hosts fail closed; this is an OS-enforced boundary, not a Python-level
-sandbox. The child retains the invoking Unix identity and host resource limits,
-so this is not a general untrusted-code sandbox.
+denied network, process, thread, namespace, and scheduler escape syscalls. On
+x86_64, the x32 ABI syscall-number bit is rejected wholesale so it cannot bypass
+the native side-effect deny list. Unsupported hosts fail closed; this is an
+OS-enforced boundary, not a Python-level sandbox. The child retains the invoking
+Unix identity and host resource limits, so this is not a general untrusted-code
+sandbox.
 """
 
 from __future__ import annotations
@@ -128,9 +130,11 @@ SECCOMP_RET_ERRNO = 0x00050000
 SECCOMP_RET_ALLOW = 0x7FFF0000
 BPF_LD_W_ABS = 0x20
 BPF_JMP_JEQ_K = 0x15
+BPF_JMP_JSET_K = 0x45
 BPF_RET_K = 0x06
 SECCOMP_ARCH_X86_64 = 0xC000003E
 SECCOMP_ARCH_AARCH64 = 0xC00000B7
+X32_SYSCALL_BIT = 0x40000000
 
 _BLOCKED_SYSCALLS = {
     # Numbers from Linux arch/x86/entry/syscalls/syscall_64.tbl. Keep this
@@ -767,13 +771,23 @@ def _install_probe_landlock(libc: ctypes.CDLL, repo_root: Path, task_root: Path)
 
 
 def _probe_seccomp_instructions(machine: str) -> list[_SockFilter]:
-    """Build a deny filter for network, process, namespace, and scheduler syscalls."""
+    """Build the fail-closed deny filter for one supported Linux architecture."""
     instructions = [
         _SockFilter(BPF_LD_W_ABS, 0, 0, 4),
         _SockFilter(BPF_JMP_JEQ_K, 1, 0, _SECCOMP_ARCHITECTURES[machine]),
         _SockFilter(BPF_RET_K, 0, 0, SECCOMP_RET_KILL_PROCESS),
         _SockFilter(BPF_LD_W_ABS, 0, 0, 0),
     ]
+    if machine == "x86_64":
+        # x32 uses the x86_64 audit architecture but sets this bit in nr. Reject
+        # the ABI as a whole before checking native syscall numbers so every
+        # existing side-effect denial remains covered without duplicating it.
+        instructions.extend(
+            (
+                _SockFilter(BPF_JMP_JSET_K, 0, 1, X32_SYSCALL_BIT),
+                _SockFilter(BPF_RET_K, 0, 0, SECCOMP_RET_ERRNO | errno.EPERM),
+            )
+        )
     for syscall_number in _BLOCKED_SYSCALLS[machine]:
         instructions.extend(
             (
@@ -1157,8 +1171,9 @@ def probe_help(
     and subcommand introspection. Linux Landlock and seccomp enforce read-only
     source/runtime roots, a task-owned writable root, no inherited credential
     environment or file descriptors, and denied network/process/thread escape
-    syscalls before target import. Hosts without that OS support fail closed;
-    this is not a Python-level sandbox.
+    syscalls before target import. On x86_64, the x32 ABI is rejected as a whole
+    before the native syscall deny list. Hosts without that OS support fail
+    closed; this is not a Python-level sandbox.
 
     Args:
         script: Console script name (used as ``sys.argv[0]`` for stable help).
@@ -1428,6 +1443,10 @@ def render_markdown(
     lines.append(
         "- Network, process/thread, namespace, and scheduler escape syscalls are denied; "
         "unsupported hosts fail closed."
+    )
+    lines.append(
+        "- On x86_64, the x32 ABI syscall-number bit is rejected wholesale before "
+        "native syscall filtering."
     )
     lines.append(
         "- This is not a general untrusted-code sandbox: the child retains the invoking "

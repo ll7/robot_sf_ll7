@@ -206,5 +206,6 @@ Subcommands (summary only; see the task guide for flags):
 - `--help` runs in an OS-enforced sandbox (Linux Landlock + seccomp) with a fixed width, task-owned temporary root, and timeout.
 - Dynamic import/help code gets read-only source/runtime access, writes only inside that temporary root, and receives no inherited environment or file-descriptor credentials.
 - Network, process/thread, namespace, and scheduler escape syscalls are denied; unsupported hosts fail closed.
+- On x86_64, the x32 ABI syscall-number bit is rejected wholesale before native syscall filtering.
 - This is not a general untrusted-code sandbox: the child retains the invoking Unix identity and host resource limits.
 - CI fails on drift: run the generator without `--check` to refresh this file.

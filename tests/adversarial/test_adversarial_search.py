@@ -1127,6 +1127,22 @@ def test_multi_ped_adversarial_runtime_config_resets_and_steps() -> None:
         env.close()
 
 
+def test_multi_ped_runtime_copy_preserves_svg_geometry_contract() -> None:
+    """Derived adversarial maps retain geometry provenance for downstream partitioning."""
+    config = _runtime_multi_ped_config()
+    base_map = dataclasses.replace(_runtime_base_map(), svg_geometry_contract="corrected")
+
+    robot_config = build_multi_ped_adversarial_robot_config(
+        config,
+        base_map,
+        map_id="corrected_runtime",
+        sim_time_in_secs=0.5,
+    )
+
+    runtime_map = robot_config.map_pool.get_map("corrected_runtime")
+    assert runtime_map.svg_geometry_contract == "corrected"
+
+
 def test_multi_ped_adversarial_runtime_config_resets_and_steps_single_pedestrian() -> None:
     """The 1-N adversarial runtime contract should include N=1 reset/step coverage."""
     config = MultiPedAdversarialConfig(

@@ -251,6 +251,20 @@ class SvgMapConverter:
         return result
 
     @staticmethod
+    def _subtract_finite_coordinate(value: float, offset: float, *, description: str) -> float:
+        """Subtract a corrected SVG viewBox offset and reject non-finite results.
+
+        Returns:
+            float: Finite coordinate after subtracting the viewBox offset.
+        """
+        result = value - offset
+        if not isfinite(result):
+            raise ValueError(
+                f"non-finite corrected SVG coordinate while {description}: {value!r} - {offset!r}."
+            )
+        return result
+
+    @staticmethod
     def _advance_transform_cursor(transform_value: str, cursor: int, *, source: str) -> int:
         """Consume one valid separator between transform functions.
 
@@ -1137,6 +1151,49 @@ class SvgMapConverter:
     def _apply_viewbox_offset(self, offset_x: float, offset_y: float) -> None:
         """Shift all parsed SVG elements by the viewBox origin to normalize to (0,0)."""
         if abs(offset_x) < 1e-9 and abs(offset_y) < 1e-9:
+            return
+
+        if self.geometry_contract == GEOMETRY_CONTRACT_CORRECTED:
+            for path in self.path_info:
+                path.coordinates = tuple(
+                    (
+                        self._subtract_finite_coordinate(
+                            x,
+                            offset_x,
+                            description="normalizing path x coordinate by viewBox",
+                        ),
+                        self._subtract_finite_coordinate(
+                            y,
+                            offset_y,
+                            description="normalizing path y coordinate by viewBox",
+                        ),
+                    )
+                    for x, y in path.coordinates
+                )
+
+            for rect in self.rect_info:
+                rect.x = self._subtract_finite_coordinate(
+                    rect.x,
+                    offset_x,
+                    description="normalizing rectangle x coordinate by viewBox",
+                )
+                rect.y = self._subtract_finite_coordinate(
+                    rect.y,
+                    offset_y,
+                    description="normalizing rectangle y coordinate by viewBox",
+                )
+
+            for circle in self.circle_info:
+                circle.cx = self._subtract_finite_coordinate(
+                    circle.cx,
+                    offset_x,
+                    description="normalizing circle x coordinate by viewBox",
+                )
+                circle.cy = self._subtract_finite_coordinate(
+                    circle.cy,
+                    offset_y,
+                    description="normalizing circle y coordinate by viewBox",
+                )
             return
 
         offset = np.array([offset_x, offset_y])

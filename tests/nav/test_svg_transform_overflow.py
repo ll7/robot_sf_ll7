@@ -19,10 +19,17 @@ SVG_HEADER = (
 )
 
 
-def _write_svg(tmp_path: Path, name: str, inner: str) -> str:
+def _write_svg(
+    tmp_path: Path,
+    name: str,
+    inner: str,
+    *,
+    view_box: str = "0 0 40 40",
+) -> str:
     """Write a minimal SVG fixture and return its path."""
     path = tmp_path / name
-    path.write_text(SVG_HEADER + inner + "</svg>", encoding="utf-8")
+    header = SVG_HEADER.replace('viewBox="0 0 40 40"', f'viewBox="{view_box}"')
+    path.write_text(header + inner + "</svg>", encoding="utf-8")
     return str(path)
 
 
@@ -81,6 +88,44 @@ def test_corrected_rejects_nonfinite_shifted_shape_coordinate(
 
     with pytest.raises(ValueError, match="non-finite"):
         SvgMapConverter(svg, geometry_contract="corrected")
+
+
+@pytest.mark.parametrize(
+    ("element", "name"),
+    [
+        ('<path d="M 1e308 0 L 1e308 1" />', "path"),
+        ('<rect x="1e308" y="0" width="1" height="1" />', "rect"),
+        ('<circle cx="1e308" cy="0" r="1" />', "circle"),
+    ],
+)
+def test_corrected_rejects_nonfinite_viewbox_normalization(
+    tmp_path: Path, element: str, name: str
+) -> None:
+    """Corrected viewBox normalization rejects finite coordinates that overflow."""
+    svg = _write_svg(
+        tmp_path,
+        f"{name}_viewbox_overflow.svg",
+        element,
+        view_box="-1e308 0 40 40",
+    )
+
+    with pytest.raises(ValueError, match="non-finite corrected SVG coordinate"):
+        SvgMapConverter(svg, geometry_contract="corrected")
+
+
+def test_corrected_viewbox_normalization_preserves_finite_coordinates(tmp_path: Path) -> None:
+    """Corrected viewBox normalization shifts finite geometry without changing its contract."""
+    svg = _write_svg(
+        tmp_path,
+        "finite_viewbox.svg",
+        '<path inkscape:label="robot_route_0_0" d="M 10 20 L 11 21" />',
+        view_box="10 20 40 40",
+    )
+
+    converter = SvgMapConverter(svg, geometry_contract="corrected")
+
+    assert converter.path_info[0].coordinates == ((0.0, 0.0), (1.0, 1.0))
+    assert converter.get_map_definition().svg_geometry_contract == "corrected"
 
 
 def test_legacy_ignores_overflowing_ancestor_translation(tmp_path: Path) -> None:

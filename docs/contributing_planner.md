@@ -103,6 +103,13 @@ For broader benchmark interpretation, use
 
 ## Minimal Example Path
 
+New to the planner interface? Start with the runnable
+[`37_custom_planner_protocol.py`](../examples/advanced/37_custom_planner_protocol.py) tutorial:
+one deterministic stateless planner implementing `plan`, keyword-only seeded `reset`,
+`diagnostics`, and idempotent `close` against `LocalPlannerProtocol`, with action validation,
+a short headless episode, and a negative fixture. It is educational only — not a benchmark
+reference and not a production recommendation.
+
 For a diagnostic adapter contribution, compare against the existing reference adapter before adding
 new surfaces:
 

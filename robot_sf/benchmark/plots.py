@@ -220,8 +220,9 @@ def save_pareto_png(  # noqa: PLR0913
     y_higher_better: bool = False,
     title: str | None = None,
     out_pdf: str | None = None,
-    out_svg: str | None = None,
     observation_track_mode: str = "strict",
+    *,
+    out_svg: str | None = None,
 ) -> dict[str, object]:
     """Render and save a Pareto scatter with non-dominated points highlighted.
 

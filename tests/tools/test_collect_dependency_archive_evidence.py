@@ -13,6 +13,8 @@ import pytest
 
 from scripts.tools.collect_dependency_archive_evidence import (
     MAX_ARCHIVE_BYTES,
+    MAX_EVIDENCE_MEMBER_BYTES,
+    MAX_MANIFEST_MEMBER_COUNT,
     MAX_METADATA_JSON_BYTES,
     _collection_status,
     _validate_manifest,
@@ -20,6 +22,7 @@ from scripts.tools.collect_dependency_archive_evidence import (
     fetch_archive,
     fetch_json,
     inspect_archive,
+    read_bounded_bytes,
     select_target_artifacts,
     target_compatible,
 )
@@ -54,7 +57,7 @@ def _artifact(
         "platform_tags": ["py3", "none", "manylinux_2_17_x86_64"],
         "sha256": "b" * 64,
         "size": 10,
-        "url": f"https://files.example.test/{filename}",
+        "url": f"https://files.pythonhosted.org/packages/{filename}",
     }
 
 
@@ -101,6 +104,14 @@ def test_manifest_validation_binds_owner_profile_and_candidate_identities() -> N
     assert _validate_manifest(_manifest(), _args()) == 8179
 
 
+def test_manifest_input_read_is_bounded(tmp_path: Path) -> None:
+    path = tmp_path / "manifest.json"
+    path.write_bytes(b"1234")
+
+    with pytest.raises(ValueError, match="batch manifest exceeds 3 byte bound"):
+        read_bounded_bytes(path, 3, "batch manifest")
+
+
 def test_manifest_validation_rejects_owner_mismatch_before_fetch() -> None:
     manifest = _manifest()
     manifest["members"][0]["assignment"]["owner_issue"] = 8172  # type: ignore[index]
@@ -132,6 +143,20 @@ def test_manifest_validation_rejects_identity_suffix_mismatch() -> None:
     )
 
     with pytest.raises(ValueError, match="package_id suffix"):
+        _validate_manifest(manifest, _args())
+
+
+def test_manifest_validation_rejects_untyped_or_oversized_member_count() -> None:
+    manifest = _manifest()
+    manifest["member_count"] = True
+
+    with pytest.raises(ValueError, match="member_count must be a typed integer"):
+        _validate_manifest(manifest, _args())
+
+    manifest = _manifest()
+    manifest["member_count"] = MAX_MANIFEST_MEMBER_COUNT + 1
+
+    with pytest.raises(ValueError, match="bounded collector limit"):
         _validate_manifest(manifest, _args())
 
 
@@ -309,6 +334,91 @@ def test_zip_symlink_and_control_member_fail_closed(tmp_path: Path) -> None:
     assert any("unsafe archive member" in error for error in result["errors"])
 
 
+def test_evidence_member_bound_marks_archive_partial(tmp_path: Path) -> None:
+    archive_path = tmp_path / "demo-1.0.0.whl"
+    oversized_license = b"license\n" + b"x" * MAX_EVIDENCE_MEMBER_BYTES
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("LICENSE", oversized_license)
+    data = archive_path.read_bytes()
+    artifact = {
+        "filename": archive_path.name,
+        "kind": "wheel",
+        "url": "https://files.pythonhosted.org/packages/demo-1.0.0.whl",
+        "size": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+    result = inspect_archive(
+        archive_path,
+        artifact,
+        expected_name="demo",
+        expected_version="1.0.0",
+    )
+
+    assert result["digest_verified"] is True
+    assert result["inspection_status"] == "partial"
+    assert result["evidence_members"][0]["read_status"].startswith("too_large>")
+    assert any("could not be read" in error for error in result["errors"])
+
+
+def test_zip_sdist_is_inspected_and_metadata_identity_is_bound(tmp_path: Path) -> None:
+    archive_path = tmp_path / "demo-1.0.0.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "demo-1.0.0/PKG-INFO",
+            "Metadata-Version: 2.3\nName: demo\nVersion: 1.0.0\n",
+        )
+        archive.writestr("demo-1.0.0/LICENSE", "Permission is granted.\n")
+    data = archive_path.read_bytes()
+    artifact = {
+        "filename": archive_path.name,
+        "kind": "sdist",
+        "url": "https://files.pythonhosted.org/packages/demo-1.0.0.zip",
+        "size": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+    result = inspect_archive(
+        archive_path,
+        artifact,
+        expected_name="demo",
+        expected_version="1.0.0",
+    )
+
+    assert result["inspection_status"] == "inspected"
+    assert result["metadata"][0]["fields"]["name"] == "demo"
+    assert result["evidence_members"][0]["identity_match"] is True
+
+
+def test_archive_metadata_identity_mismatch_is_partial(tmp_path: Path) -> None:
+    archive_path = tmp_path / "demo-1.0.0.whl"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "demo-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: another-demo\nVersion: 1.0.0\n",
+        )
+    data = archive_path.read_bytes()
+    artifact = {
+        "filename": archive_path.name,
+        "kind": "wheel",
+        "url": "https://files.pythonhosted.org/packages/demo-1.0.0.whl",
+        "size": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+    result = inspect_archive(
+        archive_path,
+        artifact,
+        expected_name="demo",
+        expected_version="1.0.0",
+    )
+
+    assert result["inspection_status"] == "partial"
+    assert result["metadata"][0]["fields"]["name"] == "another-demo"
+    assert result["evidence_members"][0]["identity_match"] is False
+    assert any("identity differs" in error for error in result["errors"])
+
+
 def test_archive_fetch_rejects_non_https_without_touching_network(
     tmp_path: Path,
 ) -> None:
@@ -321,6 +431,136 @@ def test_archive_fetch_rejects_non_https_without_touching_network(
     assert path is None
     assert record["error"] == "archive URL must be HTTPS"
     assert downloaded == 0
+
+
+def test_archive_fetch_rejects_unapproved_https_host_without_touching_network(
+    tmp_path: Path, monkeypatch
+) -> None:
+    def fail_urlopen(*args: object, **kwargs: object) -> None:
+        raise AssertionError("unapproved archive host attempted network access")
+
+    monkeypatch.setattr("urllib.request.urlopen", fail_urlopen)
+    path, record, downloaded = fetch_archive(
+        {
+            "url": "https://files.example.test/demo.whl",
+            "size": 1,
+            "sha256": "a" * 64,
+        },
+        tmp_path / "demo.whl",
+        0,
+    )
+
+    assert path is None
+    assert record["error"] == "archive URL host is not an approved PyPI archive host"
+    assert downloaded == 0
+
+
+def test_offline_cache_misses_never_open_network(tmp_path: Path, monkeypatch) -> None:
+    def fail_urlopen(*args: object, **kwargs: object) -> None:
+        raise AssertionError("offline collection attempted network access")
+
+    monkeypatch.setattr("urllib.request.urlopen", fail_urlopen)
+
+    payload, metadata_record = fetch_json(
+        "https://pypi.org/pypi/demo/1.0.0/json",
+        tmp_path / "metadata.json",
+        offline=True,
+    )
+    path, archive_record, downloaded = fetch_archive(
+        {
+            "url": "https://files.pythonhosted.org/packages/demo.whl",
+            "size": 1,
+            "sha256": "a" * 64,
+        },
+        tmp_path / "demo.whl",
+        0,
+        offline=True,
+    )
+
+    assert payload is None
+    assert "offline mode" in metadata_record["error"]
+    assert path is None
+    assert "offline mode" in archive_record["error"]
+    assert downloaded == 0
+
+
+def test_malformed_registry_metadata_remains_partial(tmp_path: Path) -> None:
+    artifact = _artifact()
+    archive_path = tmp_path / "output" / "cache" / "demo_package" / "1.0.0" / artifact["filename"]
+    archive_path.parent.mkdir(parents=True)
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            "demo-1.0.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: demo-package\nVersion: 1.0.0\n",
+        )
+        archive.writestr("LICENSE", "Permission is granted.\n")
+    data = archive_path.read_bytes()
+    artifact["size"] = len(data)
+    artifact["sha256"] = hashlib.sha256(data).hexdigest()
+
+    output = tmp_path / "output"
+    pypi_path = output / "pypi-json" / "demo_package-1.0.0.json"
+    pypi_path.parent.mkdir(parents=True)
+    pypi_path.write_text(
+        json.dumps(
+            {
+                "info": {
+                    "name": "demo-package",
+                    "version": "1.0.0",
+                    "description": "contact@example.invalid",
+                    "classifiers": None,
+                    "project_urls": {
+                        "homepage": "https://example.invalid/demo",
+                        "unexpected": {"private": "value"},
+                    },
+                },
+                "urls": [
+                    {
+                        "filename": artifact["filename"],
+                        "digests": {"sha256": artifact["sha256"]},
+                        "size": artifact["size"],
+                        "url": artifact["url"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest = _manifest(artifacts=[artifact])
+    manifest_bytes = json.dumps(manifest, sort_keys=True).encode("utf-8")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_bytes(manifest_bytes)
+    args = _args(
+        task_id="malformed-metadata",
+        output=str(output),
+        batch_manifest=str(manifest_path),
+        expected_batch_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+        target_os="Linux",
+        target_architecture="x86_64",
+        python_version="3.13",
+        resolver_name="uv",
+        resolver_version="0.11.21",
+        offline=True,
+        argv="synthetic malformed metadata",
+    )
+
+    result = collect(args)
+    row = result["rows"][0]
+
+    assert row["pypi_evidence"]["errors"]
+    assert row["collection_status"] == "partial_or_unavailable"
+    assert row["license_facts"]["authority_boundary"] == "descriptive_observation_only"
+    observed_info = row["pypi_evidence"]["metadata"]["info"]
+    assert "description" not in observed_info
+    assert observed_info["project_urls"] == {"homepage": "https://example.invalid/demo"}
+    ledger_text = (output / "dependency_evidence_ledger.json").read_text(encoding="utf-8")
+    run_text = (output / "collector-run.json").read_text(encoding="utf-8")
+    assert str(tmp_path) not in ledger_text
+    assert str(tmp_path) not in run_text
+    assert result["target"]["offline"] is True
+    first_ledger = ledger_text
+    collect(args)
+    assert (output / "dependency_evidence_ledger.json").read_text(encoding="utf-8") == first_ledger
 
 
 def test_collect_continues_after_ambiguous_target_selection(tmp_path: Path) -> None:

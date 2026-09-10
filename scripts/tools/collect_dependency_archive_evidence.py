@@ -33,9 +33,12 @@ MAX_MEMBER_UNCOMPRESSED_BYTES = 4 * 1024 * 1024 * 1024
 MAX_EVIDENCE_MEMBER_BYTES = 8 * 1024 * 1024
 MAX_EVIDENCE_TOTAL_BYTES = 64 * 1024 * 1024
 MAX_METADATA_JSON_BYTES = 16 * 1024 * 1024
+MAX_MANIFEST_JSON_BYTES = 16 * 1024 * 1024
+MAX_MANIFEST_MEMBER_COUNT = 50_000
 CHUNK_BYTES = 1024 * 1024
 MANIFEST_SCHEMA = "robot_sf.p04.p05_batch.v1"
 PYPI_REGISTRY_URL = "https://pypi.org/simple"
+PYPI_ARCHIVE_HOSTS = frozenset({"files.pythonhosted.org", "pypi.org"})
 KNOWN_SOURCE_TYPES = frozenset({"editable", "registry"})
 CANONICAL_OWNER_REPOSITORY = "ll7/robot_sf_ll7"
 SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -77,12 +80,99 @@ def write_json(path: Path, value: object) -> None:
     )
 
 
+def read_bounded_bytes(path: Path, limit: int, description: str) -> bytes:
+    """Read one input file without allowing its in-memory representation to grow unbounded."""
+    with path.open("rb") as handle:
+        data = handle.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f"{description} exceeds {limit} byte bound")
+    return data
+
+
 def _https_url(value: object) -> bool:
     """Return whether a value is an absolute HTTPS URL."""
     if not isinstance(value, str):
         return False
-    parsed = urllib.parse.urlsplit(value)
-    return parsed.scheme.lower() == "https" and bool(parsed.netloc) and not parsed.fragment
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        return (
+            parsed.scheme.lower() == "https"
+            and bool(parsed.hostname)
+            and parsed.username is None
+            and parsed.password is None
+            and not parsed.fragment
+        )
+    except ValueError:
+        return False
+
+
+def _pypi_archive_url(value: object) -> bool:
+    """Return whether an archive URL stays on the public PyPI file hosts."""
+    if not _https_url(value):
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(str(value))
+        return (
+            parsed.hostname.lower() in PYPI_ARCHIVE_HOSTS
+            and parsed.port in {None, 443}
+            and not parsed.query
+        )
+    except (AttributeError, ValueError):
+        return False
+
+
+def _pypi_json_url(value: object) -> bool:
+    """Return whether a registry URL stays on the canonical HTTPS PyPI host."""
+    if not _https_url(value):
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(str(value))
+        return (
+            parsed.hostname.lower() == "pypi.org"
+            and parsed.port in {None, 443}
+            and not parsed.query
+        )
+    except (AttributeError, ValueError):
+        return False
+
+
+def _safe_output_path(root: Path, candidate: Path) -> bool:
+    """Return whether a cache path stays below ``root`` without symlink hops."""
+    root_path = root.resolve()
+    candidate_path = candidate.absolute()
+    try:
+        candidate_path.relative_to(root_path)
+    except ValueError:
+        return False
+    current = candidate_path
+    while current != root_path:
+        if current.is_symlink():
+            return False
+        current = current.parent
+    return True
+
+
+def _relative_output_path(path: Path, root: Path) -> str:
+    """Return a stable output-relative path without exposing host directories."""
+    try:
+        return path.resolve(strict=False).relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return "<external-local-path>"
+
+
+def _input_display_path(path: Path, output: Path) -> str:
+    """Return a privacy-safe input path label; the byte digest remains authoritative."""
+    if _safe_output_path(output, path):
+        return _relative_output_path(path, output)
+    return f"<external-input>/{path.name}"
+
+
+def _redact_cache_record(record: dict[str, Any], output: Path) -> dict[str, Any]:
+    """Replace local cache paths in a durable network observation with relative labels."""
+    redacted = dict(record)
+    if isinstance(record.get("path"), str):
+        redacted["path"] = _relative_output_path(Path(record["path"]), output)
+    return redacted
 
 
 def _canonical_name(value: str) -> str:
@@ -149,8 +239,17 @@ def _validate_manifest(  # noqa: C901, PLR0912, PLR0915 - closed batch contract 
     if not isinstance(members, list) or not members:
         issues.append("manifest members must be a non-empty list")
         members = []
-    if manifest.get("member_count") != len(members):
+    member_count = manifest.get("member_count")
+    if not isinstance(member_count, int) or isinstance(member_count, bool):
+        issues.append("manifest member_count must be a typed integer")
+    elif member_count != len(members):
         issues.append("manifest member_count does not match members")
+    if (
+        isinstance(member_count, int)
+        and not isinstance(member_count, bool)
+        and member_count > MAX_MANIFEST_MEMBER_COUNT
+    ) or len(members) > MAX_MANIFEST_MEMBER_COUNT:
+        issues.append("manifest member count exceeds bounded collector limit")
     package_ids: set[str] = set()
     identity_ids: set[str] = set()
     for index, member in enumerate(members):
@@ -257,8 +356,10 @@ def _validate_manifest(  # noqa: C901, PLR0912, PLR0915 - closed batch contract 
                 issues.append(f"{artifact_prefix} size is not a positive typed integer")
             if not _sha(artifact.get("sha256"), SHA256_RE):
                 issues.append(f"{artifact_prefix} sha256 is invalid")
-            if not _https_url(artifact.get("url")):
-                issues.append(f"{artifact_prefix} URL must be HTTPS")
+            if not _pypi_archive_url(artifact.get("url")):
+                issues.append(
+                    f"{artifact_prefix} URL must be HTTPS on an approved PyPI archive host"
+                )
             tags = artifact.get("platform_tags", [])
             if not isinstance(tags, list) or not all(isinstance(tag, str) and tag for tag in tags):
                 issues.append(f"{artifact_prefix} platform_tags are invalid")
@@ -359,8 +460,24 @@ def bounded_read(handle: BinaryIO) -> tuple[bytes | None, str]:
     return data, "read"
 
 
-def fetch_json(  # noqa: C901 - cache and network bounds remain explicit
-    url: str, path: Path
+def _metadata_identity_match(
+    fields: dict[str, Any], expected_name: str, expected_version: str | None
+) -> bool:
+    """Check archive metadata identity without turning it into a rights decision."""
+    observed_name = fields.get("name")
+    if not isinstance(observed_name, str) or _canonical_name(observed_name) != _canonical_name(
+        expected_name
+    ):
+        return False
+    return expected_version is None or fields.get("version") == expected_version
+
+
+def fetch_json(  # noqa: C901, PLR0912 - cache and network bounds remain explicit
+    url: str,
+    path: Path,
+    *,
+    offline: bool = False,
+    cache_root: Path | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """Reuse or fetch bounded registry JSON and report malformed responses."""
     if not _https_url(url):
@@ -370,52 +487,72 @@ def fetch_json(  # noqa: C901 - cache and network bounds remain explicit
             "status": "unavailable",
             "error": "metadata URL must be HTTPS",
         }
-    if path.is_file():
+    if not _pypi_json_url(url):
+        return None, {
+            "url": url,
+            "path": str(path),
+            "status": "unavailable",
+            "error": "metadata URL host is not the canonical pypi.org host",
+        }
+    if cache_root is not None and not _safe_output_path(cache_root, path):
+        return None, {
+            "url": url,
+            "path": str(path),
+            "status": "unavailable",
+            "error": "metadata cache path escapes the output directory",
+        }
+    cache_error = None
+    try:
+        cache_is_file = path.is_file()
+    except OSError as exc:
+        cache_is_file = False
+        cache_error = f"{type(exc).__name__}: cannot inspect metadata cache"
+    if cache_is_file:
         try:
             cached_size = path.stat().st_size
         except OSError as exc:
-            return None, {
-                "url": url,
-                "path": str(path),
-                "status": "unavailable",
-                "error": f"{type(exc).__name__}: cannot stat metadata cache",
-            }
-        if cached_size > MAX_METADATA_JSON_BYTES:
-            return None, {
-                "url": url,
-                "path": str(path),
-                "status": "unavailable",
-                "error": "metadata cache exceeds 16 MiB bound",
-            }
-        try:
-            with path.open("rb") as handle:
-                data = handle.read(MAX_METADATA_JSON_BYTES + 1)
-            if len(data) > MAX_METADATA_JSON_BYTES:
+            cache_error = f"{type(exc).__name__}: cannot stat metadata cache"
+        else:
+            if cached_size > MAX_METADATA_JSON_BYTES:
                 return None, {
                     "url": url,
                     "path": str(path),
                     "status": "unavailable",
                     "error": "metadata cache exceeds 16 MiB bound",
                 }
-            payload = json.loads(data)
-            if not isinstance(payload, dict):
-                raise TypeError("metadata cache is not a JSON object")
-            return payload, {
-                "url": url,
-                "path": str(path),
-                "status": "cache_reused",
-                "bytes": len(data),
-                "sha256": sha256_bytes(data),
-            }
-        except (OSError, TypeError) as exc:
-            return None, {
-                "url": url,
-                "path": str(path),
-                "status": "unavailable",
-                "error": f"{type(exc).__name__}: invalid metadata cache",
-            }
-        except json.JSONDecodeError:
-            pass
+            try:
+                with path.open("rb") as handle:
+                    data = handle.read(MAX_METADATA_JSON_BYTES + 1)
+                if len(data) > MAX_METADATA_JSON_BYTES:
+                    return None, {
+                        "url": url,
+                        "path": str(path),
+                        "status": "unavailable",
+                        "error": "metadata cache exceeds 16 MiB bound",
+                    }
+                payload = json.loads(data)
+                if not isinstance(payload, dict):
+                    raise TypeError("metadata cache is not a JSON object")
+                return payload, {
+                    "url": url,
+                    "path": str(path),
+                    "status": "cache_reused",
+                    "bytes": len(data),
+                    "sha256": sha256_bytes(data),
+                }
+            except (OSError, TypeError, UnicodeError) as exc:
+                cache_error = f"{type(exc).__name__}: invalid metadata cache"
+            except json.JSONDecodeError:
+                cache_error = "JSONDecodeError: invalid metadata cache"
+    if offline:
+        return None, {
+            "url": url,
+            "path": str(path),
+            "status": "unavailable",
+            "error": "offline mode: metadata cache is missing or invalid"
+            if cache_error is None
+            else f"offline mode: {cache_error}",
+        }
     try:
         request = urllib.request.Request(
             url, headers={"User-Agent": "robot-sf-p05-generic-evidence/1"}
@@ -423,18 +560,22 @@ def fetch_json(  # noqa: C901 - cache and network bounds remain explicit
         with urllib.request.urlopen(request, timeout=60) as response:
             data = response.read(MAX_METADATA_JSON_BYTES + 1)
             status = getattr(response, "status", 200)
+            final_url = getattr(response, "geturl", lambda: url)()
+        if not _pypi_json_url(final_url):
+            raise ValueError("metadata redirect did not remain on pypi.org over HTTPS")
         if len(data) > MAX_METADATA_JSON_BYTES:
             raise ValueError("metadata JSON exceeds 16 MiB bound")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
         payload = json.loads(data)
         if not isinstance(payload, dict):
             raise TypeError("metadata response is not a JSON object")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
         return payload, {
             "url": url,
             "path": str(path),
             "status": "fetched",
             "http_status": status,
+            "final_url": final_url,
             "bytes": len(data),
             "sha256": sha256_bytes(data),
         }
@@ -445,6 +586,7 @@ def fetch_json(  # noqa: C901 - cache and network bounds remain explicit
         TypeError,
         ValueError,
         json.JSONDecodeError,
+        UnicodeError,
     ) as exc:
         return None, {
             "url": url,
@@ -454,8 +596,13 @@ def fetch_json(  # noqa: C901 - cache and network bounds remain explicit
         }
 
 
-def fetch_archive(  # noqa: C901 - bounded cache and streamed fetch states stay explicit
-    artifact: dict[str, Any], path: Path, downloaded: int
+def fetch_archive(  # noqa: C901, PLR0912 - bounded cache and streamed fetch states stay explicit
+    artifact: dict[str, Any],
+    path: Path,
+    downloaded: int,
+    *,
+    offline: bool = False,
+    cache_root: Path | None = None,
 ) -> tuple[Path | None, dict[str, Any], int]:
     """Fetch or verify one manifest archive under the batch download bound."""
     expected_size = int(artifact["size"])
@@ -463,7 +610,28 @@ def fetch_archive(  # noqa: C901 - bounded cache and streamed fetch states stay 
     if not _https_url(artifact.get("url")):
         return (
             None,
-            {"status": "unavailable", "error": "archive URL must be HTTPS"},
+            {
+                "status": "unavailable",
+                "error": "archive URL must be HTTPS",
+            },
+            downloaded,
+        )
+    if not _pypi_archive_url(artifact.get("url")):
+        return (
+            None,
+            {
+                "status": "unavailable",
+                "error": "archive URL host is not an approved PyPI archive host",
+            },
+            downloaded,
+        )
+    if cache_root is not None and not _safe_output_path(cache_root, path):
+        return (
+            None,
+            {
+                "status": "unavailable",
+                "error": "archive cache path escapes the output directory",
+            },
             downloaded,
         )
     if expected_size > MAX_ARCHIVE_BYTES:
@@ -484,11 +652,16 @@ def fetch_archive(  # noqa: C901 - bounded cache and streamed fetch states stay 
             },
             downloaded,
         )
-    if (
-        path.is_file()
-        and path.stat().st_size == expected_size
-        and sha256_file(path) == expected_sha
-    ):
+    cache_verified = False
+    try:
+        cache_verified = (
+            path.is_file()
+            and path.stat().st_size == expected_size
+            and sha256_file(path) == expected_sha
+        )
+    except OSError:
+        cache_verified = False
+    if cache_verified:
         return (
             path,
             {
@@ -501,7 +674,31 @@ def fetch_archive(  # noqa: C901 - bounded cache and streamed fetch states stay 
             },
             downloaded + expected_size,
         )
+    if offline:
+        return (
+            None,
+            {
+                "status": "unavailable",
+                "expected_size": expected_size,
+                "expected_sha256": expected_sha,
+                "path": str(path),
+                "error": "offline mode: archive cache is missing or digest-mismatched",
+            },
+            downloaded,
+        )
     part = path.with_name(path.name + ".part")
+    if cache_root is not None and not _safe_output_path(cache_root, part):
+        return (
+            None,
+            {
+                "status": "unavailable",
+                "expected_size": expected_size,
+                "expected_sha256": expected_sha,
+                "path": str(path),
+                "error": "archive partial path escapes the output directory",
+            },
+            downloaded,
+        )
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         request = urllib.request.Request(
@@ -516,6 +713,9 @@ def fetch_archive(  # noqa: C901 - bounded cache and streamed fetch states stay 
                 raise ValueError(
                     f"content length {content_length} != manifest size {expected_size}"
                 )
+            final_url = getattr(response, "geturl", lambda: artifact["url"])()
+            if not _pypi_archive_url(final_url):
+                raise ValueError("archive redirect did not remain on an approved PyPI host")
             digest = hashlib.sha256()
             observed = 0
             while True:
@@ -539,6 +739,7 @@ def fetch_archive(  # noqa: C901 - bounded cache and streamed fetch states stay 
                 "observed_size": observed,
                 "expected_sha256": expected_sha,
                 "observed_sha256": observed_sha,
+                "final_url": final_url,
                 "path": str(path),
             },
             downloaded + observed,
@@ -562,7 +763,11 @@ def fetch_archive(  # noqa: C901 - bounded cache and streamed fetch states stay 
 
 
 def inspect_archive(  # noqa: C901, PLR0912, PLR0915 - archive safety states are explicit
-    path: Path, artifact: dict[str, Any]
+    path: Path,
+    artifact: dict[str, Any],
+    *,
+    expected_name: str | None = None,
+    expected_version: str | None = None,
 ) -> dict[str, Any]:
     """Inspect bounded metadata and notice members without extracting an archive."""
     result: dict[str, Any] = {
@@ -571,8 +776,8 @@ def inspect_archive(  # noqa: C901, PLR0912, PLR0915 - archive safety states are
         "url": artifact["url"],
         "expected_size": artifact["size"],
         "expected_sha256": artifact["sha256"],
-        "observed_size": path.stat().st_size,
-        "observed_sha256": sha256_file(path),
+        "observed_size": None,
+        "observed_sha256": None,
         "digest_verified": False,
         "inspection_status": "unavailable",
         "member_count": None,
@@ -581,6 +786,12 @@ def inspect_archive(  # noqa: C901, PLR0912, PLR0915 - archive safety states are
         "metadata": [],
         "errors": [],
     }
+    try:
+        result["observed_size"] = path.stat().st_size
+        result["observed_sha256"] = sha256_file(path)
+    except OSError as exc:
+        result["errors"].append(f"archive file could not be read: {type(exc).__name__}: {exc}")
+        return result
     result["digest_verified"] = (
         result["observed_size"] == artifact["size"]
         and result["observed_sha256"] == artifact["sha256"]
@@ -590,6 +801,8 @@ def inspect_archive(  # noqa: C901, PLR0912, PLR0915 - archive safety states are
         return result
     try:
         archive_kind = "zip" if path.suffix.lower() == ".whl" else "tar"
+        if artifact.get("kind") == "wheel" or path.suffix.lower() == ".zip":
+            archive_kind = "zip"
         evidence_total = 0
         if archive_kind == "zip":
             with zipfile.ZipFile(path) as archive:
@@ -633,15 +846,28 @@ def inspect_archive(  # noqa: C901, PLR0912, PLR0915 - archive safety states are
                         "sha256": sha256_bytes(data) if data is not None else None,
                         "read_status": status,
                     }
+                    if status != "read":
+                        result["errors"].append(
+                            f"evidence member could not be read: {info.filename}: {status}"
+                        )
                     record.update(text_summary(data))
                     result["evidence_members"].append(record)
                     evidence_total += min(info.file_size, MAX_EVIDENCE_MEMBER_BYTES)
                     if kind == "metadata" and data is not None:
+                        fields = parse_metadata(data)
+                        identity_match = expected_name is None or _metadata_identity_match(
+                            fields, expected_name, expected_version
+                        )
+                        record["identity_match"] = identity_match
+                        if not identity_match:
+                            result["errors"].append(
+                                f"archive metadata identity differs from manifest: {info.filename}"
+                            )
                         result["metadata"].append(
                             {
                                 "path": info.filename,
                                 "sha256": record["sha256"],
-                                "fields": parse_metadata(data),
+                                "fields": fields,
                             }
                         )
         else:
@@ -688,19 +914,40 @@ def inspect_archive(  # noqa: C901, PLR0912, PLR0915 - archive safety states are
                         "sha256": sha256_bytes(data) if data is not None else None,
                         "read_status": status,
                     }
+                    if status != "read":
+                        result["errors"].append(
+                            f"evidence member could not be read: {info.name}: {status}"
+                        )
                     record.update(text_summary(data))
                     result["evidence_members"].append(record)
                     evidence_total += min(info.size, MAX_EVIDENCE_MEMBER_BYTES)
                     if kind == "metadata" and data is not None:
+                        fields = parse_metadata(data)
+                        identity_match = expected_name is None or _metadata_identity_match(
+                            fields, expected_name, expected_version
+                        )
+                        record["identity_match"] = identity_match
+                        if not identity_match:
+                            result["errors"].append(
+                                f"archive metadata identity differs from manifest: {info.name}"
+                            )
                         result["metadata"].append(
                             {
                                 "path": info.name,
                                 "sha256": record["sha256"],
-                                "fields": parse_metadata(data),
+                                "fields": fields,
                             }
                         )
         result["inspection_status"] = "inspected" if not result["errors"] else "partial"
-    except (OSError, tarfile.TarError, zipfile.BadZipFile, ValueError) as exc:
+    except (
+        OSError,
+        EOFError,
+        KeyError,
+        RuntimeError,
+        tarfile.TarError,
+        zipfile.BadZipFile,
+        ValueError,
+    ) as exc:
         result["errors"].append(f"archive inspection failed: {type(exc).__name__}: {exc}")
     return result
 
@@ -764,7 +1011,14 @@ def select_target_artifacts(
 def metadata_summary(archives: list[dict[str, Any]], pypi: dict[str, Any]) -> dict[str, Any]:
     """Summarize observed metadata without making a rights or custody decision."""
     fields = [item["fields"] for archive in archives for item in archive.get("metadata", [])]
+    info = pypi.get("info")
+    if not isinstance(info, dict):
+        info = {}
+    info_observation = _pypi_info_observation(info)
+    classifiers = info_observation["classifiers"] or []
+    project_urls = info_observation["project_urls"] or {}
     return {
+        "authority_boundary": "descriptive_observation_only",
         "archive_license": sorted({item.get("license") for item in fields if item.get("license")}),
         "archive_license_expression": sorted(
             {item.get("license_expression") for item in fields if item.get("license_expression")}
@@ -775,15 +1029,106 @@ def metadata_summary(archives: list[dict[str, Any]], pypi: dict[str, Any]) -> di
         "archive_license_files": sorted(
             {f for item in fields for f in item.get("license_files", [])}
         ),
-        "pypi_license": pypi.get("info", {}).get("license"),
+        "pypi_license": info_observation.get("license"),
         "pypi_license_classifiers": [
-            c
-            for c in pypi.get("info", {}).get("classifiers", [])
-            if c.lower().startswith("license ::")
+            c for c in classifiers if isinstance(c, str) and c.lower().startswith("license ::")
         ],
-        "pypi_project_urls": pypi.get("info", {}).get("project_urls") or {},
-        "pypi_home_page": pypi.get("info", {}).get("home_page"),
+        "pypi_project_urls": project_urls,
+        "pypi_home_page": info_observation.get("home_page"),
     }
+
+
+def _pypi_info_errors(info: dict[str, Any]) -> list[str]:
+    """Validate only the registry metadata fields consumed by the ledger."""
+    errors: list[str] = []
+    for field in ("name", "version"):
+        if not isinstance(info.get(field), str):
+            errors.append(f"registry metadata {field} is not a string")
+    classifiers = info.get("classifiers")
+    if not isinstance(classifiers, list) or not all(isinstance(item, str) for item in classifiers):
+        errors.append("registry metadata classifiers are not a string list")
+    project_urls = info.get("project_urls")
+    if not isinstance(project_urls, dict) or not all(
+        isinstance(key, str) and isinstance(value, str) for key, value in project_urls.items()
+    ):
+        errors.append("registry metadata project_urls are not a string mapping")
+    for field in ("license", "home_page"):
+        if info.get(field) is not None and not isinstance(info.get(field), str):
+            errors.append(f"registry metadata {field} is not a string or null")
+    return errors
+
+
+def _pypi_info_observation(info: dict[str, Any]) -> dict[str, Any]:
+    """Keep only registry fields consumed by this diagnostic collector."""
+    observed = {}
+    for field in ("name", "version", "license", "home_page"):
+        value = info.get(field)
+        if field in info and (value is None or isinstance(value, str)):
+            observed[field] = value
+    classifiers = info.get("classifiers")
+    observed["classifiers"] = (
+        [item for item in classifiers if isinstance(item, str)]
+        if isinstance(classifiers, list)
+        else None
+    )
+    project_urls = info.get("project_urls")
+    observed["project_urls"] = (
+        {
+            key: value
+            for key, value in project_urls.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
+        if isinstance(project_urls, dict)
+        else None
+    )
+    return observed
+
+
+def _pypi_release_file_observation(item: dict[str, Any]) -> dict[str, Any]:
+    """Keep exact-match and release-routing fields, excluding arbitrary registry payloads."""
+    observed = {}
+    for field in (
+        "filename",
+        "packagetype",
+        "python_version",
+        "url",
+        "upload_time_iso_8601",
+        "requires_python",
+        "yanked_reason",
+    ):
+        value = item.get(field)
+        if field in item and (value is None or isinstance(value, str)):
+            observed[field] = value
+    size = item.get("size")
+    if isinstance(size, int) and not isinstance(size, bool):
+        observed["size"] = size
+    yanked = item.get("yanked")
+    if isinstance(yanked, bool):
+        observed["yanked"] = yanked
+    digests = item.get("digests")
+    observed["digests"] = {"sha256": digests.get("sha256") if isinstance(digests, dict) else None}
+    return observed
+
+
+def _pypi_release_file_sort_key(item: dict[str, Any]) -> tuple[str, str, str, str]:
+    """Return a stable key for release-file observations."""
+    return tuple(
+        str(item.get(field, "")) for field in ("filename", "packagetype", "python_version", "url")
+    )
+
+
+def _pypi_exact_file_match(item: object, artifact: dict[str, Any]) -> bool:
+    """Compare one PyPI release-file observation without trusting nested shapes."""
+    if not isinstance(item, dict):
+        return False
+    digests = item.get("digests")
+    return (
+        isinstance(digests, dict)
+        and item.get("filename") == artifact["filename"]
+        and digests.get("sha256") == artifact["sha256"]
+        and item.get("size") == artifact["size"]
+        and item.get("url") == artifact["url"]
+    )
 
 
 def _collection_status(
@@ -809,7 +1154,7 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
     cache = output / "cache"
     pypi_cache = output / "pypi-json"
     manifest_path = Path(args.batch_manifest).resolve()
-    manifest_bytes = manifest_path.read_bytes()
+    manifest_bytes = read_bounded_bytes(manifest_path, MAX_MANIFEST_JSON_BYTES, "batch manifest")
     manifest_sha = sha256_bytes(manifest_bytes)
     if manifest_sha != args.expected_batch_sha256:
         raise SystemExit(
@@ -819,6 +1164,7 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
     if not isinstance(manifest, dict):
         raise SystemExit("batch manifest must contain a JSON object")
     owner_issue = _validate_manifest(manifest, args)
+    offline = bool(getattr(args, "offline", False))
     rows = []
     network = []
     all_archives = []
@@ -828,8 +1174,10 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
         pypi_url = f"https://pypi.org/pypi/{urllib.parse.quote(member['name'])}/{urllib.parse.quote(str(member['version']))}/json"
         pypi_path = pypi_cache / f"{member['name'].replace('-', '_')}-{member['version']}.json"
         if member.get("source_type") == "registry" and member.get("version") is not None:
-            pypi_payload, pypi_record = fetch_json(pypi_url, pypi_path)
-            network.append({"package_id": package_id, **pypi_record})
+            pypi_payload, pypi_record = fetch_json(
+                pypi_url, pypi_path, offline=offline, cache_root=output
+            )
+            network.append({"package_id": package_id, **_redact_cache_record(pypi_record, output)})
         else:
             pypi_payload, pypi_record = (
                 None,
@@ -935,19 +1283,24 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
             if not isinstance(pypi_info, dict):
                 pypi_info = {}
                 pypi_errors.append("registry metadata info is not an object")
+            pypi_errors.extend(_pypi_info_errors(pypi_info))
             if not isinstance(raw_release_files, list) or not all(
                 isinstance(item, dict) for item in raw_release_files
             ):
                 release_files: list[dict[str, Any]] = []
                 pypi_errors.append("registry metadata urls is not a list of objects")
             else:
-                release_files = raw_release_files
+                release_files = sorted(raw_release_files, key=_pypi_release_file_sort_key)
+            release_file_observations = [
+                _pypi_release_file_observation(item) for item in release_files
+            ]
             observed_name = pypi_info.get("name")
             observed_version = pypi_info.get("version")
             pypi_identity_match = (
                 isinstance(observed_name, str)
                 and _canonical_name(observed_name) == _canonical_name(member["name"])
-                and str(observed_version) == str(member["version"])
+                and isinstance(observed_version, str)
+                and observed_version == member["version"]
             )
             if not pypi_identity_match:
                 pypi_errors.append(
@@ -969,8 +1322,8 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
                     None,
                 ),
                 "metadata": {
-                    "info": pypi_info,
-                    "release_files": release_files,
+                    "info": _pypi_info_observation(pypi_info),
+                    "release_files": release_file_observations,
                 },
                 "file_matches": [
                     {
@@ -980,25 +1333,23 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
                         "manifest_url": artifact["url"],
                         "pypi_match": next(
                             (
-                                item
+                                _pypi_release_file_observation(item)
                                 for item in release_files
                                 if item.get("filename") == artifact["filename"]
                             ),
                             None,
                         ),
                         "exact_match": any(
-                            item.get("filename") == artifact["filename"]
-                            and item.get("digests", {}).get("sha256") == artifact["sha256"]
-                            and item.get("size") == artifact["size"]
-                            and item.get("url") == artifact["url"]
-                            for item in release_files
+                            _pypi_exact_file_match(item, artifact) for item in release_files
                         ),
                     }
                     for artifact in selected
                 ],
             }
             row["target_context"]["uninspected_release_files"] = [
-                item for item in release_files if item.get("filename") not in selected_names
+                observation
+                for item, observation in zip(release_files, release_file_observations, strict=False)
+                if item.get("filename") not in selected_names
             ]
         package_cache = cache / member["name"].replace("-", "_") / str(member["version"])
         for artifact in selected:
@@ -1021,19 +1372,28 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
                 )
                 continue
             path, download_record, downloaded = fetch_archive(
-                artifact, package_cache / artifact["filename"], downloaded
+                artifact,
+                package_cache / artifact["filename"],
+                downloaded,
+                offline=offline,
+                cache_root=output,
             )
             network.append(
                 {
                     "package_id": package_id,
                     "artifact": artifact["filename"],
-                    **download_record,
+                    **_redact_cache_record(download_record, output),
                 }
             )
             if path is not None:
-                archive = inspect_archive(path, artifact)
+                archive = inspect_archive(
+                    path,
+                    artifact,
+                    expected_name=member["name"],
+                    expected_version=member.get("version"),
+                )
                 archive["download_status"] = download_record["status"]
-                archive["local_cache_path"] = str(path)
+                archive["local_cache_path"] = _relative_output_path(path, output)
             else:
                 archive = {
                     "filename": artifact["filename"],
@@ -1156,9 +1516,11 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
         "claim_boundary": "Exact target-compatible dependency archive, registry metadata, bounded license/notice member, and manifest routing facts only; no rights conclusion, permission, candidate admission, or all-platform clearance.",
         "inputs": {
             "batch_manifest": {
-                "path": str(manifest_path),
+                "path": _input_display_path(manifest_path, output),
                 "sha256": manifest_sha,
                 "member_count": manifest.get("member_count"),
+                "max_bytes": MAX_MANIFEST_JSON_BYTES,
+                "max_members": MAX_MANIFEST_MEMBER_COUNT,
             },
             "requested": {
                 "owner_issue": args.expected_owner_issue,
@@ -1177,6 +1539,7 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
             "os": args.target_os,
             "architecture": args.target_architecture,
             "python": args.python_version,
+            "offline": offline,
             "resolver": {
                 "name": args.resolver_name,
                 "version": args.resolver_version,
@@ -1194,10 +1557,10 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
     write_json(output / "dependency_evidence_ledger.json", result)
     cache_files = []
     for path in sorted(cache.rglob("*")) if cache.exists() else []:
-        if path.is_file() and not path.name.endswith(".part"):
+        if _safe_output_path(output, path) and path.is_file() and not path.name.endswith(".part"):
             cache_files.append(
                 {
-                    "path": str(path),
+                    "path": _relative_output_path(path, output),
                     "size": path.stat().st_size,
                     "sha256": sha256_file(path),
                 }
@@ -1221,7 +1584,7 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
             "schema_version": "robot_sf.p05.generic_collector_run.v1",
             "task_id": args.task_id,
             "owner_issue": owner_issue,
-            "argv": args.argv,
+            "argv": "<local invocation omitted; input identities are recorded above>",
             "finished_at": now(),
             "exit_code": 0,
             "coverage": coverage,
@@ -1248,9 +1611,18 @@ def main() -> int:
     parser.add_argument("--python-version", default="3.13")
     parser.add_argument("--resolver-name", default="uv")
     parser.add_argument("--resolver-version", default="0.11.21")
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="reuse only bounded local caches; never contact PyPI or download archives",
+    )
     args = parser.parse_args()
     args.argv = " ".join(sys.argv)
-    result = collect(args)
+    try:
+        result = collect(args)
+    except (OSError, TypeError, ValueError, KeyError) as exc:
+        print(f"collector failed closed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
     print(json.dumps(result["coverage"], sort_keys=True))
     return 0
 

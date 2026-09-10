@@ -20,15 +20,15 @@
     "https://github.com/ll7/robot_sf_ll7/issues/7394"
   ],
   "repository_heads": {
-    "origin_main_at_start": "0e56bb03445f4de87579f97fd6319d0261716d57",
-    "rw01_rw02_pr_8612_head": "4f5a7dffbf0a5954425bc3b25eddd12d87b2b2c8",
-    "rw03_rw04_pr_8620_head": "da64f92508c4f6f050d9cef3e14491e2969060e2",
-    "rw05_rw06_rw07_pr_8622_code_head": "491b8e39e799bc6255edfa2205793f88bcfefd00"
+    "origin_main_at_start": "ade95312d31462c8a66208948f9c8528910de0c7",
+    "rw01_rw02_pr_8612_head": "db1215d6e5d1a19598d4f6a4ba10b119229f66b7",
+    "rw03_rw04_pr_8620_head": "4ef0858d33c91291129098c08975525a54fb0121",
+    "rw05_rw06_rw07_pr_8622_code_head": "75e69876a3a141d8e3f231110a1d557f65794177"
   },
   "receipt_binding": {
-    "base_head": "0e56bb03445f4de87579f97fd6319d0261716d57",
-    "code_head": "491b8e39e799bc6255edfa2205793f88bcfefd00",
-    "dossier_commit_scope": "metadata-only refresh after fail-closed signal validation and stack ancestry refresh",
+    "base_head": "ade95312d31462c8a66208948f9c8528910de0c7",
+    "code_head": "75e69876a3a141d8e3f231110a1d557f65794177",
+    "dossier_commit_scope": "metadata-only refresh after exact-head fail-closed signal validation and current stack ancestry refresh",
     "status": "exact_code_head_validated"
   },
   "pull_requests": [
@@ -253,9 +253,9 @@
     {"id": "H9", "statement": "PELT or a learned selector is needed for v1", "status": "blocked", "evidence": "Option A selected for preparation; alternatives deferred", "limitation": "reopen only after measured baseline shortcomings"}
   ],
   "command_receipts": [
-    {"command": "uv run pytest -q tests/benchmark/test_relevance_windows.py tests/benchmark/test_typed_snapshot.py tests/benchmark/test_last_avoidable_replay_issue_5442.py tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_continuation_experiment_plan.py tests/benchmark/test_scenario_window_research_dossier.py", "exit_code": 0, "result": "121 passed at refreshed stack code head 491b8e39e799bc6255edfa2205793f88bcfefd00 with parent 4f5a7dffbf0a5954425bc3b25eddd12d87b2b2c8 and typed child da64f92508c4f6f050d9cef3e14491e2969060e2"},
-    {"command": "uv run ruff check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py", "exit_code": 0, "result": "passed at refreshed stack code head 491b8e39e799bc6255edfa2205793f88bcfefd00"},
-    {"command": "uv run ruff format --check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py", "exit_code": 0, "result": "2 files already formatted at refreshed stack code head 491b8e39e799bc6255edfa2205793f88bcfefd00"},
+    {"command": "uv run pytest -q tests/benchmark/test_relevance_windows.py tests/benchmark/test_typed_snapshot.py tests/benchmark/test_last_avoidable_replay_issue_5442.py tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_continuation_experiment_plan.py tests/benchmark/test_scenario_window_research_dossier.py", "exit_code": 0, "result": "142 passed at tested stack code head 75e69876a3a141d8e3f231110a1d557f65794177 with parent db1215d6e5d1a19598d4f6a4ba10b119229f66b7 and typed child 4ef0858d33c91291129098c08975525a54fb0121"},
+    {"command": "uv run ruff check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py tests/benchmark/test_last_avoidable_replay_issue_5442.py", "exit_code": 0, "result": "passed at tested stack code head 75e69876a3a141d8e3f231110a1d557f65794177"},
+    {"command": "uv run ruff format --check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py tests/benchmark/test_last_avoidable_replay_issue_5442.py", "exit_code": 0, "result": "3 files already formatted at tested stack code head 75e69876a3a141d8e3f231110a1d557f65794177"},
     {"command": "uv run pytest -q tests/dev/test_issue_7331_benchmark_namespace_inventory.py", "exit_code": 0, "result": "7 passed on the refreshed origin/main stack"},
     {"command": "BASE_REF=origin/main scripts/dev/pr_ready_check.sh", "exit_code": null, "result": "pending exact-head readiness after the final metadata refresh"},
     {"command": "causal availability and disjoint-event precursor regression probes", "exit_code": 0, "result": "future signals remain unknown and separate event precursors remain scoped"}

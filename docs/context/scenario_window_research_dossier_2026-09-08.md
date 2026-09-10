@@ -6,10 +6,11 @@ This work follows the live #7381 programme and the preparation rulings in #7383
 and #7384; the attached packet is guidance/evidence, not a replacement authority.
 
 Refresh provenance for this repair: current `origin/main` is
-`0e56bb03445f4de87579f97fd6319d0261716d57`; the live #8620 tip is
-`da64f92508c4f6f050d9cef3e14491e2969060e2`; and the relevance-window validation
-repair is `491b8e39e799bc6255edfa2205793f88bcfefd00`. The stack is refreshed for
-inspection, but live domain authority and native campaign admission remain blocked.
+`ade95312d31462c8a66208948f9c8528910de0c7`; the live #8612 and #8620 tips are
+`db1215d6e5d1a19598d4f6a4ba10b119229f66b7` and
+`4ef0858d33c91291129098c08975525a54fb0121`; and the tested #8622 code head is
+`75e69876a3a141d8e3f231110a1d557f65794177`. The stack is refreshed for inspection,
+but live domain authority and native campaign admission remain blocked.
 
 ## Outcome
 

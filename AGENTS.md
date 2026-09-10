@@ -91,19 +91,28 @@ schema, model-provenance, or paper-facing result must use the stronger proof tie
 
 ## Task-Scoped Context Entrypoints
 
-Read only the surfaces relevant to the task. Prefer repo-local files over ad-hoc summaries in issue comments.
-Do not load every skill, historical report, implementation detail, or runtime guide indiscriminately.
+Read only the surfaces relevant to the task. The machine-readable profile and route mapping is
+`.agents/task_scope_manifest.yaml`; the human route table is owned by
+`docs/ai/agent_workflow_entrypoints.md`. Select one execution profile from the changed surfaces and
+risk, load only that profile's required context, and escalate when inspection reveals more risk.
+
+| Profile | Typical work | Minimum context and action |
+| --- | --- | --- |
+| **Observe** | inspect, explain, triage, read-only review | root router + nearest scoped guidance; no environment, branch, plan, worktree, or PR ceremony |
+| **Local** | bounded docs/code/test edit | scoped guidance + targeted validation for the changed behavior |
+| **Coordinated** | multi-module, API, migration, or ambiguous change | execution plan, isolated worktree when collision risk exists, integration validation |
+| **Evidence-critical** | benchmark evidence, research claim, release, security, publication artifacts | full evidence, custody, reproducibility, exact-head, and release gates |
 
 Always-required core context:
-- `docs/maintainer_values.md`: compact current values and hard contracts.
-- `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
-- `docs/ai/agent_workflow_entrypoints.md`: task route table, canonical command entrypoints, handoff format, and large-file navigation.
+- `docs/maintainer_values.md`: maintainer principles and tie-breakers.
+- `AGENTS.md`: invariants, precedence, and this router.
+- `docs/ai/agent_workflow_entrypoints.md`: route table, canonical command entrypoints, handoff format, and large-file navigation.
 
 The route table in `docs/ai/agent_workflow_entrypoints.md` is the single owner of task-to-guidance
-routing. Select the matching route there and load only its required context; do not restate the
-route mapping in this file. References in instruction surfaces are required by default. A reference
-is optional only when it is marked optional/illustrative, is itself generated, or is explicitly
-scoped as background.
+routing. Select the matching route there, use the profile mapping in `.agents/task_scope_manifest.yaml`,
+and load only the required context; do not restate the route mapping in this file. References in
+instruction surfaces are required by default. A reference is optional only when it is marked
+optional/illustrative, is itself generated, or is explicitly scoped as background.
 
 For the token-efficient active thread profile, phase audits, meta-workflow PR gate, SLURM lane rules,
 shared knowledge graph, cross-agent compatibility, and detailed context-note policy, read

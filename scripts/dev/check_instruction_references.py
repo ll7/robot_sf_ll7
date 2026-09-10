@@ -16,6 +16,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Canonical boot and scoped instruction surfaces. Adding a surface here requires an owner and
@@ -37,6 +39,23 @@ ROUTE_TABLE_MARKER = "| Route | Purpose | Required context / evidence |"
 PRECEDENCE_OWNER = "AGENTS.md"
 PRECEDENCE_START_MARKER = "<!-- instruction-precedence:start -->"
 PRECEDENCE_END_MARKER = "<!-- instruction-precedence:end -->"
+
+TASK_SCOPE_MANIFEST = ".agents/task_scope_manifest.yaml"
+PROFILE_IDS = ("observe", "local", "coordinated", "evidence_critical")
+PROFILE_BOOL_FIELDS = (
+    "plan_required",
+    "environment_required",
+    "worktree_required",
+    "pr_required",
+    "evidence_gates_required",
+)
+ROUTE_IDS = (
+    "read-only-observation",
+    "documentation-only-edit",
+    "implementation-runtime-change",
+    "scientific-benchmark-interpretation",
+    "environment-worktree-repair",
+)
 
 REPO_ROOT_SEGMENTS = frozenset(
     {
@@ -261,11 +280,121 @@ def check_precedence_contract(
     return errors
 
 
+def load_task_scope_manifest(root: Path = REPO_ROOT) -> object:
+    """Load the machine-readable execution-profile and route mapping."""
+    return yaml.safe_load((root / TASK_SCOPE_MANIFEST).read_text(encoding="utf-8"))
+
+
+def _check_profile(root: Path, profile_id: str, profile: object, errors: list[str]) -> None:
+    """Validate one execution-profile entry in the task-scope manifest."""
+    prefix = f"{TASK_SCOPE_MANIFEST}: profiles.{profile_id}"
+    if not isinstance(profile, dict):
+        errors.append(f"{prefix} must be a mapping")
+        return
+    description = profile.get("description")
+    if not isinstance(description, str) or not description.strip():
+        errors.append(f"{prefix}.description must be a non-empty string")
+    for field_name in PROFILE_BOOL_FIELDS:
+        if not isinstance(profile.get(field_name), bool):
+            errors.append(f"{prefix}.{field_name} must be a boolean")
+    context = profile.get("required_context")
+    if not isinstance(context, list) or not context:
+        errors.append(f"{prefix}.required_context must be a non-empty list")
+    else:
+        for entry in context:
+            if not isinstance(entry, str) or not entry.strip():
+                errors.append(f"{prefix}.required_context entries must be non-empty strings")
+            elif not (root / entry).exists():
+                errors.append(f"{prefix}.required_context path does not exist: {entry}")
+    ceremony = profile.get("forbidden_ceremony", [])
+    if not isinstance(ceremony, list):
+        errors.append(f"{prefix}.forbidden_ceremony must be a list when present")
+
+
+def _check_manifest_header(manifest: dict, errors: list[str]) -> None:
+    """Validate the fixed manifest identity fields."""
+    if manifest.get("version") != 1:
+        errors.append(f"{TASK_SCOPE_MANIFEST}: version must be 1")
+    if manifest.get("routing_owner") != ROUTING_OWNER:
+        errors.append(f"{TASK_SCOPE_MANIFEST}: routing_owner must be {ROUTING_OWNER}")
+    if manifest.get("manifest_owner") != PRECEDENCE_OWNER:
+        errors.append(f"{TASK_SCOPE_MANIFEST}: manifest_owner must be {PRECEDENCE_OWNER}")
+
+
+def _check_profiles(root: Path, profiles: object, errors: list[str]) -> None:
+    """Validate the execution-profile section of the manifest."""
+    if not isinstance(profiles, dict):
+        errors.append(f"{TASK_SCOPE_MANIFEST}: profiles must be a mapping")
+        return
+    if set(profiles) != set(PROFILE_IDS):
+        errors.append(
+            f"{TASK_SCOPE_MANIFEST}: profiles must be exactly {list(PROFILE_IDS)}; "
+            f"found {sorted(profiles)}"
+        )
+    for profile_id, profile in profiles.items():
+        _check_profile(root, str(profile_id), profile, errors)
+
+
+def _check_routes(routes: object, errors: list[str]) -> None:
+    """Validate the route-to-profile section of the manifest."""
+    if not isinstance(routes, dict):
+        errors.append(f"{TASK_SCOPE_MANIFEST}: routes must be a mapping")
+        return
+    if set(routes) != set(ROUTE_IDS):
+        errors.append(
+            f"{TASK_SCOPE_MANIFEST}: routes must be exactly {list(ROUTE_IDS)}; "
+            f"found {sorted(routes)}"
+        )
+    for route_id, route in routes.items():
+        default = route.get("default_profile") if isinstance(route, dict) else None
+        if default not in PROFILE_IDS:
+            errors.append(
+                f"{TASK_SCOPE_MANIFEST}: routes.{route_id}.default_profile must be one of "
+                f"{list(PROFILE_IDS)}"
+            )
+
+
+def _check_escalation(escalation: object, errors: list[str]) -> None:
+    """Validate the profile escalation rule."""
+    if not isinstance(escalation, dict):
+        errors.append(f"{TASK_SCOPE_MANIFEST}: escalation must be a mapping")
+        return
+    if escalation.get("allowed") is not True:
+        errors.append(f"{TASK_SCOPE_MANIFEST}: escalation.allowed must be true")
+    rule = escalation.get("rule")
+    if not isinstance(rule, str) or not rule.strip():
+        errors.append(f"{TASK_SCOPE_MANIFEST}: escalation.rule must be a non-empty string")
+
+
+def check_task_scope_manifest(
+    root: Path = REPO_ROOT,
+    manifest: object | None = None,
+) -> list[str]:
+    """Validate the machine-readable task/profile mapping schema and references."""
+    errors: list[str] = []
+    if manifest is None:
+        path = root / TASK_SCOPE_MANIFEST
+        if not path.is_file():
+            return [f"{TASK_SCOPE_MANIFEST} is missing"]
+        try:
+            manifest = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as exc:
+            return [f"{TASK_SCOPE_MANIFEST} is not valid YAML: {exc}"]
+    if not isinstance(manifest, dict):
+        return [f"{TASK_SCOPE_MANIFEST} must be a mapping at the document root"]
+    _check_manifest_header(manifest, errors)
+    _check_profiles(root, manifest.get("profiles"), errors)
+    _check_routes(manifest.get("routes"), errors)
+    _check_escalation(manifest.get("escalation"), errors)
+    return errors
+
+
 def run_checks(root: Path = REPO_ROOT) -> dict[str, object]:
     """Run all instruction-reference checks and return a JSON-ready report."""
     graph_result = check_instruction_graph(root)
     ownership_errors = check_routing_ownership(root)
     precedence_errors = check_precedence_contract(root)
+    task_scope_errors = check_task_scope_manifest(root)
     return {
         "schema": "instruction_references.v1",
         "root": str(root),
@@ -275,7 +404,10 @@ def run_checks(root: Path = REPO_ROOT) -> dict[str, object]:
         "references_checked": graph_result.checked,
         "optional_references": graph_result.optional_skipped,
         "precedence_errors": precedence_errors,
-        "errors": graph_result.errors + ownership_errors + precedence_errors,
+        "task_scope_errors": task_scope_errors,
+        "errors": (
+            graph_result.errors + ownership_errors + precedence_errors + task_scope_errors
+        ),
     }
 
 

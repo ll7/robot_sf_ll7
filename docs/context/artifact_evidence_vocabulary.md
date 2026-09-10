@@ -54,6 +54,26 @@ coverage, temporary exports, videos, and caches, but it is not a durable depende
   so the run that produced the evidence is auditable. Start from
   [`docs/templates/agent_run_manifest.yaml`](../templates/agent_run_manifest.yaml).
 
+## Durable Artifact Locality Audit
+
+`scripts/validation/check_durable_artifact_locality.py` joins the public `references`
+inventory in a sanitized locality packet (`durable_artifact_locator_projection.v1`)
+to its locator-class `artifacts` projection by artifact ID, version, and digest.
+`--check` exits non-zero when an active durable-required reference has no verified
+non-institutional locator, or a release-facing reference lacks its configured
+independent failure-domain copies. It reads sanitized inputs only and never emits
+locator values; historical inactive references stay recorded with outcome `inactive`
+and never satisfy an active custody requirement.
+
+Locator classes: `public_release`, `cloud_durable`, `personal_durable`,
+`institutional_durable`, `institutional_cache`, `local_scratch`, `unknown`,
+`unavailable`. Only the first three count as non-institutional custody. Stable
+reason codes include `missing_projection_row`, `version_mismatch`, `digest_mismatch`,
+`stale_verification`, `mutable_alias`, `institutional_only`, `cache_only`,
+`non_durable_custody`, `no_verified_locator`, `same_failure_domain`, and `insufficient_redundancy`.
+
+Validate with `uv run python scripts/validation/check_durable_artifact_locality.py --projection tests/validation/fixtures/durable_artifact_locality/compliant.json --check`.
+
 ## Learned-Policy Artifact Manifests
 
 Learned local-policy checkpoints, normalizers, imitation datasets, and residual-policy artifacts

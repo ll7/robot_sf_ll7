@@ -391,9 +391,6 @@ _FAST_FILES = {
     # in the dedicated examples-smoke phase.
     "test_examples_manifest.py",
     "test_examples_cli.py",
-    # Pareto plotting helper tests use deterministic Agg output and provide
-    # exact-head coverage for the shared SVG emission path.
-    "test_plots_pareto.py",
     # Fixture-based check-only prerequisite contracts are deterministic and
     # provide the exact-head changed-line coverage for the shared example
     # prerequisite checker (issue #8735).

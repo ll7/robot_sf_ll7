@@ -284,12 +284,6 @@ def save_pareto_png(  # noqa: PLR0913
             svg_dir = os.path.dirname(out_svg)
             if svg_dir:
                 os.makedirs(svg_dir, exist_ok=True)
-            fig.savefig(out_svg, format="svg")
-
-        if out_svg is not None:
-            svg_dir = os.path.dirname(out_svg)
-            if svg_dir:
-                os.makedirs(svg_dir, exist_ok=True)
             # Matplotlib otherwise embeds the current time and randomizes SVG ids.
             # Keep this scoped to SVG output so PNG/PDF behavior is unchanged.
             with mpl.rc_context({"svg.hashsalt": "robot_sf_pareto"}):

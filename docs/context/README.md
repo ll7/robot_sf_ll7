@@ -62,6 +62,7 @@ blocked.
 The SVG geometry-contract boundary (legacy as-run vs corrected authored coordinates) is documented
 in [svg_geometry_contract.md](svg_geometry_contract.md); legacy and corrected rows must never be
 pooled as comparable evidence.
+Issue #8891's outcome-free matched-budget temporal-robustness packet is documented in [issue_8891_temporal_robustness_packet.md](issue_8891_temporal_robustness_packet.md).
 
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.

@@ -1,0 +1,341 @@
+name: Apply issue 8677 projection repair
+
+on:
+  push:
+    branches:
+      - fix/issue-8677-separate-pr-contract-review-authority
+    paths:
+      - .github/workflows/apply-issue-8677-projection-repair.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-issue-8677-projection-repair
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Apply bounded projection and documentation changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement target, found {count}")
+              target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+          gate = "scripts/dev/merge_queue_gate.py"
+          replace_once(
+              gate,
+              """from scripts.dev.pr_metadata import (  # noqa: E402
+              extract_metadata_digests,
+              find_not_ready_body_sentinels,
+              metadata_digest,
+              metadata_trailer,
+          )
+          from scripts.dev.snapshot_pr_queue import (  # noqa: E402
+          """,
+              """from scripts.dev.pr_metadata import (  # noqa: E402
+              extract_metadata_digests,
+              find_not_ready_body_sentinels,
+              metadata_digest,
+              metadata_trailer,
+          )
+          from scripts.dev.same_account_review_report import (  # noqa: E402
+              fetch_same_account_static_reports,
+          )
+          from scripts.dev.snapshot_pr_queue import (  # noqa: E402
+          """,
+          )
+          replace_once(
+              gate,
+              """        is_receipt_review = name in RECEIPT_REVIEW_CHECK_NAMES
+                  approved_source = is_receipt_review or item.get("approved_source") is True
+                  metadata_digest = item.get("metadata_digest") or (
+                      expected_metadata_digest if is_receipt_review else None
+                  )
+          """,
+              """        is_receipt_review = name in RECEIPT_REVIEW_CHECK_NAMES
+                  approved_source = is_receipt_review
+                  metadata_digest = expected_metadata_digest if is_receipt_review else None
+          """,
+          )
+          replace_once(
+              gate,
+              """                "identity": str(
+                              item.get("identity")
+                              or app.get("slug")
+                              or app.get("name")
+                              or item.get("name")
+                              or ""
+                          ),
+          """,
+              """                "identity": str(
+                              app.get("slug") or app.get("name") or item.get("name") or ""
+                          ),
+          """,
+          )
+          replace_once(
+              gate,
+              """                "approved_reviewer": item.get("approved_reviewer") is True,
+                          "approved_source": approved_source,
+                          "metadata_digest": metadata_digest,
+                          "evidence_digest": item.get("evidence_digest") or item.get("digest"),
+          """,
+              """                "approved_reviewer": False,
+                          "approved_source": approved_source,
+                          "metadata_digest": metadata_digest,
+                          "evidence_digest": None,
+          """,
+          )
+          replace_once(
+              gate,
+              """    current_metadata_digest = metadata_digest(title, body)
+              requested_reviewers, requested_teams = _requested_review_identities(review_requests)
+          """,
+              """    current_metadata_digest = metadata_digest(title, body)
+              static_reports, static_report_provenance = fetch_same_account_static_reports(
+                  _gh,
+                  repository=repo,
+                  pr_number=int(pr_number),
+              )
+              requested_reviewers, requested_teams = _requested_review_identities(review_requests)
+          """,
+          )
+          replace_once(
+              gate,
+              """    review_evidence = {
+                  "check_runs": required_checks,
+                  "reviews": _to_receipt_review_evidence(
+          """,
+              """    review_evidence = {
+                  "check_runs": required_checks,
+                  "static_reports": static_reports,
+                  "reviews": _to_receipt_review_evidence(
+          """,
+          )
+          replace_once(
+              gate,
+              """            "fallback_diagnostic": graphql_fallback_diagnostic or None,
+                  },
+              }
+          """,
+              """            "fallback_diagnostic": graphql_fallback_diagnostic or None,
+                      "implementation_review_reports": static_report_provenance,
+                  },
+              }
+          """,
+          )
+
+          tests = Path("tests/dev/test_merge_queue_gate.py")
+          text = tests.read_text(encoding="utf-8")
+          old_name = (
+              "def test_receipt_check_projection_binds_focused_review_to_exact_head_and_metadata()"
+              " -> None:"
+          )
+          new_name = "def test_receipt_check_projection_keeps_contract_checks_as_ci_only() -> None:"
+          if text.count(old_name) != 1:
+              raise SystemExit("test_merge_queue_gate.py: first #8677 test name changed unexpectedly")
+          text = text.replace(old_name, new_name, 1)
+          start_marker = (
+              "def test_receipt_check_projection_preserves_explicit_approved_source_and_metadata()"
+              " -> None:\n"
+          )
+          end_marker = "def test_receipt_check_projection_drops_superseded_duplicate_runs() -> None:\n"
+          start = text.find(start_marker)
+          end = text.find(end_marker)
+          if start < 0 or end < 0 or end <= start:
+              raise SystemExit("test_merge_queue_gate.py: #8677 replacement window not found")
+          replacement = '''def test_receipt_check_projection_rejects_injected_authority_fields() -> None:
+              """Caller-provided flags cannot turn an ordinary check into review authority."""
+              checks = _to_receipt_check_runs(
+                  [
+                      {
+                          "name": "approved-static-analysis",
+                          "identity": "forged-reviewer",
+                          "status": "COMPLETED",
+                          "conclusion": "SUCCESS",
+                          "approved_reviewer": True,
+                          "approved_source": True,
+                          "metadata_digest": METADATA_DIGEST,
+                          "evidence_digest": "c" * 64,
+                      },
+                  ],
+                  head_sha=FULL_SHA,
+                  expected_metadata_digest=METADATA_DIGEST,
+              )
+
+              assert checks[0]["name"] == "approved-static-analysis"
+              assert checks[0]["identity"] == "approved-static-analysis"
+              assert checks[0]["approved_reviewer"] is False
+              assert checks[0]["approved_source"] is False
+              assert checks[0]["metadata_digest"] is None
+              assert checks[0]["evidence_digest"] is None
+
+
+          def test_pr_contract_check_not_admitted_as_independent_review_authority() -> None:
+              """A green contract check plus owner review remains a receipt refusal."""
+              checks = _to_receipt_check_runs(
+                  [
+                      {
+                          "name": "pr-contract-check",
+                          "status": "COMPLETED",
+                          "conclusion": "SUCCESS",
+                      },
+                  ],
+                  head_sha=FULL_SHA,
+                  expected_metadata_digest=METADATA_DIGEST,
+              )
+              author_self_review = _to_receipt_review_evidence(
+                  [
+                      {
+                          "identity": "author-account",
+                          "state": "APPROVED",
+                          "authorAssociation": "OWNER",
+                          "head_sha": FULL_SHA,
+                          "metadata_digest": METADATA_DIGEST,
+                      },
+                  ],
+                  head_sha=FULL_SHA,
+                  expected_metadata_digest=METADATA_DIGEST,
+              )
+
+              classified_with_self_review = classify_implementation_review(
+                  {
+                      "head_sha": FULL_SHA,
+                      "metadata_digest": METADATA_DIGEST,
+                      "waiver_actor": "author-account",
+                      "check_runs": checks,
+                      "reviews": author_self_review,
+                  }
+              )
+              assert classified_with_self_review["status"] == "conflicting"
+              assert classified_with_self_review["carrier"] is None
+              assert "owner_self_review_not_independent" in classified_with_self_review["reason_codes"]
+
+              classified_alone = classify_implementation_review(
+                  {
+                      "head_sha": FULL_SHA,
+                      "metadata_digest": METADATA_DIGEST,
+                      "check_runs": checks,
+                  }
+              )
+              assert classified_alone["status"] == "unavailable"
+              assert classified_alone["carrier"] is None
+              assert "review_carrier_source_not_approved" in classified_alone["reason_codes"]
+
+              copied_name = classify_implementation_review(
+                  {
+                      "head_sha": FULL_SHA,
+                      "metadata_digest": METADATA_DIGEST,
+                      "check_runs": [
+                          {
+                              "name": "pr-contract-check",
+                              "identity": "pr-contract-check",
+                              "status": "completed",
+                              "conclusion": "success",
+                              "head_sha": FULL_SHA,
+                              "metadata_digest": METADATA_DIGEST,
+                          }
+                      ],
+                  }
+              )
+              assert copied_name["status"] == "unavailable"
+              assert "review_carrier_source_not_approved" in copied_name["reason_codes"]
+
+
+          '''
+          tests.write_text(f"{text[:start]}{replacement}{text[end:]}", encoding="utf-8")
+
+          skill = ".agents/skills/gh-pr-merger/SKILL.md"
+          replace_once(
+              skill,
+              """dependency authority. Per issue #8677, PR contract and metadata formatting checks (such as
+          `pr-contract-check`) remain standard CI evidence and cannot by themselves satisfy independent
+          implementation-review authority; independent review must come from approved independent
+          carriers (e.g. CodeRabbit or human reviewers). The receipt owner performs the final expected-head compare-and-swap
+          merge and records GitHub's returned merge SHA.
+          """,
+              """dependency authority. Per issue #8677, PR contract and metadata formatting checks (such as
+          `pr-contract-check`) remain standard CI evidence and cannot by themselves satisfy independent
+          implementation-review authority. Existing distinct-reviewer and approved automated-review
+          carriers retain their normal precedence and rules.
+
+          For same-account publication, reuse the approved `static_report` carrier through
+          `scripts/dev/same_account_review_report.py`. The visible repository-owner account is only the
+          publisher; producer/custody authority comes from the exact existing OpenAI-owned ChatGPT Codex
+          Connector GitHub App tuple returned by the REST issue-comment object. Direct owner comments,
+          copied app names, edited app comments, and caller-injected approval fields remain unapproved.
+          A report must assess the implementation under `## Independent implementation review`, include
+          `### Scope`, `### Findings`, and `### Validation`, and end with this canonical block:
+
+          ```text
+          single-account-review: accepted @ <exact-40-character-head>
+          metadata: <current-64-character-metadata-digest>
+          evidence: <64-zero-placeholder-before-binding>
+          unresolved-correctness-findings: 0
+          ```
+
+          Bind the report before publishing it once (never edit the published comment):
+
+          ```bash
+          python -m scripts.dev.same_account_review_report bind \
+            --repo OWNER/REPOSITORY --pr NUMBER \
+            --input review.md --output review.bound.md
+          ```
+
+          The original evidence digest binds the report text, repository/PR, declared head and metadata,
+          verdict/findings count, publisher, and fixed existing app identity. The gate re-reads the complete
+          REST comment collection, verifies immutable app/source fields and `created_at == updated_at`, and
+          projects only that authenticated source into `static_reports`. The newest app-custodied report
+          supersedes older reports from that producer; stale, malformed, edited, findings-bearing, or
+          digest-mismatched evidence refuses admission. This route does not waive any other receipt hold.
+
+          The receipt owner performs the final expected-head compare-and-swap
+          merge and records GitHub's returned merge SHA.
+          """,
+          )
+          PY
+
+          rm .github/workflows/apply-issue-8677-projection-repair.yml
+
+          python -m pip install --disable-pip-version-check --quiet \
+            pytest==9.0.2 ruff==0.16.6
+          ruff format \
+            scripts/dev/merge_queue_gate.py \
+            scripts/dev/same_account_review_report.py \
+            tests/dev/test_merge_queue_gate.py \
+            tests/dev/test_same_account_review_report.py
+          ruff check \
+            scripts/dev/merge_queue_gate.py \
+            scripts/dev/same_account_review_report.py \
+            tests/dev/test_merge_queue_gate.py \
+            tests/dev/test_same_account_review_report.py
+          python -m pytest -q tests/dev/test_same_account_review_report.py
+          python -m py_compile \
+            scripts/dev/merge_queue_gate.py \
+            scripts/dev/same_account_review_report.py
+          git diff --check
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(workflow): project app-custodied static reviews"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

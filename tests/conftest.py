@@ -382,6 +382,9 @@ _FAST_FILES = {
     # in the dedicated examples-smoke phase.
     "test_examples_manifest.py",
     "test_examples_cli.py",
+    # Pareto plotting helper tests use deterministic Agg output and provide
+    # exact-head coverage for the shared SVG emission path.
+    "test_plots_pareto.py",
     "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
     "test_global_route.py",

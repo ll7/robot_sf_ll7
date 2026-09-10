@@ -61,7 +61,7 @@ def test_save_png_creates_file(tmp_path):
     assert "front_size" in meta
 
 
-def test_save_pdf_option(tmp_path):
+def test_save_vector_options(tmp_path):
     """TODO docstring. Document this function.
 
     Args:
@@ -74,6 +74,7 @@ def test_save_pdf_option(tmp_path):
     ]
     out_png = tmp_path / "pareto.png"
     out_pdf = tmp_path / "pareto.pdf"
+    out_svg = tmp_path / "pareto.svg"
     meta = save_pareto_png(
         records,
         str(out_png),
@@ -81,7 +82,10 @@ def test_save_pdf_option(tmp_path):
         "comfort_exposure",
         title="PDF Test",
         out_pdf=str(out_pdf),
+        out_svg=str(out_svg),
     )
     assert out_png.exists() and out_png.stat().st_size > 0
     assert out_pdf.exists() and out_pdf.stat().st_size > 0
+    assert out_svg.exists() and out_svg.stat().st_size > 0
     assert meta.get("pdf") == str(out_pdf)
+    assert meta.get("svg") == str(out_svg)

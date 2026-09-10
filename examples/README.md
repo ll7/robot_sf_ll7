@@ -9,6 +9,10 @@ runtime evaluation tooling lives under **Benchmarks**, and plotting resources
 reside in **Plotting & Analysis**. Archived scripts remain available for
 reference but are excluded from CI by default.
 
+The SNQI (Social Navigation Quality Index) fixture mode is diagnostic-only:
+its synthetic outputs verify example plumbing and are not benchmark or
+scientific evidence.
+
 ## Quickstart Decision Path
 
 1. **Need a five-minute tour?** Run the quickstart trio in order:
@@ -119,7 +123,7 @@ Benchmark runners and evaluation workflows.
 | [Demo Full Classic Benchmark](./benchmarks/demo_full_classic_benchmark.py) | Run the full classic interaction benchmark via programmatic helper. | _None_ | benchmark | ✅ |
 | [Demo Social Nav Scenarios](./benchmarks/demo_social_nav_scenarios.py) | Run social navigation SVG scenarios sequentially. | _None_ | benchmark, scenario | ✅ |
 | [Per-Ped Force Quantiles Demo](./benchmarks/per_ped_force_quantiles_demo.py) | Demo: per-pedestrian vs aggregated force quantiles. | _None_ | benchmark, metrics, force | ✅ |
-| [SNQI Full Flow](./benchmarks/snqi_full_flow.py) | End-to-end SNQI figure generation flow. | _None_ | benchmark, snqi | ⚠️ Full CLI workflow expects episode/baseline JSON arguments. |
+| [SNQI Full Flow](./benchmarks/snqi_full_flow.py) | Run the SNQI figure flow from real inputs or a diagnostic fixture. | _None_ | benchmark, fixture, snqi | ✅ |
 
 ## Plotting & Analysis
 
@@ -141,4 +145,4 @@ Visualization and analysis scripts built atop benchmark outputs.
 | [Plot Micro Pedestrian Scene](./plotting/plot_micro_pedestrian_scene.py) | Render a static micro-scale pedestrian-simulation snapshot for publications. | _None_ | visualization, pedestrian, publication | ⚠️ Publication figure workflow; requires manual figure inspection. |
 | [Plot Pareto](./plotting/plot_pareto.py) | Generate Pareto front plots from benchmark episodes or synthetic data. | _None_ | visualization, pareto | ⚠️ CLI expects --in dataset argument; no default input for CI. |
 | [Plot Pedestrian Position KDE](./plotting/plot_pedestrian_position_kde.py) | Plot a KDE of pedestrian positions on top of the source map. | _None_ | visualization, pedestrian | ✅ |
-| [SNQI Figures Example](./plotting/snqi_figures_example.py) | Generate publication-ready SNQI figures via the orchestrator script. | _None_ | visualization, snqi | ⚠️ Requires --episodes CLI input and benchmark outputs. |
+| [SNQI Figures Example](./plotting/snqi_figures_example.py) | Generate SNQI figures from real episodes or a diagnostic fixture. | _None_ | fixture, visualization, snqi | ✅ |

@@ -220,6 +220,7 @@ def save_pareto_png(  # noqa: PLR0913
     y_higher_better: bool = False,
     title: str | None = None,
     out_pdf: str | None = None,
+    out_svg: str | None = None,
     observation_track_mode: str = "strict",
 ) -> dict[str, object]:
     """Render and save a Pareto scatter with non-dominated points highlighted.
@@ -276,6 +277,11 @@ def save_pareto_png(  # noqa: PLR0913
             if pdf_dir:
                 os.makedirs(pdf_dir, exist_ok=True)
             fig.savefig(out_pdf)
+        if out_svg is not None:
+            svg_dir = os.path.dirname(out_svg)
+            if svg_dir:
+                os.makedirs(svg_dir, exist_ok=True)
+            fig.savefig(out_svg, format="svg")
 
         plt.close(fig)
 

@@ -34,6 +34,10 @@ runtime evaluation tooling lives under **Benchmarks**, and plotting resources
 reside in **Plotting & Analysis**. Archived scripts remain available for
 reference but are excluded from CI by default.
 
+The SNQI (Social Navigation Quality Index) fixture mode is diagnostic-only:
+its synthetic outputs verify example plumbing and are not benchmark or
+scientific evidence.
+
 """
 
 DECISION_TREE_NOTE = """## Quickstart Decision Path

@@ -533,9 +533,12 @@ def _generate_pareto(
         fallback_group_by=args.fallback_group_by,
         agg=args.pareto_agg,
         out_pdf=(str(pareto_pdf) if pareto_pdf else None),
+        out_svg=(str(out_dir / "pareto.svg") if publication and "svg" in formats else None),
     )
     if publication:
-        written_formats = ["png"] + (["pdf"] if pareto_pdf else [])
+        written_formats = (
+            ["png"] + (["pdf"] if pareto_pdf else []) + (["svg"] if "svg" in formats else [])
+        )
         _write_publication_sidecars(
             out_dir / "pareto",
             Path(args.episodes),
@@ -582,9 +585,14 @@ def _generate_distributions(
         bins=int(args.dists_bins),
         kde=bool(args.dists_kde),
         out_pdf=bool(args.dists_pdf),
+        out_svg=bool(publication and "svg" in formats),
     )
     if publication:
-        written_formats = ["png"] + (["pdf"] if bool(args.dists_pdf) else [])
+        written_formats = (
+            ["png"]
+            + (["pdf"] if bool(args.dists_pdf) else [])
+            + (["svg"] if "svg" in formats else [])
+        )
         for png_path in meta.wrote:
             _write_publication_sidecars(
                 Path(png_path).with_suffix(""),

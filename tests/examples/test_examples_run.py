@@ -118,6 +118,14 @@ def test_example_runs_without_error(
 
     timeout_seconds = getattr(perf_policy, "hard_timeout_seconds", 120.0)
     command = [sys.executable, str(script_path)]
+    if "fixture" in example.tags:
+        command.extend(
+            [
+                "--fixture",
+                "--out-dir",
+                str(repo_root_path / "output" / "example-fixtures" / example.path.stem),
+            ]
+        )
 
     start = time.perf_counter()
     try:

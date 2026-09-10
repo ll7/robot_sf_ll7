@@ -1,4 +1,4 @@
-"""End-to-end SNQI figure generation flow.
+"""Run the SNQI figure flow from real inputs or a diagnostic fixture.
 
 This script demonstrates a complete reproducible pipeline:
 1. (Optional) Run a small scenario matrix to produce episodes JSONL (skip if you already have one)
@@ -26,6 +26,7 @@ import json
 import subprocess
 from pathlib import Path
 
+from examples.fixtures.snqi.v1.loader import materialize_inputs, write_summary
 from robot_sf.common.artifact_paths import resolve_artifact_path
 
 DEFAULT_SCHEMA = "robot_sf/benchmark/schemas/episode.schema.v1.json"
@@ -83,7 +84,7 @@ def main() -> int:
     ap.add_argument(
         "--episodes",
         type=Path,
-        required=True,
+        required=False,
         help="Episodes JSONL path (input or to create)",
     )
     ap.add_argument(
@@ -95,15 +96,57 @@ def main() -> int:
     ap.add_argument(
         "--baseline-json",
         type=Path,
-        required=True,
+        required=False,
         help="Output baseline stats JSON path",
     )
-    ap.add_argument("--weights-json", type=Path, required=True, help="SNQI weights JSON path")
+    ap.add_argument("--weights-json", type=Path, required=False, help="SNQI weights JSON path")
+    ap.add_argument("--fixture", action="store_true", help="Run the versioned diagnostic fixture")
+    ap.add_argument("--out-dir", type=Path, default=None, help="Caller-owned output directory")
     ap.add_argument("--horizon", type=int, default=100)
     ap.add_argument("--dt", type=float, default=0.1)
     ap.add_argument("--base-seed", type=int, default=0)
     ap.add_argument("--schema", type=Path, default=Path(DEFAULT_SCHEMA))
     args = ap.parse_args()
+
+    if args.fixture:
+        if args.out_dir is None:
+            raise SystemExit("--out-dir is required with --fixture")
+        out_dir = args.out_dir.resolve()
+        episodes, weights_json, baseline_json = materialize_inputs(out_dir)
+        _run(
+            [
+                "uv",
+                "run",
+                "python",
+                "scripts/generate_figures.py",
+                "--episodes",
+                str(episodes),
+                "--out-dir",
+                str(out_dir),
+                "--dmetrics",
+                "collisions,comfort_exposure,near_misses,snqi",
+                "--table-metrics",
+                "collisions,comfort_exposure,near_misses,snqi",
+                "--snqi-weights",
+                str(weights_json),
+                "--snqi-baseline",
+                str(baseline_json),
+                "--publication-style",
+                "--format",
+                "png,svg",
+            ]
+        )
+        outputs = [
+            str(p.relative_to(out_dir)) for p in out_dir.rglob("*") if p.suffix in {".png", ".svg"}
+        ]
+        write_summary(out_dir, example="snqi_full_flow", output_files=outputs)
+        print("[diagnostic-only] Synthetic fixture output is not benchmark or scientific evidence.")
+        return 0
+
+    if args.episodes is None or args.baseline_json is None or args.weights_json is None:
+        raise SystemExit(
+            "--episodes, --baseline-json, and --weights-json are required unless --fixture is set"
+        )
 
     if args.episodes.exists():
         episodes = args.episodes.resolve()

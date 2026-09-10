@@ -1,0 +1,4 @@
+{"schema_version": "cross_host_workload_requirements.v1", "workload_id": "gpu-policy-smoke",
+ "description": "GPU inference smoke; the CUDA stack must match.",
+ "not_applicable_fields": [], "material_fields": ["accelerators", "threading"],
+ "compatible_variations": []}

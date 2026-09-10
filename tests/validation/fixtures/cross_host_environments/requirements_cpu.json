@@ -1,0 +1,4 @@
+{"schema_version": "cross_host_workload_requirements.v1", "workload_id": "cpu-social-force-smoke",
+ "description": "CPU-only planner smoke; the GPU stack is irrelevant.",
+ "not_applicable_fields": ["accelerators"], "material_fields": ["os/architecture_class"],
+ "compatible_variations": []}

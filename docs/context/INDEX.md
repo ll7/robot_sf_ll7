@@ -7,6 +7,13 @@ Start from the contract, then the release guide section:
 [benchmark_data_release_s30_h600_2026_09_erratum_1.json](../../configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json),
 [../RELEASE.md](../RELEASE.md), [../benchmark_release_reproducibility.md](../benchmark_release_reproducibility.md).
 
+Issue #8566 source-bound uncertainty and component-contrast fixture packet: a deterministic,
+fixture-only adapter with source/release identity, paired scenario-block uncertainty, separate
+terminal-outcome, safety-wrapper, and Social Navigation Quality Index (SNQI) components, and
+explicitly unavailable #7980/September source-complete coverage. It is diagnostic-only and does
+not establish empirical, benchmark, safety, causal, planner-ranking, release, or paper claims:
+[evidence/issue_8566_source_bound_component_contrasts_2026-09-10/README.md](evidence/issue_8566_source_bound_component_contrasts_2026-09-10/README.md).
+
 Issue #8222 obstacle-force compatibility boundary: preserves frozen/unversioned historical laws,
 separates the fast-pysf segment kernel from the vectorized planner point site, and defines the
 opt-in, domain-gated runtime correction boundary. This is a compatibility and implementation-context

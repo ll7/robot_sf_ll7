@@ -116,7 +116,7 @@ def classify_failure(
     # "simulator_step_failure: plan_exception text" cannot erase simulator ownership.
     planner_reason_prefixes = ("plan_exception:", "planner_diagnostic:")
     if any(
-        reason.strip().lower() == prefix[:-1] or reason.strip().lower().startswith(prefix)
+        reason.strip().lower().startswith(prefix)
         for reason in degradation_reasons
         for prefix in planner_reason_prefixes
     ):

@@ -64,9 +64,7 @@ MANIFEST_FIELDS = frozenset(
     {"version", "routing_owner", "manifest_owner", "profiles", "escalation", "routes"}
 )
 MAINTAINER_VALUES = "docs/maintainer_values.md"
-VALUES_ALLOWED_HEADINGS = frozenset(
-    {"# Maintainer Values", "## Principles", "## Procedure Owners"}
-)
+VALUES_ALLOWED_HEADINGS = frozenset({"# Maintainer Values", "## Principles", "## Procedure Owners"})
 
 REPO_ROOT_SEGMENTS = frozenset(
     {

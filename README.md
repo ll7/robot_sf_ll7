@@ -206,7 +206,7 @@ The framework is designed to be extended. Common extension points:
 
 ### Adding a New Planner
 
-Planner adapters usually live under [`robot_sf/planner/`](robot_sf/planner/), with metadata and
+Planner adapters usually live under [`robot_sf/planner/`](robot_sf/planner/__init__.py), with metadata and
 benchmark wiring described in [`docs/contributing_planner.md`](docs/contributing_planner.md).
 
 ### Adding Scenario Families
@@ -218,7 +218,7 @@ and [`examples/README.md`](examples/README.md) for how to load and customize sce
 ### Custom Maps
 
 Maps are SVG files under [`maps/svg_maps/`](maps/svg_maps/) and related map assets under
-[`maps/`](maps/). To add a new map, create valid SVG geometry, update the relevant map/scenario
+[`maps/`](maps/registry.yaml). To add a new map, create valid SVG geometry, update the relevant map/scenario
 config, and test with `examples/quickstart/03_custom_map.py`.
 
 ## Acknowledgments and provenance

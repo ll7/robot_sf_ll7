@@ -57,9 +57,7 @@ ROUTE_IDS = (
     "environment-worktree-repair",
 )
 MAINTAINER_VALUES = "docs/maintainer_values.md"
-VALUES_ALLOWED_HEADINGS = frozenset(
-    {"# Maintainer Values", "## Principles", "## Procedure Owners"}
-)
+VALUES_ALLOWED_HEADINGS = frozenset({"# Maintainer Values", "## Principles", "## Procedure Owners"})
 
 REPO_ROOT_SEGMENTS = frozenset(
     {
@@ -278,9 +276,7 @@ def check_precedence_contract(
         owners.append(source)
     if owners != [PRECEDENCE_OWNER]:
         found = ", ".join(owners) if owners else "no surface"
-        errors.append(
-            f"precedence contract must be owned by {PRECEDENCE_OWNER}; found in {found}"
-        )
+        errors.append(f"precedence contract must be owned by {PRECEDENCE_OWNER}; found in {found}")
     return errors
 
 

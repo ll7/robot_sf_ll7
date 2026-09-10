@@ -6,11 +6,13 @@ This work follows the live #7381 programme and the preparation rulings in #7383
 and #7384; the attached packet is guidance/evidence, not a replacement authority.
 
 Refresh provenance for this repair: current `origin/main` is
-`ade95312d31462c8a66208948f9c8528910de0c7`; the live #8612 and #8620 tips are
+`d6a41ba2395b19eb604978836f6c35735df45460`; the live #8612 and #8620 tips are
 `db1215d6e5d1a19598d4f6a4ba10b119229f66b7` and
-`4ef0858d33c91291129098c08975525a54fb0121`; and the refreshed #8622 code head is
-`ce31aa2dd1fb684f0a04cd738dbc8a1845673ff0`. The stack is refreshed for inspection,
-but live domain authority and native campaign admission remain blocked.
+`4ef0858d33c91291129098c08975525a54fb0121`; and the exact live #8622 code head under
+repair is `d4d5ed586244edb2e4bcf4cebc0751d119c3641d`. The dossier binds its receipt
+to that input head; the final repair SHA is reported at handoff rather than embedded
+in this self-containing dossier. The stack is refreshed for inspection, but live
+domain authority and native campaign admission remain blocked.
 
 ## Outcome
 
@@ -70,9 +72,9 @@ its required-step and window fields. The full parent digest, actor IDs, original
 indices, and complete rows remain linked in the proposal. This is a fidelity refusal, not a
 claim that the physical event is impossible.
 
-Precursor ownership is keyed by typed/untyped event type and event identity. Untyped
-triggers never inherit typed precursors; a trigger run containing both ownership
-types is refused as ambiguous.
+Precursor ownership is keyed by typed/untyped event type and event identity. Hysteresis-only
+active rows remain ownership-bearing, so an untyped safe row never inherits a typed
+precursor; a trigger run containing both ownership types is refused as ambiguous.
 
 ## Proposed fidelity vector
 

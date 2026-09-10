@@ -812,11 +812,16 @@ def _validate_precursor_rows(rows: Sequence[Mapping[str, Any]]) -> None:
 def _run_owner(
     rows: Sequence[Mapping[str, Any]], vectors: Sequence[RelevanceVector], run: Sequence[int]
 ) -> _EventOwner:
-    """Return one unambiguous owner or reject a mixed trigger run."""
+    """Return one unambiguous owner or reject a mixed trigger run.
+
+    Hysteresis-only rows are still active trigger rows.  Their row-level event
+    identity must participate in ownership resolution so an untyped safe row
+    cannot inherit the typed owner of the preceding direct trigger.
+    """
     owners: set[_EventOwner] = set()
     for index in run:
         owner = _event_owner(rows[index])
-        if owner[0] == "typed" or vectors[index].triggered_reasons:
+        if vectors[index].active_reasons:
             owners.add(owner)
     if len(owners) != 1:
         trigger_steps = tuple(int(rows[index]["step"]) for index in run)

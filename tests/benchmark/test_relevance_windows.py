@@ -96,8 +96,11 @@ def test_multistage_events_merge_overlapping_intervals() -> None:
     rows = _parent_rows()
     rows[1].update({"event_id": "multi", "precursor": True})
     rows[3].update({"event_id": "multi", "clearance_m": 0.8})
+    rows[4]["event_id"] = "multi"
     rows[5].update({"event_id": "multi", "path_conflict": True})
+    rows[6]["event_id"] = "multi"
     rows[8].update({"event_id": "multi", "collision": True})
+    rows[9]["event_id"] = "multi"
     selection = select_relevance_windows(
         rows,
         parent_digest=_parent_digest(),
@@ -117,8 +120,10 @@ def test_disjoint_event_precursors_do_not_expand_or_merge_each_other() -> None:
     rows = _parent_rows()
     rows[1].update({"event_id": "first", "precursor": True})
     rows[3].update({"event_id": "first", "clearance_m": 0.8})
+    rows[4]["event_id"] = "first"
     rows[5].update({"event_id": "second", "precursor": True})
     rows[7].update({"event_id": "second", "clearance_m": 0.8})
+    rows[8]["event_id"] = "second"
     selection = select_relevance_windows(
         rows,
         parent_digest=_parent_digest(),
@@ -159,16 +164,16 @@ def test_untyped_trigger_has_no_typed_precursor_or_window_merge() -> None:
 
 
 def test_mixed_typed_and_untyped_trigger_run_is_rejected() -> None:
-    """A run with competing ownership cannot be safely assigned a precursor."""
+    """A hysteresis-active untyped row cannot inherit a typed trigger owner."""
     rows = _parent_rows()
     rows[1].update({"event_id": "typed", "precursor": True})
     rows[3].update({"event_id": "typed", "clearance_m": 0.8})
-    rows[4]["clearance_m"] = 0.8
+    rows[4]["clearance_m"] = 2.0
     with pytest.raises(ExcerptContractError, match="ambiguous event ownership"):
         select_relevance_windows(
             rows,
             parent_digest=_parent_digest(),
-            thresholds=RelevanceThresholds(hysteresis_steps=0, merge_gap_steps=1),
+            thresholds=RelevanceThresholds(hysteresis_steps=1, merge_gap_steps=1),
         )
 
 
@@ -177,6 +182,7 @@ def test_too_late_crop_is_rejected_as_unsafe() -> None:
     rows = _parent_rows()
     rows[1].update({"event_id": "doorway", "precursor": True})
     rows[4].update({"event_id": "doorway", "clearance_m": 0.5})
+    rows[5]["event_id"] = "doorway"
     selection = select_relevance_windows(rows, parent_digest=_parent_digest())
     late = replace(
         selection.manifest,
@@ -193,6 +199,7 @@ def test_manifest_cannot_remove_precursor_from_selection_and_window() -> None:
     rows = _parent_rows()
     rows[1].update({"event_id": "doorway", "precursor": True})
     rows[4].update({"event_id": "doorway", "clearance_m": 0.5})
+    rows[5]["event_id"] = "doorway"
     selection = select_relevance_windows(rows, parent_digest=_parent_digest())
     window = selection.windows[0]
     forged_window = replace(

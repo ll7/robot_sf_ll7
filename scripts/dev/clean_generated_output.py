@@ -195,6 +195,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
+    if args.check and args.eligibility_record is None and args.artifact is None:
+        print(
+            "--check requires --eligibility-record and --artifact; refusing to delete",
+            file=sys.stderr,
+        )
+        return 2
     if args.eligibility_record is not None or args.artifact is not None:
         if args.eligibility_record is None or args.artifact is None:
             print("--eligibility-record and --artifact must be used together", file=sys.stderr)

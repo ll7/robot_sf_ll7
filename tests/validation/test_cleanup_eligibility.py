@@ -125,6 +125,7 @@ def test_cleanup_command_checks_eligibility_in_check_only_mode() -> None:
     """The existing cleanup command gates on the guard and deletes nothing in --check mode."""
     from scripts.dev.clean_generated_output import main as cleanup_main
 
+    assert cleanup_main(["output", "--check"]) == 2
     blocked = cleanup_main(
         ["--eligibility-record", str(CASE_FILE), "--artifact", "active-job", "--check"]
     )

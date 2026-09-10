@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -1265,14 +1265,15 @@ def _retirement_evidence_for_row(
     )
 
 
-RetirementRow = TypeVar("RetirementRow", WorktreeHygiene, dict[str, str])
-
-
 def _apply_resume_cursor(
-    rows: list[RetirementRow],
+    rows: list[Any],
     resume_after: str | None,
-) -> list[RetirementRow]:
-    """Drop rows up to and including a previous run's last processed worktree."""
+) -> list[Any]:
+    """Drop rows up to and including a previous run's last processed worktree.
+
+    Accepts both parsed porcelain dict rows and :class:`WorktreeHygiene`
+    dataclass rows; row objects are returned unchanged.
+    """
     if not resume_after:
         return rows
     for index, row in enumerate(rows):

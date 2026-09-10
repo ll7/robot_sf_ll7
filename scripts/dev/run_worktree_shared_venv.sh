@@ -677,7 +677,12 @@ PY
 }
 
 check_shared_venv_freshness() {
-  local venv_path="$1"
+  # Do not declare venv_path as local: automatic recovery in a linked worktree
+  # updates venv_path to the worktree-local environment, which must persist to
+  # UV_PROJECT_ENVIRONMENT for the final uv-run execution boundary (issue #8772).
+  if [[ "$#" -gt 0 ]]; then
+    venv_path="$1"
+  fi
   local src_pkg="$repo_root/fast-pysf/pysocialforce"
 
   # PYTHONPATH makes the checkout source authoritative after the interpreter
@@ -886,9 +891,14 @@ export UV_NO_SYNC=1
 # An explicit shared --venv override must stay authoritative across nested
 # common_setup.sh consumers: pin VIRTUAL_ENV so an incomplete worktree-local
 # .venv cannot shadow the shared environment (issue #7823).
+# When the worktree-local .venv is selected (explicitly or via automatic
+# recovery), keep VIRTUAL_ENV aligned so uv run and subprocesses execute
+# with the verified worktree interpreter (issue #8772).
 if [[ -n "$venv_override" ]]; then
   export VIRTUAL_ENV="$venv_path"
   export ROBOT_SF_EXPLICIT_VENV_OVERRIDE="$venv_path"
+elif [[ "$venv_path" == "$repo_root/.venv" ]]; then
+  export VIRTUAL_ENV="$venv_path"
 fi
 if [[ -z "$standalone" ]]; then
   export PYTHONPATH="$repo_root:$repo_root/fast-pysf${PYTHONPATH:+:$PYTHONPATH}"

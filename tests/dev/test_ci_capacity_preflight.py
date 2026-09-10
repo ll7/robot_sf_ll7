@@ -223,15 +223,48 @@ def _linked_recovery_fixture(
         'if [[ "${1:-}" == *check_fast_pysf_runtime.py ]]; then\n'
         '  printf "fast-pysf runtime preflight passed\\n"\n'
         "fi\n"
+        'if [[ "${1:-}" == *check_worktree_optional_deps.py ]]; then\n'
+        "  exit 0\n"
+        "fi\n"
+        'target_root="$(cd -- "$(dirname "$0")/.." && pwd -P)"\n'
+        'if [[ -n "${RECORD_RUN_ENV:-}" ]]; then\n'
+        '  printf "EXECUTABLE=%s/bin/python\\n" "$target_root" >> "$RECORD_RUN_ENV"\n'
+        '  printf "PREFIX=%s\\n" "$target_root" >> "$RECORD_RUN_ENV"\n'
+        '  printf "VIRTUAL_ENV=%s\\n" "${VIRTUAL_ENV-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        '  printf "UV_PROJECT_ENVIRONMENT=%s\\n" "${UV_PROJECT_ENVIRONMENT-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        '  printf "PYTHONPATH=%s\\n" "${PYTHONPATH-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        "fi\n"
         "exit 0\n"
         "PY\n"
         '    chmod +x "$target/bin/python"\n'
+        "    cat > \"$target/bin/pytest\" <<'PYT'\n"
+        "#!/usr/bin/env bash\n"
+        'target_root="$(cd -- "$(dirname "$0")/.." && pwd -P)"\n'
+        'if [[ -n "${RECORD_RUN_ENV:-}" ]]; then\n'
+        '  printf "EXECUTABLE=%s/bin/python\\n" "$target_root" >> "$RECORD_RUN_ENV"\n'
+        '  printf "PREFIX=%s\\n" "$target_root" >> "$RECORD_RUN_ENV"\n'
+        '  printf "VIRTUAL_ENV=%s\\n" "${VIRTUAL_ENV-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        '  printf "UV_PROJECT_ENVIRONMENT=%s\\n" "${UV_PROJECT_ENVIRONMENT-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        '  printf "PYTHONPATH=%s\\n" "${PYTHONPATH-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        "fi\n"
+        "exit 0\n"
+        "PYT\n"
+        '    chmod +x "$target/bin/pytest"\n'
         "    ;;\n"
         "  sync)\n"
         '    if [[ -n "${UV_SYNC_STARTED:-}" ]]; then : > "$UV_SYNC_STARTED"; fi\n'
         '    if [[ "${UV_SYNC_SLEEP:-0}" != "0" ]]; then sleep "$UV_SYNC_SLEEP"; fi\n'
         "    ;;\n"
         "  run)\n"
+        "    shift\n"
+        '    selected_env="${UV_PROJECT_ENVIRONMENT:-${VIRTUAL_ENV:-}}"\n'
+        '    if [[ -n "$selected_env" && -d "$selected_env/bin" ]]; then\n'
+        '      export PATH="$selected_env/bin:$PATH"\n'
+        '      export VIRTUAL_ENV="$selected_env"\n'
+        "    fi\n"
+        '    if [[ -n "${UV_RUN_DISPATCH:-}" && "$#" -gt 0 ]]; then\n'
+        '      exec "$@"\n'
+        "    fi\n"
         "    ;;\n"
         '  *) printf "unexpected uv invocation: %s\\n" "$*" >&2; exit 9 ;;\n'
         "esac\n",
@@ -344,6 +377,86 @@ def test_shared_venv_auto_recovers_stale_default_environment_in_worktree(
         assert main_python.read_bytes() == main_python_before
         assert "Recovering stale fast-pysf in the linked worktree" in result.stderr
         assert "Automatic fast-pysf recovery selected worktree environment" in result.stderr
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_auto_recovers_preserves_worktree_interpreter_and_package_roots(
+    tmp_path: Path,
+) -> None:
+    """Automatic recovery executes pytest with the worktree interpreter and package roots."""
+    repo, worktree, _, _capture, _, env = _linked_recovery_fixture(tmp_path)
+    main_python = repo / ".venv" / "bin" / "python"
+    main_python.parent.mkdir(parents=True)
+    _write_executable(
+        main_python,
+        "#!/usr/bin/env bash\n"
+        'case "${1:-}" in\n'
+        "  *check_worktree_optional_deps.py) exit 0 ;;\n"
+        '  *check_fast_pysf_runtime.py) printf "installed pysocialforce package is stale relative to this checkout\\n" >&2; exit 1 ;;\n'
+        "  *)\n"
+        '    target_root="$(cd -- "$(dirname "$0")/.." && pwd -P)"\n'
+        '    if [[ -n "${RECORD_RUN_ENV:-}" ]]; then\n'
+        '      printf "EXECUTABLE=%s/bin/python\\n" "$target_root" >> "$RECORD_RUN_ENV"\n'
+        '      printf "PREFIX=%s\\n" "$target_root" >> "$RECORD_RUN_ENV"\n'
+        '      printf "VIRTUAL_ENV=%s\\n" "${VIRTUAL_ENV-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        '      printf "UV_PROJECT_ENVIRONMENT=%s\\n" "${UV_PROJECT_ENVIRONMENT-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        '      printf "PYTHONPATH=%s\\n" "${PYTHONPATH-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        "    fi\n"
+        "    exit 0 ;;\n"
+        "esac\n",
+    )
+    main_pytest = repo / ".venv" / "bin" / "pytest"
+    _write_executable(
+        main_pytest,
+        "#!/usr/bin/env bash\n"
+        'target_root="$(cd -- "$(dirname "$0")/.." && pwd -P)"\n'
+        'if [[ -n "${RECORD_RUN_ENV:-}" ]]; then\n'
+        '  printf "EXECUTABLE=%s/bin/python\\n" "$target_root" >> "$RECORD_RUN_ENV"\n'
+        '  printf "PREFIX=%s\\n" "$target_root" >> "$RECORD_RUN_ENV"\n'
+        '  printf "VIRTUAL_ENV=%s\\n" "${VIRTUAL_ENV-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        '  printf "UV_PROJECT_ENVIRONMENT=%s\\n" "${UV_PROJECT_ENVIRONMENT-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        '  printf "PYTHONPATH=%s\\n" "${PYTHONPATH-<unset>}" >> "$RECORD_RUN_ENV"\n'
+        "fi\n"
+        "exit 0\n",
+    )
+    record_file = tmp_path / "run_env.txt"
+    env = {
+        **env,
+        "UV_RUN_DISPATCH": "1",
+        "RECORD_RUN_ENV": str(record_file),
+    }
+    try:
+        result = subprocess.run(
+            [
+                str(worktree / "scripts" / "dev" / RUN_SHARED_VENV.name),
+                "--",
+                "pytest",
+                "tests/benchmark/test_figure_profile.py",
+            ],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        records = dict(
+            line.split("=", 1)
+            for line in record_file.read_text(encoding="utf-8").splitlines()
+            if "=" in line
+        )
+        assert records["PREFIX"] == str(worktree / ".venv")
+        assert records["EXECUTABLE"] == str(worktree / ".venv" / "bin" / "python")
+        assert records["UV_PROJECT_ENVIRONMENT"] == str(worktree / ".venv")
+        assert records["VIRTUAL_ENV"] == str(worktree / ".venv")
+        pythonpath_entries = records["PYTHONPATH"].split(os.pathsep)
+        assert str(worktree) in pythonpath_entries
+        assert str(worktree / "fast-pysf") in pythonpath_entries
+        assert str(repo) not in pythonpath_entries
+        assert str(repo / "fast-pysf") not in pythonpath_entries
     finally:
         _remove_linked_recovery_fixture(repo, worktree)
 

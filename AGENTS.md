@@ -1,8 +1,8 @@
 # Repository Guidelines
 
-Use `docs/maintainer_values.md` as the highest-level current maintainer guidance, then `AGENTS.md`,
-`.specify/memory/constitution.md`, and `docs/dev_guide.md` for repository execution details.
-This file is the compact boot contract. Long-form situational guidance moved to
+This file is the compact boot contract and the entry point into repository instructions. It owns
+the Instruction Precedence contract below; other surfaces link to it instead of restating their own
+authority order. Long-form situational guidance moved to
 `docs/dev/agents/relocated-agents-guidance.md`; read the linked section before that workflow.
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
@@ -10,12 +10,51 @@ Keep agent prompts, internal instructions, and handoff notes token-efficient whi
 For human-facing surfaces (README, `docs/`, feature names, `CHANGELOG.md`, public docstrings, PR/issue titles),
 clarity wins: define acronyms/project terms on first use or link `docs/glossary.md`, and lead with a plain-language summary.
 
+## Instruction Precedence
+
+<!-- instruction-precedence:start -->
+Repository-internal sources, highest first:
+
+1. **Repository invariants** — safety, evidence integrity, honest validation reporting, and
+   recoverability of local work. No lower source may weaken these; benchmark, metric, schema,
+   model-provenance, and paper-facing contracts are invariant-class.
+2. **Current maintainer direction** in the active issue, PR, or thread. It overrides stale workflow
+   prose and lower sources, but it cannot waive an invariant or authorize an unproven claim.
+3. **Nearest scoped guidance** (for example `SLURM/AGENTS.md` or a task-owned procedure doc). It may
+   specialize root guidance for its scope; it cannot silently weaken root invariants.
+4. **`AGENTS.md`** (this file): the boot router, the invariant list, and the owner of this
+   precedence contract.
+5. **Task-owned procedures and skills** selected through the route table in
+   `docs/ai/agent_workflow_entrypoints.md`: `.agents/PLANS.md`, `.agents/skills/`,
+   `docs/dev/worktree_lifecycle.md`, and other canonical owners.
+6. **`docs/maintainer_values.md`**: stable rationale and tie-breakers for ambiguous trade-offs; not
+   a second executable rulebook.
+7. **`docs/dev_guide.md`, context notes, historical reports, and provider adapters**: supporting
+   detail and provider mechanics.
+
+Resolution rules:
+
+- Platform and system instructions outrank repository documents. An applicable user task request
+  sets task intent within those higher-level constraints; it cannot waive a repository invariant or
+  authorize an unproven claim. This contract governs repository-owned documents only.
+- A task plan, issue comment, or historical record never outranks current code and evidence; stale
+  plans are re-validated before use, and scoped guidance cannot weaken a root invariant.
+- Provider adapters configure tools and link to canonical policy; they never create repository
+  policy, even under a renamed heading.
+- `.specify/memory/constitution.md` states WHAT the platform delivers and its stable contracts; it
+  does not define a competing runtime precedence.
+<!-- instruction-precedence:end -->
+
+When this contract resolves a recurring conflict, make it visible: update the active issue or PR,
+patch the stale instruction, or open a bounded follow-up issue.
+
 ## Maintainer Value Hierarchy
 
-`docs/maintainer_values.md` is the compact source of truth for current maintainer values. Optimize
-first for concrete research progress on social-navigation simulation, benchmarking, and planner
-exploration. The hard rule is to be honest, transparent, and reproducible. Apply proof,
-documentation, and process in proportion to risk:
+`docs/maintainer_values.md` records stable maintainer principles and tie-breakers for ambiguous
+trade-offs. It is not a second authority hierarchy; this file's Instruction Precedence contract
+governs repository-internal conflicts. Optimize first for concrete research progress on
+social-navigation simulation, benchmarking, and planner exploration. The hard rule is to be honest,
+transparent, and reproducible. Apply proof, documentation, and process in proportion to risk:
 
 - benchmark, metric, schema, model-provenance, and paper-facing claims still require strong,
   reproducible evidence before they are treated as established;
@@ -30,17 +69,10 @@ documentation, and process in proportion to risk:
   conflict with the user's current priority, follow the current priority, call out the conflict, and
   propose or make the smallest doc update needed to remove the drift.
 
-When instruction surfaces conflict, use this precedence order:
+When instruction surfaces conflict, the Instruction Precedence contract above is the single
+normative source; do not restate its order elsewhere.
 
-1. Current maintainer direction in the active issue, PR, or thread.
-2. `docs/maintainer_values.md`.
-3. `AGENTS.md`.
-4. `.agents/README.md`, `.agents/PLANS.md`, and repo-local skill docs under `.agents/skills/`.
-5. `docs/dev_guide.md`, context notes, and tool-specific compatibility pointers.
-
-If this order resolves a recurring workflow conflict, make the conflict visible where practical:
-update the active issue/PR, patch the stale instruction, or open a bounded follow-up issue. Routine
-workflow cleanup should proceed autonomously when the scope is bounded; label assumptions,
+Routine workflow cleanup should proceed autonomously when the scope is bounded; label assumptions,
 uncertainty, and evidence grade instead of pausing for confirmation. Treat Project #5 ordering and
 scores as advisory when they conflict with fresh maintainer direction or newly observed evidence;
 record the override and update Project metadata later when quota and API limits allow.

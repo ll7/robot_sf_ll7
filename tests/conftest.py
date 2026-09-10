@@ -616,6 +616,7 @@ _FAST_FILES = {
     "test_recurrent_ppo_learned_adapter.py",
     # Both CLI test owners exercise deterministic release command contracts.
     "test_cli.py",
+    "test_cli_scenarios.py",
     # The release-publication contract is deterministic schema/CLI coverage for
     # the changed release_publication_contract.py producer.
     "test_release_publication_contract.py",

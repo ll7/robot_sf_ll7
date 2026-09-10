@@ -1,0 +1,12 @@
+# Duplicate ID fixture
+scenarios:
+  - name: duplicate_scenario_id
+    map_file: ../../../maps/svg_maps/classic_crossing.svg
+    simulation_config:
+      max_episode_steps: 100
+      ped_density: 0.05
+  - name: duplicate_scenario_id
+    map_file: ../../../maps/svg_maps/classic_crossing.svg
+    simulation_config:
+      max_episode_steps: 100
+      ped_density: 0.05

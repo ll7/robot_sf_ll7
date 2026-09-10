@@ -38,7 +38,6 @@ from robot_sf.common.artifacts import (
 )
 from robot_sf.common.compat import validate_compatibility
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
-from robot_sf.common.geometry import euclid_dist
 from robot_sf.common.hardware import (
     HardwareCapacity,
     detect_hardware_capacity,
@@ -58,7 +57,6 @@ from robot_sf.common.math_utils import (
     wrap_angle_pi_array,
     wrap_angle_pi_closed,
 )
-from robot_sf.common.matplotlib_utils import ensure_interactive_backend, is_headless_environment
 from robot_sf.common.metrics_utils import metric_samples
 from robot_sf.common.optional_import import require_extra, try_import
 from robot_sf.common.seed import SeedReport, set_global_seed
@@ -80,6 +78,54 @@ from robot_sf.common.validation import (
     require_finite_fields,
     require_finite_scalar,
 )
+
+
+def euclid_dist(vec_1: Vec2D, vec_2: Vec2D) -> float:
+    """Return the Euclidean distance between two 2D vectors.
+
+    The numba-backed implementation is imported only when this helper is
+    called, keeping package-level utility imports free of optional scientific
+    compilation dependencies.
+
+    Returns:
+        float: Euclidean distance between the vectors.
+    """
+    from robot_sf.common.geometry import euclid_dist as _euclid_dist  # noqa: PLC0415
+
+    return _euclid_dist(vec_1, vec_2)
+
+
+def ensure_interactive_backend(verbose: bool = False) -> bool:
+    """Switch to an interactive matplotlib backend when one is available.
+
+    The implementation is imported only when called so lightweight consumers of
+    ``robot_sf.common`` do not load optional plotting dependencies.
+
+    Returns:
+        bool: Whether an interactive backend was selected.
+    """
+    from robot_sf.common.matplotlib_utils import (  # noqa: PLC0415
+        ensure_interactive_backend as _ensure_interactive_backend,
+    )
+
+    return _ensure_interactive_backend(verbose=verbose)
+
+
+def is_headless_environment() -> bool:
+    """Return whether the current process has no interactive display.
+
+    The implementation is imported only when called so lightweight consumers of
+    ``robot_sf.common`` do not load optional plotting dependencies.
+
+    Returns:
+        bool: Whether the process is headless.
+    """
+    from robot_sf.common.matplotlib_utils import (  # noqa: PLC0415
+        is_headless_environment as _is_headless_environment,
+    )
+
+    return _is_headless_environment()
+
 
 __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     # Artifact helpers (from .artifact_paths)

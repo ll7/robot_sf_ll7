@@ -172,6 +172,8 @@ def _redact_cache_record(record: dict[str, Any], output: Path) -> dict[str, Any]
     redacted = dict(record)
     if isinstance(record.get("path"), str):
         redacted["path"] = _relative_output_path(Path(record["path"]), output)
+    if isinstance(record.get("error"), str):
+        redacted["error"] = record["error"].replace(str(output), "<output>")
     return redacted
 
 
@@ -940,11 +942,15 @@ def inspect_archive(  # noqa: C901, PLR0912, PLR0915 - archive safety states are
                         )
         result["inspection_status"] = "inspected" if not result["errors"] else "partial"
     except (
+        AttributeError,
         OSError,
         EOFError,
+        IndexError,
         KeyError,
         RuntimeError,
         tarfile.TarError,
+        TypeError,
+        UnicodeError,
         zipfile.BadZipFile,
         ValueError,
     ) as exc:
@@ -1067,7 +1073,7 @@ def _pypi_info_observation(info: dict[str, Any]) -> dict[str, Any]:
             observed[field] = value
     classifiers = info.get("classifiers")
     observed["classifiers"] = (
-        [item for item in classifiers if isinstance(item, str)]
+        sorted(item for item in classifiers if isinstance(item, str))
         if isinstance(classifiers, list)
         else None
     )
@@ -1106,7 +1112,8 @@ def _pypi_release_file_observation(item: dict[str, Any]) -> dict[str, Any]:
     if isinstance(yanked, bool):
         observed["yanked"] = yanked
     digests = item.get("digests")
-    observed["digests"] = {"sha256": digests.get("sha256") if isinstance(digests, dict) else None}
+    sha256 = digests.get("sha256") if isinstance(digests, dict) else None
+    observed["digests"] = {"sha256": sha256 if isinstance(sha256, str) else None}
     return observed
 
 
@@ -1126,7 +1133,9 @@ def _pypi_exact_file_match(item: object, artifact: dict[str, Any]) -> bool:
         isinstance(digests, dict)
         and item.get("filename") == artifact["filename"]
         and digests.get("sha256") == artifact["sha256"]
-        and item.get("size") == artifact["size"]
+        and isinstance(item.get("size"), int)
+        and not isinstance(item.get("size"), bool)
+        and item["size"] == artifact["size"]
         and item.get("url") == artifact["url"]
     )
 
@@ -1378,11 +1387,12 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
                 offline=offline,
                 cache_root=output,
             )
+            download_record = _redact_cache_record(download_record, output)
             network.append(
                 {
                     "package_id": package_id,
                     "artifact": artifact["filename"],
-                    **_redact_cache_record(download_record, output),
+                    **download_record,
                 }
             )
             if path is not None:

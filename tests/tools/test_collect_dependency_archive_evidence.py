@@ -484,6 +484,47 @@ def test_offline_cache_misses_never_open_network(tmp_path: Path, monkeypatch) ->
     assert downloaded == 0
 
 
+def test_archive_failure_paths_are_redacted_from_ledger(tmp_path: Path, monkeypatch) -> None:
+    artifact = _artifact()
+    output = tmp_path / "output"
+    manifest = _manifest(
+        version=None,
+        package_id=f"demo-package@editable#{IDENTITY_SHA[:16]}",
+        source_type="editable",
+        source={"editable": "."},
+        artifacts=[artifact],
+    )
+    manifest_bytes = json.dumps(manifest, sort_keys=True).encode("utf-8")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_bytes(manifest_bytes)
+    args = _args(
+        task_id="redacted-archive-failure",
+        output=str(output),
+        batch_manifest=str(manifest_path),
+        expected_batch_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+        target_os="Linux",
+        target_architecture="x86_64",
+        python_version="3.13",
+        resolver_name="uv",
+        resolver_version="0.11.21",
+    )
+    cache_path = output / "cache" / "demo_package" / "None" / artifact["filename"]
+
+    def fail_urlopen(*args: object, **kwargs: object) -> None:
+        raise OSError(f"cannot write {cache_path}")
+
+    monkeypatch.setattr("urllib.request.urlopen", fail_urlopen)
+
+    result = collect(args)
+
+    ledger_text = (output / "dependency_evidence_ledger.json").read_text(encoding="utf-8")
+    assert str(tmp_path) not in ledger_text
+    assert "<output>/cache/demo_package/None/" in ledger_text
+    assert (
+        "<output>/cache/demo_package/None/" in result["rows"][0]["archive_evidence"][0]["errors"][0]
+    )
+
+
 def test_malformed_registry_metadata_remains_partial(tmp_path: Path) -> None:
     artifact = _artifact()
     archive_path = tmp_path / "output" / "cache" / "demo_package" / "1.0.0" / artifact["filename"]

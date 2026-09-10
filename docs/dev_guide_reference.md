@@ -2107,6 +2107,7 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 - Enforce the policy locally and in CI with `uv run python scripts/tools/check_artifact_root.py`; the guard fails fast when new top-level artifacts appear.
 - Override the artifact destination by exporting `ROBOT_SF_ARTIFACT_ROOT=/path/to/custom/output` before invoking scripts; the helpers and guard honor the override consistently.
 - Canonical helpers in `robot_sf.common.artifact_paths` (e.g., `ensure_canonical_tree`) create the required layout for tests and tooling—prefer them over hard-coded paths.
+- Snapshot compute-window logical locator mappings with `uv run python scripts/tools/locator_snapshot.py --registry <registry.yaml> --overlay <private-overlay.yaml>`; `--check` validates duplicate IDs, conflicting bytes, mutable `latest` aliases, expired/signed locators, missing targets, unowned locations, and incomplete transfers without writing outputs, and public snapshots never emit exact private locators.
 - Need a guided walkthrough? Follow the [artifact policy quickstart](../specs/243-clean-output-dirs/quickstart.md) for migration, guard usage, and override examples end to end.
 
 ### Testing strategy (UNIFIED test suite)

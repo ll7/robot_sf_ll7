@@ -401,6 +401,165 @@ def test_classify_open_pr_risk(tmp_path: Path, fake_subprocess: FakeSubprocess) 
     assert "open_pr" in candidate.risk_flags
 
 
+def test_open_pr_snapshot_maps_exact_branch_and_fails_closed_on_ambiguity() -> None:
+    """The batched listing maps numbers by exact head branch and never guesses."""
+    snapshot = reaper.OpenPrSnapshot(
+        transport=lambda _args: _result(
+            stdout=json.dumps(
+                [
+                    {"number": 7, "headRefName": "feature-a"},
+                    {"number": 9, "headRefName": "feature-a"},
+                ]
+            )
+        )
+    )
+
+    assert snapshot.read("feature-a") == (True, None, [7, 9])
+    assert snapshot.read("feature-b") == (False, None, [])
+
+    ambiguous = reaper.OpenPrSnapshot(
+        transport=lambda _args: _result(stdout=json.dumps([{"number": 7}]))
+    )
+    open_pr, error, numbers = ambiguous.read("feature-a")
+    assert open_pr is False
+    assert error is not None and "malformed head branch" in error
+    assert numbers == []
+
+
+@pytest.mark.parametrize(
+    ("stdout", "expected"),
+    [
+        ("not-json", "invalid JSON"),
+        ('{"number": 1}', "non-list payload"),
+        ("[42]", "ambiguous row"),
+        ('[{"number": true, "headRefName": "branch"}]', "ambiguous row"),
+        ('[{"number": 0, "headRefName": "branch"}]', "malformed PR number"),
+        ('[{"number": 1, "headRefName": null}]', "malformed head branch"),
+        ('[{"number": 1, "headRefName": ""}]', "malformed head branch"),
+    ],
+)
+def test_open_pr_snapshot_payload_failures_are_unreadable(stdout: str, expected: str) -> None:
+    """Every malformed batch payload makes the open-PR state unreadable."""
+    snapshot = reaper.OpenPrSnapshot(transport=lambda _args: _result(stdout=stdout))
+
+    open_pr, error, numbers = snapshot.read("branch")
+
+    assert open_pr is False
+    assert error is not None and expected in error
+    assert numbers == []
+
+
+def test_open_pr_snapshot_transport_failure_is_unreadable() -> None:
+    """A failed batch transport must not be mistaken for a PR-free fleet."""
+    snapshot = reaper.OpenPrSnapshot(
+        transport=lambda _args: _result(stderr="HTTP 503", returncode=1)
+    )
+
+    open_pr, error, numbers = snapshot.read("branch")
+
+    assert open_pr is False
+    assert error is not None and "snapshot failed" in error
+    assert numbers == []
+
+
+def test_open_pr_snapshot_truncated_inventory_is_unreadable() -> None:
+    """A listing at the query limit must not prove unlisted branches PR-free."""
+    limit = reaper.OPEN_PR_SNAPSHOT_LIMIT
+    rows = [{"number": number, "headRefName": f"branch-{number}"} for number in range(1, limit + 1)]
+    snapshot = reaper.OpenPrSnapshot(
+        transport=lambda _args: _result(stdout=json.dumps(rows)),
+    )
+
+    open_pr, error, numbers = snapshot.read("branch-1")
+
+    assert open_pr is False
+    assert error is not None and "truncated" in error
+    assert numbers == []
+
+
+def test_build_plan_reuses_single_open_pr_snapshot(
+    tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess
+) -> None:
+    """A fleet-wide plan must cost one open-PR listing, not one per worktree."""
+    main = tmp_path / "main"
+    covered = tmp_path / "covered-wt"
+    free = tmp_path / "free-wt"
+    for path in (main, covered, free):
+        path.mkdir()
+
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(
+            _worktree_porcelain(
+                (str(main), "aaa", "main"),
+                (str(covered), "bbb", "covered-branch"),
+                (str(free), "ccc", "free-branch"),
+            )
+        ),
+    )
+    _setup_reaper_mock(
+        fake_subprocess,
+        branch="covered-branch",
+        pr_list=json.dumps([{"number": 42, "headRefName": "covered-branch"}]),
+    )
+    monkeypatch.setattr(reaper, "_worktree_lease_state", lambda _path: (None, None))
+    monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
+
+    plan = reaper.build_plan(current_path=str(main))
+
+    pr_calls = [call for call in fake_subprocess.calls if call[:3] == ["gh", "pr", "list"]]
+    assert len(pr_calls) == 1
+    assert "--state" in pr_calls[0] and "open" in pr_calls[0]
+    by_path = {candidate.path: candidate for candidate in plan.candidates}
+    assert "open_pr" in by_path[str(covered)].risk_flags
+    assert by_path[str(free)].classification == "clean_stale"
+    assert str(free) in plan.deletable
+
+
+def test_build_plan_open_pr_snapshot_failure_refuses_all_candidates(
+    tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess
+) -> None:
+    """One failed batch listing must make every candidate's PR state unreadable."""
+    main = tmp_path / "main"
+    stale_a = tmp_path / "stale-a"
+    stale_b = tmp_path / "stale-b"
+    for path in (main, stale_a, stale_b):
+        path.mkdir()
+
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(
+            _worktree_porcelain(
+                (str(main), "aaa", "main"),
+                (str(stale_a), "bbb", "stale-a"),
+                (str(stale_b), "ccc", "stale-b"),
+            )
+        ),
+    )
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(""))
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"], _result("origin/stale-a\n")
+    )
+    fake_subprocess.register(["git", "log"], _result(""))
+    fake_subprocess.register(["git", "status", "--ignored"], _result(""))
+    fake_subprocess.register(
+        ["gh", "pr", "list"],
+        _result(stderr="GitHub unavailable", returncode=1),
+    )
+    fake_subprocess.set_default(_result("", returncode=1))
+    monkeypatch.setattr(reaper, "_worktree_lease_state", lambda _path: (None, None))
+    monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
+
+    plan = reaper.build_plan(current_path=str(main))
+
+    assert plan.deletable == []
+    checked = [candidate for candidate in plan.candidates if not candidate.is_current]
+    assert len(checked) == 2
+    for candidate in checked:
+        assert candidate.classification == "risky"
+        assert "unreadable_open_pr_state" in candidate.risk_flags
+
+
 def test_skip_pr_check_is_conservative_risk(
     tmp_path: Path, fake_subprocess: FakeSubprocess
 ) -> None:

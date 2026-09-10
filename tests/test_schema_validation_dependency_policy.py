@@ -73,7 +73,7 @@ def test_issue_8163_policy_batch_has_exact_scope_and_fail_closed_surfaces() -> N
     rows = {
         row["package"]: row
         for row in policy["package_dispositions"]
-        if row["package"] != "llvmlite"
+        if row["status"] == "pending_review"
     }
 
     assert rows.keys() == ISSUE_8163_BATCH.keys()

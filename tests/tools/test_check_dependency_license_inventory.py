@@ -796,7 +796,7 @@ def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None
     selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
     expected = selected_policy_pending_package_count(selected_rows)
 
-    assert expected == 119
+    assert expected == 118
     assert inventory["summary"]["policy_pending_package_count"] == expected
     assert inventory["summary"]["policy_pending_package_count"] != 155
 
@@ -822,9 +822,9 @@ def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
             row.get("policy_disposition") == "external_dependency_not_redistributed"
             for row in selected_rows
         )
-        == 37
+        == 38
     )
-    assert selected_policy_pending_package_count(selected_rows) == 119
+    assert selected_policy_pending_package_count(selected_rows) == 118
 
 
 def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:

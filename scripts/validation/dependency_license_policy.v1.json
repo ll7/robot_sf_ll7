@@ -159,6 +159,87 @@
       ]
     },
     {
+      "id": "sb3-contrib-2-9-0-external-install",
+      "package": "sb3-contrib",
+      "version": "2.9.0",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/sb3-contrib/2.9.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "sb3_contrib-2.9.0.tar.gz",
+          "sha256": "6e839c669552ecb3deb616a42ea98ed5e6c599eb5ac5f86232415b87a3873699",
+          "size": 90312,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "sb3_contrib-2.9.0-py3-none-any.whl",
+          "sha256": "b492b2be792f8f8214ff6b984e94812dc877f809ae82302cbe00626442ae316a",
+          "size": 93042,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/Stable-Baselines-Team/stable-baselines3-contrib",
+        "tag": "v2.9.0",
+        "commit_sha": "075bd5be8d43848b0f0cd3bc8a32f6892d0d58fb",
+        "notice_paths": [
+          "https://github.com/Stable-Baselines-Team/stable-baselines3-contrib/blob/075bd5be8d43848b0f0cd3bc8a32f6892d0d58fb/LICENSE",
+          "https://github.com/Stable-Baselines-Team/stable-baselines3-contrib/tree/075bd5be8d43848b0f0cd3bc8a32f6892d0d58fb"
+        ],
+        "archive_notice_paths": [
+          "sb3_contrib-2.9.0/LICENSE",
+          "sb3_contrib-2.9.0.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": []
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "reviewed",
+      "reviewer": "/root/p00_runtime (gpt-5.6-luna/max factual exact-row route; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-10T17:49:07Z",
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked.",
+      "evidence_paths": [
+        "docs/context/dependency_license_inventory.md"
+      ]
+    },
+    {
       "id": "absl-py-2-4-0-external-install",
       "package": "absl-py",
       "version": "2.4.0",

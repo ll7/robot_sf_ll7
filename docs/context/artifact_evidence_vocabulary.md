@@ -74,6 +74,16 @@ reason codes include `missing_projection_row`, `version_mismatch`, `digest_misma
 
 Validate with `uv run python scripts/validation/check_durable_artifact_locality.py --projection tests/validation/fixtures/durable_artifact_locality/compliant.json --check`.
 
+## Chunk Manifests for Large Result Trees
+
+[`scripts/tools/chunk_manifest.py`](../../scripts/tools/chunk_manifest.py) writes a
+`chunk_manifest.v1` record for result trees too large to re-hash in one transfer window:
+normalized relative paths, full-file digests for small members, fixed-boundary chunk digests for
+large members, an order/worker-invariant `tree_sha256`, and a `manifest_id` semantic digest that
+preservation and transfer receipts reference without rewriting producer manifests. `verify` fails
+closed with exact file/chunk locations on mutation, truncation, sparse/symlink/hardlink/special
+file, path, collision, and partial-manifest conditions.
+
 ## Learned-Policy Artifact Manifests
 
 Learned local-policy checkpoints, normalizers, imitation datasets, and residual-policy artifacts

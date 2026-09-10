@@ -395,6 +395,9 @@ _FAST_FILES = {
     # provide the exact-head changed-line coverage for the shared example
     # prerequisite checker (issue #8735).
     "test_example_prerequisites.py",
+    # Deterministic resolved-config drift contracts for the compute-sunset
+    # configuration example (issue #8904).
+    "test_compare_resolved_configs.py",
     "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
     "test_global_route.py",
@@ -745,6 +748,11 @@ _FAST_FILES = {
     # Relevance-window tests are deterministic selector, manifest, and missing
     # signal contracts for the preparation-only research scaffold (issue #8622).
     "test_relevance_windows.py",
+    # Canonical artifact-path helper tests (tests/research and tests/test_guard)
+    # are deterministic path and override contracts for the changed reusable
+    # helper module; keep their producer coverage in the exact-head fast lane
+    # (issue #8910).
+    "test_artifact_paths.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

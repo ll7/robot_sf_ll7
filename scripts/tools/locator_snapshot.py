@@ -65,7 +65,8 @@ _SIGNED_URL_QUERY_KEYS = frozenset(
 _ENUM_FIELDS = (
     ("artifact_class", ARTIFACT_CLASSES),
     ("locator_class", LOCATOR_CLASSES),
-    ("availability", AVAILABILITIES), ("durable_destination_class", DURABLE_DESTINATION_CLASSES),
+    ("availability", AVAILABILITIES),
+    ("durable_destination_class", DURABLE_DESTINATION_CLASSES),
 )
 _REMOTE_SCHEMES = {"http", "https", "s3", "gs", "az"}
 

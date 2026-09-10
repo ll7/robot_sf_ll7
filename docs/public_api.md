@@ -63,7 +63,7 @@ All symbols in `robot_sf.__all__` are part of the `stable` public facade:
 - **`robot_sf.PlannerProtocol`**:
   Protocol defining the standard interface for navigation planners (`step`, `reset`, `configure`, `close`).
 - **`robot_sf.api`**:
-  Module re-exporting the public facade functions and types.
+  Module re-exporting the public facade functions and types. For complete runnable first-episode examples and exception contracts, see the [Sphinx API Facade Reference](api/robot_sf.api.rst).
 
 ### Telemetry Surface
 

@@ -1,4 +1,9 @@
-"""TODO docstring. Document this module."""
+"""Train a PPO policy with the action-change penalty reward on varied pedestrian densities.
+
+Runs a standalone 10M-timestep training job over the default scenarios, writing
+TensorBoard logs to ``./logs/ppo_logs/``, periodic checkpoints to
+``./model/backup``, and the final policy to ``./model/ppo_model``.
+"""
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
@@ -13,13 +18,13 @@ from robot_sf.tb_logging import DrivingMetricsCallback
 
 
 def training():
-    """TODO docstring. Document this function."""
+    """Run PPO training with denser pedestrian scenarios and save the final model."""
     n_envs = 32
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
 
     def make_env():
-        """TODO docstring. Document this function."""
+        """Build a ``RobotEnv`` with the punish-action reward and configured difficulty."""
         config = EnvSettings()
         config.sim_config.ped_density_by_difficulty = ped_densities
         config.sim_config.difficulty = difficulty

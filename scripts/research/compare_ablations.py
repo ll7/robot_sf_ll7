@@ -23,11 +23,14 @@ from loguru import logger
 
 
 def parse_args() -> argparse.Namespace:
-    """TODO docstring. Document this function.
+    """Parse command-line arguments for the ablation comparison CLI.
 
+    Defines the required config path, experiment name, and seed list, plus the
+    optional improvement threshold percentage and output directory.
 
     Returns:
-        TODO docstring.
+        Parsed arguments with fields ``config``, ``experiment_name``, ``seeds``,
+        ``threshold`` (percent, default ``40.0``), and ``output``.
     """
     p = argparse.ArgumentParser(description="Run ablation matrix and generate report")
     p.add_argument("--config", required=True, type=Path, help="Path to ablation YAML config")
@@ -45,7 +48,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """TODO docstring. Document this function."""
+    """Run an ablation matrix from CLI arguments and write a Markdown report.
+
+    Argument parsing happens before the optional analytics import so ``--help``
+    and argument errors work in the core installation. The YAML parameter grid is
+    parsed with a throwaway orchestrator, then evaluated by a second orchestrator:
+    variants without improvement results are marked ``INCOMPLETE`` and the report
+    path is logged after generation.
+    """
     args = parse_args()
     # Defer optional analytics dependencies until after argparse has handled
     # lightweight help and validation paths in the core installation.

@@ -38,20 +38,18 @@ class GuardResult:
 
     @property
     def exit_code(self) -> int:
-        """TODO docstring. Document this function.
-
+        """Return the process exit code for this guard result.
 
         Returns:
-            TODO docstring.
+            ``0`` when no violations were detected, otherwise ``1``.
         """
         return 0 if not self.violations else 1
 
     def to_dict(self) -> dict[str, object]:
-        """TODO docstring. Document this function.
-
+        """Convert the guard result into a JSON-serializable mapping.
 
         Returns:
-            TODO docstring.
+            Mapping with ``violations`` details, the ``artifact_root``, and ``exit_code``.
         """
         return {
             "violations": [asdict(v) for v in self.violations],
@@ -61,14 +59,17 @@ class GuardResult:
 
 
 def _normalize_allowlist(entries: Iterable[str | Path], repo_root: Path) -> set[Path]:
-    """TODO docstring. Document this function.
+    """Resolve allowlist entries against the repository root.
+
+    Relative entries are joined with ``repo_root`` before resolution; absolute
+    entries are resolved directly.
 
     Args:
-        entries: TODO docstring.
-        repo_root: TODO docstring.
+        entries: Relative or absolute allowlist paths to normalize.
+        repo_root: Repository root used to resolve relative entries.
 
     Returns:
-        TODO docstring.
+        Set of resolved absolute allowlist paths.
     """
     normalized: set[Path] = set()
     for entry in entries:
@@ -113,11 +114,10 @@ def check_artifact_root(
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """TODO docstring. Document this function.
-
+    """Build the command-line parser for the artifact root guard.
 
     Returns:
-        TODO docstring.
+        Parser exposing ``--repo-root``, ``--artifact-root``, ``--allow``, and ``--json``.
     """
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -150,11 +150,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _write_json_report(result: GuardResult, path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Write the guard result as indented JSON, creating parent directories.
 
     Args:
-        result: TODO docstring.
-        path: TODO docstring.
+        result: Guard result to serialize.
+        path: Destination file path for the JSON report.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result.to_dict(), indent=2) + "\n", encoding="utf-8")
@@ -162,13 +162,16 @@ def _write_json_report(result: GuardResult, path: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Run the artifact root guard command-line interface.
+
+    Logs each detected legacy artifact with its remediation hint, or a clean
+    result when none are found, and optionally writes the JSON report.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument list to parse; defaults to ``sys.argv[1:]``.
 
     Returns:
-        TODO docstring.
+        Guard exit code: ``0`` when clean, otherwise ``1``.
     """
     parser = _build_parser()
     args = parser.parse_args(argv)

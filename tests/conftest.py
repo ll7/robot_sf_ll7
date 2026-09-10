@@ -552,6 +552,9 @@ _FAST_FILES = {
     # coverage gate.
     "test_figure_profile.py",
     "test_scenario_figure_pack.py",
+    # Versioned figure display-semantics tests cover the registry and its
+    # explicit legacy compatibility bridge in the fast changed-coverage lane.
+    "test_figure_semantics.py",
     # Release admission, staging, doctor, and publisher suites are deterministic
     # provenance/schema contracts for the benchmark-data release lane.
     # The direct source/test pairs are required by the changed-coverage router

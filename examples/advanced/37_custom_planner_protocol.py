@@ -7,9 +7,8 @@ Prerequisites:
     - None beyond the repository.
 
 Expected Output:
-    - A short headless episode driven by the tutorial planner, with per-step commands
-      and a diagnostics summary. ``--format json`` emits the same run summary
-      machine-readably.
+    - Text mode prints a short episode summary and a diagnostics summary.
+      ``--format json`` emits the same run summary machine-readably.
 
 Limitations:
     - Educational implementation only: constant forward command, no obstacle avoidance,
@@ -29,6 +28,9 @@ import os
 import sys
 from typing import Any
 
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    policy_command_to_env_action,
+)
 from robot_sf.common.seed import set_global_seed
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.protocol import (
@@ -41,6 +43,7 @@ LINEAR_BOUNDS = (0.0, 1.0)
 ANGULAR_BOUNDS = (-1.2, 1.2)
 SEED = 11
 HORIZON = 20
+MAX_STEPS = 1_000
 PLANNER_TYPE = "tutorial_constant_forward"
 
 
@@ -71,7 +74,7 @@ def validate_command(command: object) -> tuple[float, float]:
 
 
 class TutorialPlanner:
-    """Deterministic stateless goal-directed tutorial planner (educational only)."""
+    """Deterministic stateless constant-command tutorial planner (educational only)."""
 
     def __init__(self, linear_speed: float = 0.3, angular_rate: float = 0.0) -> None:
         """Create the planner with one constant validated command.
@@ -118,14 +121,14 @@ assert isinstance(TutorialPlanner(), LocalPlannerProtocol)
 
 
 def _step_budget(default: int) -> int:
-    """Return a smaller rollout budget when the example runs in smoke mode."""
+    """Return a positive rollout budget capped at the tutorial's hard limit."""
     override = os.environ.get("ROBOT_SF_EXAMPLES_MAX_STEPS")
     if override:
         try:
-            return max(1, int(override))
+            return min(MAX_STEPS, max(1, int(override)))
         except ValueError:  # pragma: no cover - defensive guard
             pass
-    return default
+    return min(MAX_STEPS, max(1, default))
 
 
 def run_episode(horizon: int) -> dict[str, Any]:
@@ -139,25 +142,34 @@ def run_episode(horizon: int) -> dict[str, Any]:
     """
     set_global_seed(SEED)
     planner = TutorialPlanner()
-    planner.reset(seed=SEED)
-    env = make_robot_env(debug=False)
+    env = None
     total_reward = 0.0
     steps = 0
     try:
+        env = make_robot_env(debug=False)
         observation, _ = env.reset()
-        for _ in range(horizon):
+        planner.reset(seed=SEED)
+        for _ in range(min(MAX_STEPS, max(1, horizon))):
             command = planner.plan(observation)
-            observation, reward, terminated, truncated, _ = env.step(command)
+            action = policy_command_to_env_action(
+                env=env,
+                config=env.config,
+                command=command,
+            )
+            observation, reward, terminated, truncated, _ = env.step(action)
             total_reward += float(reward)
             steps += 1
             if terminated or truncated:
                 observation, _ = env.reset()
+                planner.reset(seed=SEED)
     finally:
         planner.close()
-        env.close()
+        if env is not None:
+            env.close()
+    effective_horizon = min(MAX_STEPS, max(1, horizon))
     return {
         "planner_type": PLANNER_TYPE,
-        "horizon": horizon,
+        "horizon": effective_horizon,
         "steps": steps,
         "total_reward": total_reward,
         "seed": SEED,
@@ -175,7 +187,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         Parsed arguments with horizon and output format.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--horizon", type=int, default=HORIZON)
+    parser.add_argument(
+        "--horizon",
+        type=lambda value: min(MAX_STEPS, max(1, int(value))),
+        default=HORIZON,
+    )
     parser.add_argument("--format", choices=("text", "json"), default="text")
     return parser.parse_args(argv)
 
@@ -190,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         Process exit code (0 on success).
     """
     args = parse_args(argv)
-    summary = run_episode(_step_budget(max(1, args.horizon)))
+    summary = run_episode(_step_budget(args.horizon))
     if args.format == "json":
         print(json.dumps(summary, indent=2, sort_keys=True, default=str))
     else:

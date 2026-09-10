@@ -5,10 +5,13 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from robot_sf.planner.protocol import LocalPlannerProtocol
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _MODULE_PATH = REPO_ROOT / "examples/advanced/37_custom_planner_protocol.py"
@@ -62,6 +65,118 @@ def test_close_is_idempotent() -> None:
     planner = _tutorial.TutorialPlanner()
     planner.close()
     planner.close()
+
+
+def test_run_episode_projects_velocity_command_to_default_drive_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The tutorial passes velocity/rate commands through the canonical projection."""
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.0), current_speed=(0.0, 0.0))
+    config = SimpleNamespace(
+        robot_config=DifferentialDriveSettings(),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.2),
+    )
+
+    class FakeEnv:
+        def __init__(self) -> None:
+            self.config = config
+            self.simulator = SimpleNamespace(robots=[robot])
+            self.actions: list[np.ndarray] = []
+
+        def reset(self):
+            return {}, {}
+
+        def step(self, action):
+            self.actions.append(action)
+            return {}, 0.0, False, False, {}
+
+        def close(self):
+            pass
+
+    env = FakeEnv()
+    monkeypatch.setattr(_tutorial, "make_robot_env", lambda debug=False: env)
+    summary = _tutorial.run_episode(1)
+
+    assert np.allclose(env.actions[0], np.array([1.5, 0.0]))
+    assert summary["steps"] == 1
+
+
+def test_run_episode_closes_planner_when_environment_creation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planner resources are released even when the environment cannot be built."""
+    closed = False
+
+    class TrackingPlanner:
+        def __init__(self) -> None:
+            pass
+
+        def close(self) -> None:
+            nonlocal closed
+            closed = True
+
+    monkeypatch.setattr(_tutorial, "TutorialPlanner", TrackingPlanner)
+    monkeypatch.setattr(
+        _tutorial,
+        "make_robot_env",
+        lambda debug=False: (_ for _ in ()).throw(RuntimeError("construction failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="construction failed"):
+        _tutorial.run_episode(1)
+    assert closed
+
+
+def test_run_episode_resets_planner_after_internal_environment_reset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An environment episode reset is followed by the matching planner reset."""
+    reset_seeds: list[int | None] = []
+
+    class TrackingPlanner(_tutorial.TutorialPlanner):
+        def reset(self, *, seed: int | None = None) -> None:
+            reset_seeds.append(seed)
+            super().reset(seed=seed)
+
+    class FakeEnv:
+        config = SimpleNamespace(
+            robot_config=DifferentialDriveSettings(),
+            sim_config=SimpleNamespace(time_per_step_in_secs=0.2),
+        )
+        simulator = SimpleNamespace(
+            robots=[SimpleNamespace(pose=((0.0, 0.0), 0.0), current_speed=(0.0, 0.0))]
+        )
+
+        def __init__(self) -> None:
+            self.reset_count = 0
+
+        def reset(self):
+            self.reset_count += 1
+            return {}, {}
+
+        def step(self, action):
+            return {}, 0.0, self.reset_count == 1, False, {}
+
+        def close(self):
+            pass
+
+    env = FakeEnv()
+    monkeypatch.setattr(_tutorial, "TutorialPlanner", TrackingPlanner)
+    monkeypatch.setattr(_tutorial, "make_robot_env", lambda debug=False: env)
+
+    summary = _tutorial.run_episode(2)
+
+    assert reset_seeds == [_tutorial.SEED, _tutorial.SEED]
+    assert env.reset_count == 2
+    assert summary["steps"] == 2
+
+
+def test_step_budgets_are_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Environment and CLI step budgets share a hard upper bound."""
+    assert _tutorial._step_budget(10**9) == _tutorial.MAX_STEPS
+    monkeypatch.setenv("ROBOT_SF_EXAMPLES_MAX_STEPS", str(10**9))
+    assert _tutorial._step_budget(1) == _tutorial.MAX_STEPS
+    assert _tutorial.parse_args(["--horizon", str(10**9)]).horizon == _tutorial.MAX_STEPS
 
 
 def test_manifest_entry_is_registered(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

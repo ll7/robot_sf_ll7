@@ -233,8 +233,19 @@ def test_core_import_check_is_required_and_has_narrow_remedy(
     assert "uv sync)." in details["hint"]
 
 
-def test_optional_import_remedies_name_the_declared_extra() -> None:
+def test_optional_import_remedies_name_the_declared_extra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Optional import remedies do not broaden setup to every extra."""
+    real_find_spec = doctor.importlib_util.find_spec
+
+    def _fake_find_spec(name: str, *args: object, **kwargs: object) -> object:
+        if name == "pygame":
+            return None
+        return real_find_spec(name, *args, **kwargs)
+
+    monkeypatch.setattr(doctor.importlib_util, "find_spec", _fake_find_spec)
+
     assert (
         "uv sync --extra viz"
         in doctor._check_optional_import("pygame", required=False).details["hint"]

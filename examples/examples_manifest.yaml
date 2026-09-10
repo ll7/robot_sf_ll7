@@ -252,6 +252,15 @@ examples:
     ci_reason: null
     doc_reference: docs/SCENARIOS.md#programmatic-python-api
     tags: [scenarios, authoring, validation, tutorial]
+  - path: advanced/37_custom_planner_protocol.py
+    name: "37 Custom Planner Protocol"
+    summary: "Implement and run the smallest planner compatible with LocalPlannerProtocol."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/contributing_planner.md#minimal-example-path
+    tags: [tutorial, planner, protocol, validation]
   - path: advanced/08_multi_pedestrian.py
     name: "08 Multi-Pedestrian"
     summary: "Build a multi-pedestrian scenario using map definitions."

@@ -19,25 +19,25 @@ without a more specific cause.
 state preparation, clearance checks, or kinematic state integration. The resulting row is
 structured as `status="error"`, `degraded=true`, with a `simulator_<phase>_failure` reason and
 `failure_class="simulator"`. Planner reset, `planner.plan()`, diagnostics, and invalid command or
-diagnostic output remain `path_generation` failures through the existing `plan_exception` reason
-mechanism.
+diagnostic output are recorded through the existing `plan_exception` reason mechanism; any
+combined collision or simulator signals still follow the base taxonomy precedence below.
 
-Explicit boundary flags identify ownership before reason-substring classification: an explicit
-simulator flag yields `simulator`, while a planner exception yields `path_generation` even when
-the exception text contains words such as `simulator`. For rows without an explicit boundary flag,
-the remaining reason precedence is:
+The base taxonomy precedence is preserved for combined signals. An explicit simulator flag or
+simulator reason text is checked first, followed by social compliance, tracking, and path
+generation:
 
 1. `simulator`
 2. `social_compliance`
 3. `tracking`
 4. `path_generation`
 
-Planner-owned diagnostic reasons carry a `planner_diagnostic` prefix, so reason text cannot
-override that ownership even when it contains a simulator keyword. Unknown rollout statuses and
-non-canonical classes fail closed with `ValueError`. For a recognized non-success status without a
-more specific signal, `classify_failure` preserves the established `path_generation` fallback.
-Summary aggregation rejects a missing non-success degradation reason or class, so a row cannot
-silently disappear from `failure_class_counts`.
+Consequently, `planner_diagnostic: simulator backend unavailable` with a pedestrian collision
+remains `simulator`, while `plan_exception` with a pedestrian collision remains
+`social_compliance`, matching the base simulator-first and social-before-path ordering. Unknown
+rollout statuses and non-canonical classes fail closed with `ValueError`. For a recognized
+non-success status without a more specific signal, `classify_failure` preserves the established
+`path_generation` fallback. Summary aggregation rejects a missing non-success degradation reason
+or class, so a row cannot silently disappear from `failure_class_counts`.
 
 The rollout boundary deliberately catches broad `Exception` values so failures from the external
 planner and analytic simulator phases become structured diagnostic rows instead of escaping the
@@ -46,20 +46,20 @@ broad-exception baseline; the baseline approval does not broaden the benchmark c
 
 ## Diagnostic success and provenance
 
-For this comparator, `success_rate` counts only rows that are all of the following: `status="ok"`,
-not degraded, completed, collision-free, and not a near miss. A near miss may remain an `ok` row
-with no failure class because it is a separate clearance caveat rather than one of the four
-failure mechanisms, but it is never counted as diagnostic success. Degraded and fallback
-execution are likewise excluded from success; their status and degradation reasons remain
-visible rather than being normalized into a clean result. Summary validation does require every
-non-`ok` row to retain its emitted `degraded=true` invariant, at least one degradation reason,
-and a canonical failure class.
+For this comparator, the established v1 `success_rate` predicate remains exactly
+`completed and not collision`. It intentionally does not filter by `status`, `degraded`, or
+`near_miss`; those caveats remain visible through their dedicated fields and rates. A stricter
+clean-completion slice would need a separately named or versioned metric and is outside this
+repair. Summary validation does require every non-`ok` row to retain its emitted `degraded=true`
+invariant, at least one degradation reason, and a canonical failure class.
 
-The canonical registry in this module contains native analytic planners only. This change does
-not convert adapter, fallback, or degraded provenance into native evidence, and it makes no
-benchmark-improvement claim. Any future adapter or fallback registration must retain explicit
-execution metadata and pass the same fail-closed summary contract before its rows can be
-interpreted.
+The canonical registry in this module contains native analytic planners only, and its registry key
+is passed into `execute_rollout` before any simulator-boundary work. Thus simulator failures that
+occur before `planner.diagnostics()` remain grouped under the canonical planner ID rather than the
+planner class name. This change does not convert adapter, fallback, or degraded provenance into
+native evidence, and it makes no benchmark-improvement claim. Any future adapter or fallback
+registration must retain explicit execution metadata and pass the same fail-closed summary
+contract before its rows can be interpreted.
 
 The receipt remains `force_coupled_comparator_receipt.v1`; the taxonomy fields stay additive and
 optional for legacy receipt compatibility. A legacy non-success row may omit `failure_class`, but

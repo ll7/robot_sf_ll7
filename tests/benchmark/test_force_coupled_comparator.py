@@ -170,7 +170,7 @@ def test_first_step_planner_exception_is_classified_without_diagnostics() -> Non
         ("diagnostics", FAILURE_CLASS_PATH_GENERATION, False),
         ("diagnostic_status", FAILURE_CLASS_PATH_GENERATION, False),
         ("command", FAILURE_CLASS_PATH_GENERATION, False),
-        ("planner_simulator_text", FAILURE_CLASS_PATH_GENERATION, False),
+        ("planner_simulator_text", FAILURE_CLASS_SIMULATOR, False),
         ("integration", FAILURE_CLASS_SIMULATOR, True),
     ],
 )
@@ -180,7 +180,7 @@ def test_execute_rollout_classifies_planner_boundaries_and_simulator_integration
     expected_simulator_error: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Planner-owned failures stay path-generation; analytic integration sets the flag."""
+    """Boundary failures use base taxonomy precedence; analytic integration sets the flag."""
     scenario = get_canonical_comparison_scenarios()[0]
     planner: comparator.LocalPlannerProtocol = _SimulatorBoundaryFailurePlanner(failure_phase)
     if failure_phase == "integration":
@@ -208,24 +208,25 @@ def test_execute_rollout_classifies_planner_boundaries_and_simulator_integration
 
 
 @pytest.mark.parametrize(
-    ("failure_phase", "expected_reason"),
+    ("failure_phase", "expected_reason", "expected_failure_class"),
     [
-        ("degraded_diagnostics", "fixture_degraded"),
-        ("degraded_simulator_text", "simulator backend unavailable"),
-        ("fallback_diagnostics", "fallback_execution"),
+        ("degraded_diagnostics", "fixture_degraded", FAILURE_CLASS_PATH_GENERATION),
+        ("degraded_simulator_text", "simulator backend unavailable", FAILURE_CLASS_SIMULATOR),
+        ("fallback_diagnostics", "fallback_execution", FAILURE_CLASS_PATH_GENERATION),
     ],
 )
 def test_execute_rollout_records_diagnostic_degradation(
     failure_phase: str,
     expected_reason: str,
+    expected_failure_class: str,
 ) -> None:
-    """Planner diagnostic degradation remains visible without becoming simulator failure."""
+    """Diagnostic degradation remains visible under base combined-signal precedence."""
     scenario = get_canonical_comparison_scenarios()[0]
     result = execute_rollout(_SimulatorBoundaryFailurePlanner(failure_phase), scenario)
 
     assert result.status == "degraded"
     assert result.degraded is True
-    assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
+    assert result.failure_class == expected_failure_class
     assert f"planner_diagnostic: {expected_reason}" in result.degradation_reasons
 
 
@@ -265,6 +266,29 @@ def test_execute_rollout_captures_simulator_state_failure(monkeypatch: pytest.Mo
     assert result.degradation_reasons == (
         "simulator_state_failure: RuntimeError: fixture state failure",
     )
+
+
+def test_registry_planner_id_survives_simulator_failure_before_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Simulator failures before diagnostics retain the canonical registry planner ID."""
+    planner = _SimulatorBoundaryFailurePlanner("normal")
+
+    def fail_hypot(*args: object) -> float:
+        del args
+        raise RuntimeError("fixture state failure")
+
+    monkeypatch.setattr(
+        comparator,
+        "build_planner_registry",
+        lambda _config: {"canonical_fixture": planner},
+    )
+    monkeypatch.setattr(comparator.math, "hypot", fail_hypot)
+
+    receipt = run_force_coupled_comparator()
+
+    assert {row["planner_id"] for row in receipt["results"]} == {"canonical_fixture"}
+    assert {row["failure_class"] for row in receipt["results"]} == {FAILURE_CLASS_SIMULATOR}
 
 
 def test_execute_rollout_captures_simulator_clearance_failure(
@@ -319,8 +343,8 @@ def test_execute_rollout_captures_nonfinite_simulator_state(
     )
 
 
-def test_classify_failure_rejects_unknown_status_and_preserves_path_fallback() -> None:
-    """Unknown statuses fail closed while the established non-success fallback remains stable."""
+def test_classify_failure_rejects_unknown_status_and_preserves_base_precedence() -> None:
+    """Unknown statuses fail closed while base mixed-signal precedence remains stable."""
     with pytest.raises(ValueError, match="unknown rollout status"):
         classify_failure(status="unknown")
 
@@ -330,7 +354,7 @@ def test_classify_failure_rejects_unknown_status_and_preserves_path_fallback() -
             status="degraded",
             degradation_reasons=("plan_exception: simulator backend unavailable",),
         )
-        == FAILURE_CLASS_PATH_GENERATION
+        == FAILURE_CLASS_SIMULATOR
     )
 
 
@@ -343,7 +367,7 @@ def test_classify_failure_rejects_unknown_status_and_preserves_path_fallback() -
                 "plan_exception": True,
                 "collision_pedestrian": True,
             },
-            FAILURE_CLASS_PATH_GENERATION,
+            FAILURE_CLASS_SOCIAL_COMPLIANCE,
         ),
         (
             {
@@ -351,7 +375,7 @@ def test_classify_failure_rejects_unknown_status_and_preserves_path_fallback() -
                 "collision_pedestrian": True,
                 "degradation_reasons": ("planner_diagnostic: simulator backend unavailable",),
             },
-            FAILURE_CLASS_PATH_GENERATION,
+            FAILURE_CLASS_SIMULATOR,
         ),
         (
             {
@@ -377,10 +401,10 @@ def test_classify_failure_rejects_unknown_status_and_preserves_path_fallback() -
         ),
     ],
 )
-def test_classify_failure_preserves_planner_boundary_precedence(
+def test_classify_failure_preserves_base_mixed_signal_precedence(
     signals: dict[str, object], expected: str
 ) -> None:
-    """Planner ownership wins over combined pedestrian/simulator signals."""
+    """Base simulator-first, social-before-path precedence wins for combined signals."""
     assert classify_failure(**signals) == expected  # type: ignore[arg-type]
 
 
@@ -716,8 +740,8 @@ def test_summary_table_rejects_inconsistent_ok_row() -> None:
         compute_summary_table([replace(healthy, degradation_reasons=("fixture",))])
 
 
-def test_summary_table_excludes_degraded_and_near_miss_rows_from_success() -> None:
-    """Diagnostic success requires clean completion; near misses remain separate caveats."""
+def test_summary_table_preserves_established_success_rate_semantics() -> None:
+    """Success rate remains completed and collision-free; caveats stay separately visible."""
     healthy = execute_rollout(PurePursuitGoalPlanner(), get_canonical_comparison_scenarios()[-1])
     near_miss = replace(healthy, scenario_id="near_miss_fixture", near_miss=True)
     degraded = replace(
@@ -731,7 +755,7 @@ def test_summary_table_excludes_degraded_and_near_miss_rows_from_success() -> No
 
     [summary] = compute_summary_table([near_miss, degraded])
 
-    assert summary["success_rate"] == 0.0
+    assert summary["success_rate"] == 1.0
     assert summary["near_miss_rate"] == 0.5
     assert summary["status_counts"] == {"ok": 1, "degraded": 1}
     assert summary["failure_class_counts"][FAILURE_CLASS_TRACKING] == 1

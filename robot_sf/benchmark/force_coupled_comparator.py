@@ -102,28 +102,13 @@ def classify_failure(
     ):
         return None
 
-    # Explicit flags identify the owning boundary.  In particular, planner exception text may
-    # contain words such as "simulator" without making the planner failure a simulator failure.
-    if simulator_error:
-        return FAILURE_CLASS_SIMULATOR
-    if plan_exception:
-        return FAILURE_CLASS_PATH_GENERATION
-
     reasons_str = " ".join(degradation_reasons).lower()
 
-    # Planner-owned diagnostic text must retain its ownership even when the reason text contains
-    # a simulator keyword.  Match only canonical reason prefixes so an incidental mention such as
-    # "simulator_step_failure: plan_exception text" cannot erase simulator ownership.
-    planner_reason_prefixes = ("plan_exception:", "planner_diagnostic:")
-    if any(
-        reason.strip().lower().startswith(prefix)
-        for reason in degradation_reasons
-        for prefix in planner_reason_prefixes
-    ):
-        return FAILURE_CLASS_PATH_GENERATION
-
+    # Preserve the base taxonomy precedence for combined signals.  An explicit simulator flag
+    # and simulator reason text win before social, tracking, or path-generation signals.
+    #
     # 1. Simulator errors
-    if "simulator" in reasons_str or "sim_error" in reasons_str:
+    if simulator_error or "simulator" in reasons_str or "sim_error" in reasons_str:
         return FAILURE_CLASS_SIMULATOR
 
     # 2. Social compliance (pedestrian collision or social proximity violation)
@@ -145,7 +130,9 @@ def classify_failure(
 
     # 4. Path generation (planner exceptions, solver failures, goal unreachable timeouts)
     if (
-        "solver" in reasons_str
+        plan_exception
+        or "plan_exception" in reasons_str
+        or "solver" in reasons_str
         or "infeasible" in reasons_str
         or "no_path" in reasons_str
         or not completed
@@ -447,12 +434,16 @@ def _update_clearance(
 def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     planner: LocalPlannerProtocol,
     scenario: ComparatorScenarioSpec,
+    *,
+    planner_id: str | None = None,
 ) -> ComparatorRunResult:
     """Execute one deterministic kinematic rollout in an analytic scenario.
 
     Args:
         planner: Local planner instance to evaluate.
         scenario: Scenario specification with start, goal, obstacles, and limits.
+        planner_id: Canonical registry ID, when available. Direct callers default to the planner
+            class name for compatibility.
 
     Returns:
         Structured rollout outcome containing trajectory metrics and collision status.
@@ -473,14 +464,14 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     degraded = False
     degradation_reasons: list[str] = []
     status = "ok"
-    planner_id = type(planner).__name__
+    rollout_planner_id = planner_id if planner_id is not None else type(planner).__name__
     col_obs_occurred = False
     col_ped_occurred = False
     plan_exception_occurred = False
     simulator_error_occurred = False
 
     def record_plan_exception(exc: Exception) -> None:
-        """Record a planner-owned lifecycle or output failure as path generation."""
+        """Record a planner-owned lifecycle or output failure for taxonomy classification."""
         nonlocal degraded, plan_exception_occurred, status
         status = "error"
         degraded = True
@@ -567,7 +558,7 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             planned_command = planner.plan(obs)
             t1 = time.perf_counter()
             latencies_ms.append((t1 - t0) * 1000.0)
-        except Exception as exc:  # noqa: BLE001 - all planner failures stay path-generation failures
+        except Exception as exc:  # noqa: BLE001 - planner failures become structured diagnostics
             record_plan_exception(exc)
             break
 
@@ -577,7 +568,7 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             diag_status = diag.get("status")
             if diag_status not in (None, "ok", "degraded"):
                 raise ValueError(f"unsupported planner diagnostic status: {diag_status!r}")
-            planner_id = str(diag.get("planner_type", planner_id))
+            rollout_planner_id = str(diag.get("planner_type", rollout_planner_id))
             if diag_status == "degraded" or diag.get("degraded") is True:
                 degraded = True
                 diagnostic_reasons = diag.get("degradation_reasons", [])
@@ -658,7 +649,7 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     )
 
     return ComparatorRunResult(
-        planner_id=planner_id,
+        planner_id=rollout_planner_id,
         scenario_id=scenario.scenario_id,
         seed=scenario.seed,
         steps=step,
@@ -722,19 +713,9 @@ def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, 
     for pid in sorted(by_planner.keys()):
         runs = by_planner[pid]
         n = len(runs)
-        # Keep the established strict diagnostic-success definition; taxonomy rows, degraded
-        # execution, collisions, near misses, and incomplete runs are not clean successes.
-        successes = sum(
-            1
-            for r in runs
-            if (
-                r.status == "ok"
-                and not r.degraded
-                and r.completed
-                and not r.collision
-                and not r.near_miss
-            )
-        )
+        # Preserve the established v1 success-rate contract; status, degradation, and near-miss
+        # caveats remain separately reported rather than changing this aggregate.
+        successes = sum(1 for r in runs if r.completed and not r.collision)
         collisions = sum(1 for r in runs if r.collision)
         near_misses = sum(1 for r in runs if r.near_miss and not r.collision)
         mean_path = float(np.mean([r.path_length_m for r in runs]))
@@ -800,8 +781,8 @@ def run_force_coupled_comparator(
 
     all_results: list[ComparatorRunResult] = []
     for scenario in scenarios:
-        for planner in planners.values():
-            result = execute_rollout(planner, scenario)
+        for planner_id, planner in planners.items():
+            result = execute_rollout(planner, scenario, planner_id=planner_id)
             all_results.append(result)
 
     summary_table = compute_summary_table(all_results)

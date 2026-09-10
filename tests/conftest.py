@@ -430,6 +430,9 @@ _FAST_FILES = {
     # Distribution plotting tests use Agg and deterministic fixtures; keep their
     # changed-line coverage in the exact-head fast lane.
     "test_distributions.py",
+    # Pareto plotting tests use Agg and deterministic fixtures; keep the
+    # save_pareto_png SVG output branch in the exact-head fast lane.
+    "test_plots_pareto.py",
     # CLI distribution-control regressions are deterministic input-boundary
     # contracts and exercise the benchmark error path in PR fast shards.
     "test_cli_plot_distributions_ci.py",

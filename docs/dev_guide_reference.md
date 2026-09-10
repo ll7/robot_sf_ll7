@@ -1077,15 +1077,22 @@ timestamp source, run/job IDs, and exact-head matching. When a job is actively r
 in environment setup (such as Python runtime or dependency provisioning) beyond
 `--actions-stale-after-seconds`, the payload emits `checks.setup_starvation: true`,
 `checks.pending_reason: "setup_starvation"`, and `checks.diagnostic: "actions_gate_setup_starvation"`.
-Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`. Cancellation
-or rerun requires explicit operator authorization, and merge admission stays strictly blocked until
-a fresh exact-head run succeeds. `checks.age_warnings` marks gates that exceed the configured
+Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`.
+`scripts/dev/recover_stale_ci_run.py` is the repository-owned, exact-head-guarded operator recovery
+path: it is report-only by default, and `--apply` requires an explicit `--reason`, re-reads the live
+PR CI state under the host-local PR write lock, then requests exactly one `gh run rerun` only after
+every fail-closed guard passes. Cancellation or rerun still requires explicit operator
+authorization, and merge admission stays strictly blocked until a fresh exact-head run succeeds.
+A requested rerun is route evidence only and is never implementation proof.
+`checks.age_warnings` marks gates that exceed the configured
 threshold without changing the fail-closed `checks.overall: "pending"` result.
 `checks.superseded_runs` names an older exact-head run and its newer same-workflow replacement
 rather than hiding the replacement relationship behind a count. When a stale run has an
-independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
-monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
-and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
+independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, guarded recovery,
+and bounded monitor commands. These are explicit suggestions only: the monitor itself does not
+cancel or rerun Actions, and it never authorizes a merge. The `guarded_recovery_command` names the
+repository-owned exact-head-guarded path (`scripts/dev/recover_stale_ci_run.py`), whose `--apply`
+remains explicit operator authorization. Missing REST metadata or a mismatching run head suppresses
 mutation commands and leaves the route evidence incomplete.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
@@ -2651,6 +2658,12 @@ distinctly so the gate can hold for a *fresh run* rather than treat it as a main
 regression. The `--quiet` flag suppresses the human line; the existing
 exit-code contract is unchanged.
 
+The gate's default fetch is deliberately one bounded `gh run list --limit`
+window (default 5 runs, 30s timeout) so merge-hold evaluation stays fast; when
+cancellation churn fills that window it fails closed to `stale` instead of
+reading further back. Callers that need the decisive verdict behind a
+cancelled-run flood use the paginated reader below.
+
 ### Scheduled main-CI incident reconciliation
 
 Open issues carrying the canonical `ll7-main-red-incident:v1` body marker (or
@@ -2670,13 +2683,23 @@ incidents instead of GitHub's semantic closing keywords (`Closes`, `Fixes`, or
 the canonical body marker or its compatibility label, leaving the scheduled
 reconciler as the sole closer after the two-green criterion is met.
 
-The Actions run evidence window is paginated. The reconciler reads full
-workflow-run pages and stops only after two decisive completed green/red runs
-are visible, so a cancellation-saturated newest page cannot hide the decisive
-history. The default page budget is ten; `--max-run-pages N` changes it, and
-the legacy `--run-limit N` option is retained as an alias for that page budget.
-If the budget is exhausted before two decisive runs are found, the helper
-fails closed instead of classifying an incomplete window.
+The Actions run evidence window is paginated in both consumers through the
+shared reader `main_ci_is_green.fetch_run_window`, so a cancellation-saturated
+newest page cannot hide the decisive history. The classifier behind
+`main_ci_incident_reconcile.py` stops after one decisive completed green/red
+run and defaults to a ten-page budget (`--max-pages N` changes it); passing a
+raw `--limit N` keeps the legacy single `gh run list` window instead. When the
+page budget is exhausted without a decisive run, the classifier stays
+fail-closed `pending` and reports `window_exhausted: true` with
+`decisive_run_found: false`, which cannot be confused with a genuine red
+(`active`).
+
+The scheduled reconciler requires two decisive runs and stops only after two
+completed green/red runs are visible. Its default page budget is ten;
+`--max-run-pages N` changes it, and the legacy `--run-limit N` option is
+retained as an alias for that page budget. If the budget is exhausted before
+two decisive runs are found, the helper fails closed instead of classifying an
+incomplete window.
 
 The helper is report-only unless `--apply` is supplied, so an offline or local
 inspection can use:

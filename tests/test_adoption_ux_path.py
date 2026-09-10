@@ -21,8 +21,8 @@ def adoption_text() -> str:
     (
         "uv run robot-sf doctor",
         "uv run robot-sf demo",
-        "uv run robot-sf examples list",
-        "uv run robot-sf recipe list",
+        "uv run --offline --no-sync robot-sf examples list",
+        "uv run --offline --no-sync robot-sf recipe list",
         "uv run robot-sf gallery build",
     ),
 )

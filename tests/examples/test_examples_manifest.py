@@ -419,3 +419,107 @@ def test_manifest_parses_expected_runtime_field(tmp_path: Path) -> None:
 
     manifest = load_manifest(manifest_path, validate_paths=True)
     assert manifest.examples[0].expected_runtime == "~5s"
+
+
+def _category_entry(**overrides) -> dict:
+    """Return a minimal valid category entry."""
+
+    entry: dict = {
+        "slug": "quickstart",
+        "title": "Quickstart",
+        "description": "d",
+        "order": 1,
+        "ci_default": True,
+    }
+    entry.update(overrides)
+    return entry
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("slug", "", "must be a non-empty string"),
+        ("slug", "a/b", "path separators"),
+        ("slug", " quickstart", "leading or trailing whitespace"),
+        ("order", "1", "must be an integer"),
+        ("ci_default", "yes", "ci_default"),
+    ],
+)
+def test_malformed_category_fields_rejected(
+    tmp_path: Path, field: str, value: object, match: str
+) -> None:
+    """Malformed category fields fail closed with a stable message."""
+
+    _write_example(tmp_path / "examples", "quickstart/demo.py")
+    manifest_path = _write_manifest(
+        tmp_path,
+        examples=[_demo_entry()],
+        categories=[_category_entry(**{field: value})],
+    )
+    with pytest.raises(ManifestValidationError, match=match):
+        load_manifest(manifest_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("name", ""),
+        ("name", " Demo"),
+        ("summary", ""),
+        ("category_slug", ""),
+        ("ci_enabled", "yes"),
+    ],
+)
+def test_malformed_example_identity_rejected(tmp_path: Path, field: str, value: object) -> None:
+    """Malformed example identity fields fail closed."""
+
+    _write_example(tmp_path / "examples", "quickstart/demo.py")
+    manifest_path = _write_manifest(tmp_path, examples=[_demo_entry(**{field: value})])
+    with pytest.raises(ManifestValidationError, match="Example|Field"):
+        load_manifest(manifest_path)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"schema_version": True}, "schema_version"),
+        ({"exclusions": "nope"}, "exclusions.*list"),
+        ({"exclusions": ["x.py"]}, "must be a mapping"),
+        (
+            {"exclusions": [{"path": "/abs.py", "kind": "mirror", "reason": "r"}]},
+            "must be relative",
+        ),
+        (
+            {"exclusions": [{"path": "../x.py", "kind": "mirror", "reason": "r"}]},
+            "cannot traverse",
+        ),
+        (
+            {"exclusions": [{"path": "x.txt", "kind": "mirror", "reason": "r"}]},
+            "must point to a Python file",
+        ),
+        (
+            {"exclusions": [{"path": "x.py", "kind": "nope", "reason": "r"}]},
+            "unknown kind",
+        ),
+        (
+            {
+                "exclusions": [
+                    {"path": "old.py", "kind": "archive", "reason": "r"},
+                    {"path": "old.py", "kind": "archive", "reason": "r"},
+                ]
+            },
+            "Duplicate exclusion",
+        ),
+        (
+            {"exclusions": [{"path": "quickstart/demo.py", "kind": "mirror", "reason": "r"}]},
+            "overlaps a registered example",
+        ),
+    ],
+)
+def test_malformed_schema_and_exclusions_rejected(tmp_path: Path, kwargs: dict, match: str) -> None:
+    """Malformed schema versions and exclusion entries fail closed."""
+
+    _write_example(tmp_path / "examples", "quickstart/demo.py")
+    manifest_path = _write_manifest(tmp_path, examples=[_demo_entry()], **kwargs)
+    with pytest.raises(ManifestValidationError, match=match):
+        load_manifest(manifest_path)

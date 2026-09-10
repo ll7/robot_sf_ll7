@@ -765,7 +765,10 @@ def test_ci_driver_test_phase_excludes_separately_timed_examples() -> None:
     """Keep example smoke timing out of the fast-feedback pytest phase."""
     driver_text = CI_DRIVER.read_text(encoding="utf-8")
 
-    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples' in driver_text
+    assert (
+        '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples/test_examples_run.py'
+        in driver_text
+    )
     assert "uv run python scripts/validation/run_examples_smoke.py --skip-perf-tests" in driver_text
 
 

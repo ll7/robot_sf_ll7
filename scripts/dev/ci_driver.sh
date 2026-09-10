@@ -296,7 +296,12 @@ run_phase() {
     test)
       "$SCRIPT_DIR/check_event_ledger_reconciliation_guard.sh"
       run_fast_feedback_benchmark_reconciliation_guard
-      "$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples
+      # Keep model-dependent, subprocess-heavy example execution in the
+      # dedicated examples-smoke phase, but collect the deterministic manifest,
+      # CLI, and tutorial contract tests in the main coverage shards. Otherwise
+      # changes to the manifest loader can pass focused local tests while the
+      # exact-head changed-coverage gate sees only the smoke harness.
+      "$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples/test_examples_run.py
       ;;
     examples-smoke)
       run_examples_smoke_phase

@@ -752,6 +752,9 @@ _FAST_FILES = {
     # Relevance-window tests are deterministic selector, manifest, and missing
     # signal contracts for the preparation-only research scaffold (issue #8622).
     "test_relevance_windows.py",
+    # Source-bound fixture and provenance contracts are deterministic analysis
+    # coverage for the issue #8566 diagnostic packet.
+    "test_issue_8566_source_bound_component_contrasts.py",
     # Canonical artifact-path helper tests (tests/research and tests/test_guard)
     # are deterministic path and override contracts for the changed reusable
     # helper module; keep their producer coverage in the exact-head fast lane

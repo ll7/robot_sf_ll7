@@ -54,7 +54,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=PER_NOTEBOOK_TIMEOUT,
         help=f"Per-notebook execution timeout in seconds (default: {PER_NOTEBOOK_TIMEOUT})",
     )
+    parser.add_argument(
+        "--skip-parity",
+        action="store_true",
+        help="Skip the canonical generator/committed parity check before executing.",
+    )
     return parser.parse_args(argv)
+
+
+def check_generator_parity() -> bool:
+    """Verify committed notebooks are canonical generator output.
+
+    Returns:
+        ``True`` when the canonical parity check passes; ``False`` otherwise.
+    """
+
+    from scripts.dev.generate_quickstart_notebooks import check as check_parity
+
+    return check_parity() == 0
 
 
 def _headless_env() -> dict[str, str]:
@@ -109,6 +126,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         for nb in notebooks:
             print(f"  {nb.relative_to(REPO_ROOT)}")
         return 0
+
+    if not args.skip_parity:
+        print("Checking generator/committed notebook parity...")
+        if not check_generator_parity():
+            print(
+                "Notebook parity check failed; regenerate with "
+                "scripts/dev/generate_quickstart_notebooks.py",
+                file=sys.stderr,
+            )
+            return 1
 
     print(f"Executing {len(notebooks)} notebook(s) headless via nbconvert...")
     failures: list[str] = []

@@ -24,10 +24,15 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import textwrap
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import nbformat as nbf
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = ROOT / "notebooks"
@@ -696,39 +701,251 @@ def _assign_stable_cell_ids(nb: nbf.notebooknode, path: Path) -> None:
         used_ids.add(cell_id)
 
 
-def check(notebook_names: tuple[str, ...] | None = None) -> int:
-    """Verify committed notebooks match the generator without writing files.
+#: Stable schema id for the generator/committed parity report.
+PARITY_SCHEMA = "quickstart_notebook_parity.v1"
+
+#: Notebook metadata keys that are stable across machines; everything else
+#: (display names, versions, lexer hints) is treated as transient.
+_CANONICAL_NOTEBOOK_METADATA_KEYS = ("kernelspec", "language_info")
+_CANONICAL_KERNELSPEC_KEYS = ("language", "name")
+
+
+def _canonical_notebook_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Return the machine-stable subset of notebook metadata.
+
+    Returns:
+        Canonical metadata with environment-specific fields removed.
+    """
+
+    canonical: dict[str, Any] = {}
+    kernelspec = metadata.get("kernelspec")
+    if isinstance(kernelspec, dict):
+        canonical["kernelspec"] = {key: kernelspec.get(key) for key in _CANONICAL_KERNELSPEC_KEYS}
+    language_info = metadata.get("language_info")
+    if isinstance(language_info, dict):
+        canonical["language_info"] = {"name": language_info.get("name")}
+    return canonical
+
+
+def _canonical_notebook(nb: nbf.notebooknode) -> dict[str, Any]:
+    """Return the canonical parity payload for one notebook.
+
+    Execution counts, outputs, transient cell ids, widget state, and
+    environment-specific metadata are removed so the comparison rejects
+    meaningful source changes without rejecting harmless execution state.
+
+    Returns:
+        A JSON-serializable canonical payload.
+    """
+
+    cells: list[dict[str, Any]] = []
+    for cell in nb.cells:
+        tags = cell.get("metadata", {}).get("tags") or []
+        cells.append(
+            {
+                "cell_type": cell.cell_type,
+                "source": _cell_source(cell),
+                "tags": sorted(str(tag) for tag in tags),
+            }
+        )
+    return {
+        "nbformat": nb.get("nbformat"),
+        "nbformat_minor": nb.get("nbformat_minor"),
+        "metadata": _canonical_notebook_metadata(dict(nb.get("metadata") or {})),
+        "cells": cells,
+    }
+
+
+def _transient_state_issues(nb: nbf.notebooknode) -> list[str]:
+    """Return committed transient-state findings that must never be checked in.
+
+    Returns:
+        Human-readable findings for executed outputs or execution counts.
+    """
+
+    issues: list[str] = []
+    for index, cell in enumerate(nb.cells):
+        if cell.cell_type != "code":
+            continue
+        if cell.get("outputs"):
+            issues.append(f"cells[{index}].outputs")
+        if cell.get("execution_count") is not None:
+            issues.append(f"cells[{index}].execution_count")
+    return issues
+
+
+def _diff_paths(expected: Any, actual: Any, prefix: str = "") -> list[str]:
+    """Return dotted paths where two canonical payloads differ.
+
+    Returns:
+        Sorted mismatch paths; an empty list means the payloads are equal.
+    """
+
+    if isinstance(expected, dict) and isinstance(actual, dict):
+        paths: list[str] = []
+        for key in sorted(set(expected) | set(actual)):
+            child = f"{prefix}.{key}" if prefix else str(key)
+            if key not in expected or key not in actual:
+                paths.append(child)
+            else:
+                paths.extend(_diff_paths(expected[key], actual[key], child))
+        return paths
+    if isinstance(expected, list) and isinstance(actual, list):
+        if len(expected) != len(actual):
+            return [prefix]
+        paths = []
+        for index, (item, other) in enumerate(zip(expected, actual, strict=True)):
+            paths.extend(_diff_paths(item, other, f"{prefix}[{index}]"))
+        return paths
+    if expected != actual:
+        return [prefix]
+    return []
+
+
+def _mismatch_reason_codes(paths: Sequence[str]) -> list[str]:
+    """Map canonical mismatch paths to stable reason codes.
+
+    Returns:
+        Sorted unique reason codes.
+    """
+
+    codes: set[str] = set()
+    for path in paths:
+        if ".source" in path:
+            codes.add("cell_source_changed")
+        elif path.endswith("metadata") or ".metadata" in path:
+            codes.add("metadata_changed")
+        elif path.startswith("cells[") and "]." not in path:
+            codes.add("cell_structure_changed")
+        else:
+            codes.add("content_changed")
+    return sorted(codes)
+
+
+def _generator_source_digest() -> str:
+    """Return the SHA-256 digest of this generator source file."""
+
+    return hashlib.sha256(Path(__file__).resolve().read_bytes()).hexdigest()
+
+
+def _canonical_digest(payload: dict[str, Any]) -> str:
+    """Return the SHA-256 digest of a canonical payload."""
+
+    encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def notebook_parity_report(
+    notebook_names: tuple[str, ...] | None = None,
+    *,
+    out_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Rebuild every notebook in memory and compare canonical JSON to the committed file.
 
     Args:
         notebook_names: Optional subset of canonical notebook names to check.
+        out_dir: Optional directory holding the committed notebooks (defaults
+            to the repository ``notebooks/`` directory).
 
     Returns:
-        ``0`` when every checked notebook matches its generated bytes, ``1``
-        when one or more notebooks drifted.
+        A deterministic ``quickstart_notebook_parity.v1`` report.
     """
 
     names = notebook_names or tuple(NOTEBOOK_BUILDERS)
-    drifted: list[str] = []
+    directory = Path(out_dir) if out_dir is not None else OUT_DIR
+    reports: list[dict[str, Any]] = []
     for name in names:
-        nb = NOTEBOOK_BUILDERS[name]()
-        path = OUT_DIR / name
-        _assign_stable_cell_ids(nb, path)
-        rendered = nbf.writes(nb)
-        committed = path.read_text(encoding="utf-8") if path.is_file() else ""
-        # ``nbformat.write`` appends a trailing newline that ``writes`` omits;
-        # normalize it so the check compares notebook content, not EOF style.
-        if rendered.rstrip("\n") != committed.rstrip("\n"):
-            drifted.append(name)
-            print(f"DRIFT: {name} differs from generated output")
-        else:
-            print(f"OK: {name}")
-    if drifted:
+        rebuilt = _canonical_notebook(NOTEBOOK_BUILDERS[name]())
+        rebuilt_digest = _canonical_digest(rebuilt)
+        path = directory / name
+        entry: dict[str, Any] = {
+            "notebook": name,
+            "generator_digest": _generator_source_digest(),
+            "rebuilt_digest": rebuilt_digest,
+            "committed_digest": None,
+            "status": "match",
+            "mismatch_paths": [],
+            "reason_codes": [],
+            "transient_state_issues": [],
+        }
+        if not path.is_file():
+            entry["status"] = "missing"
+            entry["reason_codes"] = ["missing_committed_notebook"]
+            reports.append(entry)
+            continue
+        committed_nb = nbf.read(path, as_version=4)
+        transient = _transient_state_issues(committed_nb)
+        committed = _canonical_notebook(committed_nb)
+        committed_digest = _canonical_digest(committed)
+        entry["committed_digest"] = committed_digest
+        entry["transient_state_issues"] = transient
+        mismatches = _diff_paths(rebuilt, committed)
+        entry["mismatch_paths"] = mismatches
+        reason_codes = _mismatch_reason_codes(mismatches)
+        if transient:
+            reason_codes = sorted({*reason_codes, "transient_state_present"})
+        entry["reason_codes"] = reason_codes
+        if mismatches or transient:
+            entry["status"] = "drift"
+        reports.append(entry)
+
+    drifted = [entry for entry in reports if entry["status"] != "match"]
+    return {
+        "schema": PARITY_SCHEMA,
+        "generator_digest": _generator_source_digest(),
+        "status": "match" if not drifted else "drift",
+        "mismatch_count": len(drifted),
+        "notebooks": reports,
+    }
+
+
+def check(
+    notebook_names: tuple[str, ...] | None = None,
+    *,
+    out_dir: Path | None = None,
+    as_json: bool = False,
+) -> int:
+    """Verify committed notebooks match the generator without writing files.
+
+    The check rebuilds each notebook in memory, strips execution counts,
+    outputs, transient cell ids, widget state, and environment-specific
+    metadata, and compares canonical JSON. Committed notebooks that carry
+    executed output or execution counts fail even when the canonical content
+    matches.
+
+    Args:
+        notebook_names: Optional subset of canonical notebook names to check.
+        out_dir: Optional committed-notebooks directory override.
+        as_json: When True, print the full parity report as JSON.
+
+    Returns:
+        ``0`` when every checked notebook matches canonically and is clean,
+        ``1`` when one or more notebooks drifted, are missing, or carry
+        transient execution state.
+    """
+
+    report = notebook_parity_report(notebook_names, out_dir=out_dir)
+    if as_json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report["status"] == "match" else 1
+
+    for entry in report["notebooks"]:
+        if entry["status"] == "match":
+            print(f"OK: {entry['notebook']}")
+            continue
+        reasons = ", ".join(entry["reason_codes"]) or "unknown"
+        print(f"DRIFT: {entry['notebook']} ({reasons})")
+        for path in entry["mismatch_paths"]:
+            print(f"  mismatch: {path}")
+        for issue in entry["transient_state_issues"]:
+            print(f"  transient state: {issue}")
+    if report["status"] != "match":
         print(
-            f"ERROR: {len(drifted)} notebook(s) drifted; rerun "
+            f"ERROR: {report['mismatch_count']} notebook(s) drifted; rerun "
             "scripts/dev/generate_quickstart_notebooks.py"
         )
         return 1
-    print(f"Notebooks up to date: {len(names)} checked")
+    print(f"Notebooks up to date: {len(report['notebooks'])} checked")
     return 0
 
 
@@ -772,8 +989,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Verify committed notebooks match the generator without writing files.",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="With --check, print the canonical parity report as JSON.",
+    )
     args = parser.parse_args()
     selection = tuple(args.only) if args.only else None
     if args.check:
-        raise SystemExit(check(selection))
+        raise SystemExit(check(selection, as_json=args.json))
     raise SystemExit(main(selection))

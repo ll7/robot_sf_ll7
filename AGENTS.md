@@ -1,8 +1,8 @@
 # Repository Guidelines
 
-Use `docs/maintainer_values.md` as the highest-level current maintainer guidance, then `AGENTS.md`,
-`.specify/memory/constitution.md`, and `docs/dev_guide.md` for repository execution details.
-This file is the compact boot contract. Long-form situational guidance moved to
+This file is the compact boot contract and the entry point into repository instructions. It owns
+the Instruction Precedence contract below; other surfaces link to it instead of restating their own
+authority order. Long-form situational guidance moved to
 `docs/dev/agents/relocated-agents-guidance.md`; read the linked section before that workflow.
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
@@ -10,37 +10,52 @@ Keep agent prompts, internal instructions, and handoff notes token-efficient whi
 For human-facing surfaces (README, `docs/`, feature names, `CHANGELOG.md`, public docstrings, PR/issue titles),
 clarity wins: define acronyms/project terms on first use or link `docs/glossary.md`, and lead with a plain-language summary.
 
+## Instruction Precedence
+
+<!-- instruction-precedence:start -->
+Repository-internal sources, highest first:
+
+1. **Repository invariants** — safety, evidence integrity, honest validation reporting, and
+   recoverability of local work. No lower source may weaken these; benchmark, metric, schema,
+   model-provenance, and paper-facing contracts are invariant-class.
+2. **Current maintainer direction** in the active issue, PR, or thread. It overrides stale workflow
+   prose and lower sources, but it cannot waive an invariant or authorize an unproven claim.
+3. **Nearest scoped guidance** (for example `SLURM/AGENTS.md` or a task-owned procedure doc). It may
+   specialize root guidance for its scope; it cannot silently weaken root invariants.
+4. **`AGENTS.md`** (this file): the boot router, the invariant list, and the owner of this
+   precedence contract.
+5. **Task-owned procedures and skills** selected through the route table in
+   `docs/ai/agent_workflow_entrypoints.md`: `.agents/PLANS.md`, `.agents/skills/`,
+   `docs/dev/worktree_lifecycle.md`, and other canonical owners.
+6. **`docs/maintainer_values.md`**: stable rationale and tie-breakers for ambiguous trade-offs; not
+   a second executable rulebook.
+7. **`docs/dev_guide.md`, context notes, historical reports, and provider adapters**: supporting
+   detail and provider mechanics.
+
+Resolution rules:
+
+- Platform and system instructions outrank repository documents. An applicable user task request
+  sets task intent within those higher-level constraints; it cannot waive a repository invariant or
+  authorize an unproven claim. This contract governs repository-owned documents only.
+- A task plan, issue comment, or historical record never outranks current code and evidence; stale
+  plans are re-validated before use, and scoped guidance cannot weaken a root invariant.
+- Provider adapters configure tools and link to canonical policy; they never create repository
+  policy, even under a renamed heading.
+- `.specify/memory/constitution.md` states WHAT the platform delivers and its stable contracts; it
+  does not define a competing runtime precedence.
+<!-- instruction-precedence:end -->
+
+When this contract resolves a recurring conflict, make it visible: update the active issue or PR,
+patch the stale instruction, or open a bounded follow-up issue.
+
 ## Maintainer Value Hierarchy
 
-`docs/maintainer_values.md` is the compact source of truth for current maintainer values. Optimize
-first for concrete research progress on social-navigation simulation, benchmarking, and planner
-exploration. The hard rule is to be honest, transparent, and reproducible. Apply proof,
-documentation, and process in proportion to risk:
+`docs/maintainer_values.md` records the stable principles and tie-breakers that resolve trade-offs
+when procedure is silent; it is linked, not restated, here. The hard rule is honest, transparent,
+reproducible work, and process scales with risk and claim strength. When instruction surfaces
+conflict, the Instruction Precedence contract above is the single normative source.
 
-- benchmark, metric, schema, model-provenance, and paper-facing claims still require strong,
-  reproducible evidence before they are treated as established;
-- exploratory planner or research work may move faster when its status is clearly labeled as
-  exploratory, diagnostic, blocked, or not yet benchmark evidence;
-- low-risk docs, metadata, and instruction changes use the cheaper validation path by default:
-  inspect the diff and verify changed links or referenced paths where practical;
-- substantive claims, recommendations, benchmark conclusions, and prioritization judgments below
-  roughly 95 percent confidence should include a numeric uncertainty estimate, caveat, or condition
-  that would change the conclusion;
-- current maintainer direction overrides stale workflow prose. When an instruction appears to
-  conflict with the user's current priority, follow the current priority, call out the conflict, and
-  propose or make the smallest doc update needed to remove the drift.
-
-When instruction surfaces conflict, use this precedence order:
-
-1. Current maintainer direction in the active issue, PR, or thread.
-2. `docs/maintainer_values.md`.
-3. `AGENTS.md`.
-4. `.agents/README.md`, `.agents/PLANS.md`, and repo-local skill docs under `.agents/skills/`.
-5. `docs/dev_guide.md`, context notes, and tool-specific compatibility pointers.
-
-If this order resolves a recurring workflow conflict, make the conflict visible where practical:
-update the active issue/PR, patch the stale instruction, or open a bounded follow-up issue. Routine
-workflow cleanup should proceed autonomously when the scope is bounded; label assumptions,
+Routine workflow cleanup should proceed autonomously when the scope is bounded; label assumptions,
 uncertainty, and evidence grade instead of pausing for confirmation. Treat Project #5 ordering and
 scores as advisory when they conflict with fresh maintainer direction or newly observed evidence;
 record the override and update Project metadata later when quota and API limits allow.
@@ -60,20 +75,28 @@ schema, model-provenance, or paper-facing result must use the stronger proof tie
 
 ## Task-Scoped Context Entrypoints
 
-Read only the surfaces relevant to the task. Prefer repo-local files over ad-hoc summaries in issue comments.
-Do not load every skill, historical report, implementation detail, or runtime guide indiscriminately.
+Read only the surfaces relevant to the task. The machine-readable profile and route mapping is
+`.agents/task_scope_manifest.yaml`; the human route table is owned by
+`docs/ai/agent_workflow_entrypoints.md`. Select one execution profile from the changed surfaces and
+risk, load only that profile's required context, and escalate when inspection reveals more risk.
+
+| Profile | Typical work | Minimum context and action |
+| --- | --- | --- |
+| **Observe** | inspect, explain, triage, read-only review | root router + nearest scoped guidance; no environment, branch, plan, worktree, or PR ceremony |
+| **Local** | bounded docs/code/test edit | scoped guidance + targeted validation for the changed behavior |
+| **Coordinated** | multi-module, API, migration, or ambiguous change | execution plan, isolated worktree when collision risk exists, integration validation |
+| **Evidence-critical** | benchmark evidence, research claim, release, security, publication artifacts | full evidence, custody, reproducibility, exact-head, and release gates |
 
 Always-required core context:
-- `docs/maintainer_values.md`: compact current values and hard contracts.
-- `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
-- `docs/ai/agent_workflow_entrypoints.md`: task route table, canonical command entrypoints, handoff format, and large-file navigation.
+- `docs/maintainer_values.md`: maintainer principles and tie-breakers.
+- `AGENTS.md`: invariants, precedence, and this router.
+- `docs/ai/agent_workflow_entrypoints.md`: route table, canonical command entrypoints, handoff format, and large-file navigation.
 
-Route-specific context references (consult `docs/ai/agent_workflow_entrypoints.md` and load only what matches the active task):
-- **Read-only observation / review**: `docs/code_review.md`, `.agents/skills/implementation-verification/SKILL.md`, `scripts/dev/review_worktree_guard.py` (see issue #8321). Use `goal-pr-review` only when mutation-authorized PR fixes or state changes are in scope.
-- **Documentation-only edit**: `docs/glossary.md`, `docs/maintainer_values.md` (clarity and proof tier).
-- **Implementation / runtime change**: `.agents/PLANS.md`, `docs/code_review.md`, targeted modules and tests under `robot_sf/`, `scripts/`, or `tests/`.
-- **Scientific result / benchmark interpretation**: `memory/MEMORY.md`, `docs/context/INDEX.md`, `docs/ai/`, benchmark skills (`benchmark-overview`, `benchmark-row-status`, `evidence-synthesis`).
-- **Environment / worktree repair**: `docs/dev/worktree_lifecycle.md`, `scripts/dev/check_worktree_capacity.py`, `scripts/dev/bootstrap_worktree.sh` (see issue #8443).
+The route table in `docs/ai/agent_workflow_entrypoints.md` is the single owner of task-to-guidance
+routing. Select the matching route there, use the profile mapping in `.agents/task_scope_manifest.yaml`,
+and load only the required context; do not restate the route mapping in this file. References in
+instruction surfaces are required by default. A reference is optional only when it is marked
+optional/illustrative, is itself generated, or is explicitly scoped as background.
 
 For the token-efficient active thread profile, phase audits, meta-workflow PR gate, SLURM lane rules,
 shared knowledge graph, cross-agent compatibility, and detailed context-note policy, read
@@ -243,11 +266,11 @@ details, read `docs/dev/agents/relocated-agents-guidance.md`.
 
 ## Planning And Communication
 
-For non-trivial work, follow `.agents/PLANS.md`: restate boundaries, list evidence sources before
-implementation, keep validation commands explicit, and say what proof will demonstrate. Prefer
-concise-but-explanatory responses over terse status-only updates. For benchmark or planner findings,
-include what changed, why it matters, and what risk or limitation remains. Separate observed
-evidence from hypothesis when uncertainty remains.
+A persistent execution plan is required for the Coordinated and Evidence-critical profiles and
+optional otherwise (see `.agents/task_scope_manifest.yaml`); when required, follow
+`.agents/PLANS.md`. Prefer concise-but-explanatory responses over terse status-only updates. For
+benchmark or planner findings, include what changed, why it matters, and what risk or limitation
+remains. Separate observed evidence from hypothesis when uncertainty remains.
 
 ## Key Codex Skills
 

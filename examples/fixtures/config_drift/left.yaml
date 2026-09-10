@@ -1,0 +1,11 @@
+# Left fixture: inherits every shared base value except the explicit notes and
+# output directory. No semantic contract overrides.
+base_config: base.yaml
+
+training:
+  batch_size: 256
+
+execution:
+  output_dir: output/train/left
+
+notes: left notes

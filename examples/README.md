@@ -114,6 +114,7 @@ Feature-focused demos for developers exploring capabilities.
 | [35 Custom Scenario Authoring](./advanced/35_custom_scenario_authoring.py) | Author a custom corridor scenario programmatically, validate, reload, and smoke-test it. | maps/svg_maps/classic_head_on_corridor.svg | scenarios, authoring, validation, tutorial | ✅ |
 | [36 Optional Capability Handling](./advanced/36_optional_capability_handling.py) | Handle unavailable optional capabilities without fallback or fabricated success. | _None_ | tutorial, errors, fixtures, validation | ✅ |
 | [37 Custom Planner Protocol](./advanced/37_custom_planner_protocol.py) | Implement and run the smallest planner compatible with LocalPlannerProtocol. | _None_ | tutorial, planner, protocol, validation | ✅ |
+| [38 Compare Resolved Configs](./advanced/38_compare_resolved_configs.py) | Compare two resolved training configurations and explain semantic drift. | uv sync --all-extras | config, provenance, analysis | ⚠️ Imports the canonical training-config resolver, which pulls the training stack; run locally with the fixture pair. |
 
 ## Benchmarks
 

@@ -2,12 +2,14 @@
 
 `AGENTS.md` is the canonical repository instruction source. Treat this file as the Copilot-facing
 entrypoint and keep it limited to Copilot-specific pointers that are not already covered there.
-For current maintainer values and hard contracts, read
+For current maintainer values and tie-breakers, read
 [`docs/maintainer_values.md`](../docs/maintainer_values.md), and for development workflow use the
 official [dev_guide](../docs/dev_guide.md) as the primary reference.
 
 ## Copilot-Specific Instructions
 
+- Task-to-guidance routing is owned by `docs/ai/agent_workflow_entrypoints.md`; select the matching
+  route there and load only its required context.
 - Use scriptable interfaces instead of CLI interfaces when possible.
 - Source the environment before using python or uv: `source .venv/bin/activate`.
 - For GitHub issue batches and Project #5 writes, follow the batch-first workflow in
@@ -18,5 +20,5 @@ official [dev_guide](../docs/dev_guide.md) as the primary reference.
 - For any changes that affect users, update the `CHANGELOG.md` file.
 - Link new documentation (sub-)pages in the appropriate section of `docs/README.md`.
 
-All other workflow, validation, evidence, and publication rules live in `AGENTS.md`,
-`docs/maintainer_values.md`, and `docs/dev_guide.md` — do not duplicate them here.
+All other workflow, validation, evidence, and publication rules live in `AGENTS.md`, the
+canonical task-owner guides, and `docs/dev_guide.md`; do not duplicate them here.

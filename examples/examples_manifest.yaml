@@ -241,6 +241,15 @@ examples:
     ci_reason: null
     doc_reference: docs/SCENARIOS.md#programmatic-python-api
     tags: [scenarios, authoring, validation, tutorial]
+  - path: advanced/36_optional_capability_handling.py
+    name: "36 Optional Capability Handling"
+    summary: "Handle unavailable optional capabilities without fallback or fabricated success."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/user-guide.md#8-troubleshoot
+    tags: [tutorial, errors, fixtures, validation]
   - path: advanced/08_multi_pedestrian.py
     name: "08 Multi-Pedestrian"
     summary: "Build a multi-pedestrian scenario using map definitions."

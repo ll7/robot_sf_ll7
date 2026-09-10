@@ -87,6 +87,9 @@ internals or research methodology.
   management.
 - [Runtime Requirements Checker](./dev_runtime_requirements.md) — inventory missing host tools.
 - [Security Triage Guidance](./security_triage.md) — vulnerability reporting and dependency scanning.
+- [Optional Capability Handling example](../examples/advanced/36_optional_capability_handling.py) —
+  distinguish a missing optional extra, absent model, unavailable dataset, or unsupported runtime
+  without fallback or fabricated success.
 
 ## Where to go next
 

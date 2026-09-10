@@ -92,6 +92,7 @@ Feature-focused demos for developers exploring capabilities.
 | [33 Three.js Recording Viewer](./advanced/33_threejs_recording_viewer.py) | Export a JSONL or pickle recording to a static browser viewer. | _None_ | visualization, recording, threejs | ✅ |
 | [34 Trace Three.js Viewer](./advanced/34_trace_threejs_viewer.py) | Export a simulation_trace_export.v1 trace to a static browser viewer. | _None_ | visualization, trace, annotation, threejs | ✅ |
 | [35 Custom Scenario Authoring](./advanced/35_custom_scenario_authoring.py) | Author a custom corridor scenario programmatically, validate, reload, and smoke-test it. | maps/svg_maps/classic_head_on_corridor.svg | scenarios, authoring, validation, tutorial | ✅ |
+| [36 Optional Capability Handling](./advanced/36_optional_capability_handling.py) | Handle unavailable optional capabilities without fallback or fabricated success. | _None_ | tutorial, errors, fixtures, validation | ✅ |
 | [Occupancy Reward Shaping](./occupancy_reward_shaping.py) | Derive a clearance penalty from occupancy grid observations in a short rollout. | _None_ | occupancy, reward, grid | ✅ |
 
 ## Benchmarks

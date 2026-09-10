@@ -231,6 +231,17 @@ examples:
     ci_reason: null
     doc_reference: docs/debug_visualization.md#threejs-trace-viewer
     tags: [visualization, trace, annotation, threejs]
+  - path: advanced/35_reproducible_episode_replay.py
+    name: "35 Reproducible Episode Replay"
+    summary: "Compare same-seed episode records and a changed-seed input."
+    category_slug: advanced
+    prerequisites:
+      - configs/scenarios/single/quickstart_demo.yaml
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/glossary.md
+    tags: [reproducibility, determinism, episode-record]
+    expected_runtime: "~15s"
   - path: advanced/08_multi_pedestrian.py
     name: "08 Multi-Pedestrian"
     summary: "Build a multi-pedestrian scenario using map definitions."

@@ -15,6 +15,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Worktree lifecycle, leases, retirement | [../dev/worktree_lifecycle.md](../dev/worktree_lifecycle.md) |
 | Worktree teardown and artifact preservation rules | [AGENTS.md](../../AGENTS.md) "Worktree Teardown And Artifacts" |
 | Large result-tree manifests and verification | [chunk_manifest.py](../../scripts/tools/chunk_manifest.py) |
+| Durable locality and failure-domain audit | [check_durable_artifact_locality.py](../../scripts/validation/check_durable_artifact_locality.py) |
 | Read-only reclaim inventory | [check_worktree_capacity.py](../../scripts/dev/check_worktree_capacity.py) |
 | Read-only worktree hygiene snapshot | [worktree_hygiene_snapshot.py](../../scripts/dev/worktree_hygiene_snapshot.py) |
 | Preservation-aware retirement | [stale_worktree_reaper.py](../../scripts/dev/stale_worktree_reaper.py) |
@@ -71,7 +72,7 @@ State each gate explicitly before using either word.
 | Active writer / lease | Does an active task still own the branch, worktree, or artifact? | `pr_gate_lease.py status`; `docs/dev/worktree_lifecycle.md` |
 | Consumer / dependency | Does a benchmark, report, manuscript, or launcher still consume it? | Search the manifest, registry, or context note that references it. |
 | Supersession | Is there an exact, repository-resolvable replacement pointer? | The replacement path or artifact URI must resolve; remove ambiguity first. |
-| Failure domain | Are the surviving copies in genuinely different failure domains? | Record host, account, or backend for each copy. |
+| Failure domain | Are the surviving copies in genuinely different failure domains? | `check_durable_artifact_locality.py --check` reports `same_failure_domain` and `insufficient_redundancy`. |
 | Rights / license | Are redistribution and retention permitted? | Asset-rights inventory and the evidence bundle policy. |
 | Restore test | Can the artifact be hydrated and re-checked from the durable copy? | Hydrate into a scratch path and run the owning verification command. |
 | Retention role | Is the intended lifecycle recorded? | `chunk_manifest.py manifest --retention-role {keep-latest,long-lived,short-lived,disposable,unspecified}` |
@@ -137,7 +138,19 @@ Any deletion, symlink/path alias, identity drift, new content, lease, lookup err
 refuses removal. Normal worktree removal preserves the local branch and its commits; artifact
 preservation remains the owner's responsibility before retirement.
 
-### 4.6 Report a blocker
+### 4.6 Audit durable locality and failure domains
+
+```bash
+uv run python scripts/validation/check_durable_artifact_locality.py \
+  --projection tests/validation/fixtures/durable_artifact_locality/compliant.json --check
+```
+
+The audit is fail-closed: it joins a sanitized locality packet to its locator-class artifacts
+projection by artifact ID, version, and digest, and exits non-zero when an active durable-required
+reference has no verified non-institutional custody or a release-facing reference lacks independent
+failure-domain copies. It reads sanitized inputs only and never emits locator values.
+
+### 4.7 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

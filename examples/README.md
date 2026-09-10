@@ -57,6 +57,7 @@ Foundational walkthroughs for first-time users.
 | [02 Trained PPO Benchmark](./quickstart/02_trained_model.py) | Run the Robot SF benchmark with the pre-trained PPO baseline. | configs/baselines/example_matrix.yaml<br>configs/baselines/ppo.yaml | quickstart, benchmark | ✅ |
 | [03 Custom SVG Map](./quickstart/03_custom_map.py) | Load an SVG map into Robot SF and simulate random navigation. | maps/svg_maps/debug_06.svg | quickstart, maps | ✅ |
 | [04 Occupancy Grid](./quickstart/04_occupancy_grid.py) | Enable occupancy grid observations, run a center query, and step a short rollout. | _None_ | quickstart, occupancy, grid | ✅ |
+| [05 Public API Facade](./quickstart/05_public_api.py) | Demonstrate the stable public API facade with EpisodeRecord persistence. | _None_ | quickstart, public-api, facade | ✅ |
 
 ## Advanced Features
 
@@ -91,6 +92,7 @@ Feature-focused demos for developers exploring capabilities.
 | [32 Demo Adversarial Pedestrian](./advanced/32_demo_adversarial_pedestrian.py) | Run a modernized debug rollout for pedestrian PPO policies with factory-based setup. | maps/svg_maps/masterthesis/intersection.svg<br>model/run_043<br>model/pedestrian/ppo_intersection.zip | pedestrian, policy, debug, ppo | ⚠️ Interactive pygame debug demo with offline checkpoints. |
 | [33 Three.js Recording Viewer](./advanced/33_threejs_recording_viewer.py) | Export a JSONL or pickle recording to a static browser viewer. | _None_ | visualization, recording, threejs | ✅ |
 | [34 Trace Three.js Viewer](./advanced/34_trace_threejs_viewer.py) | Export a simulation_trace_export.v1 trace to a static browser viewer. | _None_ | visualization, trace, annotation, threejs | ✅ |
+| [35 Custom Scenario Authoring](./advanced/35_custom_scenario_authoring.py) | Author a custom corridor scenario programmatically, validate, reload, and smoke-test it. | maps/svg_maps/classic_head_on_corridor.svg | scenarios, authoring, validation, tutorial | ✅ |
 | [Occupancy Reward Shaping](./occupancy_reward_shaping.py) | Derive a clearance penalty from occupancy grid observations in a short rollout. | _None_ | occupancy, reward, grid | ✅ |
 
 ## Benchmarks

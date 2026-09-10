@@ -231,6 +231,16 @@ examples:
     ci_reason: null
     doc_reference: docs/debug_visualization.md#threejs-trace-viewer
     tags: [visualization, trace, annotation, threejs]
+  - path: advanced/35_custom_scenario_authoring.py
+    name: "35 Custom Scenario Authoring"
+    summary: "Author a custom corridor scenario programmatically, validate, reload, and smoke-test it."
+    category_slug: advanced
+    prerequisites:
+      - maps/svg_maps/classic_head_on_corridor.svg
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/SCENARIOS.md#programmatic-python-api
+    tags: [scenarios, authoring, validation, tutorial]
   - path: advanced/08_multi_pedestrian.py
     name: "08 Multi-Pedestrian"
     summary: "Build a multi-pedestrian scenario using map definitions."
@@ -353,6 +363,16 @@ examples:
     ci_reason: null
     doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
     tags: [quickstart, occupancy, grid]
+  - path: quickstart/05_public_api.py
+    name: "05 Public API Facade"
+    summary: "Demonstrate the stable public API facade with EpisodeRecord persistence."
+    category_slug: quickstart
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/public_api.md
+    tags: [quickstart, public-api, facade]
+    expected_runtime: "~5s"
   - path: plotting/snqi_figures_example.py
     name: "SNQI Figures Example"
     summary: "Generate publication-ready SNQI figures via the orchestrator script."

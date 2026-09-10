@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -871,3 +872,188 @@ def test_cli_scenarios_import_light_isolated_subprocess() -> None:
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     assert result.returncode == 0, f"Import test failed: {result.stderr}"
+
+
+def test_top_level_cli_lazy_dispatch_wrappers_are_exercised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep top-level lazy CLI dispatch covered in the fast validation lane."""
+    from robot_sf import cli_datasets, cli_envs, cli_models, cli_planners, examples_cli
+    from robot_sf.benchmark import doctor
+    from robot_sf.recipes import cli as recipes_cli
+
+    monkeypatch.setattr(cli_models, "list_models", lambda registry_path=None: [])
+    monkeypatch.setattr(cli_datasets, "list_datasets", lambda: [])
+    monkeypatch.setattr(cli_envs, "_handle_envs_list", lambda _args: 0)
+    monkeypatch.setattr(cli_planners, "_handle_planners_list", lambda _args: 0)
+    monkeypatch.setattr(examples_cli, "examples_cli_main", lambda _args: 0)
+    monkeypatch.setattr(recipes_cli, "handle", lambda _args: 0)
+    monkeypatch.setattr(doctor, "collect_doctor_report", lambda **_kwargs: {})
+    monkeypatch.setattr(doctor, "doctor_exit_code", lambda _report: 0)
+
+    assert main(["doctor", "--format", "json", "--skip-env-smoke", "--skip-quickstart-smoke"]) == 0
+    assert main(["models", "list", "--format", "json"]) == 0
+    assert main(["datasets", "list", "--format", "json"]) == 0
+    assert main(["examples"]) == 0
+    assert main(["envs", "list"]) == 0
+    assert main(["planners", "list", "--format", "json"]) == 0
+    assert main(["recipe", "list"]) == 0
+
+
+def test_common_lazy_helpers_delegate_without_eager_optional_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise the lightweight common facade's deferred helper imports."""
+    from robot_sf import common
+    from robot_sf.common import geometry, matplotlib_utils
+
+    monkeypatch.setattr(geometry, "euclid_dist", lambda _first, _second: 42.0)
+    monkeypatch.setattr(matplotlib_utils, "ensure_interactive_backend", lambda **_kwargs: True)
+    monkeypatch.setattr(matplotlib_utils, "is_headless_environment", lambda: True)
+
+    assert common.euclid_dist((0.0, 0.0), (3.0, 4.0)) == 42.0
+    assert common.ensure_interactive_backend(verbose=True) is True
+    assert common.is_headless_environment() is True
+
+
+def test_scenario_loader_discovery_and_validation_preserve_contracts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cover auxiliary discovery, task bundles, and validation base-dir failures."""
+    from robot_sf.training import scenario_loader, task_bundles
+
+    auxiliary = tmp_path / "auxiliary.yaml"
+    auxiliary.write_text("title: metadata-only\n", encoding="utf-8")
+    assert scenario_loader.load_scenarios_for_discovery(auxiliary) is None
+
+    empty = tmp_path / "empty.yaml"
+    empty.write_text("", encoding="utf-8")
+    with pytest.raises(ValueError, match="candidate is empty"):
+        scenario_loader.load_scenarios_for_discovery(empty)
+
+    scalar = tmp_path / "scalar.yaml"
+    scalar.write_text("metadata-only\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must contain a manifest"):
+        scenario_loader.load_scenarios_for_discovery(scalar)
+
+    fixture = Path("tests/fixtures/cli_scenarios/valid_scenario.yaml")
+    discovered = scenario_loader.load_scenarios_for_discovery(fixture)
+    assert discovered is not None
+    assert discovered[0]["name"] == "fixture_valid_crossing"
+
+    monkeypatch.setattr(task_bundles, "is_task_bundle_reference", lambda _reference: True)
+    monkeypatch.setattr(
+        task_bundles,
+        "load_task_bundle_scenarios",
+        lambda _reference: [{"name": "bundle_scenario"}],
+    )
+    bundled = scenario_loader.load_scenarios_for_validation("bundle:demo")
+    assert bundled.load_error is None
+    assert bundled.raw_entry_count == 1
+    assert bundled.scenarios == [{"name": "bundle_scenario"}]
+
+    monkeypatch.setattr(task_bundles, "is_task_bundle_reference", lambda _reference: False)
+    missing_root = tmp_path / "missing-root"
+    report = scenario_loader.load_scenarios_for_validation(
+        tmp_path / "missing.yaml", base_dir=missing_root
+    )
+    assert report.scenarios == []
+    assert report.load_error is not None
+    assert "base_dir does not exist" in report.load_error
+
+
+def test_scenario_loader_tolerant_paths_record_row_and_include_issues(tmp_path: Path) -> None:
+    """Exercise tolerant include, selection, override, and normalization branches."""
+    from robot_sf.training import scenario_loader
+
+    root = tmp_path / "root.yaml"
+    root.write_text("includes:\n  - missing.yaml\n", encoding="utf-8")
+    report = scenario_loader.load_scenarios_for_validation(root)
+    assert report.load_error is None
+    assert report.scenarios == []
+    assert report.load_issues
+    assert report.load_issues[0].source == (tmp_path / "missing.yaml").resolve()
+
+    source = tmp_path / "direct.yaml"
+    collector = scenario_loader._ScenarioValidationCollector()
+    selected = scenario_loader._apply_scenario_selection(
+        [{}, {"name": "selected"}],
+        data={"select_scenarios": ["selected"]},
+        source=source,
+        collector=collector,
+    )
+    assert selected == [{"name": "selected"}]
+    assert len(collector.entry_issues) == 1
+
+    collector = scenario_loader._ScenarioValidationCollector()
+    overridden = scenario_loader._apply_scenario_overrides_by_name(
+        [{}, {"name": "selected"}],
+        data={"scenario_overrides_by_name": {"selected": {"metadata": {"tag": "ok"}}}},
+        source=source,
+        root=source,
+        map_search_paths=[],
+        collector=collector,
+    )
+    assert overridden[1]["metadata"] == {"tag": "ok"}
+    assert len(collector.entry_issues) == 1
+
+    with pytest.raises(ValueError, match="must be a mapping"):
+        scenario_loader._normalize_scenarios(
+            ["not-a-mapping"],
+            source=source,
+            root=source,
+            map_search_paths=[],
+        )
+
+    collector = scenario_loader._ScenarioValidationCollector()
+    assert (
+        scenario_loader._normalize_scenarios(
+            ["not-a-mapping"],
+            source=source,
+            root=source,
+            map_search_paths=[],
+            collector=collector,
+        )
+        == []
+    )
+    assert len(collector.entry_issues) == 1
+
+
+def test_scenario_loader_deferred_override_imports_are_exercised() -> None:
+    """Cover deferred map/config imports used by scenario override helpers."""
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    from robot_sf.nav.map_config import SinglePedestrianDefinition
+    from robot_sf.training import scenario_loader
+
+    config = RobotSimulationConfig()
+    scenario_loader._set_simulation_override_attr(
+        config,
+        "ttc_predictive_force",
+        {
+            "ttc_predictive_force": {"force_scale": 2.0},
+            "pedestrian_model": "hsfm_ttc_predictive_v1",
+        },
+    )
+    assert config.sim_config.ttc_predictive_force.enabled is True
+    assert config.sim_config.ttc_predictive_force.force_scale == 2.0
+
+    ped = SinglePedestrianDefinition(id="ped", start=(0.0, 0.0), goal=(1.0, 1.0))
+    updated = scenario_loader._apply_single_pedestrian_override(
+        ped,
+        {},
+        SimpleNamespace(),
+    )
+    assert updated.id == "ped"
+    assert updated.goal == (1.0, 1.0)
+
+    rules = scenario_loader._parse_wait_overrides(
+        [{"waypoint_index": 0, "wait_s": 0.5}],
+        trajectory=[(0.0, 0.0)],
+        trajectory_labels=None,
+    )
+    assert rules is not None
+    assert rules[0].wait_s == pytest.approx(0.5)
+
+    scenario_loader._apply_prf_config_override(config, {"force_multiplier": 2.0})
+    assert config.sim_config.prf_config.force_multiplier == pytest.approx(2.0)

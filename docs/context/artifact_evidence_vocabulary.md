@@ -23,6 +23,9 @@ later.
 `output/` is the git-ignored worktree artifact root. It is useful for local runs, smoke checks,
 coverage, temporary exports, videos, and caches, but it is not a durable dependency by itself.
 
+For operational retention classes, preservation proof, and cleanup-eligibility workflows, see the
+[Artifact Retention, Preservation, and Cleanup Guide](artifact_retention_and_cleanup.md).
+
 ## Vocabulary
 
 | Category | Meaning | May cite `output/`? | Acceptable reference |

@@ -46,11 +46,14 @@ broad-exception baseline; the baseline approval does not broaden the benchmark c
 
 ## Diagnostic success and provenance
 
-This change does not redefine the existing `success_rate` metric: it remains based on completed,
-collision-free rows. Near misses, degraded rows, and fallback reasons remain visible in their
-separate status/diagnostic fields, but this issue does not promote a new strict-success or
-failure-rate interpretation. Summary validation does require every non-`ok` row to retain its
-emitted `degraded=true` invariant, at least one degradation reason, and a canonical failure class.
+For this comparator, `success_rate` counts only rows that are all of the following: `status="ok"`,
+not degraded, completed, collision-free, and not a near miss. A near miss may remain an `ok` row
+with no failure class because it is a separate clearance caveat rather than one of the four
+failure mechanisms, but it is never counted as diagnostic success. Degraded and fallback
+execution are likewise excluded from success; their status and degradation reasons remain
+visible rather than being normalized into a clean result. Summary validation does require every
+non-`ok` row to retain its emitted `degraded=true` invariant, at least one degradation reason,
+and a canonical failure class.
 
 The canonical registry in this module contains native analytic planners only. This change does
 not convert adapter, fallback, or degraded provenance into native evidence, and it makes no

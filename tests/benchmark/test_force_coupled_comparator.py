@@ -36,6 +36,7 @@ from robot_sf.planner.force_coupled_potential_field import (
     ForceCoupledPotentialFieldConfig,
     ForceCoupledPotentialFieldPlanner,
 )
+from scripts.benchmark import check_force_coupled_comparator as checker
 
 
 class _SimulatorBoundaryFailurePlanner:
@@ -456,6 +457,29 @@ def test_cli_runner_smoke_mode(tmp_path: Path) -> None:
     assert saved_receipt["schema_version"] == SCHEMA_VERSION
 
 
+def test_cli_smoke_rejects_simulator_error_rows(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Smoke mode cannot pass a receipt containing an actual simulator-error row."""
+    receipt = {
+        "status": "ok",
+        "receipt_digest": "a" * 64,
+        "results": [
+            {
+                "planner_id": "fixture_planner",
+                "scenario_id": "simulator_failure",
+                "failure_class": FAILURE_CLASS_SIMULATOR,
+            }
+        ],
+    }
+    monkeypatch.setattr(checker, "run_force_coupled_comparator", lambda **_: receipt)
+
+    assert checker.main(["--smoke"]) == 1
+    captured = capsys.readouterr()
+    assert "simulator-error rows" in captured.err
+    assert "PASS" not in captured.out
+
+
 def test_classify_failure_deterministic_mapping_per_class() -> None:
     """Mapping rules deterministically assign each of the four explicit failure classes."""
     # 1. Ok rollout produces None
@@ -692,8 +716,8 @@ def test_summary_table_rejects_inconsistent_ok_row() -> None:
         compute_summary_table([replace(healthy, degradation_reasons=("fixture",))])
 
 
-def test_summary_table_preserves_existing_success_rate_semantics() -> None:
-    """Taxonomy diagnostics do not change the established completion/collision success rate."""
+def test_summary_table_excludes_degraded_and_near_miss_rows_from_success() -> None:
+    """Diagnostic success requires clean completion; near misses remain separate caveats."""
     healthy = execute_rollout(PurePursuitGoalPlanner(), get_canonical_comparison_scenarios()[-1])
     near_miss = replace(healthy, scenario_id="near_miss_fixture", near_miss=True)
     degraded = replace(
@@ -707,7 +731,7 @@ def test_summary_table_preserves_existing_success_rate_semantics() -> None:
 
     [summary] = compute_summary_table([near_miss, degraded])
 
-    assert summary["success_rate"] == 1.0
+    assert summary["success_rate"] == 0.0
     assert summary["near_miss_rate"] == 0.5
     assert summary["status_counts"] == {"ok": 1, "degraded": 1}
     assert summary["failure_class_counts"][FAILURE_CLASS_TRACKING] == 1

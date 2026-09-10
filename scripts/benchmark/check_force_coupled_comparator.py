@@ -7,9 +7,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from robot_sf.benchmark.force_coupled_comparator import (
     CANONICAL_CONFIG_PATH,
+    FAILURE_CLASS_SIMULATOR,
     run_force_coupled_comparator,
 )
 
@@ -54,6 +56,44 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _simulator_error_row_labels(receipt: dict[str, Any]) -> list[str]:
+    """Return labels for rows that carry an actual simulator-error signal.
+
+    Generated receipts identify the taxonomy class explicitly. Legacy receipts may omit that
+    additive field, so canonical simulator reason prefixes are also recognized. Planner-owned
+    ``plan_exception:`` and ``planner_diagnostic:`` reasons retain taxonomy precedence and are
+    not treated as simulator errors merely because their text mentions a simulator.
+    """
+    results = receipt.get("results")
+    if not isinstance(results, list):
+        return []
+
+    labels: list[str] = []
+    for index, row in enumerate(results):
+        if not isinstance(row, dict):
+            continue
+        failure_class = row.get("failure_class")
+        if failure_class is not None:
+            if failure_class == FAILURE_CLASS_SIMULATOR:
+                labels.append(
+                    f"{row.get('planner_id', '<unknown>')}/{row.get('scenario_id', index)}"
+                )
+            continue
+
+        reasons = row.get("degradation_reasons")
+        if not isinstance(reasons, list) or any(not isinstance(reason, str) for reason in reasons):
+            continue
+        normalized_reasons = [reason.strip().lower() for reason in reasons]
+        if any(
+            reason.startswith(("plan_exception:", "planner_diagnostic:"))
+            for reason in normalized_reasons
+        ):
+            continue
+        if any("simulator" in reason or "sim_error" in reason for reason in normalized_reasons):
+            labels.append(f"{row.get('planner_id', '<unknown>')}/{row.get('scenario_id', index)}")
+    return labels
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run comparator and report results.
 
@@ -80,10 +120,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.smoke:
         status = receipt.get("status")
         digest = receipt.get("receipt_digest")
-        runs = len(receipt.get("results", []))
+        results = receipt.get("results")
+        runs = len(results) if isinstance(results, list) else 0
         if status != "ok" or not digest or runs == 0:
             print(
                 f"FAIL: force-coupled comparator check failed (status={status}, runs={runs})",
+                file=sys.stderr,
+            )
+            return 1
+        simulator_rows = _simulator_error_row_labels(receipt)
+        if simulator_rows:
+            print(
+                "FAIL: force-coupled comparator check found simulator-error rows "
+                f"({', '.join(simulator_rows)})",
                 file=sys.stderr,
             )
             return 1

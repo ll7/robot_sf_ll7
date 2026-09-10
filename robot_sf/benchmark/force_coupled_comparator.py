@@ -722,9 +722,19 @@ def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, 
     for pid in sorted(by_planner.keys()):
         runs = by_planner[pid]
         n = len(runs)
-        # Keep the established metric definition; this taxonomy change must not alter the
-        # comparator's existing success-rate semantics.
-        successes = sum(1 for r in runs if r.completed and not r.collision)
+        # Keep the established strict diagnostic-success definition; taxonomy rows, degraded
+        # execution, collisions, near misses, and incomplete runs are not clean successes.
+        successes = sum(
+            1
+            for r in runs
+            if (
+                r.status == "ok"
+                and not r.degraded
+                and r.completed
+                and not r.collision
+                and not r.near_miss
+            )
+        )
         collisions = sum(1 for r in runs if r.collision)
         near_misses = sum(1 for r in runs if r.near_miss and not r.collision)
         mean_path = float(np.mean([r.path_length_m for r in runs]))

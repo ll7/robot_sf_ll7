@@ -118,6 +118,19 @@ def test_build_robot_config_rejects_mixed_route_representations(tmp_path: Path) 
         build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
 
 
+def test_build_robot_config_rejects_inline_route_proposals() -> None:
+    """Inline route proposals must fail until an authorized route file is materialized."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    scenario = {
+        "name": "inline-route-proposal",
+        "map_file": str(Path("maps/svg_maps/classic_overtaking.svg").resolve()),
+        "route_overrides": {"robot_routes": [], "ped_routes": []},
+    }
+
+    with pytest.raises(ValueError, match="inline route_overrides are proposal-only"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
 def test_load_scenarios_rebases_route_override_paths_from_included_archetypes() -> None:
     """Included issue-596 archetypes should resolve route override paths into repo-root form."""
     scenarios = load_scenarios(

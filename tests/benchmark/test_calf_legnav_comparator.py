@@ -79,6 +79,37 @@ def _config() -> dict[str, Any]:
     }
 
 
+def _configured_observation_config(*, sensor: bool) -> dict[str, Any]:
+    """Return the full trace-side perturbation payload for configured-profile tests."""
+    return {
+        "position_noise_std_m": 0.15 if sensor else 0.0,
+        "position_noise_bound_m": 0.3 if sensor else 0.0,
+        "missed_detection_probability": 0.0,
+        "occlusion_distance_m": None,
+        "false_positive_actor_count": 0,
+        "false_positive_offset_x_m": 1.0,
+        "false_positive_offset_y_m": 0.0,
+        "false_positive_spacing_y_m": 0.5,
+        "delay_steps": 0,
+        "seed": 7318 if sensor else None,
+        "fixture_visibility_ignored": sensor is False,
+    }
+
+
+def _configured_comparator_config() -> dict[str, Any]:
+    """Return a minimal config with both condition profiles bound."""
+    config = _config()
+    config["conditions"] = {
+        "perfect_perception": {"ignore_fixture_visibility": True},
+        "sensor_limited": {
+            "position_noise_std_m": 0.15,
+            "position_noise_bound_m": 0.3,
+            "observation_perturbation_seed": 7318,
+        },
+    }
+    return config
+
+
 def test_paired_report_preserves_observation_and_proxy_boundaries() -> None:
     """A valid paired fixture produces local metrics without transfer claims."""
     config = _config()
@@ -158,6 +189,90 @@ def test_missing_outcome_flags_are_unavailable_not_zeroes() -> None:
     for name in ("success_rate", "collision_rate", "timeout_rate"):
         assert metrics[name]["status"] == "unavailable"
         assert metrics[name]["value"] is None
+    assert report["conditions"]["perfect_perception"]["status"] == "blocked"
+    assert report["status"] == "blocked"
+
+
+def test_partial_collision_flags_block_condition_admission() -> None:
+    """A partial collision vocabulary cannot be admitted as a zero collision rate."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    perfect["steps"][1].pop("is_obstacle_collision")
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+
+    condition = report["conditions"]["perfect_perception"]
+    assert condition["status"] == "blocked"
+    assert condition["metrics"]["collision_rate"]["status"] == "unavailable"
+    assert condition["metrics"]["collision_rate"]["reason"] == (
+        "each executed row must expose all collision flags"
+    )
+    assert report["status"] == "blocked"
+
+
+def test_configured_observation_profile_must_match_trace() -> None:
+    """A trace cannot relabel a different perturbation profile as the configured contrast."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    perfect["observation_perturbation_config"] = _configured_observation_config(sensor=False)
+    sensor["observation_perturbation_config"] = _configured_observation_config(sensor=True)
+    for row in sensor["steps"]:
+        row["observed_observation"]["noise_profile"] = "bounded_gaussian"
+    config = _configured_comparator_config()
+    sensor["observation_perturbation_config"]["position_noise_std_m"] = 0.2
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=config)
+
+    observation = report["conditions"]["sensor_limited"]["observation_contract"]
+    assert observation["status"] == "unavailable"
+    assert observation["config_binding"] == "unavailable"
+    assert "position_noise_std_m" in observation["reason"]
+    assert report["conditions"]["sensor_limited"]["status"] == "blocked"
+    assert report["status"] == "blocked"
+
+
+def test_matching_configured_observation_profile_is_recorded() -> None:
+    """A matching configured profile is explicitly recorded as provenance."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    perfect["observation_perturbation_config"] = _configured_observation_config(sensor=False)
+    sensor["observation_perturbation_config"] = _configured_observation_config(sensor=True)
+    for row in sensor["steps"]:
+        row["observed_observation"]["noise_profile"] = "bounded_gaussian"
+
+    report = build_calf_legnav_comparator_report(
+        perfect,
+        sensor,
+        config=_configured_comparator_config(),
+    )
+
+    assert report["status"] == "available"
+    for condition in ("perfect_perception", "sensor_limited"):
+        observation = report["conditions"][condition]["observation_contract"]
+        assert observation["config_binding"] == "matched"
+
+
+def test_configured_noise_profile_must_match_trace() -> None:
+    """A trace cannot relabel configured perturbation as an unperturbed observation."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    perfect["observation_perturbation_config"] = _configured_observation_config(sensor=False)
+    sensor["observation_perturbation_config"] = _configured_observation_config(sensor=True)
+    for row in perfect["steps"]:
+        row["observed_observation"]["noise_profile"] = "none"
+    for row in sensor["steps"]:
+        row["observed_observation"]["noise_profile"] = "none"
+
+    report = build_calf_legnav_comparator_report(
+        perfect,
+        sensor,
+        config=_configured_comparator_config(),
+    )
+
+    observation = report["conditions"]["sensor_limited"]["observation_contract"]
+    assert observation["status"] == "unavailable"
+    assert "noise profiles" in observation["reason"]
+    assert report["status"] == "blocked"
 
 
 def test_missing_observation_contract_row_blocks_the_condition() -> None:
@@ -364,6 +479,49 @@ def test_runtime_checkpoint_refs_require_a_paired_registry_match() -> None:
     refs = comparator_runner._runtime_checkpoint_refs(traces, expected_sha256="b" * 64)
     assert refs["checkpoint_sha256_matches_declared"] == "false"
 
+    traces["perfect_perception"]["planner_summary"]["checkpoint_provenance"][
+        "hash_source"
+    ] = "declared_registry_digest"
+    refs = comparator_runner._runtime_checkpoint_refs(traces, expected_sha256=digest)
+    assert refs["checkpoint_sha256_runtime"] == "unavailable"
+    error = comparator_runner._runtime_provenance_error(refs)
+    assert error is not None
+    assert "runtime checkpoint provenance" in error["reason"]
+
+
+def test_runtime_checkpoint_model_identity_is_required_when_declared() -> None:
+    """Matching checkpoint bytes cannot hide a mismatched runtime model ID."""
+    digest = "a" * 64
+    traces = {
+        condition: {
+            "planner_summary": {
+                "checkpoint_provenance": {
+                    "checkpoint_sha256": digest,
+                    "hash_source": "computed_resolved_file",
+                    "load_succeeded": True,
+                    "model_id": "different_model",
+                }
+            }
+        }
+        for condition in ("perfect_perception", "sensor_limited")
+    }
+
+    refs = comparator_runner._runtime_checkpoint_refs(
+        traces,
+        expected_sha256=digest,
+        expected_model_id="ppo_fixture",
+    )
+
+    assert refs["checkpoint_sha256_matches_declared"] == "true"
+    assert refs["checkpoint_model_id_runtime"] == "different_model"
+    assert refs["checkpoint_model_id_matches_declared"] == "false"
+    error = comparator_runner._runtime_provenance_error(
+        {**refs, "checkpoint_model_id": "ppo_fixture"}
+    )
+    assert error is not None
+    assert error["status"] == "blocked"
+    assert "model identity" in error["reason"]
+
 
 def test_input_refs_bind_enabled_predictive_checkpoint_to_registry() -> None:
     """Enabled predictive foresight contributes its own declared registry identity."""
@@ -376,6 +534,19 @@ def test_input_refs_bind_enabled_predictive_checkpoint_to_registry() -> None:
     assert refs["predictive_checkpoint_sha256_declared"] == (
         "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1"
     )
+    assert refs["scenario_manifest_file_count"] == "2"
+    assert len(refs["scenario_effective_sha256"]) == 64
+    assert refs["scenario_map_file"] == ("maps/svg_maps/francis2023/francis2023_blind_corner.svg")
+    assert len(refs["scenario_map_file_sha256"]) == 64
+
+
+def test_invalid_scenario_manifest_is_normalized_for_blocked_handoff(tmp_path: Path) -> None:
+    """Malformed scenario YAML raises a bounded provenance error for the runner."""
+    manifest = tmp_path / "invalid-scenarios.yaml"
+    manifest.write_text("scenarios:\n  - name: [\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Scenario manifest is invalid"):
+        comparator_runner._load_scenario_manifest(manifest)
 
 
 def _checkpoint_traces(

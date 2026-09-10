@@ -25,7 +25,6 @@ from robot_sf.benchmark.observation_perturbation import (
     ObservationPerturbationState,
     perturb_ground_truth,
 )
-from robot_sf.benchmark.termination_reason import route_complete_success
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.policy_search_common import infer_scenario_family
@@ -63,6 +62,22 @@ def _json_ready(value: Any) -> Any:
         except Exception:
             pass
     return str(value)
+
+
+def _strict_route_complete_success(info: Mapping[str, Any] | None) -> bool | None:
+    """Return route completion only when the environment emits a typed flag."""
+    if not isinstance(info, Mapping):
+        return None
+    meta = info.get("meta")
+    if not isinstance(meta, Mapping) or "is_route_complete" not in meta:
+        return None
+    value = _json_ready(meta["is_route_complete"])
+    return value if isinstance(value, bool) else None
+
+
+def _optional_trace_fields(mapping: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+    """Copy optional trace fields without defaulting missing values to false."""
+    return {field: _json_ready(mapping[field]) for field in fields if field in mapping}
 
 
 def _optional_float(value: Any) -> float | None:
@@ -924,7 +939,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 step=step_idx,
                 state=observation_state,
             )
-            policy_observation = _policy_observation_payload(obs, perturbation["observed"])
+            policy_observation = (
+                _policy_observation_payload(obs, perturbation["observed"])
+                if isinstance(obs, Mapping)
+                else None
+            )
             policy_obs = _apply_observed_pedestrians_to_policy_obs(
                 obs,
                 perturbation,
@@ -948,7 +967,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     planner_decision = last_decision()
 
             obs, reward, terminated, truncated, info = env.step(env_action)
-            meta = info.get("meta", {}) if isinstance(info, dict) else {}
+            raw_meta = info.get("meta", {}) if isinstance(info, Mapping) else {}
+            meta = dict(raw_meta) if isinstance(raw_meta, Mapping) else {}
             post_step_min_robot_ped_dist = _sim_min_robot_ped_distance(env)
             post_step_goal_distance = float(
                 np.linalg.norm(
@@ -956,7 +976,11 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     - np.array(env.simulator.robot_pos[0], dtype=float)
                 )
             )
-            is_success = route_complete_success(info if isinstance(info, dict) else {})
+            is_success = _strict_route_complete_success(info if isinstance(info, Mapping) else None)
+            terminated_flag = _json_ready(terminated)
+            terminated_flag = terminated_flag if isinstance(terminated_flag, bool) else None
+            truncated_flag = _json_ready(truncated)
+            truncated_flag = truncated_flag if isinstance(truncated_flag, bool) else None
             trace_rows.append(
                 {
                     "step": int(step_idx),
@@ -972,24 +996,29 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     "planner_execution_mode": (
                         "native_env_action" if step_is_native else "command_adapter"
                     ),
-                    "terminated": bool(terminated),
-                    "truncated": bool(truncated),
-                    "is_success": bool(is_success),
-                    "is_pedestrian_collision": bool(meta.get("is_pedestrian_collision", False)),
-                    "is_obstacle_collision": bool(meta.get("is_obstacle_collision", False)),
-                    "is_robot_collision": bool(meta.get("is_robot_collision", False)),
+                    "terminated": terminated_flag,
+                    "truncated": truncated_flag,
+                    "is_success": is_success,
+                    **_optional_trace_fields(
+                        meta,
+                        (
+                            "is_pedestrian_collision",
+                            "is_obstacle_collision",
+                            "is_robot_collision",
+                        ),
+                    ),
                     **_trace_observation_payload(
                         perturbation,
                         policy_observation=policy_observation,
                     ),
                 }
             )
-            if terminated or truncated or is_success:
+            if terminated_flag is True or truncated_flag is True or is_success is True:
                 done_info = {
                     "step": int(step_idx),
-                    "terminated": bool(terminated),
-                    "truncated": bool(truncated),
-                    "success": bool(is_success),
+                    "terminated": terminated_flag,
+                    "truncated": truncated_flag,
+                    "success": is_success,
                     "meta": _json_ready(meta),
                     "family": family,
                 }

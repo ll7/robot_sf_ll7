@@ -16,9 +16,11 @@ from scripts.validation.run_policy_search_step_diagnostics import (
     _format_planner_summary_lines,
     _observation_perturbation_spec,
     _occlusion_mask_by_distance,
+    _optional_trace_fields,
     _pedestrian_state_from_sim,
     _planner_fallback_degraded_status,
     _policy_observation_payload,
+    _strict_route_complete_success,
     _trace_observation_payload,
     _trace_planner_execution_mode,
     _trace_progress_summary,
@@ -273,6 +275,29 @@ def test_planner_fallback_status_is_unavailable_without_explicit_verdict() -> No
 
     assert result["available"] is False
     assert result["reported_fallback_or_degraded"] is None
+
+
+@pytest.mark.parametrize(
+    ("info", "expected"),
+    [
+        ({"meta": {"is_route_complete": True}}, True),
+        ({"meta": {"is_route_complete": False}}, False),
+        ({"meta": {}}, None),
+        ({}, None),
+        ({"meta": {"is_route_complete": "false"}}, None),
+    ],
+)
+def test_trace_success_preserves_missing_or_malformed_outcomes(info, expected) -> None:
+    """The trace writer must not turn absent route-completion metadata into false."""
+    assert _strict_route_complete_success(info) is expected
+
+
+def test_optional_trace_fields_preserve_missing_collision_metadata() -> None:
+    """Optional outcome fields remain absent when the environment did not emit them."""
+    assert _optional_trace_fields(
+        {"is_pedestrian_collision": True},
+        ("is_pedestrian_collision", "is_obstacle_collision", "is_robot_collision"),
+    ) == {"is_pedestrian_collision": True}
 
 
 class _DummySimulator:

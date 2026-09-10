@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from jsonschema import Draft202012Validator
 from robot_sf.benchmark.calf_legnav_comparator import (
     build_calf_legnav_comparator_report,
 )
+from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.run_policy_search_candidate import (
     _resolve_path,
     load_candidate_definition,
@@ -54,6 +56,105 @@ def _json_sha256(payload: Any) -> str:
     """Return a stable digest for one resolved JSON-compatible configuration."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _load_scenario_manifest(path: Path) -> Any:
+    """Load one scenario manifest and normalize YAML parser failures."""
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Scenario manifest is invalid: {path}") from exc
+
+
+def _scenario_include_paths(data: Any, source: Path) -> list[Path]:
+    """Resolve include entries declared by one scenario manifest."""
+    if not isinstance(data, Mapping):
+        return []
+    raw_includes = data.get("includes") or data.get("include") or data.get("scenario_files")
+    if raw_includes is None:
+        return []
+    entries = [raw_includes] if isinstance(raw_includes, str) else raw_includes
+    if not isinstance(entries, list):
+        raise ValueError(f"Scenario includes must be a list in {source}")
+    include_paths: list[Path] = []
+    for entry in entries:
+        if not isinstance(entry, str) or not entry.strip():
+            raise ValueError(f"Scenario include must be a non-empty string in {source}")
+        include_path = Path(entry)
+        if not include_path.is_absolute():
+            include_path = (source.parent / include_path).resolve()
+        include_paths.append(include_path)
+    return include_paths
+
+
+def _scenario_manifest_paths(scenario_matrix: Path) -> list[Path]:
+    """Resolve the scenario manifest include graph in deterministic order."""
+    ordered: list[Path] = []
+    visited: set[Path] = set()
+    visiting: set[Path] = set()
+
+    def visit(path: Path) -> None:
+        resolved = path.resolve()
+        if resolved in visiting:
+            raise ValueError(f"Scenario manifest include cycle detected at {resolved}")
+        if resolved in visited:
+            return
+        if not resolved.is_file():
+            raise ValueError(f"Scenario manifest file is missing: {resolved}")
+        visiting.add(resolved)
+        data = _load_scenario_manifest(resolved)
+        ordered.append(resolved)
+        for include_path in _scenario_include_paths(data, resolved):
+            visit(include_path)
+        visiting.remove(resolved)
+        visited.add(resolved)
+
+    visit(scenario_matrix)
+    return ordered
+
+
+def _scenario_provenance_refs(scenario_matrix: Path, scenario_name: str) -> dict[str, str]:
+    """Hash the resolved selected scenario, manifest graph, and referenced assets."""
+    manifest_paths = _scenario_manifest_paths(scenario_matrix)
+    manifest_digests = {_display_path(path): _sha256(path) for path in manifest_paths}
+    scenarios = load_scenarios(scenario_matrix)
+    selected = next(
+        (
+            dict(scenario)
+            for scenario in scenarios
+            if str(
+                scenario.get("name")
+                or scenario.get("scenario_id")
+                or scenario.get("id")
+                or "unknown"
+            )
+            == scenario_name
+        ),
+        None,
+    )
+    if selected is None:
+        raise ValueError(f"Scenario '{scenario_name}' was not resolved from {scenario_matrix}")
+
+    refs = {
+        "scenario_manifest_file_count": str(len(manifest_paths)),
+        "scenario_manifest_files": json.dumps(list(manifest_digests), separators=(",", ":")),
+        "scenario_manifest_sha256s": json.dumps(
+            manifest_digests, sort_keys=True, separators=(",", ":")
+        ),
+        "scenario_effective_sha256": _json_sha256(selected),
+    }
+    for field in ("map_file", "route_overrides_file"):
+        raw_path = selected.get(field)
+        if raw_path is None:
+            continue
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            raise ValueError(f"Resolved scenario has an invalid {field}: {scenario_name}")
+        resolved_path = _resolve_path(scenario_matrix.parent, raw_path)
+        if resolved_path is None or not resolved_path.is_file():
+            raise ValueError(f"Resolved scenario {field} is missing or unreadable: {raw_path}")
+        refs[f"scenario_{field}"] = _display_path(resolved_path)
+        refs[f"scenario_{field}_sha256"] = _sha256(resolved_path)
+    return refs
 
 
 def _registry_checkpoint_sha256(registry_path: Path, model_id: str) -> str:
@@ -119,6 +220,7 @@ def _input_refs(config_path: Path, config: dict[str, Any]) -> dict[str, str]:
         "checkpoint_sha256_declared": _registry_checkpoint_sha256(model_registry, model_id),
         "resolved_algo_config_sha256": _json_sha256(resolved_config),
     }
+    refs.update(_scenario_provenance_refs(scenario_matrix, str(config["scenario_name"])))
     for name, path in (
         ("config", config_path),
         ("scenario_matrix", scenario_matrix),
@@ -253,22 +355,26 @@ def _runtime_checkpoint_refs(
     traces: dict[str, dict[str, Any]],
     *,
     expected_sha256: str | None = None,
+    expected_model_id: str | None = None,
     expected_predictive_sha256: str | None = None,
     expected_predictive_model_id: str | None = None,
 ) -> dict[str, str]:
-    """Return paired runtime checkpoint hashes and their registry-match verdict."""
+    """Return paired runtime checkpoint identity and registry-match verdicts."""
     runtime_hashes: dict[str, str] = {}
     runtime_sources: dict[str, str] = {}
+    runtime_model_ids: dict[str, str] = {}
     for condition in ("perfect_perception", "sensor_limited"):
         summary = traces.get(condition, {}).get("planner_summary")
         provenance = summary.get("checkpoint_provenance") if isinstance(summary, dict) else None
         raw_sha256 = provenance.get("checkpoint_sha256") if isinstance(provenance, dict) else None
         raw_source = provenance.get("hash_source") if isinstance(provenance, dict) else None
+        raw_model_id = provenance.get("model_id") if isinstance(provenance, dict) else None
+        model_id = _normalize_model_id(raw_model_id)
         if (
             isinstance(raw_sha256, str)
             and re.fullmatch(r"[0-9a-fA-F]{64}", raw_sha256)
             and isinstance(raw_source, str)
-            and raw_source
+            and raw_source == "computed_resolved_file"
             and provenance.get("load_succeeded") is True
         ):
             runtime_hashes[condition] = raw_sha256.lower()
@@ -276,20 +382,37 @@ def _runtime_checkpoint_refs(
         else:
             runtime_hashes[condition] = "unavailable"
             runtime_sources[condition] = "unavailable"
+        runtime_model_ids[condition] = model_id or "unavailable"
 
     refs = {
         "checkpoint_sha256_runtime_perfect_perception": runtime_hashes["perfect_perception"],
         "checkpoint_sha256_runtime_sensor_limited": runtime_hashes["sensor_limited"],
         "checkpoint_hash_source_runtime_perfect_perception": runtime_sources["perfect_perception"],
         "checkpoint_hash_source_runtime_sensor_limited": runtime_sources["sensor_limited"],
+        "checkpoint_model_id_runtime_perfect_perception": runtime_model_ids["perfect_perception"],
+        "checkpoint_model_id_runtime_sensor_limited": runtime_model_ids["sensor_limited"],
     }
     paired_hash = runtime_hashes["perfect_perception"]
     if paired_hash != "unavailable" and paired_hash == runtime_hashes["sensor_limited"]:
         refs["checkpoint_sha256_runtime"] = paired_hash
     else:
         refs["checkpoint_sha256_runtime"] = "unavailable"
+    expected = _normalize_sha256(expected_sha256)
     refs["checkpoint_sha256_matches_declared"] = str(
-        expected_sha256 is not None and refs["checkpoint_sha256_runtime"] == expected_sha256.lower()
+        expected is not None
+        and refs["checkpoint_sha256_runtime"] != "unavailable"
+        and refs["checkpoint_sha256_runtime"] == expected
+    ).lower()
+    paired_model_id = runtime_model_ids["perfect_perception"]
+    if paired_model_id != "unavailable" and paired_model_id == runtime_model_ids["sensor_limited"]:
+        refs["checkpoint_model_id_runtime"] = paired_model_id
+    else:
+        refs["checkpoint_model_id_runtime"] = "unavailable"
+    expected_model = _normalize_model_id(expected_model_id)
+    refs["checkpoint_model_id_matches_declared"] = str(
+        expected_model is not None
+        and refs["checkpoint_model_id_runtime"] != "unavailable"
+        and refs["checkpoint_model_id_runtime"] == expected_model
     ).lower()
     if expected_predictive_sha256 is not None:
         refs.update(
@@ -321,6 +444,21 @@ def _runtime_provenance_error(input_refs: dict[str, str]) -> dict[str, Any] | No
             "reason": "runtime checkpoint digest does not match the model registry digest",
             "command": ["_runtime_checkpoint_refs"],
         }
+    if "checkpoint_model_id" in input_refs:
+        if input_refs.get("checkpoint_model_id_runtime") == "unavailable":
+            return {
+                "condition": "inputs",
+                "status": "blocked",
+                "reason": "paired runtime checkpoint model identity is unavailable",
+                "command": ["_runtime_checkpoint_refs"],
+            }
+        if input_refs.get("checkpoint_model_id_matches_declared") != "true":
+            return {
+                "condition": "inputs",
+                "status": "blocked",
+                "reason": "runtime checkpoint model identity does not match the model registry identity",
+                "command": ["_runtime_checkpoint_refs"],
+            }
     if "predictive_checkpoint_sha256_declared" in input_refs:
         if input_refs.get("predictive_checkpoint_sha256_runtime") == "unavailable":
             return {
@@ -623,12 +761,13 @@ def main(argv: list[str] | None = None) -> int:
             _runtime_checkpoint_refs(
                 traces,
                 expected_sha256=input_refs.get("checkpoint_sha256_declared"),
+                expected_model_id=input_refs.get("checkpoint_model_id"),
                 expected_predictive_sha256=input_refs.get("predictive_checkpoint_sha256_declared"),
                 expected_predictive_model_id=input_refs.get("predictive_checkpoint_model_id"),
             )
         )
         runtime_provenance_error = _runtime_provenance_error(input_refs)
-    except (OSError, ValueError) as exc:
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError, yaml.YAMLError) as exc:
         runner_errors.append(
             {
                 "condition": "inputs",

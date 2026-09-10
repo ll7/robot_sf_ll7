@@ -41,6 +41,11 @@ then validates `summary.json` against
 The YAML itself is checked against
 `robot_sf/benchmark/schemas/calf_legnav_comparator_config.v1.json` before either
 condition starts, including a strict finite-JSON check for numeric values.
+The report provenance also records the resolved selected scenario, its manifest
+include graph, and referenced map/route-override digests; an unreadable input
+blocks the handoff. A learned-policy trace is admitted only when both paired
+conditions report a successful load, the same model identity, and a
+`computed_resolved_file` checkpoint digest matching the model registry.
 
 Use `--dry-run` to inspect the two generated commands without executing the policy.
 Generated traces and summaries belong under ignored `output/` or a disposable temporary
@@ -64,15 +69,17 @@ shared state between adjacent rows from being counted twice while preserving
 within-step clearance violations. Every executed row must expose at least one
 finite non-negative distance field; a partial distance trace leaves both distance
 metrics unavailable instead of silently changing their denominator. Outcome
-flags must be JSON booleans; malformed flags are reported as unavailable rather
-than coerced into results. When terminal `done_info.success` is present, a true
-row-level `is_success` flag must not contradict a false terminal outcome; such a
-contradiction leaves success and dependent timeout metrics unavailable. Trace
-rows must also have contiguous step identities, a complete fixed horizon or
-explicit terminal `done_info`, recognized execution-mode provenance,
-non-negative integer observed-actor counts, and finite non-negative distance
-values. Violations block the condition or materialize a schema-valid blocked
-handoff.
+flags must be JSON booleans; missing or malformed flags are reported as
+unavailable rather than coerced into results. Success, collision, and timeout
+must all be available before a condition can be admitted as `available`. When
+terminal `done_info.success` is present, a true row-level `is_success` flag must
+not contradict a false terminal outcome; such a contradiction leaves success and
+dependent timeout metrics unavailable. Trace rows must also have contiguous step
+identities, a complete fixed horizon or explicit terminal `done_info`, recognized
+execution-mode provenance, non-negative integer observed-actor counts, and finite
+non-negative distance values. Violations block the condition or materialize a
+schema-valid blocked handoff. The configured observation perturbation profile is
+also checked against the trace before the paired contrast is admitted.
 
 One paired episode has no uncertainty estimate. Missing observations, runner errors,
 fallback/degraded execution, or an unrecognized observation contract produce `blocked`

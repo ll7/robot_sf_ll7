@@ -29,6 +29,33 @@ CALF_LEGNAV_EVIDENCE_STATUS = "diagnostic-only"
 CONDITION_IDEAL = "perfect_perception"
 CONDITION_SENSOR = "sensor_limited"
 CONDITIONS = (CONDITION_IDEAL, CONDITION_SENSOR)
+_COLLISION_FIELDS = (
+    "is_pedestrian_collision",
+    "is_obstacle_collision",
+    "is_robot_collision",
+)
+_OBSERVATION_CONFIG_DEFAULTS: dict[str, Any] = {
+    "position_noise_std_m": 0.0,
+    "position_noise_bound_m": 0.0,
+    "missed_detection_probability": 0.0,
+    "occlusion_distance_m": None,
+    "false_positive_actor_count": 0,
+    "false_positive_offset_x_m": 1.0,
+    "false_positive_offset_y_m": 0.0,
+    "false_positive_spacing_y_m": 0.5,
+    "delay_steps": 0,
+    "seed": None,
+    "fixture_visibility_ignored": False,
+}
+_OBSERVATION_CONFIG_KEYS = {
+    "position_noise_std_m": "position_noise_std_m",
+    "position_noise_bound_m": "position_noise_bound_m",
+    "missed_detection_probability": "missed_detection_probability",
+    "occlusion_distance_m": "occlusion_distance_m",
+    "delay_steps": "delay_steps",
+    "observation_perturbation_seed": "seed",
+    "ignore_fixture_visibility": "fixture_visibility_ignored",
+}
 
 
 def canonical_config_digest(config: Mapping[str, Any]) -> str:
@@ -45,6 +72,69 @@ def canonical_config_digest(config: Mapping[str, Any]) -> str:
 def _mapping(value: Any) -> Mapping[str, Any]:
     """Return a mapping value or an empty mapping for malformed optional fields."""
     return value if isinstance(value, Mapping) else {}
+
+
+def _config_values_equal(actual: Any, expected: Any) -> bool:
+    """Compare JSON-loaded observation settings without coercing booleans.
+
+    Returns:
+        Whether the values match without unsafe type coercion.
+    """
+    if isinstance(expected, bool):
+        return isinstance(actual, bool) and actual == expected
+    if expected is None:
+        return actual is None
+    if isinstance(expected, Real) and not isinstance(expected, bool):
+        return isinstance(actual, Real) and not isinstance(actual, bool) and actual == expected
+    return actual == expected
+
+
+def _observation_config_mismatch(
+    trace_config: Mapping[str, Any], expected_config: Mapping[str, Any] | None
+) -> str | None:
+    """Return a blocker when trace perturbation settings do not match the config."""
+    if expected_config is None:
+        return None
+    expected = dict(_OBSERVATION_CONFIG_DEFAULTS)
+    for config_key, trace_key in _OBSERVATION_CONFIG_KEYS.items():
+        if config_key in expected_config:
+            expected[trace_key] = expected_config[config_key]
+    missing = object()
+    mismatches = []
+    for key, expected_value in expected.items():
+        actual_value = trace_config.get(key, missing)
+        if actual_value is missing or not _config_values_equal(actual_value, expected_value):
+            actual_label = "missing" if actual_value is missing else repr(actual_value)
+            mismatches.append(f"{key}={actual_label} (expected {expected_value!r})")
+    if not mismatches:
+        return None
+    return (
+        "trace observation perturbation config does not match the configured condition: "
+        + "; ".join(mismatches)
+    )
+
+
+def _expected_noise_profile(expected_config: Mapping[str, Any] | None) -> str | None:
+    """Return the deterministic noise label implied by a configured profile."""
+    if expected_config is None:
+        return None
+    expected = dict(_OBSERVATION_CONFIG_DEFAULTS)
+    for config_key, trace_key in _OBSERVATION_CONFIG_KEYS.items():
+        if config_key in expected_config:
+            expected[trace_key] = expected_config[config_key]
+    if (_finite_number(expected["position_noise_std_m"]) or 0.0) > 0.0:
+        return "bounded_gaussian"
+    if (_finite_number(expected["missed_detection_probability"]) or 0.0) > 0.0:
+        return "missed_detection"
+    if expected["occlusion_distance_m"] is not None:
+        return "occlusion_mask"
+    if _integer_value(expected["delay_steps"]) not in (None, 0):
+        return "delayed_observation"
+    if _integer_value(expected["false_positive_actor_count"]) not in (None, 0):
+        return "false_positive_actor_injection"
+    if expected["fixture_visibility_ignored"] is True:
+        return "none"
+    return None
 
 
 def _finite_number(value: Any) -> float | None:
@@ -229,8 +319,11 @@ def _observed_actor_counts(rows: Sequence[Mapping[str, Any]]) -> tuple[list[int]
     return counts, malformed
 
 
-def _observation_contract(
-    trace: Mapping[str, Any], *, expected_condition: str | None = None
+def _observation_contract(  # noqa: C901
+    trace: Mapping[str, Any],
+    *,
+    expected_condition: str | None = None,
+    expected_config: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Summarize the observed evidence class and perturbation profile.
 
@@ -276,35 +369,50 @@ def _observation_contract(
         )
         status = "unavailable"
     actor_counts, malformed_actor_counts = _observed_actor_counts(rows)
-    malformed_reasons = []
+    trace_config = _mapping(trace.get("observation_perturbation_config"))
+    config_reason = _observation_config_mismatch(trace_config, expected_config)
+    expected_profile = _expected_noise_profile(expected_config)
+    profile_reason = (
+        f"trace noise profiles {sorted(profiles)!r} do not match the configured "
+        f"profile {expected_profile!r}"
+        if expected_profile is not None and profiles != {expected_profile}
+        else None
+    )
+    reasons = []
+    if mismatch_reason:
+        reasons.append(mismatch_reason)
     if malformed_rows:
-        malformed_reasons.append(
+        reasons.append(
             "each trace row must expose a typed observed observation evidence class and noise profile"
         )
     if malformed_actor_counts:
-        malformed_reasons.append(
-            "each trace row must expose a non-negative integer observed_actor_count"
-        )
+        reasons.append("each trace row must expose a non-negative integer observed_actor_count")
         status = "unavailable"
-    malformed_reason = "; ".join(malformed_reasons) or None
-    config = _mapping(trace.get("observation_perturbation_config"))
+    if config_reason:
+        reasons.append(config_reason)
+        status = "unavailable"
+    if profile_reason:
+        reasons.append(profile_reason)
+        status = "unavailable"
+    reason = "; ".join(reasons) or None
     return {
         "condition": condition,
         "expected_condition": expected_condition,
         "condition_binding": (
             "unavailable"
-            if mismatch_reason or malformed_reason
+            if reason
             else ("matched" if expected_condition is not None else "not_checked")
         ),
-        **(
-            {"reason": mismatch_reason or malformed_reason}
-            if mismatch_reason or malformed_reason
-            else {}
+        "config_binding": (
+            "unavailable"
+            if config_reason
+            else ("matched" if expected_config is not None else "not_checked")
         ),
+        **({"reason": reason} if reason else {}),
         "status": status,
         "evidence_classes": sorted(classes),
         "noise_profiles": sorted(profiles),
-        "config": dict(config),
+        "config": dict(trace_config),
         "observed_actor_count": {
             "min": min(actor_counts, default=None),
             "max": max(actor_counts, default=None),
@@ -466,12 +574,21 @@ def _condition_metrics(
     )
     collision_values: list[bool] = []
     malformed_collision = False
-    for key in ("is_pedestrian_collision", "is_obstacle_collision", "is_robot_collision"):
-        values, malformed = _boolean_values(rows, key)
-        collision_values.extend(values)
-        malformed_collision = malformed_collision or malformed
+    missing_collision = False
+    for row_data in rows:
+        for key in _COLLISION_FIELDS:
+            if key not in row_data:
+                missing_collision = True
+                continue
+            value = row_data[key]
+            if isinstance(value, bool):
+                collision_values.append(value)
+            else:
+                malformed_collision = True
     collision = (
-        None if malformed_collision or not collision_values else float(any(collision_values))
+        None
+        if malformed_collision or missing_collision or not collision_values
+        else float(any(collision_values))
     )
     horizon = _integer_value(trace.get("horizon"))
     horizon_reached = horizon is not None and horizon > 0 and len(rows) >= horizon
@@ -515,6 +632,13 @@ def _condition_metrics(
         else "ground-truth simulator distance is not present"
     )
     complete_distances = bool(distances) and not malformed_distances and not incomplete_distances
+    collision_reason = (
+        boolean_reason
+        if malformed_collision
+        else "each executed row must expose all collision flags"
+        if missing_collision
+        else boolean_reason
+    )
     action_reason = (
         "action fields must contain at least two finite numeric channels"
         if malformed_actions
@@ -533,7 +657,7 @@ def _condition_metrics(
             units="fraction",
             source="trace.collision_flags",
             mapping="exact_local",
-            reason=boolean_reason if collision is None else None,
+            reason=collision_reason if collision is None else None,
         ),
         "minimum_human_distance_m": row(
             value=min(distances) if complete_distances else None,
@@ -632,6 +756,7 @@ def _condition_report(
     trace: Mapping[str, Any],
     *,
     expected_condition: str,
+    expected_config: Mapping[str, Any] | None = None,
     personal_space_radius_m: float,
     dt_s: float,
 ) -> dict[str, Any]:
@@ -640,12 +765,24 @@ def _condition_report(
     Returns:
         A schema-shaped condition report.
     """
-    observation = _observation_contract(trace, expected_condition=expected_condition)
+    observation = _observation_contract(
+        trace,
+        expected_condition=expected_condition,
+        expected_config=expected_config,
+    )
     execution = _execution_block(trace)
+    metrics = _condition_metrics(
+        trace,
+        personal_space_radius_m=personal_space_radius_m,
+        dt_s=dt_s,
+    )
+    required_outcome_metrics = ("success_rate", "collision_rate", "timeout_rate")
     return {
         "status": (
             "available"
-            if observation["status"] == "available" and execution["status"] == "available"
+            if observation["status"] == "available"
+            and execution["status"] == "available"
+            and all(metrics[name]["status"] == "available" for name in required_outcome_metrics)
             else "blocked"
         ),
         "scenario_id": trace.get("scenario_id"),
@@ -654,11 +791,7 @@ def _condition_report(
         "algo": trace.get("algo"),
         "observation_contract": observation,
         "execution": execution,
-        "metrics": _condition_metrics(
-            trace,
-            personal_space_radius_m=personal_space_radius_m,
-            dt_s=dt_s,
-        ),
+        "metrics": metrics,
     }
 
 
@@ -706,16 +839,27 @@ def build_calf_legnav_comparator_report(
     if dt_s is None or dt_s <= 0.0:
         raise ValueError("dt_s must be a positive finite number")
 
+    configured_conditions = _mapping(config.get("conditions"))
     conditions = {
         CONDITION_IDEAL: _condition_report(
             perfect_trace,
             expected_condition=CONDITION_IDEAL,
+            expected_config=(
+                _mapping(configured_conditions[CONDITION_IDEAL])
+                if CONDITION_IDEAL in configured_conditions
+                else None
+            ),
             personal_space_radius_m=personal_space_radius_m,
             dt_s=dt_s,
         ),
         CONDITION_SENSOR: _condition_report(
             sensor_trace,
             expected_condition=CONDITION_SENSOR,
+            expected_config=(
+                _mapping(configured_conditions[CONDITION_SENSOR])
+                if CONDITION_SENSOR in configured_conditions
+                else None
+            ),
             personal_space_radius_m=personal_space_radius_m,
             dt_s=dt_s,
         ),

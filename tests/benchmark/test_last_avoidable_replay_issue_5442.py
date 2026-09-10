@@ -169,6 +169,31 @@ def test_initial_contact_abstains_before_branching() -> None:
     assert report.t_uca is None
 
 
+def test_branch_over_window_rejects_post_contact_snapshot() -> None:
+    """A post-contact snapshot is a coverage gap, not a branchable decision point."""
+    scenario = fx.KinematicScenario(
+        robot_x0=0.0,
+        robot_speed0=1.0,
+        ped_pos0=(0.0, 0.0),
+        ped_vel0=(0.0, 0.0),
+    )
+    model = fx.KinematicCollisionModel(scenario)
+    post_contact_snapshot = model.snapshot()
+    config = ReplayConfig(t_danger=0, t_contact=1, horizon=1)
+
+    branches, interventions = _branch_over_window(
+        model,
+        {0: post_contact_snapshot},
+        [0.0],
+        config,
+    )
+
+    assert len(branches) == 1
+    assert branches[0].feasible_count == 0
+    assert branches[0].any_prevented is False
+    assert interventions == []
+
+
 @pytest.mark.parametrize(
     ("substitution_mode", "extra_actions"),
     ((SUBSTITUTION_HOLD, 0), (SUBSTITUTION_SINGLE_STEP, 5 - 1)),

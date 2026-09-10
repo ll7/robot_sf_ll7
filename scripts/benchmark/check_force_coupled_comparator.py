@@ -60,9 +60,9 @@ def _simulator_error_row_labels(receipt: dict[str, Any]) -> list[str]:
     """Return labels for rows that carry an actual simulator-error signal.
 
     Generated receipts identify the taxonomy class explicitly. Legacy receipts may omit that
-    additive field, so canonical simulator reason prefixes are also recognized. Planner-owned
-    ``plan_exception:`` and ``planner_diagnostic:`` reasons retain taxonomy precedence and are
-    not treated as simulator errors merely because their text mentions a simulator.
+    additive field, so simulator reason text is also recognized. An explicit non-simulator class or
+    a planner-owned ``plan_exception:``/``planner_diagnostic:`` prefix cannot mask an independent
+    simulator signal; this mirrors the simulator-first taxonomy precedence.
     """
     results = receipt.get("results")
     if not isinstance(results, list):
@@ -73,23 +73,16 @@ def _simulator_error_row_labels(receipt: dict[str, Any]) -> list[str]:
         if not isinstance(row, dict):
             continue
         failure_class = row.get("failure_class")
-        if failure_class is not None:
-            if failure_class == FAILURE_CLASS_SIMULATOR:
-                labels.append(
-                    f"{row.get('planner_id', '<unknown>')}/{row.get('scenario_id', index)}"
-                )
-            continue
-
         reasons = row.get("degradation_reasons")
-        if not isinstance(reasons, list) or any(not isinstance(reason, str) for reason in reasons):
-            continue
-        normalized_reasons = [reason.strip().lower() for reason in reasons]
-        if any(
-            reason.startswith(("plan_exception:", "planner_diagnostic:"))
-            for reason in normalized_reasons
-        ):
-            continue
-        if any("simulator" in reason or "sim_error" in reason for reason in normalized_reasons):
+        has_simulator_reason = (
+            isinstance(reasons, list)
+            and all(isinstance(reason, str) for reason in reasons)
+            and any(
+                "simulator" in reason.strip().lower() or "sim_error" in reason.strip().lower()
+                for reason in reasons
+            )
+        )
+        if failure_class == FAILURE_CLASS_SIMULATOR or has_simulator_reason:
             labels.append(f"{row.get('planner_id', '<unknown>')}/{row.get('scenario_id', index)}")
     return labels
 

@@ -18,9 +18,12 @@ without a more specific cause.
 `execute_rollout` sets the simulator-error flag only when an exception occurs in analytic simulator
 state preparation, clearance checks, or kinematic state integration. The resulting row is
 structured as `status="error"`, `degraded=true`, with a `simulator_<phase>_failure` reason and
-`failure_class="simulator"`. Planner reset, `planner.plan()`, diagnostics, and invalid command or
-diagnostic output are recorded through the existing `plan_exception` reason mechanism; any
-combined collision or simulator signals still follow the base taxonomy precedence below.
+`failure_class="simulator"`. Exceptions from planner reset, `planner.plan()`, or
+`planner.diagnostics()`, as well as invalid command or diagnostic payloads, use the existing
+`plan_exception:` reason mechanism. A valid diagnostic response with `status="degraded"`,
+`degraded=true`, or `fallback=true` is not an exception: it remains a degraded row and records its
+reason with the `planner_diagnostic:` prefix. Combined collision or simulator signals from either
+kind of planner-owned diagnostic still follow the base taxonomy precedence below.
 
 The base taxonomy precedence is preserved for combined signals. An explicit simulator flag or
 simulator reason text is checked first, followed by social compliance, tracking, and path

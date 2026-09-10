@@ -291,6 +291,24 @@ def test_registry_planner_id_survives_simulator_failure_before_diagnostics(
     assert {row["failure_class"] for row in receipt["results"]} == {FAILURE_CLASS_SIMULATOR}
 
 
+def test_canonical_planner_id_survives_untrusted_diagnostic_on_integration_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An untrusted diagnostic ID cannot replace a canonical ID on simulator failure."""
+    scenario = replace(get_canonical_comparison_scenarios()[0], max_steps=1)
+    monkeypatch.setattr(comparator, "wrap_angle_pi", lambda _angle: float("nan"))
+
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner("normal"),
+        scenario,
+        planner_id="canonical_fixture",
+    )
+
+    assert result.planner_id == "canonical_fixture"
+    assert result.failure_class == FAILURE_CLASS_SIMULATOR
+    assert result.degradation_reasons[0].startswith("simulator_integration_failure")
+
+
 def test_execute_rollout_captures_simulator_clearance_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -496,6 +514,50 @@ def test_cli_smoke_rejects_simulator_error_rows(
             }
         ],
     }
+    monkeypatch.setattr(checker, "run_force_coupled_comparator", lambda **_: receipt)
+
+    assert checker.main(["--smoke"]) == 1
+    captured = capsys.readouterr()
+    assert "simulator-error rows" in captured.err
+    assert "PASS" not in captured.out
+
+
+@pytest.mark.parametrize(
+    ("failure_class", "degradation_reasons"),
+    [
+        (
+            FAILURE_CLASS_PATH_GENERATION,
+            ["simulator_integration_failure: fixture integration failure"],
+        ),
+        (
+            None,
+            [
+                "planner_diagnostic: legacy degraded status",
+                "simulator_integration_failure: fixture integration failure",
+            ],
+        ),
+    ],
+)
+def test_cli_smoke_is_simulator_first_for_conflicting_legacy_rows(
+    failure_class: str | None,
+    degradation_reasons: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Smoke rejects schema-compatible simulator signals despite conflicting legacy metadata."""
+    receipt = run_force_coupled_comparator()
+    row = receipt["results"][0]
+    row.update(
+        {
+            "status": "degraded",
+            "degraded": True,
+            "degradation_reasons": degradation_reasons,
+        }
+    )
+    if failure_class is None:
+        row.pop("failure_class", None)
+    else:
+        row["failure_class"] = failure_class
     monkeypatch.setattr(checker, "run_force_coupled_comparator", lambda **_: receipt)
 
     assert checker.main(["--smoke"]) == 1

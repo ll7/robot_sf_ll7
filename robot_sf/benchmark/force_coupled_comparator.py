@@ -568,7 +568,8 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             diag_status = diag.get("status")
             if diag_status not in (None, "ok", "degraded"):
                 raise ValueError(f"unsupported planner diagnostic status: {diag_status!r}")
-            rollout_planner_id = str(diag.get("planner_type", rollout_planner_id))
+            if planner_id is None:
+                rollout_planner_id = str(diag.get("planner_type", rollout_planner_id))
             if diag_status == "degraded" or diag.get("degraded") is True:
                 degraded = True
                 diagnostic_reasons = diag.get("degradation_reasons", [])

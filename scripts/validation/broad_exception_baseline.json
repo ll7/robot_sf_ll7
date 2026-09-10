@@ -171,7 +171,7 @@
       "context": "execute_rollout",
       "fingerprint": "5f7446a8127dffa9",
       "handler": "Exception",
-      "lineno": 494,
+      "lineno": 491,
       "path": "robot_sf/benchmark/force_coupled_comparator.py",
       "source": "except Exception as exc:  # noqa: BLE001 - planner lifecycle failures are path-generation results"
     },
@@ -180,7 +180,7 @@
       "context": "execute_rollout",
       "fingerprint": "feead7c81a4257a4",
       "handler": "Exception",
-      "lineno": 508,
+      "lineno": 505,
       "path": "robot_sf/benchmark/force_coupled_comparator.py",
       "source": "except Exception as exc:  # noqa: BLE001 - analytic simulator state failures are structured"
     },
@@ -189,7 +189,7 @@
       "context": "execute_rollout",
       "fingerprint": "0fce21e7f5fcd536",
       "handler": "Exception",
-      "lineno": 540,
+      "lineno": 537,
       "path": "robot_sf/benchmark/force_coupled_comparator.py",
       "source": "except Exception as exc:  # noqa: BLE001 - analytic clearance failures are structured"
     },
@@ -198,25 +198,25 @@
       "context": "execute_rollout",
       "fingerprint": "65473528714d33b2",
       "handler": "Exception",
-      "lineno": 555,
+      "lineno": 552,
       "path": "robot_sf/benchmark/force_coupled_comparator.py",
       "source": "except Exception as exc:  # noqa: BLE001 - analytic simulator-state failures are structured"
     },
     {
       "col_offset": 8,
       "context": "execute_rollout",
-      "fingerprint": "1cfb34369beceb95",
+      "fingerprint": "2f7d5941627f4b0a",
       "handler": "Exception",
-      "lineno": 564,
+      "lineno": 561,
       "path": "robot_sf/benchmark/force_coupled_comparator.py",
-      "source": "except Exception as exc:  # noqa: BLE001 - all planner failures stay path-generation failures"
+      "source": "except Exception as exc:  # noqa: BLE001 - planner failures become structured diagnostics"
     },
     {
       "col_offset": 8,
       "context": "execute_rollout",
       "fingerprint": "f84506689cdcd3dc",
       "handler": "Exception",
-      "lineno": 595,
+      "lineno": 596,
       "path": "robot_sf/benchmark/force_coupled_comparator.py",
       "source": "except Exception as exc:  # noqa: BLE001 - planner output-boundary failures are path-generation results"
     },
@@ -225,7 +225,7 @@
       "context": "execute_rollout",
       "fingerprint": "096d584c7efe6758",
       "handler": "Exception",
-      "lineno": 616,
+      "lineno": 617,
       "path": "robot_sf/benchmark/force_coupled_comparator.py",
       "source": "except Exception as exc:  # noqa: BLE001 - analytic kinematic integration failures are structured"
     },
@@ -747,7 +747,7 @@
       "context": "main",
       "fingerprint": "49eef50940c10a67",
       "handler": "Exception",
-      "lineno": 1776,
+      "lineno": 2016,
       "path": "scripts/dev/stale_worktree_reaper.py",
       "source": "except Exception as exc:"
     },

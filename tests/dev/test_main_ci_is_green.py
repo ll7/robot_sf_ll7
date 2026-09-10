@@ -8,15 +8,19 @@ so it gets an explicit test.
 
 from __future__ import annotations
 
+import json
 import subprocess
 
 import pytest
 
 from scripts.dev import main_ci_is_green
 from scripts.dev.main_ci_is_green import (
+    MainCiRunFetchError,
+    MainCiRunWindow,
     build_signal,
     classify,
     decide,
+    fetch_run_window,
     fetch_runs,
     latest_completed_run,
 )
@@ -267,3 +271,133 @@ def test_json_fetch_failure_is_machine_readable_stale(
     assert payload["is_green"] is False
     assert payload["deciding_run"] is None
     assert "error" in payload
+
+
+class _FakeRunREST:
+    """REST fake for workflow resolution and paginated Actions run pages."""
+
+    def __init__(self, pages: list[list[dict]]) -> None:
+        self.pages = pages
+        self.calls: list[str] = []
+
+    def __call__(
+        self,
+        path: str,
+        payload: object | None = None,
+        *,
+        method: str | None = None,
+        extra_args: list[str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        assert payload is None
+        assert method is None
+        assert extra_args is None
+        self.calls.append(path)
+        if path.endswith("actions/workflows?per_page=100&page=1"):
+            inventory = {
+                "workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]
+            }
+            return subprocess.CompletedProcess(["gh"], 0, json.dumps(inventory), "")
+        prefix = (
+            f"repos/{main_ci_is_green.DEFAULT_REPO}"
+            "/actions/workflows/77/runs?branch=main&per_page=100&page="
+        )
+        if path.startswith(prefix):
+            page = int(path.removeprefix(prefix))
+            return subprocess.CompletedProcess(
+                ["gh"], 0, json.dumps({"workflow_runs": self.pages[page - 1]}), ""
+            )
+        raise AssertionError(f"unexpected REST path: {path}")
+
+
+def _actions_run(run: dict) -> dict:
+    """Convert a classifier-shaped run into an Actions REST row."""
+    return {
+        "id": run["databaseId"],
+        "status": run["status"],
+        "conclusion": run["conclusion"],
+        "head_sha": run["headSha"],
+        "created_at": run["createdAt"],
+    }
+
+
+def test_fetch_run_window_skips_cancelled_flood_and_stops_at_decisive() -> None:
+    """The paginated reader reaches the decisive verdict behind a cancelled page."""
+    cancelled_page = [
+        _actions_run(_run(1000 + index, "completed", "cancelled", f"2026-09-04T00:{index:02d}:00Z"))
+        for index in range(100)
+    ]
+    decisive_page = [
+        _actions_run(_run(300, "completed", "success", "2026-09-03T23:00:00Z")),
+        _actions_run(_run(200, "completed", "failure", "2026-09-03T22:00:00Z")),
+    ]
+    fake = _FakeRunREST([cancelled_page, decisive_page])
+
+    window = fetch_run_window(max_pages=3, stop_after_decisive=1, runner=fake)
+
+    assert isinstance(window, MainCiRunWindow)
+    assert window.window_exhausted is False
+    assert [run["databaseId"] for run in window.runs[-2:]] == [300, 200]
+    assert any(call.endswith("page=2") for call in fake.calls)
+
+
+def test_fetch_run_window_reports_budget_exhaustion_without_a_verdict() -> None:
+    """A cancelled-only window exhausting its budget is explicit, never red."""
+    cancelled_pages = [
+        [
+            _actions_run(
+                _run(
+                    2000 + page * 100 + index,
+                    "completed",
+                    "cancelled",
+                    f"2026-09-0{page}T00:{index:02d}:00Z",
+                )
+            )
+            for index in range(100)
+        ]
+        for page in range(1, 3)
+    ]
+    fake = _FakeRunREST(cancelled_pages)
+
+    window = fetch_run_window(max_pages=2, stop_after_decisive=1, runner=fake)
+
+    assert window.window_exhausted is True
+    assert len(window.runs) == 200
+    assert all(run["conclusion"] == "cancelled" for run in window.runs)
+    assert latest_completed_run(window.runs) is None
+
+
+def test_fetch_run_window_malformed_page_fails_closed() -> None:
+    """A non-object page payload raises instead of being guessed at."""
+
+    def malformed_runner(path: str, payload: object = None, **kwargs: object):
+        if path.endswith("actions/workflows?per_page=100&page=1"):
+            inventory = {
+                "workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]
+            }
+            return subprocess.CompletedProcess(["gh"], 0, json.dumps(inventory), "")
+        return subprocess.CompletedProcess(["gh"], 0, json.dumps([]), "")
+
+    with pytest.raises(MainCiRunFetchError, match="non-object payload"):
+        fetch_run_window(max_pages=1, runner=malformed_runner)
+
+
+def test_raw_fetch_runs_keeps_single_bounded_limit_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The legacy raw window still issues exactly one bounded gh run list call."""
+    captured: dict = {}
+
+    def fake_gh(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["args"] = args
+        payload = [_run(1, "completed", "success", "2026-09-01T00:00:00Z")]
+        return subprocess.CompletedProcess(["gh", *args], 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(main_ci_is_green, "_gh", fake_gh)
+
+    runs = fetch_runs("owner/repo", "CI", 7)
+
+    assert [run["databaseId"] for run in runs] == [1]
+    assert "--limit" in captured["args"]
+    assert captured["args"][captured["args"].index("--limit") + 1] == "7"
+    assert "--status" in captured["args"]
+    assert captured["args"][captured["args"].index("--status") + 1] == "completed"

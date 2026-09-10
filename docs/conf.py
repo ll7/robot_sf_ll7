@@ -31,17 +31,11 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
 ]
-suppress_warnings = [
-    # The first site pass intentionally exposes a curated nav over a much larger Markdown corpus.
-    "toc.not_included",
-    # Existing repo-relative links often point outside docs/ or to GitHub-flavored anchors.
-    "myst.xref_missing",
-    # Some historical notes start below H1 or end on Markdown transitions.
-    "myst.header",
-    "docutils",
-    # Historical docs include mermaid/jsonc fences and illustrative JSON with ellipses.
-    "misc.highlighting_failure",
-]
+# Warning-class suppressions are intentionally absent. The canonical documentation
+# build is the curated strict build (scripts/dev/sphinx_strict_build.sh): it builds
+# only the docs/index.rst toctree closure, promotes warnings to errors, and allows
+# only cross-references to existing repository documents that the curated site does
+# not build. A full-tree build is unsupported and noisy by design.
 
 html_theme = "sphinx_rtd_theme"
 html_title = "Robot SF Documentation"

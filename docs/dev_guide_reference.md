@@ -2658,6 +2658,12 @@ distinctly so the gate can hold for a *fresh run* rather than treat it as a main
 regression. The `--quiet` flag suppresses the human line; the existing
 exit-code contract is unchanged.
 
+The gate's default fetch is deliberately one bounded `gh run list --limit`
+window (default 5 runs, 30s timeout) so merge-hold evaluation stays fast; when
+cancellation churn fills that window it fails closed to `stale` instead of
+reading further back. Callers that need the decisive verdict behind a
+cancelled-run flood use the paginated reader below.
+
 ### Scheduled main-CI incident reconciliation
 
 Open issues carrying the canonical `ll7-main-red-incident:v1` body marker (or
@@ -2677,13 +2683,23 @@ incidents instead of GitHub's semantic closing keywords (`Closes`, `Fixes`, or
 the canonical body marker or its compatibility label, leaving the scheduled
 reconciler as the sole closer after the two-green criterion is met.
 
-The Actions run evidence window is paginated. The reconciler reads full
-workflow-run pages and stops only after two decisive completed green/red runs
-are visible, so a cancellation-saturated newest page cannot hide the decisive
-history. The default page budget is ten; `--max-run-pages N` changes it, and
-the legacy `--run-limit N` option is retained as an alias for that page budget.
-If the budget is exhausted before two decisive runs are found, the helper
-fails closed instead of classifying an incomplete window.
+The Actions run evidence window is paginated in both consumers through the
+shared reader `main_ci_is_green.fetch_run_window`, so a cancellation-saturated
+newest page cannot hide the decisive history. The classifier behind
+`main_ci_incident_reconcile.py` stops after one decisive completed green/red
+run and defaults to a ten-page budget (`--max-pages N` changes it); passing a
+raw `--limit N` keeps the legacy single `gh run list` window instead. When the
+page budget is exhausted without a decisive run, the classifier stays
+fail-closed `pending` and reports `window_exhausted: true` with
+`decisive_run_found: false`, which cannot be confused with a genuine red
+(`active`).
+
+The scheduled reconciler requires two decisive runs and stops only after two
+completed green/red runs are visible. Its default page budget is ten;
+`--max-run-pages N` changes it, and the legacy `--run-limit N` option is
+retained as an alias for that page budget. If the budget is exhausted before
+two decisive runs are found, the helper fails closed instead of classifying an
+incomplete window.
 
 The helper is report-only unless `--apply` is supplied, so an offline or local
 inspection can use:

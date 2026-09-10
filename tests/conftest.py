@@ -434,6 +434,9 @@ _FAST_FILES = {
     # Distribution plotting tests use Agg and deterministic fixtures; keep their
     # changed-line coverage in the exact-head fast lane.
     "test_distributions.py",
+    # Pareto plotting tests use Agg and deterministic fixtures; keep the
+    # save_pareto_png SVG output branch in the exact-head fast lane.
+    "test_plots_pareto.py",
     # CLI distribution-control regressions are deterministic input-boundary
     # contracts and exercise the benchmark error path in PR fast shards.
     "test_cli_plot_distributions_ci.py",
@@ -733,6 +736,9 @@ _FAST_FILES = {
     # shells, no environments) for the changed recording-save path; keep them in
     # PR fast shards for the exact-head changed-coverage gate (issue #8422).
     "test_recording_save_policy.py",
+    # Typed simulator snapshots are deterministic serialization and compatibility
+    # contracts for the preparation-only continuation prototype (issue #8620).
+    "test_typed_snapshot.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

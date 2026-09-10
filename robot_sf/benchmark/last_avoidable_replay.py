@@ -1,8 +1,8 @@
 """Frozen-state counterfactual replay: locate the last avoidable control action.
 
 This module implements the offline analysis contract of issue #5442 (child of
-#5440, depends on the report contract of #5441): given a controlled fixture that
-can *deterministically* snapshot and restore its full state (including any random
+#5440, depends on the report contract of #5441): given a replay model that can
+*deterministically* snapshot and restore its full state (including any random
 number generator), branch over admissible robot actions at each decision point in
 the danger window and decide whether — and how early — the collision was avoidable.
 
@@ -28,9 +28,10 @@ Determinations (fail-closed):
   coverage over the window is incomplete, so avoidability cannot be tested. Per
   the issue contract this **never** collapses to ``unavoidable``.
 
-The result is controlled-fixture diagnostic evidence only. It assigns no legal or
-moral fault (``normative_fault`` is always ``not_assessed``) and is not a real-
-episode root-cause claim.
+The result is source-tagged diagnostic replay evidence only. The source kind
+identifies whether it came from a controlled fixture or a native simulator
+adapter; it assigns no legal or moral fault (``normative_fault`` is always
+``not_assessed``) and is not a real-episode root-cause claim.
 """
 
 from __future__ import annotations
@@ -56,6 +57,13 @@ VERDICT_UNKNOWN = "unknown"
 SUBSTITUTION_SINGLE_STEP = "single_step"  # substitute at t, then resume baseline commands
 SUBSTITUTION_HOLD = "hold"  # apply the substituted action for the whole frozen horizon
 _SUBSTITUTION_MODES = (SUBSTITUTION_SINGLE_STEP, SUBSTITUTION_HOLD)
+
+
+class _DefaultPedestrianResponse(str):
+    """String-compatible marker for an omitted, model-bindable response mode."""
+
+
+_DEFAULT_PEDESTRIAN_RESPONSE = _DefaultPedestrianResponse("unknown")
 
 
 @runtime_checkable
@@ -126,8 +134,11 @@ class ReplayConfig:
         collision_predicate: Provenance label for the collision predicate.
         pedestrian_response: Pedestrian response assumption for this run, e.g.
             ``replayed`` (pedestrian follows its recorded path) or ``closed_loop``
-            (pedestrian reacts to the robot). The default ``unknown`` is schema-safe
-            and must not be interpreted as either response mode.
+            (pedestrian reacts to the robot). An omitted value is serialized as the
+            schema-safe ``unknown`` value when no model declaration is available,
+            but binds to a model-declared response mode when one is available.
+            Explicit ``unknown`` remains an intentional unknown declaration and is
+            not silently rebound to a model mode.
         source_kind: Provenance classification for the replay source. Native live
             simulator adapters bind this to ``live_episode``; controlled fixtures
             must use ``synthetic_fixture`` before a causal join. The default
@@ -144,7 +155,7 @@ class ReplayConfig:
     action_set_id: str = "unspecified"
     feasibility_filter: str = "unspecified"
     collision_predicate: str = "unspecified"
-    pedestrian_response: str = "unknown"
+    pedestrian_response: str = _DEFAULT_PEDESTRIAN_RESPONSE
     source_kind: str = "unspecified"
 
     def __post_init__(self) -> None:
@@ -244,12 +255,15 @@ class TimeBranchResult:
 class LastAvoidableReport:
     """Self-contained ``last_avoidable_replay.v1`` result.
 
-    The field set is deliberately forward-compatible with the
-    ``collision_causal_report.v1`` contract proposed in issue #5441: it exposes
-    ``t_danger``/``t_uca``/``t_inevitable``/``t_contact`` as available/unavailable
-    (``None``) fields, records competing-explanation-relevant provenance, and
-    holds ``normative_fault`` at ``not_assessed``. When #5441 lands this report can
-    be embedded as the counterfactual branch of that contract without re-running.
+    The report is source-tagged diagnostic evidence: controlled fixtures and
+    native simulator adapters can use the same replay contract, but their source
+    and claim boundaries remain distinct. ``config.t_contact`` is the declared
+    contact state tick; ``determinism.observed_contact_steps`` records the replay
+    observations, and a downstream causal join may expose ``t_contact`` as an
+    observed timestamp only when every observation agrees with that declaration.
+    The report records competing-explanation-relevant provenance, holds
+    ``normative_fault`` at ``not_assessed``, and is not a real-episode root-cause,
+    benchmark, or paper-grade claim.
     """
 
     verdict: str
@@ -265,8 +279,9 @@ class LastAvoidableReport:
     abstain_reason: str | None = None
     normative_fault: str = "not_assessed"
     claim_boundary: str = (
-        "controlled-fixture diagnostic evidence; not a real-episode root-cause "
-        "claim; assigns no legal or moral fault"
+        "source-tagged diagnostic replay evidence; interpret using source_kind; "
+        "not a real-episode root-cause, benchmark, or paper-grade claim; assigns "
+        "no legal or moral fault"
     )
     notes: tuple[str, ...] = field(default_factory=tuple)
 
@@ -631,7 +646,13 @@ def _bind_model_metadata(
         actual = _model_metadata(model, model_field)
         if actual is None:
             continue
-        if declared == "unspecified":
+        # The omitted pedestrian-response default is a string-compatible marker,
+        # so existing callers still observe/serialize ``unknown`` while native
+        # adapters can bind it to their actual response mode. A caller that
+        # explicitly supplies ``unknown`` remains distinct and fails closed
+        # against a declared native mode. ``unspecified`` retains its legacy
+        # model-binding semantics for all provenance fields.
+        if declared is _DEFAULT_PEDESTRIAN_RESPONSE or declared == "unspecified":
             bound_config = replace(bound_config, **{field_name: actual})
         elif declared != actual:
             mismatches.append(f"{field_name}: declared={declared!r}, actual={actual!r}")

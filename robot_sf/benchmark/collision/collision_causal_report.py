@@ -362,6 +362,7 @@ def collide_causal_report_from_last_avoidable(
     ped_response = config.pedestrian_response
     replay_determinism = "deterministic" if replay.determinism.deterministic else "nondeterministic"
     rationale = _join_rationale(replay, abstained)
+    verified_contact = _verified_contact_tick(replay)
     missing_fields = _join_missing_fields(replay)
     interventions = _join_interventions(replay, ped_response, supported_actual_cause)
 
@@ -413,7 +414,7 @@ def collide_causal_report_from_last_avoidable(
                 "t_danger": _ts(True, config.t_danger),
                 "t_uca": _ts(replay.t_uca is not None, replay.t_uca),
                 "t_inevitable": _ts(replay.t_inevitable is not None, replay.t_inevitable),
-                "t_contact": _ts(True, config.t_contact),
+                "t_contact": _ts(verified_contact is not None, verified_contact),
             },
             "elements": {
                 key: {
@@ -498,18 +499,40 @@ def _join_missing_fields(replay: LastAvoidableReport) -> list[str]:
     The replay summary has no per-element canonical trace, so every
     planner-internal reconstruction element is unavailable for every verdict.
     Unsupported evidence is explicit, never inferred from report-wide coverage.
+    The contact timestamp is listed only when the replay observations verify
+    the declared contact tick.
     """
     missing: list[str] = []
     missing.extend(RECONSTRUCTION_ELEMENT_KEYS)
+    verified_contact = _verified_contact_tick(replay)
     for key in CRITICAL_TIMESTAMP_KEYS:
         is_available = (
-            key in ("t_danger", "t_contact")
+            key == "t_danger"
+            or (key == "t_contact" and verified_contact is not None)
             or (key == "t_uca" and replay.t_uca is not None)
             or (key == "t_inevitable" and replay.t_inevitable is not None)
         )
         if not is_available and key not in missing:
             missing.append(key)
     return missing
+
+
+def _verified_contact_tick(replay: LastAvoidableReport) -> int | None:
+    """Return the declared contact tick only when every replay agrees with it.
+
+    ``ReplayConfig.t_contact`` is a declaration used to bound replay. The
+    determinism observations are the evidence that can promote that
+    declaration to an observed contact timestamp in the causal-report join.
+    """
+    observations = replay.determinism.observed_contact_steps
+    if (
+        not replay.determinism.deterministic
+        or not observations
+        or len(observations) != replay.determinism.replays
+        or any(step != replay.config.t_contact for step in observations)
+    ):
+        return None
+    return replay.config.t_contact
 
 
 def _join_interventions(

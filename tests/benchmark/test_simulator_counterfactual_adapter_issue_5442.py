@@ -458,7 +458,7 @@ def test_native_replay_metadata_binds_action_contract_and_source() -> None:
     sim = SimpleNamespace(
         robots=[robot],
         config=SimpleNamespace(
-            prf_config=SimpleNamespace(is_active=False),
+            prf_config=SimpleNamespace(is_active=True),
             apf_config=SimpleNamespace(is_active=False),
             residual_adversary=SimpleNamespace(is_active=False),
         ),
@@ -489,9 +489,31 @@ def test_native_replay_metadata_binds_action_contract_and_source() -> None:
         [],
         ReplayConfig(t_danger=0, t_contact=1, horizon=1),
     )
+    assert native.verdict == VERDICT_UNKNOWN
+    assert native.abstain_reason == "incomplete_snapshot_state"
     assert native.config.source_kind == "live_episode"
     assert native.config.action_set_id.startswith("simulator_native_action_lattice_v1:")
     assert native.config.feasibility_filter == "native_declared_action_lattice_v1:n=5"
+    assert native.config.pedestrian_response == "closed_loop"
+
+    explicitly_unknown = locate_last_avoidable(
+        model,
+        [],
+        ReplayConfig(t_danger=0, t_contact=1, horizon=1, pedestrian_response="unknown"),
+    )
+    assert explicitly_unknown.verdict == VERDICT_UNKNOWN
+    assert explicitly_unknown.abstain_reason == "metadata_mismatch"
+    assert explicitly_unknown.config.pedestrian_response == "unknown"
+    assert "pedestrian_response" in explicitly_unknown.notes[0]
+
+    explicitly_unspecified = locate_last_avoidable(
+        model,
+        [],
+        ReplayConfig(t_danger=0, t_contact=1, horizon=1, pedestrian_response="unspecified"),
+    )
+    assert explicitly_unspecified.verdict == VERDICT_UNKNOWN
+    assert explicitly_unspecified.abstain_reason == "incomplete_snapshot_state"
+    assert explicitly_unspecified.config.pedestrian_response == "closed_loop"
 
 
 def test_unknown_action_contract_fails_closed_and_uses_generic_label() -> None:

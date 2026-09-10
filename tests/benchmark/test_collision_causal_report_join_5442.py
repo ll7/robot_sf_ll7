@@ -82,6 +82,9 @@ def test_avoidable_replay_joins_to_supporting_causal_report() -> None:
     ts = report["observed_reconstruction"]["critical_timestamps"]
     assert ts["t_uca"]["available"] is True and ts["t_uca"]["step"] is not None
     assert ts["t_inevitable"]["available"] is True and ts["t_inevitable"]["step"] is not None
+    assert ts["t_contact"]["available"] is True
+    assert ts["t_contact"]["step"] == 10
+    assert "t_contact" not in report["missing_fields"]
     # The summary has no per-element canonical trace, so coverage cannot make
     # planner-internal reconstruction fields appear available.
     elements = report["observed_reconstruction"]["elements"]
@@ -120,6 +123,11 @@ def test_nondeterministic_baseline_joins_to_abstaining_unknown() -> None:
     assert report["causal_contribution"]["verdict"] == "unknown"
     assert report["causal_contribution"]["supported_actual_cause"] is False
     assert report["data_source"]["replay_determinism"] == "nondeterministic"
+    ts = report["observed_reconstruction"]["critical_timestamps"]
+    assert ts["t_contact"]["available"] is False
+    assert ts["t_contact"]["step"] is None
+    assert ts["t_contact"]["source"] is None
+    assert "t_contact" in report["missing_fields"]
     # The abstention must flag every planner-internal element and unavailable timestamp missing.
     assert "t_uca" in report["missing_fields"]
     for key in (
@@ -142,6 +150,41 @@ def test_missing_feasible_action_joins_to_abstaining_unknown() -> None:
     assert report["abstained"] is True
     assert report["causal_contribution"]["verdict"] == "unknown"
     assert report["causal_contribution"]["verdict"] != "unavoidable"
+
+
+def test_mismatched_contact_observation_is_unavailable_in_join() -> None:
+    """A replay with one stable but incorrectly declared contact tick stays fail closed."""
+    scenario = fx.preventable_late_braking_scenario()
+    actual_contact_tick = fx.find_contact_step(scenario)
+    assert actual_contact_tick == 10
+    config = ReplayConfig(
+        t_danger=0,
+        t_contact=12,
+        horizon=18,
+        substitution_mode=SUBSTITUTION_HOLD,
+        determinism_replays=5,
+    )
+    replay = locate_last_avoidable(
+        fx.KinematicCollisionModel(scenario),
+        fx.maintain_baseline_actions(config.t_contact + config.horizon + 2),
+        config,
+    )
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id="mismatched-contact",
+        case_id="fixture",
+        replay=replay,
+        metadata=_METADATA,
+    )
+
+    assert report["abstained"] is True
+    assert report["causal_contribution"]["verdict"] == "unknown"
+    ts = report["observed_reconstruction"]["critical_timestamps"]
+    assert ts["t_contact"]["available"] is False
+    assert ts["t_contact"]["step"] is None
+    assert ts["t_contact"]["source"] is None
+    assert "t_contact" in report["missing_fields"]
+    validate_collision_causal_report(report)
 
 
 def test_unsupported_replay_verdict_abstains_and_fails_closed() -> None:

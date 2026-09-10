@@ -395,6 +395,13 @@ rewritten:
 Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
 [issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).
 
+Typed simulator snapshot continuation contract and machine-readable state inventory:
+pre-step boundary, strict destination restoration, explicit RNG requirements, typed no-op
+determinism comparison, and unsupported controller/history state. This remains preparation-only
+diagnostic context, not benchmark or paper-facing evidence:
+[simulator_typed_snapshot_contract.md](simulator_typed_snapshot_contract.md),
+[simulator_state_inventory.v1.json](simulator_state_inventory.v1.json).
+
 Issue #5441 `collision_causal_report.v1` field-producer map, temporal causal-graph nodes, and
 fail-closed contract decision record (model-scoped, `normative_fault: not_assessed`):
 [collision_causal_report_field_map_2026-07-13.md](collision_causal_report_field_map_2026-07-13.md).

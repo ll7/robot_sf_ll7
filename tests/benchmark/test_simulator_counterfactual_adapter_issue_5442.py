@@ -16,6 +16,10 @@ replay diverge, exercising the same guard on production state.
 
 from __future__ import annotations
 
+import pickle
+import random
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -309,6 +313,7 @@ def test_production_fixture_is_avoidable() -> None:
     report = _run_engine(model)
     assert report.verdict == VERDICT_AVOIDABLE
     assert report.determinism.deterministic is True
+    assert report.determinism.trace_stable is True
     assert report.determinism.observed_contact_steps == (_FIXTURE_CONTACT_STEP,) * 5
     assert report.t_uca is not None and report.t_inevitable is not None
     assert report.t_uca <= report.t_inevitable <= report.config.t_contact
@@ -456,7 +461,7 @@ def test_native_replay_metadata_binds_action_contract_and_source() -> None:
     sim = SimpleNamespace(
         robots=[robot],
         config=SimpleNamespace(
-            prf_config=SimpleNamespace(is_active=False),
+            prf_config=SimpleNamespace(is_active=True),
             apf_config=SimpleNamespace(is_active=False),
             residual_adversary=SimpleNamespace(is_active=False),
         ),
@@ -487,9 +492,62 @@ def test_native_replay_metadata_binds_action_contract_and_source() -> None:
         [],
         ReplayConfig(t_danger=0, t_contact=1, horizon=1),
     )
+    assert native.verdict == VERDICT_UNKNOWN
+    assert native.abstain_reason == "incomplete_snapshot_state"
     assert native.config.source_kind == "live_episode"
     assert native.config.action_set_id.startswith("simulator_native_action_lattice_v1:")
     assert native.config.feasibility_filter == "native_declared_action_lattice_v1:n=5"
+    assert native.config.pedestrian_response == "closed_loop"
+
+    explicitly_unknown = locate_last_avoidable(
+        model,
+        [],
+        ReplayConfig(t_danger=0, t_contact=1, horizon=1, pedestrian_response="unknown"),
+    )
+    assert explicitly_unknown.verdict == VERDICT_UNKNOWN
+    assert explicitly_unknown.abstain_reason == "metadata_mismatch"
+    assert explicitly_unknown.config.pedestrian_response == "unknown"
+    assert "pedestrian_response" in explicitly_unknown.notes[0]
+
+    explicitly_unspecified = locate_last_avoidable(
+        model,
+        [],
+        ReplayConfig(t_danger=0, t_contact=1, horizon=1, pedestrian_response="unspecified"),
+    )
+    assert explicitly_unspecified.verdict == VERDICT_UNKNOWN
+    assert explicitly_unspecified.abstain_reason == "incomplete_snapshot_state"
+    assert explicitly_unspecified.config.pedestrian_response == "closed_loop"
+
+
+def test_omitted_response_remains_bindable_after_copy_and_pickle() -> None:
+    """Copied and reconstructed omission markers still bind to native metadata."""
+    robot = SimpleNamespace(
+        config=SimpleNamespace(max_linear_decel=4.0, max_angular_accel=2.0),
+        state=SimpleNamespace(),
+    )
+    sim = SimpleNamespace(
+        robots=[robot],
+        config=SimpleNamespace(
+            prf_config=SimpleNamespace(is_active=True),
+            apf_config=SimpleNamespace(is_active=False),
+            residual_adversary=SimpleNamespace(is_active=False),
+        ),
+        peds_behaviors=[],
+    )
+    model = SimulatorCounterfactualModel(sim, capture_rng=False)
+    direct = ReplayConfig(t_danger=0, t_contact=1, horizon=1)
+    variants = {
+        "direct": direct,
+        "replace": replace(direct, horizon=2),
+        "deepcopy": deepcopy(direct),
+        "pickle": pickle.loads(pickle.dumps(direct)),
+    }
+
+    for variant, config in variants.items():
+        report = locate_last_avoidable(model, [], config)
+
+        assert report.abstain_reason == "incomplete_snapshot_state", variant
+        assert report.config.pedestrian_response == "closed_loop", variant
 
 
 def test_unknown_action_contract_fails_closed_and_uses_generic_label() -> None:
@@ -915,6 +973,18 @@ def test_single_runtime_malformed_entries_fail_closed() -> None:
     with pytest.raises(ValueError, match="duplicate runtime"):
         _restore_single_runtimes([two_runtime_behavior], [[fields, fields]])
 
+    unknown_field = dict(fields, unexpected_runtime_field=1)
+    with pytest.raises(ValueError, match="unknown fields"):
+        _restore_single_runtimes([behavior], [[unknown_field]])
+
+    coercive_integer = dict(fields, waypoint_index="1")
+    with pytest.raises(ValueError, match="waypoint_index must be an integer"):
+        _restore_single_runtimes([behavior], [[coercive_integer]])
+
+    coercive_boolean = dict(fields, waiting_for_advance=1)
+    with pytest.raises(ValueError, match="waiting_for_advance must be a boolean"):
+        _restore_single_runtimes([behavior], [[coercive_boolean]])
+
     two_behaviors = [_single_runtime_behavior(3), _single_runtime_behavior(4)]
     two_saved = _capture_single_runtimes(two_behaviors)
     # NOTE: the "omits a destination runtime" guard is unreachable behind the
@@ -955,6 +1025,19 @@ def test_behavior_rng_unexpected_identity_fails_closed() -> None:
 
     with pytest.raises(ValueError, match="unknown behavior RNG identities"):
         _restore_behavior_rng_states([behavior], {**captured, "ghost:rng": {}})
+
+
+def test_behavior_rng_unknown_nested_field_fails_closed() -> None:
+    """NumPy's setter must not silently accept an extra nested RNG field."""
+    behavior = SimpleNamespace(rng=np.random.default_rng(7))
+    captured = _capture_behavior_rng_states([behavior])
+    key = next(iter(captured))
+    malformed = dict(captured)
+    malformed[key] = dict(malformed[key])
+    malformed[key]["future_field"] = 1
+
+    with pytest.raises(ValueError, match="incomplete or unknown fields"):
+        _restore_behavior_rng_states([behavior], malformed)
 
 
 def test_pedestrian_groups_plain_cache_attribute_clears() -> None:
@@ -1010,6 +1093,16 @@ def test_residual_adversary_restore_branches_fail_closed() -> None:
     _restore_residual_adversary_state(SimpleNamespace(_residual_adversary=adversary), {field: 2})
     assert adversary._last_residual == 2
 
+    with pytest.raises(ValueError, match="field _last_residual must be an integer"):
+        _restore_residual_adversary_state(
+            SimpleNamespace(_residual_adversary=SimpleNamespace(**{field: 1})),
+            {field: "2"},
+        )
+    with pytest.raises(ValueError, match="unsupported by destination"):
+        _restore_residual_adversary_state(
+            SimpleNamespace(_residual_adversary=SimpleNamespace()), {field: 2}
+        )
+
 
 def test_route_navigator_snapshot_must_be_mapping() -> None:
     """A non-mapping navigator snapshot cannot restore waypoint progress."""
@@ -1028,6 +1121,15 @@ def test_route_navigator_non_mapping_state_fails_closed() -> None:
         _restore_route_navigators([behavior], {identity: "not-a-mapping"})
     with pytest.raises(ValueError, match="is incomplete"):
         _restore_route_navigators([behavior], {identity: {7: "not-a-mapping"}})
+
+    malformed = _capture_route_navigators([behavior])
+    malformed[identity][7]["waypoint_id"] = "1"
+    with pytest.raises(ValueError, match="waypoint_id.*must be an integer"):
+        _restore_route_navigators([behavior], malformed)
+    malformed = _capture_route_navigators([behavior])
+    malformed[identity][7]["unexpected"] = False
+    with pytest.raises(ValueError, match="unknown fields"):
+        _restore_route_navigators([behavior], malformed)
 
 
 def test_restore_missing_robot_velocity_resets_state() -> None:
@@ -1057,16 +1159,133 @@ def test_restore_missing_residual_adversary_state_fails_closed() -> None:
         armed_model.restore(snapshot)
 
 
-def test_restore_mismatched_max_speeds_replaces_backend_speeds() -> None:
-    """A shape-mismatched speed snapshot replaces backend speeds instead of broadcasting."""
+def test_restore_rolls_back_lazy_residual_creation_and_rng_failure() -> None:
+    """A late stdlib-RNG failure removes a lazily created residual controller."""
+    ped_state = np.zeros((1, 6), dtype=float)
+    robot = SimpleNamespace(
+        pose=((0.0, 0.0), 0.0),
+        state=SimpleNamespace(),
+        config=SimpleNamespace(radius=0.5),
+        pos=(0.0, 0.0),
+    )
+    sim = SimpleNamespace(
+        robots=[robot],
+        robot_navs=[],
+        peds_behaviors=[],
+        groups=None,
+        pysf_sim=SimpleNamespace(peds=SimpleNamespace(max_speeds=None)),
+        pysf_state=SimpleNamespace(pysf_states=lambda: ped_state),
+        ped_headings=np.zeros(1),
+        ped_angular_velocities=np.zeros(1),
+        peds_have_obstacle_forces=False,
+        _residual_adversary=None,
+    )
+    model = SimulatorCounterfactualModel(sim, capture_rng=True)
+    target = model.snapshot()
+    target.residual_adversary_state = dict.fromkeys(_RESIDUAL_STATE_FIELDS, 0)
+    target.python_random_state = ("invalid-python-random-state",)
+    sim._build_residual_adversary = lambda: SimpleNamespace(
+        **dict.fromkeys(_RESIDUAL_STATE_FIELDS, 0)
+    )
+
+    original_python_state = random.getstate()
+    try:
+        np.random.random()
+        random.random()
+        before_numpy = np.random.get_state()
+        before_python = random.getstate()
+
+        with pytest.raises(ValueError, match="state"):
+            model.restore(target)
+
+        assert sim._residual_adversary is None
+        assert model._step_index == 0
+        np.testing.assert_array_equal(sim.pysf_state.pysf_states(), ped_state)
+        assert np.array_equal(before_numpy[1], np.random.get_state()[1])
+        assert before_numpy[0] == np.random.get_state()[0]
+        assert before_numpy[2:] == np.random.get_state()[2:]
+        assert random.getstate() == before_python
+    finally:
+        random.setstate(original_python_state)
+
+
+def test_restore_catches_unexpected_assertion_and_rolls_back() -> None:
+    """An unexpected assertion after mutation still restores the native destination."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    before = model.snapshot()
+    original_restore = model._restore_unchecked
+    calls = 0
+
+    def fail_once(snapshot) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            model._step_index = 999
+            sim.pysf_state.pysf_states()[0, 0] = 123.0
+            raise AssertionError("unexpected restore failure")
+        original_restore(snapshot)
+
+    model._restore_unchecked = fail_once
+    with pytest.raises(AssertionError, match="unexpected restore failure"):
+        model.restore(before)
+
+    assert calls == 2
+    assert model._step_index == before.step_index
+    np.testing.assert_array_equal(sim.pysf_state.pysf_states(), before.pysf_state)
+
+
+def test_restore_rejects_raw_array_shape_and_dtype_without_mutation() -> None:
+    """Raw adapter arrays must match shape and dtype before restore starts."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    before = model.snapshot()
+
+    malformed_shape = model.snapshot()
+    malformed_shape.ped_headings = np.asarray([0.5], dtype=malformed_shape.ped_headings.dtype)
+    with pytest.raises(ValueError, match="ped_headings shape mismatch"):
+        model.restore(malformed_shape)
+
+    malformed_dtype = model.snapshot()
+    alternate_dtype = np.float32 if malformed_dtype.pysf_state.dtype != np.float32 else np.float64
+    malformed_dtype.pysf_state = malformed_dtype.pysf_state.astype(alternate_dtype)
+    with pytest.raises(ValueError, match="pysf_state dtype mismatch"):
+        model.restore(malformed_dtype)
+
+    assert model._step_index == before.step_index
+    np.testing.assert_array_equal(sim.pysf_state.pysf_states(), before.pysf_state)
+    np.testing.assert_array_equal(sim.ped_headings, before.ped_headings)
+
+
+def test_restore_rejects_coercive_obstacle_force_flag_without_mutation() -> None:
+    """A raw string flag cannot be truthiness-coerced during restore."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    before = model.snapshot()
+    malformed = model.snapshot()
+    malformed.peds_have_obstacle_forces = "false"
+
+    with pytest.raises(ValueError, match="peds_have_obstacle_forces must be a boolean"):
+        model.restore(malformed)
+
+    assert sim.peds_have_obstacle_forces == before.peds_have_obstacle_forces
+    assert model._step_index == before.step_index
+
+
+def test_restore_rejects_mismatched_max_speeds_without_replacement() -> None:
+    """A shape-mismatched speed snapshot cannot replace backend arrays."""
     sim = _build_simulator()
     model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
     snapshot = model.snapshot()
     if snapshot.ped_max_speeds is None:
         pytest.skip("fixture simulator captures no pedestrian max speeds")
-    snapshot.ped_max_speeds = np.asarray([0.5], dtype=float)
+    before = np.asarray(sim.pysf_sim.peds.max_speeds).copy()
+    snapshot.ped_max_speeds = np.asarray([0.5], dtype=snapshot.ped_max_speeds.dtype)
 
-    model.restore(snapshot)
+    with pytest.raises(ValueError, match="ped_max_speeds shape mismatch"):
+        model.restore(snapshot)
+
+    np.testing.assert_array_equal(sim.pysf_sim.peds.max_speeds, before)
 
 
 def test_behavior_rng_absent_snapshot_covers_empty_and_missing_branches() -> None:

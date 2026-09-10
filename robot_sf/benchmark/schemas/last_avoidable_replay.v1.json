@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "last_avoidable_replay.v1.json",
   "title": "Last Avoidable Replay v1",
-  "description": "Offline, controlled-fixture result of frozen-state counterfactual replay (issue #5442). Records whether a collision was avoidable, the earliest avoidable unsafe control action (t_uca) and the point of no return (t_inevitable), the versioned analysis config, the baseline determinism check, and every per-decision-point branch result. This is controlled-fixture diagnostic evidence only; it assigns no legal or moral fault and is not a real-episode root-cause claim. Field naming is forward-compatible with the collision_causal_report.v1 contract proposed in issue #5441.",
+  "description": "Source-tagged offline result of frozen-state counterfactual replay (issue #5442). Controlled fixtures and native simulator adapters may emit this same contract; config.source_kind and claim_boundary keep their source and claim boundaries explicit. The report records whether a collision was avoidable, the earliest avoidable unsafe control action (t_uca) and the point of no return (t_inevitable), the versioned analysis config, the baseline determinism check, and every per-decision-point branch result. This is diagnostic replay evidence only, not a real-episode root-cause, benchmark, or paper-grade claim, and it assigns no legal or moral fault. config.t_contact is the declared contact state tick; determinism.observed_contact_steps are the replay observations that a downstream join must verify before exposing a contact timestamp.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -36,6 +36,7 @@
       "const": "not_assessed"
     },
     "claim_boundary": {
+      "description": "Source-sensitive claim boundary for this diagnostic replay; schema validity does not promote the result to a causal, benchmark, or paper-facing claim.",
       "type": "string",
       "minLength": 1
     },
@@ -52,6 +53,7 @@
       "minimum": 0
     },
     "t_contact": {
+      "description": "Declared baseline contact state tick; downstream joins expose it as observed only when determinism.observed_contact_steps agree exactly.",
       "type": "integer",
       "minimum": 1
     },
@@ -83,7 +85,11 @@
       ],
       "properties": {
         "t_danger": {"type": "integer", "minimum": 0},
-        "t_contact": {"type": "integer", "minimum": 1},
+        "t_contact": {
+          "description": "Declared baseline contact state tick used to bound replay.",
+          "type": "integer",
+          "minimum": 1
+        },
         "horizon": {"type": "integer", "minimum": 1},
         "substitution_mode": {"type": "string", "enum": ["single_step", "hold"]},
         "determinism_replays": {"type": "integer", "minimum": 1},
@@ -101,6 +107,9 @@
         "replays",
         "collision_stable",
         "contact_step_stable",
+        "trace_stable",
+        "first_divergence_step",
+        "first_divergence_field",
         "deterministic",
         "observed_contact_steps"
       ],
@@ -108,8 +117,12 @@
         "replays": {"type": "integer", "minimum": 1},
         "collision_stable": {"type": "boolean"},
         "contact_step_stable": {"type": "boolean"},
+        "trace_stable": {"type": "boolean"},
+        "first_divergence_step": {"type": ["integer", "null"], "minimum": 0},
+        "first_divergence_field": {"type": ["string", "null"], "minLength": 1},
         "deterministic": {"type": "boolean"},
         "observed_contact_steps": {
+          "description": "Contact state ticks observed across baseline replays; a single declared tick is verified only when all entries agree.",
           "type": "array",
           "items": {"type": ["integer", "null"], "minimum": 0}
         }

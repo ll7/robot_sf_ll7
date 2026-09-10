@@ -51,6 +51,7 @@ def _run_replay(scenario, *, determinism_replays: int = 20):
         feasibility_filter="all_admissible_decel",
         collision_predicate="euclidean_distance<=collision_radius",
         pedestrian_response=scenario.pedestrian_response,
+        source_kind="synthetic_fixture",
     )
     model = fx.KinematicCollisionModel(scenario)
     baseline = fx.maintain_baseline_actions(contact_step + horizon + 2)
@@ -81,6 +82,9 @@ def test_avoidable_replay_joins_to_supporting_causal_report() -> None:
     ts = report["observed_reconstruction"]["critical_timestamps"]
     assert ts["t_uca"]["available"] is True and ts["t_uca"]["step"] is not None
     assert ts["t_inevitable"]["available"] is True and ts["t_inevitable"]["step"] is not None
+    assert ts["t_contact"]["available"] is True
+    assert ts["t_contact"]["step"] == 10
+    assert "t_contact" not in report["missing_fields"]
     # The summary has no per-element canonical trace, so coverage cannot make
     # planner-internal reconstruction fields appear available.
     elements = report["observed_reconstruction"]["elements"]
@@ -119,6 +123,11 @@ def test_nondeterministic_baseline_joins_to_abstaining_unknown() -> None:
     assert report["causal_contribution"]["verdict"] == "unknown"
     assert report["causal_contribution"]["supported_actual_cause"] is False
     assert report["data_source"]["replay_determinism"] == "nondeterministic"
+    ts = report["observed_reconstruction"]["critical_timestamps"]
+    assert ts["t_contact"]["available"] is False
+    assert ts["t_contact"]["step"] is None
+    assert ts["t_contact"]["source"] is None
+    assert "t_contact" in report["missing_fields"]
     # The abstention must flag every planner-internal element and unavailable timestamp missing.
     assert "t_uca" in report["missing_fields"]
     for key in (
@@ -141,6 +150,41 @@ def test_missing_feasible_action_joins_to_abstaining_unknown() -> None:
     assert report["abstained"] is True
     assert report["causal_contribution"]["verdict"] == "unknown"
     assert report["causal_contribution"]["verdict"] != "unavoidable"
+
+
+def test_mismatched_contact_observation_is_unavailable_in_join() -> None:
+    """A replay with one stable but incorrectly declared contact tick stays fail closed."""
+    scenario = fx.preventable_late_braking_scenario()
+    actual_contact_tick = fx.find_contact_step(scenario)
+    assert actual_contact_tick == 10
+    config = ReplayConfig(
+        t_danger=0,
+        t_contact=12,
+        horizon=18,
+        substitution_mode=SUBSTITUTION_HOLD,
+        determinism_replays=5,
+    )
+    replay = locate_last_avoidable(
+        fx.KinematicCollisionModel(scenario),
+        fx.maintain_baseline_actions(config.t_contact + config.horizon + 2),
+        config,
+    )
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id="mismatched-contact",
+        case_id="fixture",
+        replay=replay,
+        metadata=_METADATA,
+    )
+
+    assert report["abstained"] is True
+    assert report["causal_contribution"]["verdict"] == "unknown"
+    ts = report["observed_reconstruction"]["critical_timestamps"]
+    assert ts["t_contact"]["available"] is False
+    assert ts["t_contact"]["step"] is None
+    assert ts["t_contact"]["source"] is None
+    assert "t_contact" in report["missing_fields"]
+    validate_collision_causal_report(report)
 
 
 def test_unsupported_replay_verdict_abstains_and_fails_closed() -> None:
@@ -187,6 +231,29 @@ def test_native_live_replay_abstains_without_verified_provenance() -> None:
     validate_collision_causal_report(report)
 
 
+def test_unspecified_replay_provenance_abstains_without_relabeling() -> None:
+    """A replay without an explicit source label cannot enter the causal join."""
+    from dataclasses import replace
+
+    replay = _run_replay(fx.preventable_late_braking_scenario())
+    unspecified = replace(replay, config=replace(replay.config, source_kind="unspecified"))
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id="unspecified-source",
+        case_id="fixture",
+        replay=unspecified,
+        metadata=_METADATA,
+    )
+
+    assert report["abstained"] is True
+    assert report["abstention_reason"] == "unspecified_replay_provenance"
+    assert report["data_source"]["source_kind"] == "unknown"
+    assert report["causal_contribution"]["verdict"] == "unknown"
+    assert report["causal_contribution"]["supported_actual_cause"] is False
+    assert "replay_source_provenance" in report["missing_fields"]
+    validate_collision_causal_report(report)
+
+
 def test_two_action_interaction_joins_as_avoidable() -> None:
     """A closed-loop two-body interaction replay joins as an avoidable report."""
     scenario = fx.two_action_interaction_scenario()
@@ -197,7 +264,7 @@ def test_two_action_interaction_joins_as_avoidable() -> None:
 
 
 def test_default_pedestrian_response_is_schema_safe() -> None:
-    """An omitted response assumption joins as explicit ``unknown``."""
+    """An omitted response remains diagnostic-safe but cannot support a causal join."""
     scenario = fx.preventable_late_braking_scenario()
     contact_step = fx.find_contact_step(scenario)
     assert contact_step is not None
@@ -212,6 +279,7 @@ def test_default_pedestrian_response_is_schema_safe() -> None:
             action_set_id="decel_lattice",
             feasibility_filter="all_admissible_decel",
             collision_predicate="euclidean_distance<=collision_radius",
+            source_kind="synthetic_fixture",
         ),
     )
 
@@ -222,8 +290,43 @@ def test_default_pedestrian_response_is_schema_safe() -> None:
         metadata=_METADATA,
     )
 
+    assert report["abstained"] is True
+    assert report["abstention_reason"] == "incomplete_replay_provenance"
+    assert report["causal_contribution"]["supported_actual_cause"] is False
+    assert "replay_provenance.pedestrian_response" in report["missing_fields"]
     assert report["causal_contribution"]["pedestrian_response_assumption"] == "unknown"
     validate_collision_causal_report(report)
+
+
+def test_synthetic_join_requires_complete_replay_provenance() -> None:
+    """Every non-native provenance field is required before causal attribution."""
+    from dataclasses import replace
+
+    replay = _run_replay(fx.preventable_late_braking_scenario(), determinism_replays=2)
+    for field_name in (
+        "action_set_id",
+        "feasibility_filter",
+        "collision_predicate",
+        "pedestrian_response",
+    ):
+        incomplete = replace(
+            replay,
+            config=replace(
+                replay.config,
+                **{field_name: "unknown" if field_name == "pedestrian_response" else "unspecified"},
+            ),
+        )
+        report = collide_causal_report_from_last_avoidable(
+            report_id=f"incomplete-{field_name}",
+            case_id="fixture",
+            replay=incomplete,
+            metadata=_METADATA,
+        )
+        assert report["abstained"] is True
+        assert report["abstention_reason"] == "incomplete_replay_provenance"
+        assert f"replay_provenance.{field_name}" in report["missing_fields"]
+        assert report["causal_contribution"]["supported_actual_cause"] is False
+        validate_collision_causal_report(report)
 
 
 def test_join_rejects_unknown_mechanism_label() -> None:

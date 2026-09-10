@@ -62,11 +62,24 @@ _CANONICAL_ACTOR_SAFE_SOURCES = frozenset(
 _UNKNOWN_CANDIDATE_SOURCE = GoalCandidateSource.UNKNOWN.value
 _FEASIBLE_STATUS = "feasible"
 _PRIVILEGED_PROVENANCE_MARKERS = (
+    "assigned_goal",
     "assigned_route",
+    "force_truth",
     "ground_truth",
+    "goal_after_behavior",
+    "goal_before_behavior",
     "route_assignment",
+    "route_after_behavior",
+    "route_before_behavior",
     "sim_truth",
+    "sim_pedestrian_id",
     "truth_label",
+    "true_force",
+    "true_route",
+    "true_waypoint",
+    "waypoint_after_behavior",
+    "waypoint_before_behavior",
+    "waypoint_assignment",
 )
 
 
@@ -81,7 +94,7 @@ def _normalize_label(value: str) -> str:
 
 
 def _is_forbidden_actor_provenance(value: str) -> bool:
-    """Return whether a label uses privileged actor-inference provenance.
+    """Return whether text uses privileged actor-inference provenance.
 
     Returns:
         ``True`` when the value identifies forbidden oracle, simulator, route, or truth evidence.
@@ -92,6 +105,18 @@ def _is_forbidden_actor_provenance(value: str) -> bool:
         marker in normalized or marker in separator_normalized
         for marker in _PRIVILEGED_PROVENANCE_MARKERS
     )
+
+
+def _require_actor_safe_text(value: Any, field_name: str) -> str:
+    """Return text that cannot encode privileged actor provenance.
+
+    Marker rejection keeps arbitrary public fixture and provider IDs valid without
+    allowing known oracle or simulator labels through the actor boundary.
+    """
+    text = require_text(value, field_name)
+    if _is_forbidden_actor_provenance(text):
+        raise ValueError(f"{field_name} contains privileged actor data")
+    return text
 
 
 def _validate_actor_safe_source(
@@ -121,15 +146,21 @@ def _validate_candidate_set_metadata(candidate_set: GoalCandidateSet) -> None:
         )
     _validate_actor_safe_source(candidate_set.source, "candidate_set.source")
     for candidate in candidate_set.candidates:
+        _require_actor_safe_text(candidate.id, f"candidate {candidate.id}.id")
+        if candidate.parent_destination_id is not None:
+            _require_actor_safe_text(
+                candidate.parent_destination_id,
+                f"candidate {candidate.id}.parent_destination_id",
+            )
         _validate_actor_safe_source(
             candidate.source,
             f"candidate {candidate.id}.source",
             allow_unknown=candidate.role is GoalCandidateRole.UNKNOWN,
         )
-        if any(_is_forbidden_actor_provenance(ref) for ref in candidate.provenance_refs):
-            raise ValueError(
-                f"candidate {candidate.id} has privileged oracle, simulator, route, or "
-                "truth provenance"
+        for ref in candidate.provenance_refs:
+            _require_actor_safe_text(
+                ref,
+                f"candidate {candidate.id}.provenance_refs[]",
             )
 
 
@@ -278,8 +309,10 @@ def _normalize_parent_map(
             raise TypeError(
                 "waypoint_parent_destination entries must be [waypoint_id, destination_id]"
             )
-        waypoint_id = require_text(pair[0], "waypoint_parent_destination.waypoint_id")
-        destination_id = require_text(pair[1], "waypoint_parent_destination.destination_id")
+        waypoint_id = _require_actor_safe_text(pair[0], "waypoint_parent_destination.waypoint_id")
+        destination_id = _require_actor_safe_text(
+            pair[1], "waypoint_parent_destination.destination_id"
+        )
         if waypoint_id in seen:
             raise ValueError(f"duplicate waypoint parent mapping: {waypoint_id}")
         seen.add(waypoint_id)
@@ -296,7 +329,11 @@ class HierarchicalProbability:
 
     def __post_init__(self) -> None:
         """Validate identity and finite probability mass."""
-        object.__setattr__(self, "candidate_id", require_text(self.candidate_id, "candidate_id"))
+        object.__setattr__(
+            self,
+            "candidate_id",
+            _require_actor_safe_text(self.candidate_id, "candidate_id"),
+        )
         if self.candidate_id.strip().lower() == _UNKNOWN_CANDIDATE_ID:
             raise ValueError(
                 "candidate_id 'unknown' is reserved for the explicit unknown probability mass"
@@ -339,7 +376,7 @@ class HierarchicalWaypointConditionalV1:
         object.__setattr__(
             self,
             "destination_id",
-            require_text(self.destination_id, "destination_id"),
+            _require_actor_safe_text(self.destination_id, "destination_id"),
         )
         probabilities, unknown_probability = _validate_probability_vector(
             _as_sequence(self.waypoint_probabilities, "waypoint_probabilities"),
@@ -458,7 +495,7 @@ class HierarchicalGoalPosteriorV1:
         )
 
         blocker_values = tuple(
-            require_text(blocker, "blockers[]")
+            _require_actor_safe_text(blocker, "blockers[]")
             for blocker in _as_sequence(self.blockers, "blockers")
         )
         if len(blocker_values) != len(set(blocker_values)):

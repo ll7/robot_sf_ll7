@@ -74,6 +74,7 @@ def _posterior(
     conditionals: tuple[HierarchicalWaypointConditionalV1, ...] | None = None,
     parents: dict[str, str] | None = None,
     evidence_source: str = "upstream_selected",
+    blockers: tuple[str, ...] = ("synthetic_fixture",),
 ) -> HierarchicalGoalPosteriorV1:
     """Build a small two-destination hierarchy with explicit unknown states."""
     return HierarchicalGoalPosteriorV1(
@@ -111,7 +112,7 @@ def _posterior(
         },
         evidence_source=evidence_source,
         innovation=0.2,
-        blockers=("synthetic_fixture",),
+        blockers=blockers,
         config_hash=HASH,
         candidate_set_digest=POSTERIOR_CANDIDATE_SET_DIGEST,
     )
@@ -368,6 +369,49 @@ def test_flat_projection_rejects_unreferenced_candidate_ids() -> None:
         posterior.to_goal_belief_v1("active_waypoint", candidate_set=candidate_set)
 
 
+def test_flat_projection_rejects_privileged_bound_candidate_ids() -> None:
+    """Binding cannot admit a hostile ID even when it is not referenced by posterior mass."""
+    candidate_set = GoalCandidateSet(
+        candidates=POSTERIOR_CANDIDATE_SET.candidates
+        + (
+            GoalCandidate(
+                id="true_goal",
+                position=(20.0, 0.0),
+                source="public_fixture",
+                role=GoalCandidateRole.FINAL_DESTINATION,
+            ),
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="privileged actor data"):
+        posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
+
+
+def test_flat_projection_rejects_privileged_bound_parent_id() -> None:
+    """Binding cannot admit simulator identity through a candidate parent ID."""
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            replace(candidate, parent_destination_id="sim_pedestrian_id:42")
+            if candidate.id == "waypoint-a-near"
+            else candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="privileged actor data"):
+        posterior.to_goal_belief_v1("active_waypoint", candidate_set=candidate_set)
+
+
 @pytest.mark.parametrize("binding", ["set", "candidate"])
 def test_flat_projection_rejects_privileged_candidate_sources(binding: str) -> None:
     """Static source labels cannot smuggle privileged evidence into observation-only output."""
@@ -531,7 +575,10 @@ def test_flat_projection_rejects_unavailable_candidate_set() -> None:
 
 
 @pytest.mark.parametrize("binding", ["set", "candidate", "provenance"])
-@pytest.mark.parametrize("privileged_provenance", ["oracle:goal", "route truth"])
+@pytest.mark.parametrize(
+    "privileged_provenance",
+    ["oracle:goal", "route truth", "sim_pedestrian_id:42"],
+)
 def test_flat_projection_rejects_extended_privileged_candidate_provenance(
     binding: str, privileged_provenance: str
 ) -> None:
@@ -587,6 +634,45 @@ def test_flat_projection_rejects_privileged_source_aliases(source: str) -> None:
 
     with pytest.raises(ValueError, match="forbidden oracle or simulator source"):
         posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
+
+
+@pytest.mark.parametrize(
+    "candidate_id",
+    ["true_goal", "sim_pedestrian_id:42", "force_component:desired"],
+)
+def test_hierarchy_rejects_privileged_candidate_ids(candidate_id: str) -> None:
+    """Hierarchy probability IDs cannot encode oracle goals, simulator identity, or forces."""
+    with pytest.raises(ValueError, match="privileged actor data"):
+        HierarchicalProbability(candidate_id, 1.0)
+
+
+@pytest.mark.parametrize("destination_id", ["true_route", "sim_pedestrian_id:42"])
+def test_hierarchy_rejects_privileged_destination_ids(destination_id: str) -> None:
+    """Conditional destination IDs cannot encode oracle routes or simulator identity."""
+    with pytest.raises(ValueError, match="privileged actor data"):
+        HierarchicalWaypointConditionalV1(destination_id)
+
+
+def test_hierarchy_rejects_privileged_parent_destination_ids() -> None:
+    """Static parent links cannot encode simulator identity."""
+    with pytest.raises(ValueError, match="privileged actor data"):
+        _posterior(
+            parents={
+                "waypoint-a-near": "destination-a",
+                "waypoint-a-far": "destination-a",
+                "waypoint-b": "sim_pedestrian_id:42",
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "blocker",
+    ["oracle goal: true_goal", "sim_pedestrian_id:42", "force component: desired"],
+)
+def test_hierarchy_rejects_privileged_blockers(blocker: str) -> None:
+    """Blocker diagnostics cannot become a side channel for privileged actor data."""
+    with pytest.raises(ValueError, match="privileged actor data"):
+        _posterior(blockers=(blocker,))
 
 
 @pytest.mark.parametrize("status", ["infeasible", "unknown", "unavailable"])

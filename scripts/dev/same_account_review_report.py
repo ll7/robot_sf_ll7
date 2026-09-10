@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from datetime import datetime
@@ -412,7 +413,12 @@ def _fetch_rest_comments(
         endpoint = (
             f"repos/{repository}/issues/{pr_number}/comments?per_page={_PAGE_SIZE}&page={page}"
         )
-        result = gh(["api", endpoint], timeout=45)
+        try:
+            result = gh(["api", endpoint], timeout=45)
+        except subprocess.TimeoutExpired:
+            return None, "static_report_comment_fetch_timeout"
+        except OSError:
+            return None, "static_report_comment_fetch_os_error"
         if getattr(result, "returncode", 1) != 0:
             diagnostic = _string(getattr(result, "stderr", ""))
             return None, diagnostic or "static_report_comment_fetch_failed"

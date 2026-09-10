@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import shlex
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -28,6 +29,7 @@ from scripts.dev.merge_queue_gate import (
     main,
 )
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
+from scripts.dev.same_account_review_report import fetch_same_account_static_reports
 from scripts.dev.single_account_merge_receipt import classify_implementation_review
 
 FULL_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
@@ -468,6 +470,34 @@ def test_fetch_pr_snapshot_passes_static_reports_to_receipt_classifier(
     assert classified["carrier"]["kind"] == "static_report"
     assert classified["carrier"]["identity"] == "openai/chatgpt-codex-connector"
     assert classified["carrier"]["evidence_digest"] == "9" * 64
+
+
+def test_fetch_pr_snapshot_preserves_static_report_timeout_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A comments timeout produces a structured snapshot provenance result."""
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "fetch_same_account_static_reports",
+        fetch_same_account_static_reports,
+    )
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
+            subprocess.TimeoutExpired(
+                cmd=["gh", "api", "comments"],
+                timeout=45,
+            ),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["review_evidence"]["static_reports"] == []
+    provenance = snapshot["evidence_provenance"]["implementation_review_reports"]
+    assert provenance["status"] == "unavailable"
+    assert provenance["reason_codes"] == ["static_report_comment_fetch_timeout"]
 
 
 def test_fetch_pr_snapshot_refreshes_graphql_evidence_status_by_exact_head() -> None:

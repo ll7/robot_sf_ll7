@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
 from typing import Any
 
@@ -234,4 +235,34 @@ def test_rest_unavailability_does_not_create_approval() -> None:
     assert reports == []
     assert provenance["status"] == "unavailable"
     assert provenance["reason_codes"] == ["network unavailable"]
+    assert _classify(reports)["status"] == "missing"
+
+
+@pytest.mark.parametrize(
+    ("failure", "reason"),
+    [
+        (
+            subprocess.TimeoutExpired(
+                cmd=["gh", "api", "comments"],
+                timeout=45,
+            ),
+            "static_report_comment_fetch_timeout",
+        ),
+        (OSError("gh unavailable"), "static_report_comment_fetch_os_error"),
+    ],
+)
+def test_rest_transport_failures_return_unavailable_provenance(
+    failure: BaseException, reason: str
+) -> None:
+    """Bounded REST transport failures stay in the structured unavailable path."""
+
+    def gh(_args: list[str], timeout: int = 30) -> _Result:
+        assert timeout == 45
+        raise failure
+
+    reports, provenance = fetch_same_account_static_reports(gh, repository=REPO, pr_number=PR)
+
+    assert reports == []
+    assert provenance["status"] == "unavailable"
+    assert provenance["reason_codes"] == [reason]
     assert _classify(reports)["status"] == "missing"

@@ -16,6 +16,9 @@ replay diverge, exercising the same guard on production state.
 
 from __future__ import annotations
 
+import pickle
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -495,6 +498,37 @@ def test_native_replay_metadata_binds_action_contract_and_source() -> None:
     assert explicitly_unspecified.verdict == VERDICT_UNKNOWN
     assert explicitly_unspecified.abstain_reason == "incomplete_snapshot_state"
     assert explicitly_unspecified.config.pedestrian_response == "closed_loop"
+
+
+def test_omitted_response_remains_bindable_after_copy_and_pickle() -> None:
+    """Copied and reconstructed omission markers still bind to native metadata."""
+    robot = SimpleNamespace(
+        config=SimpleNamespace(max_linear_decel=4.0, max_angular_accel=2.0),
+        state=SimpleNamespace(),
+    )
+    sim = SimpleNamespace(
+        robots=[robot],
+        config=SimpleNamespace(
+            prf_config=SimpleNamespace(is_active=True),
+            apf_config=SimpleNamespace(is_active=False),
+            residual_adversary=SimpleNamespace(is_active=False),
+        ),
+        peds_behaviors=[],
+    )
+    model = SimulatorCounterfactualModel(sim, capture_rng=False)
+    direct = ReplayConfig(t_danger=0, t_contact=1, horizon=1)
+    variants = {
+        "direct": direct,
+        "replace": replace(direct, horizon=2),
+        "deepcopy": deepcopy(direct),
+        "pickle": pickle.loads(pickle.dumps(direct)),
+    }
+
+    for variant, config in variants.items():
+        report = locate_last_avoidable(model, [], config)
+
+        assert report.abstain_reason == "incomplete_snapshot_state", variant
+        assert report.config.pedestrian_response == "closed_loop", variant
 
 
 def test_unknown_action_contract_fails_closed_and_uses_generic_label() -> None:

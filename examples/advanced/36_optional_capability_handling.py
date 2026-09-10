@@ -96,18 +96,18 @@ def check_model_artifact() -> CapabilityStatus:
 
     from robot_sf.models.registry import resolve_model_path
 
-    registry = {
-        "version": 1,
-        "models": [
-            {
-                "model_id": "tutorial_missing_model",
-                "local_path": "output/tutorial_fixtures/absent_model.zip",
-                "local_only": True,
-            }
-        ],
-    }
     with tempfile.TemporaryDirectory(prefix="tutorial_registry_") as tmpdir:
         registry_path = Path(tmpdir) / "registry.yaml"
+        registry = {
+            "version": 1,
+            "models": [
+                {
+                    "model_id": "tutorial_missing_model",
+                    "local_path": str(Path(tmpdir) / "absent_model.zip"),
+                    "local_only": True,
+                }
+            ],
+        }
         registry_path.write_text(yaml.safe_dump(registry))
         try:
             resolve_model_path(
@@ -118,7 +118,7 @@ def check_model_artifact() -> CapabilityStatus:
                 capability="model_artifact",
                 available=False,
                 reason_code="model_unavailable",
-                detail=str(exc),
+                detail=f"{type(exc).__name__}: registered local model artifact is unavailable.",
                 remedy="Stage the checkpoint per model/registry.md, then retry.",
             )
     return CapabilityStatus(  # pragma: no cover - fixture artifact never exists
@@ -166,19 +166,20 @@ def check_dataset_artifact() -> CapabilityStatus:
         load_sdd_track_set,
     )
 
-    missing = Path("output/tutorial_fixtures/absent_annotations.txt")
-    try:
-        load_sdd_track_set(
-            missing, scene="tutorial", split="train", frame_rate_hz=30.0, meters_per_pixel=0.1
-        )
-    except (SddTrajectoryDataError, OSError) as exc:
-        return CapabilityStatus(
-            capability="dataset_artifact",
-            available=False,
-            reason_code="dataset_unavailable",
-            detail=str(exc),
-            remedy="Stage the licensed dataset per the data-staging docs, then retry.",
-        )
+    with tempfile.TemporaryDirectory(prefix="tutorial_dataset_") as tmpdir:
+        missing = Path(tmpdir) / "absent_annotations.txt"
+        try:
+            load_sdd_track_set(
+                missing, scene="tutorial", split="train", frame_rate_hz=30.0, meters_per_pixel=0.1
+            )
+        except (SddTrajectoryDataError, OSError) as exc:
+            return CapabilityStatus(
+                capability="dataset_artifact",
+                available=False,
+                reason_code="dataset_unavailable",
+                detail=f"{type(exc).__name__}: SDD dataset annotations are unavailable.",
+                remedy="Stage the licensed dataset per the data-staging docs, then retry.",
+            )
     return CapabilityStatus(  # pragma: no cover - fixture path never exists
         capability="dataset_artifact",
         available=True,
@@ -236,6 +237,7 @@ def format_text(statuses: list[CapabilityStatus]) -> str:
     Returns:
         Human-readable lines with reason codes and remedy hints.
     """
+    fail_on_unknown_status(statuses)
     lines = []
     for status in statuses:
         state = "available" if status.available else "UNAVAILABLE"
@@ -253,6 +255,7 @@ def format_json(statuses: list[CapabilityStatus]) -> str:
     Returns:
         JSON array preserving the same reason codes as the text format.
     """
+    fail_on_unknown_status(statuses)
     return json.dumps([asdict(status) for status in statuses], indent=2, sort_keys=True)
 
 

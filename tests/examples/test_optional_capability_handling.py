@@ -73,6 +73,35 @@ def test_unknown_reason_codes_fail_closed() -> None:
         _tutorial.fail_on_unknown_status(tampered)
 
 
+def test_formatters_fail_closed_on_unknown_reason_codes() -> None:
+    """Programmatic renderers cannot serialize an unrecognized status as valid output."""
+    statuses = _tutorial.collect_statuses()
+    tampered = list(statuses) + [
+        type(statuses[0])(
+            capability="mystery",
+            available=False,
+            reason_code="something_new",
+            detail="x",
+            remedy="y",
+        )
+    ]
+    with pytest.raises(ValueError, match="Unknown capability reason codes"):
+        _tutorial.format_text(tampered)
+    with pytest.raises(ValueError, match="Unknown capability reason codes"):
+        _tutorial.format_json(tampered)
+
+
+def test_absent_model_fixture_is_cwd_independent(tmp_path: Path, monkeypatch) -> None:
+    """A colliding CWD fixture cannot turn the guaranteed-missing model probe into success."""
+    fixture = tmp_path / "output" / "tutorial_fixtures" / "absent_model.zip"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes(b"not a model")
+    monkeypatch.chdir(tmp_path)
+    status = _tutorial.check_model_artifact()
+    assert status.reason_code == "model_unavailable"
+    assert status.available is False
+
+
 def test_example_runs_headless_with_stable_output() -> None:
     """The tutorial executes as a subprocess with deterministic reason codes."""
     first = subprocess.run(

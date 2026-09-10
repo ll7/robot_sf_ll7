@@ -293,6 +293,30 @@ def test_real_materialized_candidate_build_has_only_supported_extras(tmp_path: P
     assert policy["include"].count("scripts/__init__.py") == 1
     assert policy["required"].count("scripts/__init__.py") == 1
     assert "scripts/**" not in policy["include"]
+    expected_dependency_evidence = {
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md": (
+            55343,
+            "70e1c5af8d57bdd68a2ede8fbdddbea31a0d22b0bf5e0e4792f27102b1bb99ff",
+        ),
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json": (
+            25180,
+            "f0afd953298ec33e660f812a43b7801f767642edb348c31d22ddd7523475e417",
+        ),
+    }
+    for path, (expected_size, expected_sha256) in expected_dependency_evidence.items():
+        assert policy["include"].count(path) == 1
+        assert policy["required"].count(path) == 1
+        source_evidence = source / path
+        candidate_evidence = candidate / path
+        source_bytes = source_evidence.read_bytes()
+        assert len(source_bytes) == expected_size
+        assert hashlib.sha256(source_bytes).hexdigest() == expected_sha256
+        assert candidate_evidence.read_bytes() == source_bytes
+        evidence_member = next(
+            member for member in report_payload["members"] if member["path"] == path
+        )
+        assert evidence_member["size"] == expected_size
+        assert evidence_member["sha256"] == expected_sha256
     rights_policy = json.loads(
         (source / "scripts/validation/software_release_rights_policy.v1.json").read_text(
             encoding="utf-8"

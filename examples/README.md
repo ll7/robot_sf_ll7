@@ -108,6 +108,7 @@ Feature-focused demos for developers exploring capabilities.
 | [33 Three.js Recording Viewer](./advanced/33_threejs_recording_viewer.py) | Export a JSONL or pickle recording to a static browser viewer. | _None_ | visualization, recording, threejs | ✅ |
 | [34 Trace Three.js Viewer](./advanced/34_trace_threejs_viewer.py) | Export a simulation_trace_export.v1 trace to a static browser viewer. | _None_ | visualization, trace, annotation, threejs | ✅ |
 | [35 Custom Scenario Authoring](./advanced/35_custom_scenario_authoring.py) | Author a custom corridor scenario programmatically, validate, reload, and smoke-test it. | maps/svg_maps/classic_head_on_corridor.svg | scenarios, authoring, validation, tutorial | ✅ |
+| [37 Custom Planner Protocol](./advanced/37_custom_planner_protocol.py) | Implement and run the smallest planner compatible with LocalPlannerProtocol. | _None_ | tutorial, planner, protocol, validation | ✅ |
 
 ## Benchmarks
 

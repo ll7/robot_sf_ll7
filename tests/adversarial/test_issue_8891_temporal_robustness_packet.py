@@ -39,7 +39,7 @@ def test_packet_is_source_bound_and_diagnostic_only(packet: dict) -> None:
         and result["simulator_call_budget"] == 14112
         and not result["campaign_execution_allowed"]
     )
-    assert packet["source"]["base_commit"] == "88bb656f6c9b74b285d98a99a9614f9beabb9213"
+    assert packet["source"]["base_commit"] == "69580e4837ac96e9f658da92eb19e8b1a3a76950"
 
 
 def test_identity_builder_is_deterministic_and_complete(packet: dict) -> None:

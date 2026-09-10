@@ -344,7 +344,12 @@ def _label_delta(
     if ruling_valid:
         additions.update({"ruled", "parent", "dependency:has-blockers", "state:blocked"})
         removals.update(
-            {"decision-required", "blocked:needs-maintainer", "state:blocked-no-code-slice"}
+            {
+                "decision-required",
+                "blocked:needs-maintainer",
+                "state:blocked-no-code-slice",
+                "state:ready",
+            }
         )
         if not child_present and not ready_recorded:
             additions.add("needs-triage")

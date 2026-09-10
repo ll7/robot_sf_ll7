@@ -356,3 +356,4 @@ def test_ready_ruling_without_child_never_gains_needs_triage() -> None:
     )
 
     assert "needs-triage" not in plan["proposed_label_delta"]["add"]
+    assert "state:ready" in plan["proposed_label_delta"]["remove"]

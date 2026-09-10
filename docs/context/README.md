@@ -1667,6 +1667,10 @@ why a change was made rather than a full issue execution transcript.
   native diagnostic over a fixed station-platform candidate pool, including route-binding
   provenance, observed event counts, and the pending budget-matched/domain-approval boundary.
 
+* [Issue #8571 Default-Disabled Bounded Falsification Slice](issue_8571_bounded_falsification_slice.md) -
+  source-faithful random/Halton preparation, zero-overlay equivalence, explicit blocked outcomes,
+  and a non-instantiated CMA-ES arm behind the answerability and replay gates.
+
 * [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.

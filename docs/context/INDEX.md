@@ -118,6 +118,12 @@ diagnostic-only; template-mode `pedestrian_delay_s` remains provenance-only and 
 compute:
 [issue_8570_adversarial_falsification_answerability.md](issue_8570_adversarial_falsification_answerability.md).
 
+Issue #8571 default-disabled bounded falsification slice: source-faithful equal-budget random and
+Halton preparation, zero-overlay equivalence, explicit blocked outcome rows, and a recorded but
+uninstantiated CMA-ES arm. The preflight preserves the packet's runtime-effectiveness, native
+outcome, replay, and durable-custody gates:
+[issue_8571_bounded_falsification_slice.md](issue_8571_bounded_falsification_slice.md).
+
 Issue #7261 stale-base observation: input-backed `stale_base_observation_window.v1` measurement
 with deterministic nearest-rank P50/P95 wait summaries, exact-head/base red-main classification,
 compatible baseline comparison, and fail-closed `not_available`/`invalid_contract` states. The

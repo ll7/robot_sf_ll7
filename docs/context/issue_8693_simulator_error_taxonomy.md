@@ -25,6 +25,13 @@ structured as `status="error"`, `degraded=true`, with a `simulator_<phase>_failu
 reason with the `planner_diagnostic:` prefix. Combined collision or simulator signals from either
 kind of planner-owned diagnostic still follow the base taxonomy precedence below.
 
+A non-empty diagnostic `degradation_reasons` value is itself a degradation signal, even when a
+legacy planner reports `status="ok"`; a single legacy string is treated as one reason rather than
+being split into characters. Invalid non-string reason collections remain planner-owned
+`plan_exception:` failures. An empty or invalid diagnostic `planner_type` cannot replace a direct
+caller’s class-name fallback, and a supplied canonical registry ID is never replaced by diagnostic
+metadata. These guards keep simulator signals and planner identity intact before any aggregation.
+
 At receipt level, `run_force_coupled_comparator` sets `status="failed"` whenever any emitted row is
 an error or carries `failure_class="simulator"`. This prevents a handled simulator exception from
 looking like a successful comparator invocation to consumers that do not run the smoke helper.

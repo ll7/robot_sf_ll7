@@ -82,6 +82,20 @@ class _SimulatorBoundaryFailurePlanner:
                 "status": "degraded",
                 "degradation_reasons": ["simulator backend unavailable"],
             }
+        if self.failure_phase == "ok_simulator_text":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "ok",
+                "degradation_reasons": "simulator backend unavailable",
+            }
+        if self.failure_phase == "invalid_planner_type":
+            return {"planner_type": "", "status": "ok"}
+        if self.failure_phase == "invalid_reason_payload":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "degraded",
+                "degradation_reasons": ["simulator backend unavailable", 7],
+            }
         if self.failure_phase == "fallback_diagnostics":
             return {
                 "planner_type": "simulator_boundary_fixture",
@@ -228,6 +242,42 @@ def test_execute_rollout_records_diagnostic_degradation(
     assert result.degraded is True
     assert result.failure_class == expected_failure_class
     assert f"planner_diagnostic: {expected_reason}" in result.degradation_reasons
+
+
+def test_execute_rollout_preserves_single_legacy_simulator_reason() -> None:
+    """A string diagnostic reason remains one simulator signal even with a conflicting ok status."""
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner("ok_simulator_text"),
+        get_canonical_comparison_scenarios()[0],
+    )
+
+    assert result.status == "degraded"
+    assert result.failure_class == FAILURE_CLASS_SIMULATOR
+    assert result.degradation_reasons[0] == "planner_diagnostic: simulator backend unavailable"
+
+
+def test_execute_rollout_falls_back_from_invalid_diagnostic_planner_type() -> None:
+    """An invalid diagnostic planner type cannot create an empty public planner identity."""
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner("invalid_planner_type"),
+        get_canonical_comparison_scenarios()[0],
+    )
+
+    assert result.planner_id == "_SimulatorBoundaryFailurePlanner"
+
+
+def test_execute_rollout_rejects_non_string_diagnostic_reasons() -> None:
+    """Malformed diagnostic reason collections become fail-closed planner errors."""
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner("invalid_reason_payload"),
+        get_canonical_comparison_scenarios()[0],
+    )
+
+    assert result.status == "error"
+    assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
+    assert result.degradation_reasons[0].startswith(
+        "plan_exception: planner diagnostic degradation_reasons"
+    )
 
 
 def test_execute_rollout_emits_reason_for_degraded_diagnostic_without_reason() -> None:
@@ -527,6 +577,24 @@ def test_comparator_receipt_fails_closed_on_simulator_error_rows(
     jsonschema.validate(
         instance=receipt, schema=json.loads(schema_path.read_text(encoding="utf-8"))
     )
+
+
+def test_comparator_receipt_fails_on_simulator_diagnostic_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A simulator reason remains a root receipt failure despite a conflicting diagnostic status."""
+    planner = _SimulatorBoundaryFailurePlanner("ok_simulator_text")
+    monkeypatch.setattr(
+        comparator,
+        "build_planner_registry",
+        lambda _config: {"canonical_fixture": planner},
+    )
+
+    receipt = run_force_coupled_comparator()
+
+    assert receipt["status"] == "failed"
+    assert all(row["planner_id"] == "canonical_fixture" for row in receipt["results"])
+    assert all(row["failure_class"] == FAILURE_CLASS_SIMULATOR for row in receipt["results"])
 
 
 def test_cli_smoke_rejects_simulator_error_rows(

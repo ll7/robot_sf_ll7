@@ -431,6 +431,29 @@ def _update_clearance(
     return new_min, collision, near_miss
 
 
+def _diagnostic_degradation_reasons(diag: dict[str, Any]) -> list[str]:
+    """Return diagnostic degradation reasons without masking malformed signals.
+
+    A few legacy planner adapters emitted one reason as a string rather than a JSON-like list.
+    Treat that value as one reason so a simulator signal cannot be split into characters and lose
+    simulator-first classification. Other non-string reason payloads are invalid planner output
+    and must fail through the existing planner-exception boundary.
+    """
+    if "degradation_reasons" not in diag:
+        return []
+
+    raw_reasons = diag["degradation_reasons"]
+    if isinstance(raw_reasons, str):
+        return [raw_reasons]
+    if isinstance(raw_reasons, (list, tuple)) and all(
+        isinstance(reason, str) for reason in raw_reasons
+    ):
+        return list(raw_reasons)
+    raise ValueError(
+        "planner diagnostic degradation_reasons must be a string or a sequence of strings"
+    )
+
+
 def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     planner: LocalPlannerProtocol,
     scenario: ComparatorScenarioSpec,
@@ -569,10 +592,13 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
             if diag_status not in (None, "ok", "degraded"):
                 raise ValueError(f"unsupported planner diagnostic status: {diag_status!r}")
             if planner_id is None:
-                rollout_planner_id = str(diag.get("planner_type", rollout_planner_id))
-            if diag_status == "degraded" or diag.get("degraded") is True:
+                diagnostic_planner_id = diag.get("planner_type")
+                if isinstance(diagnostic_planner_id, str) and diagnostic_planner_id.strip():
+                    rollout_planner_id = diagnostic_planner_id
+
+            diagnostic_reasons = _diagnostic_degradation_reasons(diag)
+            if diag_status == "degraded" or diag.get("degraded") is True or diagnostic_reasons:
                 degraded = True
-                diagnostic_reasons = diag.get("degradation_reasons", [])
                 if not diagnostic_reasons:
                     diagnostic_reasons = ["degraded_without_reason"]
                 for reason in diagnostic_reasons:

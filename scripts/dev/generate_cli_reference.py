@@ -398,7 +398,7 @@ def probe_help(
     except subprocess.TimeoutExpired:
         result.help_error = f"--help timed out after {timeout_s}s"
         return result
-    except Exception as exc:  # noqa: BLE001 - record subprocess launch failures
+    except (OSError, ValueError) as exc:  # subprocess launch failures only
         result.help_error = f"--help launch failed: {exc}".strip()[:300]
         return result
     if completed.returncode != 0:

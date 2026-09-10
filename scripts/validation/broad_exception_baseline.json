@@ -671,6 +671,51 @@
     },
     {
       "col_offset": 4,
+      "context": "get_live_parser_info",
+      "fingerprint": "398e9b515b43968f",
+      "handler": "Exception",
+      "lineno": 258,
+      "path": "scripts/dev/generate_cli_reference.py",
+      "source": "except Exception:  # noqa: BLE001 - probe path; import errors handled by help smoke"
+    },
+    {
+      "col_offset": 8,
+      "context": "get_live_parser_info",
+      "fingerprint": "6d5882a0d4e8c397",
+      "handler": "Exception",
+      "lineno": 266,
+      "path": "scripts/dev/generate_cli_reference.py",
+      "source": "except Exception:  # noqa: BLE001 - factory may need args; fall back to help text"
+    },
+    {
+      "col_offset": 4,
+      "context": "probe_help",
+      "fingerprint": "82aa90b903ff4141",
+      "handler": "Exception",
+      "lineno": 374,
+      "path": "scripts/dev/generate_cli_reference.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - fail-closed probe records the reason"
+    },
+    {
+      "col_offset": 4,
+      "context": "_robot_sf_subcommand_help",
+      "fingerprint": "bdfe35ae0a8bbcf0",
+      "handler": "Exception",
+      "lineno": 599,
+      "path": "scripts/dev/generate_cli_reference.py",
+      "source": "except Exception:  # noqa: BLE001 - fall back to empty; probe still records subcommands"
+    },
+    {
+      "col_offset": 4,
+      "context": "_robot_sf_subcommand_help",
+      "fingerprint": "e056ef21a61fb2dc",
+      "handler": "Exception",
+      "lineno": 603,
+      "path": "scripts/dev/generate_cli_reference.py",
+      "source": "except Exception:  # noqa: BLE001 - defensive; help smoke remains authoritative"
+    },
+    {
+      "col_offset": 4,
       "context": "main",
       "fingerprint": "d11e2578d4e58c2f",
       "handler": "Exception",

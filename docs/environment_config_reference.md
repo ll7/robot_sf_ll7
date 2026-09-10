@@ -96,7 +96,7 @@ Configuration for robot environments with image observations.
 | <a id="ImageRobotConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="ImageRobotConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="ImageRobotConfig.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="ImageRobotConfig.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="ImageRobotConfig.use_image_obs"></a>`use_image_obs` | `bool` | `True` | no | public |  |
 | <a id="ImageRobotConfig.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.rollover_proxy_params"></a>`rollover_proxy_params` | `RolloverProxyParams` | `RolloverProxyParams()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.rollover_proxy_penalty"></a>`rollover_proxy_penalty` | `float` | `0.0` | no | public | inherited from `RobotSimulationConfig`; |
@@ -318,7 +318,7 @@ Deprecated: Use ImageRobotConfig instead.
 | <a id="RobotEnvSettings.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotEnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotEnvSettings.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="RobotEnvSettings.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="RobotEnvSettings.use_image_obs"></a>`use_image_obs` | `bool` | `True` | no | public | inherited from `ImageRobotConfig`; |
 | <a id="RobotEnvSettings.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.rollover_proxy_params"></a>`rollover_proxy_params` | `RolloverProxyParams` | `RolloverProxyParams()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.rollover_proxy_penalty"></a>`rollover_proxy_penalty` | `float` | `0.0` | no | public | inherited from `RobotSimulationConfig`; |

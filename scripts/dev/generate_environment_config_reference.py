@@ -170,7 +170,7 @@ def _display_default(raw: str) -> str:
 def _flatten(classes: dict[str, _ClassInfo], info: _ClassInfo) -> list[ConfigField]:
     """Inline same-module base fields first, marked with their owner."""
     ordered: list[ConfigField] = []
-    seen: set[str] = set()
+    positions: dict[str, int] = {}
 
     def _inherit(parent: _ClassInfo, owner: str) -> None:
         for base in parent.bases:
@@ -179,20 +179,22 @@ def _flatten(classes: dict[str, _ClassInfo], info: _ClassInfo) -> list[ConfigFie
             if grandparent is not None and grandparent.name != parent.name:
                 _inherit(grandparent, grandparent.name)
         for parent_field in parent.fields:
-            if parent_field.name in seen:
-                continue
-            seen.add(parent_field.name)
-            ordered.append(
-                ConfigField(
-                    parent_field.name,
-                    parent_field.annotation,
-                    parent_field.default,
-                    parent_field.required,
-                    parent_field.doc,
-                    parent_field.stability,
-                    inherited_from=owner,
-                )
+            inherited = ConfigField(
+                parent_field.name,
+                parent_field.annotation,
+                parent_field.default,
+                parent_field.required,
+                parent_field.doc,
+                parent_field.stability,
+                inherited_from=owner,
             )
+            position = positions.get(parent_field.name)
+            if position is None:
+                positions[parent_field.name] = len(ordered)
+                ordered.append(inherited)
+            else:
+                # A nearer same-module parent may override a grandparent field.
+                ordered[position] = inherited
 
     for base in info.bases:
         base_name = base.split("[")[0].split(".")[-1]
@@ -201,10 +203,14 @@ def _flatten(classes: dict[str, _ClassInfo], info: _ClassInfo) -> list[ConfigFie
             continue
         _inherit(parent, parent.name)
     for own in info.fields:
-        if own.name in seen:
-            continue
-        seen.add(own.name)
-        ordered.append(own)
+        position = positions.get(own.name)
+        if position is None:
+            positions[own.name] = len(ordered)
+            ordered.append(own)
+        else:
+            # Dataclasses keep an overridden field in its inherited position while
+            # applying the subclass annotation/default, so preserve that order here.
+            ordered[position] = own
     return ordered
 
 

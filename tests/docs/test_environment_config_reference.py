@@ -44,6 +44,21 @@ def test_every_public_field_appears_exactly_once() -> None:
     assert len(anchors) == len(set(anchors))
 
 
+def test_subclass_overrides_use_subclass_defaults() -> None:
+    """Inherited fields must reflect a subclass's replacement annotation/default."""
+    classes = parse_config_module(TARGET_MODULES[0])
+    fields = {field.name: field for field in _flatten(classes, classes["ImageRobotConfig"])}
+    assert fields["use_image_obs"].default == "field(default=True)"
+    assert not fields["use_image_obs"].inherited_from
+    assert "`use_image_obs` | `bool` | `True`" in render()
+
+    transitive_fields = {
+        field.name: field for field in _flatten(classes, classes["RobotEnvSettings"])
+    }
+    assert transitive_fields["use_image_obs"].default == "field(default=True)"
+    assert transitive_fields["use_image_obs"].inherited_from == "ImageRobotConfig"
+
+
 def test_generator_avoids_heavy_imports() -> None:
     """The generator must stay AST-based without heavy third-party imports."""
     tree = ast.parse(

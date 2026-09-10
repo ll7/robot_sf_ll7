@@ -27,8 +27,7 @@ It must not support these statements by itself:
 - unmodeled pedestrians, vehicle classes, weather, sensors, or actuation dynamics are covered,
 - fallback, degraded, failed, not-available, or metadata-only rows are success evidence.
 
-Use the repository evidence ladder from
-[Maintainer Values And Hard Contracts](./maintainer_values.md): `diagnostic-only`,
+Use the repository evidence ladder from the [Glossary](./glossary.md): `diagnostic-only`,
 `smoke evidence`, `nominal benchmark evidence`, and `paper-grade`. When confidence is below about
 95 percent, put the caveat or uncertainty next to the claim.
 

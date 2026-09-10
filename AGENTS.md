@@ -50,27 +50,10 @@ patch the stale instruction, or open a bounded follow-up issue.
 
 ## Maintainer Value Hierarchy
 
-`docs/maintainer_values.md` records stable maintainer principles and tie-breakers for ambiguous
-trade-offs. It is not a second authority hierarchy; this file's Instruction Precedence contract
-governs repository-internal conflicts. Optimize first for concrete research progress on
-social-navigation simulation, benchmarking, and planner exploration. The hard rule is to be honest,
-transparent, and reproducible. Apply proof, documentation, and process in proportion to risk:
-
-- benchmark, metric, schema, model-provenance, and paper-facing claims still require strong,
-  reproducible evidence before they are treated as established;
-- exploratory planner or research work may move faster when its status is clearly labeled as
-  exploratory, diagnostic, blocked, or not yet benchmark evidence;
-- low-risk docs, metadata, and instruction changes use the cheaper validation path by default:
-  inspect the diff and verify changed links or referenced paths where practical;
-- substantive claims, recommendations, benchmark conclusions, and prioritization judgments below
-  roughly 95 percent confidence should include a numeric uncertainty estimate, caveat, or condition
-  that would change the conclusion;
-- current maintainer direction overrides stale workflow prose. When an instruction appears to
-  conflict with the user's current priority, follow the current priority, call out the conflict, and
-  propose or make the smallest doc update needed to remove the drift.
-
-When instruction surfaces conflict, the Instruction Precedence contract above is the single
-normative source; do not restate its order elsewhere.
+`docs/maintainer_values.md` records the stable principles and tie-breakers that resolve trade-offs
+when procedure is silent; it is linked, not restated, here. The hard rule is honest, transparent,
+reproducible work, and process scales with risk and claim strength. When instruction surfaces
+conflict, the Instruction Precedence contract above is the single normative source.
 
 Routine workflow cleanup should proceed autonomously when the scope is bounded; label assumptions,
 uncertainty, and evidence grade instead of pausing for confirmation. Treat Project #5 ordering and
@@ -283,11 +266,11 @@ details, read `docs/dev/agents/relocated-agents-guidance.md`.
 
 ## Planning And Communication
 
-For non-trivial work, follow `.agents/PLANS.md`: restate boundaries, list evidence sources before
-implementation, keep validation commands explicit, and say what proof will demonstrate. Prefer
-concise-but-explanatory responses over terse status-only updates. For benchmark or planner findings,
-include what changed, why it matters, and what risk or limitation remains. Separate observed
-evidence from hypothesis when uncertainty remains.
+A persistent execution plan is required for the Coordinated and Evidence-critical profiles and
+optional otherwise (see `.agents/task_scope_manifest.yaml`); when required, follow
+`.agents/PLANS.md`. Prefer concise-but-explanatory responses over terse status-only updates. For
+benchmark or planner findings, include what changed, why it matters, and what risk or limitation
+remains. Separate observed evidence from hypothesis when uncertainty remains.
 
 ## Key Codex Skills
 

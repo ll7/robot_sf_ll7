@@ -1,22 +1,23 @@
 # Planning Convention
 
-Use this file when the work is large enough that an agent should externalize its plan before or
-during implementation. A plan records intent, decisions, and intended proof; it never outranks
+Use this file when the selected execution profile is `coordinated` or `evidence_critical`, or when
+inspection reveals enough ambiguity or risk to escalate. Observe and Local tasks use short working
+notes or no persistent plan. A plan records intent, decisions, and intended proof; it never outranks
 current code, evidence, or repository invariants. Repository-internal precedence is owned by the
 `Instruction Precedence` contract in `AGENTS.md`.
 
-## When To Write A Plan
+## When A Plan Is Required
 
-Write a plan when the task:
+| Profile | Persistent plan |
+| --- | --- |
+| Observe | not required |
+| Local | not required; short working notes are sufficient |
+| Coordinated | required before or during implementation |
+| Evidence-critical | required before execution |
 
-- spans multiple subsystems,
-- changes benchmark semantics, training contracts, or planner provenance,
-- adds documentation intended to guide future agent work,
-- or is likely to require follow-up issues.
+Escalate to a higher profile instead of planning around a larger-than-expected task.
 
-Skip formal planning only for narrow, obviously local edits.
-
-## Plan Template
+## Implementation / Migration Template
 
 Keep plans short and operational:
 
@@ -24,45 +25,36 @@ Keep plans short and operational:
 # Goal
 - One or two sentences on the desired outcome.
 
-# Boundaries
-- What is in scope.
-- What is explicitly out of scope.
+# Scope
+- In scope and explicitly out of scope.
+- Acceptance criteria.
 
-# Evidence
+# Evidence sources
 - Files, issues, docs, configs, or upstream sources that define the contract.
 
 # Steps
 - Ordered implementation steps.
 
-# Validation
-- Commands to run.
-- Evidence that will prove the change works in this repository.
+# Decisions and risks
+- Observed evidence separated from assumptions.
+- Deferred scope or follow-up issue candidates.
 
-# Risks / Follow-ups
-- Remaining uncertainty, deferred scope, or issue candidates.
+# Validation route
+- Commands to run and the proof each one demonstrates.
+
+# Recovery / handoff
+- How to resume, revert, or hand off if interrupted.
 ```
 
-## Required Behaviors
+## Evidence / Research Additions
 
-- Restate the issue or user goal in repository terms, not generic assistant language.
-- Separate observed evidence from assumptions.
-- For bounded workflow cleanup, proceed autonomously when the maintainer direction is clear; label
-  uncertainty, assumptions, and evidence grade instead of pausing for routine confirmation.
-- Prefer canonical scripts and committed configs over ad-hoc commands.
-- When benchmark or planner claims are involved, include the exact docs/configs that anchor the claim.
-- State the proof obligation for any new planner, metric, skill, or test before implementation.
-- Close the plan only after that proof has been gathered or the remaining gap has been called out
-  explicitly.
-- If scope expands, create a follow-up issue instead of silently broadening the implementation.
-- Use the `AGENTS.md` readiness matrix to choose validation depth. A small docs or workflow plan can
-  use cheap validation, but any stronger benchmark, metric, schema, model-provenance, or
-  paper-facing claim escalates to the proof tier for that claim.
+For evidence-critical plans, add:
 
-## Review Expectations
+- target claim or hypothesis, comparator or baseline, and minimum valid evidence;
+- decision or stop rule, including fallback/degraded exclusions;
+- artifact and provenance plan, and the synthesis, registry, or context surface to update.
 
-A good plan makes it easy for a reviewer to answer:
+## Plan Review
 
-- what changed,
-- why that scope is correct,
-- how it was validated,
-- and what risk remains.
+A good plan lets a reviewer answer: what changed, why the scope is correct, how it was validated, and
+what risk remains.

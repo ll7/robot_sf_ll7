@@ -18,7 +18,9 @@ entrypoints, and `docs/maintainer_values.md` is the compact source for current v
 contracts. `docs/ai/agent_workflow_entrypoints.md` is the single owner of task route selection
 (read-only observation, documentation edit, runtime change, scientific interpretation, or
 environment repair), correct `uv run` command entrypoints, model registry lookup, shared routing
-handoff format, and targeted large-file navigation. Other surfaces link to the route table instead
+handoff format, and targeted large-file navigation. `.agents/task_scope_manifest.yaml` is the
+machine-readable execution-profile and route mapping validated by
+`scripts/dev/check_instruction_references.py`. Other surfaces link to the route table instead
 of restating the mapping; references are required by default unless marked optional or generated.
 Branch synchronization is mode-specific: implementation branches merge `origin/main` early,
 while read-only review worktrees never merge or push to implementation branches (enforced by

@@ -1,0 +1,74 @@
+version: 1
+routing_owner: docs/ai/agent_workflow_entrypoints.md
+manifest_owner: AGENTS.md
+profiles:
+  observe:
+    description: Inspect, explain, triage, or review without mutating repository state.
+    plan_required: false
+    environment_required: false
+    worktree_required: false
+    pr_required: false
+    evidence_gates_required: false
+    required_context:
+      - AGENTS.md
+      - docs/ai/agent_workflow_entrypoints.md
+    forbidden_ceremony:
+      - execution plan
+      - worktree creation
+      - release gates
+  local:
+    description: Bounded documentation, code, or test edit with an obvious targeted check.
+    plan_required: false
+    environment_required: false
+    worktree_required: false
+    pr_required: false
+    evidence_gates_required: false
+    required_context:
+      - AGENTS.md
+      - docs/ai/agent_workflow_entrypoints.md
+    forbidden_ceremony:
+      - execution plan
+      - worktree creation
+      - release gates
+  coordinated:
+    description: Multi-module, API, migration, or ambiguous change.
+    plan_required: true
+    environment_required: true
+    worktree_required: true
+    pr_required: true
+    evidence_gates_required: false
+    required_context:
+      - .agents/PLANS.md
+      - docs/code_review.md
+      - docs/dev/worktree_lifecycle.md
+    forbidden_ceremony:
+      - release gates
+  evidence_critical:
+    description: Benchmark evidence, research claims, release, security, or publication artifacts.
+    plan_required: true
+    environment_required: true
+    worktree_required: true
+    pr_required: true
+    evidence_gates_required: true
+    required_context:
+      - .agents/PLANS.md
+      - docs/benchmark_governance.md
+      - docs/code_review.md
+      - docs/dev/worktree_lifecycle.md
+    forbidden_ceremony: []
+escalation:
+  allowed: true
+  rule: >-
+    Escalate to the next higher profile when inspection reveals more risk, collision potential, or
+    evidence sensitivity than the initial profile assumed, and record the escalation in the handoff.
+routes:
+  read-only-observation:
+    default_profile: observe
+  documentation-only-edit:
+    default_profile: local
+  implementation-runtime-change:
+    default_profile: coordinated
+  scientific-benchmark-interpretation:
+    default_profile: evidence_critical
+  environment-worktree-repair:
+    default_profile: coordinated

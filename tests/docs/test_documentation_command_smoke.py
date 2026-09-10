@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+import sys
+import time
+from pathlib import Path
 
 import pytest
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 from scripts.validation.run_documentation_commands import (
     BlockResult,
+    _run_process,
+    digest,
     iter_tagged_blocks,
     main,
     normalize_output,
     run_block,
+    run_profile,
     screen_command,
 )
 
@@ -23,8 +25,8 @@ from scripts.validation.run_documentation_commands import (
 def test_only_tagged_blocks_execute(tmp_path: Path) -> None:
     page = tmp_path / "page.md"
     page.write_text(
-        "```bash\nuv run robot-sf --help\n```\n\n"
-        "```bash exec-doc-root\nuv run robot-sf --version\n```\n",
+        "```bash\nuv run --offline --no-sync robot-sf --help\n```\n\n"
+        "```bash exec-doc-root\nuv run --offline --no-sync robot-sf --version\n```\n",
         encoding="utf-8",
     )
     blocks = iter_tagged_blocks(page)
@@ -32,8 +34,11 @@ def test_only_tagged_blocks_execute(tmp_path: Path) -> None:
 
 
 def test_screen_rejects_placeholders() -> None:
-    assert screen_command("uv run robot-sf demo --seed <SEED>") == "placeholder_token"
-    assert screen_command("uv run robot-sf demo --seed 270") is None
+    assert (
+        screen_command("uv run --offline --no-sync robot-sf demo --seed <SEED>")
+        == "placeholder_token"
+    )
+    assert screen_command("uv run --offline --no-sync robot-sf demo --seed 270") is None
 
 
 def test_screen_rejects_network() -> None:
@@ -53,7 +58,25 @@ def test_screen_rejects_shell_wrappers_and_composition() -> None:
     )
     assert screen_command("bash -c 'echo unsafe'") == "shell_wrapper"
     assert screen_command("printf safe | nc example.com 443") == "shell_syntax"
-    assert screen_command("uv run robot-sf --help") is None
+    assert screen_command("uv run --offline --no-sync robot-sf --help") is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        r"r\m -rf work",
+        r"sour\ce payload",
+        r"u\v run --offline --no-sync robot-sf --help",
+    ],
+)
+def test_screen_rejects_escaped_command_spellings(command: str) -> None:
+    """Backslash-obfuscated commands cannot reach shell execution."""
+    assert screen_command(command) == "shell_syntax"
+
+
+def test_screen_rejects_source_and_unknown_argv() -> None:
+    assert screen_command("source payload") == "shell_wrapper"
+    assert screen_command("echo safe") == "unsupported_command"
 
 
 def test_screen_rejects_destructive() -> None:
@@ -69,12 +92,47 @@ def test_screen_rejects_output_escape() -> None:
     assert screen_command("cd .. && ls") == "output_escape"
 
 
+@pytest.mark.parametrize("command", ["cd /", "cd ../outside", "cd ../../outside"])
+def test_screen_rejects_temporary_cwd_escape(command: str) -> None:
+    assert screen_command(command) is not None
+
+
+def test_semicolon_composition_is_rejected() -> None:
+    assert screen_command("false;true") == "shell_syntax"
+
+
+def test_multiline_block_stops_at_first_nonzero_command() -> None:
+    receipt = run_block("page.md", 1, "false\nsleep 30", "exec-doc", 0.2)
+    assert receipt.reason == "nonzero_exit"
+    assert receipt.exit_code == 1
+
+
 def test_unterminated_tagged_fence_fails_closed(tmp_path: Path) -> None:
     """Malformed tagged Markdown is rejected instead of executing through EOF."""
     page = tmp_path / "page.md"
-    page.write_text("```bash exec-doc-root\nuv run robot-sf --help\n", encoding="utf-8")
+    page.write_text(
+        "```bash exec-doc-root\nuv run --offline --no-sync robot-sf --help\n", encoding="utf-8"
+    )
     with pytest.raises(ValueError, match="Unterminated tagged fence"):
         iter_tagged_blocks(page)
+
+
+def test_fence_closer_must_match_opening_length(tmp_path: Path) -> None:
+    page = tmp_path / "page.md"
+    page.write_text(
+        "````bash exec-doc-root\nuv run --offline --no-sync robot-sf --help\n```\n"
+        "uv run --offline --no-sync robot-sf --version\n````\n",
+        encoding="utf-8",
+    )
+    blocks = iter_tagged_blocks(page)
+    assert blocks == [
+        (
+            2,
+            "exec-doc-root",
+            "uv run --offline --no-sync robot-sf --help\n```\n"
+            "uv run --offline --no-sync robot-sf --version",
+        )
+    ]
 
 
 def test_run_block_records_rejection_without_executing(tmp_path: Path) -> None:
@@ -90,6 +148,144 @@ def test_run_block_timeout_is_bounded() -> None:
     assert receipt.reason == "timeout"
 
 
+def test_approved_uv_commands_require_offline_no_sync_flags() -> None:
+    assert screen_command("uv run robot-sf --help") == "unsupported_command"
+    assert screen_command("uv run --offline --no-sync robot-sf --help") is None
+    assert screen_command("uv run --offline robot-sf --help") == "unsupported_command"
+    assert screen_command("uv run --no-sync robot-sf --help") == "unsupported_command"
+
+
+def test_run_block_rejects_unbounded_timeout() -> None:
+    receipt = run_block("page.md", 1, "true", "exec-doc", float("inf"))
+    assert receipt.reason == "invalid_timeout"
+
+
+def test_run_block_bounds_combined_output() -> None:
+    receipt = run_block("page.md", 1, "yes", "exec-doc", 5.0, max_output_bytes=4096)
+    assert receipt.reason == "output_limit"
+    assert receipt.exit_code is None
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="detached process cleanup requires Linux")
+def test_process_timeout_reaps_descendants(monkeypatch, tmp_path: Path) -> None:
+    import scripts.validation.run_documentation_commands as command_runner
+
+    real_resolve_executable = command_runner._resolve_executable
+    monkeypatch.setattr(
+        command_runner,
+        "_resolve_executable",
+        lambda name: sys.executable if name == sys.executable else real_resolve_executable(name),
+    )
+    child_pid_file = tmp_path / "child.pid"
+    child_code = "import os, time; os.setsid(); time.sleep(30)"
+    parent_code = (
+        "import pathlib, subprocess, sys, time; "
+        "child = subprocess.Popen([sys.executable, '-c', sys.argv[2]]); "
+        "pathlib.Path(sys.argv[1]).write_text(str(child.pid), encoding='ascii'); "
+        "time.sleep(30)"
+    )
+    result = _run_process(
+        [
+            sys.executable,
+            "-c",
+            parent_code,
+            str(child_pid_file),
+            child_code,
+        ],
+        cwd=tmp_path,
+        timeout_s=1.0,
+        max_output_bytes=4096,
+    )
+    assert result.reason == "timeout"
+
+    deadline = time.monotonic() + 2.0
+    while not child_pid_file.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    child_pid = int(child_pid_file.read_text(encoding="ascii"))
+
+    def child_is_live() -> bool:
+        try:
+            state = Path(f"/proc/{child_pid}/stat").read_text(encoding="ascii")
+        except FileNotFoundError:
+            return False
+        return state.rsplit(")", 1)[1].split()[0] != "Z"
+
+    while time.monotonic() < deadline:
+        if not child_is_live():
+            break
+        time.sleep(0.01)
+    else:
+        pytest.fail(f"descendant process {child_pid} survived timeout cleanup")
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="detached process cleanup requires Linux")
+def test_process_timeout_reaps_orphaned_descendant_before_cleanup_snapshot(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A detached child observed while supervised is still reaped after its parent exits."""
+    import scripts.validation.run_documentation_commands as command_runner
+
+    real_resolve_executable = command_runner._resolve_executable
+    monkeypatch.setattr(
+        command_runner,
+        "_resolve_executable",
+        lambda name: sys.executable if name == sys.executable else real_resolve_executable(name),
+    )
+    child_pid_file = tmp_path / "child.pid"
+    child_ready_file = tmp_path / "child.ready"
+    parent_done_file = tmp_path / "parent.done"
+    child_code = (
+        "import os, pathlib, sys, time; "
+        "os.setsid(); "
+        "pathlib.Path(sys.argv[1]).write_text(str(os.getpid()), encoding='ascii'); "
+        "time.sleep(30)"
+    )
+    parent_code = (
+        "import pathlib, subprocess, sys, time\n"
+        "child = subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[3]])\n"
+        "pathlib.Path(sys.argv[1]).write_text(str(child.pid), encoding='ascii')\n"
+        "deadline = time.monotonic() + 0.5\n"
+        "while not pathlib.Path(sys.argv[3]).exists() and time.monotonic() < deadline:\n"
+        "    time.sleep(0.001)\n"
+        "time.sleep(0.25)\n"
+        "pathlib.Path(sys.argv[4]).write_text('exited', encoding='ascii')"
+    )
+    result = _run_process(
+        [
+            sys.executable,
+            "-c",
+            parent_code,
+            str(child_pid_file),
+            child_code,
+            str(child_ready_file),
+            str(parent_done_file),
+        ],
+        cwd=tmp_path,
+        timeout_s=1.0,
+        max_output_bytes=4096,
+    )
+    assert result.reason == "timeout"
+    assert parent_done_file.exists()
+    assert child_ready_file.exists()
+    assert child_pid_file.exists()
+    child_pid = int(child_pid_file.read_text(encoding="ascii"))
+
+    def child_is_live() -> bool:
+        try:
+            state = Path(f"/proc/{child_pid}/stat").read_text(encoding="ascii")
+        except FileNotFoundError:
+            return False
+        return state.rsplit(")", 1)[1].split()[0] != "Z"
+
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        if not child_is_live():
+            break
+        time.sleep(0.01)
+    else:
+        pytest.fail(f"orphaned descendant process {child_pid} survived timeout cleanup")
+
+
 def test_normalize_output_replaces_machine_paths(tmp_path: Path) -> None:
     text = (
         f"wrote {tmp_path}/out/episode.jsonl\n"
@@ -103,12 +299,82 @@ def test_normalize_output_replaces_machine_paths(tmp_path: Path) -> None:
     assert normalized.endswith("ok\n")
 
 
+def test_normalize_output_canonicalizes_stderr_formatting(tmp_path: Path) -> None:
+    text = (
+        f"\x1b[31merror\x1b[0m at {tmp_path}\\\r\n"
+        "I0000 00:00:1789035762.286829 2763162 cudart_stub.cc:31] noise\n"
+        "2026-09-10 10:22:42.958 | DEBUG    | module:function:1 - detail\r"
+        "next\rline\n"
+    )
+    normalized = normalize_output(text, str(tmp_path))
+    assert (
+        normalized
+        == "error at <tmp>\\\n<timestamp> | DEBUG    | module:function:1 - detail\nnext\nline\n"
+    )
+
+
+def test_run_process_uses_fixed_executable_and_sanitized_environment(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import scripts.validation.run_documentation_commands as command_runner
+
+    captured: dict[str, object] = {}
+    real_popen = command_runner.subprocess.Popen
+
+    def recording_popen(argv, **kwargs):
+        captured["argv"] = argv
+        captured["env"] = kwargs["env"]
+        return real_popen(argv, **kwargs)
+
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path / "malicious-home"))
+    monkeypatch.setenv("DOC_RUNNER_SECRET", "must-not-leak")
+    monkeypatch.setenv("UV_OFFLINE", "0")
+    monkeypatch.setenv("UV_NO_SYNC", "0")
+    monkeypatch.setattr(command_runner.subprocess, "Popen", recording_popen)
+
+    result = _run_process(["true"], cwd=tmp_path, timeout_s=5.0, max_output_bytes=4096)
+
+    assert result.reason == "completed"
+    assert Path(captured["argv"][0]).is_absolute()
+    child_env = captured["env"]
+    assert child_env["PATH"] == command_runner.TRUSTED_PATH
+    assert child_env["HOME"] == str(tmp_path.resolve())
+    assert child_env["TMPDIR"] == str(tmp_path.resolve())
+    assert child_env["UV_OFFLINE"] == "1"
+    assert child_env["UV_NO_SYNC"] == "1"
+    assert "DOC_RUNNER_SECRET" not in child_env
+
+
+def test_run_process_rejects_untrusted_absolute_executable(tmp_path: Path) -> None:
+    executable = tmp_path / "true"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    result = _run_process([str(executable)], cwd=tmp_path, timeout_s=5.0, max_output_bytes=4096)
+
+    assert result.reason == "process_error"
+
+
 def test_run_block_true_command_receipt(tmp_path: Path) -> None:
     receipt = run_block("page.md", 1, "true", "exec-doc", 30.0)
     assert receipt.reason == "ok"
     assert receipt.exit_code == 0
     assert receipt.stdout_digest is not None
     assert "duration_s" not in receipt.as_dict()
+
+
+def test_run_profile_honors_supplied_root(tmp_path: Path) -> None:
+    for relative_page in ("README.md", "docs/adoption_path.md", "docs/user-guide.md"):
+        page = tmp_path / relative_page
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text("```bash exec-doc-root\npwd\n```\n", encoding="utf-8")
+
+    results = run_profile("onboarding", root=tmp_path, timeout_s=5.0)
+
+    assert len(results) == 3
+    assert all(result.reason == "ok" for result in results)
+    assert all(result.stdout_digest == digest("<repo>\n") for result in results)
 
 
 def test_json_cli_output_is_parseable(monkeypatch, capsys) -> None:
@@ -120,7 +386,11 @@ def test_json_cli_output_is_parseable(monkeypatch, capsys) -> None:
         ],
     )
     assert main(["--format", "json", "--check"]) == 0
-    payload = json.loads(capsys.readouterr().out)
+    first_output = capsys.readouterr().out
+    assert main(["--format", "json", "--check"]) == 0
+    second_output = capsys.readouterr().out
+    assert first_output == second_output
+    payload = json.loads(first_output)
     assert payload == [
         {
             "source": "page.md",

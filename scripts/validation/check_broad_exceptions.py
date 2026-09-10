@@ -177,6 +177,19 @@ def _baseline_payload(
     }
 
 
+def _serialized_entry_counts(entries: object) -> dict[str, Any] | None:
+    """Return summary counts for baseline dictionaries, or ``None`` if malformed."""
+    if not isinstance(entries, list):
+        return None
+    by_path: dict[str, int] = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            return None
+        path = entry["path"]
+        by_path[path] = by_path.get(path, 0) + 1
+    return {"total": len(entries), "by_path": dict(sorted(by_path.items()))}
+
+
 def _load_baseline(path: Path) -> dict[str, Any]:
     """Load and minimally validate a baseline file."""
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -196,6 +209,20 @@ def check_against_baseline(
     """Return ratchet failure messages for new or increased broad catches."""
     failures: list[str] = []
     baseline_entries = baseline.get("entries", [])
+    expected_counts = _serialized_entry_counts(baseline_entries)
+    if expected_counts is None:
+        return ["Broad exception baseline entries are malformed; regenerate the baseline."]
+    if baseline.get("counts") != expected_counts:
+        failures.append(
+            "Broad exception baseline summary is stale; "
+            f"expected {expected_counts!r}, recorded {baseline.get('counts')!r}. "
+            "Regenerate with --write-baseline."
+        )
+    if not all(
+        isinstance(entry, dict) and isinstance(entry.get("fingerprint"), str)
+        for entry in baseline_entries
+    ):
+        return failures + ["Broad exception baseline entries lack fingerprints; regenerate."]
     baseline_fingerprints = {entry["fingerprint"] for entry in baseline_entries}
     current_fingerprints = {entry.fingerprint for entry in current}
     if len(current) > len(baseline_entries):

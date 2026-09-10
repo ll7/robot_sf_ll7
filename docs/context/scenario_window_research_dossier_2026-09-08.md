@@ -9,7 +9,7 @@ Refresh provenance for this repair: current `origin/main` is
 `ade95312d31462c8a66208948f9c8528910de0c7`; the live #8612 and #8620 tips are
 `db1215d6e5d1a19598d4f6a4ba10b119229f66b7` and
 `4ef0858d33c91291129098c08975525a54fb0121`; and the refreshed #8622 code head is
-`ba85ab31f2f82e6bb3d97d69b146a80d4217bf70`. The stack is refreshed for inspection,
+`ce31aa2dd1fb684f0a04cd738dbc8a1845673ff0`. The stack is refreshed for inspection,
 but live domain authority and native campaign admission remain blocked.
 
 ## Outcome

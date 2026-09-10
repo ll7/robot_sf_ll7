@@ -1,4 +1,4 @@
-"""Author a custom scenario programmatically and validate it through canonical owners.
+"""Author a custom corridor scenario programmatically, validate, reload, and smoke-test it.
 
 Usage:
     uv run python examples/advanced/35_custom_scenario_authoring.py [--out PATH]

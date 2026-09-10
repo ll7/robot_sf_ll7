@@ -155,6 +155,7 @@ _BLOCKED_SYSCALLS = {
         58,
         59,
         62,
+        129,  # rt_sigqueueinfo
         141,
         101,
         203,
@@ -180,6 +181,7 @@ _BLOCKED_SYSCALLS = {
         179,
         200,
         234,
+        297,  # rt_tgsigqueueinfo
         246,
         248,
         249,
@@ -248,6 +250,7 @@ _BLOCKED_SYSCALLS = {
         129,
         130,
         131,
+        138,  # rt_sigqueueinfo
         122,
         140,
         142,
@@ -276,7 +279,7 @@ _BLOCKED_SYSCALLS = {
         224,
         225,
         241,
-        240,
+        240,  # rt_tgsigqueueinfo
         242,
         243,
         260,

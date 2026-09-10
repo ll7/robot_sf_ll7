@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import importlib.util
 import os
 import re
@@ -327,6 +328,83 @@ def test_entry_point_probe_denies_real_side_effect_escape_attempts(
         listener.close()
         os.close(inherited_fd)
         os.close(credential_fd)
+
+
+def test_seccomp_policy_blocks_queued_signal_syscalls_on_supported_architectures() -> None:
+    """Both queued-signal syscall variants use the policy's EPERM deny path."""
+    gen = _load_generator()
+    expected = {
+        "x86_64": (129, 297),
+        "aarch64": (138, 240),
+    }
+    for machine, syscall_numbers in expected.items():
+        instructions = gen._probe_seccomp_instructions(machine)
+        denied = {
+            instruction.k
+            for instruction in instructions
+            if instruction.code == gen.BPF_JMP_JEQ_K and instruction.jf == 1
+        }
+        assert set(syscall_numbers) <= denied
+
+
+def test_entry_point_probe_denies_queued_signal_syscalls(tmp_path: Path) -> None:
+    """The isolated child cannot queue even a harmless signal to its parent."""
+    gen = _load_generator()
+    queue_syscalls = {
+        "x86_64": (129, 297),
+        "aarch64": (138, 240),
+    }
+    first_syscall, second_syscall = queue_syscalls[gen._probe_machine()]
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    module_name = f"cli_probe_queued_signal_{os.getpid()}"
+    module_path = source_root / f"{module_name}.py"
+    module_path.write_text(
+        textwrap.dedent(
+            f"""
+            import ctypes
+            import os
+            import signal
+
+            LIBC = ctypes.CDLL(None, use_errno=True)
+            LIBC.syscall.restype = ctypes.c_long
+
+            def syscall_status(number, arguments):
+                siginfo = (ctypes.c_ubyte * 128)()
+                ctypes.set_errno(0)
+                result = LIBC.syscall(number, *arguments, ctypes.byref(siginfo))
+                return f"{{result}}:{{ctypes.get_errno()}}"
+
+            def main(argv):
+                if argv != ["--help"]:
+                    return 1
+                print("usage: queued-signal-probe [--help]")
+                print(
+                    "rt-sigqueueinfo:"
+                    + syscall_status({first_syscall}, (os.getppid(), signal.SIGCHLD))
+                )
+                print(
+                    "rt-tgsigqueueinfo:"
+                    + syscall_status(
+                        {second_syscall},
+                        (os.getppid(), os.getpid(), signal.SIGCHLD),
+                    )
+                )
+                return 0
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+
+    result = gen.probe_help(
+        "queued-signal-probe",
+        f"{module_name}:main",
+        source_root,
+        timeout_s=2,
+    )
+    assert result.help_ok, result.help_error
+    assert f"rt-sigqueueinfo:-1:{errno.EPERM}" in result.help_text
+    assert f"rt-tgsigqueueinfo:-1:{errno.EPERM}" in result.help_text
 
 
 def test_entry_point_negative_unimportable_callable() -> None:

@@ -17,7 +17,7 @@ Core simulation configuration shared by all environments.
 | --- | --- | --- | --- | --- | --- |
 | <a id="BaseSimulationConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="BaseSimulationConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
-| <a id="BaseSimulationConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="BaseSimulationConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `list(DEFAULT_TELEMETRY_METRICS)` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="BaseSimulationConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="BaseSimulationConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="BaseSimulationConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
@@ -31,7 +31,7 @@ Core simulation configuration shared by all environments.
 | <a id="BaseSimulationConfig.observation_mode"></a>`observation_mode` | `ObservationMode` | `ObservationMode.DEFAULT_GYM` | no | public |  |
 | <a id="BaseSimulationConfig.observation_stack"></a>`observation_stack` | `ObservationStackSettings` | `ObservationStackSettings()` | no | public |  |
 | <a id="BaseSimulationConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public |  |
-| <a id="BaseSimulationConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public |  |
+| <a id="BaseSimulationConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 
 ### `EnvSettings`
 
@@ -41,7 +41,7 @@ Deprecated: Use RobotSimulationConfig instead.
 | --- | --- | --- | --- | --- | --- |
 | <a id="EnvSettings.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="EnvSettings.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
-| <a id="EnvSettings.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="EnvSettings.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `list(DEFAULT_TELEMETRY_METRICS)` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="EnvSettings.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="EnvSettings.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="EnvSettings.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
@@ -55,7 +55,7 @@ Deprecated: Use RobotSimulationConfig instead.
 | <a id="EnvSettings.observation_mode"></a>`observation_mode` | `ObservationMode` | `ObservationMode.DEFAULT_GYM` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="EnvSettings.observation_stack"></a>`observation_stack` | `ObservationStackSettings` | `ObservationStackSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="EnvSettings.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
-| <a id="EnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; |
+| <a id="EnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="EnvSettings.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
@@ -69,8 +69,8 @@ Deprecated: Use RobotSimulationConfig instead.
 | <a id="EnvSettings.grid_config"></a>`grid_config` | `GridConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.use_occupancy_grid"></a>`use_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.include_grid_in_observation"></a>`include_grid_in_observation` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="EnvSettings.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="EnvSettings.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="EnvSettings.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; Show occupancy grid overlay in pygame visualization |
+| <a id="EnvSettings.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; Alpha blending for grid overlay (0.0=transparent, 1.0=opaque) |
 | <a id="EnvSettings.planner_backend"></a>`planner_backend` | `str` | `'classic'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.planner_classic_config"></a>`planner_classic_config` | `ClassicPlannerConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="EnvSettings.navigation_settings"></a>`navigation_settings` | `NavigationSettings` | `NavigationSettings()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -96,7 +96,7 @@ Configuration for robot environments with image observations.
 | --- | --- | --- | --- | --- | --- |
 | <a id="ImageRobotConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="ImageRobotConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
-| <a id="ImageRobotConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="ImageRobotConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `list(DEFAULT_TELEMETRY_METRICS)` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="ImageRobotConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="ImageRobotConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="ImageRobotConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
@@ -110,7 +110,7 @@ Configuration for robot environments with image observations.
 | <a id="ImageRobotConfig.observation_mode"></a>`observation_mode` | `ObservationMode` | `ObservationMode.DEFAULT_GYM` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="ImageRobotConfig.observation_stack"></a>`observation_stack` | `ObservationStackSettings` | `ObservationStackSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="ImageRobotConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
-| <a id="ImageRobotConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; |
+| <a id="ImageRobotConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="ImageRobotConfig.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.use_image_obs"></a>`use_image_obs` | `bool` | `True` | no | public |  |
 | <a id="ImageRobotConfig.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
@@ -124,8 +124,8 @@ Configuration for robot environments with image observations.
 | <a id="ImageRobotConfig.grid_config"></a>`grid_config` | `GridConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.use_occupancy_grid"></a>`use_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.include_grid_in_observation"></a>`include_grid_in_observation` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="ImageRobotConfig.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="ImageRobotConfig.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="ImageRobotConfig.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; Show occupancy grid overlay in pygame visualization |
+| <a id="ImageRobotConfig.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; Alpha blending for grid overlay (0.0=transparent, 1.0=opaque) |
 | <a id="ImageRobotConfig.planner_backend"></a>`planner_backend` | `str` | `'classic'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.planner_classic_config"></a>`planner_classic_config` | `ClassicPlannerConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="ImageRobotConfig.navigation_settings"></a>`navigation_settings` | `NavigationSettings` | `NavigationSettings()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -152,7 +152,7 @@ Configuration for multi-robot environments.
 | --- | --- | --- | --- | --- | --- |
 | <a id="MultiRobotConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="MultiRobotConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
-| <a id="MultiRobotConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="MultiRobotConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `list(DEFAULT_TELEMETRY_METRICS)` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="MultiRobotConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="MultiRobotConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="MultiRobotConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
@@ -166,7 +166,7 @@ Configuration for multi-robot environments.
 | <a id="MultiRobotConfig.observation_mode"></a>`observation_mode` | `ObservationMode` | `ObservationMode.DEFAULT_GYM` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="MultiRobotConfig.observation_stack"></a>`observation_stack` | `ObservationStackSettings` | `ObservationStackSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="MultiRobotConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
-| <a id="MultiRobotConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; |
+| <a id="MultiRobotConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="MultiRobotConfig.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
@@ -180,8 +180,8 @@ Configuration for multi-robot environments.
 | <a id="MultiRobotConfig.grid_config"></a>`grid_config` | `GridConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.use_occupancy_grid"></a>`use_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.include_grid_in_observation"></a>`include_grid_in_observation` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="MultiRobotConfig.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="MultiRobotConfig.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="MultiRobotConfig.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; Show occupancy grid overlay in pygame visualization |
+| <a id="MultiRobotConfig.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; Alpha blending for grid overlay (0.0=transparent, 1.0=opaque) |
 | <a id="MultiRobotConfig.planner_backend"></a>`planner_backend` | `str` | `'classic'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.planner_classic_config"></a>`planner_classic_config` | `ClassicPlannerConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="MultiRobotConfig.navigation_settings"></a>`navigation_settings` | `NavigationSettings` | `NavigationSettings()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -226,7 +226,7 @@ Deprecated: Use PedestrianSimulationConfig instead.
 | --- | --- | --- | --- | --- | --- |
 | <a id="PedEnvSettings.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedEnvSettings.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
-| <a id="PedEnvSettings.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedEnvSettings.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `list(DEFAULT_TELEMETRY_METRICS)` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedEnvSettings.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedEnvSettings.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedEnvSettings.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
@@ -240,7 +240,7 @@ Deprecated: Use PedestrianSimulationConfig instead.
 | <a id="PedEnvSettings.observation_mode"></a>`observation_mode` | `ObservationMode` | `ObservationMode.DEFAULT_GYM` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedEnvSettings.observation_stack"></a>`observation_stack` | `ObservationStackSettings` | `ObservationStackSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedEnvSettings.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
-| <a id="PedEnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; |
+| <a id="PedEnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="PedEnvSettings.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
@@ -254,8 +254,8 @@ Deprecated: Use PedestrianSimulationConfig instead.
 | <a id="PedEnvSettings.grid_config"></a>`grid_config` | `GridConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.use_occupancy_grid"></a>`use_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.include_grid_in_observation"></a>`include_grid_in_observation` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="PedEnvSettings.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="PedEnvSettings.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="PedEnvSettings.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; Show occupancy grid overlay in pygame visualization |
+| <a id="PedEnvSettings.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; Alpha blending for grid overlay (0.0=transparent, 1.0=opaque) |
 | <a id="PedEnvSettings.planner_backend"></a>`planner_backend` | `str` | `'classic'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.planner_classic_config"></a>`planner_classic_config` | `ClassicPlannerConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedEnvSettings.navigation_settings"></a>`navigation_settings` | `NavigationSettings` | `NavigationSettings()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -284,7 +284,7 @@ Configuration for pedestrian environments.
 | --- | --- | --- | --- | --- | --- |
 | <a id="PedestrianSimulationConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedestrianSimulationConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
-| <a id="PedestrianSimulationConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedestrianSimulationConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `list(DEFAULT_TELEMETRY_METRICS)` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedestrianSimulationConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedestrianSimulationConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedestrianSimulationConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
@@ -298,7 +298,7 @@ Configuration for pedestrian environments.
 | <a id="PedestrianSimulationConfig.observation_mode"></a>`observation_mode` | `ObservationMode` | `ObservationMode.DEFAULT_GYM` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.observation_stack"></a>`observation_stack` | `ObservationStackSettings` | `ObservationStackSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
-| <a id="PedestrianSimulationConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; |
+| <a id="PedestrianSimulationConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="PedestrianSimulationConfig.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
@@ -312,8 +312,8 @@ Configuration for pedestrian environments.
 | <a id="PedestrianSimulationConfig.grid_config"></a>`grid_config` | `GridConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.use_occupancy_grid"></a>`use_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.include_grid_in_observation"></a>`include_grid_in_observation` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="PedestrianSimulationConfig.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="PedestrianSimulationConfig.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="PedestrianSimulationConfig.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; Show occupancy grid overlay in pygame visualization |
+| <a id="PedestrianSimulationConfig.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; Alpha blending for grid overlay (0.0=transparent, 1.0=opaque) |
 | <a id="PedestrianSimulationConfig.planner_backend"></a>`planner_backend` | `str` | `'classic'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.planner_classic_config"></a>`planner_classic_config` | `ClassicPlannerConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.navigation_settings"></a>`navigation_settings` | `NavigationSettings` | `NavigationSettings()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -342,7 +342,7 @@ Deprecated: Use ImageRobotConfig instead.
 | --- | --- | --- | --- | --- | --- |
 | <a id="RobotEnvSettings.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotEnvSettings.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
-| <a id="RobotEnvSettings.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotEnvSettings.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `list(DEFAULT_TELEMETRY_METRICS)` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotEnvSettings.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotEnvSettings.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotEnvSettings.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
@@ -356,7 +356,7 @@ Deprecated: Use ImageRobotConfig instead.
 | <a id="RobotEnvSettings.observation_mode"></a>`observation_mode` | `ObservationMode` | `ObservationMode.DEFAULT_GYM` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotEnvSettings.observation_stack"></a>`observation_stack` | `ObservationStackSettings` | `ObservationStackSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotEnvSettings.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
-| <a id="RobotEnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; |
+| <a id="RobotEnvSettings.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="RobotEnvSettings.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.use_image_obs"></a>`use_image_obs` | `bool` | `True` | no | public | inherited from `ImageRobotConfig`; |
 | <a id="RobotEnvSettings.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
@@ -370,8 +370,8 @@ Deprecated: Use ImageRobotConfig instead.
 | <a id="RobotEnvSettings.grid_config"></a>`grid_config` | `GridConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.use_occupancy_grid"></a>`use_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.include_grid_in_observation"></a>`include_grid_in_observation` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="RobotEnvSettings.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; |
-| <a id="RobotEnvSettings.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; |
+| <a id="RobotEnvSettings.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | inherited from `RobotSimulationConfig`; Show occupancy grid overlay in pygame visualization |
+| <a id="RobotEnvSettings.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | inherited from `RobotSimulationConfig`; Alpha blending for grid overlay (0.0=transparent, 1.0=opaque) |
 | <a id="RobotEnvSettings.planner_backend"></a>`planner_backend` | `str` | `'classic'` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.planner_classic_config"></a>`planner_classic_config` | `ClassicPlannerConfig | None` | `None` | no | public | inherited from `RobotSimulationConfig`; |
 | <a id="RobotEnvSettings.navigation_settings"></a>`navigation_settings` | `NavigationSettings` | `NavigationSettings()` | no | public | inherited from `RobotSimulationConfig`; |
@@ -398,7 +398,7 @@ Configuration for robot-based environments.
 | --- | --- | --- | --- | --- | --- |
 | <a id="RobotSimulationConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotSimulationConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
-| <a id="RobotSimulationConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotSimulationConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `list(DEFAULT_TELEMETRY_METRICS)` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotSimulationConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotSimulationConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotSimulationConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
@@ -412,7 +412,7 @@ Configuration for robot-based environments.
 | <a id="RobotSimulationConfig.observation_mode"></a>`observation_mode` | `ObservationMode` | `ObservationMode.DEFAULT_GYM` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotSimulationConfig.observation_stack"></a>`observation_stack` | `ObservationStackSettings` | `ObservationStackSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotSimulationConfig.observation_visibility"></a>`observation_visibility` | `ObservationVisibilitySettings` | `ObservationVisibilitySettings()` | no | public | inherited from `BaseSimulationConfig`; |
-| <a id="RobotSimulationConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; |
+| <a id="RobotSimulationConfig.sample_positions_globally"></a>`sample_positions_globally` | `bool` | `False` | no | public | inherited from `BaseSimulationConfig`; When True, sample start/goal anywhere in free space instead of spawn/goal zones. |
 | <a id="RobotSimulationConfig.robot_config"></a>`robot_config` | `DifferentialDriveSettings | BicycleDriveSettings | HolonomicDriveSettings` | `DifferentialDriveSettings()` | no | public |  |
 | <a id="RobotSimulationConfig.use_image_obs"></a>`use_image_obs` | `bool` | `False` | no | public |  |
 | <a id="RobotSimulationConfig.rollover_proxy_enabled"></a>`rollover_proxy_enabled` | `bool` | `False` | no | public |  |
@@ -426,8 +426,8 @@ Configuration for robot-based environments.
 | <a id="RobotSimulationConfig.grid_config"></a>`grid_config` | `GridConfig | None` | `None` | no | public |  |
 | <a id="RobotSimulationConfig.use_occupancy_grid"></a>`use_occupancy_grid` | `bool` | `False` | no | public |  |
 | <a id="RobotSimulationConfig.include_grid_in_observation"></a>`include_grid_in_observation` | `bool` | `False` | no | public |  |
-| <a id="RobotSimulationConfig.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public |  |
-| <a id="RobotSimulationConfig.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public |  |
+| <a id="RobotSimulationConfig.show_occupancy_grid"></a>`show_occupancy_grid` | `bool` | `False` | no | public | Show occupancy grid overlay in pygame visualization |
+| <a id="RobotSimulationConfig.grid_visualization_alpha"></a>`grid_visualization_alpha` | `float` | `0.5` | no | public | Alpha blending for grid overlay (0.0=transparent, 1.0=opaque) |
 | <a id="RobotSimulationConfig.planner_backend"></a>`planner_backend` | `str` | `'classic'` | no | public |  |
 | <a id="RobotSimulationConfig.planner_classic_config"></a>`planner_classic_config` | `ClassicPlannerConfig | None` | `None` | no | public |  |
 | <a id="RobotSimulationConfig.navigation_settings"></a>`navigation_settings` | `NavigationSettings` | `NavigationSettings()` | no | public |  |

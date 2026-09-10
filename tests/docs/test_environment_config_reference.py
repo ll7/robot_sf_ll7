@@ -50,14 +50,14 @@ def test_subclass_overrides_use_subclass_defaults() -> None:
     """Inherited fields must reflect a subclass's replacement annotation/default."""
     classes = parse_config_module(TARGET_MODULES[0])
     fields = {field.name: field for field in _flatten(classes, classes["ImageRobotConfig"])}
-    assert fields["use_image_obs"].default == "field(default=True)"
+    assert fields["use_image_obs"].default == "True"
     assert not fields["use_image_obs"].inherited_from
     assert "`use_image_obs` | `bool` | `True`" in render()
 
     transitive_fields = {
         field.name: field for field in _flatten(classes, classes["RobotEnvSettings"])
     }
-    assert transitive_fields["use_image_obs"].default == "field(default=True)"
+    assert transitive_fields["use_image_obs"].default == "True"
     assert transitive_fields["use_image_obs"].inherited_from == "ImageRobotConfig"
 
 
@@ -65,9 +65,12 @@ def test_local_mixin_fields_are_documented() -> None:
     """Public fields from lightweight local mixins must not be silently omitted."""
     classes = parse_config_modules()
     fields = {field.name: field for field in _flatten(classes, classes["BaseSimulationConfig"])}
-    assert fields["telemetry_metrics"].default.startswith("field(default_factory=")
+    assert fields["telemetry_metrics"].default == "list(DEFAULT_TELEMETRY_METRICS)"
     assert fields["telemetry_metrics"].inherited_from == "TelemetryConfigMixin"
-    assert "unexpanded external bases: TelemetryConfigMixin" not in render()
+    reference = render()
+    assert "list(DEFAULT_TELEMETRY_METRICS)" in reference
+    assert "lambda: list(DEFAULT_TELEMETRY_METRICS)()" not in reference
+    assert "unexpanded external bases: TelemetryConfigMixin" not in reference
 
 
 def test_generator_avoids_heavy_imports() -> None:

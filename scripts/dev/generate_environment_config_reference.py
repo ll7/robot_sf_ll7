@@ -63,16 +63,24 @@ def _is_dataclass(classdef: ast.ClassDef) -> bool:
     )
 
 
+def _is_field_call(value: ast.AST) -> bool:
+    """Return whether *value* is a call to the dataclass ``field`` helper."""
+    if not isinstance(value, ast.Call):
+        return False
+    return (isinstance(value.func, ast.Name) and value.func.id == "field") or (
+        isinstance(value.func, ast.Attribute) and value.func.attr == "field"
+    )
+
+
 def _field_default(value: ast.AST) -> tuple[str, bool]:
     """Return (default_text, required) for one dataclass field value."""
-    if (
-        isinstance(value, ast.Call)
-        and isinstance(value.func, ast.Attribute)
-        and value.func.attr == "field"
-    ):
+    if _is_field_call(value):
+        assert isinstance(value, ast.Call)
         for keyword in value.keywords:
             if keyword.arg == "default_factory" and keyword.value is not None:
                 factory = _unparse(keyword.value)
+                if isinstance(keyword.value, ast.Lambda):
+                    return _unparse(keyword.value.body), False
                 return f"{factory}()", False
         for keyword in value.keywords:
             if keyword.arg == "default" and keyword.value is not None:
@@ -82,11 +90,8 @@ def _field_default(value: ast.AST) -> tuple[str, bool]:
 
 
 def _field_doc(value: ast.AST) -> str:
-    if (
-        isinstance(value, ast.Call)
-        and isinstance(value.func, ast.Attribute)
-        and value.func.attr == "field"
-    ):
+    if _is_field_call(value):
+        assert isinstance(value, ast.Call)
         for keyword in value.keywords:
             if keyword.arg == "metadata" and isinstance(keyword.value, ast.Dict):
                 for key, item in zip(keyword.value.keys, keyword.value.values, strict=True):

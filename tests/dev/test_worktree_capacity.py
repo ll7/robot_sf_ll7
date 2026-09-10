@@ -1352,7 +1352,9 @@ def test_create_worktree_exec_can_create_nested_worktree(
         "result = subprocess.run(\n"
         "    [sys.argv[1], '--path', sys.argv[2], '--branch', sys.argv[3],\n"
         "     '--minimum-free-bytes', '0'],\n"
-        "    cwd=sys.argv[4], capture_output=True, text=True, timeout=10, check=False\n"
+        # Nested checkout is intentionally still bounded, but ten seconds is
+        # below the observed loaded-runner envelope (issue #8890).
+        "    cwd=sys.argv[4], capture_output=True, text=True, timeout=30, check=False\n"
         ")\n"
         "if result.returncode != 0:\n"
         "    print(result.stdout)\n"

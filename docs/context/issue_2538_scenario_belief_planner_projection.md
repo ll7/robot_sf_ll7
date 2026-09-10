@@ -52,6 +52,11 @@ lifecycle boundary. No generation or continuity token is fabricated, and no reti
 benchmark/safety benefit is inferred. Aggregate confidence and the radius covariance block are
 explicitly labelled as adapter-derived and unavailable-as-modelled in the diagnostics.
 
+For the current simulator-oracle constructor, `ped_###` entity IDs are derived from the pedestrian
+array position in each snapshot. The adapter preserves those source keys but does not turn them into
+actor-side tracking identities; `source.adapter == "simulator_oracle"` and synthetic calibration
+remain privileged diagnostic provenance, not actor-observable or planner-calibrated evidence.
+
 ## Claim Boundary
 
 Safe claim: this is a deterministic, entity-ID-keyed projection of one `ScenarioBelief` snapshot

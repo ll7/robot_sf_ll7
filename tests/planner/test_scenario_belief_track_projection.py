@@ -110,6 +110,7 @@ def test_projection_retains_visible_and_occluded_tracks_by_snapshot_entity_id() 
     assert projected.tracks["ped_001"].velocity_units == "m/s"
     assert projected.tracks["ped_001"].source_sensor_ids == ("simulator",)
     assert projected.tracks["ped_001"].calibration_status == "synthetic"
+    assert projected.tracks["ped_001"].source == "simulator_oracle"
     assert projected.legacy_observation["pedestrians"]["count"][0] == pytest.approx(1.0)
 
 
@@ -567,10 +568,18 @@ def test_projection_rejects_nonfinite_time_ratios_as_invalid_belief() -> None:
     """Overflowing finite time ratios fail closed before integer conversion."""
     belief = _belief_fixture()
 
+    class _OverflowingFloat:
+        def __float__(self):
+            raise OverflowError("synthetic conversion overflow")
+
     with pytest.raises(ValueError, match="ratio"):
         adapter._belief_step(SimpleNamespace(sim_time_s=1e308, timestep_s=1e-308))
     with pytest.raises(ValueError, match="ratio"):
         adapter._age_steps(1e308, 1e-308)
+    with pytest.raises(ValueError, match="belief time metadata"):
+        adapter._belief_step(SimpleNamespace(sim_time_s=_OverflowingFloat(), timestep_s=0.1))
+    with pytest.raises(ValueError, match="last_observed_age_s must be numeric"):
+        adapter._age_steps(_OverflowingFloat(), 0.1)
 
     overflowing_time = project_belief_aware_planner_input(
         replace(belief, sim_time_s=1e308, timestep_s=1e-308),
@@ -586,10 +595,18 @@ def test_projection_rejects_nonfinite_time_ratios_as_invalid_belief() -> None:
         ),
         planner_name="BeliefGuidedLocalPlanner",
     )
+    escaping_time_conversion = project_belief_aware_planner_input(
+        replace(belief, sim_time_s=_OverflowingFloat()),
+        planner_name="BeliefGuidedLocalPlanner",
+    )
 
-    for rejected in (overflowing_time, overflowing_age):
+    for rejected in (overflowing_time, overflowing_age, escaping_time_conversion):
         assert rejected.diagnostics["status"] == "invalid_belief"
-        assert "ratio" in rejected.diagnostics["fallback_reason"]
+    assert "ratio" in overflowing_time.diagnostics["fallback_reason"]
+    assert "ratio" in overflowing_age.diagnostics["fallback_reason"]
+    assert escaping_time_conversion.diagnostics["fallback_reason"] == (
+        "belief time metadata is malformed"
+    )
 
 
 def test_validation_helpers_reject_malformed_values() -> None:
@@ -617,6 +634,8 @@ def test_validation_helpers_reject_malformed_values() -> None:
         adapter._readonly_covariance(np.eye(4, dtype=np.complex128))
     with pytest.raises(ValueError, match="numeric"):
         adapter._readonly_covariance(np.full((5, 5), "x", dtype=object))
+    with pytest.raises(ValueError, match="numeric dtype"):
+        adapter._readonly_covariance(np.eye(5, dtype=object))
     with pytest.raises(ValueError, match="shape"):
         adapter._readonly_covariance(np.eye(3))
     nonfinite_covariance = np.eye(5)
@@ -675,6 +694,16 @@ def test_typed_input_validation_and_json_edges() -> None:
     with pytest.raises(ValueError, match="NaN or Inf"):
         adapter._json_safe(float("nan"))
 
+    with pytest.raises(ValueError, match="finite"):
+        BeliefAwarePlannerInput(legacy_observation={"bad": np.nan}, tracks={}, belief_step=0)
+    with pytest.raises(ValueError, match="finite"):
+        BeliefAwarePlannerInput(
+            legacy_observation={},
+            tracks={},
+            belief_step=0,
+            diagnostics={"bad": np.inf},
+        )
+
     with pytest.raises(TypeError, match="legacy_observation"):
         BeliefAwarePlannerInput(legacy_observation=None, tracks={}, belief_step=0)
     with pytest.raises(TypeError, match="tracks"):
@@ -695,6 +724,14 @@ def test_typed_input_validation_and_json_edges() -> None:
     )
     with pytest.raises(ValueError, match="collide"):
         colliding.to_dict()
+
+    colliding_legacy_keys = BeliefAwarePlannerInput(
+        legacy_observation={1: "one", "1": "string"},
+        tracks={},
+        belief_step=0,
+    )
+    with pytest.raises(ValueError, match="collide"):
+        colliding_legacy_keys.to_dict()
 
     non_json = BeliefAwarePlannerInput(
         legacy_observation={},

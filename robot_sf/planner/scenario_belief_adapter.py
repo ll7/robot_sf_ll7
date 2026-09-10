@@ -300,7 +300,7 @@ def _readonly_float_array(
     """
     try:
         array = np.asarray(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"{name} must be a numeric array") from exc
     if array.shape != shape:
         raise ValueError(f"{name} must have shape {shape}, got {array.shape}")
@@ -310,7 +310,7 @@ def _readonly_float_array(
         raise ValueError(f"{name} must contain real-valued data")
     try:
         owned = np.array(array, dtype=np.float64, copy=True)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"{name} must be a numeric array") from exc
     if not np.all(np.isfinite(owned)):
         raise ValueError(f"{name} must contain only finite values")
@@ -334,20 +334,26 @@ def _readonly_covariance(value: Any) -> np.ndarray:
     """
     try:
         array = np.asarray(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("covariance must be a numeric array") from exc
-    if np.iscomplexobj(array):
-        raise ValueError("covariance must contain real-valued data")
+    numeric_dtype = np.issubdtype(array.dtype, np.number)
+    if not numeric_dtype or np.iscomplexobj(array):
+        message = (
+            "covariance must use a numeric dtype"
+            if not numeric_dtype
+            else "covariance must contain real-valued data"
+        )
+        raise ValueError(message)
     if array.shape == (4, 4):
         try:
             normalized = np.zeros((5, 5), dtype=np.float64)
             normalized[:4, :4] = np.asarray(array, dtype=np.float64)
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, OverflowError) as exc:
             raise ValueError("covariance must be numeric") from exc
     elif array.shape == (5, 5):
         try:
             normalized = np.asarray(array, dtype=np.float64)
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, OverflowError) as exc:
             raise ValueError("covariance must be numeric") from exc
     else:
         raise ValueError(f"covariance must have shape (5, 5) or (4, 4), got {array.shape}")
@@ -366,7 +372,7 @@ def _validate_probability(name: str, value: Any) -> float:
     """Return a finite probability in the closed unit interval."""
     try:
         normalized = float(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"{name} must be a finite value in [0, 1]") from exc
     if not np.isfinite(normalized) or not 0.0 <= normalized <= 1.0:
         raise ValueError(f"{name} must be a finite value in [0, 1]")
@@ -668,7 +674,7 @@ def _entity_float_array(value: np.ndarray) -> np.ndarray:
         raise ValueError("entity state or covariance must contain real-valued data")
     try:
         return np.asarray(value, dtype=np.float64)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("entity state or covariance is malformed") from exc
 
 
@@ -713,7 +719,13 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, np.generic):
         return _json_safe(value.item())
     if isinstance(value, Mapping):
-        return {str(key): _json_safe(nested) for key, nested in value.items()}
+        normalized: dict[str, Any] = {}
+        for key, nested in value.items():
+            normalized_key = str(key)
+            if normalized_key in normalized:
+                raise ValueError("JSON object keys collide after string normalization")
+            normalized[normalized_key] = _json_safe(nested)
+        return normalized
     if isinstance(value, (list, tuple)):
         return [_json_safe(nested) for nested in value]
     if isinstance(value, float):
@@ -758,6 +770,8 @@ class BeliefAwarePlannerInput:
         """Validate mappings and make caller-owned observation data independent."""
         if not isinstance(self.legacy_observation, Mapping):
             raise TypeError("legacy_observation must be a mapping")
+        if not _runtime_value_is_finite(self.legacy_observation):
+            raise ValueError("legacy_observation must contain only finite real values")
         object.__setattr__(
             self, "legacy_observation", _freeze_runtime_value(self.legacy_observation)
         )
@@ -771,6 +785,8 @@ class BeliefAwarePlannerInput:
             raise ValueError("schema_version must be a non-empty string")
         if not isinstance(self.diagnostics, Mapping):
             raise TypeError("diagnostics must be a mapping")
+        if not _runtime_value_is_finite(self.diagnostics):
+            raise ValueError("diagnostics must contain only finite real values")
         object.__setattr__(self, "diagnostics", _freeze_runtime_value(self.diagnostics))
 
     @property
@@ -831,7 +847,7 @@ def _belief_step(belief: Any) -> int:
     try:
         sim_time_s = float(belief.sim_time_s)
         timestep_s = float(belief.timestep_s)
-    except (AttributeError, TypeError, ValueError) as exc:
+    except (AttributeError, TypeError, ValueError, OverflowError) as exc:
         raise ValueError("belief time metadata is malformed") from exc
     if not np.isfinite(sim_time_s) or sim_time_s < 0.0:
         raise ValueError("belief sim_time_s must be finite and non-negative")
@@ -859,7 +875,7 @@ def _age_steps(age_s: Any, timestep_s: Any) -> int:
     try:
         age = float(age_s)
         timestep = float(timestep_s)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("last_observed_age_s must be numeric") from exc
     if not np.isfinite(age) or age < 0.0:
         raise ValueError("last_observed_age_s must be finite and non-negative")
@@ -935,7 +951,7 @@ def _planner_track_from_entity(
         velocity = np.asarray(agent.velocity.mean_xy)
         position_covariance = np.asarray(agent.position.covariance_xy)
         velocity_covariance = np.asarray(agent.velocity.covariance_xy)
-    except (AttributeError, TypeError, ValueError) as exc:
+    except (AttributeError, TypeError, ValueError, OverflowError) as exc:
         raise ValueError("entity state or covariance is malformed") from exc
     if position.shape != (2,) or velocity.shape != (2,):
         raise ValueError("entity position and velocity must each have shape (2,) (two coordinates)")
@@ -948,7 +964,7 @@ def _planner_track_from_entity(
     provenance = _entity_track_provenance(agent)
     try:
         radius = float(agent.radius)
-    except (AttributeError, TypeError, ValueError) as exc:
+    except (AttributeError, TypeError, ValueError, OverflowError) as exc:
         raise ValueError("entity radius is malformed") from exc
     if not np.isfinite(radius) or radius < 0.0:
         raise ValueError("entity radius must be finite and non-negative")
@@ -1164,7 +1180,7 @@ def project_belief_aware_planner_input(
 
     try:
         belief_step = _belief_step(belief)
-    except ValueError as exc:
+    except (ValueError, OverflowError) as exc:
         diagnostics = _belief_projection_diagnostics(
             planner_name=resolved_name,
             status="invalid_belief",

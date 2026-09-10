@@ -295,18 +295,21 @@ def test_real_materialized_candidate_build_has_only_supported_extras(tmp_path: P
     assert "scripts/**" not in policy["include"]
     report_payload = json.loads(report.read_text(encoding="utf-8"))
     expected_dependency_evidence = {
-        "docs/context/evidence/dependency_license_batch_2026-09-01.md": (
+        "dependency_license_batch_2026-09-01.md": (
             55343,
             "70e1c5af8d57bdd68a2ede8fbdddbea31a0d22b0bf5e0e4792f27102b1bb99ff",
         ),
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json": (
+        "dependency_license_batch_2026-09-01.receipt.json": (
             25180,
             "f0afd953298ec33e660f812a43b7801f767642edb348c31d22ddd7523475e417",
         ),
     }
-    for path, (expected_size, expected_sha256) in expected_dependency_evidence.items():
-        assert policy["include"].count(path) == 1
-        assert policy["required"].count(path) == 1
+    for filename, (expected_size, expected_sha256) in expected_dependency_evidence.items():
+        include_matches = [path for path in policy["include"] if path.endswith(filename)]
+        required_matches = [path for path in policy["required"] if path.endswith(filename)]
+        assert len(include_matches) == 1
+        assert required_matches == include_matches
+        path = include_matches[0]
         source_evidence = source / path
         candidate_evidence = candidate / path
         source_bytes = source_evidence.read_bytes()

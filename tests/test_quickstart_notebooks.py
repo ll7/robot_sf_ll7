@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import nbformat
@@ -334,3 +335,94 @@ def test_notebook_03_locates_fresh_recording_with_stale_present(tmp_path: Path) 
         )
     finally:
         env.close()
+
+
+def _load_notebook_generator():
+    """Load the notebook generator module from the repository scripts tree."""
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "gen_setup_cleanup", REPO_ROOT / "scripts" / "dev" / "generate_quickstart_notebooks.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _generated_cell_source(nb, needle: str) -> str:
+    """Return the first generated code cell containing ``needle``."""
+
+    for cell in nb.cells:
+        if cell.cell_type == "code" and needle in cell.source:
+            return cell.source
+    raise AssertionError(f"no generated code cell contains {needle!r}")
+
+
+class _FakeRaisingEnv:
+    """Environment whose setup reset always fails, recording close calls."""
+
+    def __init__(self) -> None:
+        self.close_calls = 0
+        self.action_space = types.SimpleNamespace(seed=lambda *args, **kwargs: None)
+
+    def reset(self, **kwargs):
+        """Fail during setup to exercise the cleanup path."""
+        raise RuntimeError("setup boom")
+
+    def close(self) -> None:
+        """Record the cleanup call."""
+        self.close_calls += 1
+
+
+def test_notebook_01_setup_failure_closes_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #8745 review: a failed reset in notebook 01 must close the environment."""
+
+    gen = _load_notebook_generator()
+    nb = gen.build_notebook_01()
+    setup_source = _generated_cell_source(nb, "os.environ.setdefault")
+    env_source = _generated_cell_source(nb, "env.reset(seed=SEED)")
+    fake_env = _FakeRaisingEnv()
+
+    import robot_sf
+
+    monkeypatch.setattr(robot_sf, "make_env", lambda **kwargs: fake_env)
+    namespace: dict = {}
+    exec(compile(setup_source, "<notebook-01-setup>", "exec"), namespace)  # noqa: S102
+
+    with pytest.raises(RuntimeError, match="setup boom"):
+        exec(compile(env_source, "<notebook-01-env>", "exec"), namespace)  # noqa: S102
+
+    assert fake_env.close_calls == 1, "failed reset must close the created environment"
+
+
+def test_notebook_03_setup_failure_closes_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #8745 review: failed setup in notebook 03 must close the environment."""
+
+    gen = _load_notebook_generator()
+    nb = gen.build_notebook_03()
+    setup_source = _generated_cell_source(nb, "os.environ.setdefault")
+    env_source = _generated_cell_source(nb, "env = make_env(")
+    fake_env = _FakeRaisingEnv()
+
+    import robot_sf
+    from robot_sf.baselines import random_policy
+
+    class _FakePlanner:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def reset(self, **kwargs) -> None:
+            pass
+
+    monkeypatch.setattr(robot_sf, "make_env", lambda **kwargs: fake_env)
+    monkeypatch.setattr(robot_sf, "load_scenario", lambda name: {"name": name})
+    monkeypatch.setattr(random_policy, "RandomPlanner", _FakePlanner)
+    namespace: dict = {}
+    exec(compile(setup_source, "<notebook-03-setup>", "exec"), namespace)  # noqa: S102
+
+    with pytest.raises(RuntimeError, match="setup boom"):
+        exec(compile(env_source, "<notebook-03-env>", "exec"), namespace)  # noqa: S102
+
+    assert fake_env.close_calls == 1, "failed setup must close the created environment"

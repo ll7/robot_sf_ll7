@@ -159,7 +159,12 @@ def build_notebook_01() -> nbf.notebooknode:
             # also seeds the private Torch/TensorFlow RNGs, which can crash the kernel
             # on the installed stack, and it does NOT seed Gymnasium's action_space RNG.
             env = make_env(debug=False, seed=SEED)
-            observation, info = env.reset(seed=SEED)
+            try:
+                observation, info = env.reset(seed=SEED)
+            except BaseException:
+                # A failed reset must not leak the created environment.
+                env.close()
+                raise
             env.action_space.seed(SEED)
             print("Environment created and reset.")
             print("Observation type:", type(observation).__name__)
@@ -491,10 +496,14 @@ def build_notebook_03() -> nbf.notebooknode:
                 algorithm_name="random",
                 recording_seed=SEED,
             )
-
-            planner = RandomPlanner({"mode": "velocity", "v_max": 1.5}, seed=SEED)
-            env.reset(seed=SEED)
-            planner.reset(seed=SEED)
+            try:
+                planner = RandomPlanner({"mode": "velocity", "v_max": 1.5}, seed=SEED)
+                env.reset(seed=SEED)
+                planner.reset(seed=SEED)
+            except BaseException:
+                # Planner or reset setup failures must not leak the environment.
+                env.close()
+                raise
 
             steps = 0
             terminated = truncated = False

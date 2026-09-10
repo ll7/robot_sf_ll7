@@ -4,6 +4,9 @@
 
 This project uses Python with a locked dependency set via `uv` (see `uv.lock`). Follow these steps to reproduce the development and CI environment locally.
 
+See the [Environment Configuration Reference](./environment_config_reference.md) for every
+public configuration field with its type, default, and stability class.
+
 ## Requirements
 - Python 3.12 (3.10+ works; CI uses 3.12)
 - uv package manager (https://docs.astral.sh/uv/)

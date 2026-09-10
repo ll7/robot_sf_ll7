@@ -6,9 +6,9 @@ This work follows the live #7381 programme and the preparation rulings in #7383
 and #7384; the attached packet is guidance/evidence, not a replacement authority.
 
 Refresh provenance for this repair: current `origin/main` is
-`0e56bb03445f4de87579f97fd6319d0261716d57`; the live #8620 tip is
-`da64f92508c4f6f050d9cef3e14491e2969060e2`; and the relevance-window validation
-repair is `491b8e39e799bc6255edfa2205793f88bcfefd00`. The stack is refreshed for
+`ade95312d31462c8a66208948f9c8528910de0c7`; the live #8620 tip is
+`3bae649fc917bbd0f41cd7b98db7c90c735f8c7a`; and the relevance-window validation
+repair is `ba85ab31f2f82e6bb3d97d69b146a80d4217bf70`. The stack is refreshed for
 inspection, but live domain authority and native campaign admission remain blocked.
 
 ## Outcome
@@ -58,8 +58,10 @@ approved.
 For the multi-stage timeline, a deliberately late crop containing steps 6–11 drops
 the precursor at step 1 and earlier decisions at steps 3 and 5. The immutable
 manifest validator rejects it with `unsafe crop: selected excerpt omits required
-precursor steps`. The full parent digest, actor IDs, original step indices, and
-complete rows remain linked in the proposal. This is a fidelity refusal, not a
+precursor steps`. The validator recomputes selector windows and precursor ownership
+from the complete parent, so a forged manifest cannot erase the precursor from both
+its required-step and window fields. The full parent digest, actor IDs, original step
+indices, and complete rows remain linked in the proposal. This is a fidelity refusal, not a
 claim that the physical event is impossible.
 
 ## Proposed fidelity vector

@@ -40,6 +40,9 @@ code block is reintroduced.
 - Validation depth and claim strength: the proportional validation matrix in `AGENTS.md` and
   `docs/benchmark_governance.md`.
 - Task routing and command entrypoints: `docs/ai/agent_workflow_entrypoints.md`.
-- Development workflow and review expectations: `docs/dev_guide.md` and `docs/code_review.md`.
-- GitHub work collection and prioritization: `docs/dev_guide.md` and the batch-first workflow note.
+- Development workflow, optional tooling, and review expectations: `docs/dev_guide.md`,
+  `docs/dev_guide_reference.md`, and `docs/code_review.md`.
+- GitHub work collection and prioritization: `docs/dev_guide.md` and
+  `docs/context/issue_713_batch_first_issue_workflow.md`.
+- Human-facing clarity and terminology: `AGENTS.md` and `docs/glossary.md`.
 - Context notes and durable memory: `docs/context/README.md` and `memory/MEMORY.md`.

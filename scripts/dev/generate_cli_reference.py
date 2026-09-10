@@ -5,25 +5,35 @@ Usage:
     uv run python scripts/dev/generate_cli_reference.py [--check]
 
 Reads every ``[project.scripts]`` entry from ``pyproject.toml`` in deterministic
-order, runs a bounded isolated ``--help`` smoke for each callable, and renders
+order, runs an OS-isolated bounded ``--help`` smoke for each callable, and renders
 ``docs/cli_reference.md`` from ``docs/cli_reference_meta.yaml`` plus live parser
 help. Entry-point imports, signatures, and parser introspection all stay inside
 the bounded child. With ``--check``, exits 1 when the committed reference differs
 from the deterministic render instead of writing it.
 
-The ``--help`` smoke is local-only: it never touches the network, a simulator,
-a scheduler, or repository artifacts beyond reading help text.
+The ``--help`` smoke requires Linux Landlock ABI 4+ and seccomp on a supported
+architecture. The child gets read-only source/runtime roots, a task-owned writable
+temporary root, a fixed environment without inherited credential variables, and
+denied network, process, thread, namespace, and scheduler escape syscalls.
+Unsupported hosts fail closed; this is an OS-enforced boundary, not a Python-level
+sandbox. The child retains the invoking Unix identity and host resource limits,
+so this is not a general untrusted-code sandbox.
 """
 
 from __future__ import annotations
 
 import argparse
+import ctypes
 import difflib
+import errno
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
+import sysconfig
+import tempfile
 import tomllib
 from dataclasses import dataclass, field
 from io import StringIO
@@ -46,14 +56,319 @@ PARSER_GETTERS = ("get_parser", "_build_parser", "_configure_parser", "build_par
 
 SUBCOMMAND_BRACE_RE = re.compile(r"\{([A-Za-z0-9_][A-Za-z0-9_\-, ]*)\}")
 
+PROBE_RUNTIME_DIRS = ("home", "tmp", "cache", "config", "data", "state", "runtime")
+PROBE_READ_ONLY_ENV = {
+    "COLUMNS": str(HELP_COLUMNS),
+    "LINES": "24",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/usr/bin:/bin",
+    "PYTHONHASHSEED": "0",
+    "PYTHONIOENCODING": "utf-8",
+    "PYTHONNOUSERSITE": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONSAFEPATH": "1",
+    "PYTHONUNBUFFERED": "1",
+    "TERM": "dumb",
+    "TZ": "UTC",
+    "MPLBACKEND": "Agg",
+    "MPLCONFIGDIR": "{task_root}/config/matplotlib",
+    "IMAGEIO_FFMPEG_EXE": "/usr/bin/ffmpeg",
+    "SDL_VIDEODRIVER": "dummy",
+    "SDL_AUDIODRIVER": "dummy",
+    "QT_QPA_PLATFORM": "offscreen",
+    "PYGAME_HIDE_SUPPORT_PROMPT": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1",
+    "BLIS_NUM_THREADS": "1",
+    "CUDA_VISIBLE_DEVICES": "",
+    "WANDB_DISABLED": "true",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
+}
+
+LANDLOCK_CREATE_RULESET_SYSCALL = 444
+LANDLOCK_ADD_RULE_SYSCALL = 445
+LANDLOCK_RESTRICT_SELF_SYSCALL = 446
+LANDLOCK_CREATE_RULESET_VERSION = 1 << 0
+LANDLOCK_RULE_PATH_BENEATH = 1
+LANDLOCK_MINIMUM_ABI = 4
+LANDLOCK_ACCESS_FS_EXECUTE = 1 << 0
+LANDLOCK_ACCESS_FS_WRITE_FILE = 1 << 1
+LANDLOCK_ACCESS_FS_READ_FILE = 1 << 2
+LANDLOCK_ACCESS_FS_READ_DIR = 1 << 3
+LANDLOCK_ACCESS_FS_REMOVE_DIR = 1 << 4
+LANDLOCK_ACCESS_FS_REMOVE_FILE = 1 << 5
+LANDLOCK_ACCESS_FS_MAKE_CHAR = 1 << 6
+LANDLOCK_ACCESS_FS_MAKE_DIR = 1 << 7
+LANDLOCK_ACCESS_FS_MAKE_REG = 1 << 8
+LANDLOCK_ACCESS_FS_MAKE_SOCK = 1 << 9
+LANDLOCK_ACCESS_FS_MAKE_FIFO = 1 << 10
+LANDLOCK_ACCESS_FS_MAKE_BLOCK = 1 << 11
+LANDLOCK_ACCESS_FS_MAKE_SYM = 1 << 12
+LANDLOCK_ACCESS_FS_REFER = 1 << 13
+LANDLOCK_ACCESS_FS_TRUNCATE = 1 << 14
+LANDLOCK_ACCESS_FS_ALL = (1 << 15) - 1
+LANDLOCK_ACCESS_NET_BIND_TCP = 1 << 0
+LANDLOCK_ACCESS_NET_CONNECT_TCP = 1 << 1
+LANDLOCK_ACCESS_NET_ALL = LANDLOCK_ACCESS_NET_BIND_TCP | LANDLOCK_ACCESS_NET_CONNECT_TCP
+LANDLOCK_ACCESS_FS_READ_EXECUTE = (
+    LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR
+)
+
+PR_SET_NO_NEW_PRIVS = 38
+SECCOMP_SYSCALL = 317
+SECCOMP_SET_MODE_FILTER = 1
+SECCOMP_RET_KILL_PROCESS = 0x80000000
+SECCOMP_RET_ERRNO = 0x00050000
+SECCOMP_RET_ALLOW = 0x7FFF0000
+BPF_LD_W_ABS = 0x20
+BPF_JMP_JEQ_K = 0x15
+BPF_RET_K = 0x06
+SECCOMP_ARCH_X86_64 = 0xC000003E
+SECCOMP_ARCH_AARCH64 = 0xC00000B7
+
+_BLOCKED_SYSCALLS = {
+    # Numbers from Linux arch/x86/entry/syscalls/syscall_64.tbl. Keep this
+    # deny list limited to escape and externally visible side-effect paths;
+    # Landlock handles filesystem policy.
+    "x86_64": (
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        56,
+        57,
+        58,
+        59,
+        62,
+        141,
+        101,
+        203,
+        206,
+        207,
+        208,
+        209,
+        210,
+        142,
+        144,
+        155,
+        161,
+        163,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        175,
+        176,
+        179,
+        200,
+        234,
+        246,
+        248,
+        249,
+        250,
+        272,
+        251,
+        256,
+        279,
+        288,
+        298,
+        299,
+        300,
+        301,
+        302,
+        303,
+        304,
+        307,
+        308,
+        310,
+        311,
+        313,
+        314,
+        320,
+        321,
+        322,
+        323,
+        317,
+        324,
+        424,
+        425,
+        426,
+        427,
+        428,
+        429,
+        430,
+        431,
+        432,
+        433,
+        434,
+        435,
+        438,
+        440,
+        448,
+    ),
+    # Numbers from Linux include/uapi/asm-generic/unistd.h, used by aarch64.
+    "aarch64": (
+        0,
+        2,
+        3,
+        39,
+        40,
+        41,
+        51,
+        58,
+        60,
+        89,
+        95,
+        97,
+        104,
+        105,
+        106,
+        107,
+        117,
+        118,
+        119,
+        129,
+        130,
+        131,
+        122,
+        140,
+        142,
+        161,
+        162,
+        198,
+        199,
+        200,
+        201,
+        202,
+        203,
+        204,
+        205,
+        206,
+        207,
+        208,
+        209,
+        210,
+        211,
+        212,
+        217,
+        218,
+        219,
+        220,
+        221,
+        224,
+        225,
+        241,
+        240,
+        242,
+        243,
+        260,
+        261,
+        262,
+        263,
+        264,
+        265,
+        266,
+        267,
+        268,
+        269,
+        270,
+        271,
+        272,
+        273,
+        274,
+        280,
+        281,
+        282,
+        277,
+        279,
+        425,
+        426,
+        427,
+        424,
+        434,
+        435,
+        438,
+        440,
+        448,
+    ),
+}
+
+_SECCOMP_ARCHITECTURES = {
+    "x86_64": SECCOMP_ARCH_X86_64,
+    "amd64": SECCOMP_ARCH_X86_64,
+    "aarch64": SECCOMP_ARCH_AARCH64,
+    "arm64": SECCOMP_ARCH_AARCH64,
+}
+
 
 class CliReferenceError(ValueError):
     """Raised when metadata or project script inventory is malformed."""
 
 
+class ProbeIsolationError(RuntimeError):
+    """Raised when the OS cannot enforce the CLI probe boundary."""
+
+
+class _LandlockRulesetAttr(ctypes.Structure):
+    """Stable prefix of Linux's extensible Landlock ruleset structure."""
+
+    _fields_ = [
+        ("handled_access_fs", ctypes.c_uint64),
+        ("handled_access_net", ctypes.c_uint64),
+    ]
+
+
+class _LandlockPathBeneathAttr(ctypes.Structure):
+    """Packed path rule structure required by the Landlock user-space API."""
+
+    _pack_ = 1
+    _fields_ = [
+        ("allowed_access", ctypes.c_uint64),
+        ("parent_fd", ctypes.c_int32),
+    ]
+
+
+class _SockFilter(ctypes.Structure):
+    """One classic-BPF instruction for the child seccomp policy."""
+
+    _fields_ = [
+        ("code", ctypes.c_uint16),
+        ("jt", ctypes.c_uint8),
+        ("jf", ctypes.c_uint8),
+        ("k", ctypes.c_uint32),
+    ]
+
+
+class _SockFprog(ctypes.Structure):
+    """Classic-BPF program descriptor accepted by the seccomp syscall."""
+
+    _fields_ = [
+        ("length", ctypes.c_uint16),
+        ("filter", ctypes.POINTER(_SockFilter)),
+    ]
+
+
 @dataclass
 class ProbeResult:
-    """Isolated ``--help`` outcome for one console script."""
+    """OS-isolated ``--help`` outcome for one console script."""
 
     script: str
     spec: str
@@ -61,6 +376,7 @@ class ProbeResult:
     import_error: str = ""
     help_ok: bool = False
     help_error: str = ""
+    isolation_error: str = ""
     help_text: str = ""
     synopsis: str = ""
     subcommands: list[str] = field(default_factory=list)
@@ -71,7 +387,7 @@ class ProbeResult:
         """Return the compact help status label."""
         if self.help_ok:
             return "available"
-        return f"unavailable: {self.help_error or self.import_error or 'unknown'}"
+        return f"unavailable: {self.help_error or self.import_error or self.isolation_error or 'unknown'}"
 
 
 def load_project_scripts(pyproject_path: Path) -> dict[str, str]:
@@ -231,6 +547,277 @@ def validate_metadata_entries(
         if name not in raw_entries:
             errors.append(f"missing documentation owner for declared script: {name!r}")
     return entries, errors
+
+
+def _probe_machine() -> str:
+    """Normalize the Linux machine name used by the syscall policy."""
+    machine = platform.machine().lower()
+    aliases = {"amd64": "x86_64", "arm64": "aarch64"}
+    return aliases.get(machine, machine)
+
+
+def _probe_libc() -> tuple[ctypes.CDLL, str]:
+    """Load libc only on Linux architectures with a known syscall policy."""
+    if sys.platform != "linux":
+        raise ProbeIsolationError(
+            "secure CLI probe isolation is unavailable: Linux Landlock and seccomp are required"
+        )
+    machine = _probe_machine()
+    if machine not in _BLOCKED_SYSCALLS or machine not in _SECCOMP_ARCHITECTURES:
+        raise ProbeIsolationError(
+            f"secure CLI probe isolation is unavailable: unsupported Linux architecture {machine!r}"
+        )
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+    except OSError as exc:
+        raise ProbeIsolationError(f"secure CLI probe isolation cannot load libc: {exc}") from exc
+    libc.syscall.restype = ctypes.c_long
+    libc.prctl.restype = ctypes.c_int
+    return libc, machine
+
+
+def _raise_probe_errno(action: str) -> None:
+    """Raise a bounded, fail-closed diagnostic for a failed isolation syscall."""
+    error_number = ctypes.get_errno()
+    detail = os.strerror(error_number) if error_number else "unknown error"
+    raise ProbeIsolationError(f"secure CLI probe isolation {action} failed: {detail}")
+
+
+def _probe_landlock_abi(libc: ctypes.CDLL) -> None:
+    """Require the Landlock ABI features used by the filesystem policy."""
+    ctypes.set_errno(0)
+    result = libc.syscall(
+        LANDLOCK_CREATE_RULESET_SYSCALL,
+        ctypes.c_void_p(),
+        ctypes.c_size_t(0),
+        ctypes.c_uint(LANDLOCK_CREATE_RULESET_VERSION),
+    )
+    if result < 0:
+        _raise_probe_errno("Landlock capability detection")
+    abi = int(result)
+    if abi < LANDLOCK_MINIMUM_ABI:
+        raise ProbeIsolationError(
+            "secure CLI probe isolation is unavailable: Linux Landlock ABI "
+            f"{abi} is older than required ABI {LANDLOCK_MINIMUM_ABI}"
+        )
+
+
+def _close_probe_fds() -> None:
+    """Close inherited descriptors so pre-opened handles cannot bypass Landlock."""
+    try:
+        descriptor_names = os.listdir("/proc/self/fd")
+    except OSError as exc:
+        raise ProbeIsolationError(
+            f"secure CLI probe isolation cannot verify inherited file descriptors: {exc}"
+        ) from exc
+    for descriptor_name in descriptor_names:
+        try:
+            descriptor = int(descriptor_name)
+        except ValueError:
+            continue
+        if descriptor <= 2:
+            continue
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            if exc.errno != errno.EBADF:
+                raise ProbeIsolationError(
+                    "secure CLI probe isolation could not close inherited file descriptor "
+                    f"{descriptor}: {exc}"
+                ) from exc
+
+
+def _add_probe_landlock_path_rule(
+    libc: ctypes.CDLL, ruleset_fd: int, path: Path, allowed_access: int
+) -> None:
+    """Add a Landlock rule for a trusted read root or the task-owned root."""
+    try:
+        path_fd = os.open(str(path), os.O_PATH | os.O_CLOEXEC)
+    except (AttributeError, OSError) as exc:
+        raise ProbeIsolationError(
+            f"secure CLI probe isolation cannot open policy path {path}: {exc}"
+        ) from exc
+    try:
+        rule = _LandlockPathBeneathAttr(allowed_access=allowed_access, parent_fd=path_fd)
+        ctypes.set_errno(0)
+        result = libc.syscall(
+            LANDLOCK_ADD_RULE_SYSCALL,
+            ruleset_fd,
+            LANDLOCK_RULE_PATH_BENEATH,
+            ctypes.byref(rule),
+            ctypes.c_uint(0),
+        )
+        if result < 0:
+            _raise_probe_errno(f"adding Landlock path rule for {path}")
+    finally:
+        try:
+            os.close(path_fd)
+        except OSError as exc:
+            raise ProbeIsolationError(
+                f"secure CLI probe isolation could not close policy descriptor for {path}: {exc}"
+            ) from exc
+
+
+def _required_probe_path(path: Path, label: str) -> Path:
+    """Resolve a required sandbox path without accepting a missing or non-directory root."""
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise ProbeIsolationError(
+            f"secure CLI probe isolation cannot resolve {label}: {exc}"
+        ) from exc
+    if not resolved.is_dir():
+        raise ProbeIsolationError(f"secure CLI probe isolation requires {label} to be a directory")
+    return resolved
+
+
+def _probe_read_roots(repo_root: Path) -> tuple[Path, ...]:
+    """Return the narrow read/execute roots needed by the already-started interpreter."""
+    candidates: list[Path] = [
+        repo_root,
+        Path(sys.executable).resolve().parent,
+        Path(sys.prefix),
+        Path(sys.base_prefix),
+        Path(sys.exec_prefix),
+        Path(sys.base_exec_prefix),
+        Path("/lib"),
+        Path("/lib64"),
+        Path("/usr/lib"),
+        Path("/usr/lib64"),
+        Path("/usr/local/lib"),
+        Path("/dev"),
+    ]
+    for value in (
+        sysconfig.get_path("stdlib"),
+        sysconfig.get_path("platstdlib"),
+        sysconfig.get_path("purelib"),
+        sysconfig.get_path("platlib"),
+        sysconfig.get_config_var("LIBDIR"),
+    ):
+        if value:
+            candidates.append(Path(value))
+    for value in sys.path:
+        if value and Path(value).is_absolute():
+            candidates.append(Path(value))
+
+    roots: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=True)
+        except OSError:
+            continue
+        if resolved in seen:
+            continue
+        if not resolved.is_dir() and not resolved.is_file():
+            continue
+        seen.add(resolved)
+        roots.append(resolved)
+    return tuple(roots)
+
+
+def _install_probe_landlock(libc: ctypes.CDLL, repo_root: Path, task_root: Path) -> None:
+    """Allow source/runtime reads and task-root writes while denying other filesystem access."""
+    repo_root = _required_probe_path(repo_root, "repository root")
+    task_root = _required_probe_path(task_root, "task root")
+    read_roots = _probe_read_roots(repo_root)
+    if repo_root not in read_roots:
+        raise ProbeIsolationError("secure CLI probe isolation could not authorize repository reads")
+
+    ruleset = _LandlockRulesetAttr(
+        handled_access_fs=LANDLOCK_ACCESS_FS_ALL,
+        handled_access_net=LANDLOCK_ACCESS_NET_ALL,
+    )
+    ctypes.set_errno(0)
+    ruleset_fd = libc.syscall(
+        LANDLOCK_CREATE_RULESET_SYSCALL,
+        ctypes.byref(ruleset),
+        ctypes.sizeof(ruleset),
+        ctypes.c_uint(0),
+    )
+    if ruleset_fd < 0:
+        _raise_probe_errno("creating Landlock ruleset")
+    try:
+        for read_root in read_roots:
+            allowed_access = (
+                LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_READ_FILE
+                if read_root == Path("/dev")
+                else LANDLOCK_ACCESS_FS_READ_EXECUTE
+            )
+            _add_probe_landlock_path_rule(libc, int(ruleset_fd), read_root, allowed_access)
+        _add_probe_landlock_path_rule(libc, int(ruleset_fd), task_root, LANDLOCK_ACCESS_FS_ALL)
+        ctypes.set_errno(0)
+        result = libc.syscall(
+            LANDLOCK_RESTRICT_SELF_SYSCALL,
+            int(ruleset_fd),
+            ctypes.c_uint(0),
+        )
+        if result < 0:
+            _raise_probe_errno("restricting the child process")
+    finally:
+        try:
+            os.close(int(ruleset_fd))
+        except OSError as exc:
+            raise ProbeIsolationError(
+                f"secure CLI probe isolation could not close Landlock ruleset: {exc}"
+            ) from exc
+
+
+def _probe_seccomp_instructions(machine: str) -> list[_SockFilter]:
+    """Build a deny filter for network, process, namespace, and scheduler syscalls."""
+    instructions = [
+        _SockFilter(BPF_LD_W_ABS, 0, 0, 4),
+        _SockFilter(BPF_JMP_JEQ_K, 1, 0, _SECCOMP_ARCHITECTURES[machine]),
+        _SockFilter(BPF_RET_K, 0, 0, SECCOMP_RET_KILL_PROCESS),
+        _SockFilter(BPF_LD_W_ABS, 0, 0, 0),
+    ]
+    for syscall_number in _BLOCKED_SYSCALLS[machine]:
+        instructions.extend(
+            (
+                _SockFilter(BPF_JMP_JEQ_K, 0, 1, syscall_number),
+                _SockFilter(BPF_RET_K, 0, 0, SECCOMP_RET_ERRNO | errno.EPERM),
+            )
+        )
+    instructions.append(_SockFilter(BPF_RET_K, 0, 0, SECCOMP_RET_ALLOW))
+    return instructions
+
+
+def _install_probe_seccomp(libc: ctypes.CDLL, machine: str) -> None:
+    """Deny target-created network sockets, processes, threads, and escape syscalls."""
+    instructions = _probe_seccomp_instructions(machine)
+    instruction_array = (_SockFilter * len(instructions))(*instructions)
+    program = _SockFprog(
+        length=len(instruction_array),
+        filter=ctypes.cast(instruction_array, ctypes.POINTER(_SockFilter)),
+    )
+    ctypes.set_errno(0)
+    result = libc.syscall(
+        SECCOMP_SYSCALL,
+        ctypes.c_uint(SECCOMP_SET_MODE_FILTER),
+        ctypes.c_uint(0),
+        ctypes.byref(program),
+    )
+    if result < 0:
+        _raise_probe_errno("installing seccomp policy")
+
+
+def _install_probe_isolation(repo_root: Path, task_root: Path) -> None:
+    """Install all OS restrictions before importing or introspecting the target module."""
+    libc, machine = _probe_libc()
+    try:
+        resolved_task_root = _required_probe_path(task_root, "task root")
+        os.chdir(resolved_task_root)
+    except OSError as exc:
+        raise ProbeIsolationError(
+            f"secure CLI probe isolation cannot enter task root: {exc}"
+        ) from exc
+    _probe_landlock_abi(libc)
+    _close_probe_fds()
+    ctypes.set_errno(0)
+    if libc.prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
+        _raise_probe_errno("setting no-new-privileges")
+    _install_probe_landlock(libc, repo_root, resolved_task_root)
+    _install_probe_seccomp(libc, machine)
 
 
 def _parser_subcommands(parser: object) -> list[str]:
@@ -423,13 +1010,16 @@ def _child_help_payload(
     }
 
 
-def _run_probe_child(script: str, module_name: str, attr: str, repo_root: Path) -> int:
-    """Import, introspect, and invoke one entry point inside the bounded child."""
+def _run_probe_child(
+    script: str, module_name: str, attr: str, repo_root: Path, task_root: Path
+) -> int:
+    """Import, introspect, and invoke one entry point inside the OS-bounded child."""
     import contextlib
 
     payload: dict[str, object] = {
         "import_ok": False,
         "import_error": "",
+        "isolation_error": "",
         "help_ok": False,
         "help_error": "",
         "help_text": "",
@@ -439,36 +1029,47 @@ def _run_probe_child(script: str, module_name: str, attr: str, repo_root: Path) 
     }
     stdout = StringIO()
     stderr = StringIO()
-    sys.path.insert(0, str(repo_root))
-    # Keep import-time argv conservative. The exact callable invocation argv is
-    # selected after the bounded child has inspected the target signature.
-    sys.argv = [script]
-    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        module, target, import_error = _child_import_target(module_name, attr)
-        if import_error:
-            payload["import_error"] = import_error
-        else:
-            payload["import_ok"] = True
-            payload.update(_child_help_payload(script, module, target, stdout, stderr))
+    try:
+        _install_probe_isolation(repo_root, task_root)
+    except ProbeIsolationError as exc:
+        payload["isolation_error"] = str(exc)[:300]
+    else:
+        # Keep libraries that open ``os.devnull`` during import inside the
+        # task-owned root. This compatibility redirect is not the security
+        # boundary; Landlock still denies every other filesystem write.
+        os.devnull = str(task_root / "devnull")
+        sys.path.insert(0, str(repo_root))
+        # Keep import-time argv conservative. The exact callable invocation argv
+        # is selected after the bounded child has inspected the target signature.
+        sys.argv = [script]
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            module, target, import_error = _child_import_target(module_name, attr)
+            if import_error:
+                payload["import_error"] = import_error
+            else:
+                payload["import_ok"] = True
+                payload.update(_child_help_payload(script, module, target, stdout, stderr))
 
     sys.__stdout__.write(PROBE_RESULT_PREFIX + json.dumps(payload, sort_keys=True) + "\n")
     return 0
 
 
 def _run_probe_subprocess(
-    command: list[str], repo_root: Path, env: dict[str, str], timeout_s: int
+    command: list[str], task_root: Path, env: dict[str, str], timeout_s: int
 ) -> tuple[subprocess.CompletedProcess[str] | None, str]:
     """Run one bounded child process and return a launch/timeout error separately."""
     try:
         return (
             subprocess.run(
                 command,
-                cwd=str(repo_root),
+                cwd=str(task_root),
                 env=env,
                 capture_output=True,
                 text=True,
                 timeout=timeout_s,
                 check=False,
+                close_fds=True,
+                stdin=subprocess.DEVNULL,
             ),
             "",
         )
@@ -504,6 +1105,10 @@ def _decode_probe_payload(
 
 def _apply_probe_payload(result: ProbeResult, payload: dict[str, object]) -> None:
     """Apply a decoded child result to its parent-side probe record."""
+    isolation_error = payload.get("isolation_error")
+    if isolation_error:
+        result.isolation_error = str(isolation_error)[:300]
+        return
     if not payload.get("import_ok"):
         result.import_error = str(payload.get("import_error") or "unknown import failure")[:300]
         return
@@ -543,16 +1148,19 @@ def probe_help(
     repo_root: Path,
     timeout_s: int = HELP_TIMEOUT_S,
 ) -> ProbeResult:
-    """Run a bounded isolated ``--help`` smoke for one console script.
+    """Run an OS-isolated, bounded ``--help`` smoke for one console script.
 
     The child owns entry-point imports, signature detection, parser construction,
-    and subcommand introspection; the parent only launches it and decodes the
-    structured result.
+    and subcommand introspection. Linux Landlock and seccomp enforce read-only
+    source/runtime roots, a task-owned writable root, no inherited credential
+    environment or file descriptors, and denied network/process/thread escape
+    syscalls before target import. Hosts without that OS support fail closed;
+    this is not a Python-level sandbox.
 
     Args:
         script: Console script name (used as ``sys.argv[0]`` for stable help).
         spec: ``module:attr`` callable spec from ``pyproject.toml``.
-        repo_root: Repository root (subprocess working directory).
+        repo_root: Repository root (read-only import and source root).
         timeout_s: Subprocess timeout in seconds.
 
     Returns:
@@ -565,39 +1173,82 @@ def probe_help(
         return result
     module_name, attr = spec.split(":", 1)
     module_name, attr = module_name.strip(), attr.strip()
-    env = dict(os.environ)
-    env["COLUMNS"] = str(HELP_COLUMNS)
-    env["LINES"] = "24"
-    # Keep the smoke read-only: --help must never need credentials or remotes.
-    env.pop("CARLA_HOST", None)
-    command = [
-        sys.executable,
-        str(Path(__file__).resolve()),
-        PROBE_FLAG,
-        "--repo-root",
-        str(repo_root),
-        "--script",
-        script,
-        "--module",
-        module_name,
-        "--attr",
-        attr,
-    ]
-    completed, process_error = _run_probe_subprocess(command, repo_root, env, timeout_s)
-    if process_error:
-        result.help_error = process_error
+    try:
+        resolved_repo_root = repo_root.resolve(strict=True)
+    except OSError as exc:
+        result.isolation_error = (
+            f"secure CLI probe isolation cannot resolve repository root: {exc}"[:300]
+        )
         return result
-    if completed is None:
-        result.help_error = "--help probe did not return a child result"
+    if not resolved_repo_root.is_dir():
+        result.isolation_error = (
+            "secure CLI probe isolation requires repository root to be a directory"
+        )
         return result
-    payload, payload_error = _decode_probe_payload(completed)
-    if payload_error:
-        result.help_error = payload_error
-        return result
-    if payload is None:
-        result.help_error = "--help probe did not return a child payload"
-        return result
-    _apply_probe_payload(result, payload)
+
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="cli-reference-probe-", dir="/tmp"
+        ) as temporary_root:
+            task_root = Path(temporary_root)
+            for relative_path in PROBE_RUNTIME_DIRS:
+                (task_root / relative_path).mkdir(parents=True, exist_ok=True)
+            (task_root / "config" / "matplotlib").mkdir(parents=True, exist_ok=True)
+            task_null = task_root / "devnull"
+            task_null.touch()
+            env = {
+                key: value.format(task_root=str(task_root))
+                for key, value in PROBE_READ_ONLY_ENV.items()
+            }
+            env.update(
+                {
+                    "HOME": str(task_root / "home"),
+                    "TMPDIR": str(task_root / "tmp"),
+                    "TMP": str(task_root / "tmp"),
+                    "TEMP": str(task_root / "tmp"),
+                    "XDG_CACHE_HOME": str(task_root / "cache"),
+                    "XDG_CONFIG_HOME": str(task_root / "config"),
+                    "XDG_CONFIG_DIRS": str(task_root / "config"),
+                    "XDG_DATA_HOME": str(task_root / "data"),
+                    "XDG_DATA_DIRS": str(task_root / "data"),
+                    "XDG_STATE_HOME": str(task_root / "state"),
+                    "XDG_RUNTIME_DIR": str(task_root / "runtime"),
+                }
+            )
+            command = [
+                sys.executable,
+                "-I",
+                str(Path(__file__).resolve()),
+                PROBE_FLAG,
+                "--repo-root",
+                str(resolved_repo_root),
+                "--task-root",
+                str(task_root),
+                "--script",
+                script,
+                "--module",
+                module_name,
+                "--attr",
+                attr,
+            ]
+            completed, process_error = _run_probe_subprocess(command, task_root, env, timeout_s)
+            if process_error:
+                result.help_error = process_error
+                return result
+            if completed is None:
+                result.help_error = "--help probe did not return a child result"
+                return result
+            payload, payload_error = _decode_probe_payload(completed)
+            if payload_error:
+                result.help_error = payload_error
+                return result
+            if payload is None:
+                result.help_error = "--help probe did not return a child payload"
+                return result
+            _apply_probe_payload(result, payload)
+    except OSError as exc:
+        result.help_ok = False
+        result.isolation_error = f"secure CLI probe isolation cannot create task root: {exc}"[:300]
     return result
 
 
@@ -614,11 +1265,13 @@ def _check_single_script(
     if not probe.import_ok:
         if profile == "carla":
             return []
-        return [f"callable cannot import for {name!r}: {probe.import_error}"]
+        detail = probe.import_error or probe.isolation_error or "unknown import failure"
+        return [f"callable cannot import for {name!r}: {detail}"]
     if not probe.help_ok:
         if profile == "carla":
             return []
-        return [f"--help failed for {name!r}: {probe.help_error}"]
+        detail = probe.help_error or probe.isolation_error or "unknown help failure"
+        return [f"--help failed for {name!r}: {detail}"]
     if name != "robot-sf":
         return []
     want = set(probe.subcommands)
@@ -691,8 +1344,8 @@ def render_markdown(
         "> Generated file — do not edit by hand. Regenerate with",
         "> `uv run python scripts/dev/generate_cli_reference.py`.",
         "> Sources: `pyproject.toml [project.scripts]` plus",
-        "> `docs/cli_reference_meta.yaml` plus live `--help` (local-only, no network,",
-        "> simulator, scheduler, or artifact mutation).",
+        "> `docs/cli_reference_meta.yaml` plus live `--help` under an OS-enforced",
+        "> local sandbox (Linux Landlock + seccomp; unsupported hosts fail closed).",
         "",
         "## Overview",
         "",
@@ -760,8 +1413,23 @@ def render_markdown(
     lines.append("## Reproducibility")
     lines.append("")
     lines.append("- Script order is sorted from `[project.scripts]` for determinism.")
-    lines.append("- `--help` runs in an isolated subprocess with a fixed width and timeout.")
-    lines.append("- No network, simulator, scheduler, or artifact mutation occurs during checks.")
+    lines.append(
+        "- `--help` runs in an OS-enforced sandbox (Linux Landlock + seccomp) with a "
+        "fixed width, task-owned temporary root, and timeout."
+    )
+    lines.append(
+        "- Dynamic import/help code gets read-only source/runtime access, writes only "
+        "inside that temporary root, and receives no inherited environment or file-descriptor "
+        "credentials."
+    )
+    lines.append(
+        "- Network, process/thread, namespace, and scheduler escape syscalls are denied; "
+        "unsupported hosts fail closed."
+    )
+    lines.append(
+        "- This is not a general untrusted-code sandbox: the child retains the invoking "
+        "Unix identity and host resource limits."
+    )
     lines.append("- CI fails on drift: run the generator without `--check` to refresh this file.")
     lines.append("")
     return "\n".join(lines).rstrip() + "\n"
@@ -865,11 +1533,14 @@ def _run_probe_child_cli(argv: list[str]) -> int:
     """Parse the private child command used by :func:`probe_help`."""
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--repo-root", type=Path, required=True)
+    parser.add_argument("--task-root", type=Path, required=True)
     parser.add_argument("--script", required=True)
     parser.add_argument("--module", required=True)
     parser.add_argument("--attr", required=True)
     args = parser.parse_args(argv)
-    return _run_probe_child(args.script, args.module, args.attr, args.repo_root.resolve())
+    return _run_probe_child(
+        args.script, args.module, args.attr, args.repo_root.resolve(), args.task_root.resolve()
+    )
 
 
 def _dispatch(argv: list[str]) -> int:

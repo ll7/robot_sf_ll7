@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 import os
 import re
+import socket
+import textwrap
 import tomllib
 from pathlib import Path
 
@@ -123,6 +125,9 @@ def test_entry_point_reference_has_no_handwritten_counts() -> None:
     assert "implementation complete" not in lowered
     assert "generated file" in lowered
     assert "uv run python scripts/dev/generate_cli_reference.py" in text
+    assert "Landlock" in text
+    assert "seccomp" in text
+    assert "unsupported hosts fail closed" in lowered
 
 
 def test_entry_point_sphinx_index_links_cli_reference() -> None:
@@ -181,53 +186,147 @@ def test_entry_point_help_ignores_ambient_terminal_and_carla_environment(
     assert first.subcommand_help == second.subcommand_help
 
 
-def test_entry_point_probe_bounds_import_and_parser_side_effects(
+def test_entry_point_probe_denies_real_side_effect_escape_attempts(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """Callable import and parser construction happen only in the bounded child."""
+    """The OS policy blocks writes, network, processes, threads, and credentials."""
     gen = _load_generator()
-    module_name = f"cli_probe_side_effect_{os.getpid()}"
-    marker = tmp_path / "probe-events.txt"
-    module_path = tmp_path / f"{module_name}.py"
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    module_name = f"cli_probe_adversarial_{os.getpid()}"
+    outside_marker = tmp_path / "outside-task-root.marker"
+    credential_path = tmp_path / "credential.txt"
+    credential_path.write_text("must-not-cross-boundary", encoding="utf-8")
+    credential_fd = os.open(credential_path, os.O_RDONLY)
+    inherited_fd = os.dup(credential_fd)
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    port = listener.getsockname()[1]
+    module_path = source_root / f"{module_name}.py"
     module_path.write_text(
-        "import argparse\n"
-        "import os\n"
-        "import time\n"
-        "from pathlib import Path\n"
-        f"_marker = Path({str(marker)!r})\n"
-        "with _marker.open('a', encoding='utf-8') as handle:\n"
-        "    handle.write(f'import:{os.getpid()}\\n')\n"
-        "if os.getpid() == int(os.environ['CLI_PROBE_PARENT_PID']):\n"
-        "    time.sleep(2)\n"
-        "def _build_parser():\n"
-        "    with _marker.open('a', encoding='utf-8') as handle:\n"
-        "        handle.write(f'parser:{os.getpid()}\\n')\n"
-        "    return argparse.ArgumentParser(description='side-effect probe')\n"
-        "def main(argv):\n"
-        "    if argv != ['--help']:\n"
-        "        return 1\n"
-        "    print('usage: side-effect [--help]')\n"
-        "    print('side-effect help')\n"
-        "    return 0\n",
+        textwrap.dedent(
+            f"""
+            import argparse
+            import os
+            import socket
+            import subprocess
+            import sys
+            import threading
+            from pathlib import Path
+
+            OUTSIDE = Path({str(outside_marker)!r})
+            PORT = {port}
+            INHERITED_FD = {inherited_fd}
+
+            def attempt(action):
+                try:
+                    action()
+                except BaseException:
+                    return "blocked"
+                return "ran"
+
+            def write_outside():
+                OUTSIDE.write_text("escape", encoding="utf-8")
+
+            IMPORT_STATUS = attempt(write_outside)
+            PARSER_STATUS = "not-run"
+
+            def _build_parser():
+                global PARSER_STATUS
+                PARSER_STATUS = attempt(write_outside)
+                parser = argparse.ArgumentParser(description="adversarial probe")
+                parser.add_subparsers().add_parser("parser-" + PARSER_STATUS)
+                return parser
+
+            def run_network():
+                connection = socket.create_connection(("127.0.0.1", PORT), timeout=1)
+                connection.close()
+
+            def run_process():
+                completed = subprocess.run(
+                    [sys.executable, "-c", "print('process-ran')"],
+                    capture_output=True,
+                    check=False,
+                    text=True,
+                )
+                if "process-ran" not in completed.stdout:
+                    raise RuntimeError("child process produced no proof of execution")
+
+            def run_thread():
+                thread_state = []
+
+                def worker():
+                    thread_state.append("ran")
+                    try:
+                        write_outside()
+                    except BaseException:
+                        pass
+
+                thread = threading.Thread(target=worker)
+                thread.start()
+                thread.join()
+                if thread_state != ["ran"]:
+                    raise RuntimeError("thread did not run")
+
+            def inspect_inherited_fd():
+                os.fstat(INHERITED_FD)
+
+            def main(argv):
+                if argv != ["--help"]:
+                    return 1
+                task_marker = Path.cwd() / "task-root.marker"
+                try:
+                    task_marker.write_text("allowed", encoding="utf-8")
+                    task_status = "allowed"
+                except BaseException:
+                    task_status = "blocked"
+                print("usage: adversarial-probe [--help]")
+                print("import-write:" + IMPORT_STATUS)
+                print("main-write:" + attempt(write_outside))
+                print("task-write:" + task_status)
+                print("network:" + attempt(run_network))
+                print("process:" + attempt(run_process))
+                print("thread:" + attempt(run_thread))
+                print("fd-credential:" + ("leaked" if attempt(inspect_inherited_fd) == "ran" else "hidden"))
+                print("credential:" + ("leaked" if os.environ.get("CLI_PROBE_SECRET") else "hidden"))
+                return 0
+            """
+        ).lstrip(),
         encoding="utf-8",
     )
-    monkeypatch.syspath_prepend(str(tmp_path))
-    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
-    monkeypatch.setenv("CLI_PROBE_PARENT_PID", str(os.getpid()))
+    monkeypatch.setenv("CLI_PROBE_SECRET", "must-not-cross-boundary")
 
-    result = gen.probe_help(
-        "side-effect",
-        f"{module_name}:main",
-        REPO_ROOT,
-        timeout_s=1,
-    )
-
-    assert result.help_ok, result.help_error
-    events = marker.read_text(encoding="utf-8").splitlines()
-    assert events
-    event_pids = [event.rsplit(":", 1)[1] for event in events]
-    assert all(pid != str(os.getpid()) for pid in event_pids)
-    assert [event.split(":", 1)[0] for event in events] == ["import", "parser"]
+    try:
+        result = gen.probe_help(
+            "adversarial-probe",
+            f"{module_name}:main",
+            source_root,
+            timeout_s=2,
+        )
+        assert result.help_ok, result.help_error
+        assert "import-write:blocked" in result.help_text
+        assert "main-write:blocked" in result.help_text
+        assert "task-write:allowed" in result.help_text
+        assert "network:blocked" in result.help_text
+        assert "process:blocked" in result.help_text
+        assert "thread:blocked" in result.help_text
+        assert "fd-credential:hidden" in result.help_text
+        assert "credential:hidden" in result.help_text
+        assert result.subcommands == ["parser-blocked"]
+        assert not outside_marker.exists()
+        listener.settimeout(0.2)
+        try:
+            connection, _address = listener.accept()
+        except TimeoutError:
+            pass
+        else:
+            connection.close()
+            raise AssertionError("probe reached the real loopback listener")
+    finally:
+        listener.close()
+        os.close(inherited_fd)
+        os.close(credential_fd)
 
 
 def test_entry_point_negative_unimportable_callable() -> None:

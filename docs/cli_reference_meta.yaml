@@ -5,7 +5,8 @@ entries:
       datasets, envs, scenarios, planners, recipe, release).
     profile: core
     availability: Always available after `uv sync --all-extras` (core dependencies only);
-      `--help` is local-only with no network, simulator, scheduler, or artifact mutation.
+      `--help` uses the OS-enforced local probe sandbox (Linux Landlock + seccomp);
+      unsupported hosts fail closed.
     guide: docs/adoption_path.md
     subcommands:
       doctor: docs/adoption_path.md
@@ -24,7 +25,7 @@ entries:
     profile: carla
     availability: Preflight is host-local; `smoke` and `live-replay` need the Docker
       daemon, the pinned `carlasim/carla:0.9.16` image, and the `carla` client group;
-      `--help` is local-only.
+      `--help` uses the OS-enforced local probe sandbox; unsupported hosts fail closed.
     guide: docs/dev_runtime_requirements.md
   robot-sf-carla-parity-bundle-preflight:
     purpose: Read-only readiness preflight for the compact CARLA native/aligned parity
@@ -37,8 +38,8 @@ entries:
     purpose: Build conservative CARLA replay diagnostics from Robot-SF and CARLA JSON
       inputs.
     profile: carla
-    availability: Local-only diagnostics over supplied JSON files; no CARLA server,
-      network, scheduler, or artifact mutation for `--help`.
+    availability: Local-only diagnostics over supplied JSON files; `--help` uses the
+      OS-enforced local probe sandbox; unsupported hosts fail closed.
     guide: docs/dev_runtime_requirements.md
   robot-sf-carla-t1-oracle-smoke:
     purpose: Prepare one CARLA T1 oracle replay smoke from a T0 export manifest.
@@ -86,5 +87,6 @@ entries:
       doctor).
     profile: benchmark
     availability: Requires the `benchmark` extra (included in `uv sync --all-extras`);
-      `--help` is local-only with no network, simulator, scheduler, or artifact mutation.
+      `--help` uses the OS-enforced local probe sandbox (Linux Landlock + seccomp);
+      unsupported hosts fail closed.
     guide: docs/benchmark.md

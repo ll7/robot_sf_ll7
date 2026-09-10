@@ -8,17 +8,17 @@ acronyms and project terms.
 > Generated file — do not edit by hand. Regenerate with
 > `uv run python scripts/dev/generate_cli_reference.py`.
 > Sources: `pyproject.toml [project.scripts]` plus
-> `docs/cli_reference_meta.yaml` plus live `--help` (local-only, no network,
-> simulator, scheduler, or artifact mutation).
+> `docs/cli_reference_meta.yaml` plus live `--help` under an OS-enforced
+> local sandbox (Linux Landlock + seccomp; unsupported hosts fail closed).
 
 ## Overview
 
 | Command | Purpose | Profile | Availability | Guide | Help |
 | --- | --- | --- | --- | --- | --- |
-| `robot-sf` | Top-level user workflow entry point (doctor, demo, examples, gallery, models, datasets, envs, scenarios, planners, recipe, release). | core | Always available after `uv sync --all-extras` (core dependencies only); `--help` is local-only with no network, simulator, scheduler, or artifact mutation. | [adoption_path.md](adoption_path.md) | available |
-| `robot-sf-carla-docker-runtime` | Preflight or smoke-test the pinned CARLA 0.9.16 Docker runtime. | carla | Preflight is host-local; `smoke` and `live-replay` need the Docker daemon, the pinned `carlasim/carla:0.9.16` image, and the `carla` client group; `--help` is local-only. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
+| `robot-sf` | Top-level user workflow entry point (doctor, demo, examples, gallery, models, datasets, envs, scenarios, planners, recipe, release). | core | Always available after `uv sync --all-extras` (core dependencies only); `--help` uses the OS-enforced local probe sandbox (Linux Landlock + seccomp); unsupported hosts fail closed. | [adoption_path.md](adoption_path.md) | available |
+| `robot-sf-carla-docker-runtime` | Preflight or smoke-test the pinned CARLA 0.9.16 Docker runtime. | carla | Preflight is host-local; `smoke` and `live-replay` need the Docker daemon, the pinned `carlasim/carla:0.9.16` image, and the `carla` client group; `--help` uses the OS-enforced local probe sandbox; unsupported hosts fail closed. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
 | `robot-sf-carla-parity-bundle-preflight` | Read-only readiness preflight for the compact CARLA native/aligned parity bundle. | carla | Local-only; does not run CARLA, needs no network or simulator, and never asserts metric parity. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
-| `robot-sf-carla-replay-diagnostics` | Build conservative CARLA replay diagnostics from Robot-SF and CARLA JSON inputs. | carla | Local-only diagnostics over supplied JSON files; no CARLA server, network, scheduler, or artifact mutation for `--help`. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
+| `robot-sf-carla-replay-diagnostics` | Build conservative CARLA replay diagnostics from Robot-SF and CARLA JSON inputs. | carla | Local-only diagnostics over supplied JSON files; `--help` uses the OS-enforced local probe sandbox; unsupported hosts fail closed. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
 | `robot-sf-carla-t1-oracle-smoke` | Prepare one CARLA T1 oracle replay smoke from a T0 export manifest. | carla | Setup is local-only; live replay needs the external CARLA 0.9.16 Docker runtime and the `carla` client group. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
 | `robot-sf-catalog-carla-schemas` | Print CARLA bridge schema catalog metadata. | carla | Local-only; no CARLA server, network, or simulator required. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
 | `robot-sf-check-carla` | Check optional CARLA Python API availability. | carla | Local-only check; reports `not-available` when the `carla` client group is absent and never requires the simulator for `--help`. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
@@ -26,7 +26,7 @@ acronyms and project terms.
 | `robot-sf-migrate-artifacts` | Consolidate legacy artifacts under the canonical `output/` root. | core | Always available (core dependencies only); `--help` and `--dry-run` are read-only, migration writes only under `output/` when actually run. | [dev_guide_reference.md](dev_guide_reference.md) | available |
 | `robot-sf-validate-carla-t0-batch` | Validate a CARLA T0 export manifest and every referenced payload. | carla | Local-only validation; no CARLA server, network, or simulator required. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
 | `robot-sf-validate-carla-t0-manifest` | Validate a CARLA T0 export manifest. | carla | Local-only validation; no CARLA server, network, or simulator required. | [dev_runtime_requirements.md](dev_runtime_requirements.md) | available |
-| `robot_sf_bench` | Social-navigation benchmark toolkit (run, aggregate, validate, plot, SNQI, doctor). | benchmark | Requires the `benchmark` extra (included in `uv sync --all-extras`); `--help` is local-only with no network, simulator, scheduler, or artifact mutation. | [benchmark.md](benchmark.md) | available |
+| `robot_sf_bench` | Social-navigation benchmark toolkit (run, aggregate, validate, plot, SNQI, doctor). | benchmark | Requires the `benchmark` extra (included in `uv sync --all-extras`); `--help` uses the OS-enforced local probe sandbox (Linux Landlock + seccomp); unsupported hosts fail closed. | [benchmark.md](benchmark.md) | available |
 
 ## Commands
 
@@ -34,7 +34,7 @@ acronyms and project terms.
 
 - Callable: `robot_sf.cli:main`
 - Profile: `core`
-- Availability: Always available after `uv sync --all-extras` (core dependencies only); `--help` is local-only with no network, simulator, scheduler, or artifact mutation.
+- Availability: Always available after `uv sync --all-extras` (core dependencies only); `--help` uses the OS-enforced local probe sandbox (Linux Landlock + seccomp); unsupported hosts fail closed.
 - Guide: [adoption_path.md](adoption_path.md)
 - Help: available
 - Synopsis: Robot SF top-level command line interface.
@@ -59,7 +59,7 @@ Nested `robot-sf` subcommands (summary only; see each task guide for flags):
 
 - Callable: `robot_sf_carla_bridge.cli:carla_docker_runtime_main`
 - Profile: `carla`
-- Availability: Preflight is host-local; `smoke` and `live-replay` need the Docker daemon, the pinned `carlasim/carla:0.9.16` image, and the `carla` client group; `--help` is local-only.
+- Availability: Preflight is host-local; `smoke` and `live-replay` need the Docker daemon, the pinned `carlasim/carla:0.9.16` image, and the `carla` client group; `--help` uses the OS-enforced local probe sandbox; unsupported hosts fail closed.
 - Guide: [dev_runtime_requirements.md](dev_runtime_requirements.md)
 - Help: available
 - Synopsis: Preflight or smoke-test the pinned CARLA 0.9.16 Docker runtime.
@@ -85,7 +85,7 @@ Subcommands (summary only; see the task guide for flags):
 
 - Callable: `scripts.carla_bridge.diagnose_replay_semantics:main`
 - Profile: `carla`
-- Availability: Local-only diagnostics over supplied JSON files; no CARLA server, network, scheduler, or artifact mutation for `--help`.
+- Availability: Local-only diagnostics over supplied JSON files; `--help` uses the OS-enforced local probe sandbox; unsupported hosts fail closed.
 - Guide: [dev_runtime_requirements.md](dev_runtime_requirements.md)
 - Help: available
 - Synopsis: Build conservative CARLA replay diagnostics from Robot-SF and CARLA JSON inputs.
@@ -157,7 +157,7 @@ Subcommands (summary only; see the task guide for flags):
 
 - Callable: `robot_sf.benchmark.cli:main`
 - Profile: `benchmark`
-- Availability: Requires the `benchmark` extra (included in `uv sync --all-extras`); `--help` is local-only with no network, simulator, scheduler, or artifact mutation.
+- Availability: Requires the `benchmark` extra (included in `uv sync --all-extras`); `--help` uses the OS-enforced local probe sandbox (Linux Landlock + seccomp); unsupported hosts fail closed.
 - Guide: [benchmark.md](benchmark.md)
 - Help: available
 - Synopsis: Social Navigation Benchmark CLI
@@ -203,6 +203,8 @@ Subcommands (summary only; see the task guide for flags):
 ## Reproducibility
 
 - Script order is sorted from `[project.scripts]` for determinism.
-- `--help` runs in an isolated subprocess with a fixed width and timeout.
-- No network, simulator, scheduler, or artifact mutation occurs during checks.
+- `--help` runs in an OS-enforced sandbox (Linux Landlock + seccomp) with a fixed width, task-owned temporary root, and timeout.
+- Dynamic import/help code gets read-only source/runtime access, writes only inside that temporary root, and receives no inherited environment or file-descriptor credentials.
+- Network, process/thread, namespace, and scheduler escape syscalls are denied; unsupported hosts fail closed.
+- This is not a general untrusted-code sandbox: the child retains the invoking Unix identity and host resource limits.
 - CI fails on drift: run the generator without `--check` to refresh this file.

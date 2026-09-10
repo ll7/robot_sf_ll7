@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import jsonschema
+import pytest
 
 from scripts.dev.check_dependency_coherence import (
     compare_lock_resolution,
@@ -206,6 +207,38 @@ def test_supported_python_range_change_is_material_resolution_evidence() -> None
     assert report["status"] == "coherent"
     assert report["classification"] == "material_resolution"
     assert report["material_fields"] == ["requires-python"]
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("version", ("version = 1", "version = 2")),
+        ("revision", ("revision = 3", "revision = 4")),
+        (
+            "conflicts",
+            (
+                'requires-python = ">=3.11"',
+                'requires-python = ">=3.11"\n'
+                'conflicts = [[{ package = "robot-sf", group = "examples" }]]',
+            ),
+        ),
+    ],
+)
+def test_top_level_lock_metadata_change_is_material_resolution_evidence(
+    field: str, replacement: tuple[str, str]
+) -> None:
+    """Top-level uv metadata changes cannot be treated as profile-only churn."""
+    base_lock = _lock("robot-sf", "alpha")
+    head_lock = base_lock.replace(*replacement)
+
+    report = compare_lock_resolution(
+        base_lock,
+        head_lock,
+        [{"id": "linux-py311", "python": "3.11", "required": True}],
+    )
+
+    assert report["material_fields"] == [field]
+    assert report["material_resolution"] is True
 
 
 def test_profile_checks_use_the_pinned_resolver_and_affected_owner_only(tmp_path: Path) -> None:

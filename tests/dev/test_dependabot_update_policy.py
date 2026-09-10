@@ -108,13 +108,28 @@ training = [
 {group_block}"""
 
 
-def _profile_lock(*, group_name: str | None, changed_package: str | None = None) -> str:
+def _profile_lock(
+    *,
+    group_name: str | None,
+    changed_package: str | None = None,
+    top_level_change: str | None = None,
+) -> str:
     """Build a minimal uv lock with an optional root profile edge."""
     versions = {
         "scikit-learn": "1.10.0" if changed_package == "scikit-learn" else "1.9.0",
         "stable-baselines3": "2.9.0",
         "torch": "2.13.0",
     }
+    header = "version = 1\nrevision = 3\n"
+    if top_level_change == "version":
+        header = "version = 2\nrevision = 3\n"
+    elif top_level_change == "revision":
+        header = "version = 1\nrevision = 4\n"
+    elif top_level_change == "conflicts":
+        header += 'conflicts = [[{ package = "robot-sf", group = "examples" }]]\n'
+    elif top_level_change is not None:
+        raise ValueError(f"unsupported top-level change: {top_level_change}")
+
     root_group = ""
     if group_name is not None:
         root_group = f"""
@@ -143,7 +158,7 @@ source = {{ registry = "https://pypi.org/simple" }}
         if group_name is not None
         else "metadata = { requires-dev = {} }"
     )
-    return f"""version = 1
+    return f"""{header}
 
 [[package]]
 name = "robot-sf"
@@ -161,12 +176,17 @@ def _run_profile_policy_case(
     group_name: str = "examples",
     changed_package: str | None = None,
     published_update: bool = False,
+    top_level_change: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate one guarded-group case against exact synthetic base/head files."""
     base_project = _profile_project(None)
     head_project = _profile_project(group_name, published_update=published_update)
     base_lock = _profile_lock(group_name=None)
-    head_lock = _profile_lock(group_name=group_name, changed_package=changed_package)
+    head_lock = _profile_lock(
+        group_name=group_name,
+        changed_package=changed_package,
+        top_level_change=top_level_change,
+    )
     (tmp_path / "pyproject.toml").write_text(head_project, encoding="utf-8")
     (tmp_path / "uv.lock").write_text(head_lock, encoding="utf-8")
 
@@ -207,6 +227,42 @@ def test_live_policy_covers_direct_dependencies_and_ci_surfaces() -> None:
     policy = validate_repository_structure(repo_root=REPO_ROOT)
     validate_ci_workflow(policy)
     validate_dependabot_config()
+
+
+@pytest.mark.parametrize(
+    "sync_args",
+    ["--group examples", "--group other --frozen", "--all-extras --frozen"],
+)
+def test_ci_only_profile_requires_exact_group_sync_arguments(
+    tmp_path: Path, sync_args: str
+) -> None:
+    """A profile exemption requires its exact group and frozen setup invocation."""
+    workflow_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    workflow_path = tmp_path / "ci.yml"
+    workflow_path.write_text(
+        workflow_text.replace(
+            'sync-args: "--group examples --frozen"', f'sync-args: "{sync_args}"'
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        PolicyError,
+        match=r"CI-only dependency group 'examples'.*job 'examples-smoke'.*--group examples --frozen",
+    ):
+        validate_ci_workflow(load_policy(), workflow_path)
+
+
+def test_ci_only_profile_required_job_must_materialize_the_group() -> None:
+    """An unrelated aggregate job cannot carry the examples profile exception."""
+    policy = load_policy()
+    policy["ci_only_dependency_groups"]["examples"]["required_jobs"] = ["notebooks-smoke"]
+
+    with pytest.raises(
+        PolicyError,
+        match=r"CI-only dependency group 'examples'.*job 'notebooks-smoke'.*--group examples --frozen",
+    ):
+        validate_ci_workflow(policy)
 
 
 def test_issue_7480_package_set_is_split_into_distinct_risk_classes() -> None:
@@ -279,6 +335,21 @@ def test_mixed_published_update_remains_rejected_with_examples_group(
     """Published requirement changes cannot hide behind the CI-only group."""
     with pytest.raises(PolicyError, match="mixes direct risk classes"):
         _run_profile_policy_case(tmp_path, monkeypatch, published_update=True)
+
+
+@pytest.mark.parametrize("top_level_change", ["version", "revision", "conflicts"])
+def test_examples_group_with_top_level_lock_change_cannot_get_profile_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    top_level_change: str,
+) -> None:
+    """Any top-level lock metadata change remains outside the profile exception."""
+    with pytest.raises(PolicyError, match="mixes direct risk classes"):
+        _run_profile_policy_case(
+            tmp_path,
+            monkeypatch,
+            top_level_change=top_level_change,
+        )
 
 
 def test_unknown_direct_package_fails_closed() -> None:

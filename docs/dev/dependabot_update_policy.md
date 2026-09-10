@@ -21,15 +21,17 @@ The checker also covers the standalone fast-pysf project files. A new direct pac
 
 The `ci_only_dependency_groups` metadata is an explicit allow-list for CI-only PEP 735 dependency
 groups. Each entry binds one group to the root declaration and lockfile, names its root project
-requirement, lists every approved external requirement, and names the aggregate CI job. A group
-is profile-only only when it is newly added, matches that metadata exactly, leaves all published
-project requirements unchanged, and changes the lock only by adding the matching root
-`dev-dependencies` and `metadata.requires-dev` profile edges. The root lock row's version, source,
-published dependencies, and all other dev groups must remain unchanged; every other lock package
-row must remain unchanged as well. This permits the bounded `examples` workflow to compose
-high-impact and optional runtimes while keeping their classes visible. Unconfigured groups, changed
-requirements, published dependency changes, material lock changes, and lock-resolution changes
-remain subject to the mixed-risk fail-closed guard.
+requirement, lists every approved external requirement, and names the CI job or jobs whose shared
+setup action must use exactly `--group <group> --frozen`. A group is profile-only only when it is newly
+added, matches that metadata exactly, leaves all published project requirements unchanged, and
+changes the lock only by adding the matching root `dev-dependencies` and
+`metadata.requires-dev` profile edges. All top-level lock metadata (including `version`, `revision`,
+`requires-python`, `resolution-markers`, and `conflicts`), the root lock row's published
+dependencies, and all other dev groups must remain unchanged; every other lock package row must
+remain unchanged as well. This permits the bounded `examples` workflow to compose high-impact and
+optional runtimes while keeping their classes visible. Unconfigured groups, changed requirements,
+published dependency changes, material lock changes, and lock-resolution changes remain subject to
+the mixed-risk fail-closed guard.
 
 ## Workflow action-pin coupling
 

@@ -268,17 +268,14 @@ def _lock_rows(text: str) -> dict[str, list[Mapping[str, Any]]]:
 
 
 def _lock_header(text: str) -> dict[str, Any]:
+    """Return all top-level lock metadata, excluding package rows."""
     if not text:
         return {}
     try:
         document = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise CoherenceError(f"invalid uv.lock: {exc}") from exc
-    return {
-        key: document.get(key)
-        for key in ("requires-python", "resolution-markers")
-        if key in document
-    }
+    return {str(key): value for key, value in document.items() if key != "package"}
 
 
 def _material_row(row: Mapping[str, Any]) -> Any:

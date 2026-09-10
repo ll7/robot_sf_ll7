@@ -55,6 +55,7 @@ PACKAGE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 WORKFLOW_ACTION_VALUE = re.compile(
     r"^(?P<action>(?!\.)[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+)@(?P<sha>[0-9a-fA-F]{40})$"
 )
+CI_SETUP_ACTION = "./.github/actions/setup-ci-python"
 WORKFLOW_PATH_PREFIX = ".github/workflows/"
 WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 
@@ -321,6 +322,41 @@ def _workflow_strings(value: Any) -> Iterable[str]:
             yield from _workflow_strings(child)
 
 
+def _setup_action_sync_args(job_name: str, job: Mapping[str, Any]) -> list[Any]:
+    """Return sync arguments from every shared CI setup action in one job."""
+    steps = job.get("steps", [])
+    if not isinstance(steps, list):
+        raise PolicyError(f"CI jobs.{job_name}.steps must be a list")
+    sync_args: list[Any] = []
+    for index, raw_step in enumerate(steps):
+        step = _as_mapping(raw_step, f"CI jobs.{job_name}.steps[{index}]")
+        if step.get("uses") != CI_SETUP_ACTION:
+            continue
+        with_block = step.get("with", {})
+        if not isinstance(with_block, Mapping):
+            raise PolicyError(f"CI jobs.{job_name}.steps[{index}].with must be an object")
+        sync_args.append(with_block.get("sync-args"))
+    return sync_args
+
+
+def _validate_ci_only_profile_jobs(
+    jobs: Mapping[str, Any], profile_groups: Mapping[str, Any]
+) -> None:
+    """Require each CI-only profile job to materialize its exact dependency group."""
+    for group_name, raw_profile in profile_groups.items():
+        profile = _validated_ci_only_group(str(group_name), raw_profile)
+        expected_sync_args = f"--group {group_name} --frozen"
+        for job_name in profile["required_jobs"]:
+            job = _as_mapping(jobs.get(job_name), f"CI jobs.{job_name}")
+            observed_sync_args = _setup_action_sync_args(job_name, job)
+            if observed_sync_args != [expected_sync_args]:
+                raise PolicyError(
+                    f"CI-only dependency group {group_name!r} job {job_name!r} must contain "
+                    f"exactly one {CI_SETUP_ACTION!r} step with sync-args "
+                    f"{expected_sync_args!r}; observed {observed_sync_args!r}"
+                )
+
+
 def _root_uv_update(document: Mapping[str, Any]) -> Mapping[str, Any]:
     updates = document.get("updates")
     if not isinstance(updates, list):
@@ -405,7 +441,7 @@ def validate_dependabot_config(path: Path = DEFAULT_DEPENDABOT_CONFIG) -> None: 
 
 
 def validate_ci_workflow(policy: Mapping[str, Any], path: Path = DEFAULT_CI_WORKFLOW) -> None:  # noqa: C901
-    """Ensure policy evidence points at jobs the CI aggregate requires."""
+    """Ensure policy evidence points at jobs and exact setup invocations."""
     try:
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
@@ -420,6 +456,7 @@ def validate_ci_workflow(policy: Mapping[str, Any], path: Path = DEFAULT_CI_WORK
         aggregate_needs = [aggregate_needs]
     aggregate_needs = set(_as_string_list(aggregate_needs, f"CI jobs.{aggregate_name}.needs"))
 
+    profile_groups = _as_mapping(policy["ci_only_dependency_groups"], "ci_only_dependency_groups")
     required_jobs: set[str] = set()
     policy_items = list(policy["classes"]) + [
         _as_mapping(policy["transitive_fallback"], "transitive_fallback"),
@@ -441,6 +478,7 @@ def validate_ci_workflow(policy: Mapping[str, Any], path: Path = DEFAULT_CI_WORK
         raise PolicyError(
             f"CI aggregate {aggregate_name!r} does not require policy jobs: {', '.join(missing_needs)}"
         )
+    _validate_ci_only_profile_jobs(jobs, profile_groups)
 
     compatibility_text = "\n".join(_workflow_strings(jobs["compat-matrix"]))
     for raw_class in policy["classes"]:

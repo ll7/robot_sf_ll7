@@ -5,14 +5,15 @@ Status: preparation-only terminal packet. The complete machine-readable record i
 This work follows the live #7381 programme and the preparation rulings in #7383
 and #7384; the attached packet is guidance/evidence, not a replacement authority.
 
-Refresh provenance for this repair: current `origin/main` is
+Receipt provenance for this repair: current `origin/main` is
 `d6a41ba2395b19eb604978836f6c35735df45460`; the live #8612 and #8620 tips are
 `db1215d6e5d1a19598d4f6a4ba10b119229f66b7` and
-`4ef0858d33c91291129098c08975525a54fb0121`; and the exact live #8622 code head under
-repair is `d4d5ed586244edb2e4bcf4cebc0751d119c3641d`. The dossier binds its receipt
-to that input head; the final repair SHA is reported at handoff rather than embedded
-in this self-containing dossier. The stack is refreshed for inspection, but live
-domain authority and native campaign admission remain blocked.
+`4ef0858d33c91291129098c08975525a54fb0121`; and the published #8622 code-bearing
+commit is `40c33c26068cee38cbf59a5ff9a889736eff86e1`. The dossier binds its receipts
+to that code-bearing commit; this receipt/docs-only follow-up's final SHA is reported
+at handoff rather than embedded in this self-containing dossier. The stack is
+refreshed for inspection, but live domain authority and native campaign admission
+remain blocked.
 
 ## Outcome
 

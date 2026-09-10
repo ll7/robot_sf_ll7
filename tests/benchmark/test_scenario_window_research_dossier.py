@@ -17,8 +17,9 @@ _DOSSIER = _ROOT / "docs/context/scenario_window_research_dossier_2026-09-08.jso
 _EXPECTED_REPOSITORY_HEADS = {
     "origin_main_at_start": "d6a41ba2395b19eb604978836f6c35735df45460",
     "rw03_rw04_pr_8620_head": "4ef0858d33c91291129098c08975525a54fb0121",
-    "rw05_rw06_rw07_pr_8622_code_head": "d4d5ed586244edb2e4bcf4cebc0751d119c3641d",
+    "rw05_rw06_rw07_pr_8622_code_head": "40c33c26068cee38cbf59a5ff9a889736eff86e1",
 }
+_STALE_CODE_HEAD = "d4d5ed586244edb2e4bcf4cebc0751d119c3641d"
 
 
 def test_terminal_dossier_has_only_allowed_hypothesis_statuses() -> None:
@@ -67,6 +68,8 @@ def test_dossier_sources_and_receipts_are_resolvable() -> None:
     assert (
         _EXPECTED_REPOSITORY_HEADS["rw05_rw06_rw07_pr_8622_code_head"] in focused_receipt["result"]
     )
+    serialized_dossier = json.dumps(payload, sort_keys=True)
+    assert _STALE_CODE_HEAD not in serialized_dossier
     serialized_receipts = json.dumps(payload["command_receipts"], sort_keys=True)
     assert "ce31aa2" not in serialized_receipts
     assert "144 passed" not in serialized_receipts

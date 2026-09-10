@@ -2887,13 +2887,14 @@ def _simulate_dry_run_metrics(
 
 
 def _aggregate_metrics(samples: MetricSamples) -> dict[str, common.MetricAggregate]:
-    """TODO docstring. Document this function.
+    """Aggregate per-metric sample lists into summary statistics.
 
     Args:
-        samples: TODO docstring.
+        samples: Mapping from metric name to recorded float samples.
 
     Returns:
-        TODO docstring.
+        Mapping from metric name to mean, median, p95, and 95% bootstrap
+        confidence interval; empty sample lists yield all-zero aggregates.
     """
     aggregates: dict[str, common.MetricAggregate] = {}
     rng = np.random.default_rng(12345)
@@ -2957,11 +2958,14 @@ def _zero_shot_decay_metric(
 
 
 def _write_episode_log(path: Path, records: Iterable[Mapping[str, object]]) -> None:
-    """TODO docstring. Document this function.
+    """Write episode records as newline-delimited JSON.
+
+    Creates the parent directory when missing and serializes each record on its
+    own line with sorted keys.
 
     Args:
-        path: TODO docstring.
-        records: TODO docstring.
+        path: Destination path for the JSONL episode log.
+        records: Episode records to serialize.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -3325,11 +3329,11 @@ def run_expert_training(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """TODO docstring. Document this function.
-
+    """Build the CLI argument parser for the expert PPO training script.
 
     Returns:
-        TODO docstring.
+        Parser with ``--config``, ``--dry-run``, ``--log-level``, ``--log-file``,
+        and ``--resume-from`` options.
     """
     parser = argparse.ArgumentParser(
         description="Train an expert PPO policy with manifest outputs."
@@ -3362,13 +3366,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Run the expert PPO training CLI.
+
+    Parses arguments, loads the referenced training configuration, routes the
+    log level, and delegates training to :func:`run_expert_training`. Tees
+    stdout/stderr to ``--log-file`` when provided and restores the original
+    streams and ``LOGURU_LEVEL`` afterwards.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument vector; defaults to ``sys.argv[1:]``.
 
     Returns:
-        TODO docstring.
+        Process exit code, ``0`` after training completes.
     """
     parser = build_arg_parser()
     args = parser.parse_args(argv)

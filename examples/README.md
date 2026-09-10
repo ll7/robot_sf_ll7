@@ -139,6 +139,6 @@ Visualization and analysis scripts built atop benchmark outputs.
 | [Plot Force Field Save](./plotting/plot_force_field_save.py) | Generate and save static images of the force field for documentation. | _None_ | visualization, force-field | ✅ |
 | [Plot Map](./plotting/plot_map.py) | Plot a MapDefinition as a quick visual sanity check. | _None_ | maps, visualization | ✅ |
 | [Plot Micro Pedestrian Scene](./plotting/plot_micro_pedestrian_scene.py) | Render a static micro-scale pedestrian-simulation snapshot for publications. | _None_ | visualization, pedestrian, publication | ⚠️ Publication figure workflow; requires manual figure inspection. |
-| [Plot Pareto](./plotting/plot_pareto.py) | Generate Pareto front plots from benchmark episodes or synthetic data. | _None_ | visualization, pareto | ⚠️ CLI expects --in dataset argument; no default input for CI. |
+| [Plot Pareto](./plotting/plot_pareto.py) | Generate Pareto front plots from benchmark episodes, synthetic data, or a fixture demo. | _None_ | visualization, pareto | ✅ |
 | [Plot Pedestrian Position KDE](./plotting/plot_pedestrian_position_kde.py) | Plot a KDE of pedestrian positions on top of the source map. | _None_ | visualization, pedestrian | ✅ |
 | [SNQI Figures Example](./plotting/snqi_figures_example.py) | Generate publication-ready SNQI figures via the orchestrator script. | _None_ | visualization, snqi | ⚠️ Requires --episodes CLI input and benchmark outputs. |

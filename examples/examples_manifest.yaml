@@ -327,7 +327,7 @@ examples:
     tags: [occupancy, reward, grid]
   - path: plotting/plot_pareto.py
     name: "Plot Pareto"
-    summary: "Generate Pareto front plots from benchmark episodes, synthetic data, or the deterministic fixture demo."
+    summary: "Generate Pareto front plots from benchmark episodes, synthetic data, or a fixture demo."
     category_slug: plotting
     prerequisites: []
     ci_enabled: true

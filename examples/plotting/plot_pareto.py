@@ -1,4 +1,4 @@
-"""Generate Pareto front plots from benchmark episodes or synthetic data.
+"""Generate Pareto front plots from benchmark episodes, synthetic data, or a fixture demo.
 
 Purpose:
     Aggregate episode metrics and produce Pareto scatter plots for model

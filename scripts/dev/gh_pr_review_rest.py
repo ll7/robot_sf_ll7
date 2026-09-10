@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Publish an exact-head pull-request review through the REST API."""
+"""Publish an exact-head pull-request review through the REST API.
+
+When a caller has already computed the exact title/body metadata digest, pass
+``--expected-metadata-digest`` so the live PR metadata is re-read and compared
+before the review POST. A mismatch is a safe stale-state skip.
+"""
 
 from __future__ import annotations
 
@@ -19,10 +24,13 @@ from scripts.dev._gh_rest import gh_api_review_post as _gh_api_post
 from scripts.dev._gh_rest import parse_json as _parse_json
 from scripts.dev.github_transport_policy import get_transport_contract
 from scripts.dev.pr_carrier_gate import _declared_base_sha, extract_full_shas
+from scripts.dev.pr_metadata import metadata_digest
 from scripts.dev.pr_write_guard import DEFAULT_REPO, guard_pr_write, pr_write_lock
 
 REVIEW_EVENTS = ("COMMENT", "APPROVE", "REQUEST_CHANGES")
 SELF_AUTHORED_REVIEW_STATUS = "review_skipped_self_authored"
+METADATA_DIGEST_STATUS = "review_skipped_stale_state"
+FULL_METADATA_DIGEST_LENGTH = 64
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_review_rest.py")
 
 
@@ -85,6 +93,40 @@ def _read_authenticated_actor() -> tuple[str | None, dict[str, Any] | None]:
     if not isinstance(login, str) or not login.strip():
         return None, {"status": "error", "error": "authenticated actor payload has no login"}
     return login.strip(), None
+
+
+def _read_live_metadata_digest(
+    number: int, *, repo: str
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Read the live PR title/body and return its exact canonical metadata digest."""
+    result = _gh_api_get(f"repos/{repo}/pulls/{number}")
+    payload, error = _parse_json(result, what=f"PR {number} metadata read")
+    if error:
+        return None, {"status": "error", "error": error}
+    if not isinstance(payload, dict):
+        return None, {"status": "error", "error": "PR metadata payload was not an object"}
+    title = payload.get("title")
+    body = payload.get("body")
+    if not isinstance(title, str):
+        return None, {"status": "error", "error": "PR metadata payload has no title"}
+    if body is None:
+        body = ""
+    if not isinstance(body, str):
+        return None, {"status": "error", "error": "PR metadata payload has malformed body"}
+    return metadata_digest(title, body), None
+
+
+def _validate_expected_metadata_digest(expected_digest: str | None) -> str | None:
+    """Validate an optional exact title/body metadata digest supplied by the caller."""
+    if expected_digest is None:
+        return None
+    if (
+        not isinstance(expected_digest, str)
+        or len(expected_digest) != FULL_METADATA_DIGEST_LENGTH
+        or any(character not in "0123456789abcdefABCDEF" for character in expected_digest)
+    ):
+        return "expected_metadata_digest must be a full 64-character hexadecimal digest"
+    return None
 
 
 def _guard_review(
@@ -173,6 +215,71 @@ def _review_preflight(
     return guard
 
 
+def _metadata_digest_preflight(
+    number: int,
+    *,
+    repo: str,
+    expected_digest: str | None,
+    preflight: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Return a safe stale skip when live title/body metadata differs."""
+    if expected_digest is None:
+        return None
+    observed_digest, metadata_error = _read_live_metadata_digest(number, repo=repo)
+    if metadata_error is not None:
+        return metadata_error
+    assert observed_digest is not None
+    if observed_digest.casefold() == expected_digest.casefold():
+        return None
+    return {
+        **preflight,
+        "status": METADATA_DIGEST_STATUS,
+        "reason": "metadata_digest_changed",
+        "expected_metadata_digest": expected_digest.lower(),
+        "observed_metadata_digest": observed_digest,
+    }
+
+
+def _publish_review(
+    number: int,
+    body: str,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    event: str,
+) -> dict[str, Any]:
+    """POST a review and validate the response's exact commit binding."""
+    result = _gh_api_post(
+        f"repos/{repo}/pulls/{number}/reviews",
+        {"body": body, "event": event, "commit_id": expected_head_sha},
+    )
+    payload, error = _parse_json(result, what=f"PR {number} review publication")
+    if error:
+        return {"status": "error", "error": error}
+    if not isinstance(payload, dict):
+        return {"status": "error", "error": "review response was not an object"}
+    response_commit = payload.get("commit_id")
+    if response_commit and str(response_commit).lower() != expected_head_sha.lower():
+        return {
+            "status": "error",
+            "error": "review response was bound to a different commit",
+            "expected_head_sha": expected_head_sha,
+            "observed_review_commit_id": response_commit,
+        }
+    review_id = payload.get("id")
+    if isinstance(review_id, bool) or not isinstance(review_id, int) or review_id < 1:
+        return {"status": "error", "error": "review response had no numeric id"}
+    return {
+        "status": "ok",
+        "number": number,
+        "repo": repo,
+        "event": event,
+        "head_sha": expected_head_sha,
+        "review_id": review_id,
+        "url": str(payload.get("html_url", "")),
+    }
+
+
 def post_review(
     number: int,
     body_file: Path,
@@ -180,8 +287,9 @@ def post_review(
     expected_head_sha: str,
     event: str = "COMMENT",
     repo: str = DEFAULT_REPO,
+    expected_metadata_digest: str | None = None,
 ) -> dict[str, Any]:
-    """Post one review only when the PR is still open at the expected head."""
+    """Post one review only when the PR state and optional metadata digest are current."""
     body, body_error = _read_body_file(body_file)
     if body_error:
         return {"status": "error", "error": body_error}
@@ -192,6 +300,9 @@ def post_review(
             "status": "error",
             "error": f"event must be one of {', '.join(REVIEW_EVENTS)}",
         }
+    digest_error = _validate_expected_metadata_digest(expected_metadata_digest)
+    if digest_error is not None:
+        return {"status": "error", "error": digest_error}
 
     try:
         with pr_write_lock(repo, number):
@@ -205,35 +316,22 @@ def post_review(
             if preflight["status"] != "ok":
                 return preflight
 
-            result = _gh_api_post(
-                f"repos/{repo}/pulls/{number}/reviews",
-                {"body": body, "event": event, "commit_id": expected_head_sha},
+            metadata_preflight = _metadata_digest_preflight(
+                number,
+                repo=repo,
+                expected_digest=expected_metadata_digest,
+                preflight=preflight,
             )
-            payload, error = _parse_json(result, what=f"PR {number} review publication")
-            if error:
-                return {"status": "error", "error": error}
-            if not isinstance(payload, dict):
-                return {"status": "error", "error": "review response was not an object"}
-            response_commit = payload.get("commit_id")
-            if response_commit and str(response_commit).lower() != expected_head_sha.lower():
-                return {
-                    "status": "error",
-                    "error": "review response was bound to a different commit",
-                    "expected_head_sha": expected_head_sha,
-                    "observed_review_commit_id": response_commit,
-                }
-            review_id = payload.get("id")
-            if isinstance(review_id, bool) or not isinstance(review_id, int) or review_id < 1:
-                return {"status": "error", "error": "review response had no numeric id"}
-            return {
-                "status": "ok",
-                "number": number,
-                "repo": repo,
-                "event": event,
-                "head_sha": expected_head_sha,
-                "review_id": review_id,
-                "url": str(payload.get("html_url", "")),
-            }
+            if metadata_preflight is not None:
+                return metadata_preflight
+
+            return _publish_review(
+                number,
+                body,
+                repo=repo,
+                expected_head_sha=expected_head_sha,
+                event=event,
+            )
     except RuntimeError as exc:
         return {"status": "error", "error": str(exc)}
 
@@ -248,6 +346,13 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Full 40-character PR head SHA captured by the review lane.",
     )
+    parser.add_argument(
+        "--expected-metadata-digest",
+        help=(
+            "Optional full 64-character SHA-256 digest of the exact live PR title/body; "
+            "mismatch skips publication."
+        ),
+    )
     parser.add_argument("--event", choices=REVIEW_EVENTS, default="COMMENT")
     return parser
 
@@ -261,6 +366,7 @@ def main(argv: list[str] | None = None) -> int:
         expected_head_sha=args.expected_head_sha,
         event=args.event,
         repo=args.repo,
+        expected_metadata_digest=args.expected_metadata_digest,
     )
     status = result.get("status")
     print(json.dumps(result, sort_keys=True), file=sys.stdout if status == "ok" else sys.stderr)

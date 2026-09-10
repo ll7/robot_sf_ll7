@@ -153,8 +153,14 @@ scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path
 # Exact-head review publication; re-reads PR state/head while holding the local writer lock.
 # The merge-ready carrier gate reads this COMMENTED review directly from the PR reviews API.
 uv run python scripts/dev/gh_pr_review_rest.py <number> --event COMMENT \
-    --body-file <path> --expected-head-sha <head_sha> --repo ll7/robot_sf_ll7
+    --body-file <path> --expected-head-sha <head_sha> \
+    --expected-metadata-digest <metadata_digest> --repo ll7/robot_sf_ll7
 ```
+
+`--expected-metadata-digest` is optional; when present, it must be the exact
+`pr_metadata` SHA-256 digest for the final title/body pair. The helper re-reads
+the live PR metadata immediately before publication and returns a stale-state
+skip without posting if the title/body changed or cannot be read.
 
 Use the label helper whenever the review loop applies, reapplies, or removes
 `merge-ready` (including the remove-and-reapply gate refresh in step 8 below).

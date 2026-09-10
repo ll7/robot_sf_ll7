@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.dev.gh_pr_review_rest import main, post_review
+from scripts.dev.pr_metadata import metadata_digest
 
 HEAD_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
 BASE_SHA = "f0e1d2c3b4a5968778695a4b3c2d1e0f00112233"
@@ -85,6 +86,122 @@ def test_post_review_binds_rest_payload_to_expected_head(tmp_path: Path) -> None
             "commit_id": HEAD_SHA,
         },
     )
+
+
+def test_expected_metadata_digest_preserves_terminal_newlines(tmp_path: Path) -> None:
+    """The optional live-metadata guard hashes the exact body string, including newlines."""
+    body = f"Exact-head review evidence for {HEAD_SHA}.\n\n"
+    body_file = _write_body(tmp_path, body)
+    expected_digest = metadata_digest("PR title", body)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_get",
+            return_value=_proc(stdout=json.dumps({"title": "PR title", "body": body})),
+        ) as mock_metadata,
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(
+                stdout=json.dumps(
+                    {"id": 11, "commit_id": HEAD_SHA, "html_url": "https://example.test/review/11"}
+                )
+            ),
+        ) as mock_post,
+    ):
+        result = post_review(
+            7571,
+            body_file,
+            expected_head_sha=HEAD_SHA,
+            repo="ll7/robot_sf_ll7",
+            expected_metadata_digest=expected_digest,
+        )
+
+    assert result["status"] == "ok"
+    assert result["review_id"] == 11
+    mock_metadata.assert_called_once_with("repos/ll7/robot_sf_ll7/pulls/7571")
+    mock_post.assert_called_once()
+
+
+def test_metadata_digest_mismatch_skips_review_before_post(tmp_path: Path) -> None:
+    """A newline-stripped digest is rejected before a review can be created."""
+    body = f"Exact-head review evidence for {HEAD_SHA}.\n\n"
+    body_file = _write_body(tmp_path, body)
+    stripped_digest = metadata_digest("PR title", body.rstrip("\n"))
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_get",
+            return_value=_proc(stdout=json.dumps({"title": "PR title", "body": body})),
+        ),
+        patch("scripts.dev.gh_pr_review_rest._gh_api_post") as mock_post,
+    ):
+        result = post_review(
+            7571,
+            body_file,
+            expected_head_sha=HEAD_SHA,
+            expected_metadata_digest=stripped_digest,
+        )
+
+    assert result["status"] == "review_skipped_stale_state"
+    assert result["reason"] == "metadata_digest_changed"
+    assert result["expected_metadata_digest"] == stripped_digest
+    assert result["observed_metadata_digest"] == metadata_digest("PR title", body)
+    mock_post.assert_not_called()
+
+
+def test_metadata_digest_read_failure_skips_review_post(tmp_path: Path) -> None:
+    """An uncertain live title/body read fails closed before review publication."""
+    body_file = _write_body(tmp_path, f"Exact-head review evidence for {HEAD_SHA}.")
+    expected_digest = metadata_digest("PR title", body_file.read_text(encoding="utf-8"))
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_get",
+            return_value=_proc(returncode=1, stderr="HTTP 503: unavailable"),
+        ),
+        patch("scripts.dev.gh_pr_review_rest._gh_api_post") as mock_post,
+    ):
+        result = post_review(
+            7571,
+            body_file,
+            expected_head_sha=HEAD_SHA,
+            expected_metadata_digest=expected_digest,
+        )
+
+    assert result["status"] == "error"
+    assert "HTTP 503" in result["error"]
+    mock_post.assert_not_called()
+
+
+def test_invalid_metadata_digest_fails_before_guard(tmp_path: Path) -> None:
+    """Malformed metadata guards cannot reach the PR state reader or POST."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch("scripts.dev.gh_pr_review_rest.guard_pr_write") as mock_guard,
+        patch("scripts.dev.gh_pr_review_rest._gh_api_post") as mock_post,
+    ):
+        result = post_review(
+            7571,
+            body_file,
+            expected_head_sha=HEAD_SHA,
+            expected_metadata_digest="not-a-digest",
+        )
+
+    assert result == {
+        "status": "error",
+        "error": "expected_metadata_digest must be a full 64-character hexadecimal digest",
+    }
+    mock_guard.assert_not_called()
+    mock_post.assert_not_called()
 
 
 def test_self_authored_request_changes_returns_explicit_comment_guidance(
@@ -413,6 +530,29 @@ def test_cli_maps_stale_skip_to_exit_two(tmp_path: Path, capsys) -> None:
     captured = capsys.readouterr()
     assert rc == 2
     assert json.loads(captured.err) == stale
+
+
+def test_cli_forwards_expected_metadata_digest(tmp_path: Path) -> None:
+    """The CLI passes the optional exact metadata digest to the publisher."""
+    body_file = _write_body(tmp_path)
+    expected_digest = "a" * 64
+    with patch("scripts.dev.gh_pr_review_rest.post_review", return_value={"status": "ok"}) as mock:
+        assert (
+            main(
+                [
+                    "7571",
+                    "--body-file",
+                    str(body_file),
+                    "--expected-head-sha",
+                    HEAD_SHA,
+                    "--expected-metadata-digest",
+                    expected_digest,
+                ]
+            )
+            == 0
+        )
+
+    assert mock.call_args.kwargs["expected_metadata_digest"] == expected_digest
 
 
 def test_cli_maps_self_authored_skip_to_exit_two(tmp_path: Path, capsys) -> None:

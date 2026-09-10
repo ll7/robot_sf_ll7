@@ -22,9 +22,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UNIFIED_CONFIG = REPO_ROOT / "robot_sf" / "gym_env" / "unified_config.py"
 CROWD_SIM_ENV = REPO_ROOT / "robot_sf" / "gym_env" / "crowd_sim_env.py"
+TELEMETRY_CONFIG = REPO_ROOT / "robot_sf" / "gym_env" / "telemetry_config.py"
 REFERENCE_MD = REPO_ROOT / "docs" / "environment_config_reference.md"
 
 TARGET_MODULES = (UNIFIED_CONFIG, CROWD_SIM_ENV)
+SOURCE_MODULES = (TELEMETRY_CONFIG, *TARGET_MODULES)
 
 
 @dataclass(frozen=True)
@@ -153,6 +155,14 @@ def parse_config_module(path: Path) -> dict[str, _ClassInfo]:
     return classes
 
 
+def parse_config_modules(paths: tuple[Path, ...] = SOURCE_MODULES) -> dict[str, _ClassInfo]:
+    """Parse target modules and lightweight local bases into one class index."""
+    classes: dict[str, _ClassInfo] = {}
+    for path in paths:
+        classes.update(parse_config_module(path))
+    return classes
+
+
 def _display_default(raw: str) -> str:
     """Render one field default in value semantics instead of source syntax."""
     text = raw.strip()
@@ -228,6 +238,7 @@ def render() -> str:
     modules: dict[str, dict[str, _ClassInfo]] = {
         str(path.relative_to(REPO_ROOT)): parse_config_module(path) for path in TARGET_MODULES
     }
+    all_classes = parse_config_modules()
     lines = [
         "# Environment Configuration Reference",
         "",
@@ -243,11 +254,11 @@ def render() -> str:
         lines += [f"## Module `{module}`", ""]
         for name in sorted(classes):
             info = classes[name]
-            fields = _flatten(classes, info)
+            fields = _flatten(all_classes, info)
             lines += [f"### `{name}`", ""]
             if info.docstring:
                 lines += [info.docstring.strip().splitlines()[0], ""]
-            externals = _external_bases(classes, info)
+            externals = _external_bases(all_classes, info)
             if externals:
                 lines += [f"_Inherits unexpanded external bases: {', '.join(externals)}._", ""]
             if not fields:

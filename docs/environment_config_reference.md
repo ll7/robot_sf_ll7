@@ -13,10 +13,14 @@ when stated in field metadata or docstrings; otherwise they remain unspecified.
 
 Core simulation configuration shared by all environments.
 
-_Inherits unexpanded external bases: TelemetryConfigMixin._
-
 | Field | Type | Default | Required | Stability | Notes |
 | --- | --- | --- | --- | --- | --- |
+| <a id="BaseSimulationConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="BaseSimulationConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="BaseSimulationConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="BaseSimulationConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="BaseSimulationConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="BaseSimulationConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="BaseSimulationConfig.sim_config"></a>`sim_config` | `SimulationSettings` | `SimulationSettings()` | no | public |  |
 | <a id="BaseSimulationConfig.map_pool"></a>`map_pool` | `MapDefinitionPool` | `MapDefinitionPool()` | no | public |  |
 | <a id="BaseSimulationConfig.map_id"></a>`map_id` | `str | None` | `None` | no | public |  |
@@ -35,6 +39,12 @@ Deprecated: Use RobotSimulationConfig instead.
 
 | Field | Type | Default | Required | Stability | Notes |
 | --- | --- | --- | --- | --- | --- |
+| <a id="EnvSettings.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="EnvSettings.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="EnvSettings.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="EnvSettings.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="EnvSettings.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="EnvSettings.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="EnvSettings.sim_config"></a>`sim_config` | `SimulationSettings` | `SimulationSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="EnvSettings.map_pool"></a>`map_pool` | `MapDefinitionPool` | `MapDefinitionPool()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="EnvSettings.map_id"></a>`map_id` | `str | None` | `None` | no | public | inherited from `BaseSimulationConfig`; |
@@ -84,6 +94,12 @@ Configuration for robot environments with image observations.
 
 | Field | Type | Default | Required | Stability | Notes |
 | --- | --- | --- | --- | --- | --- |
+| <a id="ImageRobotConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="ImageRobotConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="ImageRobotConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="ImageRobotConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="ImageRobotConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="ImageRobotConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="ImageRobotConfig.sim_config"></a>`sim_config` | `SimulationSettings` | `SimulationSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="ImageRobotConfig.map_pool"></a>`map_pool` | `MapDefinitionPool` | `MapDefinitionPool()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="ImageRobotConfig.map_id"></a>`map_id` | `str | None` | `None` | no | public | inherited from `BaseSimulationConfig`; |
@@ -134,6 +150,12 @@ Configuration for multi-robot environments.
 
 | Field | Type | Default | Required | Stability | Notes |
 | --- | --- | --- | --- | --- | --- |
+| <a id="MultiRobotConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="MultiRobotConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="MultiRobotConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="MultiRobotConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="MultiRobotConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="MultiRobotConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="MultiRobotConfig.sim_config"></a>`sim_config` | `SimulationSettings` | `SimulationSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="MultiRobotConfig.map_pool"></a>`map_pool` | `MapDefinitionPool` | `MapDefinitionPool()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="MultiRobotConfig.map_id"></a>`map_id` | `str | None` | `None` | no | public | inherited from `BaseSimulationConfig`; |
@@ -202,6 +224,12 @@ Deprecated: Use PedestrianSimulationConfig instead.
 
 | Field | Type | Default | Required | Stability | Notes |
 | --- | --- | --- | --- | --- | --- |
+| <a id="PedEnvSettings.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedEnvSettings.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedEnvSettings.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedEnvSettings.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedEnvSettings.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedEnvSettings.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedEnvSettings.sim_config"></a>`sim_config` | `SimulationSettings` | `SimulationSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedEnvSettings.map_pool"></a>`map_pool` | `MapDefinitionPool` | `MapDefinitionPool()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedEnvSettings.map_id"></a>`map_id` | `str | None` | `None` | no | public | inherited from `BaseSimulationConfig`; |
@@ -254,6 +282,12 @@ Configuration for pedestrian environments.
 
 | Field | Type | Default | Required | Stability | Notes |
 | --- | --- | --- | --- | --- | --- |
+| <a id="PedestrianSimulationConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedestrianSimulationConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedestrianSimulationConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedestrianSimulationConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedestrianSimulationConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="PedestrianSimulationConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="PedestrianSimulationConfig.sim_config"></a>`sim_config` | `SimulationSettings` | `SimulationSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.map_pool"></a>`map_pool` | `MapDefinitionPool` | `MapDefinitionPool()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="PedestrianSimulationConfig.map_id"></a>`map_id` | `str | None` | `None` | no | public | inherited from `BaseSimulationConfig`; |
@@ -306,6 +340,12 @@ Deprecated: Use ImageRobotConfig instead.
 
 | Field | Type | Default | Required | Stability | Notes |
 | --- | --- | --- | --- | --- | --- |
+| <a id="RobotEnvSettings.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotEnvSettings.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotEnvSettings.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotEnvSettings.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotEnvSettings.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotEnvSettings.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotEnvSettings.sim_config"></a>`sim_config` | `SimulationSettings` | `SimulationSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotEnvSettings.map_pool"></a>`map_pool` | `MapDefinitionPool` | `MapDefinitionPool()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotEnvSettings.map_id"></a>`map_id` | `str | None` | `None` | no | public | inherited from `BaseSimulationConfig`; |
@@ -356,6 +396,12 @@ Configuration for robot-based environments.
 
 | Field | Type | Default | Required | Stability | Notes |
 | --- | --- | --- | --- | --- | --- |
+| <a id="RobotSimulationConfig.enable_telemetry_panel"></a>`enable_telemetry_panel` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotSimulationConfig.telemetry_record"></a>`telemetry_record` | `bool` | `False` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotSimulationConfig.telemetry_metrics"></a>`telemetry_metrics` | `list[str]` | `lambda: list(DEFAULT_TELEMETRY_METRICS)()` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotSimulationConfig.telemetry_refresh_hz"></a>`telemetry_refresh_hz` | `float` | `1.0` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotSimulationConfig.telemetry_pane_layout"></a>`telemetry_pane_layout` | `str` | `'vertical_split'` | no | public | inherited from `TelemetryConfigMixin`; |
+| <a id="RobotSimulationConfig.telemetry_decimation"></a>`telemetry_decimation` | `int` | `1` | no | public | inherited from `TelemetryConfigMixin`; |
 | <a id="RobotSimulationConfig.sim_config"></a>`sim_config` | `SimulationSettings` | `SimulationSettings()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotSimulationConfig.map_pool"></a>`map_pool` | `MapDefinitionPool` | `MapDefinitionPool()` | no | public | inherited from `BaseSimulationConfig`; |
 | <a id="RobotSimulationConfig.map_id"></a>`map_id` | `str | None` | `None` | no | public | inherited from `BaseSimulationConfig`; |

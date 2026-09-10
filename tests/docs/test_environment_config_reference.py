@@ -9,6 +9,7 @@ from scripts.dev.generate_environment_config_reference import (
     TARGET_MODULES,
     _flatten,
     parse_config_module,
+    parse_config_modules,
     render,
 )
 
@@ -21,10 +22,11 @@ FORBIDDEN_IMPORTS = ("pygame", "torch", "stable_baselines3", "sb3", "carla")
 def _public_dataclass_fields() -> set[str]:
     """Collect flattened ``Class.field`` names, mirroring generator semantics."""
     names: set[str] = set()
+    all_classes = parse_config_modules()
     for module in TARGET_MODULES:
         classes = parse_config_module(module)
         for name, info in classes.items():
-            for entry in _flatten(classes, info):
+            for entry in _flatten(all_classes, info):
                 names.add(f"{name}.{entry.name}")
     return names
 
@@ -57,6 +59,15 @@ def test_subclass_overrides_use_subclass_defaults() -> None:
     }
     assert transitive_fields["use_image_obs"].default == "field(default=True)"
     assert transitive_fields["use_image_obs"].inherited_from == "ImageRobotConfig"
+
+
+def test_local_mixin_fields_are_documented() -> None:
+    """Public fields from lightweight local mixins must not be silently omitted."""
+    classes = parse_config_modules()
+    fields = {field.name: field for field in _flatten(classes, classes["BaseSimulationConfig"])}
+    assert fields["telemetry_metrics"].default.startswith("field(default_factory=")
+    assert fields["telemetry_metrics"].inherited_from == "TelemetryConfigMixin"
+    assert "unexpanded external bases: TelemetryConfigMixin" not in render()
 
 
 def test_generator_avoids_heavy_imports() -> None:

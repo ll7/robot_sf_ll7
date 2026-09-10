@@ -413,6 +413,11 @@ Issue #5326 temporal-robustness comparison integration state (diagnostic infrast
 campaign evidence remains blocked on a SLURM-capable worker):
 [issue_5326_state.yaml](issue_5326_state.yaml).
 
+Issue #8891 matched-budget temporal-robustness packet: source-bound, outcome-free
+identities, common simulator-call ledger, separated certification/replay/confirmation
+gates, monitor-artifact exclusions, and a disjoint planned canary:
+[issue_8891_temporal_robustness_packet.md](issue_8891_temporal_robustness_packet.md).
+
 Issue #5311 BRNE (Bayesian Recursive Nash Equilibrium) external interaction-planning comparator: source-side smoke + contract mapping, runtime-vs-neighbor-count measurement, and conditional go/no-go (GPL-3.0, local-only staging, no vendoring):
 [issue_5311_brne_source_smoke.md](issue_5311_brne_source_smoke.md).
 

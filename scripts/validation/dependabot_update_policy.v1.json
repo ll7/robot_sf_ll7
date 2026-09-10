@@ -4,6 +4,27 @@
   "dependabot_config": ".github/dependabot.yml",
   "ci_workflow": ".github/workflows/ci.yml",
   "aggregate_job": "ci",
+  "ci_only_dependency_groups": {
+    "examples": {
+      "declaration": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_project": "robot-sf",
+      "root_requirement": "robot_sf[viz,benchmark]",
+      "allowed_packages": [
+        "scikit-learn",
+        "stable-baselines3",
+        "torch"
+      ],
+      "requirements": {
+        "scikit-learn": "scikit-learn>=1.9.0",
+        "stable-baselines3": "stable-baselines3>=2.9.0",
+        "torch": "torch>=2.13.0,<2.14.0"
+      },
+      "required_jobs": [
+        "examples-smoke"
+      ]
+    }
+  },
   "classes": [
     {
       "id": "high-impact-runtime",

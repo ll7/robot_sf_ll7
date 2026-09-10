@@ -24,7 +24,10 @@ import urllib.request
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 MAX_ARCHIVE_BYTES = 1024 * 1024 * 1024
 MAX_BATCH_DOWNLOAD_BYTES = 3 * 1024 * 1024 * 1024
@@ -136,6 +139,40 @@ def _pypi_json_url(value: object) -> bool:
         return False
 
 
+class _CanonicalRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject every redirect that leaves the caller's canonical host policy."""
+
+    def __init__(self, validator: Callable[[object], bool], error: str) -> None:
+        super().__init__()
+        self._validator = validator
+        self._error = error
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        if not self._validator(newurl):
+            raise ValueError(self._error)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_canonical_url(
+    request: urllib.request.Request,
+    *,
+    validator: Callable[[object], bool],
+    redirect_error: str,
+    timeout: int,
+) -> Any:
+    """Open a URL while validating every automatic redirect, not only the final URL."""
+    opener = urllib.request.build_opener(_CanonicalRedirectHandler(validator, redirect_error))
+    return opener.open(request, timeout=timeout)
+
+
 def _safe_output_path(root: Path, candidate: Path) -> bool:
     """Return whether a cache path stays below ``root`` without symlink hops."""
     root_path = root.resolve()
@@ -167,13 +204,22 @@ def _input_display_path(path: Path, output: Path) -> str:
     return f"<external-input>/{path.name}"
 
 
+def _redact_output_paths(value: Any, output: Path) -> Any:
+    """Redact the caller-owned output root anywhere in a serializable value."""
+    if isinstance(value, str):
+        return value.replace(str(output), "<output>")
+    if isinstance(value, list):
+        return [_redact_output_paths(item, output) for item in value]
+    if isinstance(value, dict):
+        return {key: _redact_output_paths(item, output) for key, item in value.items()}
+    return value
+
+
 def _redact_cache_record(record: dict[str, Any], output: Path) -> dict[str, Any]:
     """Replace local cache paths in a durable network observation with relative labels."""
-    redacted = dict(record)
+    redacted = _redact_output_paths(record, output)
     if isinstance(record.get("path"), str):
         redacted["path"] = _relative_output_path(Path(record["path"]), output)
-    if isinstance(record.get("error"), str):
-        redacted["error"] = record["error"].replace(str(output), "<output>")
     return redacted
 
 
@@ -315,6 +361,8 @@ def _validate_manifest(  # noqa: C901, PLR0912, PLR0915 - closed batch contract 
             or not all(isinstance(item, str) and item for item in member.get("profiles", []))
         ):
             issues.append(f"{prefix} profiles are not a non-empty string list")
+        elif args.expected_profile not in member["profiles"]:
+            issues.append(f"{prefix} profiles do not include the selected profile")
         source_type = member.get("source_type")
         if source_type not in KNOWN_SOURCE_TYPES:
             issues.append(f"{prefix} source_type is unknown")
@@ -354,6 +402,12 @@ def _validate_manifest(  # noqa: C901, PLR0912, PLR0915 - closed batch contract 
             artifact_names.add(filename_key)
             if kind not in ARTIFACT_KINDS:
                 issues.append(f"{artifact_prefix} has unsupported kind")
+            elif isinstance(filename, str):
+                filename_lower = filename.lower()
+                if kind == "wheel" and not filename_lower.endswith(".whl"):
+                    issues.append(f"{artifact_prefix} wheel filename must end with .whl")
+                elif kind == "sdist" and filename_lower.endswith(".whl"):
+                    issues.append(f"{artifact_prefix} sdist filename cannot end with .whl")
             if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
                 issues.append(f"{artifact_prefix} size is not a positive typed integer")
             if not _sha(artifact.get("sha256"), SHA256_RE):
@@ -362,6 +416,11 @@ def _validate_manifest(  # noqa: C901, PLR0912, PLR0915 - closed batch contract 
                 issues.append(
                     f"{artifact_prefix} URL must be HTTPS on an approved PyPI archive host"
                 )
+            elif isinstance(filename, str):
+                parsed_url = urllib.parse.urlsplit(str(artifact["url"]))
+                url_filename = urllib.parse.unquote(PurePosixPath(parsed_url.path).name)
+                if url_filename != filename:
+                    issues.append(f"{artifact_prefix} URL path does not identify filename")
             tags = artifact.get("platform_tags", [])
             if not isinstance(tags, list) or not all(isinstance(tag, str) and tag for tag in tags):
                 issues.append(f"{artifact_prefix} platform_tags are invalid")
@@ -559,7 +618,12 @@ def fetch_json(  # noqa: C901, PLR0912 - cache and network bounds remain explici
         request = urllib.request.Request(
             url, headers={"User-Agent": "robot-sf-p05-generic-evidence/1"}
         )
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with _open_canonical_url(
+            request,
+            validator=_pypi_json_url,
+            redirect_error="metadata redirect did not remain on pypi.org over HTTPS",
+            timeout=60,
+        ) as response:
             data = response.read(MAX_METADATA_JSON_BYTES + 1)
             status = getattr(response, "status", 200)
             final_url = getattr(response, "geturl", lambda: url)()
@@ -707,7 +771,12 @@ def fetch_archive(  # noqa: C901, PLR0912 - bounded cache and streamed fetch sta
             artifact["url"], headers={"User-Agent": "robot-sf-p05-generic-evidence/1"}
         )
         with (
-            urllib.request.urlopen(request, timeout=120) as response,
+            _open_canonical_url(
+                request,
+                validator=_pypi_archive_url,
+                redirect_error="archive redirect did not remain on an approved PyPI host",
+                timeout=120,
+            ) as response,
             part.open("wb") as handle,
         ):
             content_length = response.headers.get("Content-Length")
@@ -789,7 +858,19 @@ def inspect_archive(  # noqa: C901, PLR0912, PLR0915 - archive safety states are
         "errors": [],
     }
     try:
+        expected_size = artifact.get("size")
+        if (
+            not isinstance(expected_size, int)
+            or isinstance(expected_size, bool)
+            or expected_size <= 0
+            or expected_size > MAX_ARCHIVE_BYTES
+        ):
+            result["errors"].append("archive manifest size exceeds or violates the bound")
+            return result
         result["observed_size"] = path.stat().st_size
+        if result["observed_size"] > MAX_ARCHIVE_BYTES:
+            result["errors"].append("archive file exceeds per-archive bound")
+            return result
         result["observed_sha256"] = sha256_file(path)
     except OSError as exc:
         result["errors"].append(f"archive file could not be read: {type(exc).__name__}: {exc}")
@@ -960,10 +1041,13 @@ def inspect_archive(  # noqa: C901, PLR0912, PLR0915 - archive safety states are
 
 def _python_tag_compatible(tag: str, python_version: str) -> bool:
     """Check the Python portion of a wheel tag for the requested runtime."""
-    major, _, minor = python_version.partition(".")
+    match = re.fullmatch(r"(\d+)\.(\d+)", python_version)
+    if match is None:
+        return False
+    major, minor = match.groups()
     target = f"{major}{minor}"
     for value in tag.lower().split("."):
-        if value in {f"py{major}", f"cp{target}"}:
+        if value in {f"py{major}", f"py{target}", f"cp{target}"}:
             return True
         if value.startswith("cp") and value[2:] == target:
             return True
@@ -986,9 +1070,17 @@ def target_compatible(
         return True
     arch = architecture.lower()
     has_target_arch = any(tag == arch or tag.endswith("_" + arch) for tag in tag_set)
-    if os_name.lower() == "linux":
-        return has_target_arch and any(tag.startswith("manylinux") for tag in tag_set)
-    return has_target_arch
+    if not has_target_arch:
+        return False
+    target_os = os_name.strip().lower()
+    platform_tags = {tag for tag in tag_set if tag not in {"none", "any"}}
+    if target_os in {"linux", "gnu/linux"}:
+        return any(tag.startswith("manylinux") for tag in platform_tags)
+    if target_os in {"darwin", "mac", "macos", "macosx", "osx"}:
+        return any(tag.startswith("macosx") for tag in platform_tags)
+    if target_os in {"win", "win32", "win64", "windows"}:
+        return any(tag.startswith("win") for tag in platform_tags)
+    return False
 
 
 def select_target_artifacts(
@@ -1129,8 +1221,14 @@ def _pypi_exact_file_match(item: object, artifact: dict[str, Any]) -> bool:
     if not isinstance(item, dict):
         return False
     digests = item.get("digests")
+    expected_packagetype = {
+        "sdist": "sdist",
+        "wheel": "bdist_wheel",
+    }.get(artifact.get("kind"))
     return (
-        isinstance(digests, dict)
+        expected_packagetype is not None
+        and item.get("packagetype") == expected_packagetype
+        and isinstance(digests, dict)
         and item.get("filename") == artifact["filename"]
         and digests.get("sha256") == artifact["sha256"]
         and isinstance(item.get("size"), int)
@@ -1177,6 +1275,7 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
     rows = []
     network = []
     all_archives = []
+    used_archive_cache_paths: set[Path] = set()
     downloaded = 0
     for member in manifest["members"]:
         package_id = member["package_id"]
@@ -1396,6 +1495,7 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
                 }
             )
             if path is not None:
+                used_archive_cache_paths.add(path)
                 archive = inspect_archive(
                     path,
                     artifact,
@@ -1415,6 +1515,7 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
                     "inspection_status": "unavailable",
                     "errors": [download_record.get("error", "download failed")],
                 }
+            archive = _redact_output_paths(archive, output)
             row["archive_evidence"].append(archive)
             all_archives.append(archive)
         row["license_facts"] = metadata_summary(row["archive_evidence"], pypi_payload or {})
@@ -1566,15 +1667,24 @@ def collect(  # noqa: C901, PLR0912, PLR0915 - diagnostic row assembly is fail-c
     }
     write_json(output / "dependency_evidence_ledger.json", result)
     cache_files = []
-    for path in sorted(cache.rglob("*")) if cache.exists() else []:
-        if _safe_output_path(output, path) and path.is_file() and not path.name.endswith(".part"):
+    cache_summary_bytes = 0
+    for path in sorted(used_archive_cache_paths):
+        try:
+            if not _safe_output_path(output, path) or not path.is_file():
+                continue
+            size = path.stat().st_size
+            if size > MAX_ARCHIVE_BYTES or cache_summary_bytes + size > MAX_BATCH_DOWNLOAD_BYTES:
+                continue
             cache_files.append(
                 {
                     "path": _relative_output_path(path, output),
-                    "size": path.stat().st_size,
+                    "size": size,
                     "sha256": sha256_file(path),
                 }
             )
+            cache_summary_bytes += size
+        except OSError:
+            continue
     write_json(
         output / "private_cache_summary.json",
         {

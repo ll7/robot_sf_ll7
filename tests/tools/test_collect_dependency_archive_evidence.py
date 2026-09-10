@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import stat
+import urllib.request
 import zipfile
 from typing import TYPE_CHECKING
 
@@ -16,7 +17,11 @@ from scripts.tools.collect_dependency_archive_evidence import (
     MAX_EVIDENCE_MEMBER_BYTES,
     MAX_MANIFEST_MEMBER_COUNT,
     MAX_METADATA_JSON_BYTES,
+    _CanonicalRedirectHandler,
     _collection_status,
+    _pypi_archive_url,
+    _pypi_exact_file_match,
+    _pypi_json_url,
     _validate_manifest,
     collect,
     fetch_archive,
@@ -168,6 +173,28 @@ def test_manifest_validation_rejects_normalized_name_mismatch() -> None:
         _validate_manifest(manifest, _args())
 
 
+def test_manifest_validation_binds_selected_profile_and_archive_url_filename() -> None:
+    manifest = _manifest()
+    manifest["members"][0]["profiles"] = ["core"]  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="profiles do not include"):
+        _validate_manifest(manifest, _args())
+
+    manifest = _manifest()
+    manifest["members"][0]["artifacts"][0]["url"] = (  # type: ignore[index]
+        "https://files.pythonhosted.org/packages/other.whl"
+    )
+
+    with pytest.raises(ValueError, match="URL path does not identify filename"):
+        _validate_manifest(manifest, _args())
+
+    manifest = _manifest()
+    manifest["members"][0]["artifacts"][0]["kind"] = "sdist"  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="sdist filename cannot end with"):
+        _validate_manifest(manifest, _args())
+
+
 def test_manifest_validation_rejects_lockfile_and_identity_hash_mismatch() -> None:
     manifest = _manifest(lockfile="requirements.txt")
     manifest["members"][0]["artifacts"][0]["sha256"] = "bad"  # type: ignore[index]
@@ -227,6 +254,83 @@ def test_target_selection_requires_python_and_rejects_ambiguous_wheels() -> None
         select_target_artifacts(
             member, os_name="Linux", architecture="x86_64", python_version="3.13"
         )
+
+
+def test_target_selection_binds_platform_family_and_python_tag() -> None:
+    manylinux = _artifact()
+    assert target_compatible(manylinux, "Linux", "x86_64", "3.13")
+    assert not target_compatible(manylinux, "Windows", "x86_64", "3.13")
+    assert not target_compatible(manylinux, "Darwin", "x86_64", "3.13")
+
+    windows = _artifact(filename="demo-1.0.0-py3-none-win_amd64.whl")
+    windows["platform_tags"] = ["py3", "none", "win_amd64"]
+    assert target_compatible(windows, "Windows", "amd64", "3.13")
+    assert not target_compatible(windows, "Linux", "amd64", "3.13")
+
+    macos = _artifact(filename="demo-1.0.0-py313-none-macosx_11_0_x86_64.whl")
+    macos["platform_tags"] = ["py313", "none", "macosx_11_0_x86_64"]
+    assert target_compatible(macos, "Darwin", "x86_64", "3.13")
+    assert not target_compatible(macos, "Windows", "x86_64", "3.13")
+    assert not target_compatible(macos, "Other", "x86_64", "3.13")
+
+
+@pytest.mark.parametrize(
+    ("validator", "url"),
+    [
+        (_pypi_json_url, "https://evil.example/pypi/demo/1.0/json"),
+        (_pypi_archive_url, "https://evil.example/packages/demo.whl"),
+    ],
+)
+def test_redirect_handler_rejects_noncanonical_hops(validator, url: str) -> None:
+    handler = _CanonicalRedirectHandler(validator, "redirect rejected")
+    request = urllib.request.Request("https://pypi.org/pypi/demo/1.0/json")
+
+    with pytest.raises(ValueError, match="redirect rejected"):
+        handler.redirect_request(request, None, 302, "Found", {}, url)
+
+
+def test_pypi_exact_file_match_binds_distribution_kind() -> None:
+    artifact = {
+        "kind": "sdist",
+        "filename": "demo-1.0.0.zip",
+        "sha256": "a" * 64,
+        "size": 10,
+        "url": "https://files.pythonhosted.org/packages/demo-1.0.0.zip",
+    }
+    release_file = {
+        "filename": artifact["filename"],
+        "packagetype": "bdist_wheel",
+        "digests": {"sha256": artifact["sha256"]},
+        "size": artifact["size"],
+        "url": artifact["url"],
+    }
+
+    assert not _pypi_exact_file_match(release_file, artifact)
+    release_file["packagetype"] = "sdist"
+    assert _pypi_exact_file_match(release_file, artifact)
+
+
+def test_inspect_archive_rejects_over_cap_before_hashing(tmp_path: Path, monkeypatch) -> None:
+    archive_path = tmp_path / "demo-1.0.0.whl"
+    archive_path.write_bytes(b"not inspected")
+
+    def fail_hash(*args: object, **kwargs: object) -> str:
+        raise AssertionError("over-cap archive was hashed")
+
+    monkeypatch.setattr("scripts.tools.collect_dependency_archive_evidence.sha256_file", fail_hash)
+    result = inspect_archive(
+        archive_path,
+        {
+            "filename": archive_path.name,
+            "kind": "wheel",
+            "url": "https://files.pythonhosted.org/packages/demo.whl",
+            "size": MAX_ARCHIVE_BYTES + 1,
+            "sha256": "a" * 64,
+        },
+    )
+
+    assert result["digest_verified"] is False
+    assert result["errors"] == ["archive manifest size exceeds or violates the bound"]
 
 
 def test_unsupported_target_artifacts_remain_unresolved() -> None:
@@ -456,10 +560,11 @@ def test_archive_fetch_rejects_unapproved_https_host_without_touching_network(
 
 
 def test_offline_cache_misses_never_open_network(tmp_path: Path, monkeypatch) -> None:
-    def fail_urlopen(*args: object, **kwargs: object) -> None:
+    def fail_network(*args: object, **kwargs: object) -> None:
         raise AssertionError("offline collection attempted network access")
 
-    monkeypatch.setattr("urllib.request.urlopen", fail_urlopen)
+    monkeypatch.setattr("urllib.request.urlopen", fail_network)
+    monkeypatch.setattr("urllib.request.build_opener", fail_network)
 
     payload, metadata_record = fetch_json(
         "https://pypi.org/pypi/demo/1.0.0/json",
@@ -510,10 +615,11 @@ def test_archive_failure_paths_are_redacted_from_ledger(tmp_path: Path, monkeypa
     )
     cache_path = output / "cache" / "demo_package" / "None" / artifact["filename"]
 
-    def fail_urlopen(*args: object, **kwargs: object) -> None:
-        raise OSError(f"cannot write {cache_path}")
+    class FailingOpener:
+        def open(self, *args: object, **kwargs: object) -> None:
+            raise OSError(f"cannot write {cache_path}")
 
-    monkeypatch.setattr("urllib.request.urlopen", fail_urlopen)
+    monkeypatch.setattr("urllib.request.build_opener", lambda *args: FailingOpener())
 
     result = collect(args)
 
@@ -525,7 +631,59 @@ def test_archive_failure_paths_are_redacted_from_ledger(tmp_path: Path, monkeypa
     )
 
 
-def test_malformed_registry_metadata_remains_partial(tmp_path: Path) -> None:
+def test_archive_inspection_failure_paths_are_redacted(tmp_path: Path, monkeypatch) -> None:
+    artifact = _artifact()
+    output = tmp_path / "output"
+    cache_path = output / "cache" / "demo_package" / "None" / artifact["filename"]
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_bytes(b"cached archive")
+    artifact["size"] = cache_path.stat().st_size
+    artifact["sha256"] = hashlib.sha256(cache_path.read_bytes()).hexdigest()
+    manifest = _manifest(
+        version=None,
+        package_id=f"demo-package@editable#{IDENTITY_SHA[:16]}",
+        source_type="editable",
+        source={"editable": "."},
+        artifacts=[artifact],
+    )
+    manifest_bytes = json.dumps(manifest, sort_keys=True).encode("utf-8")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_bytes(manifest_bytes)
+    args = _args(
+        task_id="redacted-inspection-failure",
+        output=str(output),
+        batch_manifest=str(manifest_path),
+        expected_batch_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
+        target_os="Linux",
+        target_architecture="x86_64",
+        python_version="3.13",
+        resolver_name="uv",
+        resolver_version="0.11.21",
+        offline=True,
+    )
+
+    def fake_inspect(*args: object, **kwargs: object) -> dict[str, object]:
+        return {
+            "metadata": [],
+            "evidence_members": [],
+            "errors": [f"cannot inspect {cache_path}"],
+        }
+
+    monkeypatch.setattr(
+        "scripts.tools.collect_dependency_archive_evidence.inspect_archive", fake_inspect
+    )
+    result = collect(args)
+
+    archive = result["rows"][0]["archive_evidence"][0]
+    assert str(tmp_path) not in json.dumps(archive)
+    assert archive["errors"] == [
+        "cannot inspect <output>/cache/demo_package/None/" + artifact["filename"]
+    ]
+
+
+def test_malformed_registry_metadata_remains_partial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     artifact = _artifact()
     archive_path = tmp_path / "output" / "cache" / "demo_package" / "1.0.0" / artifact["filename"]
     archive_path.parent.mkdir(parents=True)
@@ -584,6 +742,14 @@ def test_malformed_registry_metadata_remains_partial(tmp_path: Path) -> None:
         offline=True,
         argv="synthetic malformed metadata",
     )
+    stale_cache_path = output / "cache" / "stale" / "unrelated.bin"
+    stale_cache_path.parent.mkdir(parents=True)
+    stale_cache_path.write_bytes(b"unrelated stale cache")
+
+    def fail_rglob(*args: object, **kwargs: object) -> object:
+        raise AssertionError("cache summary must not recursively scan the cache")
+
+    monkeypatch.setattr("pathlib.Path.rglob", fail_rglob)
 
     result = collect(args)
     row = result["rows"][0]
@@ -599,6 +765,8 @@ def test_malformed_registry_metadata_remains_partial(tmp_path: Path) -> None:
     assert str(tmp_path) not in ledger_text
     assert str(tmp_path) not in run_text
     assert result["target"]["offline"] is True
+    cache_summary = json.loads((output / "private_cache_summary.json").read_text(encoding="utf-8"))
+    assert all(item["path"] != "cache/stale/unrelated.bin" for item in cache_summary["files"])
     first_ledger = ledger_text
     collect(args)
     assert (output / "dependency_evidence_ledger.json").read_text(encoding="utf-8") == first_ledger

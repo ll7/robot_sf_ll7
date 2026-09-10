@@ -67,14 +67,18 @@ Use `--offline` for a cache-only replay. Missing, malformed, ambiguous, or
 resource-limited rows remain `partial_or_unavailable`; a diagnostic run may
 still exit `0` while retaining those unresolved rows. Invalid input or output
 failures exit non-zero. Registry archive URLs must remain HTTPS on the public
-PyPI file hosts, and redirects are rejected if they leave those hosts. The input
+PyPI file hosts, and every redirect hop is rejected if it leaves those hosts. The input
 manifest is capped at 16 MiB and 50,000 members; the durable registry
 observation keeps only identity, license-descriptor, project-link, and
 release-file routing fields from the bounded response.
+Target wheel selection matches Python, operating-system, and architecture tags;
+source distributions (including ZIP sdists) are inspected separately, and
+registry matches require the corresponding PyPI `packagetype`.
 
 The durable `dependency_evidence_ledger.json` uses output-relative cache paths
 and is reproducible for identical manifest, cache, and registry observations.
-`private_cache_summary.json` classifies archive bytes as ignored local cache;
+`private_cache_summary.json` classifies the successfully used archive bytes as
+ignored local cache and does not recursively hash unrelated stale cache files;
 `collector-run.json` is volatile run metadata and its timestamp is not evidence.
 Neither the collector nor this inventory treats package metadata, archive text,
 or manifest routing as permission, redistribution, release, benchmark, or

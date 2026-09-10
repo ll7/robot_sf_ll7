@@ -57,6 +57,7 @@ Foundational walkthroughs for first-time users.
 | [02 Trained PPO Benchmark](./quickstart/02_trained_model.py) | Run the Robot SF benchmark with the pre-trained PPO baseline. | configs/baselines/example_matrix.yaml<br>configs/baselines/ppo.yaml | quickstart, benchmark | ✅ |
 | [03 Custom SVG Map](./quickstart/03_custom_map.py) | Load an SVG map into Robot SF and simulate random navigation. | maps/svg_maps/debug_06.svg | quickstart, maps | ✅ |
 | [04 Occupancy Grid](./quickstart/04_occupancy_grid.py) | Enable occupancy grid observations, run a center query, and step a short rollout. | _None_ | quickstart, occupancy, grid | ✅ |
+| [05 Public API Facade](./quickstart/05_public_api.py) | Demonstrate the stable public API facade with EpisodeRecord persistence. | _None_ | quickstart, public-api, facade | ✅ |
 
 ## Advanced Features
 

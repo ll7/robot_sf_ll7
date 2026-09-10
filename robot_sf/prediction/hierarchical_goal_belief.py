@@ -10,6 +10,7 @@ outside this contract owner.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -100,10 +101,14 @@ def _is_forbidden_actor_provenance(value: str) -> bool:
         ``True`` when the value identifies forbidden oracle, simulator, route, or truth evidence.
     """
     normalized = _normalize_label(value)
-    separator_normalized = normalized.replace("-", "_").replace(" ", "_")
-    return is_forbidden_evidence_source(normalized) or any(
-        marker in normalized or marker in separator_normalized
-        for marker in _PRIVILEGED_PROVENANCE_MARKERS
+    separator_normalized = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
+    return (
+        is_forbidden_evidence_source(normalized)
+        or is_forbidden_evidence_source(separator_normalized)
+        or any(
+            marker in normalized or marker in separator_normalized
+            for marker in _PRIVILEGED_PROVENANCE_MARKERS
+        )
     )
 
 
@@ -162,6 +167,13 @@ def _validate_candidate_set_metadata(candidate_set: GoalCandidateSet) -> None:
                 ref,
                 f"candidate {candidate.id}.provenance_refs[]",
             )
+        for field_name, value in (
+            ("route_signature", candidate.route_signature),
+            ("path_mode", candidate.path_mode),
+            ("feasibility_status", candidate.feasibility_status),
+        ):
+            if value is not None:
+                _require_actor_safe_text(value, f"candidate {candidate.id}.{field_name}")
 
 
 def _validate_referenced_candidate_semantics(
@@ -459,11 +471,11 @@ class HierarchicalGoalPosteriorV1:
         """Validate the additive hierarchy contract and canonicalize containers."""
         if self.schema_version != HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION:
             raise ValueError("schema_version must be " + HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION)
-        object.__setattr__(self, "track_id", require_text(self.track_id, "track_id"))
+        object.__setattr__(self, "track_id", _require_actor_safe_text(self.track_id, "track_id"))
         object.__setattr__(
             self,
             "tracking_epoch_id",
-            require_text(self.tracking_epoch_id, "tracking_epoch_id"),
+            _require_actor_safe_text(self.tracking_epoch_id, "tracking_epoch_id"),
         )
         timestamp = require_finite(self.timestamp_s, "timestamp_s")
         if timestamp < 0.0:

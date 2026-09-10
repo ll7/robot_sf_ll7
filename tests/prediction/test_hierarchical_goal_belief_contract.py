@@ -646,6 +646,14 @@ def test_hierarchy_rejects_privileged_candidate_ids(candidate_id: str) -> None:
         HierarchicalProbability(candidate_id, 1.0)
 
 
+@pytest.mark.parametrize("field_name", ["track_id", "tracking_epoch_id"])
+@pytest.mark.parametrize("identity", ["sim_pedestrian_id:42", "sim/pedestrian/id:42"])
+def test_hierarchy_rejects_privileged_tracking_identity(field_name: str, identity: str) -> None:
+    """Actor hierarchy identity cannot carry simulator identity through either tracking field."""
+    with pytest.raises(ValueError, match="privileged actor data"):
+        replace(_posterior(), **{field_name: identity})
+
+
 @pytest.mark.parametrize("destination_id", ["true_route", "sim_pedestrian_id:42"])
 def test_hierarchy_rejects_privileged_destination_ids(destination_id: str) -> None:
     """Conditional destination IDs cannot encode oracle routes or simulator identity."""
@@ -673,6 +681,30 @@ def test_hierarchy_rejects_privileged_blockers(blocker: str) -> None:
     """Blocker diagnostics cannot become a side channel for privileged actor data."""
     with pytest.raises(ValueError, match="privileged actor data"):
         _posterior(blockers=(blocker,))
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [("route_signature", "route/truth"), ("path_mode", "sim/pedestrian/id")],
+)
+def test_flat_projection_rejects_privileged_candidate_metadata(field_name: str, value: str) -> None:
+    """Route and path metadata cannot bypass actor provenance checks via punctuation."""
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            replace(candidate, **{field_name: value})
+            if candidate.id == "destination-a"
+            else candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="privileged actor data"):
+        posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
 
 
 @pytest.mark.parametrize("status", ["infeasible", "unknown", "unavailable"])

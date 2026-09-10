@@ -24,7 +24,7 @@ from scripts.dev._gh_rest import gh_api_review_post as _gh_api_post
 from scripts.dev._gh_rest import parse_json as _parse_json
 from scripts.dev.github_transport_policy import get_transport_contract
 from scripts.dev.pr_carrier_gate import _declared_base_sha, extract_full_shas
-from scripts.dev.pr_metadata import metadata_digest
+from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest
 from scripts.dev.pr_write_guard import DEFAULT_REPO, guard_pr_write, pr_write_lock
 
 REVIEW_EVENTS = ("COMMENT", "APPROVE", "REQUEST_CHANGES")
@@ -220,11 +220,27 @@ def _metadata_digest_preflight(
     *,
     repo: str,
     expected_digest: str | None,
+    review_body: str,
     preflight: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Return a safe stale skip when live title/body metadata differs."""
+    """Return a safe stale skip when live metadata or its review carrier differs."""
     if expected_digest is None:
         return None
+    body_digests = extract_metadata_digests(review_body)
+    mismatched_body_digests = [
+        digest for digest in body_digests if digest.casefold() != expected_digest.casefold()
+    ]
+    if mismatched_body_digests:
+        return {
+            **preflight,
+            "status": "error",
+            "error": (
+                "review body metadata digest does not match expected metadata digest: "
+                + ", ".join(mismatched_body_digests)
+            ),
+            "expected_metadata_digest": expected_digest.lower(),
+            "observed_review_body_metadata_digests": mismatched_body_digests,
+        }
     observed_digest, metadata_error = _read_live_metadata_digest(number, repo=repo)
     if metadata_error is not None:
         return metadata_error
@@ -320,6 +336,7 @@ def post_review(
                 number,
                 repo=repo,
                 expected_digest=expected_metadata_digest,
+                review_body=body,
                 preflight=preflight,
             )
             if metadata_preflight is not None:

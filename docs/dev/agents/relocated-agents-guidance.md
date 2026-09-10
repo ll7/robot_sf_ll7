@@ -508,7 +508,10 @@ fallback, rerun with `--event COMMENT` and preserve the blocking marker (for exa
 When the caller has already reconciled the final title/body, also pass
 `--expected-metadata-digest <digest>`; the helper re-reads the live title/body
 under the write lock and returns a stale-state skip without POSTing when the
-digest differs or the metadata read is uncertain.
+digest differs. An uncertain metadata read, or a present review-body
+`pr-metadata` trailer that disagrees with the expected digest, fails closed
+with an error (exit code 1); the live metadata mismatch is the stale-state
+skip (exit code 2).
 
 Canonical note:
 

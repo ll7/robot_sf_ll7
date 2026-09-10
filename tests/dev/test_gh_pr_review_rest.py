@@ -9,8 +9,10 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from scripts.dev.gh_pr_review_rest import main, post_review
-from scripts.dev.pr_metadata import metadata_digest
+from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 
 HEAD_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
 BASE_SHA = "f0e1d2c3b4a5968778695a4b3c2d1e0f00112233"
@@ -46,6 +48,7 @@ def test_post_review_binds_rest_payload_to_expected_head(tmp_path: Path) -> None
             "scripts.dev.gh_pr_review_rest.guard_pr_write",
             return_value={"status": "ok", "observed_base_sha": BASE_SHA},
         ) as mock_guard,
+        patch("scripts.dev.gh_pr_review_rest._gh_api_get") as mock_metadata,
         patch(
             "scripts.dev.gh_pr_review_rest._gh_api_post",
             return_value=_proc(
@@ -78,6 +81,7 @@ def test_post_review_binds_rest_payload_to_expected_head(tmp_path: Path) -> None
         expected_head_sha=HEAD_SHA,
         operation="commented_review",
     )
+    mock_metadata.assert_not_called()
     mock_post.assert_called_once_with(
         "repos/ll7/robot_sf_ll7/pulls/7571/reviews",
         {
@@ -88,9 +92,10 @@ def test_post_review_binds_rest_payload_to_expected_head(tmp_path: Path) -> None
     )
 
 
-def test_expected_metadata_digest_preserves_terminal_newlines(tmp_path: Path) -> None:
+@pytest.mark.parametrize("suffix", ["", "\n", "\n\n"])
+def test_expected_metadata_digest_preserves_terminal_newlines(tmp_path: Path, suffix: str) -> None:
     """The optional live-metadata guard hashes the exact body string, including newlines."""
-    body = f"Exact-head review evidence for {HEAD_SHA}.\n\n"
+    body = f"Exact-head review evidence for {HEAD_SHA}.{suffix}"
     body_file = _write_body(tmp_path, body)
     expected_digest = metadata_digest("PR title", body)
     with (
@@ -123,6 +128,40 @@ def test_expected_metadata_digest_preserves_terminal_newlines(tmp_path: Path) ->
     assert result["review_id"] == 11
     mock_metadata.assert_called_once_with("repos/ll7/robot_sf_ll7/pulls/7571")
     mock_post.assert_called_once()
+
+
+def test_mismatched_review_body_metadata_trailer_fails_closed(tmp_path: Path) -> None:
+    """A stale review carrier cannot be published with a matching live PR digest."""
+    live_body = f"Final PR body for {HEAD_SHA}.\n\n"
+    expected_digest = metadata_digest("PR title", live_body)
+    stale_digest = "b" * 64
+    body_file = _write_body(
+        tmp_path,
+        f"Exact-head review evidence for {HEAD_SHA}.\n{metadata_trailer(stale_digest)}",
+    )
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_get",
+            return_value=_proc(stdout=json.dumps({"title": "PR title", "body": live_body})),
+        ),
+        patch("scripts.dev.gh_pr_review_rest._gh_api_post") as mock_post,
+    ):
+        result = post_review(
+            7571,
+            body_file,
+            expected_head_sha=HEAD_SHA,
+            expected_metadata_digest=expected_digest,
+        )
+
+    assert result["status"] == "error"
+    assert stale_digest in result["error"]
+    assert result["expected_metadata_digest"] == expected_digest
+    assert result["observed_review_body_metadata_digests"] == [stale_digest]
+    mock_post.assert_not_called()
 
 
 def test_metadata_digest_mismatch_skips_review_before_post(tmp_path: Path) -> None:

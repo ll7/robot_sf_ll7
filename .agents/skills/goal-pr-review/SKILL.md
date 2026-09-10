@@ -160,7 +160,10 @@ uv run python scripts/dev/gh_pr_review_rest.py <number> --event COMMENT \
 `--expected-metadata-digest` is optional; when present, it must be the exact
 `pr_metadata` SHA-256 digest for the final title/body pair. The helper re-reads
 the live PR metadata immediately before publication and returns a stale-state
-skip without posting if the title/body changed or cannot be read.
+skip without posting if the title/body changed. An uncertain metadata read, or
+a present `pr-metadata` trailer in the review body that disagrees with the
+expected digest, fails closed with an error (exit code 1); a live metadata
+mismatch is the stale-state skip (exit code 2).
 
 Use the label helper whenever the review loop applies, reapplies, or removes
 `merge-ready` (including the remove-and-reapply gate refresh in step 8 below).

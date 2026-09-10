@@ -28,6 +28,7 @@ CANONICAL_INSTRUCTION_GRAPH = (
     ".agents/PLANS.md",
     "docs/maintainer_values.md",
     "docs/ai/agent_workflow_entrypoints.md",
+    "docs/dev/agents/relocated-agents-guidance.md",
     "SLURM/AGENTS.md",
     ".claude/CLAUDE.md",
     ".github/copilot-instructions.md",

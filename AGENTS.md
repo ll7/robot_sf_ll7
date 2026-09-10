@@ -2,8 +2,8 @@
 
 This file is the compact boot contract and the entry point into repository instructions. It owns
 the Instruction Precedence contract below; other surfaces link to it instead of restating their own
-authority order. Long-form situational guidance moved to
-`docs/dev/agents/relocated-agents-guidance.md`; read the linked section before that workflow.
+authority order. Long-form workflow guidance is mapped to topic owners by the index at
+`docs/dev/agents/relocated-agents-guidance.md`; consult that index instead of expecting procedure here.
 Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
 Use `.vscode/tasks.json` as thin wrappers around those scripts.
 Keep agent prompts, internal instructions, and handoff notes token-efficient while preserving meaning.
@@ -98,8 +98,8 @@ instruction surfaces are required by default. A reference is optional only when 
 optional/illustrative, is itself generated, or is explicitly scoped as background.
 
 For the token-efficient active thread profile, phase audits, meta-workflow PR gate, SLURM lane rules,
-shared knowledge graph, cross-agent compatibility, and detailed context-note policy, read
-`docs/dev/agents/relocated-agents-guidance.md`.
+shared knowledge graph, cross-agent compatibility, and context-note policy, use the topic index at
+`docs/dev/agents/relocated-agents-guidance.md` to select the canonical owner.
 
 ## Local Machine Context
 
@@ -222,7 +222,7 @@ comments with Markdown-heavy bodies, do not pass body inline through the shell; 
 `scripts/dev/gh_comment.sh`, `gh issue/pr comment --body-file`, or REST JSON input.
 
 For batching, GraphQL quota, Project #5 metadata, shared model routing, and autonomous stop guard
-details, read `docs/dev/agents/relocated-agents-guidance.md`.
+details, follow the topic index at `docs/dev/agents/relocated-agents-guidance.md` to the owner.
 
 ## Planning And Communication
 

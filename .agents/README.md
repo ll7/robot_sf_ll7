@@ -34,8 +34,9 @@ cannot live there; `scripts/tools/sync_ai_config.py` enforces their line and sec
 The shared dual-tier resolver is the sole source of truth for delegated model and provider
 selection: see the [`ai-delegation-routing` skill](https://github.com/ll7/codex-personal-skills/blob/main/skills/system/ai-delegation-routing/SKILL.md)
 and the [shared route planner](https://github.com/ll7/codex-personal-skills/blob/main/scripts/resolve-route.py).
-The accepted handoff input and the checkout-based dispatch command are documented with a complete
-`handoff.v2` example in `docs/ai/agent_workflow_entrypoints.md` (search for "handoff.v2").
+The accepted handoff input and the checkout-based dispatch command are documented in
+`docs/ai/agent_workflow_entrypoints.md`, with the example template in
+`docs/templates/handoff.v2.example.yaml`.
 Route output never substitutes for repository-local artifact, diff, validation, benchmark,
 evidence-admission, or paper-facing acceptance proof.
 

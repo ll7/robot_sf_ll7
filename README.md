@@ -63,6 +63,8 @@ software/package release.
 - **Repo-native contributor workflow:** setup, validation, and shared `scripts/dev/` entry points
   are documented in [`docs/dev_guide.md`](docs/dev_guide.md).
 
+
+> Platform-specific paths (Linux, macOS, headless): [Platform Setup Profiles](docs/quickstart_platforms.md).
 ## Quickstart
 
 The repository uses `uv` for dependency management and keeps generated artifacts under the

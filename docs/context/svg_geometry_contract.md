@@ -31,8 +31,9 @@ extended 2.135 m past the map `viewBox` into the northern boundary wall.
   call sites keep this behavior unless they opt in.
 - `corrected`: nested ancestor `translate(...)` transforms apply to parsed
   paths, rectangles, and circles. Any other transform class (`scale`, `rotate`,
-  `skew`, `matrix`) or malformed transform fails closed with `ValueError`
-  instead of being silently ignored.
+  `skew`, `matrix`), malformed transform, or non-finite result from translation
+  accumulation or coordinate shifting fails closed with `ValueError` instead of
+  being silently ignored.
 
 Selection: `SvgMapConverter(svg_file, geometry_contract=...)`,
 `convert_map(svg_file, geometry_contract=...)`, scenario key

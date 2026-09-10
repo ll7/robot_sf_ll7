@@ -472,7 +472,9 @@ def test_audit_plan_accepts_issue_number_keyed_receipt_inventory() -> None:
                 {
                     "number": 7614,
                     "title": "Require completion receipt",
+                    "url": "https://github.com/ll7/robot_sf_ll7/issues/7614",
                     "state": "open",
+                    "updated_at": "2026-08-20T00:00:00Z",
                     "body": CONTRACT,
                     "labels": [],
                     "comments": [],
@@ -494,7 +496,27 @@ def test_audit_plan_accepts_issue_number_keyed_receipt_inventory() -> None:
             "completion_receipts": {
                 "7614": {"receipt": receipt, "verification": _verification(receipt)}
             },
-            "inventory": {},
+            "inventory": {
+                "issues": {
+                    "source": "repos/ll7/robot_sf_ll7/issues?state=open",
+                    "source_kind": "canonical_open_issues",
+                    "source_status": "complete",
+                    "source_proof": "canonical_issue_rows",
+                    "source_status_reason": "canonical open-issue response is complete",
+                    "available": True,
+                    "truncated": False,
+                    "errors": [],
+                    "pages_read": 1,
+                    "requests_attempted": 1,
+                    "per_page": 100,
+                    "page_budget": 10,
+                    "row_count": 1,
+                    "raw_row_count": 1,
+                    "canonical_row_count": 1,
+                    "non_object_row_count": 0,
+                    "malformed_object_row_count": 0,
+                }
+            },
         }
     )
 

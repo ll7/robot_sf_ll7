@@ -48,8 +48,10 @@ route-reference reason, and does not construct fallback-looking `RouteReference`
 upstream report with any non-`None` failure reason is also unavailable when paired with a
 non-`unavailable` side; the builder normalizes that side to `unavailable` and propagates the
 failure reason. An unavailable route side retains the predecessor value `unavailable` and its
-reason in the record-level `unavailable_reason`. The builder fails closed when the offered and
-taken reports use incompatible reference metadata.
+reason in the record-level `unavailable_reason`. A caller-declared unavailable route reference is
+reported as `route_reference:explicitly_unavailable`; invalid upstream reference metadata keeps
+its invalid reason instead of being relabeled as caller-declared unavailability. The builder fails
+closed when the offered and taken reports use incompatible reference metadata.
 
 ## Validation commands
 

@@ -244,6 +244,7 @@ def build_pedestrian_response_observation(
     """
     missing: set[str] = set()
     unavailable = set(_field_names(unavailable_fields, "unavailable_fields"))
+    explicit_route_reference_unavailable = "route_reference" in unavailable
     reasons: list[str] = []
 
     (
@@ -263,6 +264,7 @@ def build_pedestrian_response_observation(
         taken_reference,
         offered_side=offered_side,
         taken_side=taken_side,
+        explicit_route_reference_unavailable=explicit_route_reference_unavailable,
         unavailable=unavailable,
         reasons=reasons,
     )
@@ -330,16 +332,22 @@ def _resolve_route_reference(
     *,
     offered_side: str | None,
     taken_side: str | None,
+    explicit_route_reference_unavailable: bool,
     unavailable: set[str],
     reasons: list[str],
 ) -> tuple[RouteReference | None, str | None, str | None]:
     """Retain shared route provenance or fail closed on a mismatch.
 
+    Only a caller-declared unavailable route reference receives the
+    ``explicitly_unavailable`` reason. Invalid reference metadata is already
+    represented by the upstream reason collected during route extraction.
+
     Returns:
         Shared route reference and possibly updated route-side values.
     """
     if "route_reference" in unavailable:
-        reasons.append("route_reference:explicitly_unavailable")
+        if explicit_route_reference_unavailable:
+            reasons.append("route_reference:explicitly_unavailable")
         offered_side, taken_side = _normalize_sides_without_reference(
             offered_side, taken_side, unavailable
         )

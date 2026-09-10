@@ -381,6 +381,27 @@ def test_invalid_unavailable_route_reference_fails_closed() -> None:
         "taken_side",
     )
     assert "route_reference:invalid_reference" in (record.unavailable_reason or "")
+    assert "route_reference:explicitly_unavailable" not in (record.unavailable_reason or "")
+
+
+def test_caller_unavailable_route_reference_retains_explicit_reason() -> None:
+    """Caller-declared reference unavailability remains distinguishable from invalid metadata."""
+    routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
+
+    record = build_pedestrian_response_observation(
+        encounter_id="explicit-unavailable-reference",
+        offered_route=routes["left"].side_report,
+        taken_route=routes["right"].side_report,
+        minimum_passing_clearance_m=0.8,
+        response_present=True,
+        unavailable_fields=("route_reference",),
+    )
+
+    assert record.status == "not_available"
+    assert record.unavailable_reason == "route_reference:explicitly_unavailable"
+    assert record.route_reference is None
+    assert record.offered_side == "unavailable"
+    assert record.taken_side == "unavailable"
 
 
 def test_mixed_valid_and_unavailable_route_reference_hides_both_sides() -> None:

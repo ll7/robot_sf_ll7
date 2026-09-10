@@ -68,12 +68,11 @@ Always-required core context:
 - `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
 - `docs/ai/agent_workflow_entrypoints.md`: task route table, canonical command entrypoints, handoff format, and large-file navigation.
 
-Route-specific context references (consult `docs/ai/agent_workflow_entrypoints.md` and load only what matches the active task):
-- **Read-only observation / review**: `docs/code_review.md`, `.agents/skills/implementation-verification/SKILL.md`, `scripts/dev/review_worktree_guard.py` (see issue #8321). Use `goal-pr-review` only when mutation-authorized PR fixes or state changes are in scope.
-- **Documentation-only edit**: `docs/glossary.md`, `docs/maintainer_values.md` (clarity and proof tier).
-- **Implementation / runtime change**: `.agents/PLANS.md`, `docs/code_review.md`, targeted modules and tests under `robot_sf/`, `scripts/`, or `tests/`.
-- **Scientific result / benchmark interpretation**: `memory/MEMORY.md`, `docs/context/INDEX.md`, `docs/ai/`, benchmark skills (`benchmark-overview`, `benchmark-row-status`, `evidence-synthesis`).
-- **Environment / worktree repair**: `docs/dev/worktree_lifecycle.md`, `scripts/dev/check_worktree_capacity.py`, `scripts/dev/bootstrap_worktree.sh` (see issue #8443).
+The route table in `docs/ai/agent_workflow_entrypoints.md` is the single owner of task-to-guidance
+routing. Select the matching route there and load only its required context; do not restate the
+route mapping in this file. References in instruction surfaces are required by default. A reference
+is optional only when it is marked optional/illustrative, is itself generated, or is explicitly
+scoped as background.
 
 For the token-efficient active thread profile, phase audits, meta-workflow PR gate, SLURM lane rules,
 shared knowledge graph, cross-agent compatibility, and detailed context-note policy, read

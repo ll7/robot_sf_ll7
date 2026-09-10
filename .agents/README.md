@@ -15,10 +15,12 @@ Tool-specific directories should point here when their formats allow it.
 
 `AGENTS.md` remains the top-level instruction source for repository rules and task-scoped context
 entrypoints, and `docs/maintainer_values.md` is the compact source for current values and hard
-contracts. Use `docs/ai/agent_workflow_entrypoints.md` for task route selection (read-only observation,
-documentation edit, runtime change, scientific interpretation, or environment repair), correct `uv run`
-command entrypoints, model registry lookup, shared routing handoff format, and targeted large-file
-navigation. Branch synchronization is mode-specific: implementation branches merge `origin/main` early,
+contracts. `docs/ai/agent_workflow_entrypoints.md` is the single owner of task route selection
+(read-only observation, documentation edit, runtime change, scientific interpretation, or
+environment repair), correct `uv run` command entrypoints, model registry lookup, shared routing
+handoff format, and targeted large-file navigation. Other surfaces link to the route table instead
+of restating the mapping; references are required by default unless marked optional or generated.
+Branch synchronization is mode-specific: implementation branches merge `origin/main` early,
 while read-only review worktrees never merge or push to implementation branches (enforced by
 `scripts/dev/review_worktree_guard.py` / issue #8321).
 Tool-specific instruction files, such as `.github/copilot-instructions.md`, `.claude/CLAUDE.md`,

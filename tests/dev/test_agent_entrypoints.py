@@ -407,13 +407,18 @@ def test_agents_md_task_scoped_context_and_mode_specific_sync() -> None:
     assert "review_worktree_guard.py" in text
     assert "#8321" in text
 
-    passive_review_line = next(
-        line
-        for line in text.splitlines()
-        if line.startswith("- **Read-only observation / review**:")
+    passive_route_bullet = "- **Read-only observation / review**:"
+    assert passive_route_bullet not in text, (
+        "AGENTS.md must link to the single task-route owner instead of restating the route mapping"
     )
-    assert ".agents/skills/implementation-verification/SKILL.md" in passive_review_line
-    assert ".agents/skills/goal-pr-review/SKILL.md" not in passive_review_line
+    entrypoints_text = ENTRYPOINTS_DOC.read_text(encoding="utf-8")
+    read_only_row = next(
+        line
+        for line in entrypoints_text.splitlines()
+        if line.startswith("| **Read-only observation** |")
+    )
+    assert ".agents/skills/implementation-verification/SKILL.md" in read_only_row
+    assert "docs/code_review.md" in read_only_row
 
 
 def test_relocated_guidance_mode_specific_sync() -> None:

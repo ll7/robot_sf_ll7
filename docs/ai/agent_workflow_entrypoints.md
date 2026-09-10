@@ -8,17 +8,23 @@ large files.
 
 ## Task Routes And Preflight Discipline
 
+This document is the single owner of task-to-guidance routing. Other instruction surfaces link here
+instead of restating the route mapping. The "Required context / evidence" column is required by
+default; a reference is optional only when it is marked optional/illustrative, is itself generated,
+or is explicitly scoped as background. Reference semantics are enforced by
+`scripts/dev/check_instruction_references.py`.
+
 Agents must choose the bounded task route matching their assigned goal and consume existing deterministic
 preflight and status outputs rather than repeatedly scanning instructions, reconstructing validation requirements,
 or mutating branches during read-only review.
 
 | Route | Purpose | Required context / evidence | First deterministic command | Permitted mutations | Authoritative acceptance command |
 | --- | --- | --- | --- | --- | --- |
-| **Read-only observation** | PR / issue audit, queue review, CI status, non-mutating review | Target/base/head SHAs, PR/issue metadata, triage state | `git rev-parse HEAD` or `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/watch_pr_ci_status.py <pr> --json --once` | None for ordinary Git (fail-closed via #8321 guard); deliberate override probes require the Linux Landlock `run` boundary | Structured snapshot report or non-mutating review assessment |
-| **Documentation-only edit** | Documentation, markdown, instructions, glossaries | Changed paths, referenced file/link targets | `git diff --name-only` or targeted link check | Markdown/text files under `docs/`, `.agents/`, or root instructions | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/sync_ai_config.py --check` and diff/link verification |
-| **Implementation / runtime change** | Bugfix, feature, or refactor in runtime code/tests | Issue contract, reproduction test, plan | Focused test: `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest <path> -q` | Scoped code and tests within declared `owned_paths` | `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` |
-| **Scientific / benchmark interpretation** | Benchmark analysis, policy eval, metric review | Scenario/config/seed provenance, campaign runs | Canonical benchmark runner / analyzer or row inspection | None (or diagnostic scripts / artifact manifests only) | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/camera_ready_baseline_safe.yaml --mode preflight` (preflight only; no fallback/degraded as success) |
-| **Environment / worktree repair** | Capacity reclamation, venv repair, git worktree hygiene | Capacity inventory, worktree status, venv health | `scripts/dev/run_worktree_shared_venv.sh --standalone -- uv run python scripts/dev/check_worktree_capacity.py --inventory --json` | Worktree prune, `.venv` recreation, scratch cleanup | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras` |
+| **Read-only observation** | PR / issue audit, queue review, CI status, non-mutating review | Target/base/head SHAs, PR/issue metadata, triage state; `docs/code_review.md`; `.agents/skills/implementation-verification/SKILL.md` | `git rev-parse HEAD` or `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/watch_pr_ci_status.py <pr> --json --once` | None for ordinary Git (fail-closed via #8321 guard); deliberate override probes require the Linux Landlock `run` boundary | Structured snapshot report or non-mutating review assessment |
+| **Documentation-only edit** | Documentation, markdown, instructions, glossaries | Changed paths, referenced file/link targets; `docs/glossary.md`; `docs/maintainer_values.md` | `git diff --name-only` or targeted link check | Markdown/text files under `docs/`, `.agents/`, or root instructions | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/sync_ai_config.py --check` and diff/link verification |
+| **Implementation / runtime change** | Bugfix, feature, or refactor in runtime code/tests | Issue contract, reproduction test, plan (when the coordinated trigger applies), `docs/code_review.md`, targeted modules and tests | Focused test: `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest <path> -q` | Scoped code and tests within declared `owned_paths` | `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` |
+| **Scientific / benchmark interpretation** | Benchmark analysis, policy eval, metric review | Scenario/config/seed provenance, campaign runs; `memory/MEMORY.md`; `docs/context/INDEX.md`; benchmark skills (`benchmark-overview`, `benchmark-row-status`, `evidence-synthesis`) | Canonical benchmark runner / analyzer or row inspection | None (or diagnostic scripts / artifact manifests only) | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/camera_ready_baseline_safe.yaml --mode preflight` (preflight only; no fallback/degraded as success) |
+| **Environment / worktree repair** | Capacity reclamation, venv repair, git worktree hygiene | Capacity inventory, worktree status, venv health; `docs/dev/worktree_lifecycle.md` | `scripts/dev/run_worktree_shared_venv.sh --standalone -- uv run python scripts/dev/check_worktree_capacity.py --inventory --json` | Worktree prune, `.venv` recreation, scratch cleanup | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras` |
 
 ### Protected read-only worktrees
 
@@ -240,7 +246,7 @@ Common large or fragile files:
 | File | Purpose | Navigation hint |
 | --- | --- | --- |
 | `robot_sf/benchmark/camera_ready_campaign.py` | Camera-ready benchmark orchestration and reporting. | Search for the specific command, planner family, or artifact phase before reading. |
-| `robot_sf/benchmark/map_runner.py` | Benchmark map execution and policy construction. | Search for policy names, `_build_policy`, or scenario/map handling branches. |
+| `robot_sf/benchmark/map_runner/map_runner.py` | Benchmark map execution and policy construction. | Search for policy names, `_build_policy`, or scenario/map handling branches. |
 | `robot_sf/benchmark/metrics.py` | Benchmark metric calculations and aggregation helpers. | Search for the metric name or schema field before changing formulas. |
 | `scripts/training/train_ppo.py` | Proximal Policy Optimization training entrypoint. | Search for config loading, checkpoint, or callback anchors. |
 | `scripts/validation/run_policy_search_step_diagnostics.py` | Policy-search step diagnostics launcher. | Search by candidate, diagnostic stage, or output field. |

@@ -7,8 +7,8 @@ encounter in a structured indoor fixture. It composes the existing
 The contract is diagnostic-only. It does not change planner behavior, metric
 semantics, campaigns, preregistration, social-compliance scalars, or any
 paper-facing claim. In particular, ``response_present=False`` is an observed
-absence of a response; ``None`` is unavailable and is listed explicitly in
-``missing_fields`` or ``unavailable_fields``.
+absence of a response; ``None`` is missing by default and is explicitly
+unavailable only when listed in ``unavailable_fields``.
 """
 
 from __future__ import annotations
@@ -22,6 +22,9 @@ from robot_sf.benchmark.route_choice_observability import (
     DIAGNOSTIC_SCHEMA_VERSION,
     ROUTE_SIDES,
     RouteSideReport,
+)
+from robot_sf.benchmark.route_choice_observability import (
+    _reference_axis as _canonical_reference_axis,
 )
 
 if TYPE_CHECKING:
@@ -44,6 +47,15 @@ _REQUIRED_FIELDS = (
 )
 _REQUIRED_FIELD_SET = frozenset(_REQUIRED_FIELDS)
 _RESPONSE_STATUSES = frozenset({"available", "not_available"})
+_REFERENCE_INVALID_REASONS = frozenset(
+    {
+        "invalid_tolerance",
+        "invalid_neutral_band",
+        "invalid_progress_interval",
+        "invalid_reference",
+        "degenerate_reference",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -82,6 +94,15 @@ class RouteReference:
             "progress_interval",
             _normalize_reference_interval(self.progress_interval),
         )
+        if (
+            _canonical_reference_axis(
+                self.start,
+                self.goal,
+                tolerance_m=self.tolerance_m,
+            )
+            is None
+        ):
+            raise ValueError("start and goal must define a non-degenerate reference axis")
 
     @classmethod
     def from_report(cls, report: RouteSideReport) -> RouteReference:
@@ -90,6 +111,8 @@ class RouteReference:
         Returns:
             The normalized reference metadata declared by ``report``.
         """
+        if _is_invalid_reference_reason(report.reason):
+            raise ValueError(f"route report has invalid reference reason: {report.reason}")
         return cls(
             coordinate_frame=report.coordinate_frame,
             start=report.start,
@@ -121,7 +144,9 @@ class PedestrianResponseObservation:
     ``taken_side`` is the side classified for the observed taken route. Their
     values use :data:`ROUTE_SIDES`; an unavailable route report is represented
     by ``"unavailable"`` and listed in ``unavailable_fields``. A missing route
-    report is represented by ``None`` and listed in ``missing_fields``.
+    report is represented by ``None`` and listed in ``missing_fields``. A
+    non-unavailable side label without a validated route reference is
+    normalized to ``"unavailable"``.
 
     ``minimum_passing_clearance_m`` is a caller-supplied observed minimum in
     metres. This record does not introduce a threshold or redefine any
@@ -145,9 +170,15 @@ class PedestrianResponseObservation:
         missing = set(_field_names(self.missing_fields, "missing_fields"))
         unavailable = set(_field_names(self.unavailable_fields, "unavailable_fields"))
         _validate_sides(self, unavailable)
+        _validate_route_reference(self)
+        if self.route_reference is None:
+            offered_side, taken_side = _normalize_sides_without_reference(
+                self.offered_side, self.taken_side, unavailable
+            )
+            object.__setattr__(self, "offered_side", offered_side)
+            object.__setattr__(self, "taken_side", taken_side)
         if overlap := sorted(missing & unavailable):
             raise ValueError(f"fields cannot be both missing and unavailable: {overlap}")
-        _validate_route_reference(self)
         _normalize_clearance(self)
         _validate_response_flag(self)
         _complete_field_state(self, missing, unavailable)
@@ -201,9 +232,10 @@ def build_pedestrian_response_observation(
 
     ``offered_route`` and ``taken_route`` must be reports from the existing
     route-choice observability contract. A ``None`` input is missing; a report
-    whose side is ``"unavailable"`` is unavailable. Invalid scalar encounter
-    values are retained as unavailable rather than converted into a plausible
-    value.
+    whose side is ``"unavailable"`` is unavailable. Invalid route-reference
+    metadata and upstream route-reference failure reasons are retained as
+    unavailable rather than repaired into a plausible reference. Invalid
+    scalar encounter values are handled the same way.
 
     Returns:
         A typed observation with explicit missing or unavailable fields.
@@ -306,18 +338,18 @@ def _resolve_route_reference(
     """
     if "route_reference" in unavailable:
         reasons.append("route_reference:explicitly_unavailable")
-        if offered_side is not None:
-            unavailable.add("offered_side")
-            offered_side = "unavailable"
-        if taken_side is not None:
-            unavailable.add("taken_side")
-            taken_side = "unavailable"
+        offered_side, taken_side = _normalize_sides_without_reference(
+            offered_side, taken_side, unavailable
+        )
         return None, offered_side, taken_side
 
     route_references = [
         reference for reference in (offered_reference, taken_reference) if reference is not None
     ]
     if not route_references:
+        offered_side, taken_side = _normalize_sides_without_reference(
+            offered_side, taken_side, unavailable
+        )
         return None, offered_side, taken_side
     route_reference = route_references[0]
     if all(reference == route_reference for reference in route_references[1:]):
@@ -408,13 +440,15 @@ def _extract_route_side(
     try:
         reference = RouteReference.from_report(report)
     except (OverflowError, TypeError, ValueError):
-        if report.side != "unavailable":
-            raise
-        unavailable.add("route_reference")
+        unavailable.update({field_name, "route_reference"})
+        reference_reason = (
+            report.reason if _is_invalid_reference_reason(report.reason) else "invalid_reference"
+        )
+        report_reason = report.reason or reference_reason
         return (
             "unavailable",
             None,
-            f"{field_name}:{report.reason or 'unknown'};route_reference:invalid_reference",
+            f"{field_name}:{report_reason};route_reference:{reference_reason}",
         )
     if report.side == "unavailable":
         unavailable.add(field_name)
@@ -454,6 +488,34 @@ def _validate_sides(observation: PedestrianResponseObservation, unavailable: set
             raise ValueError(f"{field_name} must use the route-side vocabulary")
         if value == "unavailable":
             unavailable.add(field_name)
+
+
+def _is_invalid_reference_reason(reason: object) -> bool:
+    """Return whether an upstream route report invalidates its reference."""
+    return isinstance(reason, str) and reason in _REFERENCE_INVALID_REASONS
+
+
+def _normalize_sides_without_reference(
+    offered_side: str | None,
+    taken_side: str | None,
+    unavailable: set[str],
+) -> tuple[str | None, str | None]:
+    """Hide side labels when no validated route reference can support them.
+
+    A side label is only evidence relative to its declared start-to-goal axis.
+    Preserve missing ``None`` values, but convert any present label to the
+    explicit unavailable vocabulary when that reference is absent or invalid.
+
+    Returns:
+        The offered and taken sides after fail-closed normalization.
+    """
+    if offered_side is not None and offered_side != "unavailable":
+        unavailable.add("offered_side")
+        offered_side = "unavailable"
+    if taken_side is not None and taken_side != "unavailable":
+        unavailable.add("taken_side")
+        taken_side = "unavailable"
+    return offered_side, taken_side
 
 
 def _validate_route_reference(observation: PedestrianResponseObservation) -> None:

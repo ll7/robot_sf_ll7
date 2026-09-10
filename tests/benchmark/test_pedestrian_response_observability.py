@@ -76,7 +76,7 @@ def test_structured_indoor_fixture_replays_identically(
 
 
 def test_missing_fields_are_distinct_from_an_observed_false_response() -> None:
-    """False means observed absence; None is explicitly missing."""
+    """False means observed absence; None is missing by default."""
     routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
     available = build_pedestrian_response_observation(
         encounter_id="false-response",
@@ -102,6 +102,25 @@ def test_missing_fields_are_distinct_from_an_observed_false_response() -> None:
     )
     assert unavailable.unavailable_fields == ()
     assert unavailable.unavailable_reason == "missing_fields"
+
+
+def test_explicitly_unavailable_response_is_not_missing() -> None:
+    """An explicit unavailable response flag stays separate from an omitted flag."""
+    routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
+    record = build_pedestrian_response_observation(
+        encounter_id="unavailable-response",
+        offered_route=routes["left"].side_report,
+        taken_route=routes["right"].side_report,
+        minimum_passing_clearance_m=0.8,
+        response_present=None,
+        unavailable_fields=("response_present",),
+    )
+
+    assert record.status == "not_available"
+    assert record.response_present is None
+    assert record.missing_fields == ()
+    assert record.unavailable_fields == ("response_present",)
+    assert record.unavailable_reason == "unavailable_fields"
 
 
 @pytest.mark.parametrize("invalid_clearance", [True, 10**1000])
@@ -152,7 +171,7 @@ def test_mismatched_route_references_fail_closed() -> None:
 
 
 def test_direct_record_requires_route_reference_for_available_status() -> None:
-    """Direct records without provenance are explicitly not available."""
+    """Direct records hide side labels when route provenance is absent."""
     record = PedestrianResponseObservation(
         encounter_id="unreferenced",
         minimum_passing_clearance_m=0.5,
@@ -162,9 +181,96 @@ def test_direct_record_requires_route_reference_for_available_status() -> None:
     )
 
     assert record.status == "not_available"
+    assert record.offered_side == "unavailable"
+    assert record.taken_side == "unavailable"
     assert record.missing_fields == ("route_reference",)
-    assert record.unavailable_fields == ()
-    assert record.unavailable_reason == "missing_fields"
+    assert record.unavailable_fields == ("offered_side", "taken_side")
+    assert record.unavailable_reason == "missing_and_unavailable_fields"
+
+
+@pytest.mark.parametrize("goal_delta", [0.0, 0.025, 0.05])
+def test_route_reference_rejects_zero_or_near_zero_start_goal(goal_delta: float) -> None:
+    """The route contract's tolerance gate rejects degenerate reference axes."""
+    routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
+    reference = RouteReference.from_report(routes["left"].side_report)
+
+    with pytest.raises(ValueError, match="non-degenerate reference axis"):
+        replace(
+            reference,
+            goal=(reference.start[0] + goal_delta, reference.start[1]),
+        )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "reason"),
+    [
+        ({"tolerance_m": -1.0}, "invalid_tolerance"),
+        ({"neutral_band_m": float("nan")}, "invalid_neutral_band"),
+        ({"progress_interval": (0.9, 0.1)}, "invalid_progress_interval"),
+        ({"start": (0.0, 0.0), "goal": (0.0, 0.0)}, "degenerate_reference"),
+        ({"start": (0.0, 0.0), "goal": (0.025, 0.0)}, "degenerate_reference"),
+    ],
+)
+def test_invalid_upstream_reference_reason_is_propagated(
+    kwargs: dict[str, object], reason: str
+) -> None:
+    """Invalid upstream reference reasons cannot become fallback provenance."""
+    reference_kwargs: dict[str, object] = {
+        "start": (0.0, 0.0),
+        "goal": (2.0, 0.0),
+    }
+    reference_kwargs.update(kwargs)
+    report = classify_route_side(
+        [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)],
+        **reference_kwargs,
+    )  # type: ignore[arg-type]
+    assert report.side == "unavailable"
+    assert report.reason == reason
+
+    record = build_pedestrian_response_observation(
+        encounter_id=f"invalid-reference-{reason}",
+        offered_route=report,
+        taken_route=report,
+        minimum_passing_clearance_m=0.8,
+        response_present=True,
+    )
+
+    assert record.status == "not_available"
+    assert record.route_reference is None
+    assert record.offered_side == "unavailable"
+    assert record.taken_side == "unavailable"
+    assert record.missing_fields == ()
+    assert record.unavailable_fields == (
+        "offered_side",
+        "route_reference",
+        "taken_side",
+    )
+    assert f"offered_side:{reason}" in (record.unavailable_reason or "")
+    assert f"route_reference:{reason}" in (record.unavailable_reason or "")
+
+
+def test_builder_hides_side_from_degenerate_reference_without_upstream_reason() -> None:
+    """A forged valid-looking side cannot bypass the canonical axis gate."""
+    routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
+    malformed_route = replace(
+        routes["left"].side_report,
+        goal=(0.025, 0.0),
+        reason=None,
+    )
+
+    record = build_pedestrian_response_observation(
+        encounter_id="unreasoned-degenerate-reference",
+        offered_route=malformed_route,
+        taken_route=malformed_route,
+        minimum_passing_clearance_m=0.8,
+        response_present=True,
+    )
+
+    assert record.status == "not_available"
+    assert record.route_reference is None
+    assert record.offered_side == "unavailable"
+    assert record.taken_side == "unavailable"
+    assert "route_reference:invalid_reference" in (record.unavailable_reason or "")
 
 
 def test_unavailable_route_side_preserves_route_observability_reason() -> None:

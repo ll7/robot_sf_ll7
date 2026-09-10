@@ -362,6 +362,24 @@ rows:
       - examples/examples_manifest.yaml
       - LICENSE
 
+  - id: snqi-example-fixture
+    scope: examples
+    globs: ["examples/fixtures/snqi/v1/fixture.json"]
+    status: project-authored
+    source: "Robot SF synthetic Social Navigation Quality Index (SNQI) example fixture."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository-authored synthetic input under the repository license; no external dataset rights are claimed."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Source-control commit pin; semantic fixture tests detect contract drift."
+    modification_status: "Deterministic synthetic diagnostic input; not a benchmark dataset or scientific result."
+    evidence:
+      - examples/fixtures/snqi/v1/fixture.json
+      - examples/fixtures/snqi/v1/loader.py
+      - LICENSE
+    notes: >-
+      The fixture's embedded provenance keeps generated example output diagnostic-only and outside
+      benchmark or scientific evidence claims.
+
   - id: example-recordings
     scope: examples
     globs: ["examples/recordings/**"]

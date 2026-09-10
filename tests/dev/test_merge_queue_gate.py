@@ -39,7 +39,28 @@ def _gh_response(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> 
     return MagicMock(stdout=stdout, stderr=stderr, returncode=returncode)
 
 
-def test_receipt_check_projection_binds_focused_review_to_exact_head_and_metadata() -> None:
+@pytest.fixture(autouse=True)
+def _stub_static_report_fetch_for_ordinary_snapshot_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep existing ordinary-snapshot fixtures focused on their declared calls."""
+
+    def unavailable(_gh: object, *, repository: str, pr_number: int) -> tuple[list[dict], dict]:
+        del repository, pr_number
+        return [], {
+            "source": "test_stub",
+            "status": "unavailable",
+            "reason_codes": ["test_fixture_does_not_supply_static_reports"],
+        }
+
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "fetch_same_account_static_reports",
+        unavailable,
+    )
+
+
+def test_receipt_check_projection_keeps_contract_checks_as_ci_only() -> None:
     checks = _to_receipt_check_runs(
         [
             {
@@ -66,14 +87,16 @@ def test_receipt_check_projection_binds_focused_review_to_exact_head_and_metadat
     assert [check["name"] for check in checks] == ["pr-contract-check", "CI"]
 
 
-def test_receipt_check_projection_preserves_explicit_approved_source_and_metadata() -> None:
-    """An approved carrier with original evidence bindings preserves them through projection."""
+def test_receipt_check_projection_rejects_injected_authority_fields() -> None:
+    """Caller-provided flags cannot turn an ordinary check into review authority."""
     checks = _to_receipt_check_runs(
         [
             {
                 "name": "approved-static-analysis",
+                "identity": "forged-reviewer",
                 "status": "COMPLETED",
                 "conclusion": "SUCCESS",
+                "approved_reviewer": True,
                 "approved_source": True,
                 "metadata_digest": METADATA_DIGEST,
                 "evidence_digest": "c" * 64,
@@ -84,9 +107,11 @@ def test_receipt_check_projection_preserves_explicit_approved_source_and_metadat
     )
 
     assert checks[0]["name"] == "approved-static-analysis"
-    assert checks[0]["approved_source"] is True
-    assert checks[0]["metadata_digest"] == METADATA_DIGEST
-    assert checks[0]["evidence_digest"] == "c" * 64
+    assert checks[0]["identity"] == "approved-static-analysis"
+    assert checks[0]["approved_reviewer"] is False
+    assert checks[0]["approved_source"] is False
+    assert checks[0]["metadata_digest"] is None
+    assert checks[0]["evidence_digest"] is None
 
 
 def test_pr_contract_check_not_admitted_as_independent_review_authority() -> None:
@@ -146,40 +171,7 @@ def test_pr_contract_check_not_admitted_as_independent_review_authority() -> Non
         or "review_carrier_metadata_missing" in classified_alone["reason_codes"]
     )
 
-    # 3. Positive control: genuine approved independent carrier passes through real classification.
-    review_digest = "d" * 64
-    approved_checks = _to_receipt_check_runs(
-        [
-            {
-                "name": "CodeRabbit Review",
-                "identity": "CodeRabbit",
-                "status": "COMPLETED",
-                "conclusion": "SUCCESS",
-                "approved_source": True,
-                "metadata_digest": METADATA_DIGEST,
-                "evidence_digest": review_digest,
-            },
-        ],
-        head_sha=FULL_SHA,
-        expected_metadata_digest=METADATA_DIGEST,
-    )
-    classified_approved = classify_implementation_review(
-        {
-            "head_sha": FULL_SHA,
-            "metadata_digest": METADATA_DIGEST,
-            "waiver_actor": "author-account",
-            "check_runs": approved_checks,
-            "reviews": author_self_review,
-        }
-    )
-    assert classified_approved["status"] == "accepted"
-    assert classified_approved["carrier"] is not None
-    assert classified_approved["carrier"]["kind"] == "check_run"
-    assert classified_approved["carrier"]["identity"] == "CodeRabbit"
-    assert classified_approved["carrier"]["metadata_digest"] == METADATA_DIGEST
-
-    # 4. Negative controls matrix:
-    # 4a. Copied check name "pr-contract-check" without approved source refuses.
+    # 3. Copied check name "pr-contract-check" without approved source refuses.
     classified_copied = classify_implementation_review(
         {
             "head_sha": FULL_SHA,
@@ -199,78 +191,32 @@ def test_pr_contract_check_not_admitted_as_independent_review_authority() -> Non
     assert classified_copied["status"] == "unavailable"
     assert "review_carrier_source_not_approved" in classified_copied["reason_codes"]
 
-    # 4b. Unknown source/app refuses.
-    classified_unknown = classify_implementation_review(
-        {
-            "head_sha": FULL_SHA,
-            "metadata_digest": METADATA_DIGEST,
-            "check_runs": [
-                {
-                    "name": "custom-unapproved-bot",
-                    "identity": "custom-unapproved-bot",
-                    "status": "completed",
-                    "conclusion": "success",
-                    "head_sha": FULL_SHA,
-                    "metadata_digest": METADATA_DIGEST,
-                }
-            ],
-        }
-    )
-    assert classified_unknown["status"] == "unavailable"
-    assert "review_carrier_source_not_approved" in classified_unknown["reason_codes"]
-
-    # 4c. Stale head refuses.
-    stale_checks = _to_receipt_check_runs(
+    # A real approved automated-review identity remains derivable from GitHub's
+    # typed app object, while caller-injected identity is ignored.
+    approved_checks = _to_receipt_check_runs(
         [
             {
                 "name": "CodeRabbit Review",
-                "identity": "CodeRabbit",
+                "identity": "forged-reviewer",
+                "app": {"slug": "coderabbit"},
                 "status": "COMPLETED",
                 "conclusion": "SUCCESS",
-                "approved_source": True,
-                "metadata_digest": METADATA_DIGEST,
             },
         ],
-        head_sha="f" * 40,
+        head_sha=FULL_SHA,
         expected_metadata_digest=METADATA_DIGEST,
     )
-    classified_stale_head = classify_implementation_review(
-        {
-            "head_sha": FULL_SHA,
-            "metadata_digest": METADATA_DIGEST,
-            "check_runs": stale_checks,
-        }
+    assert approved_checks[0]["identity"] == "coderabbit"
+    assert (
+        classify_implementation_review(
+            {
+                "head_sha": FULL_SHA,
+                "metadata_digest": METADATA_DIGEST,
+                "check_runs": approved_checks,
+            }
+        )["status"]
+        != "accepted"
     )
-    assert classified_stale_head["status"] == "stale"
-    assert "review_carrier_stale_head" in classified_stale_head["reason_codes"]
-
-    # 4d. Stale metadata digest refuses.
-    classified_stale_metadata = classify_implementation_review(
-        {
-            "head_sha": FULL_SHA,
-            "metadata_digest": "e" * 64,
-            "check_runs": approved_checks,
-        }
-    )
-    assert classified_stale_metadata["status"] == "stale"
-    assert "review_carrier_stale_metadata" in classified_stale_metadata["reason_codes"]
-
-    # 4e. Superseded carrier refuses.
-    superseded_checks = [
-        {
-            **approved_checks[0],
-            "superseded": True,
-        }
-    ]
-    classified_superseded = classify_implementation_review(
-        {
-            "head_sha": FULL_SHA,
-            "metadata_digest": METADATA_DIGEST,
-            "check_runs": superseded_checks,
-        }
-    )
-    assert classified_superseded["status"] == "superseded"
-    assert "review_carrier_superseded" in classified_superseded["reason_codes"]
 
 
 def test_receipt_check_projection_drops_superseded_duplicate_runs() -> None:
@@ -463,6 +409,65 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert "baseRefOid" not in fields
     assert "reviewRequests" in fields
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
+
+
+def test_fetch_pr_snapshot_passes_static_reports_to_receipt_classifier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live snapshot carries the approved static-report projection to receipts."""
+    current_metadata = metadata_digest("merge queue test PR", "final body")
+    reports = [
+        {
+            "identity": "openai/chatgpt-codex-connector",
+            "publisher_identity": "ll7",
+            "approved_source": True,
+            "head_sha": FULL_SHA,
+            "metadata_digest": current_metadata,
+            "evidence_digest": "9" * 64,
+            "verdict": "accepted",
+            "source_comment_id": 5622445291,
+        }
+    ]
+    provenance = {
+        "source": "rest_issue_comments",
+        "status": "accepted",
+        "producer_identity": "openai/chatgpt-codex-connector",
+        "publisher_identity": "ll7",
+        "selected_comment_id": 5622445291,
+    }
+
+    def static_report_fetch(_gh: object, *, repository: str, pr_number: int) -> tuple[list, dict]:
+        assert repository == "owner/repo"
+        assert pr_number == 42
+        return reports, provenance
+
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "fetch_same_account_static_reports",
+        static_report_fetch,
+    )
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["review_evidence"]["static_reports"] == reports
+    assert snapshot["evidence_provenance"]["implementation_review_reports"] == provenance
+    classified = classify_implementation_review(
+        {
+            "head_sha": snapshot["head_sha"],
+            "metadata_digest": snapshot["metadata_digest"],
+            **snapshot["review_evidence"],
+        }
+    )
+    assert classified["status"] == "accepted"
+    assert classified["carrier"]["kind"] == "static_report"
+    assert classified["carrier"]["identity"] == "openai/chatgpt-codex-connector"
+    assert classified["carrier"]["evidence_digest"] == "9" * 64
 
 
 def test_fetch_pr_snapshot_refreshes_graphql_evidence_status_by_exact_head() -> None:

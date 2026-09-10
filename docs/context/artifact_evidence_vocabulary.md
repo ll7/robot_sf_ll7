@@ -97,6 +97,18 @@ separate. No scientific score or admission decision is computed; stale, missing,
 duplicate, wrong-schema, or unsanitized input masks affected rows as explicit `unavailable`, and
 output carries no private paths, hostnames, accounts, credentials, or signed URLs.
 
+## Expiring-Resource Deadline Feasibility
+
+[`scripts/validation/check_expiring_resource_feasibility.py`](../../scripts/validation/check_expiring_resource_feasibility.py)
+evaluates the optional `expiring_resource` block of a campaign manifest (`expiring_resource_contract.v1`)
+and returns one deterministic verdict: `fits_conservative`, `fits_expected`, `too_late`, or
+`unknown`. It budgets expected/conservative runtime plus retrieval, verification, and preservation
+reserves into a latest safe submission time, never guesses a scheduler start, and requires non-zero
+retrieval/preservation reserves for durable-required outputs. Manifests without the block stay
+non-applicable and non-blocking. See
+[Expiring-Resource Deadline Feasibility](expiring_resource_deadlines.md); the case pack lives under
+`tests/validation/fixtures/expiring_resource_feasibility/`.
+
 ## Learned-Policy Artifact Manifests
 
 Learned local-policy checkpoints, normalizers, imitation datasets, and residual-policy artifacts

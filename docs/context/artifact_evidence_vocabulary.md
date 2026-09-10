@@ -102,6 +102,26 @@ separate. No scientific score or admission decision is computed; stale, missing,
 duplicate, wrong-schema, or unsanitized input masks affected rows as explicit `unavailable`, and
 output carries no private paths, hostnames, accounts, credentials, or signed URLs.
 
+## Sanitized Lineage Index
+
+[`scripts/tools/lineage_index.py`](../../scripts/tools/lineage_index.py) joins compact sanitized
+records (`sanitized_lineage_input.v1`) into one deterministic `robot_sf.lineage_index.v1` JSON
+plus Markdown index keyed by stable semantic identity (`kind:id`), never filename proximity or
+timestamps. Records are `{"kind", "id", "refs": {"<kind>_ids": [...]}, ...scalars}` over
+`issue`, `pull_request`, `commit`, `campaign`, `config`, `manifest`, `job`, `checkpoint`,
+`model`, `environment`, `artifact`, `analysis`, and `claim`, with scalars `digest`, `owner`,
+`attempt_index`, `relation`, `submission_receipt`, `predecessor_job_id`, `artifact_kind`,
+`locator_class`, `claim_state`, and `not_applicable`; optional `private_projection` lists
+withheld locators as `{"target", "digest", "withheld": true}` only. Each row is rooted at one
+job attempt, or at an unreachable record, so retries and resumed shards stay separate rows
+linked by `predecessor_job_id`, `attempt_index`, and `relation`; missing links classify as
+`not_applicable`, `not_recorded`, `private_unavailable`, `conflict`, or `dangling`, and
+duplicate IDs, contradictory digests, orphaned artifact pointers, projection drift, or absent
+references fail closed. Query with `lineage_index.py query --input <path>` and
+`--issue/--job/--campaign/--artifact-digest/--commit/--config` (exit 0 match, 2 otherwise).
+Validate with `uv run python scripts/tools/lineage_index.py --input
+tests/tools/fixtures/lineage_index/complete.json --check --format json`.
+
 ## Expiring-Resource Deadline Feasibility
 
 [`scripts/validation/check_expiring_resource_feasibility.py`](../../scripts/validation/check_expiring_resource_feasibility.py)

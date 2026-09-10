@@ -50,27 +50,10 @@ patch the stale instruction, or open a bounded follow-up issue.
 
 ## Maintainer Value Hierarchy
 
-`docs/maintainer_values.md` records stable maintainer principles and tie-breakers for ambiguous
-trade-offs. It is not a second authority hierarchy; this file's Instruction Precedence contract
-governs repository-internal conflicts. Optimize first for concrete research progress on
-social-navigation simulation, benchmarking, and planner exploration. The hard rule is to be honest,
-transparent, and reproducible. Apply proof, documentation, and process in proportion to risk:
-
-- benchmark, metric, schema, model-provenance, and paper-facing claims still require strong,
-  reproducible evidence before they are treated as established;
-- exploratory planner or research work may move faster when its status is clearly labeled as
-  exploratory, diagnostic, blocked, or not yet benchmark evidence;
-- low-risk docs, metadata, and instruction changes use the cheaper validation path by default:
-  inspect the diff and verify changed links or referenced paths where practical;
-- substantive claims, recommendations, benchmark conclusions, and prioritization judgments below
-  roughly 95 percent confidence should include a numeric uncertainty estimate, caveat, or condition
-  that would change the conclusion;
-- current maintainer direction overrides stale workflow prose. When an instruction appears to
-  conflict with the user's current priority, follow the current priority, call out the conflict, and
-  propose or make the smallest doc update needed to remove the drift.
-
-When instruction surfaces conflict, the Instruction Precedence contract above is the single
-normative source; do not restate its order elsewhere.
+`docs/maintainer_values.md` records the stable principles and tie-breakers that resolve trade-offs
+when procedure is silent; it is linked, not restated, here. The hard rule is honest, transparent,
+reproducible work, and process scales with risk and claim strength. When instruction surfaces
+conflict, the Instruction Precedence contract above is the single normative source.
 
 Routine workflow cleanup should proceed autonomously when the scope is bounded; label assumptions,
 uncertainty, and evidence grade instead of pausing for confirmation. Treat Project #5 ordering and
@@ -92,19 +75,28 @@ schema, model-provenance, or paper-facing result must use the stronger proof tie
 
 ## Task-Scoped Context Entrypoints
 
-Read only the surfaces relevant to the task. Prefer repo-local files over ad-hoc summaries in issue comments.
-Do not load every skill, historical report, implementation detail, or runtime guide indiscriminately.
+Read only the surfaces relevant to the task. The machine-readable profile and route mapping is
+`.agents/task_scope_manifest.yaml`; the human route table is owned by
+`docs/ai/agent_workflow_entrypoints.md`. Select one execution profile from the changed surfaces and
+risk, load only that profile's required context, and escalate when inspection reveals more risk.
+
+| Profile | Typical work | Minimum context and action |
+| --- | --- | --- |
+| **Observe** | inspect, explain, triage, read-only review | root router + nearest scoped guidance; no environment, branch, plan, worktree, or PR ceremony |
+| **Local** | bounded docs/code/test edit | scoped guidance + targeted validation for the changed behavior |
+| **Coordinated** | multi-module, API, migration, or ambiguous change | execution plan, isolated worktree when collision risk exists, integration validation |
+| **Evidence-critical** | benchmark evidence, research claim, release, security, publication artifacts | full evidence, custody, reproducibility, exact-head, and release gates |
 
 Always-required core context:
-- `docs/maintainer_values.md`: compact current values and hard contracts.
-- `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
-- `docs/ai/agent_workflow_entrypoints.md`: task route table, canonical command entrypoints, handoff format, and large-file navigation.
+- `docs/maintainer_values.md`: maintainer principles and tie-breakers.
+- `AGENTS.md`: invariants, precedence, and this router.
+- `docs/ai/agent_workflow_entrypoints.md`: route table, canonical command entrypoints, handoff format, and large-file navigation.
 
 The route table in `docs/ai/agent_workflow_entrypoints.md` is the single owner of task-to-guidance
-routing. Select the matching route there and load only its required context; do not restate the
-route mapping in this file. References in instruction surfaces are required by default. A reference
-is optional only when it is marked optional/illustrative, is itself generated, or is explicitly
-scoped as background.
+routing. Select the matching route there, use the profile mapping in `.agents/task_scope_manifest.yaml`,
+and load only the required context; do not restate the route mapping in this file. References in
+instruction surfaces are required by default. A reference is optional only when it is marked
+optional/illustrative, is itself generated, or is explicitly scoped as background.
 
 For the token-efficient active thread profile, phase audits, meta-workflow PR gate, SLURM lane rules,
 shared knowledge graph, cross-agent compatibility, and detailed context-note policy, read
@@ -274,11 +266,11 @@ details, read `docs/dev/agents/relocated-agents-guidance.md`.
 
 ## Planning And Communication
 
-For non-trivial work, follow `.agents/PLANS.md`: restate boundaries, list evidence sources before
-implementation, keep validation commands explicit, and say what proof will demonstrate. Prefer
-concise-but-explanatory responses over terse status-only updates. For benchmark or planner findings,
-include what changed, why it matters, and what risk or limitation remains. Separate observed
-evidence from hypothesis when uncertainty remains.
+A persistent execution plan is required for the Coordinated and Evidence-critical profiles and
+optional otherwise (see `.agents/task_scope_manifest.yaml`); when required, follow
+`.agents/PLANS.md`. Prefer concise-but-explanatory responses over terse status-only updates. For
+benchmark or planner findings, include what changed, why it matters, and what risk or limitation
+remains. Separate observed evidence from hypothesis when uncertainty remains.
 
 ## Key Codex Skills
 

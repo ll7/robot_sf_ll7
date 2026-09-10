@@ -52,8 +52,9 @@ Host tools and optional machine capabilities that are not installed by `uv` are 
 
 Use the maintainer hierarchy and readiness matrix in `AGENTS.md` before older workflow prose or
 tool-specific compatibility pointers. In short: active maintainer direction wins over stale
-instructions, `docs/maintainer_values.md` defines the hard contracts, and Project #5 scores are
-advisory when fresh evidence or maintainer direction conflicts with them.
+instructions, `AGENTS.md` owns the hard contracts, `docs/maintainer_values.md` records stable
+principles, and Project #5 scores are advisory when fresh evidence or maintainer direction
+conflicts with them.
 
 Routine workflow cleanup can proceed without extra confirmation when it is bounded and the PR or
 handoff clearly labels assumptions, uncertainty, evidence grade, and any deferred follow-up issue.
@@ -3111,7 +3112,8 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Advisory typecheck reviewed. Fix practical findings in touched files and stable contracts, and
   document any meaningful remaining findings in the PR when they affect the change.
 - Docs updated (README in feature folder, diagrams if changed).
-- Validation matched to risk per [maintainer_values.md](./maintainer_values.md): runtime, benchmark, metric, schema,
+- Validation matched to risk per the [AGENTS.md](../AGENTS.md) readiness matrix and
+  [maintainer_values.md](./maintainer_values.md) principles: runtime, benchmark, metric, schema,
   model-provenance, and paper-facing changes need executable proof; low-risk docs/instruction
   changes use diff review, referenced path/link checks, and lightweight automated checks when
   available. State explicitly in the PR which heavier gates were skipped and why.
@@ -3184,8 +3186,9 @@ phase exits zero.
 
 ### Proportional validation
 
-Validation depth follows [`docs/maintainer_values.md`](./maintainer_values.md): apply proof in
-proportion to risk. Do not treat the heaviest path as the default for every change.
+Validation depth follows the readiness matrix in [`AGENTS.md`](../AGENTS.md), informed by the
+proportional-process principle in [`docs/maintainer_values.md`](./maintainer_values.md): apply proof
+in proportion to risk. Do not treat the heaviest path as the default for every change.
 
 - **Low-risk docs/instruction changes** use the cheap path by default: inspect the diff, verify
   changed links or referenced paths, and run lightweight automated checks when they exist
@@ -3197,14 +3200,15 @@ proportion to risk. Do not treat the heaviest path as the default for every chan
   change that makes a benchmark, metric, schema, model-provenance, or paper-facing claim still
   needs the corresponding strength of evidence.
 
-If this section conflicts with current maintainer direction or [maintainer_values.md](./maintainer_values.md),
-follow the higher-precedence source and make the smallest doc update needed to remove the drift.
+If this section conflicts with current maintainer direction or [`AGENTS.md`](../AGENTS.md), follow
+the higher-precedence source and make the smallest doc update needed to remove the drift; use
+[`maintainer_values.md`](./maintainer_values.md) for stable rationale and tie-breakers.
 
 ### TL;DR workflow checklist
 
 1) Clarify requirements and pick the validation path by change type (see
-   [Proportional validation](#proportional-validation) above; `docs/maintainer_values.md` is the
-   higher-precedence source).
+   [Proportional validation](#proportional-validation) above and the readiness matrix in
+   `AGENTS.md`).
 2) For non-trivial runtime/benchmark/metric/schema/paper-facing changes, draft a design doc under
    `docs/` and link the issue; for low-risk docs/instruction changes, skip the design doc unless
    it clarifies scope.

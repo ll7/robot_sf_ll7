@@ -12,8 +12,8 @@ benchmark or paper-facing evidence.** Match the claim to the proof.
 
 - [Researcher's Guide](./researchers_guide.md) — from a research question to a published,
   correctly-graded result.
-- [Maintainer Values And Hard Contracts](./maintainer_values.md) — honest, transparent, reproducible
-  progress; exploration labels; uncertainty and validation policy.
+- [Maintainer Values](./maintainer_values.md) — stable principles for honest, transparent,
+  reproducible research progress and calibrated uncertainty.
 - [Research Reporting](./research_reporting.md) — how to report research results conservatively.
 - [Leakage-safe parametric curriculum diagnostic](./parametric_curriculum_diagnostic.md) — fixture-only hashed manifests, deterministic replay, and leakage checks.
 - [Context Retrieval Index](./context/INDEX.md) — retrieval-first catalog for context-note entry

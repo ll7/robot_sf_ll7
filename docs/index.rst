@@ -85,6 +85,7 @@ references.
    :maxdepth: 1
 
    Developer Guide <dev_guide>
+   Public API <public_api>
    API Reference <api/index>
    Environment API <ENVIRONMENT>
    Reward Profiles Reference <training/reward_profiles>

@@ -342,7 +342,14 @@ def test_expired_lease_allows_cleanup_and_preserves_branch_ref(tmp_path: Path, m
     save_lease(expired, lease_path(worktree))
     plan = _clean_candidate_plan(repo, worktree, branch, head_sha)
 
-    result = reaper.apply_deletions(plan)
+    with monkeypatch.context() as isolated:
+        isolated.setattr(reaper, "_read_unpushed_state", lambda _path, _branch: (False, None))
+        isolated.setattr(
+            reaper,
+            "_read_strict_open_pr_state",
+            lambda _branch, *, repo, transport: (False, None, []),
+        )
+        result = reaper.apply_deletions(plan)
 
     assert not worktree.exists()
     assert str(worktree) not in result.refused

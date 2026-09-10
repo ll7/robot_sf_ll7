@@ -834,6 +834,44 @@ def test_unknown_verification_variant_still_rejected() -> None:
 
 
 @pytest.mark.parametrize(
+    "heading",
+    [
+        "Inputs / Affected Files",
+        "Inputs and Affected Files",
+        "Inputs / Context",
+        "Inputs / Predecessor",
+        "Inputs / Predecessors",
+        "Inputs / Prerequisites",
+    ],
+)
+def test_compound_inputs_heading_aliases_satisfy_inputs(heading: str) -> None:
+    """Compound headings commonly used in child issues satisfy the inputs field."""
+    body = COMPLETE_BODY.replace("## Inputs", f"## {heading}")
+
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["contract"]["fields"]["inputs"]["present"] is True
+    assert "inputs" not in report["contract"]["missing_fields"]
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Scope and Non-goals",
+        "Scope / Non-goals",
+    ],
+)
+def test_compound_scope_heading_aliases_satisfy_scope(heading: str) -> None:
+    """Compound headings commonly used in child issues satisfy the scope field."""
+    body = COMPLETE_BODY.replace("## Scope", f"## {heading}")
+
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["contract"]["fields"]["scope"]["present"] is True
+    assert "scope" not in report["contract"]["missing_fields"]
+
+
+@pytest.mark.parametrize(
     "template_path",
     sorted(Path(".github/ISSUE_TEMPLATE").glob("*.md")),
     ids=lambda p: p.name,

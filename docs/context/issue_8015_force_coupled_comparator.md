@@ -6,10 +6,42 @@
 **CLI Entry Point:** `scripts/benchmark/check_force_coupled_comparator.py`.
 **Receipt Schema:** `robot_sf/benchmark/schemas/force_coupled_comparator_receipt.v1.json`.
 **Contract Tests:** `tests/benchmark/test_force_coupled_comparator.py`.
+**Source Reference:** Jing, Z., et al. (2026). *Local path planning for autonomous vehicles: a dynamic potential field-guided and force-coupled adaptive pure pursuit approach*. *Scientific Reports* (21 August 2026). DOI: [10.1038/s41598-026-63761-z](https://doi.org/10.1038/s41598-026-63761-z).
 
 Plain-language summary: a deterministic diagnostic comparison harness that evaluates the opt-in `force_coupled_potential_field` local planner against reference baselines (`pure_pursuit_goal`, attractive-dominant ablation, and repulsive-dominant ablation) on canonical analytic scenarios (`analytic_static_obstacle`, `analytic_pedestrian_interaction`, `analytic_symmetric_obstacle`, `analytic_unobstructed`).
 
-## Compared Planner Configurations
+## 1. Source Method and Scope Limits
+
+The comparator evaluates a local planner derived from the improved adaptive pure pursuit (i-APP) architecture described by Jing et al. (*Scientific Reports*, 21 August 2026, DOI: [10.1038/s41598-026-63761-z](https://doi.org/10.1038/s41598-026-63761-z)). In the source publication, the method couples:
+- velocity-adaptive look-ahead path search;
+- dynamic potential-field refinement for obstacle repulsion;
+- force-coupled target selection balancing goal progress and obstacle avoidance;
+- forward-kinematic integration and continuous steering-rate constraints for Ackermann-steered autonomous road vehicles.
+
+**Scope boundaries in the source:**
+- **Autonomous road vehicle scope:** The source publication addresses local planning for autonomous road vehicles in obstacle-constrained driving scenarios. Its reported evaluation is bounded to static-obstacle ROS/Gazebo experiments and one low-speed real-vehicle static-obstacle test.
+- **Vehicle results are not social-navigation evidence:** The source does not establish evidence for moving vehicles, pedestrians, cyclists, or high-speed driving. Its results do not model pedestrian crowd dynamics, proxemics, pedestrian compliance, or reciprocal collision avoidance, and must not be treated as social-navigation evidence.
+
+## 2. Implementation Deviations and Transfer Risks
+
+The repository implementation (`robot_sf/planner/force_coupled_potential_field.py`, issue [#7889](https://github.com/ll7/robot_sf_ll7/issues/7889)) adapts core force-coupling and potential-field concepts to the Robot SF unicycle simulation environment, introducing explicit engineering deviations:
+
+1. **Forward-Kinematic Integration:**
+   - *Source:* Formulates forward kinematics for Ackermann-steered vehicles with wheelbase, front-wheel steering angle, and continuous curvature bounds.
+   - *Deviation:* Adapted to planar differential-drive / unicycle robot kinematics emitting bounded `(linear, angular)` speed commands `(v, \omega)` over discrete control intervals (`control_dt`).
+2. **Steering-Rate Handling:**
+   - *Source:* Enforces continuous steering-rack angular rates and dynamic lateral tire acceleration limits.
+   - *Deviation:* Enforced through hard-predicate rate clipping on linear acceleration (`max_linear_rate`) and angular acceleration (`max_angular_rate`) per discrete control step. Overlap conditions issue explicit rate-limited stop requests (`status: degraded`) rather than dynamic vehicle evasion maneuvers.
+3. **Pedestrian-Interaction Separation:**
+   - *Source:* The publication's reported evaluation is bounded to static obstacles and does not establish moving-object or pedestrian-interaction dynamics.
+   - *Deviation:* In this harness, pedestrians are observed as separate geometric entities emitting isotropic repulsive forces without vehicle-traffic heuristics. Execution records retain distinct scenario IDs for pedestrian and static-obstacle cases, while the aggregate summary below combines all four scenarios per planner.
+
+**Expected Transfer Risks and Domain Limitations:**
+- **No Direct Parameter Transfer:** Potential-field gains, influence cutoffs (`influence_radius_m`), and look-ahead scaling from this road-vehicle method cannot be assumed to transfer directly to low-speed pedestrian-shared social navigation spaces.
+- **Static vs. Dynamic Separation:** Zero-collision performance in static obstacle scenarios provides zero evidence of safe or socially compliant behavior around moving pedestrians. Evaluating them separately prevents false confidence in social navigation capability.
+- **Diagnostic Comparator Boundary:** The harness evaluates local implementation integrity, numeric stability, and relative performance against canonical baselines on four fixed synthetic scenarios. It establishes no benchmark ranking, no leaderboard placement, and no release-roster promotion.
+
+## 3. Compared Planner Configurations
 
 | Planner ID | Description | Role |
 |---|---|---|
@@ -18,7 +50,7 @@ Plain-language summary: a deterministic diagnostic comparison harness that evalu
 | `ablation_attractive_dominant` | Force-coupled planner with near-zero repulsive weight (`repulsive_weight=0.001`) | Ablation baseline |
 | `ablation_repulsive_dominant` | Force-coupled planner with near-zero attractive weight (`attractive_weight=0.001`) | Ablation baseline |
 
-## Canonical Analytic Scenarios
+## 4. Canonical Analytic Scenarios
 
 | Scenario ID | Seed | Start $(x,y,\theta)$ | Goal $(x,y)$ | Obstacles | Pedestrians |
 |---|---:|---|---|---|---|
@@ -27,7 +59,7 @@ Plain-language summary: a deterministic diagnostic comparison harness that evalu
 | `analytic_symmetric_obstacle` | 42 | `(0.0, 0.0, 0.0)` | `(4.0, 0.0)` | `[(2.0, 0.0)]` | `[]` |
 | `analytic_unobstructed` | 1 | `(0.0, 0.0, 0.0)` | `(4.0, 0.0)` | `[]` | `[]` |
 
-## Aggregate Summary Results
+## 5. Aggregate Summary Results
 
 | Planner ID | Runs | Success Rate | Collision Rate | Near-Miss Rate | Mean Path (m) | Mean Jerk Metric | Mean Latency (ms) |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -36,7 +68,7 @@ Plain-language summary: a deterministic diagnostic comparison harness that evalu
 | `ablation_attractive_dominant` | 4 | 0.5000 | 0.5000 | 0.0000 | 3.7651 | 0.8402 | 0.1400 |
 | `ablation_repulsive_dominant` | 4 | 0.5000 | 0.0000 | 0.0000 | 8.9043 | 0.5993 | 0.1376 |
 
-## Evidence Boundary
+## 6. Evidence Boundary
 
 - Target: implementation integrity and local comparative diagnostic proof on canonical analytic scenarios only.
 - Exclusions: no SLURM execution, no large-scale campaign, no simulator dataset promotion, no benchmark leaderboard ranking, no paper-facing claim.

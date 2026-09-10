@@ -8,6 +8,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -28,7 +29,7 @@ def _shell_quote(path: Path) -> str:
 
 def _timer_test_environment(fake_bin: Path) -> dict[str, str]:
     """Provide only the runtime tools needed by the shell helper and its timer."""
-    for command_name in ("bash", "date", "dirname", "grep", "mktemp", "rm", "sleep"):
+    for command_name in ("bash", "cat", "date", "dirname", "grep", "mktemp", "rm", "sleep"):
         command_path = shutil.which(command_name)
         assert command_path, f"{command_name} is required for this test"
         os.symlink(command_path, fake_bin / command_name)
@@ -221,8 +222,317 @@ fi
     assert "install -y --no-install-recommends poppler-utils" in log_text
 
 
-def test_ci_install_headless_packages_reports_update_timeout_with_context(tmp_path: Path) -> None:
-    """A slow apt update fails before the outer CI step timeout with actionable context."""
+def test_ci_install_headless_packages_reports_fallback_timeout_after_update_timeout(
+    tmp_path: Path,
+) -> None:
+    """A failed timeout fallback reports its own budget and output context."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    install_marker = tmp_path / "install-called"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    echo 'Err:1 https://archive.ubuntu.com/ubuntu noble InRelease'
+    echo '  500 Internal Server Error'
+    sleep 5
+    exit 0
+  fi
+  exit 124
+fi
+touch {_shell_quote(install_marker)}
+exit 0
+""",
+    )
+
+    env = _timer_test_environment(fake_bin)
+    env["CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS"] = "2"
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"
+    started = time.monotonic()
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        timeout=10,
+    )
+    elapsed = time.monotonic() - started
+
+    assert result.returncode == 124
+    assert 0.8 <= elapsed < 4
+    assert "warning=apt_update_official_mirror_fallback_failed" in result.stderr
+    diagnostic = next(
+        line
+        for line in result.stderr.splitlines()
+        if "error=apt_update_official_mirror_fallback_failed" in line
+    )
+    assert "rc=124" in diagnostic
+    assert "timeout_seconds=1" in diagnostic
+    assert "elapsed_seconds=" in diagnostic
+    assert "sources=archive.ubuntu.com" in diagnostic
+    assert not install_marker.exists()
+
+
+def test_ci_install_headless_packages_reports_fallback_preparation_failure(
+    tmp_path: Path,
+) -> None:
+    """An unsupported runner reports fallback preparation failure, not apt failure."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    os_release = tmp_path / "os-release"
+    os_release.write_text("ID=debian\nVERSION_CODENAME=bookworm\n", encoding="utf-8")
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        "#!/usr/bin/env bash\nif [[ \"$*\" == *' update' ]]; then exit 124; fi\nexit 0\n",
+    )
+
+    env = _timer_test_environment(fake_bin)
+    env["CI_HEADLESS_APT_OS_RELEASE_FILE"] = str(os_release)
+    env["CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS"] = "2"
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        timeout=10,
+    )
+
+    assert result.returncode == 1
+    assert "warning=apt_update_official_mirror_fallback_unavailable" in result.stderr
+    diagnostic = next(
+        line
+        for line in result.stderr.splitlines()
+        if "error=apt_update_official_mirror_fallback_unavailable" in line
+    )
+    assert "rc=1" in diagnostic
+    assert "failed_source=none" in diagnostic
+    assert "unsupported_os_or_missing_ubuntu_codename" in result.stderr
+
+
+def test_ci_install_headless_packages_rejects_timeout_budget_over_outer_step() -> None:
+    """Custom phase and fallback budgets cannot exceed the enclosing CI timer."""
+    env = os.environ.copy()
+    env.pop("CI_STEP_TIMEOUT_SECONDS", None)
+    env["CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS"] = "600"
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "600"
+
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 2
+    assert "error=invalid_timeout_budget" in result.stderr
+    assert "phase_timeout_seconds=600" in result.stderr
+    assert "fallback_timeout_seconds=600" in result.stderr
+    assert "outer_timeout_seconds=1200" in result.stderr
+
+
+def test_ci_install_headless_packages_isolates_chrome_hash_mismatch(
+    tmp_path: Path,
+) -> None:
+    """A Chrome index mismatch gets one bounded official-mirror recovery attempt."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    log_path = tmp_path / "commands.log"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(
+        fake_bin / "sudo",
+        f'#!/usr/bin/env bash\nprintf \'sudo %s\\n\' "$*" >> {_shell_quote(log_path)}\n"$@"\n',
+    )
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+printf 'apt-get %s\\n' "$*" >> {_shell_quote(log_path)}
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    exit 0
+  fi
+  echo 'Err:1 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages'
+  echo '  Hash Sum mismatch'
+  exit 100
+fi
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_timer_test_environment(fake_bin),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "warning=apt_update_chrome_hash_mismatch source=dl.google.com retry_count=1" in (
+        result.stderr
+    )
+    assert (
+        "warning=apt_update_chrome_hash_mismatch_recovered source=dl.google.com"
+        " mirror=archive.ubuntu.com retry_count=1"
+    ) in result.stdout
+    log_text = log_path.read_text(encoding="utf-8")
+    assert "Dir::Etc::sourcelist=" in log_text
+    assert "Dir::Etc::sourceparts=-" in log_text
+    assert "install -y --no-install-recommends poppler-utils" in log_text
+
+
+def test_ci_install_headless_packages_reports_chrome_recovery_exhaustion(
+    tmp_path: Path,
+) -> None:
+    """A failed official-mirror recovery remains a terminal, identified failure."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    install_marker = tmp_path / "install-called"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    echo 'Err:1 https://archive.ubuntu.com/ubuntu noble InRelease'
+    echo '  500 Internal Server Error'
+    exit 100
+  fi
+  echo 'Err:1 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages'
+  echo '  Hash Sum mismatch'
+  exit 100
+fi
+touch {_shell_quote(install_marker)}
+exit 0
+""",
+    )
+
+    env = _timer_test_environment(fake_bin)
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 100
+    diagnostic = next(
+        line
+        for line in result.stderr.splitlines()
+        if "error=apt_update_chrome_hash_mismatch_recovery_failed" in line
+    )
+    assert "warning=apt_update_chrome_hash_mismatch_recovery_failed" in result.stderr
+    assert "timeout_seconds=1" in diagnostic
+    assert "retry_count=1" in diagnostic
+    assert "failed_source=dl.google.com" in diagnostic
+    assert not install_marker.exists()
+
+
+def test_ci_install_headless_packages_does_not_hide_unrelated_hash_failure(
+    tmp_path: Path,
+) -> None:
+    """A Chrome mismatch combined with another source failure still fails closed."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fallback_marker = tmp_path / "fallback-called"
+    install_marker = tmp_path / "install-called"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    touch {_shell_quote(fallback_marker)}
+  fi
+  echo 'Err:1 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages'
+  echo '  Hash Sum mismatch'
+  echo 'E: Failed to fetch https://archive.ubuntu.com/ubuntu/dists/noble/InRelease Hash Sum mismatch'
+  exit 100
+fi
+touch {_shell_quote(install_marker)}
+exit 0
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_timer_test_environment(fake_bin),
+    )
+
+    assert result.returncode == 100
+    assert "error=apt_update_failed" in result.stderr
+    assert "warning=apt_update_chrome_hash_mismatch" not in result.stderr
+    assert not fallback_marker.exists()
+    assert not install_marker.exists()
+
+
+def test_ci_install_headless_packages_does_not_retry_mixed_chrome_failures(
+    tmp_path: Path,
+) -> None:
+    """A Chrome mismatch plus another Chrome failure remains fail-closed."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fallback_marker = tmp_path / "fallback-called"
+    install_marker = tmp_path / "install-called"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 1\n")
+    _write_executable(fake_bin / "sudo", '#!/usr/bin/env bash\n"$@"\n')
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    touch {_shell_quote(fallback_marker)}
+  fi
+  echo 'Err:1 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages'
+  echo '  Hash Sum mismatch'
+  echo 'Err:2 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 InRelease'
+  echo '  404 Not Found'
+  exit 100
+fi
+touch {_shell_quote(install_marker)}
+exit 0
+""",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_timer_test_environment(fake_bin),
+    )
+
+    assert result.returncode == 100
+    assert "error=apt_update_failed" in result.stderr
+    assert "warning=apt_update_chrome_hash_mismatch" not in result.stderr
+    assert not fallback_marker.exists()
+    assert not install_marker.exists()
+
+
+def test_ci_install_headless_packages_reports_fallback_failure_after_update_timeout(
+    tmp_path: Path,
+) -> None:
+    """A failed official fallback reports its own status and actionable context."""
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
 
@@ -239,6 +549,8 @@ def test_ci_install_headless_packages_reports_update_timeout_with_context(tmp_pa
         "#!/usr/bin/env bash\n"
         "if [[ \"$*\" == *' update' ]]; then\n"
         "  if [[ \"$*\" == *'Dir::Etc::sourcelist='* ]]; then\n"
+        "    echo 'Err:1 https://archive.ubuntu.com/ubuntu noble InRelease'\n"
+        "    echo '  500 Internal Server Error'\n"
         "    exit 100\n"
         "  fi\n"
         "  echo 'Get:1 https://archive.ubuntu.com/ubuntu noble InRelease'\n"
@@ -257,9 +569,9 @@ def test_ci_install_headless_packages_reports_update_timeout_with_context(tmp_pa
         timeout=10,
     )
 
-    assert result.returncode == 124
+    assert result.returncode == 100
     diagnostic = result.stderr
-    assert "error=apt_update_timeout" in diagnostic
+    assert "error=apt_update_official_mirror_fallback_failed" in diagnostic
     assert "phase=update" in diagnostic
     assert "packages=poppler-utils" in diagnostic
     assert "sources=archive.ubuntu.com" in diagnostic

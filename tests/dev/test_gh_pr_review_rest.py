@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
-from typing import TYPE_CHECKING
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from scripts.dev.gh_pr_review_rest import main, post_review
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 HEAD_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
 BASE_SHA = "f0e1d2c3b4a5968778695a4b3c2d1e0f00112233"
@@ -440,3 +439,19 @@ def test_cli_maps_self_authored_skip_to_exit_two(tmp_path: Path, capsys) -> None
     captured = capsys.readouterr()
     assert rc == 2
     assert json.loads(captured.err) == guidance
+
+
+def test_direct_invocation_without_ambient_pythonpath(tmp_path: Path) -> None:
+    """Direct CLI invocation must succeed from an arbitrary working directory without PYTHONPATH."""
+    entrypoint = Path(__file__).resolve().parents[2] / "scripts/dev/gh_pr_review_rest.py"
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
+    proc = subprocess.run(
+        [sys.executable, "-B", "-I", str(entrypoint), "--help"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert "usage:" in proc.stdout.lower()

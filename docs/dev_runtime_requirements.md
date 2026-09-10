@@ -117,15 +117,28 @@ sudo apt-get install -y --no-install-recommends libglib2.0-0 libgl1 fonts-dejavu
 mandatory rendered-page quality assurance.
 
 The shared CI helper `scripts/dev/ci_install_headless_packages.sh` skips packages already present
-on the runner and bounds both the apt-update and apt-install phases to 300 seconds by default
-(600 seconds maximum per phase). The two-phase default budget is therefore 600 seconds, inside
-the outer 1,200-second CI step budget. Set `CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS` only when
-diagnosing a runner-specific problem; values must be integer seconds from 1 through 600.
+on the runner and bounds the primary apt-update and apt-install phases to 300 seconds by default
+(600 seconds maximum per phase). Its bounded official-mirror fallback uses
+`CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS`, which defaults to 60 seconds and is clamped to
+the primary phase timeout. The normal two-phase default budget is 600 seconds; an initial update
+timeout followed by a fallback and install can consume at most 660 seconds (`300 + 60 + 300`),
+inside the outer 1,200-second CI step budget. The helper rejects custom values when the worst-case
+recovery budget (`2 * phase timeout + fallback timeout`) would exceed the enclosing
+`CI_STEP_TIMEOUT_SECONDS` budget (1,200 seconds in this action). Set either timeout variable only
+when diagnosing a runner-specific problem; values must be integer seconds from 1 through 600 and
+must fit that combined budget. Unsupported fallback-source preparation is reported explicitly as
+unavailable with its preparation status and output; it is not relabeled as an apt command failure.
 
 When a phase times out or fails, the helper exits nonzero and reports the phase, required package
 set, observed apt source hosts, timeout budget, and elapsed seconds. A third-party apt 403 remains
 a warning-only exception; official-source failures, package-resolution failures, and timeouts
 remain fail-closed.
+
+For a bounded hosted-runner recovery, a `Hash Sum mismatch` attributed only to the Google Chrome
+APT source (`dl.google.com`) triggers one official Ubuntu mirror-isolation attempt. The helper logs
+the failed source and `retry_count`, and uses the isolated official source list for installation
+only after that update succeeds. A mismatch combined with any unrelated source failure, or a
+failed recovery attempt, remains a terminal setup failure.
 
 The promoted-planner and nightly performance workflows use the same headless stack, without `jq`
 where it is not needed.

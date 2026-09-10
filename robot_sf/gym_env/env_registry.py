@@ -12,7 +12,7 @@ not a factory dispatch table: the canonical construction path stays the typed
 ``make_*/create_*`` functions in :mod:`robot_sf.gym_env.environment_factory`. Each
 entry records the stable ``env_id``, the factory symbol, the environment class it
 builds, a one-line purpose, default config kind, agent count, and a stability
-level. Stability levels follow the policy documented in ``docs/api/stable_public_api.md``:
+level. Stability levels follow the policy documented in ``docs/public_api.md``:
 
 * ``stable``     — supported public API; breaking changes follow semver + deprecation.
 * ``beta``       — usable but may change within a minor release without deprecation.

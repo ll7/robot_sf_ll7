@@ -505,6 +505,13 @@ freshness guard. A self-authored request returns `review_skipped_self_authored` 
 explicit `COMMENT` guidance; it never auto-downgrades the event. If the caller chooses that
 fallback, rerun with `--event COMMENT` and preserve the blocking marker (for example, the
 `gate-verdict` evidence); a comment is not an approval or a merge-gate acceptance by itself.
+When the caller has already reconciled the final title/body, also pass
+`--expected-metadata-digest <digest>`; the helper re-reads the live title/body
+under the write lock and returns a stale-state skip without POSTing when the
+digest differs. An uncertain metadata read, or a present review-body
+`pr-metadata` trailer that disagrees with the expected digest, fails closed
+with an error (exit code 1); the live metadata mismatch is the stale-state
+skip (exit code 2).
 
 Canonical note:
 

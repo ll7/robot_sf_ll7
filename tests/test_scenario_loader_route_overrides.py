@@ -1,5 +1,8 @@
 """Tests for scenario route override artifacts in scenario_loader."""
 
+# evidence-writer-exempt: These tests write synthetic YAML route/manifest fixtures only under
+# pytest tmp_path; they are parser inputs, not retained evidence artifacts.
+
 from __future__ import annotations
 
 from pathlib import Path

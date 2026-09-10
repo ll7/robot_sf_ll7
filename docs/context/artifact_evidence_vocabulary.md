@@ -25,6 +25,8 @@ coverage, temporary exports, videos, and caches, but it is not a durable depende
 
 For operational retention classes, preservation proof, and cleanup-eligibility workflows, see the
 [Artifact Retention, Preservation, and Cleanup Guide](artifact_retention_and_cleanup.md).
+For the check-only guard that decides when one artifact or output identity may be deleted, see the
+[Cleanup Eligibility Guard](cleanup_eligibility.md).
 
 ## Vocabulary
 

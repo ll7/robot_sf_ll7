@@ -444,6 +444,9 @@ _FAST_FILES = {
     # The bounded answerability packet uses deterministic schema, digest, and
     # provenance fixtures; keep its changed-module coverage in fast shards.
     "test_research_answerability.py",
+    # The bounded falsification preflight uses deterministic manifest, overlay,
+    # and provenance fixtures; keep its changed-module coverage in fast shards.
+    "test_bounded_falsification.py",
     # Matched-compute runtime and canary tests use injected seams and deterministic
     # receipt fixtures; keep their accounting coverage in pull-request fast shards.
     "test_matched_compute_runtime.py",

@@ -105,9 +105,22 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _validate_cli_args(args: argparse.Namespace) -> str | None:
+    """Return a deterministic error for values that would break the smoke path."""
+    if args.max_frames <= 0:
+        return "--max-frames must be a positive integer"
+    if args.fixture_steps <= 0:
+        return "--fixture-steps must be a positive integer"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point routing interactive, fixture, and headless modes."""
     args = build_parser().parse_args(argv)
+    validation_error = _validate_cli_args(args)
+    if validation_error is not None:
+        logger.error(f"Invalid arguments: {validation_error}")
+        return 2
 
     recording = args.recording
     output_dir = None

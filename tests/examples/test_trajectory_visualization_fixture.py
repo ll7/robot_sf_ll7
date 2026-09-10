@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -152,6 +153,52 @@ def test_example_main_headless_smoke(tmp_path: Path) -> None:
         == 0
     )
     assert (out_dir / "summary.json").is_file()
+
+
+@pytest.mark.parametrize("max_frames", [0, -1])
+def test_example_main_rejects_non_positive_max_frames(tmp_path: Path, max_frames: int) -> None:
+    """Non-positive frame caps fail with exit 2 before fixture generation."""
+    example = _load_example_module()
+    out_dir = tmp_path / "invalid-max-frames"
+
+    assert (
+        example.main(
+            [
+                "--fixture",
+                "--headless",
+                "--out-dir",
+                str(out_dir),
+                "--max-frames",
+                str(max_frames),
+            ]
+        )
+        == 2
+    )
+    assert not out_dir.exists()
+
+
+@pytest.mark.parametrize("fixture_steps", [0, -1])
+def test_example_main_rejects_non_positive_fixture_steps(
+    tmp_path: Path, fixture_steps: int
+) -> None:
+    """Non-positive fixture lengths fail before an empty fixture can be written."""
+    example = _load_example_module()
+    out_dir = tmp_path / "invalid-fixture-steps"
+
+    assert (
+        example.main(
+            [
+                "--fixture",
+                "--headless",
+                "--out-dir",
+                str(out_dir),
+                "--fixture-steps",
+                str(fixture_steps),
+            ]
+        )
+        == 2
+    )
+    assert not out_dir.exists()
 
 
 def test_example_main_rejects_output_escape_before_fixture_write() -> None:

@@ -3,6 +3,10 @@
 The live #7381 ruling permits preparation but not an exploratory campaign.  This
 module therefore records the four comparison modes, authority prerequisites, and
 cost equations without launching a simulator or treating a blocked plan as data.
+
+Any decision-capable simulation or replay execution must route through the
+``research_answerability.v1`` gate owned by #7031. Preparation plans stay
+``execution_allowed=False`` and ``BLOCKED_ADMISSION``.
 """
 
 from __future__ import annotations
@@ -20,6 +24,22 @@ CONTINUATION_MODES = (
     "pose_velocity_only",
     "late_crop",
 )
+# Preparation-only pilot vocabulary. No campaign may invent additional terminal
+# states without a new author/domain decision.
+TERMINAL_RESULT_RULES = (
+    "admitted_for_next_stage",
+    "rejected",
+    "not_evaluable",
+)
+# Decision-capable execution gate (issue #7031). Preparation code records the
+# gate name; it never authorizes execution by itself.
+ANSWERABILITY_GATE = "research_answerability.v1"
+ANSWERABILITY_ISSUE = "#7031"
+# Held-out excerpt-pilot parent selection (Stage E1): 30 independent,
+# provenance-complete native parents, held out by parent/scenario/seed lineage
+# (and scenario-geometry family where available), excluding fixture parents.
+PILOT_PARENT_COUNT_E1 = 30
+PILOT_HOLDOUT_KEY_E1 = "parent/scenario/seed lineage plus geometry family"
 
 
 def _nonnegative_finite(value: Any, name: str) -> float:
@@ -85,6 +105,11 @@ class ContinuationExperimentPlan:
             "all_actors_retained": self.all_actors_retained,
             "execution_allowed": self.execution_allowed,
             "status": self.status,
+            "answerability_gate": ANSWERABILITY_GATE,
+            "answerability_issue": ANSWERABILITY_ISSUE,
+            "terminal_result_rules": list(TERMINAL_RESULT_RULES),
+            "pilot_parent_count_e1": PILOT_PARENT_COUNT_E1,
+            "pilot_holdout_key_e1": PILOT_HOLDOUT_KEY_E1,
         }
 
 
@@ -202,10 +227,15 @@ def estimate_continuation_cost(
 
 
 __all__ = [
+    "ANSWERABILITY_GATE",
+    "ANSWERABILITY_ISSUE",
     "BLOCKED_ADMISSION",
     "CONTINUATION_MODES",
+    "PILOT_HOLDOUT_KEY_E1",
+    "PILOT_PARENT_COUNT_E1",
     "PLAN_SCHEMA",
     "READY_NOT_LAUNCHED",
+    "TERMINAL_RESULT_RULES",
     "AdmissionReceipt",
     "ContinuationExperimentPlan",
     "estimate_continuation_cost",

@@ -14,6 +14,16 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from robot_sf.benchmark.relevance_windows import (
+    FIXTURE_HYSTERESIS_STEPS,
+    FIXTURE_INTERVAL_RULES,
+    FIXTURE_MERGE_GAP_STEPS,
+    FIXTURE_POST_ROLL_STEPS,
+    FIXTURE_PRE_ROLL_STEPS,
+    PILOT_INTERVAL_STRUCTURE,
+    PILOT_MERGE_GAP_STEPS,
+    PILOT_MINIMUM_INTERVAL_STEPS,
+    PILOT_POST_ROLL_STEPS,
+    PILOT_PRE_ROLL_STEPS,
     ExcerptContractError,
     RelevanceContractError,
     RelevanceThresholds,
@@ -400,3 +410,27 @@ def test_manifest_writer_preserves_parent_rows_and_digest(tmp_path: Path) -> Non
     assert payload["manifest"]["parent_rows_sha256"] == compute_parent_rows_sha256(rows)
     assert len(payload["parent_rows"]) == 4
     assert payload["manifest"]["selector_config"]["thresholds"]["approval_status"] == "proposed"
+
+
+def test_fixture_defaults_are_not_pilot_rules() -> None:
+    """Short 2/2/1/1 fixture defaults stay distinct from the 10/10/5 pilot structure."""
+    assert (FIXTURE_PRE_ROLL_STEPS, FIXTURE_POST_ROLL_STEPS) == (2, 2)
+    assert (FIXTURE_MERGE_GAP_STEPS, FIXTURE_HYSTERESIS_STEPS) == (1, 1)
+    assert FIXTURE_INTERVAL_RULES == {
+        "pre_roll_steps": 2,
+        "post_roll_steps": 2,
+        "merge_gap_steps": 1,
+        "hysteresis_steps": 1,
+    }
+    assert (PILOT_PRE_ROLL_STEPS, PILOT_POST_ROLL_STEPS) == (10, 10)
+    assert PILOT_MERGE_GAP_STEPS == 5
+    assert PILOT_MINIMUM_INTERVAL_STEPS == 1
+    assert PILOT_INTERVAL_STRUCTURE == {
+        "pre_roll_steps": 10,
+        "post_roll_steps": 10,
+        "merge_gap_steps": 5,
+        "minimum_interval_steps": 1,
+    }
+    defaults = RelevanceThresholds()
+    assert defaults.approval_status == "proposed"
+    assert defaults.approved_thresholds is None

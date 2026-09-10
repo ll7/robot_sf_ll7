@@ -25,6 +25,34 @@ RELEVANCE_SCHEMA = "scenario_relevance_windows.v1"
 MANIFEST_STATUS = "proposal_only"
 EVIDENCE_GRADE = "synthetic_preparation"
 
+# Short synthetic-fixture interval parameters used by the checked-in dossier
+# timelines and unit tests. These are NOT approved canonical rules.
+FIXTURE_PRE_ROLL_STEPS = 2
+FIXTURE_POST_ROLL_STEPS = 2
+FIXTURE_MERGE_GAP_STEPS = 1
+FIXTURE_HYSTERESIS_STEPS = 1
+FIXTURE_INTERVAL_RULES = {
+    "pre_roll_steps": FIXTURE_PRE_ROLL_STEPS,
+    "post_roll_steps": FIXTURE_POST_ROLL_STEPS,
+    "merge_gap_steps": FIXTURE_MERGE_GAP_STEPS,
+    "hysteresis_steps": FIXTURE_HYSTERESIS_STEPS,
+}
+
+# Initial native-pilot interval structure from the delegated #7383 ruling
+# (2026-09-08): ten-step pre/post-roll, five-step merge gap, minimum interval
+# one step. Structure only; per-signal trigger/release thresholds remain
+# unfrozen, so approved_rules stays null in preparation.
+PILOT_PRE_ROLL_STEPS = 10
+PILOT_POST_ROLL_STEPS = 10
+PILOT_MERGE_GAP_STEPS = 5
+PILOT_MINIMUM_INTERVAL_STEPS = 1
+PILOT_INTERVAL_STRUCTURE = {
+    "pre_roll_steps": PILOT_PRE_ROLL_STEPS,
+    "post_roll_steps": PILOT_POST_ROLL_STEPS,
+    "merge_gap_steps": PILOT_MERGE_GAP_STEPS,
+    "minimum_interval_steps": PILOT_MINIMUM_INTERVAL_STEPS,
+}
+
 _VALID_EXECUTION_MODES = frozenset(
     {
         "native",
@@ -242,7 +270,17 @@ class RelevanceSignal:
 
 @dataclass(frozen=True, slots=True)
 class RelevanceThresholds:
-    """Proposed numeric threshold and interval rules for offline preparation."""
+    """Synthetic-fixture threshold and interval rules for offline preparation.
+
+    The numeric defaults (including 2/2/1/1 pre/post-roll, merge gap, and
+    hysteresis) are short-fixture parameters for deterministic unit tests and
+    dossier timelines. They are not proposed canonical or approved pilot rules.
+    The initial native-pilot structure from #7383 is 10/10/5 plus a one-step
+    minimum interval (see PILOT_INTERVAL_STRUCTURE); per-signal trigger and
+    release thresholds must be frozen separately before any held-out pilot.
+    A fixed hysteresis hold is a fixture mechanism, not a substitute for
+    per-signal release thresholds.
+    """
 
     clearance_m: float = 1.0
     closing_velocity_m_s: float = 0.2
@@ -1172,7 +1210,17 @@ def write_selection_manifest(selection: RelevanceSelection, path: str | Path) ->
 
 __all__ = [
     "EVIDENCE_GRADE",
+    "FIXTURE_HYSTERESIS_STEPS",
+    "FIXTURE_INTERVAL_RULES",
+    "FIXTURE_MERGE_GAP_STEPS",
+    "FIXTURE_POST_ROLL_STEPS",
+    "FIXTURE_PRE_ROLL_STEPS",
     "MANIFEST_STATUS",
+    "PILOT_INTERVAL_STRUCTURE",
+    "PILOT_MERGE_GAP_STEPS",
+    "PILOT_MINIMUM_INTERVAL_STEPS",
+    "PILOT_POST_ROLL_STEPS",
+    "PILOT_PRE_ROLL_STEPS",
     "RELEVANCE_SCHEMA",
     "ExcerptContractError",
     "ExcerptManifest",

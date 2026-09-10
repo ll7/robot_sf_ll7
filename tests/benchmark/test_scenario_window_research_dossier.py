@@ -85,3 +85,54 @@ def test_dossier_is_linked_from_context_readme() -> None:
     assert "scenario_window_research_dossier_2026-09-08.md" in _CONTEXT_README.read_text(
         encoding="utf-8"
     )
+
+
+def test_dossier_freezes_fixture_vs_pilot_without_approving_rules() -> None:
+    """2/2/1/1 stays a fixture alias; the pilot structure is 10/10/5/1."""
+    payload = json.loads(_DOSSIER.read_text(encoding="utf-8"))
+    relevance = payload["relevance_vector"]
+    assert relevance["approved_rules"] is None
+    reconciliation = relevance["configuration_reconciliation"]
+    assert reconciliation["approved_rules"] is None
+    assert reconciliation["fixture_rules"] == {
+        "pre_roll_steps": 2,
+        "post_roll_steps": 2,
+        "merge_gap_steps": 1,
+        "hysteresis_steps": 1,
+    }
+    assert reconciliation["pilot_structure"] == {
+        "pre_roll_steps": 10,
+        "post_roll_steps": 10,
+        "merge_gap_steps": 5,
+        "minimum_interval_steps": 1,
+    }
+    pilot = relevance["pilot_configuration"]
+    assert pilot["approved_rules"] is None
+    assert pilot["structure"] == reconciliation["pilot_structure"]
+    assert re.fullmatch(r"[0-9a-f]{64}", pilot["config_digest_sha256"])
+    assert relevance["trigger_release_policy"]["status"] == "unfrozen_release_thresholds"
+    for entry in relevance["signal_threshold_source_table"]:
+        for field in (
+            "producer",
+            "unit",
+            "direction_of_risk",
+            "trigger_threshold_candidate",
+            "release_threshold",
+            "availability_timing",
+            "hindsight_status",
+            "canonical_source_or_rationale",
+            "missingness_refusal_behaviour",
+            "eligibility",
+        ):
+            assert field in entry, entry.get("name")
+        assert entry["eligibility"] == "diagnostic_only_excluded"
+    names = {entry["name"] for entry in relevance["signal_threshold_source_table"]}
+    assert {"force", "jerk", "discomfort"} <= names
+    assert relevance["parent_selection_procedure"]["count"] == 30
+    assert relevance["terminal_result_rules"]["vocabulary"] == [
+        "admitted_for_next_stage",
+        "rejected",
+        "not_evaluable",
+    ]
+    assert relevance["answerability_gate"]["schema"] == "research_answerability.v1"
+    assert relevance["answerability_gate"]["issue"] == "#7031"

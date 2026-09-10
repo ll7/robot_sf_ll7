@@ -1,5 +1,9 @@
 # Scenario-window research dossier — 2026-09-08
 
+Plain-language summary: this packet prepares dormant tools for finding interesting
+moments in robot runs. It changes no benchmark results, planner rankings, or
+manuscript claims. See the [glossary](../glossary.md) for project terms.
+
 Status: preparation-only terminal packet. The complete machine-readable record is
 [scenario_window_research_dossier_2026-09-08.json](scenario_window_research_dossier_2026-09-08.json).
 This work follows the live #7381 programme and the preparation rulings in #7383
@@ -49,15 +53,62 @@ retained.
 | doorway interaction | precursor/visibility at step 2; clearance 0.8/0.7 m and closing speed 0.3 m/s at steps 4–5; one hysteresis hold | steps 2–8 (pre 2, post 2) | synthetic preparation |
 | multi-stage interaction | precursor at 1; clearance at 3; path conflict at 5; contact at 8 | steps 1–11 after merge | synthetic preparation |
 
-The selector records clearance, closing velocity, TTC, closest approach, braking
+The selector records clearance, closing velocity, TTC (time to collision),
+closest approach, braking
 margin, visibility latency, path conflict, fallback/saturation, progress, stall,
 discomfort, and collision. Every signal carries units, provenance, availability
 timing, prediction assumptions, missingness, and an explicit hindsight flag.
-Missing values are unknown, never safe zeroes. The current Option-A rules are
-proposed only: clearance 1 m, closing speed 0.2 m/s, TTC 3 s, closest approach
-1 m, braking margin 0 m, visibility latency 0.5 s, stall 2 s, discomfort 0.5,
-pre/post-roll 2 steps, merge gap 1 step, and one hysteresis step. No rule is marked
-approved.
+Missing values are unknown, never safe zeroes.
+
+Configuration reconciliation (fixture versus pilot): the checked-in 2/2/1/1
+pre/post-roll, merge-gap, and hysteresis values are short synthetic-fixture
+parameters only. They reproduce the dossier timelines and unit tests and must not
+be labelled proposed canonical or approved rules. The initial native-pilot
+structure from the delegated #7383 ruling is pre-roll 10 steps, post-roll 10
+steps, merge gap 5 steps, and minimum interval 1 step. `approved_rules` remains
+null. The JSON record keeps `proposed_rules` only as a deprecated fixture alias;
+use `configuration_reconciliation.fixture_rules` and
+`configuration_reconciliation.pilot_structure` instead.
+
+Signal eligibility: the JSON `signal_threshold_source_table` lists every signal
+with producer, unit, direction of risk, candidate trigger, release, availability
+timing, hindsight status, canonical source or rationale, missingness/refusal
+behaviour, and eligibility. All current numeric values (for example 1 m
+clearance, 3 s TTC, 0.2 m/s closing velocity) remain fixture candidates, not
+canonical thresholds. Every listed signal is currently
+`diagnostic_only_excluded`. Force and jerk have no identified canonical producer
+in the current inventory and remain non-triggering diagnostics; discomfort must
+not silently substitute for either quantity. A signal becomes an active pilot
+trigger only after all nine fields are recorded, including separate trigger and
+release thresholds.
+
+Trigger and release: the fixed one-step hysteresis hold is a fixture mechanism
+only. It is not a substitute for per-signal release thresholds. Pilot use
+requires separately frozen trigger and release values before held-out outcomes
+are inspected. Release thresholds are currently unfrozen (null).
+
+Pilot configuration digest: the JSON `pilot_configuration` freezes the interval
+structure plus the trigger-release-required policy
+(`b9839e7d81d1229c368f1d8292ed0917b0dfb4dfbaf9980b5a22307701f5b944`).
+Per-signal numeric thresholds remain unfrozen. The digest must be frozen before
+inspecting held-out outcomes.
+
+Parent selection (Stage E1): 30 independent, provenance-complete native parents
+not used for fixtures or threshold selection, held out by parent/scenario/seed
+lineage and, where available, scenario-geometry family. Fixture parents,
+incomplete provenance, fallback/degraded/unknown execution, missing precursors,
+and unsupported provenance are excluded. Any missed declared event or precursor
+blocks admission. Zero failures among 30 is feasibility only (about a 9.5%
+one-sided 95% upper bound).
+
+Terminal result rules: `admitted_for_next_stage` means post-hoc inspection only,
+never benchmark or executable-scenario admission; `rejected` means unsafe crop or
+failed fidelity with fallback to the full parent; `not_evaluable` means missing
+or unsupported evidence.
+
+Answerability gate: any decision-capable simulation or replay execution must
+route through the `research_answerability.v1` gate owned by #7031. Preparation
+plans remain `execution_allowed=false` and `BLOCKED_ADMISSION`.
 
 Retained vectors and manifests carry explicit execution-mode provenance; an absent
 row mode is represented as `unknown`. Fallback and degraded rows may remain visible

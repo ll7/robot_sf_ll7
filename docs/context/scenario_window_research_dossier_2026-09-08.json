@@ -148,7 +148,72 @@
       "merge_gap_steps": 1,
       "hysteresis_steps": 1
     },
+    "configuration_reconciliation": {
+      "note": "proposed_rules above is a deprecated alias for short synthetic-fixture parameters only; it must not be read as proposed canonical or approved pilot rules",
+      "approved_rules": null,
+      "fixture_rules": {
+        "pre_roll_steps": 2,
+        "post_roll_steps": 2,
+        "merge_gap_steps": 1,
+        "hysteresis_steps": 1
+      },
+      "pilot_structure": {
+        "pre_roll_steps": 10,
+        "post_roll_steps": 10,
+        "merge_gap_steps": 5,
+        "minimum_interval_steps": 1
+      },
+      "source": "delegated #7383 ruling 2026-09-08; fixture values reproduce dossier timelines and unit tests"
+    },
     "approved_rules": null,
+    "signal_threshold_source_table": [
+      {"name": "clearance_m", "producer": "trace.geometry", "unit": "m", "direction_of_risk": "lower_is_risk", "trigger_threshold_candidate": 1.0, "release_threshold": null, "availability_timing": "per-step retained row", "hindsight_status": "marked per signal; offline only for post-hoc selection", "canonical_source_or_rationale": "none frozen; candidate fixture value only", "missingness_refusal_behaviour": "unknown when missing; never safe zero; unsupported rows are not_evaluable or rejected", "eligibility": "diagnostic_only_excluded"},
+      {"name": "closing_velocity_m_s", "producer": "trace.kinematics", "unit": "m/s", "direction_of_risk": "upper_is_risk", "trigger_threshold_candidate": 0.2, "release_threshold": null, "availability_timing": "per-step retained row", "hindsight_status": "marked per signal; offline only for post-hoc selection", "canonical_source_or_rationale": "none frozen; candidate fixture value only", "missingness_refusal_behaviour": "unknown when missing; never safe zero", "eligibility": "diagnostic_only_excluded"},
+      {"name": "ttc_s", "producer": "trace.derived", "unit": "s", "direction_of_risk": "lower_is_risk", "trigger_threshold_candidate": 3.0, "release_threshold": null, "availability_timing": "per-step retained row; prediction model and response mode must be declared", "hindsight_status": "marked per signal; offline only for post-hoc selection", "canonical_source_or_rationale": "none frozen; candidate fixture value only", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "closest_approach_m", "producer": "trace.derived", "unit": "m", "direction_of_risk": "lower_is_risk", "trigger_threshold_candidate": 1.0, "release_threshold": null, "availability_timing": "per-step retained row", "hindsight_status": "marked per signal", "canonical_source_or_rationale": "none frozen; candidate fixture value only", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "braking_margin_m", "producer": "trace.derived", "unit": "m", "direction_of_risk": "lower_is_risk", "trigger_threshold_candidate": 0.0, "release_threshold": null, "availability_timing": "per-step retained row; declared braking proxy, not a safety certificate", "hindsight_status": "marked per signal", "canonical_source_or_rationale": "none frozen; candidate fixture value only", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "visibility_latency_s", "producer": "trace.observation", "unit": "s", "direction_of_risk": "upper_is_risk", "trigger_threshold_candidate": 0.5, "release_threshold": null, "availability_timing": "per-step retained row; first-observation latency; unavailable-at-step violations refuse", "hindsight_status": "marked per signal", "canonical_source_or_rationale": "none frozen; candidate fixture value only", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "path_conflict", "producer": "trace.geometry", "unit": "bool", "direction_of_risk": "true_is_risk", "trigger_threshold_candidate": true, "release_threshold": null, "availability_timing": "per-step retained row", "hindsight_status": "marked per signal", "canonical_source_or_rationale": "declared path-conflict region; boolean trigger only", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "fallback_or_saturation", "producer": "trace.controller", "unit": "bool", "direction_of_risk": "true_is_risk", "trigger_threshold_candidate": true, "release_threshold": null, "availability_timing": "per-step retained row", "hindsight_status": "marked per signal", "canonical_source_or_rationale": "fallback/constraint/saturation transition; boolean trigger only", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "progress_m", "producer": "trace.metrics", "unit": "m", "direction_of_risk": "diagnostic_only_never_triggers", "trigger_threshold_candidate": null, "release_threshold": null, "availability_timing": "per-step retained row", "hindsight_status": "marked per signal", "canonical_source_or_rationale": "route progress diagnostic; no trigger semantics", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "stall_s", "producer": "trace.metrics", "unit": "s", "direction_of_risk": "upper_is_risk", "trigger_threshold_candidate": 2.0, "release_threshold": null, "availability_timing": "per-step retained row", "hindsight_status": "marked per signal", "canonical_source_or_rationale": "none frozen; candidate fixture value only", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "discomfort", "producer": "trace.metrics", "unit": "unitless", "direction_of_risk": "upper_is_risk", "trigger_threshold_candidate": 0.5, "release_threshold": null, "availability_timing": "per-step retained row", "hindsight_status": "marked per signal", "canonical_source_or_rationale": "declared discomfort exposure only; must not substitute for force or jerk", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "collision", "producer": "trace.events", "unit": "bool", "direction_of_risk": "true_is_risk", "trigger_threshold_candidate": true, "release_threshold": null, "availability_timing": "per-step retained row", "hindsight_status": "marked per signal", "canonical_source_or_rationale": "event label from the retained parent trace; boolean trigger only", "missingness_refusal_behaviour": "unknown when missing", "eligibility": "diagnostic_only_excluded"},
+      {"name": "force", "producer": "unidentified_no_canonical_producer_in_inventory", "unit": "N_or_equivalent", "direction_of_risk": "upper_is_risk_pending_definition", "trigger_threshold_candidate": null, "release_threshold": null, "availability_timing": "not available in current selector", "hindsight_status": "not applicable", "canonical_source_or_rationale": "no existing canonical producer, unit, trigger, and release identified; discomfort must not substitute", "missingness_refusal_behaviour": "not_evaluable", "eligibility": "diagnostic_only_excluded"},
+      {"name": "jerk", "producer": "unidentified_no_canonical_producer_in_inventory", "unit": "pending_definition", "direction_of_risk": "upper_is_risk_pending_definition", "trigger_threshold_candidate": null, "release_threshold": null, "availability_timing": "not available in current selector", "hindsight_status": "not applicable", "canonical_source_or_rationale": "no existing canonical producer, unit, trigger, and release identified; discomfort must not substitute", "missingness_refusal_behaviour": "not_evaluable", "eligibility": "diagnostic_only_excluded"}
+    ],
+    "trigger_release_policy": {
+      "status": "unfrozen_release_thresholds",
+      "rule": "a fixed one-step hysteresis hold is a fixture mechanism only and is not a substitute for per-signal release thresholds; a signal becomes an active pilot trigger only after producer, unit, direction, trigger, release, availability, hindsight, canonical source, and missingness/refusal are all recorded",
+      "pilot_requirement": "freeze separate trigger and release values per signal before inspecting held-out outcomes"
+    },
+    "pilot_configuration": {
+      "structure": {"pre_roll_steps": 10, "post_roll_steps": 10, "merge_gap_steps": 5, "minimum_interval_steps": 1},
+      "approved_rules": null,
+      "config_digest_sha256": "b9839e7d81d1229c368f1d8292ed0917b0dfb4dfbaf9980b5a22307701f5b944",
+      "digest_scope": "interval structure plus trigger-release-required policy; per-signal numeric thresholds remain unfrozen diagnostic candidates",
+      "freeze_condition": "digest must be frozen before inspecting held-out outcomes"
+    },
+    "parent_selection_procedure": {
+      "stage": "E1_held_out_post_hoc_excerpt_pilot",
+      "count": 30,
+      "population": "independent, provenance-complete native parent traces not used for fixtures or threshold selection",
+      "holdout_key": "parent/scenario/seed lineage and, where available, scenario-geometry family",
+      "exclusions": "fixture parents, incomplete provenance, fallback/degraded/unknown execution, missing precursors, unsupported provenance",
+      "report": ["missed declared events", "missed declared precursors", "spurious-window rate on no-event parents", "unsafe-crop rejection rate", "not_evaluable and full-parent-fallback rates", "retained-duration ratio", "per-signal and union results", "sensitivity around each candidate threshold", "every excluded or unavailable producer"],
+      "admission_rule": "any missed declared event or precursor blocks admission and returns the method to revision; zero failures among 30 is feasibility only (about 9.5% one-sided 95% upper bound)"
+    },
+    "terminal_result_rules": {
+      "vocabulary": ["admitted_for_next_stage", "rejected", "not_evaluable"],
+      "admitted_for_next_stage": "post-hoc inspection only; never benchmark_admitted, executable_scenario_admitted, or scientifically_equivalent_to_parent",
+      "rejected": "unsafe crop, ambiguous ownership, missing precursors, or failed fidelity rule; consumer falls back to the full parent",
+      "not_evaluable": "missing or unsupported evidence, incomplete rows, unavailable-at-step violations, fallback/degraded/unknown execution, or incomplete state"
+    },
+    "answerability_gate": {
+      "schema": "research_answerability.v1",
+      "issue": "#7031",
+      "rule": "route any decision-capable simulation or replay execution through the research_answerability.v1 gate; preparation plans remain execution_allowed=false and BLOCKED_ADMISSION"
+    },
     "missingness_policy": "unknown, never imputed to a safe zero",
     "hindsight_policy": "allowed only when explicitly marked offline in the manifest"
   },

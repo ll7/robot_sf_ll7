@@ -7,8 +7,13 @@ import math
 import pytest
 
 from robot_sf.benchmark.continuation_experiment_plan import (
+    ANSWERABILITY_GATE,
+    ANSWERABILITY_ISSUE,
     BLOCKED_ADMISSION,
     CONTINUATION_MODES,
+    PILOT_HOLDOUT_KEY_E1,
+    PILOT_PARENT_COUNT_E1,
+    TERMINAL_RESULT_RULES,
     ContinuationExperimentPlan,
     estimate_continuation_cost,
     evaluate_admission,
@@ -23,6 +28,29 @@ def test_preparation_plan_requires_all_comparison_modes() -> None:
     assert receipt.status == BLOCKED_ADMISSION
     assert "execution_not_enabled_in_preparation_plan" in receipt.blockers
     assert "missing_live_authority:#7381" in receipt.blockers
+
+
+def test_preparation_plan_routes_execution_through_answerability_gate() -> None:
+    """Preparation records the #7031 gate and the frozen terminal vocabulary."""
+    assert ANSWERABILITY_GATE == "research_answerability.v1"
+    assert ANSWERABILITY_ISSUE == "#7031"
+    assert TERMINAL_RESULT_RULES == (
+        "admitted_for_next_stage",
+        "rejected",
+        "not_evaluable",
+    )
+    assert PILOT_PARENT_COUNT_E1 == 30
+    assert "parent/scenario/seed" in PILOT_HOLDOUT_KEY_E1
+    plan = ContinuationExperimentPlan("rw06-rw07-preparation")
+    payload = plan.to_dict()
+    assert payload["answerability_gate"] == "research_answerability.v1"
+    assert payload["terminal_result_rules"] == [
+        "admitted_for_next_stage",
+        "rejected",
+        "not_evaluable",
+    ]
+    assert payload["execution_allowed"] is False
+    assert payload["status"] == "preparation_only"
 
 
 def test_plan_rejects_dropped_negative_control() -> None:

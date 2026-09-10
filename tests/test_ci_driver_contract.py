@@ -475,6 +475,7 @@ def test_examples_smoke_uses_narrow_lock_backed_dependency_profile() -> None:
     optional_dependencies = _pyproject()["project"]["optional-dependencies"]
     assert optional_dependencies["examples"] == [
         "robot_sf[viz,benchmark]",
+        "scikit-learn>=1.9.0",
         "stable-baselines3>=2.9.0",
         "torch>=2.13.0,<2.14.0",
     ]

@@ -62,6 +62,30 @@ _SUBSTITUTION_MODES = (SUBSTITUTION_SINGLE_STEP, SUBSTITUTION_HOLD)
 class _DefaultPedestrianResponse(str):
     """String-compatible marker for an omitted, model-bindable response mode."""
 
+    def __copy__(self) -> _DefaultPedestrianResponse:
+        """Keep the omission marker stable across shallow copies.
+
+        Returns:
+            This marker instance.
+        """
+        return self
+
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _DefaultPedestrianResponse:
+        """Keep the omission marker stable across deep copies.
+
+        Returns:
+            This marker instance.
+        """
+        return self
+
+    def __reduce__(self) -> tuple[Any, tuple[Any, ...]]:
+        """Reconstruct the module singleton when a config is unpickled.
+
+        Returns:
+            The callable and arguments used to recover the singleton.
+        """
+        return (_get_default_pedestrian_response, ())
+
 
 _DEFAULT_PEDESTRIAN_RESPONSE = _DefaultPedestrianResponse("unknown")
 _REPLAY_PROVENANCE_FIELDS = (
@@ -75,6 +99,20 @@ _REPLAY_PROVENANCE_FIELDS = (
 
 class _ReplayProvenanceError(ValueError):
     """Raised when a model-declared replay provenance field is malformed."""
+
+
+def _get_default_pedestrian_response() -> _DefaultPedestrianResponse:
+    """Return the singleton used for an omitted pedestrian response."""
+    return _DEFAULT_PEDESTRIAN_RESPONSE
+
+
+def _is_omitted_pedestrian_response(value: object) -> bool:
+    """Recognize the omission marker even when older pickles rebuilt it.
+
+    Returns:
+        Whether ``value`` is an omitted-response marker.
+    """
+    return isinstance(value, _DefaultPedestrianResponse)
 
 
 @runtime_checkable
@@ -686,7 +724,7 @@ def _bind_model_metadata(
         # explicitly supplies ``unknown`` remains distinct and fails closed
         # against a declared native mode. ``unspecified`` retains its legacy
         # model-binding semantics for all provenance fields.
-        if declared is _DEFAULT_PEDESTRIAN_RESPONSE or declared == "unspecified":
+        if _is_omitted_pedestrian_response(declared) or declared == "unspecified":
             bound_config = replace(bound_config, **{field_name: actual})
         elif declared != actual:
             mismatches.append(f"{field_name}: declared={declared!r}, actual={actual!r}")

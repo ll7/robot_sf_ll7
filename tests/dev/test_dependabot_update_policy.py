@@ -137,6 +137,72 @@ def test_private_dependency_group_can_compose_risk_classes() -> None:
     assert validate_direct_update_lanes(classified) == []
 
 
+def test_evaluate_update_distinguishes_group_additions_from_published_updates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only newly added private-group rows bypass mixed version-update rejection."""
+    base_project = """
+[project]
+name = "robot-sf"
+dependencies = []
+
+[project.optional-dependencies]
+training = [
+    "scikit-learn>=1.9.0",
+    "stable-baselines3>=2.9.0",
+    "torch>=2.13.0,<2.14.0",
+]
+"""
+    group_block = """
+[dependency-groups]
+examples = [
+    "scikit-learn>=1.9.0",
+    "stable-baselines3>=2.9.0",
+    "torch>=2.13.0,<2.14.0",
+]
+"""
+    head_project = base_project + group_block
+    (tmp_path / "pyproject.toml").write_text(head_project, encoding="utf-8")
+    diff_text = """
++    "scikit-learn>=1.9.0",
++    "stable-baselines3>=2.9.0",
++    "torch>=2.13.0,<2.14.0",
+"""
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy.changed_files",
+        lambda *_args, **_kwargs: ["pyproject.toml"],
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy.git_file_at_ref",
+        lambda _repo_root, _base_ref, relative_path: (
+            base_project if relative_path == "pyproject.toml" else ""
+        ),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy._diff_vs_head",
+        lambda *_args, **_kwargs: diff_text,
+    )
+
+    policy = load_policy()
+    group_report = evaluate_update(repo_root=tmp_path, base_ref="base", policy=policy)
+
+    assert group_report["status"] == "pass"
+    assert group_report["profile_only_packages"] == [
+        "scikit-learn",
+        "stable-baselines3",
+        "torch",
+    ]
+    assert group_report["direct_risk_classes"] == []
+
+    published_update = base_project.replace(
+        '"scikit-learn>=1.9.0"', '"scikit-learn>=1.10.0"', 1
+    ).replace('"stable-baselines3>=2.9.0"', '"stable-baselines3>=2.10.0"', 1)
+    (tmp_path / "pyproject.toml").write_text(published_update + group_block, encoding="utf-8")
+    with pytest.raises(PolicyError, match="mixes direct risk classes"):
+        evaluate_update(repo_root=tmp_path, base_ref="base", policy=policy)
+
+
 def test_unknown_direct_package_fails_closed() -> None:
     """A new direct package must receive an explicit policy classification."""
     policy = load_policy()

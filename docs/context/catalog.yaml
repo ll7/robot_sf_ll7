@@ -20,6 +20,14 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/simulator_typed_snapshot_contract.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/simulator_state_inventory.v1.json
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/issue_8222_obstacle_force_compatibility.md
   status: current
   freshness: policy

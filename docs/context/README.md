@@ -289,6 +289,8 @@ and high-churn state surface [issue_1358_state.yaml](issue_1358_state.yaml)
   [thursday_development_review_2026-05-21.md](thursday_development_review_2026-05-21.md)
 * Worktree training preservation audit 2026-05-25:
   [worktree_training_preservation_audit_2026-05-25.md](worktree_training_preservation_audit_2026-05-25.md)
+* Artifact retention, preservation, and cleanup guide:
+  [artifact_retention_and_cleanup.md](artifact_retention_and_cleanup.md)
 * Issue #1240 scenario coverage entropy:
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
 * Issue #1167 predictive obstacle-feature pipeline:

@@ -391,6 +391,10 @@ _FAST_FILES = {
     # in the dedicated examples-smoke phase.
     "test_examples_manifest.py",
     "test_examples_cli.py",
+    # Fixture-based check-only prerequisite contracts are deterministic and
+    # provide the exact-head changed-line coverage for the shared example
+    # prerequisite checker (issue #8735).
+    "test_example_prerequisites.py",
     "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
     "test_global_route.py",

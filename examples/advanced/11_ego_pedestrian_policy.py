@@ -2,6 +2,7 @@
 
 Usage:
     uv run python examples/advanced/11_ego_pedestrian_policy.py
+    uv run python examples/advanced/11_ego_pedestrian_policy.py --check --format json
 
 Prerequisites:
     - maps/svg_maps/debug_06.svg
@@ -17,25 +18,35 @@ References:
     - docs/dev_guide.md#pedestrian-environments
 """
 
-from pathlib import Path
+from __future__ import annotations
+
+import argparse
+from typing import TYPE_CHECKING
 
 from loguru import logger
-from stable_baselines3 import PPO
 
-from robot_sf.common.artifact_paths import get_artifact_category_path
-from robot_sf.gym_env.env_config import PedEnvSettings
-from robot_sf.gym_env.pedestrian_env import PedestrianEnv
-from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
-from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.render.playback_recording import load_states_and_visualize
-from robot_sf.robot.bicycle_drive import BicycleDriveSettings
-from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.examples.prerequisites import (
+    add_prerequisite_check_arguments,
+    run_prerequisite_check,
+)
 
-logger.info("Running ego pedestrian simulation with random actions and recording playback.")
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from pathlib import Path
+
+    from robot_sf.nav.map_config import MapDefinition
 
 
 def test_simulation(map_definition: MapDefinition) -> None:
     """Run a short ego pedestrian simulation and render the playback loop."""
+    from stable_baselines3 import PPO
+
+    from robot_sf.gym_env.env_config import PedEnvSettings
+    from robot_sf.gym_env.pedestrian_env import PedestrianEnv
+    from robot_sf.nav.map_config import MapDefinitionPool
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+    from robot_sf.sim.sim_config import SimulationSettings
+
     logger.info("Creating the environment.")
     env_config = PedEnvSettings(
         map_pool=MapDefinitionPool(map_defs={"my_map": map_definition}),
@@ -73,6 +84,7 @@ def test_simulation(map_definition: MapDefinition) -> None:
 
 def get_file() -> Path:
     """Get the latest recorded file."""
+    from robot_sf.common.artifact_paths import get_artifact_category_path
 
     recordings_dir = get_artifact_category_path("recordings")
     if not recordings_dir.exists():
@@ -86,7 +98,7 @@ def get_file() -> Path:
     return latest_file
 
 
-def main() -> None:
+def run_simulation() -> None:
     """Run ego pedestrian simulation and visualize the recorded playback.
 
     This function orchestrates the complete workflow:
@@ -94,6 +106,10 @@ def main() -> None:
     2. Runs a simulation with the trained policy
     3. Loads and visualizes the recorded states
     """
+    from robot_sf.nav.svg_map_parser import convert_map
+    from robot_sf.render.playback_recording import load_states_and_visualize
+
+    logger.info("Running ego pedestrian simulation with random actions and recording playback.")
     map_def = convert_map("maps/svg_maps/debug_06.svg")
 
     test_simulation(map_def)
@@ -101,5 +117,17 @@ def main() -> None:
     load_states_and_visualize(get_file())
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run check-only mode or the ego-pedestrian recording demo."""
+
+    parser = argparse.ArgumentParser(description="Run ego pedestrian simulation.")
+    add_prerequisite_check_arguments(parser)
+    args = parser.parse_args(argv)
+    if args.check:
+        return run_prerequisite_check(__file__, output_format=args.format)
+    run_simulation()
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

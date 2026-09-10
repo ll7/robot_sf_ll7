@@ -277,7 +277,8 @@ def _save_one_metric(  # noqa: PLR0913
     ci_seed: int | None,
     palette: Sequence[str],
     out_pdf: bool,
-) -> tuple[str, str | None]:
+    out_svg: bool,
+) -> tuple[str, str | None, str | None]:
     """Render and save a single metric to PNG and optionally PDF; returns paths.
 
     Returns:
@@ -329,7 +330,30 @@ def _save_one_metric(  # noqa: PLR0913
         fig2.savefig(pdf_path)
         plt.close(fig2)
 
-    return png_path, pdf_path
+    svg_path: str | None = None
+    if out_svg:
+        fig3, ax3 = plt.subplots(figsize=(6, 4))
+        _render_metric(
+            ax3,
+            grouped,
+            metric=metric,
+            bins=bins,
+            kde=kde,
+            ci=ci,
+            ci_samples=ci_samples,
+            ci_confidence=ci_confidence,
+            ci_seed=ci_seed,
+            palette=palette,
+            legend_with_n=False,
+        )
+        ax3.set_xlabel(metric)
+        ax3.set_ylabel("count")
+        ax3.legend(loc="best", fontsize=8)
+        svg_path = str(Path(out_dir) / f"dist_{metric}.svg")
+        fig3.savefig(svg_path, format="svg")
+        plt.close(fig3)
+
+    return png_path, pdf_path, svg_path
 
 
 def save_distributions(  # noqa: PLR0913
@@ -339,6 +363,7 @@ def save_distributions(  # noqa: PLR0913
     bins: int = 30,
     kde: bool = False,
     out_pdf: bool = False,
+    out_svg: bool = False,
     ci: bool = False,
     ci_samples: int = 1000,
     ci_confidence: float = 0.95,
@@ -365,7 +390,7 @@ def save_distributions(  # noqa: PLR0913
     palette = ["#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2", "#EECA3B"]
 
     for metric in _metrics_in_grouped(grouped):
-        png_path, pdf_path = _save_one_metric(
+        png_path, pdf_path, _svg_path = _save_one_metric(
             out_dir,
             metric,
             grouped,
@@ -377,6 +402,7 @@ def save_distributions(  # noqa: PLR0913
             ci_seed=ci_seed,
             palette=palette,
             out_pdf=out_pdf,
+            out_svg=out_svg,
         )
         wrote.append(png_path)
         if pdf_path is not None:

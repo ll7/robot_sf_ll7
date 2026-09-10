@@ -362,6 +362,20 @@ rows:
       - examples/examples_manifest.yaml
       - LICENSE
 
+  - id: example-fixture-json
+    scope: examples
+    globs: ["examples/**/fixtures/**"]
+    status: project-authored
+    source: "Robot SF hand-authored deterministic example fixtures."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository-owned fixture data under the repository license."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Source-control commit pin; fixture content is reviewed in the owning change."
+    modification_status: "Project-authored deterministic fixtures; no external provenance."
+    evidence:
+      - examples/plotting/fixtures/pareto_dominated_tie.json
+      - LICENSE
+
   - id: example-recordings
     scope: examples
     globs: ["examples/recordings/**"]

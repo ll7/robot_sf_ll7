@@ -261,6 +261,33 @@ def _has_unpushed_commits(path: str, branch: str) -> bool:
     return risky
 
 
+#: Local base ref for the offline merged-ancestor triage signal (issue #8773).
+MERGED_BASE_REF = "origin/main"
+
+
+def _read_merged_into_main(
+    path: str, head_sha: str, *, base_ref: str = MERGED_BASE_REF
+) -> tuple[bool | None, str | None]:
+    """Check whether HEAD is contained in the local base ref without any API use.
+
+    Returns ``(True, None)`` when every commit reachable from ``head_sha`` is
+    already contained in ``base_ref``, ``(False, None)`` when it provably is
+    not, and ``(None, reason)`` when the check cannot run (short/empty SHA or
+    a Git error). This is triage evidence only: callers must keep the
+    candidate refused and must never promote it to deletable on this signal
+    alone.
+    """
+    if not head_sha or not FULL_SHA_RE.match(head_sha):
+        return None, "head SHA is not a full 40-hex commit; merged-ancestor check skipped"
+    result = _run_command(["git", "merge-base", "--is-ancestor", head_sha, base_ref], cwd=path)
+    if result.returncode == 0:
+        return True, None
+    if result.returncode == 1:
+        return False, None
+    detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic"
+    return None, f"merged-ancestor check failed: {detail}"
+
+
 def _has_open_pr(branch: str) -> bool:
     """Check if the branch has an open PR on GitHub."""
     if not branch:
@@ -1183,6 +1210,30 @@ def classify_worktree(  # noqa: C901 - preserves the legacy gate order beside ve
         if unpushed_reason:
             reasons.append(unpushed_reason)
 
+    # Offline triage signal (issue #8773): when push state is unverifiable only
+    # because the upstream is missing (or the worktree is detached), record
+    # whether HEAD is already contained in origin/main. This never clears the
+    # risk flag above; it only distinguishes "provably merged, needs open-PR /
+    # lease / output review" from "genuinely unpushed" in refusal evidence.
+    merged_verification: dict[str, Any] = {}
+    if (
+        unpushed
+        and unpushed_reason
+        and ("upstream could not be verified" in unpushed_reason or "no branch" in unpushed_reason)
+    ):
+        merged, merged_reason = _read_merged_into_main(path, head_sha)
+        merged_verification = {
+            "merged_into_main": merged,
+            "merged_base_ref": MERGED_BASE_REF,
+        }
+        if merged is True:
+            reasons.append(
+                f"head is contained in {MERGED_BASE_REF} (local merge-base check); "
+                "upstream still unverified so push state remains risky"
+            )
+        elif merged_reason:
+            reasons.append(merged_reason)
+
     if skip_pr_check and branch:
         risk_flags.append("pr_check_skipped")
         reasons.append("open-PR state was intentionally skipped")
@@ -1226,6 +1277,7 @@ def classify_worktree(  # noqa: C901 - preserves the legacy gate order beside ve
                 lease_state=lease_state,
                 lease=lease,
             ),
+            verification=merged_verification,
         )
 
     return WorktreeCandidate(

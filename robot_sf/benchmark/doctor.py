@@ -597,6 +597,7 @@ def _format_human(report: dict[str, Any]) -> str:
         lines.append("Finished with warnings (optional capabilities missing).")
     else:
         lines.append("Hard failures detected; resolve the FAIL items above before continuing.")
+    lines.append("Per-check remedies: docs/troubleshooting/doctor.md")
     return "\n".join(lines) + "\n"
 
 

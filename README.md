@@ -89,6 +89,9 @@ uv run python examples/quickstart/03_custom_map.py
 fastest install → run → *see something* path and is CPU-only. Open
 `output/demo/latest/viewer/index.html` in a browser to replay the episode.
 
+If setup misbehaves, run `uv run robot-sf doctor` and follow the per-check remedies in
+[`docs/troubleshooting/doctor.md`](docs/troubleshooting/doctor.md).
+
 ### Beginner notebooks
 
 For an interactive, plotted walkthrough (run → compare → visualize), open the

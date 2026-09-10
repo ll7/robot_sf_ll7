@@ -35,7 +35,8 @@ uv run robot-sf --help
 ```
 
 The doctor report is the first fail-closed boundary: fix reported missing tools, imports, model
-artifacts, or quickstart failures before interpreting later output.
+artifacts, or quickstart failures before interpreting later output. Every check identifier is
+mapped to a remedy in [doctor troubleshooting](./troubleshooting/doctor.md).
 
 ## 2. Run one visible episode
 

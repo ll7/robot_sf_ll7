@@ -426,6 +426,42 @@ def test_open_pr_snapshot_maps_exact_branch_and_fails_closed_on_ambiguity() -> N
     assert numbers == []
 
 
+@pytest.mark.parametrize(
+    ("stdout", "expected"),
+    [
+        ("not-json", "invalid JSON"),
+        ('{"number": 1}', "non-list payload"),
+        ("[42]", "ambiguous row"),
+        ('[{"number": true, "headRefName": "branch"}]', "ambiguous row"),
+        ('[{"number": 0, "headRefName": "branch"}]', "malformed PR number"),
+        ('[{"number": 1, "headRefName": null}]', "malformed head branch"),
+        ('[{"number": 1, "headRefName": ""}]', "malformed head branch"),
+    ],
+)
+def test_open_pr_snapshot_payload_failures_are_unreadable(stdout: str, expected: str) -> None:
+    """Every malformed batch payload makes the open-PR state unreadable."""
+    snapshot = reaper.OpenPrSnapshot(transport=lambda _args: _result(stdout=stdout))
+
+    open_pr, error, numbers = snapshot.read("branch")
+
+    assert open_pr is False
+    assert error is not None and expected in error
+    assert numbers == []
+
+
+def test_open_pr_snapshot_transport_failure_is_unreadable() -> None:
+    """A failed batch transport must not be mistaken for a PR-free fleet."""
+    snapshot = reaper.OpenPrSnapshot(
+        transport=lambda _args: _result(stderr="HTTP 503", returncode=1)
+    )
+
+    open_pr, error, numbers = snapshot.read("branch")
+
+    assert open_pr is False
+    assert error is not None and "snapshot failed" in error
+    assert numbers == []
+
+
 def test_open_pr_snapshot_truncated_inventory_is_unreadable() -> None:
     """A listing at the query limit must not prove unlisted branches PR-free."""
     limit = reaper.OPEN_PR_SNAPSHOT_LIMIT

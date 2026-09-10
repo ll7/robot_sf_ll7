@@ -1291,7 +1291,10 @@ def test_ci_driver_test_phase_runs_benchmark_reconciliation_guard() -> None:
     assert '[[ "$shard_index" != "1" ]]' in script_text
     assert "$SCRIPT_DIR/check_event_ledger_reconciliation_guard.sh" in script_text
     assert "run_fast_feedback_benchmark_reconciliation_guard" in script_text
-    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples' in script_text
+    assert (
+        '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples/test_examples_run.py'
+        in script_text
+    )
 
 
 def test_run_ci_local_loads_default_phases_from_ci_driver() -> None:

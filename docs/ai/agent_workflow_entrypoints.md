@@ -14,7 +14,8 @@ default; a reference is optional only when it is marked optional/illustrative, i
 or is explicitly scoped as background. Reference semantics are enforced by
 `scripts/dev/check_instruction_references.py`. Repository-internal precedence is owned by the
 `Instruction Precedence` contract in `AGENTS.md`; this route table selects procedure and does not
-change that precedence.
+change that precedence. The machine-readable execution-profile mapping for these routes is
+`.agents/task_scope_manifest.yaml`.
 
 Agents must choose the bounded task route matching their assigned goal and consume existing deterministic
 preflight and status outputs rather than repeatedly scanning instructions, reconstructing validation requirements,

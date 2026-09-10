@@ -1,4 +1,15 @@
 version: 0.1.0
+schema_version: 1
+exclusions:
+  - path: classic_interactions_pygame.py
+    kind: mirror
+    reason: "Compatibility shim re-exporting examples/_archived/classic_interactions_pygame.py; registered once under _archived."
+  - path: example_multi_pedestrian.py
+    kind: mirror
+    reason: "Compatibility shim re-exporting examples/advanced/08_multi_pedestrian.py; registered once under advanced."
+  - path: demo_utils.py
+    kind: helper
+    reason: "Shared helper module (fast_demo_enabled) imported by examples; not a runnable example entry point."
 categories:
   - slug: uncategorized
     title: "Uncategorized Examples"
@@ -188,7 +199,7 @@ examples:
     prerequisites: []
     ci_enabled: true
     ci_reason: null
-    doc_reference: docs/performance_notes.md#fast-pysf-speed-fix
+    doc_reference: docs/performance_notes.md#known-performance-bottlenecks
     tags: [analysis, fast-pysf]
   - path: advanced/11_ego_pedestrian_policy.py
     name: "11 Ego Pedestrian Policy"
@@ -203,7 +214,7 @@ examples:
     tags: [pedestrian, recording]
   - path: advanced/32_demo_adversarial_pedestrian.py
     name: "32 Demo Adversarial Pedestrian"
-    summary: "Run a modernized debug rollout for pedestrian PPO policies with factory-based setup."
+    summary: "Demo for running a trained adversarial pedestrian policy."
     category_slug: advanced
     prerequisites:
       - maps/svg_maps/masterthesis/intersection.svg
@@ -263,8 +274,7 @@ examples:
     name: "03 Image Observations"
     summary: "Enable image-based observations in the robot environment."
     category_slug: advanced
-    prerequisites:
-      - None
+    prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: docs/dev_guide.md#environment-factory
@@ -308,8 +318,8 @@ examples:
     tags: [visualization, force-field]
   - path: occupancy_reward_shaping.py
     name: "Occupancy Reward Shaping"
-    summary: "Derive a clearance penalty from occupancy grid observations in a short rollout."
-    category_slug: advanced
+    summary: "Demo: occupancy-based reward shaping for RL-friendly observations."
+    category_slug: uncategorized
     prerequisites: []
     ci_enabled: true
     ci_reason: null
@@ -356,13 +366,23 @@ examples:
     tags: [quickstart, maps]
   - path: quickstart/04_occupancy_grid.py
     name: "04 Occupancy Grid"
-    summary: "Enable occupancy grid observations, run a center query, and step a short rollout."
+    summary: "Quickstart: enable occupancy grid observations and run a spawn-safety query."
     category_slug: quickstart
     prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: docs/dev/occupancy/Update_or_extend_occupancy.md
     tags: [quickstart, occupancy, grid]
+  - path: quickstart/05_public_api.py
+    name: "05 Public API Facade"
+    summary: "Demonstrate the stable public API facade with EpisodeRecord persistence."
+    category_slug: quickstart
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/public_api.md
+    tags: [quickstart, public-api, facade]
+    expected_runtime: "~5s"
   - path: plotting/snqi_figures_example.py
     name: "SNQI Figures Example"
     summary: "Generate publication-ready SNQI figures via the orchestrator script."
@@ -385,8 +405,7 @@ examples:
     name: "13 SVG Map Validation"
     summary: "Validate and summarize SVG maps from the repository."
     category_slug: advanced
-    prerequisites:
-      - None
+    prerequisites: []
     ci_enabled: true
     ci_reason: null
     doc_reference: docs/SVG_MAP_EDITOR.md
@@ -413,7 +432,7 @@ examples:
     tags: [recording, maps]
   - path: advanced/16_imitation_learning_pipeline.py
     name: "16 Imitation Learning Pipeline"
-    summary: "End-to-end imitation learning workflow: expert training → trajectory collection → BC pre-training → PPO fine-tuning."
+    summary: "Imitation Learning Pipeline - End-to-End Example."
     category_slug: advanced
     prerequisites:
       - uv sync --all-extras
@@ -424,7 +443,7 @@ examples:
     tags: [training, imitation, ppo, behavioral-cloning]
   - path: advanced/20_global_planner_demo.py
     name: "20 Global Planner Demo"
-    summary: "Demonstration of global planner integration with environment factory."
+    summary: "Global planner demo: show integration with environment factory."
     category_slug: advanced
     prerequisites: []
     ci_enabled: false
@@ -433,7 +452,7 @@ examples:
     tags: [planning, routing, poi]
   - path: advanced/21_occupancy_grid_workflow.py
     name: "21 Occupancy Grid Workflow"
-    summary: "Standalone grid generation, spawn validation queries, and occupancy-based reward shaping."
+    summary: "Advanced occupancy grid workflow: standalone grids, queries, and reward shaping."
     category_slug: advanced
     prerequisites: []
     ci_enabled: true
@@ -442,7 +461,7 @@ examples:
     tags: [occupancy, reward, observation]
   - path: advanced/22_occupancy_grid_playthrough.py
     name: "22 Occupancy Grid Playthrough"
-    summary: "Interactive occupancy grid playthrough demonstration."
+    summary: "Occupancy grid visualization with a pretrained defensive policy."
     category_slug: advanced
     prerequisites: []
     ci_enabled: false
@@ -451,7 +470,7 @@ examples:
     tags: [occupancy, interactive]
   - path: advanced/23_poi_routing_demo.py
     name: "23 POI Routing Demo"
-    summary: "Sample POIs and route through them with the global planner on an SVG map."
+    summary: "POI routing demo using GlobalPlanner and POISampler with live visualization."
     category_slug: advanced
     prerequisites: []
     ci_enabled: false
@@ -460,7 +479,7 @@ examples:
     tags: [planning, routing, poi, sampling]
   - path: advanced/24_planner_bottleneck_test.py
     name: "24 Planner Bottleneck Test"
-    summary: "Analyze planner clearance behavior on a bottleneck corridor map."
+    summary: "Test global planner with POI routing on a simple bottleneck map."
     category_slug: advanced
     prerequisites:
       - maps/svg_maps/planner_test_corridor.svg
@@ -470,7 +489,7 @@ examples:
     tags: [planning, diagnostics, clearance]
   - path: advanced/25_planner_diagnostic.py
     name: "25 Planner Diagnostic"
-    summary: "Visualize inflation and visibility-graph internals for planner debugging."
+    summary: "Diagnose global planner inflation and visibility graph construction."
     category_slug: advanced
     prerequisites:
       - maps/svg_maps/planner_test_corridor.svg
@@ -480,7 +499,7 @@ examples:
     tags: [planning, diagnostics, visualization]
   - path: advanced/26_telemetry_pane.py
     name: "26 Telemetry Pane"
-    summary: "Live telemetry visualization with docked charts in the Pygame window showing FPS, reward, collisions, and pedestrian distance."
+    summary: "Live telemetry pane docked in the Pygame window."
     category_slug: advanced
     prerequisites: []
     ci_enabled: false
@@ -489,7 +508,7 @@ examples:
     tags: [telemetry, visualization, pygame, interactive]
   - path: advanced/27_telemetry_headless_smoke.py
     name: "27 Telemetry Headless Smoke"
-    summary: "Headless telemetry smoke test producing JSONL and summary PNG/JSON artifacts without rendering."
+    summary: "Headless telemetry smoke: run without rendering and emit telemetry artifacts."
     category_slug: advanced
     prerequisites: []
     ci_enabled: false
@@ -536,3 +555,147 @@ examples:
     ci_enabled: false
     ci_reason: "Requires a benchmark publication-bundle path; no default CI input."
     tags: [paper, figures, plotting, benchmark]
+  - path: advanced/17_research_report_demo.py
+    name: "17 Research Report Demo"
+    summary: "Programmatic demo for research report + ablation generation (Phase 7)."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Generates research reports to an --out directory; requires manual output inspection."
+    doc_reference: null
+    tags: [research, report, ablation]
+  - path: advanced/18_socnav_structured_observation.py
+    name: "18 Socnav Structured Observation"
+    summary: "Example: run RobotEnv with SocNavBench-style structured observations and a simple planner."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Short rollout demo; requires manual trajectory inspection, not wired to smoke assertions."
+    doc_reference: null
+    tags: [socnav, observation, planner]
+  - path: advanced/19_planner_visual_comparison.py
+    name: "19 Planner Visual Comparison"
+    summary: "Compare SocNav planner adapters with a side-by-side trajectory overlay."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Produces a matplotlib overlay for manual planner comparison; requires plot inspection."
+    doc_reference: null
+    tags: [planner, comparison, visualization]
+  - path: advanced/26_visibility_graph_visualization.py
+    name: "Visibility Graph Visualization"
+    summary: "Visualize the visibility graph structure used by GlobalPlanner."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Interactive visibility-graph visualization; requires a display."
+    doc_reference: null
+    tags: [planning, visibility-graph, visualization]
+  - path: advanced/27_motion_planning_adapter_test.py
+    name: "Motion Planning Adapter Test"
+    summary: "Test the classic global planner with grid-based planning."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Interactive grid-planning visualization; requires a display."
+    doc_reference: null
+    tags: [planning, grid, visualization]
+  - path: advanced/28_planner_comparison.py
+    name: "28 Planner Comparison"
+    summary: "Comparison demo of VisibilityPlanner vs ClassicGlobalPlanner."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Side-by-side planner comparison; requires manual plot inspection."
+    doc_reference: null
+    tags: [planning, comparison, visualization]
+  - path: advanced/29_osm_global_planner_test.py
+    name: "29 OSM Global Planner Test"
+    summary: "Test the classic global planner with grid-based planning."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Interactive OSM grid-planning visualization; requires a display."
+    doc_reference: null
+    tags: [planning, osm, grid]
+  - path: advanced/30_random_global_planner_random_path.py
+    name: "30 Random Global Planner Random Path"
+    summary: "Plan and visualize a random path on the uni campus map."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Interactive campus-map visualization; requires a display."
+    doc_reference: null
+    tags: [planning, osm, visualization]
+  - path: advanced/31_classic_planner_orca_demo.py
+    name: "31 Classic Planner ORCA Demo"
+    summary: "Demonstrate classic global + ORCA-style local planning on the lake map."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Interactive pygame session with lake-map assets; not reliable for CI."
+    doc_reference: null
+    tags: [planning, orca, visualization]
+  - path: benchmarks/per_ped_force_quantiles_demo.py
+    name: "Per-Ped Force Quantiles Demo"
+    summary: "Demo: per-pedestrian vs aggregated force quantiles."
+    category_slug: benchmarks
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [benchmark, metrics, force]
+  - path: example_osm_svg_to_obstacle_svg.py
+    name: "Example OSM SVG to Obstacle SVG"
+    summary: "example svg conversion"
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Requires OSM SVG source asset and writes an obstacle map; no default CI input."
+    doc_reference: null
+    tags: [maps, osm, conversion]
+  - path: osm_map_editor_demo.py
+    name: "OSM Map Editor Demo"
+    summary: "OSM Zones Editor interactive demonstration (T034)."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Interactive zone-editor session; requires a display and manual input."
+    doc_reference: null
+    tags: [maps, osm, interactive, editor]
+  - path: osm_map_quickstart.py
+    name: "OSM Map Quickstart"
+    summary: "OSM PBF to MapDefinition quickstart example."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Requires an OSM PBF fixture and background rendering; no default CI input."
+    doc_reference: null
+    tags: [maps, osm, quickstart]
+  - path: osm_programmatic_scenario.py
+    name: "OSM Programmatic Scenario"
+    summary: "Example: Programmatic scenario creation using OSM zones and routes (Phase 3, T042)."
+    category_slug: uncategorized
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Programmatic OSM scenario workflow; requires manual YAML output inspection."
+    doc_reference: null
+    tags: [maps, osm, scenario]
+  - path: plotting/plot_map.py
+    name: "Plot Map"
+    summary: "Plot a MapDefinition as a quick visual sanity check."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [maps, visualization]
+  - path: plotting/plot_micro_pedestrian_scene.py
+    name: "Plot Micro Pedestrian Scene"
+    summary: "Render a static micro-scale pedestrian-simulation snapshot for publications."
+    category_slug: plotting
+    prerequisites: []
+    ci_enabled: false
+    ci_reason: "Publication figure workflow; requires manual figure inspection."
+    doc_reference: null
+    tags: [visualization, pedestrian, publication]

@@ -231,29 +231,6 @@ def test_native_live_replay_abstains_without_verified_provenance() -> None:
     validate_collision_causal_report(report)
 
 
-def test_unspecified_replay_provenance_abstains_without_relabeling() -> None:
-    """A replay without an explicit source label cannot enter the causal join."""
-    from dataclasses import replace
-
-    replay = _run_replay(fx.preventable_late_braking_scenario())
-    unspecified = replace(replay, config=replace(replay.config, source_kind="unspecified"))
-
-    report = collide_causal_report_from_last_avoidable(
-        report_id="unspecified-source",
-        case_id="fixture",
-        replay=unspecified,
-        metadata=_METADATA,
-    )
-
-    assert report["abstained"] is True
-    assert report["abstention_reason"] == "unspecified_replay_provenance"
-    assert report["data_source"]["source_kind"] == "unknown"
-    assert report["causal_contribution"]["verdict"] == "unknown"
-    assert report["causal_contribution"]["supported_actual_cause"] is False
-    assert "replay_source_provenance" in report["missing_fields"]
-    validate_collision_causal_report(report)
-
-
 def test_two_action_interaction_joins_as_avoidable() -> None:
     """A closed-loop two-body interaction replay joins as an avoidable report."""
     scenario = fx.two_action_interaction_scenario()
@@ -264,7 +241,7 @@ def test_two_action_interaction_joins_as_avoidable() -> None:
 
 
 def test_default_pedestrian_response_is_schema_safe() -> None:
-    """An omitted response remains diagnostic-safe but cannot support a causal join."""
+    """An omitted response assumption joins as explicit ``unknown``."""
     scenario = fx.preventable_late_braking_scenario()
     contact_step = fx.find_contact_step(scenario)
     assert contact_step is not None
@@ -290,43 +267,30 @@ def test_default_pedestrian_response_is_schema_safe() -> None:
         metadata=_METADATA,
     )
 
-    assert report["abstained"] is True
-    assert report["abstention_reason"] == "incomplete_replay_provenance"
-    assert report["causal_contribution"]["supported_actual_cause"] is False
-    assert "replay_provenance.pedestrian_response" in report["missing_fields"]
     assert report["causal_contribution"]["pedestrian_response_assumption"] == "unknown"
     validate_collision_causal_report(report)
 
 
-def test_synthetic_join_requires_complete_replay_provenance() -> None:
-    """Every non-native provenance field is required before causal attribution."""
+@pytest.mark.parametrize("source_kind", ("unspecified", "unknown"))
+def test_unverified_replay_source_abstains_without_synthetic_relabel(source_kind: str) -> None:
+    """Unidentified replay provenance cannot enter the synthetic fixture join."""
     from dataclasses import replace
 
-    replay = _run_replay(fx.preventable_late_braking_scenario(), determinism_replays=2)
-    for field_name in (
-        "action_set_id",
-        "feasibility_filter",
-        "collision_predicate",
-        "pedestrian_response",
-    ):
-        incomplete = replace(
-            replay,
-            config=replace(
-                replay.config,
-                **{field_name: "unknown" if field_name == "pedestrian_response" else "unspecified"},
-            ),
-        )
-        report = collide_causal_report_from_last_avoidable(
-            report_id=f"incomplete-{field_name}",
-            case_id="fixture",
-            replay=incomplete,
-            metadata=_METADATA,
-        )
-        assert report["abstained"] is True
-        assert report["abstention_reason"] == "incomplete_replay_provenance"
-        assert f"replay_provenance.{field_name}" in report["missing_fields"]
-        assert report["causal_contribution"]["supported_actual_cause"] is False
-        validate_collision_causal_report(report)
+    replay = _run_replay(fx.preventable_late_braking_scenario())
+    replay = replace(replay, config=replace(replay.config, source_kind=source_kind))
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id=f"unverified-{source_kind}",
+        case_id="fixture",
+        replay=replay,
+        metadata=_METADATA,
+    )
+
+    assert report["abstained"] is True
+    assert report["abstention_reason"] == "unverified_replay_source_provenance"
+    assert report["data_source"]["source_kind"] == "unknown"
+    assert report["causal_contribution"]["supported_actual_cause"] is False
+    validate_collision_causal_report(report)
 
 
 def test_join_rejects_unknown_mechanism_label() -> None:

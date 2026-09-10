@@ -1437,3 +1437,92 @@ def test_verified_apply_refuses_tracking_ref_reappearance(tmp_path: Path) -> Non
     assert target.is_dir()
     assert any("upstream" in event or "tracking" in event for event in result.audit_log)
     assert _git(repo, "rev-parse", "refs/heads/feature/verified").stdout.strip() == head_sha
+
+
+FULL_HEX_HEAD = "1af0d8b65f21e9068f0aadc958d09d3942b76252"
+
+
+def _setup_merged_mock(
+    fake_subprocess: FakeSubprocess,
+    *,
+    branch: str = "local-only",
+    merge_returncode: int = 0,
+) -> FakeSubprocess:
+    """Missing-upstream mock with a stubbed offline merged-ancestor check."""
+    _setup_reaper_mock(fake_subprocess, branch=branch, upstream="no upstream")
+    fake_subprocess.register(["git", "merge-base"], _result("", "", merge_returncode))
+    return fake_subprocess
+
+
+def test_missing_upstream_merged_head_records_triage_signal(
+    tmp_path: Path, fake_subprocess: FakeSubprocess
+) -> None:
+    """A missing-upstream HEAD contained in origin/main stays risky but records proof."""
+    main = tmp_path / "main"
+    local_only = tmp_path / "local-only-wt"
+    main.mkdir()
+    local_only.mkdir()
+
+    _setup_merged_mock(fake_subprocess, merge_returncode=0)
+
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
+        candidate = reaper.classify_worktree(
+            path=str(local_only),
+            branch="local-only",
+            head_sha=FULL_HEX_HEAD,
+            current_path=str(main),
+            skip_pr_check=False,
+        )
+    assert candidate.classification == "risky"
+    assert "unpushed_commits" in candidate.risk_flags
+    assert candidate.verification.get("merged_into_main") is True
+    assert candidate.verification.get("merged_base_ref") == "origin/main"
+
+
+def test_missing_upstream_unmerged_head_records_negative_signal(
+    tmp_path: Path, fake_subprocess: FakeSubprocess
+) -> None:
+    """A missing-upstream HEAD outside origin/main records merged_into_main False."""
+    main = tmp_path / "main"
+    local_only = tmp_path / "local-only-wt"
+    main.mkdir()
+    local_only.mkdir()
+
+    _setup_merged_mock(fake_subprocess, merge_returncode=1)
+
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
+        candidate = reaper.classify_worktree(
+            path=str(local_only),
+            branch="local-only",
+            head_sha=FULL_HEX_HEAD,
+            current_path=str(main),
+            skip_pr_check=False,
+        )
+    assert candidate.classification == "risky"
+    assert "unpushed_commits" in candidate.risk_flags
+    assert candidate.verification.get("merged_into_main") is False
+
+
+def test_ahead_of_upstream_skips_merged_triage_signal(
+    tmp_path: Path, fake_subprocess: FakeSubprocess
+) -> None:
+    """Genuinely ahead branches keep empty verification (no local override hint)."""
+    main = tmp_path / "main"
+    ahead = tmp_path / "ahead-wt"
+    main.mkdir()
+    ahead.mkdir()
+
+    _setup_reaper_mock(fake_subprocess, branch="ahead-branch", log="abc1234 add feature\n")
+
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
+        candidate = reaper.classify_worktree(
+            path=str(ahead),
+            branch="ahead-branch",
+            head_sha="def",
+            current_path=str(main),
+            skip_pr_check=False,
+        )
+    assert candidate.classification == "risky"
+    assert "unpushed_commits" in candidate.risk_flags
+    assert candidate.verification == {}
+    assert not any(call[:2] == ["git", "merge-base"] for call in fake_subprocess.calls)

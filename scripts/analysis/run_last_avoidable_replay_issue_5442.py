@@ -5,8 +5,9 @@ This runner drives the counterfactual-replay engine
 (:mod:`robot_sf.benchmark.last_avoidable_replay`) over the controlled kinematic
 fixtures in :mod:`robot_sf.benchmark.last_avoidable_fixtures` and emits one
 ``last_avoidable_replay.v1`` report per fixture. It runs no benchmark and makes no
-metric or paper-grade claim; the fixtures are deterministic controlled models, not
-the production simulator (which offers no snapshot seam — see
+metric or paper-grade claim; the fixtures are deterministic controlled models,
+separate from the diagnostic production-simulator adapter in
+:mod:`robot_sf.benchmark.simulator_counterfactual_adapter` (see
 ``docs/context/issue_5442_last_avoidable_replay.md``).
 
 Reports are validated against

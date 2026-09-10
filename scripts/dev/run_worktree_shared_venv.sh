@@ -677,7 +677,9 @@ PY
 }
 
 check_shared_venv_freshness() {
-  local venv_path="$1"
+  # Keep this caller-visible: automatic recovery may replace the selected
+  # owning-checkout environment with the worktree-local .venv.
+  venv_path="$1"
   local src_pkg="$repo_root/fast-pysf/pysocialforce"
 
   # PYTHONPATH makes the checkout source authoritative after the interpreter
@@ -883,11 +885,14 @@ fi
 
 export UV_PROJECT_ENVIRONMENT="$venv_path"
 export UV_NO_SYNC=1
-# An explicit shared --venv override must stay authoritative across nested
-# common_setup.sh consumers: pin VIRTUAL_ENV so an incomplete worktree-local
-# .venv cannot shadow the shared environment (issue #7823).
+# Keep the selected environment authoritative across nested uv and
+# common_setup.sh consumers. Automatic stale-package recovery can change the
+# selection from the owning checkout to this worktree's .venv, so an inherited
+# VIRTUAL_ENV must not keep pointing at the pre-recovery environment.
+export VIRTUAL_ENV="$venv_path"
+# An explicit shared --venv override also carries a marker so common_setup.sh
+# preserves that selection when it applies its own environment policy (issue #7823).
 if [[ -n "$venv_override" ]]; then
-  export VIRTUAL_ENV="$venv_path"
   export ROBOT_SF_EXPLICIT_VENV_OVERRIDE="$venv_path"
 fi
 if [[ -z "$standalone" ]]; then

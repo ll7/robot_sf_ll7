@@ -28,12 +28,27 @@ git-ignored), so the repository stays clean.
 | 02 | [`02_compare_two_planners.ipynb`](./02_compare_two_planners.ipynb) | Run the **same scenario** with two different planners (`simple_policy` vs `random`) and compare metrics | `02_compare_two_planners/planner_comparison.png`, `comparison_summary.json` |
 | 03 | [`03_visualize_trace.ipynb`](./03_visualize_trace.ipynb) | Record an episode to JSONL and **see** it three ways: a trajectory plot, a map thumbnail, and an interactive browser viewer | `03_visualize_trace/trace_trajectory.png`, `map_thumbnail.png`, `viewer/index.html`, `episode.jsonl` |
 
-The notebooks only call **existing** env/planner/trace APIs — they add no new
-simulation logic:
+The notebooks only call **existing** APIs — they add no new simulation logic.
+Where the stable public facade owns an operation, the notebooks use the documented
+top-level import:
 
-- [`robot_sf.gym_env.environment_factory.make_robot_env`](../robot_sf/gym_env/environment_factory.py)
-- [`robot_sf.benchmark.runner.run_episode`](../robot_sf/benchmark/runner.py)
-- [`robot_sf.render.threejs_viewer.export_threejs_viewer`](../robot_sf/render/threejs_viewer.py)
+- [`robot_sf.make_env`](../robot_sf/api.py) and [`robot_sf.load_scenario`](../robot_sf/api.py)
+
+The remaining internal imports are documented exceptions because the facade does not expose an
+equivalent yet; each carries an `internal-import-exception:` marker in the generated notebook:
+
+- [`robot_sf.benchmark.runner.run_episode`](../robot_sf/benchmark/runner.py) — named-algorithm
+  episode execution.
+- [`robot_sf.baselines`](../robot_sf/baselines/__init__.py) — baseline planner registry and the
+  bundled random planner.
+- [`robot_sf.common.artifact_paths`](../robot_sf/common/artifact_paths.py) — artifact path policy.
+- [`robot_sf.render.jsonl_playback`](../robot_sf/render/jsonl_playback.py) — JSONL playback loader.
+- [`robot_sf.maps.map_visualizer`](../robot_sf/maps/map_visualizer.py) — map thumbnail renderer.
+- [`robot_sf.render.threejs_viewer`](../robot_sf/render/threejs_viewer.py) — Three.js viewer export.
+
+All three notebooks share one generated setup cell (headless environment, quiet logging,
+repository/output discovery, plotting helper, fixed seed) and close their environment on normal and
+exceptional paths.
 
 ## Reproducibility & scope
 
@@ -51,6 +66,8 @@ stays in sync:
 
 ```bash
 uv run python scripts/dev/generate_quickstart_notebooks.py
+# Verify committed notebooks match the generator without writing:
+uv run python scripts/dev/generate_quickstart_notebooks.py --check
 ```
 
 ## CI

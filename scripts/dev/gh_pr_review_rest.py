@@ -3,7 +3,9 @@
 
 When a caller has already computed the exact title/body metadata digest, pass
 ``--expected-metadata-digest`` so the live PR metadata is re-read and compared
-before the review POST. A mismatch is a safe stale-state skip.
+before the review POST. A mismatched ``pr-metadata`` carrier is an error
+(CLI exit 1), while a mismatch against the live PR title/body metadata is a
+safe stale-state skip (CLI exit 2).
 """
 
 from __future__ import annotations
@@ -223,7 +225,11 @@ def _metadata_digest_preflight(
     review_body: str,
     preflight: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """Return a safe stale skip when live metadata or its review carrier differs."""
+    """Enforce carrier and live-metadata digests before publishing a review.
+
+    A mismatched review-body carrier returns ``status="error"`` (CLI exit 1).
+    A changed live PR title/body returns ``METADATA_DIGEST_STATUS`` (CLI exit 2).
+    """
     if expected_digest is None:
         return None
     body_digests = extract_metadata_digests(review_body)
@@ -367,7 +373,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--expected-metadata-digest",
         help=(
             "Optional full 64-character SHA-256 digest of the exact live PR title/body; "
-            "mismatch skips publication."
+            "a carrier mismatch errors (exit 1), while a live metadata mismatch "
+            "skips publication (exit 2)."
         ),
     )
     parser.add_argument("--event", choices=REVIEW_EVENTS, default="COMMENT")

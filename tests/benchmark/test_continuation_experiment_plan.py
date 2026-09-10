@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from robot_sf.benchmark.continuation_experiment_plan import (
@@ -71,3 +73,33 @@ def test_cost_table_reports_positive_crossover() -> None:
     assert estimate["break_even_status"] == "positive"
     assert estimate["crossover_reuse_count"] == 2
     assert estimate["marginal_savings_per_branch_s"] > 0.0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("parent_cost_s", -1.0),
+        ("selection_cost_s", -1.0),
+        ("validation_cost_s", -1.0),
+        ("load_cost_s", -1.0),
+        ("step_cost_s", -1.0),
+        ("step_cost_s", math.nan),
+        ("step_cost_s", math.inf),
+    ],
+)
+def test_cost_table_rejects_negative_or_nonfinite_inputs(field: str, value: float) -> None:
+    """Cost arithmetic must never produce totals from unsafe input values."""
+    kwargs = {
+        "parent_steps": 10,
+        "window_steps": 5,
+        "branches": 2,
+        "parent_cost_s": 1.0,
+        "selection_cost_s": 1.0,
+        "validation_cost_s": 1.0,
+        "load_cost_s": 1.0,
+        "step_cost_s": 0.1,
+    }
+    kwargs[field] = value
+
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        estimate_continuation_cost(**kwargs)

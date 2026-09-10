@@ -22,6 +22,23 @@ CONTINUATION_MODES = (
 )
 
 
+def _nonnegative_finite(value: Any, name: str) -> float:
+    """Normalize one cost input before arithmetic and reject unsafe values.
+
+    Returns:
+        The finite, non-negative cost.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be finite and non-negative")
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be finite and non-negative") from exc
+    if not math.isfinite(normalized) or normalized < 0.0:
+        raise ValueError(f"{name} must be finite and non-negative")
+    return normalized
+
+
 @dataclass(frozen=True, slots=True)
 class ContinuationExperimentPlan:
     """A frozen, non-executing plan for a gated continuation comparison."""
@@ -150,13 +167,18 @@ def estimate_continuation_cost(
     if min(parent_steps, window_steps, branches) <= 0:
         raise ValueError("steps and branches must be positive")
     costs = {
-        "parent_generation_s": float(parent_cost_s),
-        "selection_s": float(selection_cost_s),
-        "validation_s": float(validation_cost_s),
-        "load_s": float(load_cost_s),
-        "full_branch_s": float(parent_steps * step_cost_s),
-        "window_branch_s": float(window_steps * step_cost_s),
+        "parent_generation_s": _nonnegative_finite(parent_cost_s, "parent_cost_s"),
+        "selection_s": _nonnegative_finite(selection_cost_s, "selection_cost_s"),
+        "validation_s": _nonnegative_finite(validation_cost_s, "validation_cost_s"),
+        "load_s": _nonnegative_finite(load_cost_s, "load_cost_s"),
     }
+    step_cost = _nonnegative_finite(step_cost_s, "step_cost_s")
+    costs.update(
+        {
+            "full_branch_s": float(parent_steps * step_cost),
+            "window_branch_s": float(window_steps * step_cost),
+        }
+    )
     full_per_branch = costs["full_branch_s"]
     window_per_branch = costs["load_s"] + costs["window_branch_s"]
     fixed = costs["parent_generation_s"] + costs["selection_s"] + costs["validation_s"]

@@ -21,6 +21,11 @@ documented in [simulator_typed_snapshot_contract.md](simulator_typed_snapshot_co
 [simulator_state_inventory.v1.json](simulator_state_inventory.v1.json); they define diagnostic
 continuation evidence, not benchmark or paper-facing evidence.
 
+The scenario-window preparation dossier is documented in
+[scenario_window_research_dossier_2026-09-08.md](scenario_window_research_dossier_2026-09-08.md)
+and its machine-readable record; it remains a preparation-only packet with no empirical or
+benchmark claim.
+
 The route-side and homotopy observability contract is documented in
 [issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md); it is an
 analysis-only diagnostic for planner-route observability, not evidence of human preference or

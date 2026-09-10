@@ -156,6 +156,29 @@ def _event_id(value: Any, name: str) -> str | None:
     return value.strip()
 
 
+def _validate_signal_metadata(
+    name: str,
+    metadata: Mapping[str, Any],
+    expected: tuple[str, str, str],
+) -> None:
+    """Reject metadata that contradicts the fixed typed-signal contract.
+
+    Signal metadata may add availability and hindsight information, but it must
+    not relabel a signal's units, provenance, or declared assumptions.  Those
+    fields are schema-owned and are therefore compared exactly rather than
+    coerced to strings.
+    """
+    fields = ("unit", "provenance", "prediction_assumptions")
+    for field, expected_value in zip(fields, expected, strict=True):
+        if field not in metadata:
+            continue
+        value = metadata[field]
+        if not isinstance(value, str) or value != expected_value:
+            raise RelevanceContractError(
+                f"signals.{name}.{field} must match declared value {expected_value!r}"
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class RelevanceSignal:
     """One typed signal with units, provenance, availability, and hindsight."""
@@ -171,8 +194,16 @@ class RelevanceSignal:
 
     def __post_init__(self) -> None:
         """Validate signal value and explicit missingness semantics."""
-        if not str(self.name).strip() or not str(self.unit).strip():
-            raise RelevanceContractError("signal name and unit must be non-empty")
+        try:
+            expected = _SIGNAL_SPECS[self.name]
+        except (KeyError, TypeError) as exc:
+            raise RelevanceContractError(f"unsupported signal name {self.name!r}") from exc
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise RelevanceContractError("signal name must be a non-empty string")
+        if (self.unit, self.provenance, self.prediction_assumptions) != expected:
+            raise RelevanceContractError(
+                f"signal {self.name!r} metadata must match its declared contract"
+            )
         if self.missingness not in {"observed", "not_available", "invalid"}:
             raise RelevanceContractError(f"unsupported signal missingness {self.missingness!r}")
         if self.value is None and self.missingness == "observed":
@@ -577,6 +608,7 @@ def _signal_from_row(row: Mapping[str, Any], name: str) -> RelevanceSignal:
     row_metadata = row.get("signal_metadata")
     if isinstance(row_metadata, Mapping) and isinstance(row_metadata.get(name), Mapping):
         metadata = {**metadata, **row_metadata[name]}
+    _validate_signal_metadata(name, metadata, (unit, provenance, assumptions))
     if raw is None:
         missingness = "not_available"
         value: float | bool | None = None
@@ -611,10 +643,10 @@ def _signal_from_row(row: Mapping[str, Any], name: str) -> RelevanceSignal:
     return RelevanceSignal(
         name=name,
         value=value,
-        unit=str(metadata.get("unit", unit)),
-        provenance=str(metadata.get("provenance", provenance)),
+        unit=unit,
+        provenance=provenance,
         available_at_step=availability,
-        prediction_assumptions=str(metadata.get("prediction_assumptions", assumptions)),
+        prediction_assumptions=assumptions,
         missingness=missingness,
         hindsight=signal_hindsight,
     )
@@ -827,7 +859,7 @@ def _run_owner(
         trigger_steps = tuple(int(rows[index]["step"]) for index in run)
         raise ExcerptContractError(
             f"ambiguous event ownership for trigger steps {trigger_steps}; "
-            "typed and untyped triggers cannot share a run"
+            "distinct event owners cannot share a run"
         )
     return next(iter(owners))
 
@@ -955,11 +987,23 @@ def select_relevance_windows(
     selector_hindsight = _strict_bool(hindsight, "hindsight")
     vectors, windows, required_precursors = _evaluate_rows(normalized, effective)
     row_actor_ids = tuple(sorted({actor for vector in vectors for actor in vector.actor_ids}))
-    effective_actor_ids = (
-        tuple(sorted({str(item) for item in actor_ids})) if actor_ids else row_actor_ids
-    )
-    if actor_ids is not None and row_actor_ids and effective_actor_ids != row_actor_ids:
-        raise ExcerptContractError("explicit actor_ids must retain every parent actor")
+    if actor_ids is None:
+        effective_actor_ids = row_actor_ids
+    else:
+        if isinstance(actor_ids, (str, bytes)) or not isinstance(actor_ids, Sequence):
+            raise ExcerptContractError("explicit actor_ids must be a sequence of non-empty strings")
+        normalized_actor_ids: set[str] = set()
+        for item in actor_ids:
+            if not isinstance(item, str) or not item.strip():
+                raise ExcerptContractError(
+                    "explicit actor_ids must be a sequence of non-empty strings"
+                )
+            normalized_actor_ids.add(item.strip())
+        effective_actor_ids = tuple(sorted(normalized_actor_ids))
+        if not row_actor_ids:
+            raise ExcerptContractError("explicit actor_ids require parent actor identities")
+        if effective_actor_ids != row_actor_ids:
+            raise ExcerptContractError("explicit actor_ids must retain every parent actor")
     selected_steps = tuple(
         sorted({step for window in windows for step in window.original_step_indices})
     )
@@ -1002,7 +1046,7 @@ def _validate_manifest_parent(
     if compute_parent_rows_sha256(normalized) != manifest.parent_rows_sha256:
         raise ExcerptContractError("manifest parent rows digest does not match complete parent")
     actual_actor_ids = tuple(sorted({actor for row in normalized for actor in _actor_ids(row)}))
-    if actual_actor_ids and actual_actor_ids != tuple(manifest.actor_ids):
+    if actual_actor_ids != tuple(manifest.actor_ids):
         raise ExcerptContractError("manifest actor IDs do not retain the complete parent actor set")
 
 

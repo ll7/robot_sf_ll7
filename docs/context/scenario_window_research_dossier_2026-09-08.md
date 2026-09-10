@@ -5,10 +5,12 @@ Status: preparation-only terminal packet. The complete machine-readable record i
 This work follows the live #7381 programme and the preparation rulings in #7383
 and #7384; the attached packet is guidance/evidence, not a replacement authority.
 
-Receipt provenance for this repair: current `origin/main` is
-`d6a41ba2395b19eb604978836f6c35735df45460`; the live #8612 and #8620 tips are
+The receipt provenance below records the historical `origin/main` at dossier capture,
+`d6a41ba2395b19eb604978836f6c35735df45460`; it is not the current `origin/main` and is
+not the child PR base. The dossier-capture tips for #8612 and #8620 were
 `db1215d6e5d1a19598d4f6a4ba10b119229f66b7` and
-`4ef0858d33c91291129098c08975525a54fb0121`; and the published #8622 code-bearing
+`4ef0858d33c91291129098c08975525a54fb0121`; the child remains scoped against that
+stacked parent rather than `main`. The published #8622 code-bearing
 commit is `40c33c26068cee38cbf59a5ff9a889736eff86e1`. The dossier binds its receipts
 to that code-bearing commit; this receipt/docs-only follow-up's final SHA is reported
 at handoff rather than embedded in this self-containing dossier. The stack is
@@ -121,8 +123,10 @@ C_plain = K * C(T)
 C_window = C_parent + C_selection + C_validation + K * (C_load + C(W))
 ```
 
-No positive break-even was measured because no admitted pilot ran. A proposed
-validation design uses 30 independent parents to expose feasibility bugs and 300
+The cost helper rejects negative, non-finite, and boolean cost inputs before arithmetic. No
+positive break-even was measured because no admitted pilot ran.
+
+A proposed validation design uses 30 independent parents to expose feasibility bugs and 300
 independent parents for a roughly 1% one-sided 95% upper bound after zero observed
 failures; both are held out by parent/scenario/seed lineage and are not executed in
 this lane.

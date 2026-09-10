@@ -26,6 +26,7 @@
   },
   "receipt_binding": {
     "base_head": "d6a41ba2395b19eb604978836f6c35735df45460",
+    "base_head_role": "historical origin/main at dossier capture; not the child PR base",
     "code_head": "40c33c26068cee38cbf59a5ff9a889736eff86e1",
     "dossier_commit_scope": "follow-up receipt refresh for the bounded hysteresis ownership repair; the code-bearing PR #8622 commit is recorded here, while the final follow-up SHA is reported outside this self-containing dossier",
     "status": "exact_code_head_validated"
@@ -252,7 +253,7 @@
     {"id": "H9", "statement": "PELT or a learned selector is needed for v1", "status": "blocked", "evidence": "Option A selected for preparation; alternatives deferred", "limitation": "reopen only after measured baseline shortcomings"}
   ],
   "command_receipts": [
-    {"command": "uv run pytest -q tests/benchmark/test_relevance_windows.py tests/benchmark/test_typed_snapshot.py tests/benchmark/test_last_avoidable_replay_issue_5442.py tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_continuation_experiment_plan.py tests/benchmark/test_scenario_window_research_dossier.py", "exit_code": 0, "result": "160 passed after the bounded hysteresis-ownership repair; receipt custody is anchored to the code-bearing PR #8622 commit 40c33c26068cee38cbf59a5ff9a889736eff86e1 with parent #8620 at 4ef0858d33c91291129098c08975525a54fb0121 and origin/main d6a41ba2395b19eb604978836f6c35735df45460; the final follow-up receipt SHA is intentionally not embedded"},
+    {"command": "uv run pytest -q tests/benchmark/test_relevance_windows.py tests/benchmark/test_typed_snapshot.py tests/benchmark/test_last_avoidable_replay_issue_5442.py tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py tests/benchmark/test_continuation_experiment_plan.py tests/benchmark/test_scenario_window_research_dossier.py", "exit_code": 0, "result": "160 passed after the bounded hysteresis-ownership repair; receipt custody is anchored to the code-bearing PR #8622 commit 40c33c26068cee38cbf59a5ff9a889736eff86e1 with parent #8620 at 4ef0858d33c91291129098c08975525a54fb0121 and the historical origin/main at dossier capture d6a41ba2395b19eb604978836f6c35735df45460; the final follow-up receipt SHA is intentionally not embedded"},
     {"command": "uv run ruff check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py", "exit_code": 0, "result": "passed after the bounded hysteresis-ownership repair; receipt anchor is the code-bearing PR #8622 commit 40c33c26068cee38cbf59a5ff9a889736eff86e1"},
     {"command": "uv run ruff format --check robot_sf/benchmark/relevance_windows.py tests/benchmark/test_relevance_windows.py", "exit_code": 0, "result": "2 files already formatted after the bounded hysteresis-ownership repair; receipt anchor is the code-bearing PR #8622 commit 40c33c26068cee38cbf59a5ff9a889736eff86e1"},
     {"command": "uv run pytest -q tests/dev/test_issue_7331_benchmark_namespace_inventory.py", "exit_code": 0, "result": "7 passed on origin/main d6a41ba2395b19eb604978836f6c35735df45460"},

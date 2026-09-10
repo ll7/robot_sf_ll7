@@ -177,6 +177,20 @@ def test_mixed_typed_and_untyped_trigger_run_is_rejected() -> None:
         )
 
 
+def test_distinct_typed_event_owners_are_not_described_as_typed_untyped() -> None:
+    """A typed/typed conflict gets a generic ownership diagnostic."""
+    rows = _parent_rows()
+    rows[3].update({"event_id": "first", "clearance_m": 0.8})
+    rows[4].update({"event_id": "second", "path_conflict": True})
+
+    with pytest.raises(ExcerptContractError, match="distinct event owners"):
+        select_relevance_windows(
+            rows,
+            parent_digest=_parent_digest(),
+            thresholds=RelevanceThresholds(merge_gap_steps=0),
+        )
+
+
 def test_too_late_crop_is_rejected_as_unsafe() -> None:
     """Dropping a required precursor cannot be presented as a valid excerpt."""
     rows = _parent_rows()
@@ -253,6 +267,19 @@ def test_boolean_signal_rejects_numeric_truthy_values() -> None:
     assert signal.missingness == "invalid"
     assert "path_conflict" in selection.vectors[0].unknown_signals
     assert "path_conflict" not in selection.vectors[0].active_reasons
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("unit", "bool"), ("provenance", "spoofed"), ("prediction_assumptions", "spoofed")],
+)
+def test_signal_metadata_cannot_override_declared_contract(field: str, value: str) -> None:
+    """Typed signal metadata cannot relabel units, provenance, or assumptions."""
+    rows = _parent_rows(1)
+    rows[0]["signals"] = {"ttc_s": {"value": 0.5, field: value}}
+
+    with pytest.raises(RelevanceContractError, match=field):
+        select_relevance_windows(rows, parent_digest=_parent_digest())
 
 
 @pytest.mark.parametrize("value", [True, False, np.bool_(True), np.bool_(False)])
@@ -346,6 +373,18 @@ def test_future_signal_remains_unknown_even_when_row_has_flat_value() -> None:
     selection = select_relevance_windows(rows, parent_digest=_parent_digest())
     assert "ttc_s" in selection.vectors[0].unknown_signals
     assert selection.vectors[0].active_reasons == ()
+
+
+@pytest.mark.parametrize("actor_ids", [[""], [True]])
+def test_explicit_actor_ids_require_known_nonempty_parent_identities(
+    actor_ids: list[object],
+) -> None:
+    """Explicit identities cannot invent actors when parent rows are actorless."""
+    rows = _parent_rows(1)
+    rows[0].pop("actor_ids")
+
+    with pytest.raises(ExcerptContractError, match="explicit actor_ids"):
+        select_relevance_windows(rows, parent_digest=_parent_digest(), actor_ids=actor_ids)
 
 
 def test_manifest_writer_preserves_parent_rows_and_digest(tmp_path: Path) -> None:

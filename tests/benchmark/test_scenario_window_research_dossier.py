@@ -14,6 +14,7 @@ from robot_sf.benchmark.continuation_experiment_plan import (
 
 _ROOT = Path(__file__).resolve().parents[2]
 _DOSSIER = _ROOT / "docs/context/scenario_window_research_dossier_2026-09-08.json"
+_CONTEXT_README = _ROOT / "docs/context/README.md"
 _EXPECTED_REPOSITORY_HEADS = {
     "origin_main_at_start": "d6a41ba2395b19eb604978836f6c35735df45460",
     "rw03_rw04_pr_8620_head": "4ef0858d33c91291129098c08975525a54fb0121",
@@ -56,6 +57,9 @@ def test_dossier_sources_and_receipts_are_resolvable() -> None:
     assert payload["repository_heads"] == _EXPECTED_REPOSITORY_HEADS
     binding = payload["receipt_binding"]
     assert binding["base_head"] == _EXPECTED_REPOSITORY_HEADS["origin_main_at_start"]
+    assert binding["base_head_role"] == (
+        "historical origin/main at dossier capture; not the child PR base"
+    )
     assert binding["code_head"] == _EXPECTED_REPOSITORY_HEADS["rw05_rw06_rw07_pr_8622_code_head"]
     assert binding["status"] == "exact_code_head_validated"
     focused_receipt = next(
@@ -65,6 +69,7 @@ def test_dossier_sources_and_receipts_are_resolvable() -> None:
     )
     assert focused_receipt["exit_code"] == 0
     assert "160 passed" in focused_receipt["result"]
+    assert "historical origin/main at dossier capture" in focused_receipt["result"]
     assert (
         _EXPECTED_REPOSITORY_HEADS["rw05_rw06_rw07_pr_8622_code_head"] in focused_receipt["result"]
     )
@@ -73,3 +78,10 @@ def test_dossier_sources_and_receipts_are_resolvable() -> None:
     serialized_receipts = json.dumps(payload["command_receipts"], sort_keys=True)
     assert "ce31aa2" not in serialized_receipts
     assert "144 passed" not in serialized_receipts
+
+
+def test_dossier_is_linked_from_context_readme() -> None:
+    """The full context discoverability surface must link the preparation dossier."""
+    assert "scenario_window_research_dossier_2026-09-08.md" in _CONTEXT_README.read_text(
+        encoding="utf-8"
+    )

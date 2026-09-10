@@ -11,6 +11,7 @@ that the JSON payload is deterministic.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import subprocess
 import sys
@@ -20,11 +21,12 @@ import pytest
 import yaml
 
 from robot_sf.examples import prerequisites as prerequisites_module
-from robot_sf.examples.manifest_loader import load_manifest
+from robot_sf.examples.manifest_loader import ManifestValidationError, load_manifest
 from robot_sf.examples.prerequisites import (
     CHECK_SCHEMA,
     STATUS_INVALID_CHECKSUM,
     STATUS_MISSING_EXTRA,
+    STATUS_MISSING_FILE,
     STATUS_MISSING_MAP,
     STATUS_MISSING_MODEL,
     STATUS_OPERATOR_INPUT_REQUIRED,
@@ -32,7 +34,9 @@ from robot_sf.examples.prerequisites import (
     STATUS_UNSUPPORTED_LEGACY_REFERENCE,
     check_example_prerequisites,
     check_script_prerequisites,
+    format_report_text,
     report_to_dict,
+    run_prerequisite_check,
 )
 from robot_sf.examples_cli import examples_cli_main
 
@@ -358,3 +362,180 @@ def test_script_helpers_are_self_consistent() -> None:
     report = check_script_prerequisites(script_path)
     expected = check_example_prerequisites(_REAL_MANIFEST, "advanced/10_offensive_policy")
     assert report == expected
+
+
+def test_map_file_and_descriptive_prerequisites_report_explicit_statuses(
+    tmp_path: Path,
+) -> None:
+    """Map, generic-file, descriptive, and unknown-extra prerequisites stay explicit."""
+
+    manifest_path = _write_repo(
+        tmp_path,
+        [
+            _example(
+                "advanced/kinds.py",
+                [
+                    "maps/absent.svg",
+                    "configs/absent.yaml",
+                    "fast-pysf subtree (bundled)",
+                    "uv sync --extra unknown-extra",
+                ],
+            )
+        ],
+    )
+    manifest = load_manifest(manifest_path, validate_paths=True)
+
+    report = check_example_prerequisites(manifest, "advanced/kinds")
+
+    assert report.status == STATUS_MISSING_MAP
+    assert _missing_ok_checks(report, "maps/absent.svg").status == STATUS_MISSING_MAP
+    assert _missing_ok_checks(report, "configs/absent.yaml").status == STATUS_MISSING_FILE
+    assert (
+        _missing_ok_checks(report, "fast-pysf subtree (bundled)").status
+        == prerequisites_module.STATUS_NOT_VERIFIABLE
+    )
+    assert (
+        _missing_ok_checks(report, "uv sync --extra unknown-extra").status
+        == prerequisites_module.STATUS_NOT_VERIFIABLE
+    )
+
+
+def test_glob_prerequisites_resolve_or_fail(tmp_path: Path) -> None:
+    """Glob prerequisites report ready when matched and missing when empty."""
+
+    manifest_path = _write_repo(
+        tmp_path,
+        [_example("advanced/globs.py", ["configs/*.yaml", "other/*.yaml"])],
+        files={"configs/present.yaml": b"name: fixture\n"},
+    )
+    manifest = load_manifest(manifest_path, validate_paths=True)
+
+    report = check_example_prerequisites(manifest, "advanced/globs")
+
+    assert _missing_ok_checks(report, "configs/*.yaml").status == STATUS_READY
+    assert _missing_ok_checks(report, "other/*.yaml").status == STATUS_MISSING_FILE
+
+
+def test_legacy_reference_without_registry_still_reports_unsupported(tmp_path: Path) -> None:
+    """A legacy path without registry detail is unsupported and has no acquisition pointer."""
+
+    manifest_path = _write_repo(
+        tmp_path,
+        [_example("advanced/legacy_noreg.py", ["model/run_043"])],
+    )
+    manifest = load_manifest(manifest_path, validate_paths=True)
+
+    report = check_example_prerequisites(manifest, "advanced/legacy_noreg")
+
+    check = _missing_ok_checks(report, "model/run_043")
+    assert check.status == STATUS_UNSUPPORTED_LEGACY_REFERENCE
+    assert check.acquisition is None
+    assert check.model_registry is None
+
+
+def test_malformed_registry_degrades_without_failing_readiness(tmp_path: Path) -> None:
+    """A malformed registry disables checksum detail but never fails a present path."""
+
+    manifest_path = _write_repo(
+        tmp_path,
+        [_example("advanced/malformed.py", ["model/present.zip"])],
+        files={"model/present.zip": b"bytes"},
+    )
+    registry_path = tmp_path / "model" / "registry.yaml"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text("models: [not-a-mapping, {model_id: ''}] broken: [\n", encoding="utf-8")
+
+    manifest = load_manifest(manifest_path, validate_paths=True)
+    report = check_example_prerequisites(manifest, "advanced/malformed")
+
+    check = _missing_ok_checks(report, "model/present.zip")
+    assert check.status == STATUS_READY
+    assert check.model_registry is None
+
+
+def test_registry_entry_shapes_are_tolerated(tmp_path: Path) -> None:
+    """Non-mapping release blocks and missing local paths degrade registry detail only."""
+
+    manifest_path = _write_repo(
+        tmp_path,
+        [_example("advanced/registry_shapes.py", ["model/shaped.zip"])],
+        files={"model/shaped.zip": b"bytes"},
+        registry=[
+            {
+                "model_id": "shaped_model",
+                "local_path": "model/shaped.zip",
+                "github_release": "not-a-mapping",
+            }
+        ],
+    )
+    manifest = load_manifest(manifest_path, validate_paths=True)
+
+    report = check_example_prerequisites(manifest, "advanced/registry_shapes")
+
+    check = _missing_ok_checks(report, "model/shaped.zip")
+    assert check.status == STATUS_READY
+    assert check.model_registry is not None
+    assert check.expected_sha256 is None
+    assert check.model_registry["expected_sha256"] is None
+
+
+def test_missing_registered_model_without_local_path_has_plain_acquisition(
+    tmp_path: Path,
+) -> None:
+    """A registered model without a local_path keeps the download pointer without hydration text."""
+
+    manifest_path = _write_repo(
+        tmp_path,
+        [_example("advanced/no_local.py", ["model/pedestrian/ppo_ped_02.zip"])],
+        registry=[
+            {
+                "model_id": "legacy_ppo_pedestrian_ped_02",
+                "github_release": {
+                    "url": "https://example.invalid/legacy_ppo_pedestrian_ped_02.zip"
+                },
+            }
+        ],
+    )
+    manifest = load_manifest(manifest_path, validate_paths=True)
+
+    report = check_example_prerequisites(manifest, "advanced/no_local")
+
+    check = _missing_ok_checks(report, "model/pedestrian/ppo_ped_02.zip")
+    assert check.status == STATUS_MISSING_MODEL
+    assert check.acquisition == "robot-sf models download legacy_ppo_pedestrian_ped_02"
+
+
+def test_cli_text_output_and_run_prerequisite_check(tmp_path: Path) -> None:
+    """Text output paths render without JSON and match the report status."""
+
+    manifest_path = _write_repo(
+        tmp_path,
+        [_example("advanced/text.py", ["maps/absent.svg"])],
+    )
+    manifest = load_manifest(manifest_path, validate_paths=True)
+
+    report = check_example_prerequisites(manifest, "advanced/text")
+    text = format_report_text(report)
+    assert "advanced/text: missing_map" in text
+    assert "- maps/absent.svg: missing_map" in text
+
+    buffer = io.StringIO()
+    exit_code = run_prerequisite_check(
+        _REPO_ROOT / "examples" / "advanced" / "10_offensive_policy.py",
+        output_format="json",
+        stream=buffer,
+    )
+    payload = json.loads(buffer.getvalue())
+    assert payload["schema"] == CHECK_SCHEMA
+    assert exit_code == (0 if payload["ready"] else 1)
+
+
+def test_script_check_rejects_paths_outside_examples_tree(tmp_path: Path) -> None:
+    """A script outside the examples tree cannot resolve a manifest and fails closed."""
+
+    stray = tmp_path / "scripts" / "stray.py"
+    stray.parent.mkdir(parents=True)
+    stray.write_text('"""stray."""\n', encoding="utf-8")
+
+    with pytest.raises(ManifestValidationError):
+        check_script_prerequisites(stray)

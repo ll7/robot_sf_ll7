@@ -443,7 +443,9 @@ def test_malformed_registry_degrades_without_failing_readiness(tmp_path: Path) -
     )
     registry_path = tmp_path / "model" / "registry.yaml"
     registry_path.parent.mkdir(parents=True, exist_ok=True)
-    registry_path.write_text("models: [not-a-mapping, {model_id: ''}] broken: [\n", encoding="utf-8")
+    registry_path.write_text(
+        "models: [not-a-mapping, {model_id: ''}] broken: [\n", encoding="utf-8"
+    )
 
     manifest = load_manifest(manifest_path, validate_paths=True)
     report = check_example_prerequisites(manifest, "advanced/malformed")

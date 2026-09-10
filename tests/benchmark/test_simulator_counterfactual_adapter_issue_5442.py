@@ -3,7 +3,7 @@
 This is the remaining slice named in the issue thread: a real
 ``CounterfactualModel`` adapter over the live Robot SF ``Simulator`` plus the
 RNG-capture seam. The tests build a headless ``Simulator`` (no display), prove the
-snapshot/restore seam reproduces a baseline pedestrian-robot episode bit-for-bit,
+snapshot/restore seam reproduces a baseline pedestrian-robot contact outcome and tick,
 and drive the frozen-state replay engine end to end on a genuine production fixture
 where the native forward-acceleration baseline contacts but native braking
 avoids contact.
@@ -16,6 +16,7 @@ replay diverge, exercising the same guard on production state.
 
 from __future__ import annotations
 
+import json
 import pickle
 from copy import deepcopy
 from dataclasses import replace
@@ -30,6 +31,7 @@ from robot_sf.benchmark.last_avoidable_fixtures import (
     KinematicScenario,
 )
 from robot_sf.benchmark.last_avoidable_replay import (
+    OMITTED_PEDESTRIAN_RESPONSE,
     SUBSTITUTION_HOLD,
     VERDICT_AVOIDABLE,
     VERDICT_UNKNOWN,
@@ -252,12 +254,12 @@ def test_rng_capture_seam_prevents_divergence() -> None:
 
     A dense doorway scenario triggers pedestrian group respawns that draw from the
     global numpy RNG (via ``sample_zone``). With the seam ``capture_rng=True`` the
-    snapshot restores that RNG so the replay is bit-for-bit identical; with
+    snapshot restores that RNG so the replay's observable outcome is identical; with
     ``capture_rng=False`` the same replay diverges by meters — exactly the
     nondeterministic-baseline condition the engine's ``unknown`` guard protects
     against.
     """
-    # With the seam: replay is bit-for-bit reproducible.
+    # With the seam: the observable replay outcome is reproducible.
     sim = _build_dense_simulator()
     model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS, capture_rng=True)
     snap0 = model.snapshot()
@@ -523,12 +525,20 @@ def test_omitted_response_remains_bindable_after_copy_and_pickle() -> None:
         "deepcopy": deepcopy(direct),
         "pickle": pickle.loads(pickle.dumps(direct)),
     }
+    wire = json.loads(json.dumps(direct.to_dict()))
+    assert wire["pedestrian_response"] == OMITTED_PEDESTRIAN_RESPONSE
+    variants["json"] = ReplayConfig.from_dict(wire)
+    explicit_unknown = ReplayConfig.from_dict({**wire, "pedestrian_response": "unknown"})
 
     for variant, config in variants.items():
         report = locate_last_avoidable(model, [], config)
 
         assert report.abstain_reason == "incomplete_snapshot_state", variant
         assert report.config.pedestrian_response == "closed_loop", variant
+
+    report = locate_last_avoidable(model, [], explicit_unknown)
+    assert report.abstain_reason == "metadata_mismatch"
+    assert report.config.pedestrian_response == "unknown"
 
 
 def test_unknown_action_contract_fails_closed_and_uses_generic_label() -> None:
@@ -554,6 +564,10 @@ def test_adapter_rejects_invalid_robot_count_and_collision_scope() -> None:
     ("robot_pos", "ped_pos", "expected"),
     (
         ((-0.1, 1.0), np.empty((0, 2)), True),
+        ((0.2, 5.0), np.empty((0, 2)), True),
+        ((9.8, 5.0), np.empty((0, 2)), True),
+        ((5.0, 0.2), np.empty((0, 2)), True),
+        ((5.0, 9.8), np.empty((0, 2)), True),
         ((1.0, 1.0), np.empty((0, 2)), False),
         ((1.0, 1.0), np.asarray([[1.8, 1.0]]), True),
     ),

@@ -2,8 +2,8 @@
 
 This module implements the offline analysis contract of issue #5442 (child of
 #5440, depends on the report contract of #5441): given a replay model that can
-*deterministically* snapshot and restore its full state (including any random
-number generator), branch over admissible robot actions at each decision point in
+restore enough state to reproduce its observable collision outcome (including any
+random number generator), branch over admissible robot actions at each decision point in
 the danger window and decide whether — and how early — the collision was avoidable.
 
 The engine is intentionally decoupled from any concrete simulator. A caller
@@ -40,13 +40,17 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 LAST_AVOIDABLE_REPLAY_SCHEMA = "last_avoidable_replay.v1"
 
 VERDICT_AVOIDABLE = "avoidable"
 VERDICT_ALREADY_UNAVOIDABLE = "already_unavoidable"
 VERDICT_UNKNOWN = "unknown"
+
+# Wire value used to preserve the distinction between an omitted response mode
+# and an explicit ``unknown`` declaration across JSON serialization.
+OMITTED_PEDESTRIAN_RESPONSE = "__omitted_pedestrian_response__"
 
 # Substitution modes: how a candidate avoidance action is injected.
 SUBSTITUTION_SINGLE_STEP = "single_step"  # substitute at t, then resume baseline commands
@@ -104,19 +108,19 @@ class CounterfactualModel(Protocol):
     """The smallest deterministic snapshot/restore seam the engine drives.
 
     A model wraps one controlled fixture positioned at step 0 of a recorded
-    baseline episode. Implementations must be *deterministic*: restoring a
-    snapshot and applying the same actions must reproduce the same collision
-    outcome. The snapshot must capture everything that affects future steps,
-    including any RNG state (see the fixture in
-    :mod:`robot_sf.benchmark.last_avoidable_fixtures`).
+    baseline episode. Implementations should capture every state that affects
+    future steps, including any RNG state (see the fixture in
+    :mod:`robot_sf.benchmark.last_avoidable_fixtures`). The engine verifies only
+    the observable collision outcome and contact tick; it does not compare opaque
+    snapshots for full-state equality.
     """
 
     def snapshot(self) -> Any:
-        """Return an opaque, restorable copy of the full simulation state.
+        """Return an opaque, restorable copy of replay-relevant simulation state.
 
-        The snapshot must include actor state (poses, velocities) *and* any RNG
-        state so that :meth:`restore` followed by identical actions is bit-for-bit
-        deterministic.
+        The snapshot should include actor state (poses, velocities) and any RNG
+        state so that :meth:`restore` followed by identical actions can reproduce
+        the observable collision outcome and contact tick.
         """
         ...
 
@@ -168,15 +172,16 @@ class ReplayConfig:
         pedestrian_response: Pedestrian response assumption for this run, e.g.
             ``replayed`` (pedestrian follows its recorded path) or ``closed_loop``
             (pedestrian reacts to the robot). An omitted value is serialized as the
-            schema-safe ``unknown`` value when no model declaration is available,
-            but binds to a model-declared response mode when one is available.
-            Explicit ``unknown`` remains an intentional unknown declaration and is
-            not silently rebound to a model mode.
+            reserved JSON marker ``__omitted_pedestrian_response__`` and can be
+            restored with :meth:`from_dict`; it binds to a model-declared response
+            mode when one is available. Explicit ``unknown`` remains an intentional
+            unknown declaration and is not silently rebound to a model mode.
         source_kind: Provenance classification for the replay source. Native live
             simulator adapters bind this to ``live_episode``; controlled fixtures
-            may use ``synthetic_fixture`` (legacy callers may leave it
-            ``unspecified``, which the causal join accepts as fixture-compatible
-            input). This is a source label, not a causal or benchmark claim.
+            must explicitly use ``synthetic_fixture`` before the causal join can
+            treat the result as fixture evidence. ``unspecified`` is retained for
+            compatibility but is never promoted by the join. This is a source
+            label, not a causal or benchmark claim.
     """
 
     t_danger: int
@@ -208,6 +213,11 @@ class ReplayConfig:
 
     def to_dict(self) -> dict[str, Any]:
         """Return the JSON-safe provenance mapping for this config."""
+        pedestrian_response = (
+            OMITTED_PEDESTRIAN_RESPONSE
+            if _is_omitted_pedestrian_response(self.pedestrian_response)
+            else self.pedestrian_response
+        )
         return {
             "t_danger": self.t_danger,
             "t_contact": self.t_contact,
@@ -218,13 +228,38 @@ class ReplayConfig:
             "action_set_id": self.action_set_id,
             "feasibility_filter": self.feasibility_filter,
             "collision_predicate": self.collision_predicate,
-            "pedestrian_response": self.pedestrian_response,
+            "pedestrian_response": pedestrian_response,
         }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> ReplayConfig:
+        """Restore a config from its JSON mapping, including omission semantics.
+
+        The reserved wire marker is intentionally distinct from the literal
+        ``"unknown"`` value. This lets a native model bind an omitted response
+        declaration while preserving an explicit unknown declaration as a
+        fail-closed mismatch.
+
+        Args:
+            payload: JSON-decoded ``config`` mapping from a replay report.
+
+        Returns:
+            A validated :class:`ReplayConfig` instance.
+        """
+        values = dict(payload)
+        if values.get("pedestrian_response") == OMITTED_PEDESTRIAN_RESPONSE:
+            values["pedestrian_response"] = _DEFAULT_PEDESTRIAN_RESPONSE
+        return cls(**values)
 
 
 @dataclass(frozen=True)
 class DeterminismCheck:
-    """Result of verifying the baseline replay reproduces the contact outcome."""
+    """Result of checking baseline collision outcome and contact-tick stability.
+
+    This check deliberately does not claim equality of every opaque simulator
+    state field. A model-specific state digest/equality contract would be needed
+    for that stronger claim.
+    """
 
     replays: int
     collision_stable: bool
@@ -365,11 +400,12 @@ def _verify_determinism(
     baseline_actions: Sequence[Any],
     config: ReplayConfig,
 ) -> DeterminismCheck:
-    """Replay the baseline ``config.determinism_replays`` times and compare outcomes.
+    """Replay the baseline and compare collision outcomes and contact ticks.
 
     Returns:
-        A :class:`DeterminismCheck` recording whether the collision flag and
-        contact step were stable across all replays.
+        A :class:`DeterminismCheck` recording whether the observable collision
+        flag and contact step were stable across all replays. Opaque simulator
+        state is not compared here.
     """
     max_step = config.t_contact + config.horizon
     contact_steps: list[int | None] = []
@@ -574,12 +610,12 @@ def _bind_model_metadata(
         actual = _model_metadata(model, model_field)
         if actual is None:
             continue
-        # The omitted pedestrian-response default is a string-compatible marker,
-        # so existing callers still observe/serialize ``unknown`` while native
-        # adapters can bind it to their actual response mode. A caller that
-        # explicitly supplies ``unknown`` remains distinct and fails closed
-        # against a declared native mode. ``unspecified`` retains its legacy
-        # model-binding semantics for all provenance fields.
+        # ``from_dict`` restores the omitted-response wire marker to the private
+        # singleton, so native adapters can bind it to their actual response mode.
+        # A caller that explicitly supplies ``unknown`` remains distinct and
+        # fails closed against a declared native mode. ``unspecified`` retains
+        # its legacy model-binding semantics for all provenance fields, while the
+        # causal join still requires explicit fixture provenance.
         if _is_omitted_pedestrian_response(declared) or declared == "unspecified":
             bound_config = replace(bound_config, **{field_name: actual})
         elif declared != actual:

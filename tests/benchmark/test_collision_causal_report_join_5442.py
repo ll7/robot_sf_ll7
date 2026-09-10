@@ -51,6 +51,7 @@ def _run_replay(scenario, *, determinism_replays: int = 20):
         feasibility_filter="all_admissible_decel",
         collision_predicate="euclidean_distance<=collision_radius",
         pedestrian_response=scenario.pedestrian_response,
+        source_kind="synthetic_fixture",
     )
     model = fx.KinematicCollisionModel(scenario)
     baseline = fx.maintain_baseline_actions(contact_step + horizon + 2)
@@ -255,6 +256,7 @@ def test_default_pedestrian_response_is_schema_safe() -> None:
             action_set_id="decel_lattice",
             feasibility_filter="all_admissible_decel",
             collision_predicate="euclidean_distance<=collision_radius",
+            source_kind="synthetic_fixture",
         ),
     )
 
@@ -266,6 +268,28 @@ def test_default_pedestrian_response_is_schema_safe() -> None:
     )
 
     assert report["causal_contribution"]["pedestrian_response_assumption"] == "unknown"
+    validate_collision_causal_report(report)
+
+
+@pytest.mark.parametrize("source_kind", ("unspecified", "unknown"))
+def test_unverified_replay_source_abstains_without_synthetic_relabel(source_kind: str) -> None:
+    """Unidentified replay provenance cannot enter the synthetic fixture join."""
+    from dataclasses import replace
+
+    replay = _run_replay(fx.preventable_late_braking_scenario())
+    replay = replace(replay, config=replace(replay.config, source_kind=source_kind))
+
+    report = collide_causal_report_from_last_avoidable(
+        report_id=f"unverified-{source_kind}",
+        case_id="fixture",
+        replay=replay,
+        metadata=_METADATA,
+    )
+
+    assert report["abstained"] is True
+    assert report["abstention_reason"] == "unverified_replay_source_provenance"
+    assert report["data_source"]["source_kind"] == "unknown"
+    assert report["causal_contribution"]["supported_actual_cause"] is False
     validate_collision_causal_report(report)
 
 

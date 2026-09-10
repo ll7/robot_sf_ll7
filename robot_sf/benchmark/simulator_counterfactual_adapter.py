@@ -9,11 +9,11 @@ RNG-capture seam the prior controlled-fixture slice flagged as out of scope.
 
 Scope and determinism contract
 ------------------------------
-A faithful mid-episode snapshot of the production simulator must capture everything
-that affects future steps, including the random-number generator state. The engine's
-:class:`~robot_sf.benchmark.last_avoidable_replay.CounterfactualModel` contract
-requires that restoring a snapshot and applying the same actions reproduce the same
-contact outcome bit-for-bit.
+A faithful mid-episode snapshot of the production simulator should capture everything
+that affects future steps, including the random-number generator state. The replay
+engine checks only whether the observable collision outcome and contact tick are
+stable after restoration; it does not compare opaque simulator state for full-state
+equality.
 
 This adapter captures:
 
@@ -36,8 +36,8 @@ claim (see the engine's fail-closed determination vocabulary).
 The snapshot/restore seam here is intentionally scoped to the actual mutable state of a
 running ``Simulator``. Broader state (PySF force internal buffers, obstacle KD-trees)
 is reproducible from the captured actor state and the immutable config/map, so it is not
-independently snapshotted. The determinism check in the engine is the safeguard: if a
-replay diverges, the engine abstains to ``unknown`` rather than guessing.
+independently snapshotted or compared. The determinism check is an observable-outcome
+safeguard: if a replay diverges, the engine abstains to ``unknown`` rather than guessing.
 """
 
 from __future__ import annotations
@@ -349,6 +349,18 @@ class SimulatorCounterfactualModel:
         ):
             return True
 
+        boundary_lines = np.asarray(
+            (
+                (0.0, 0.0, float(map_def.width), 0.0),
+                (0.0, float(map_def.height), float(map_def.width), float(map_def.height)),
+                (0.0, 0.0, 0.0, float(map_def.height)),
+                (float(map_def.width), 0.0, float(map_def.width), float(map_def.height)),
+            ),
+            dtype=float,
+        )
+        if circle_collides_any_lines((robot_pos, robot_radius), boundary_lines):
+            return True
+
         get_obstacles = getattr(self.sim, "get_obstacle_lines", None)
         obstacle_lines = get_obstacles() if callable(get_obstacles) else ()
         if circle_collides_any_lines((robot_pos, robot_radius), obstacle_lines):
@@ -462,7 +474,7 @@ class SimulatorCounterfactualModel:
         return "true" if self.capture_rng else "false"
 
     def snapshot(self) -> _SimulatorSnapshot:
-        """Capture the full live simulator state including the global RNG.
+        """Capture the replay-relevant live simulator state including global RNG.
 
         Returns:
             A :class:`_SimulatorSnapshot` restorable via :meth:`restore`.

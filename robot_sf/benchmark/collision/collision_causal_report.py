@@ -254,7 +254,7 @@ _LAST_AVOIDABLE_TO_CAUSAL_VERDICT = {
     VERDICT_ALREADY_UNAVOIDABLE: "unavoidable",
     VERDICT_UNKNOWN: "unknown",
 }
-_SYNTHETIC_REPLAY_SOURCE_KINDS = frozenset({"unspecified", "synthetic_fixture"})
+_SYNTHETIC_REPLAY_SOURCE_KINDS = frozenset({"synthetic_fixture"})
 
 
 @dataclass(frozen=True)
@@ -325,21 +325,25 @@ def collide_causal_report_from_last_avoidable(
 
     _validate_join_metadata(metadata)
 
-    # The native adapter currently has enough state to run a diagnostic replay,
-    # but not enough verified episode/map/seed/software provenance to support the
-    # causal-report source contract. Do not silently relabel its result as a
-    # synthetic fixture. The explicit abstention is the supported hand-off until
-    # a native provenance receipt is threaded through this join.
+    # Only an explicitly declared controlled fixture may enter this join. Native,
+    # unknown, and unspecified sources do not have the verified provenance needed
+    # by the causal-report source contract; never silently relabel them as a
+    # synthetic fixture.
     source_kind = getattr(replay.config, "source_kind", "unspecified")
     if source_kind not in _SYNTHETIC_REPLAY_SOURCE_KINDS:
+        is_native = source_kind == "live_episode"
         return validate_collision_causal_report(
             abstained_collision_causal_report(
                 report_id=report_id,
                 case_id=case_id,
-                reason="native_simulator_causal_join_unsupported",
+                reason=(
+                    "native_simulator_causal_join_unsupported"
+                    if is_native
+                    else "unverified_replay_source_provenance"
+                ),
                 source_kind="unknown",
                 missing_fields=[
-                    "native_simulator_provenance",
+                    "native_simulator_provenance" if is_native else "replay_source_kind",
                     "causal_join_contract",
                 ],
             )
@@ -394,7 +398,7 @@ def collide_causal_report_from_last_avoidable(
         "case_id": case_id,
         "normative_fault": "not_assessed",
         "data_source": {
-            "source_kind": "synthetic_fixture",
+            "source_kind": source_kind,
             "provenance_uri": "last_avoidable_replay.v1+frozen_state_counterfactual_branch",
             "software_commit": None,
             "replay_determinism": replay_determinism,

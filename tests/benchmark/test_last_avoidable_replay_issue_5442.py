@@ -56,6 +56,7 @@ def _run(scenario, *, determinism_replays: int = 20):
         feasibility_filter="all_admissible_decel",
         collision_predicate="euclidean_distance<=collision_radius",
         pedestrian_response=scenario.pedestrian_response,
+        source_kind="synthetic_fixture",
     )
     model = fx.KinematicCollisionModel(scenario)
     baseline = fx.maintain_baseline_actions(contact_step + horizon + 2)
@@ -417,6 +418,15 @@ def test_report_conforms_to_schema_and_records_provenance() -> None:
         assert cfg["collision_predicate"]
         assert cfg["horizon"] >= 1
         assert cfg["pedestrian_response"] in {"replayed", "closed_loop"}
+
+
+def test_v1_schema_accepts_legacy_config_without_source_kind() -> None:
+    """The v1 schema remains readable when older payloads omit source_kind."""
+    report = _run(fx.preventable_late_braking_scenario())
+    payload = report.to_dict()
+    del payload["config"]["source_kind"]
+
+    jsonschema.validate(payload, _SCHEMA)
 
 
 def test_runner_smoke(tmp_path) -> None:

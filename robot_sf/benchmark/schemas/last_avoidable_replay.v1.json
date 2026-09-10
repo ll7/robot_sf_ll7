@@ -71,13 +71,13 @@
     "config": {
       "type": "object",
       "additionalProperties": false,
+      "description": "The source_kind property is optional for backward compatibility with earlier last_avoidable_replay.v1 payloads; new producers should emit an explicit source classification.",
       "required": [
         "t_danger",
         "t_contact",
         "horizon",
         "substitution_mode",
         "determinism_replays",
-        "source_kind",
         "action_set_id",
         "feasibility_filter",
         "collision_predicate",
@@ -93,7 +93,11 @@
         "horizon": {"type": "integer", "minimum": 1},
         "substitution_mode": {"type": "string", "enum": ["single_step", "hold"]},
         "determinism_replays": {"type": "integer", "minimum": 1},
-        "source_kind": {"type": "string", "minLength": 1},
+        "source_kind": {
+          "description": "Explicit source classification for new payloads; omitted in legacy v1 payloads.",
+          "type": "string",
+          "minLength": 1
+        },
         "action_set_id": {"type": "string", "minLength": 1},
         "feasibility_filter": {"type": "string", "minLength": 1},
         "collision_predicate": {"type": "string", "minLength": 1},

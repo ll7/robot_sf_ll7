@@ -966,6 +966,18 @@ def _source_binding(
 ) -> str:
     """Encode one complete canonical row in the packet's versioned sensitivity binding."""
 
+    if source_receipt is None:
+        source_artifact = {
+            "status": "pending",
+            "reason": "independent source-ingestion receipt is unavailable",
+            "sha256": synthesis_sha256,
+        }
+    else:
+        source_artifact = dict(source_receipt["source_artifact"])
+        # Fixture receipts identify the independent crosswalk, not the supplied synthesis.
+        # Preserve the synthesis digest in every receipt-backed binding as well.
+        source_artifact.setdefault("synthesis_sha256", synthesis_sha256)
+
     binding = {
         "canonical_decision_row": row,
         "harm_threshold": harm_threshold,
@@ -984,13 +996,7 @@ def _source_binding(
                 for scenario_id, source_path, mechanism in scenario_contract
             ],
         },
-        "source_artifact": dict(source_receipt["source_artifact"])
-        if source_receipt is not None
-        else {
-            "status": "pending",
-            "reason": "independent source-ingestion receipt is unavailable",
-            "sha256": synthesis_sha256,
-        },
+        "source_artifact": source_artifact,
     }
     return BINDING_PREFIX + json.dumps(
         binding, allow_nan=False, sort_keys=True, separators=(",", ":")

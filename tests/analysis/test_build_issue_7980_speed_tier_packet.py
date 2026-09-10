@@ -732,6 +732,8 @@ def test_fixture_receipt_build_declares_durable_source_and_validates_packet(
     assert receipt_source["tracked_commit"]
     assert "--source-receipt <verified-source-receipt.json>" in packet["producer"]["command"]
     assert all("issue_7980_source_receipt" in metric["source_ids"] for metric in packet["metrics"])
+    binding = decode_source_binding(packet["metrics"][0]["sensitivity"][0])
+    assert binding["source_artifact"]["synthesis_sha256"] == synthesis_sha256
     assert loaded.evidence.admission_state == "diagnostic_only"
     assert {decision.outcome for decision in loaded.decisions} == {"inconclusive", "invalid"}
 

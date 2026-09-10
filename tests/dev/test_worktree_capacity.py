@@ -48,6 +48,60 @@ def _worktree_target(tmp_path: Path, branch: str) -> Path:
     return tmp_path / f"new-worktree-{basename_digest}"
 
 
+def _create_isolated_worktree_config_repo(tmp_path: Path) -> tuple[Path, Path]:
+    """Create a tiny repository whose worktree config will be inherited on add."""
+    repo = tmp_path / "source-repo"
+    repo.mkdir()
+    env = git_identity_environment()
+    subprocess.run(
+        ["git", "init", "--initial-branch=main", str(repo)],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for key, value in (
+        ("user.name", "Robot SF test"),
+        ("user.email", "robot-sf-test@example.invalid"),
+        ("extensions.worktreeConfig", "true"),
+    ):
+        subprocess.run(
+            ["git", "-C", str(repo), "config", key, value],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    (repo / "README.md").write_text("worktree fallback fixture\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "README.md"],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "fixture"],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    git_dir = Path(
+        subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-dir"],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    source_config = git_dir / "config.worktree"
+    source_config.write_text("[issue8820-fixture]\n\tinherited = true\n", encoding="utf-8")
+    return repo, source_config
+
+
 def _cleanup_owned_worktree(target: Path, branch: str) -> None:
     """Remove only the worktree, ref, and config entries owned by a fixture."""
     subprocess.run(
@@ -1239,6 +1293,73 @@ def test_create_worktree_without_flock_cli_uses_python_fallback(tmp_path: Path) 
         assert target.is_dir()
     finally:
         _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_without_flock_cli_clears_inherited_worktree_config(
+    tmp_path: Path,
+) -> None:
+    """The minimal-PATH fallback removes copied config without requiring ``rm``."""
+    repo, source_config = _create_isolated_worktree_config_repo(tmp_path)
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    for tool in ("bash", "sh", "git", "git-lfs", "python3", "dirname", "cat", "grep", "du"):
+        resolved = shutil.which(tool)
+        assert resolved is not None, f"test host is missing required tool: {tool}"
+        (stub_bin / tool).symlink_to(resolved)
+    assert shutil.which("flock", path=str(stub_bin)) is None, "stub PATH must hide flock"
+
+    branch = _unique_branch(tmp_path, "no-flock-inherited-config")
+    target = _worktree_target(tmp_path, branch)
+    environment = {**git_identity_environment(os.environ), "PATH": str(stub_bin)}
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--base",
+                "HEAD",
+                "--minimum-free-bytes",
+                "0",
+            ],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=environment,
+        )
+        assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        assert "portable lock" in result.stderr
+        assert source_config.is_file()
+        target_git_dir = Path(
+            subprocess.run(
+                ["git", "-C", str(target), "rev-parse", "--path-format=absolute", "--git-dir"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                check=True,
+                env=git_identity_environment(),
+            ).stdout.strip()
+        )
+        assert not (target_git_dir / "config.worktree").exists()
+        assert target.is_dir()
+    finally:
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", str(target)],
+            cwd=repo,
+            capture_output=True,
+            check=False,
+            env=git_identity_environment(),
+        )
+        subprocess.run(
+            ["git", "branch", "-D", branch],
+            cwd=repo,
+            capture_output=True,
+            check=False,
+            env=git_identity_environment(),
+        )
 
 
 def test_create_worktree_python_fallback_runs_exec_exactly_once(tmp_path: Path) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from copy import deepcopy
@@ -62,6 +63,39 @@ def test_preflight_prepares_equal_budget_controls_without_compute() -> None:
     assert all(row["simulation_executed"] is False for row in report["outcome_rows"])
     assert all(row["native_outcome_digest"] is None for row in report["outcome_rows"])
     assert all(row["replay_digest"] is None for row in report["outcome_rows"])
+
+
+def test_preflight_records_exact_producer_custody() -> None:
+    """The diagnostic report identifies the exact code and environment that produced it."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+
+    producer = report["producer"]
+    assert len(producer["commit"]) == 40
+    assert producer["command"].startswith(
+        "uv run python scripts/adversarial/run_issue_8571_bounded_falsification_slice.py"
+    )
+    assert producer["environment"]["lock_path"] == "uv.lock"
+    assert len(producer["environment"]["lock_sha256"]) == 64
+    assert producer["source_files"] == [
+        {
+            "path": relative_path,
+            "sha256": hashlib.sha256((REPO_ROOT / relative_path).read_bytes()).hexdigest(),
+        }
+        for relative_path in (
+            "robot_sf/adversarial/bounded_falsification.py",
+            "scripts/adversarial/run_issue_8571_bounded_falsification_slice.py",
+            "robot_sf/training/scenario_loader.py",
+        )
+    ]
+
+
+def test_preflight_validator_rejects_producer_custody_drift() -> None:
+    """A report cannot survive mutation of a producer source digest."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["producer"]["source_files"][0]["sha256"] = "0" * 64
+
+    with pytest.raises(BoundedFalsificationError, match="producer custody"):
+        validate_bounded_falsification_preflight(report, repo_root=REPO_ROOT)
 
 
 def test_packet_preserves_issue_references_and_cma_es_custody() -> None:

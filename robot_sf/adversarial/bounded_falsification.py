@@ -14,6 +14,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import platform
+import re
+import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +52,16 @@ CANONICAL_PACKET_RELATIVE_PATH = (
 )
 CANONICAL_PACKET_SELF_DIGEST = "e8c9c66e6e7fc39ecfb14175348e7b486d169be8e7ac7f46116f2c9c9970af64"
 CANONICAL_PACKET_FILE_SHA256 = "ee5606bc5766f42149cec32a9c771eec5018fc6673f77262dc42848cf8e03e45"
+_PRODUCER_COMMAND = (
+    "uv run python scripts/adversarial/run_issue_8571_bounded_falsification_slice.py "
+    "--packet configs/adversarial/issue_8570_bounded_falsification_answerability_v1.yaml "
+    "--output output/adversarial/issue_8571/preflight.json"
+)
+_PRODUCER_SOURCE_PATHS = (
+    "robot_sf/adversarial/bounded_falsification.py",
+    "scripts/adversarial/run_issue_8571_bounded_falsification_slice.py",
+    "robot_sf/training/scenario_loader.py",
+)
 _ROUTE_PROPOSAL_REASON = (
     "This diagnostic preflight does not write candidate route files; materialize a "
     "route_overrides.yaml artifact through robot_sf.adversarial.bundle.write_candidate_inputs "
@@ -60,6 +73,7 @@ _REPORT_FIELDS = frozenset(
         "issue",
         "packet",
         "claim_boundary",
+        "producer",
         "source",
         "zero_overlay_equivalence",
         "arms",
@@ -74,6 +88,11 @@ _REPORT_FIELDS = frozenset(
     }
 )
 _PACKET_FIELDS = frozenset({"issue", "packet_id", "path", "self_digest"})
+_PRODUCER_FIELDS = frozenset({"commit", "command", "environment", "source_files"})
+_PRODUCER_ENVIRONMENT_FIELDS = frozenset(
+    {"python_version", "implementation", "system", "machine", "lock_path", "lock_sha256"}
+)
+_PRODUCER_SOURCE_FIELDS = frozenset({"path", "sha256"})
 _SOURCE_FIELDS = frozenset(
     {"base_ref", "base_commit", "inputs", "scenario_template_digest", "variable_order"}
 )
@@ -234,6 +253,59 @@ def _load_mapping(path: Path, *, label: str) -> dict[str, Any]:
     if not isinstance(payload, Mapping):
         raise BoundedFalsificationError(f"{label} must be a mapping: {path}")
     return dict(payload)
+
+
+def _producer_commit(repo_root: Path) -> str:
+    """Capture the exact Git commit that produced a diagnostic report."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD^{commit}"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise BoundedFalsificationError("producer Git commit cannot be captured") from exc
+    commit = result.stdout.strip()
+    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        raise BoundedFalsificationError("producer Git commit is not an exact 40-character SHA")
+    return commit
+
+
+def _producer_custody(repo_root: Path) -> dict[str, Any]:
+    """Bind the report to its producer source, command, lockfile, and environment."""
+    root = repo_root.resolve()
+    source_files = []
+    for relative_path in _PRODUCER_SOURCE_PATHS:
+        path = (root / relative_path).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError as exc:
+            raise BoundedFalsificationError(
+                f"producer source path escapes repository root: {relative_path}"
+            ) from exc
+        source_files.append(
+            {
+                "path": relative_path,
+                "sha256": _sha256_file(path),
+            }
+        )
+    lock_path = root / "uv.lock"
+    return {
+        "commit": _producer_commit(root),
+        "command": _PRODUCER_COMMAND,
+        "environment": {
+            "python_version": platform.python_version(),
+            "implementation": platform.python_implementation(),
+            "system": platform.system(),
+            "machine": platform.machine(),
+            "lock_path": "uv.lock",
+            "lock_sha256": _sha256_file(lock_path),
+        },
+        "source_files": source_files,
+    }
 
 
 def _thaw_source(value: Any) -> Any:
@@ -698,6 +770,49 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
     _assert_exact_fields(report["packet"], _PACKET_FIELDS, path="preflight packet")
     if not _strictly_equal(report["packet"], expected_packet):
         raise BoundedFalsificationError("preflight packet identity is not bound to canonical #8570")
+
+    producer = report["producer"]
+    _assert_exact_fields(producer, _PRODUCER_FIELDS, path="preflight producer")
+    if (
+        not isinstance(producer["commit"], str)
+        or re.fullmatch(r"[0-9a-f]{40}", producer["commit"]) is None
+    ):
+        raise BoundedFalsificationError("preflight producer commit must be an exact Git SHA")
+    if producer["command"] != _PRODUCER_COMMAND:
+        raise BoundedFalsificationError("preflight producer command is not canonical")
+    environment = producer["environment"]
+    _assert_exact_fields(
+        environment,
+        _PRODUCER_ENVIRONMENT_FIELDS,
+        path="preflight producer.environment",
+    )
+    if any(not isinstance(environment[field], str) for field in _PRODUCER_ENVIRONMENT_FIELDS):
+        raise BoundedFalsificationError("preflight producer environment values must be strings")
+    if environment["lock_path"] != "uv.lock" or not re.fullmatch(
+        r"[0-9a-f]{64}", environment["lock_sha256"]
+    ):
+        raise BoundedFalsificationError("preflight producer lockfile custody is invalid")
+    source_files = producer["source_files"]
+    if not isinstance(source_files, list):
+        raise BoundedFalsificationError("preflight producer.source_files must be a list")
+    for index, source_file in enumerate(source_files):
+        _assert_exact_fields(
+            source_file,
+            _PRODUCER_SOURCE_FIELDS,
+            path=f"preflight producer.source_files[{index}]",
+        )
+        if not isinstance(source_file["path"], str) or not re.fullmatch(
+            r"[0-9a-f]{64}", source_file["sha256"]
+        ):
+            raise BoundedFalsificationError(
+                f"preflight producer.source_files[{index}] has invalid custody"
+            )
+    expected_producer = _producer_custody(source.repo_root)
+    if not _strictly_equal(producer, expected_producer):
+        raise BoundedFalsificationError(
+            "preflight producer custody is not bound to the current producer sources"
+        )
+
     expected_source = {
         "base_ref": packet["source"]["base_ref"],
         "base_commit": packet["source"]["base_commit"],
@@ -923,6 +1038,7 @@ def build_bounded_falsification_preflight(
             "self_digest": packet["self_digest"],
         },
         "claim_boundary": CLAIM_BOUNDARY,
+        "producer": _producer_custody(source.repo_root),
         "source": {
             "base_ref": packet["source"]["base_ref"],
             "base_commit": packet["source"]["base_commit"],

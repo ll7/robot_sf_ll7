@@ -1490,6 +1490,12 @@ def evaluate_update(
         )
     )
     direct_class_ids = validate_direct_update_lanes(effective_classifications)
+    material_fields = resolution_evidence["material_fields"]
+    if material_fields:
+        raise PolicyError(
+            "top-level uv.lock metadata changes are not approved by the dependency policy: "
+            + ", ".join(str(field) for field in material_fields)
+        )
     required_jobs = sorted(
         {job for item in effective_classifications for job in item["required_jobs"]}
     )

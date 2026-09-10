@@ -127,6 +127,8 @@ def _profile_lock(
         header = "version = 1\nrevision = 4\n"
     elif top_level_change == "conflicts":
         header += 'conflicts = [[{ package = "robot-sf", group = "examples" }]]\n'
+    elif top_level_change == "unknown":
+        header += 'unrecognized-metadata = "base-only"\n'
     elif top_level_change is not None:
         raise ValueError(f"unsupported top-level change: {top_level_change}")
 
@@ -211,6 +213,34 @@ def _run_profile_policy_case(
     monkeypatch.setattr(
         "scripts.dev.check_dependabot_update_policy._diff_vs_head",
         lambda *_args, **_kwargs: diff_text,
+    )
+    return evaluate_update(repo_root=tmp_path, base_ref="base", policy=load_policy())
+
+
+def _run_metadata_only_policy_case(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    top_level_change: str,
+) -> dict[str, Any]:
+    """Evaluate a lock-only metadata mutation without package or declaration changes."""
+    project = _profile_project(None)
+    base_lock = _profile_lock(group_name=None, top_level_change=top_level_change)
+    head_lock = _profile_lock(group_name=None)
+    (tmp_path / "pyproject.toml").write_text(project, encoding="utf-8")
+    (tmp_path / "uv.lock").write_text(head_lock, encoding="utf-8")
+
+    def base_file(_repo_root: Path, _base_ref: str, relative_path: str) -> str:
+        return {"pyproject.toml": project, "uv.lock": base_lock}.get(relative_path, "")
+
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy.changed_files",
+        lambda *_args, **_kwargs: ["uv.lock"],
+    )
+    monkeypatch.setattr("scripts.dev.check_dependabot_update_policy.git_file_at_ref", base_file)
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy._diff_vs_head",
+        lambda *_args, **_kwargs: "",
     )
     return evaluate_update(repo_root=tmp_path, base_ref="base", policy=load_policy())
 
@@ -346,6 +376,33 @@ def test_examples_group_with_top_level_lock_change_cannot_get_profile_exception(
     """Any top-level lock metadata change remains outside the profile exception."""
     with pytest.raises(PolicyError, match="mixes direct risk classes"):
         _run_profile_policy_case(
+            tmp_path,
+            monkeypatch,
+            top_level_change=top_level_change,
+        )
+
+
+@pytest.mark.parametrize(
+    ("top_level_change", "expected_field"),
+    [
+        ("version", "version"),
+        ("revision", "revision"),
+        ("conflicts", "conflicts"),
+        ("unknown", "unrecognized-metadata"),
+    ],
+)
+def test_metadata_only_lock_change_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    top_level_change: str,
+    expected_field: str,
+) -> None:
+    """Any unapproved top-level lock metadata mutation must not pass silently."""
+    with pytest.raises(
+        PolicyError,
+        match=rf"top-level uv\.lock metadata.*{expected_field}",
+    ):
+        _run_metadata_only_policy_case(
             tmp_path,
             monkeypatch,
             top_level_change=top_level_change,

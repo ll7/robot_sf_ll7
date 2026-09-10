@@ -127,6 +127,8 @@ def sanitize_text(text: str) -> str:
 def _display(value: Any) -> Any:
     if isinstance(value, str):
         return sanitize_text(value)
+    if isinstance(value, Mapping):
+        return {key: _display(item) for key, item in value.items()}
     return [_display(item) for item in value] if isinstance(value, list) else value
 
 

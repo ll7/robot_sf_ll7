@@ -217,6 +217,23 @@ def test_private_identity_and_ambiguous_requirements_fail_closed() -> None:
         )
 
 
+def test_private_identity_is_sanitized_inside_mapping_values() -> None:
+    host_a = _host("host-a")
+    host_b = _host("host-b")
+    host_a["capture_metadata"] = [{"path": "/home/alice/robot_sf", "endpoint": "alice@192.0.2.10"}]
+    host_b["capture_metadata"] = [{"path": "/home/bob/robot_sf", "endpoint": "bob@192.0.2.11"}]
+
+    report = _compare(host_a, host_b)
+
+    serialized = json.dumps(report)
+    assert "/home/<user>/robot_sf" in serialized
+    assert "<user>@<host>" in serialized
+    assert "alice" not in serialized
+    assert "bob" not in serialized
+    assert "192.0.2.10" not in serialized
+    assert "192.0.2.11" not in serialized
+
+
 def test_cli_fixture_scenarios_are_deterministic(capsys: pytest.CaptureFixture[str]) -> None:
     args = [
         "--host-a",

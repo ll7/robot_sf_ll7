@@ -89,9 +89,12 @@ are inspected. Release thresholds are currently unfrozen (null).
 
 Pilot configuration digest: the JSON `pilot_configuration` freezes the interval
 structure plus the trigger-release-required policy
-(`b9839e7d81d1229c368f1d8292ed0917b0dfb4dfbaf9980b5a22307701f5b944`).
-Per-signal numeric thresholds remain unfrozen. The digest must be frozen before
-inspecting held-out outcomes.
+(`5c261133eb25a6912d34dc231f6b8a9a7a03b18174aa0511d103b1e5fd94f3e9`).
+The digest is recomputable with
+`robot_sf.benchmark.relevance_windows.compute_pilot_config_digest()`, and the
+test suite asserts that the recorded value matches that function. Per-signal
+numeric thresholds remain unfrozen. The digest must be frozen before inspecting
+held-out outcomes.
 
 Parent selection (Stage E1): 30 independent, provenance-complete native parents
 not used for fixtures or threshold selection, held out by parent/scenario/seed

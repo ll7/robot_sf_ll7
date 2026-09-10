@@ -53,6 +53,30 @@ PILOT_INTERVAL_STRUCTURE = {
     "minimum_interval_steps": PILOT_MINIMUM_INTERVAL_STEPS,
 }
 
+# Canonical, reproducible pilot-configuration digest payload. The digest binds
+# the dormant pilot interval structure to the trigger/release policy that must
+# be frozen before held-out inspection. Recompute it with
+# ``compute_pilot_config_digest``; the dossier records the same value.
+PILOT_CONFIG_POLICY = (
+    "per-signal trigger and release thresholds required before held-out pilot; "
+    "one-step hysteresis hold is fixture-only"
+)
+PILOT_CONFIG_PAYLOAD = {
+    "structure": PILOT_INTERVAL_STRUCTURE,
+    "trigger_release_policy": PILOT_CONFIG_POLICY,
+}
+
+
+def compute_pilot_config_digest() -> str:
+    """Return the canonical SHA-256 digest of the dormant pilot configuration.
+
+    Returns:
+        Lowercase hexadecimal SHA-256 digest of the canonical JSON payload.
+    """
+    canonical = json.dumps(PILOT_CONFIG_PAYLOAD, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 _VALID_EXECUTION_MODES = frozenset(
     {
         "native",
@@ -1216,6 +1240,8 @@ __all__ = [
     "FIXTURE_POST_ROLL_STEPS",
     "FIXTURE_PRE_ROLL_STEPS",
     "MANIFEST_STATUS",
+    "PILOT_CONFIG_PAYLOAD",
+    "PILOT_CONFIG_POLICY",
     "PILOT_INTERVAL_STRUCTURE",
     "PILOT_MERGE_GAP_STEPS",
     "PILOT_MINIMUM_INTERVAL_STEPS",
@@ -1231,6 +1257,7 @@ __all__ = [
     "RelevanceVector",
     "RelevanceWindow",
     "compute_parent_rows_sha256",
+    "compute_pilot_config_digest",
     "select_relevance_windows",
     "validate_excerpt_manifest",
     "write_selection_manifest",

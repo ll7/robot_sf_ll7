@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,7 @@ from robot_sf.benchmark.relevance_windows import (
     FIXTURE_MERGE_GAP_STEPS,
     FIXTURE_POST_ROLL_STEPS,
     FIXTURE_PRE_ROLL_STEPS,
+    PILOT_CONFIG_PAYLOAD,
     PILOT_INTERVAL_STRUCTURE,
     PILOT_MERGE_GAP_STEPS,
     PILOT_MINIMUM_INTERVAL_STEPS,
@@ -28,6 +30,7 @@ from robot_sf.benchmark.relevance_windows import (
     RelevanceContractError,
     RelevanceThresholds,
     compute_parent_rows_sha256,
+    compute_pilot_config_digest,
     select_relevance_windows,
     validate_excerpt_manifest,
     write_selection_manifest,
@@ -434,3 +437,18 @@ def test_fixture_defaults_are_not_pilot_rules() -> None:
     defaults = RelevanceThresholds()
     assert defaults.approval_status == "proposed"
     assert defaults.approved_thresholds is None
+
+
+def test_pilot_config_digest_is_recomputable_and_binds_the_structure() -> None:
+    """The frozen digest must be reproducible from the declared canonical payload."""
+    digest = compute_pilot_config_digest()
+    assert re.fullmatch(r"[0-9a-f]{64}", digest)
+    assert digest == compute_pilot_config_digest()
+    assert PILOT_CONFIG_PAYLOAD["structure"] == PILOT_INTERVAL_STRUCTURE
+    assert PILOT_CONFIG_PAYLOAD["trigger_release_policy"].startswith("per-signal trigger")
+    assert (
+        digest
+        == hashlib.sha256(
+            json.dumps(PILOT_CONFIG_PAYLOAD, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )

@@ -190,8 +190,8 @@
     "pilot_configuration": {
       "structure": {"pre_roll_steps": 10, "post_roll_steps": 10, "merge_gap_steps": 5, "minimum_interval_steps": 1},
       "approved_rules": null,
-      "config_digest_sha256": "b9839e7d81d1229c368f1d8292ed0917b0dfb4dfbaf9980b5a22307701f5b944",
-      "digest_scope": "interval structure plus trigger-release-required policy; per-signal numeric thresholds remain unfrozen diagnostic candidates",
+      "config_digest_sha256": "5c261133eb25a6912d34dc231f6b8a9a7a03b18174aa0511d103b1e5fd94f3e9",
+      "digest_scope": "canonical JSON of structure plus trigger_release_policy; recomputable via robot_sf.benchmark.relevance_windows.compute_pilot_config_digest(); per-signal numeric thresholds remain unfrozen diagnostic candidates",
       "freeze_condition": "digest must be frozen before inspecting held-out outcomes"
     },
     "parent_selection_procedure": {

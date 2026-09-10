@@ -11,6 +11,7 @@ from robot_sf.benchmark.continuation_experiment_plan import (
     ContinuationExperimentPlan,
     evaluate_admission,
 )
+from robot_sf.benchmark.relevance_windows import compute_pilot_config_digest
 
 _ROOT = Path(__file__).resolve().parents[2]
 _DOSSIER = _ROOT / "docs/context/scenario_window_research_dossier_2026-09-08.json"
@@ -109,7 +110,7 @@ def test_dossier_freezes_fixture_vs_pilot_without_approving_rules() -> None:
     pilot = relevance["pilot_configuration"]
     assert pilot["approved_rules"] is None
     assert pilot["structure"] == reconciliation["pilot_structure"]
-    assert re.fullmatch(r"[0-9a-f]{64}", pilot["config_digest_sha256"])
+    assert pilot["config_digest_sha256"] == compute_pilot_config_digest()
     assert relevance["trigger_release_policy"]["status"] == "unfrozen_release_thresholds"
     for entry in relevance["signal_threshold_source_table"]:
         for field in (

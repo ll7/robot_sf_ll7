@@ -159,6 +159,15 @@ join with `unspecified_replay_provenance`; controlled fixtures must declare
 `synthetic_fixture` explicitly. This preserves diagnostic compatibility while
 preventing provenance-free output from entering the causal report.
 
+An explicit `synthetic_fixture` label is necessary but not sufficient: the causal
+join also requires non-native replay provenance for `action_set_id`,
+`feasibility_filter`, `collision_predicate`, and a known `pedestrian_response`
+(`replayed` or `closed_loop`). Missing, `unspecified`, `unknown`, or malformed
+values produce `incomplete_replay_provenance` and a fully abstaining report.
+The replay engine may still emit its schema-safe omitted-response/unspecified
+configuration for diagnostic inspection; that legacy behavior does not authorize a
+causal join.
+
 `normative_fault` is always `not_assessed`. The join is exercised by
 `tests/benchmark/test_collision_causal_report_join_5442.py`.
 

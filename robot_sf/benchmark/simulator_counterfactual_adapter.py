@@ -177,15 +177,6 @@ _MODERN_RUNTIME_FIELDS = frozenset(
     }
 )
 _LEGACY_RUNTIME_FIELDS = (_MODERN_RUNTIME_FIELDS - {"definition_id"}) | {"definition"}
-_RESTORE_FAILURES = (
-    AttributeError,
-    IndexError,
-    KeyError,
-    OverflowError,
-    RuntimeError,
-    TypeError,
-    ValueError,
-)
 _MISSING = object()
 
 
@@ -239,6 +230,58 @@ class _SimulatorSnapshot:
     residual_adversary_state: dict[str, Any] | None = None
     absolute_time_s: float | None = None
     remaining_budget_steps: int | None = None
+
+
+def _validate_restore_array(snapshot_array: Any, destination_array: Any, name: str) -> None:
+    """Require an owned numeric array to match the destination exactly."""
+    if not isinstance(snapshot_array, np.ndarray):
+        raise ValueError(f"{name} must be a numpy array")
+    if not isinstance(destination_array, np.ndarray):
+        raise ValueError(f"destination {name} must be a numpy array")
+    if snapshot_array.dtype == object or not np.issubdtype(snapshot_array.dtype, np.number):
+        raise ValueError(f"{name} must have a numeric dtype")
+    if not np.all(np.isfinite(snapshot_array)):
+        raise ValueError(f"{name} must contain only finite values")
+    if snapshot_array.shape != destination_array.shape:
+        raise ValueError(
+            f"{name} shape mismatch: snapshot={snapshot_array.shape}, "
+            f"destination={destination_array.shape}"
+        )
+    if snapshot_array.dtype != destination_array.dtype:
+        raise ValueError(
+            f"{name} dtype mismatch: snapshot={snapshot_array.dtype}, "
+            f"destination={destination_array.dtype}"
+        )
+
+
+def _validate_raw_snapshot(simulator: Any, snapshot: _SimulatorSnapshot) -> None:
+    """Validate raw restore arrays and booleans before any destination mutation."""
+    if not isinstance(snapshot, _SimulatorSnapshot):
+        raise ValueError("snapshot must be a SimulatorSnapshot")
+    _restore_int(snapshot.step_index, "snapshot step_index")
+    _restore_bool(snapshot.peds_have_obstacle_forces, "snapshot peds_have_obstacle_forces")
+    _validate_restore_array(
+        snapshot.pysf_state,
+        simulator.pysf_state.pysf_states(),
+        "pysf_state",
+    )
+    _validate_restore_array(snapshot.ped_headings, simulator.ped_headings, "ped_headings")
+    _validate_restore_array(
+        snapshot.ped_angular_velocities,
+        simulator.ped_angular_velocities,
+        "ped_angular_velocities",
+    )
+
+    peds = getattr(getattr(simulator, "pysf_sim", None), "peds", None)
+    destination_max_speeds = getattr(peds, "max_speeds", None)
+    if (snapshot.ped_max_speeds is None) != (destination_max_speeds is None):
+        raise ValueError("ped_max_speeds presence mismatch between snapshot and destination")
+    if snapshot.ped_max_speeds is not None:
+        _validate_restore_array(
+            snapshot.ped_max_speeds,
+            destination_max_speeds,
+            "ped_max_speeds",
+        )
 
 
 def _copy_global_rng_state() -> tuple[Any, ...]:
@@ -1169,7 +1212,10 @@ class SimulatorCounterfactualModel:
             single_runtimes=_capture_single_runtimes(self.sim.peds_behaviors),
             route_navigators=_capture_route_navigators(self.sim.peds_behaviors),
             global_rng_state=_copy_global_rng_state() if self.capture_rng else None,
-            peds_have_obstacle_forces=bool(self.sim.peds_have_obstacle_forces),
+            peds_have_obstacle_forces=_restore_bool(
+                self.sim.peds_have_obstacle_forces,
+                "simulator peds_have_obstacle_forces",
+            ),
             pedestrian_groups=pedestrian_groups,
             pedestrian_group_by_ped=pedestrian_group_by_ped,
             residual_adversary=deepcopy(getattr(self.sim, "_residual_adversary", None)),
@@ -1187,15 +1233,15 @@ class SimulatorCounterfactualModel:
         before_residual = getattr(self.sim, "_residual_adversary", _MISSING)
         try:
             self._restore_unchecked(snapshot)
-        except _RESTORE_FAILURES:
-            if before_residual is _MISSING:
-                if hasattr(self.sim, "_residual_adversary"):
-                    delattr(self.sim, "_residual_adversary")
-            else:
-                self.sim._residual_adversary = deepcopy(before_residual)
+        except Exception:
             try:
+                if before_residual is _MISSING:
+                    if hasattr(self.sim, "_residual_adversary"):
+                        delattr(self.sim, "_residual_adversary")
+                else:
+                    self.sim._residual_adversary = deepcopy(before_residual)
                 self._restore_unchecked(before)
-            except _RESTORE_FAILURES as rollback_exc:
+            except Exception as rollback_exc:
                 raise RuntimeError(
                     "simulator snapshot restore failed and rollback failed; "
                     "destination state may be partial"
@@ -1204,6 +1250,7 @@ class SimulatorCounterfactualModel:
 
     def _restore_unchecked(self, snapshot: _SimulatorSnapshot) -> None:  # noqa: C901
         """Apply a snapshot, leaving rollback responsibility to :meth:`restore`."""
+        _validate_raw_snapshot(self.sim, snapshot)
         self._step_index = _restore_int(snapshot.step_index, "snapshot step_index")
         self.sim.pysf_state.pysf_states()[...] = snapshot.pysf_state
         self.sim.ped_headings = snapshot.ped_headings.copy()

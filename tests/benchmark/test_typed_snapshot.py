@@ -276,8 +276,9 @@ def test_failed_python_rng_restore_rolls_back_numpy_and_python_streams() -> None
     assert random.getstate() == before_python
 
 
-def test_restore_failure_rolls_back_partial_adapter_mutation() -> None:
-    """A restore failure cannot leave the destination at an intermediate state."""
+@pytest.mark.parametrize("failure_type", (RuntimeError, AssertionError))
+def test_restore_failure_rolls_back_partial_adapter_mutation(failure_type: type[Exception]) -> None:
+    """Any ordinary restore exception cannot leave the destination intermediate."""
     model = _build_model()
     compatibility = _compatibility(model)
     typed = capture_typed_snapshot(model, compatibility)
@@ -299,7 +300,7 @@ def test_restore_failure_rolls_back_partial_adapter_mutation() -> None:
             if self.calls == 1:
                 self.delegate._step_index = 999
                 self.sim.pysf_state.pysf_states()[0, 0] = 123.0
-                raise RuntimeError("synthetic restore failure")
+                raise failure_type("synthetic restore failure")
             self.delegate.restore(snapshot)
 
     failing_model = _FailOnceModel(model)
@@ -344,6 +345,25 @@ def test_metadata_tampering_is_rejected_even_when_payload_is_unchanged(tmp_path:
     metadata["state"]["robot_navigators"][0]["waypoint_id"] += 1
     path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     with pytest.raises(SnapshotPayloadError, match="metadata digest mismatch"):
+        read_typed_snapshot(path)
+
+
+def test_snapshot_payload_is_rechecked_after_array_load(tmp_path: Path, monkeypatch) -> None:
+    """A payload replaced during decoding cannot form a mixed-generation snapshot."""
+    model = _build_model()
+    path = tmp_path / "raced.json"
+    write_typed_snapshot(capture_typed_snapshot(model, _compatibility(model)), path)
+    original_loader = typed_snapshot_module._load_snapshot_arrays
+
+    def load_then_replace(payload_path, descriptors):
+        arrays = original_loader(payload_path, descriptors)
+        replacement = tmp_path / "replacement.npz"
+        replacement.write_bytes(b"replacement-generation")
+        replacement.replace(payload_path)
+        return arrays
+
+    monkeypatch.setattr(typed_snapshot_module, "_load_snapshot_arrays", load_then_replace)
+    with pytest.raises(SnapshotPayloadError, match="changed during load"):
         read_typed_snapshot(path)
 
 

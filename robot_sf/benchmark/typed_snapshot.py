@@ -78,15 +78,6 @@ _REQUIRED_STATE_FIELDS = frozenset(
     }
 )
 _MISSING = object()
-_RESTORE_FAILURES = (
-    AttributeError,
-    IndexError,
-    KeyError,
-    OverflowError,
-    RuntimeError,
-    TypeError,
-    ValueError,
-)
 
 
 class SnapshotContractError(ValueError):
@@ -1188,7 +1179,9 @@ class TypedSimulatorSnapshot:
             "python_random_state": deepcopy(snapshot.python_random_state),
             "behavior_rng_states": deepcopy(snapshot.behavior_rng_states),
             "residual_adversary_state": deepcopy(snapshot.residual_adversary_state),
-            "peds_have_obstacle_forces": bool(snapshot.peds_have_obstacle_forces),
+            "peds_have_obstacle_forces": _payload_bool(
+                snapshot.peds_have_obstacle_forces, "peds_have_obstacle_forces"
+            ),
         }
         arrays = {
             "pysf_state": _array_copy(snapshot.pysf_state, "pysf_state"),
@@ -1264,6 +1257,8 @@ class TypedSimulatorSnapshot:
         pedestrian_groups, pedestrian_group_by_ped = _restore_group_payload(
             state, sim, int(self.arrays["pysf_state"].shape[0])
         )
+        destination_peds = getattr(getattr(sim, "pysf_sim", None), "peds", None)
+        destination_max_speeds = getattr(destination_peds, "max_speeds", None)
         return _SimulatorSnapshot(
             step_index=self.boundary.step_index,
             pysf_state=self.arrays["pysf_state"].copy(),
@@ -1280,7 +1275,9 @@ class TypedSimulatorSnapshot:
             peds_have_obstacle_forces=_payload_bool(
                 state.get("peds_have_obstacle_forces"), "peds_have_obstacle_forces"
             ),
-            ped_max_speeds=self.arrays.get("ped_max_speeds", np.empty((0,), dtype=float)).copy(),
+            ped_max_speeds=(
+                None if destination_max_speeds is None else self.arrays["ped_max_speeds"].copy()
+            ),
             python_random_state=deepcopy(state.get("python_random_state")),
             behavior_rng_states=deepcopy(state.get("behavior_rng_states")),
             residual_adversary_state=deepcopy(state.get("residual_adversary_state")),
@@ -1322,10 +1319,10 @@ def restore_typed_snapshot(
     before = snapshot_method()
     try:
         restore_method(runtime_snapshot)
-    except _RESTORE_FAILURES as exc:
+    except Exception as exc:
         try:
             restore_method(before)
-        except _RESTORE_FAILURES as rollback_exc:
+        except Exception as rollback_exc:
             raise SnapshotContractError(
                 "typed snapshot restore failed and destination rollback failed; "
                 "destination state may be partial"
@@ -1482,6 +1479,33 @@ def _load_snapshot_arrays(
     return arrays
 
 
+def _verify_payload_integrity(
+    payload_target: Path,
+    expected_hash: str,
+    expected_bytes: int,
+    *,
+    phase: str,
+) -> None:
+    """Verify one payload generation before or after decoding its arrays."""
+    try:
+        observed_hash = _sha256_file(payload_target)
+        observed_bytes = payload_target.stat().st_size
+    except OSError as exc:
+        raise SnapshotPayloadError(
+            f"snapshot numeric payload is missing or became unavailable during {phase}"
+        ) from exc
+    if observed_hash != expected_hash:
+        if phase == "initial":
+            raise SnapshotPayloadError(
+                "snapshot numeric payload digest mismatch or file is missing"
+            )
+        raise SnapshotPayloadError("snapshot numeric payload changed during load")
+    if observed_bytes != expected_bytes:
+        if phase == "initial":
+            raise SnapshotPayloadError("snapshot numeric payload size mismatch")
+        raise SnapshotPayloadError("snapshot numeric payload changed during load")
+
+
 def read_typed_snapshot(metadata_path: str | Path) -> TypedSimulatorSnapshot:
     """Read and validate a typed snapshot without allowing pickle execution.
 
@@ -1499,13 +1523,10 @@ def read_typed_snapshot(metadata_path: str | Path) -> TypedSimulatorSnapshot:
     expected_hash = metadata.get("payload_sha256")
     if not isinstance(expected_hash, str) or not _is_digest(expected_hash):
         raise SnapshotPayloadError("snapshot payload_sha256 is missing or malformed")
-    if not payload_target.is_file() or _sha256_file(payload_target) != expected_hash:
-        raise SnapshotPayloadError("snapshot numeric payload digest mismatch or file is missing")
     expected_bytes = metadata.get("payload_bytes")
     if not isinstance(expected_bytes, int) or isinstance(expected_bytes, bool):
         raise SnapshotPayloadError("snapshot payload_bytes is missing or malformed")
-    if payload_target.stat().st_size != expected_bytes:
-        raise SnapshotPayloadError("snapshot numeric payload size mismatch")
+    _verify_payload_integrity(payload_target, expected_hash, expected_bytes, phase="initial")
     compatibility_payload = metadata.get("compatibility")
     boundary_payload = metadata.get("boundary")
     if not isinstance(compatibility_payload, Mapping) or not isinstance(boundary_payload, Mapping):
@@ -1516,6 +1537,7 @@ def read_typed_snapshot(metadata_path: str | Path) -> TypedSimulatorSnapshot:
     if not isinstance(descriptors, Mapping):
         raise SnapshotPayloadError("snapshot arrays metadata must be an object")
     arrays = _load_snapshot_arrays(payload_target, descriptors)
+    _verify_payload_integrity(payload_target, expected_hash, expected_bytes, phase="post-load")
     state = _decode_value(metadata.get("state"), arrays, "state")
     if not isinstance(state, Mapping):
         raise SnapshotPayloadError("snapshot state must be an object")
@@ -1725,7 +1747,7 @@ STATE_INVENTORY: tuple[StateInventoryEntry, ...] = (
         "dynamic",
         "NPZ numeric array",
         "SimulatorCounterfactualModel.restore",
-        "test_snapshot_restore_reproduces_baseline_deterministically",
+        "test_restore_rejects_raw_array_shape_and_dtype_without_mutation",
         "supported",
     ),
     StateInventoryEntry(
@@ -1737,7 +1759,19 @@ STATE_INVENTORY: tuple[StateInventoryEntry, ...] = (
         "dynamic",
         "NPZ numeric array",
         "adapter restore",
-        "test_snapshot_restore_reproduces_baseline_deterministically",
+        "test_restore_rejects_mismatched_max_speeds_without_replacement",
+        "supported",
+    ),
+    StateInventoryEntry(
+        "peds_have_obstacle_forces",
+        "Simulator",
+        "bool",
+        "flag",
+        "force update",
+        "dynamic",
+        "JSON boolean",
+        "strict raw preflight before adapter restore",
+        "test_restore_rejects_coercive_obstacle_force_flag_without_mutation",
         "supported",
     ),
     StateInventoryEntry(

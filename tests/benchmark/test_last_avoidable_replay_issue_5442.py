@@ -390,6 +390,46 @@ def test_incomplete_snapshot_state_returns_unknown_before_replay() -> None:
     assert report.abstain_reason == "incomplete_snapshot_state"
 
 
+@pytest.mark.parametrize(
+    "field_name",
+    ("action_set_id", "feasibility_filter", "collision_predicate", "pedestrian_response"),
+)
+def test_replay_config_rejects_non_string_provenance(field_name: str) -> None:
+    """Replay provenance fields cannot be populated by coercive scalar values."""
+    with pytest.raises(ValueError, match=f"{field_name} must be a non-empty string"):
+        ReplayConfig(
+            t_danger=0,
+            t_contact=1,
+            horizon=1,
+            **{field_name: False},
+        )
+
+
+def test_invalid_model_provenance_abstains_before_replay() -> None:
+    """A malformed model provenance declaration fails closed instead of stringifying."""
+    scenario = fx.preventable_late_braking_scenario()
+    model = fx.KinematicCollisionModel(scenario)
+    model.action_set_id = 42
+    contact_step = fx.find_contact_step(scenario)
+    assert contact_step is not None
+    config = ReplayConfig(
+        t_danger=0,
+        t_contact=contact_step,
+        horizon=1,
+        source_kind="synthetic_fixture",
+    )
+
+    report = locate_last_avoidable(
+        model,
+        fx.maintain_baseline_actions(contact_step + 1),
+        config,
+    )
+
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstained is True
+    assert report.abstain_reason == "invalid_replay_provenance"
+
+
 def test_missing_feasible_action_returns_unknown() -> None:
     """A missing feasible action set abstains to unknown (coverage gap)."""
     report = _run(fx.missing_feasible_action_scenario())

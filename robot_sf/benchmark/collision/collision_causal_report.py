@@ -96,6 +96,12 @@ CAUSE_LOCATIONS = frozenset(
 
 CAUSAL_VERDICTS = frozenset({"avoidable", "unavoidable", "unknown"})
 PEDESTRIAN_RESPONSE_ASSUMPTIONS = frozenset({"replayed", "closed_loop", "unknown"})
+_NON_NATIVE_REPLAY_PROVENANCE_FIELDS = (
+    "action_set_id",
+    "feasibility_filter",
+    "collision_predicate",
+    "pedestrian_response",
+)
 
 #: The four incident timestamps, ordered as they occur along one timeline.
 CRITICAL_TIMESTAMP_KEYS = ("t_danger", "t_uca", "t_inevitable", "t_contact")
@@ -353,6 +359,21 @@ def collide_causal_report_from_last_avoidable(
             )
         )
 
+    incomplete_provenance = _incomplete_non_native_replay_provenance(replay.config)
+    if incomplete_provenance:
+        return validate_collision_causal_report(
+            abstained_collision_causal_report(
+                report_id=report_id,
+                case_id=case_id,
+                reason="incomplete_replay_provenance",
+                source_kind="unknown",
+                missing_fields=[
+                    *(f"replay_provenance.{field}" for field in incomplete_provenance),
+                    "causal_join_contract",
+                ],
+            )
+        )
+
     unsupported_verdict = replay.verdict not in _LAST_AVOIDABLE_TO_CAUSAL_VERDICT
     abstained = replay.abstained or replay.verdict == VERDICT_UNKNOWN or unsupported_verdict
     causal_verdict = "unknown" if abstained else _LAST_AVOIDABLE_TO_CAUSAL_VERDICT[replay.verdict]
@@ -473,6 +494,25 @@ def _validate_join_metadata(metadata: CausalJoinMetadata) -> None:
         raise CollisionCausalReportError(
             f"cause_location {metadata.cause_location!r} is not in CAUSE_LOCATIONS"
         )
+
+
+def _incomplete_non_native_replay_provenance(config: Any) -> tuple[str, ...]:
+    """Return non-native replay fields that cannot support a causal join."""
+    missing: list[str] = []
+    for field_name in _NON_NATIVE_REPLAY_PROVENANCE_FIELDS:
+        value = getattr(config, field_name, None)
+        if type(value) is not str or not value.strip():
+            missing.append(field_name)
+            continue
+        normalized = value.strip().lower()
+        if normalized in {"unspecified", "unknown"}:
+            missing.append(field_name)
+        elif field_name == "pedestrian_response" and normalized not in {
+            "replayed",
+            "closed_loop",
+        }:
+            missing.append(field_name)
+    return tuple(missing)
 
 
 def _join_rationale(replay: LastAvoidableReport, abstained: bool) -> str:

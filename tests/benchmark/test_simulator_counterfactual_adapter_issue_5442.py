@@ -1175,16 +1175,83 @@ def test_restore_rolls_back_lazy_residual_creation_and_rng_failure() -> None:
         random.setstate(original_python_state)
 
 
-def test_restore_mismatched_max_speeds_replaces_backend_speeds() -> None:
-    """A shape-mismatched speed snapshot replaces backend speeds instead of broadcasting."""
+def test_restore_catches_unexpected_assertion_and_rolls_back() -> None:
+    """An unexpected assertion after mutation still restores the native destination."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    before = model.snapshot()
+    original_restore = model._restore_unchecked
+    calls = 0
+
+    def fail_once(snapshot) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            model._step_index = 999
+            sim.pysf_state.pysf_states()[0, 0] = 123.0
+            raise AssertionError("unexpected restore failure")
+        original_restore(snapshot)
+
+    model._restore_unchecked = fail_once
+    with pytest.raises(AssertionError, match="unexpected restore failure"):
+        model.restore(before)
+
+    assert calls == 2
+    assert model._step_index == before.step_index
+    np.testing.assert_array_equal(sim.pysf_state.pysf_states(), before.pysf_state)
+
+
+def test_restore_rejects_raw_array_shape_and_dtype_without_mutation() -> None:
+    """Raw adapter arrays must match shape and dtype before restore starts."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    before = model.snapshot()
+
+    malformed_shape = model.snapshot()
+    malformed_shape.ped_headings = np.asarray([0.5], dtype=malformed_shape.ped_headings.dtype)
+    with pytest.raises(ValueError, match="ped_headings shape mismatch"):
+        model.restore(malformed_shape)
+
+    malformed_dtype = model.snapshot()
+    alternate_dtype = np.float32 if malformed_dtype.pysf_state.dtype != np.float32 else np.float64
+    malformed_dtype.pysf_state = malformed_dtype.pysf_state.astype(alternate_dtype)
+    with pytest.raises(ValueError, match="pysf_state dtype mismatch"):
+        model.restore(malformed_dtype)
+
+    assert model._step_index == before.step_index
+    np.testing.assert_array_equal(sim.pysf_state.pysf_states(), before.pysf_state)
+    np.testing.assert_array_equal(sim.ped_headings, before.ped_headings)
+
+
+def test_restore_rejects_coercive_obstacle_force_flag_without_mutation() -> None:
+    """A raw string flag cannot be truthiness-coerced during restore."""
+    sim = _build_simulator()
+    model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
+    before = model.snapshot()
+    malformed = model.snapshot()
+    malformed.peds_have_obstacle_forces = "false"
+
+    with pytest.raises(ValueError, match="peds_have_obstacle_forces must be a boolean"):
+        model.restore(malformed)
+
+    assert sim.peds_have_obstacle_forces == before.peds_have_obstacle_forces
+    assert model._step_index == before.step_index
+
+
+def test_restore_rejects_mismatched_max_speeds_without_replacement() -> None:
+    """A shape-mismatched speed snapshot cannot replace backend arrays."""
     sim = _build_simulator()
     model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS)
     snapshot = model.snapshot()
     if snapshot.ped_max_speeds is None:
         pytest.skip("fixture simulator captures no pedestrian max speeds")
-    snapshot.ped_max_speeds = np.asarray([0.5], dtype=float)
+    before = np.asarray(sim.pysf_sim.peds.max_speeds).copy()
+    snapshot.ped_max_speeds = np.asarray([0.5], dtype=snapshot.ped_max_speeds.dtype)
 
-    model.restore(snapshot)
+    with pytest.raises(ValueError, match="ped_max_speeds shape mismatch"):
+        model.restore(snapshot)
+
+    np.testing.assert_array_equal(sim.pysf_sim.peds.max_speeds, before)
 
 
 def test_behavior_rng_absent_snapshot_covers_empty_and_missing_branches() -> None:

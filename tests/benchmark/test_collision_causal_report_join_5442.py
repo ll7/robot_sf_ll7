@@ -264,7 +264,7 @@ def test_two_action_interaction_joins_as_avoidable() -> None:
 
 
 def test_default_pedestrian_response_is_schema_safe() -> None:
-    """An omitted response assumption joins as explicit ``unknown``."""
+    """An omitted response remains diagnostic-safe but cannot support a causal join."""
     scenario = fx.preventable_late_braking_scenario()
     contact_step = fx.find_contact_step(scenario)
     assert contact_step is not None
@@ -290,8 +290,43 @@ def test_default_pedestrian_response_is_schema_safe() -> None:
         metadata=_METADATA,
     )
 
+    assert report["abstained"] is True
+    assert report["abstention_reason"] == "incomplete_replay_provenance"
+    assert report["causal_contribution"]["supported_actual_cause"] is False
+    assert "replay_provenance.pedestrian_response" in report["missing_fields"]
     assert report["causal_contribution"]["pedestrian_response_assumption"] == "unknown"
     validate_collision_causal_report(report)
+
+
+def test_synthetic_join_requires_complete_replay_provenance() -> None:
+    """Every non-native provenance field is required before causal attribution."""
+    from dataclasses import replace
+
+    replay = _run_replay(fx.preventable_late_braking_scenario(), determinism_replays=2)
+    for field_name in (
+        "action_set_id",
+        "feasibility_filter",
+        "collision_predicate",
+        "pedestrian_response",
+    ):
+        incomplete = replace(
+            replay,
+            config=replace(
+                replay.config,
+                **{field_name: "unknown" if field_name == "pedestrian_response" else "unspecified"},
+            ),
+        )
+        report = collide_causal_report_from_last_avoidable(
+            report_id=f"incomplete-{field_name}",
+            case_id="fixture",
+            replay=incomplete,
+            metadata=_METADATA,
+        )
+        assert report["abstained"] is True
+        assert report["abstention_reason"] == "incomplete_replay_provenance"
+        assert f"replay_provenance.{field_name}" in report["missing_fields"]
+        assert report["causal_contribution"]["supported_actual_cause"] is False
+        validate_collision_causal_report(report)
 
 
 def test_join_rejects_unknown_mechanism_label() -> None:

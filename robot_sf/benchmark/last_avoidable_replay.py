@@ -64,6 +64,17 @@ class _DefaultPedestrianResponse(str):
 
 
 _DEFAULT_PEDESTRIAN_RESPONSE = _DefaultPedestrianResponse("unknown")
+_REPLAY_PROVENANCE_FIELDS = (
+    "action_set_id",
+    "feasibility_filter",
+    "collision_predicate",
+    "pedestrian_response",
+    "source_kind",
+)
+
+
+class _ReplayProvenanceError(ValueError):
+    """Raised when a model-declared replay provenance field is malformed."""
 
 
 @runtime_checkable
@@ -160,6 +171,12 @@ class ReplayConfig:
 
     def __post_init__(self) -> None:
         """Validate window, horizon, replay count, and substitution mode."""
+        for field_name in _REPLAY_PROVENANCE_FIELDS:
+            value = getattr(self, field_name)
+            if field_name == "pedestrian_response" and value is _DEFAULT_PEDESTRIAN_RESPONSE:
+                continue
+            if type(value) is not str or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
         if self.t_danger < 0:
             raise ValueError(f"t_danger must be >= 0 (got {self.t_danger})")
         if self.t_contact <= self.t_danger:
@@ -594,13 +611,21 @@ def _model_metadata(model: CounterfactualModel, field_name: str) -> str | None:
         The normalized metadata value, or ``None`` when the model does not
         declare the requested field.
     """
-    value = getattr(model, field_name, None)
-    if callable(value):
-        value = value()
+    try:
+        value = getattr(model, field_name, None)
+        if callable(value):
+            value = value()
+    except Exception as exc:
+        raise _ReplayProvenanceError(
+            f"model replay provenance field {field_name!r} could not be read"
+        ) from exc
     if value is None:
         return None
-    text = str(value).strip()
-    return text or None
+    if type(value) is not str or not value.strip():
+        raise _ReplayProvenanceError(
+            f"model replay provenance field {field_name!r} must be a non-empty string"
+        )
+    return value
 
 
 def _snapshot_state_is_complete(model: CounterfactualModel) -> bool | None:
@@ -610,9 +635,18 @@ def _snapshot_state_is_complete(model: CounterfactualModel) -> bool | None:
         ``True`` or ``False`` when the model declares completeness; ``None`` when
         the legacy protocol has no completeness declaration.
     """
-    declared = _model_metadata(model, "replay_state_complete")
+    try:
+        declared = getattr(model, "replay_state_complete", None)
+        if callable(declared):
+            declared = declared()
+    except Exception:  # noqa: BLE001 - malformed completeness declarations fail closed
+        return False
     if declared is None:
         return None
+    if type(declared) is bool:
+        return declared
+    if type(declared) is not str:
+        return False
     normalized = declared.strip().lower()
     if normalized in {"true", "1", "yes", "complete"}:
         return True
@@ -689,7 +723,29 @@ def locate_last_avoidable(  # noqa: C901 - explicit fail-closed verdict state ma
     Returns:
         A :class:`LastAvoidableReport` preserving every branch result.
     """
-    bound_config, metadata_mismatches = _bind_model_metadata(model, config)
+    try:
+        bound_config, metadata_mismatches = _bind_model_metadata(model, config)
+    except _ReplayProvenanceError as exc:
+        determinism = DeterminismCheck(
+            replays=config.determinism_replays,
+            collision_stable=False,
+            contact_step_stable=False,
+            observed_contact_steps=(None,) * config.determinism_replays,
+        )
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="invalid_replay_provenance",
+            notes=(str(exc),),
+        )
     if metadata_mismatches:
         determinism = DeterminismCheck(
             replays=bound_config.determinism_replays,

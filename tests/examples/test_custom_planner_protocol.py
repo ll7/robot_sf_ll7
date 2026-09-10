@@ -64,11 +64,13 @@ def test_close_is_idempotent() -> None:
     planner.close()
 
 
-def test_manifest_entry_is_registered() -> None:
-    """The tutorial example must be registered and CI-enabled in the manifest."""
+def test_manifest_entry_is_registered(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The manifest registration check is independent of the current working directory."""
     import yaml
 
-    manifest = yaml.safe_load(Path("examples/examples_manifest.yaml").read_text())
+    monkeypatch.chdir(tmp_path)
+    manifest_path = REPO_ROOT / "examples/examples_manifest.yaml"
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     entries = [
         entry
         for entry in manifest["examples"]

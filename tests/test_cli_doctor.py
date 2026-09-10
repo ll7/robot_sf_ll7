@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -202,10 +203,11 @@ def test_quickstart_check_fails_without_manifest_entries(tmp_path: Path) -> None
     assert check.details["hint"] == "Add at least one manifest-declared quickstart example."
 
 
-def test_optional_import_check_renders_remedy_when_missing(
+def test_core_import_check_is_required_and_has_narrow_remedy(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A missing optional import must carry an actionable install hint."""
+    """A missing core import fails the report and points to the core sync."""
     real_find_spec = doctor.importlib_util.find_spec
 
     def _fake_find_spec(name: str, *args: object, **kwargs: object) -> object:
@@ -215,12 +217,66 @@ def test_optional_import_check_renders_remedy_when_missing(
 
     monkeypatch.setattr(doctor.importlib_util, "find_spec", _fake_find_spec)
 
-    check = doctor._check_optional_import("numpy")
+    payload = doctor.collect_doctor_report(
+        artifact_root=tmp_path / "artifacts",
+        run_env_smoke=False,
+        run_quickstart_smoke=False,
+    )
+    check = _check_by_name(payload)["import:numpy"]
 
-    assert check.status == "missing_optional"
-    assert check.details["available"] is False
-    assert "hint" in check.details
-    assert "uv sync --all-extras" in check.details["hint"]
+    assert check["status"] == "failed"
+    assert check["required"] is True
+    details = check["details"]
+    assert isinstance(details, dict)
+    assert details["available"] is False
+    assert "hint" in details
+    assert "uv sync)." in details["hint"]
+
+
+def test_optional_import_remedies_name_the_declared_extra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Optional import remedies do not broaden setup to every extra."""
+    real_find_spec = doctor.importlib_util.find_spec
+
+    def _fake_find_spec(name: str, *args: object, **kwargs: object) -> object:
+        if name == "pygame":
+            return None
+        return real_find_spec(name, *args, **kwargs)
+
+    monkeypatch.setattr(doctor.importlib_util, "find_spec", _fake_find_spec)
+
+    assert (
+        "uv sync --extra viz"
+        in doctor._check_optional_import("pygame", required=False).details["hint"]
+    )
+
+
+def test_doctor_extra_probes_match_public_project_extras() -> None:
+    """Extra probes track pyproject's public names and omit stale labels."""
+    from pathlib import Path as _Path
+
+    pyproject = tomllib.loads(
+        (_Path(doctor.__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    declared = set(pyproject["project"]["optional-dependencies"])
+
+    assert set(doctor.OPTIONAL_EXTRAS) == declared - {"all"}
+    assert {"orca", "analysis"}.isdisjoint(doctor.OPTIONAL_EXTRAS)
+
+
+def test_doctor_docs_use_declared_extra_remedies() -> None:
+    """The troubleshooting page names real selectors and rejects stale ones."""
+    from pathlib import Path as _Path
+
+    page_path = (
+        _Path(doctor.__file__).resolve().parents[2] / "docs" / "troubleshooting" / "doctor.md"
+    )
+    page = page_path.read_text(encoding="utf-8")
+    assert "uv sync --extra orca" not in page
+    assert "uv sync --extra analysis" not in page
+    assert "uv sync --group dev" in page
+    assert "uv sync --extra viz" in page
 
 
 def test_optional_binary_check_renders_remedy_when_missing(
@@ -242,3 +298,60 @@ def test_optional_binary_check_renders_remedy_when_missing(
     assert check.details["path"] is None
     assert "hint" in check.details
     assert "Install ffmpeg" in check.details["hint"]
+
+
+def test_doctor_docs_cover_every_check_identifier(tmp_path: Path) -> None:
+    """Every stable doctor identifier must have exactly one documented remedy.
+
+    Unknown future identifiers fail here rather than remaining undocumented (#8720).
+    """
+    from pathlib import Path as _Path
+
+    report = doctor.collect_doctor_report(
+        artifact_root=tmp_path / "output",
+        run_env_smoke=False,
+        run_quickstart_smoke=False,
+        workspace_root=tmp_path,
+    )
+    names = [str(check["name"]) for check in report["checks"]]
+    assert len(names) == len(set(names)), "doctor check names must be unique"
+
+    docs_root = _Path(doctor.__file__).resolve().parents[2] / "docs" / "troubleshooting"
+    page = (docs_root / "doctor.md").read_text(encoding="utf-8")
+    table_rows: list[str] = []
+    for line in page.splitlines():
+        if line.startswith("|"):
+            table_rows.append(line)
+        elif table_rows and not line.startswith("|"):
+            table_rows.append("")  # table boundary marker
+    body_rows = [
+        row
+        for row in table_rows
+        if row and not row.startswith("| Check") and set(row) != {"|", " ", "-"}
+    ]
+    for name in names:
+        first_cells = [row.split("|")[1].strip() for row in body_rows]
+        occurrences = sum(cell == f"`{name}`" for cell in first_cells)
+        assert occurrences == 1, f"check `{name}` must have exactly one table row"
+    documented = {
+        token.strip().strip("`")
+        for row in body_rows
+        for token in row.split("|")
+        if token.strip().startswith("`") and token.strip().endswith("`")
+    }
+    stale = documented - set(names)
+    assert not stale, f"documented identifiers no longer emitted: {sorted(stale)}"
+
+
+def test_doctor_friendly_output_points_to_troubleshooting_page() -> None:
+    """Friendly output must reference the troubleshooting page by relative path."""
+    from pathlib import Path as _Path
+
+    report = doctor.collect_doctor_report(
+        artifact_root=_Path("output"),
+        run_env_smoke=False,
+        run_quickstart_smoke=False,
+    )
+    rendered = doctor._format_human(report)
+    assert "docs/troubleshooting/doctor.md" in rendered
+    assert "http" not in rendered.split("docs/troubleshooting/doctor.md")[0][-80:]

@@ -63,6 +63,8 @@ software/package release.
 - **Repo-native contributor workflow:** setup, validation, and shared `scripts/dev/` entry points
   are documented in [`docs/dev_guide.md`](docs/dev_guide.md).
 
+
+> Platform-specific paths (Linux, macOS, headless): [Platform Setup Profiles](docs/quickstart_platforms.md).
 ## Quickstart
 
 The repository uses `uv` for dependency management and keeps generated artifacts under the
@@ -88,6 +90,9 @@ uv run python examples/quickstart/03_custom_map.py
 (`thumbnail.png`), and a plain-English summary under `output/demo/latest/`. It is the
 fastest install → run → *see something* path and is CPU-only. Open
 `output/demo/latest/viewer/index.html` in a browser to replay the episode.
+
+If setup misbehaves, run `uv run robot-sf doctor` and follow the per-check remedies in
+[`docs/troubleshooting/doctor.md`](docs/troubleshooting/doctor.md).
 
 ### Beginner notebooks
 

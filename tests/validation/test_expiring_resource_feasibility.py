@@ -106,6 +106,13 @@ def test_fail_closed_evidence_and_contradiction_codes(manifest: dict[str, Any], 
     assert code in report.reason_codes and report.verdict == "unknown" and report.blocking
 
 
+@pytest.mark.parametrize("throughput", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_retrieval_throughput_fails_closed(throughput: float) -> None:
+    report = tool.evaluate_manifest(_with("retrieval_throughput_bytes_per_second", throughput))
+    assert "invalid_throughput" in report.reason_codes
+    assert report.verdict == "unknown" and report.blocking
+
+
 def test_private_source_values_are_rejected_and_never_echoed() -> None:
     secret = "user@private-host.example/srv/mount"
     report = tool.evaluate_manifest(_with("deadline.source", secret))

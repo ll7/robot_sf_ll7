@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from collections.abc import Mapping, Sequence
@@ -204,7 +205,11 @@ def _check_output(
     if _slug(raw.get("basis")) is None:
         problems.append("missing_output_size_basis")
     if throughput is not None:
-        valid = not isinstance(throughput, bool) and isinstance(throughput, (int, float))
+        valid = (
+            not isinstance(throughput, bool)
+            and isinstance(throughput, (int, float))
+            and (not isinstance(throughput, float) or math.isfinite(throughput))
+        )
         if not valid or throughput <= 0:
             problems.append("invalid_throughput")
         elif reserves is not None and reserves["retrieval_seconds"] * throughput < size:

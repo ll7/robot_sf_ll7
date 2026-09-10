@@ -798,6 +798,7 @@ def _copy_map_with_single_pedestrians(
         ped_crowded_zones=list(base_map.ped_crowded_zones),
         ped_routes=list(base_map.ped_routes),
         single_pedestrians=single_pedestrians,
+        svg_geometry_contract=base_map.svg_geometry_contract,
     )
 
 

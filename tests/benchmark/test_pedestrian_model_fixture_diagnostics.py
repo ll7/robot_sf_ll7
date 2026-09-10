@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -16,6 +17,7 @@ from robot_sf.benchmark.pedestrian_model_fixture_diagnostics import (
     PedestrianModelFixtureRunConfig,
     PedestrianModelFixtureSpec,
     PedestrianModelFixtureTrace,
+    _copy_map_with_single_pedestrians,
     build_pedestrian_model_fixture_scenarios,
     compute_fixture_metrics,
     run_pedestrian_model_fixture_diagnostics,
@@ -58,6 +60,18 @@ def test_fixture_harness_emits_expected_scenarios_and_metric_keys() -> None:
         assert isinstance(metrics["entered_interaction_zone"], bool)
         assert metrics["finite_positions"] is True
         assert metrics["finite_velocities"] is True
+
+
+def test_model_fixture_map_copy_preserves_svg_geometry_contract() -> None:
+    """Fixture copies retain geometry provenance for compatible diagnostics."""
+    source_map = replace(
+        build_pedestrian_model_fixture_scenarios()["shared_throat_sliding"].map_def,
+        svg_geometry_contract="corrected",
+    )
+
+    derived_map = _copy_map_with_single_pedestrians(source_map, [])
+
+    assert derived_map.svg_geometry_contract == "corrected"
 
 
 def test_geometric_fixtures_emit_diagnostic_threshold_checks() -> None:

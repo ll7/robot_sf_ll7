@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -12,6 +13,7 @@ from robot_sf.benchmark.pedestrian_flow_validation import (
     FlowGate,
     PedFlowRunConfig,
     PedFlowTrace,
+    _copy_map_with_single_pedestrians,
     build_ped_flow_scenarios,
     compute_flow_rate,
     run_ped_flow_trace,
@@ -71,6 +73,18 @@ def test_no_robot_trace_produces_finite_pedestrian_states() -> None:
     assert trace.velocities.shape == (3, 2, 2)
     assert trace.density_ped_per_m2 > 0.0
     assert trace.pedestrian_model
+
+
+def test_flow_map_copy_preserves_svg_geometry_contract() -> None:
+    """Flow fixture copies retain geometry provenance for compatible diagnostics."""
+    source_map = replace(
+        build_ped_flow_scenarios()["bidirectional_corridor"].map_def,
+        svg_geometry_contract="corrected",
+    )
+
+    derived_map = _copy_map_with_single_pedestrians(source_map, [])
+
+    assert derived_map.svg_geometry_contract == "corrected"
 
 
 def test_bottleneck_speed_vs_density_is_monotone_ish_on_short_sanity_run() -> None:

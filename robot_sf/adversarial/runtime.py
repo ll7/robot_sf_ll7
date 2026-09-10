@@ -174,6 +174,7 @@ def _copy_map_with_single_pedestrians(
         poi_positions=deepcopy(base_map.poi_positions),
         poi_labels=deepcopy(base_map.poi_labels),
         allowed_areas=deepcopy(base_map.allowed_areas),
+        svg_geometry_contract=base_map.svg_geometry_contract,
     )
 
 

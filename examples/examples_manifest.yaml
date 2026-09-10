@@ -10,6 +10,9 @@ exclusions:
   - path: demo_utils.py
     kind: helper
     reason: "Shared helper module (fast_demo_enabled) imported by examples; not a runnable example entry point."
+  - path: advanced/trajectory_viz_fixture.py
+    kind: helper
+    reason: "Shared fixture builder and headless-run helper imported by 14_trajectory_visualization.py and its tests; not a runnable example entry point."
 categories:
   - slug: uncategorized
     title: "Uncategorized Examples"
@@ -252,6 +255,15 @@ examples:
     ci_reason: null
     doc_reference: docs/SCENARIOS.md#programmatic-python-api
     tags: [scenarios, authoring, validation, tutorial]
+  - path: advanced/37_custom_planner_protocol.py
+    name: "37 Custom Planner Protocol"
+    summary: "Implement and run the smallest planner compatible with LocalPlannerProtocol."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: docs/contributing_planner.md#minimal-example-path
+    tags: [tutorial, planner, protocol, validation]
   - path: advanced/08_multi_pedestrian.py
     name: "08 Multi-Pedestrian"
     summary: "Build a multi-pedestrian scenario using map definitions."
@@ -415,10 +427,9 @@ examples:
     name: "14 Trajectory Visualization"
     summary: "Visualize trajectories during interactive playback sessions."
     category_slug: advanced
-    prerequisites:
-      - recordings/<file>.pkl
-    ci_enabled: false
-    ci_reason: "Interactive playback; requires user input to exit."
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
     doc_reference: docs/SIM_VIEW.md
     tags: [visualization, playback]
   - path: advanced/15_view_recording.py

@@ -395,6 +395,9 @@ _FAST_FILES = {
     # provide the exact-head changed-line coverage for the shared example
     # prerequisite checker (issue #8735).
     "test_example_prerequisites.py",
+    # Deterministic resolved-config drift contracts for the compute-sunset
+    # configuration example (issue #8904).
+    "test_compare_resolved_configs.py",
     "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
     "test_global_route.py",

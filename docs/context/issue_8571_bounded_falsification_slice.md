@@ -25,6 +25,8 @@ The report source-hashes the packet inputs, checks the typed bounds and pedestri
 proves zero-overlay source equivalence, and prepares 64-candidate random and Halton control arms
 for each declared search seed. Candidate and pre-simulation rejection records retain immutable
 manifest, overlay, and seed identities. The declared CMA-ES arm is recorded but not instantiated.
+Outcome-row identity is explicit as the composite `(arm, search_seed, candidate_id)`; `candidate_id`
+alone is not globally unique across the equal-budget arms and search seeds.
 Each report also records exact producer custody: the Git commit, canonical producer command,
 bounded source-file hashes, lockfile hash, and runtime environment. The strict validator rejects
 reports whose producer custody no longer matches the checked-out producer sources.

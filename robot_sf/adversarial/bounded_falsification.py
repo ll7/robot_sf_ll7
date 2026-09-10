@@ -146,6 +146,7 @@ _OUTCOME_ROW_FIELDS = frozenset(
         "arm",
         "candidate_id",
         "candidate",
+        "identity",
         "search_seed",
         "status",
         "reason",
@@ -156,6 +157,7 @@ _OUTCOME_ROW_FIELDS = frozenset(
         "rejection",
     }
 )
+_OUTCOME_IDENTITY_FIELDS = frozenset({"arm", "search_seed", "candidate_id"})
 _NATIVE_OUTCOMES_FIELDS = frozenset({"status", "rows", "digest"})
 _REPLAY_FIELDS = frozenset({"status", "rows", "digest", "reason"})
 
@@ -624,6 +626,11 @@ def _outcome_row(
         "arm": arm,
         "candidate_id": candidate["candidate_id"],
         "candidate": candidate,
+        "identity": {
+            "arm": arm,
+            "search_seed": int(search_seed),
+            "candidate_id": candidate["candidate_id"],
+        },
         "search_seed": int(search_seed),
         "status": status,
         "reason": reason,
@@ -944,6 +951,21 @@ def _validate_bounded_falsification_report(  # noqa: C901, PLR0912, PLR0915
         raise BoundedFalsificationError("preflight outcome_rows must be a list")
     for index, row in enumerate(rows):
         _assert_exact_fields(row, _OUTCOME_ROW_FIELDS, path=f"preflight outcome_rows[{index}]")
+        identity = row["identity"]
+        _assert_exact_fields(
+            identity,
+            _OUTCOME_IDENTITY_FIELDS,
+            path=f"preflight outcome_rows[{index}].identity",
+        )
+        expected_identity = {
+            "arm": row["arm"],
+            "search_seed": row["search_seed"],
+            "candidate_id": row["candidate_id"],
+        }
+        if not _strictly_equal(identity, expected_identity):
+            raise BoundedFalsificationError(
+                f"preflight outcome row {index} identity is not bound to row fields"
+            )
         if row.get("simulation_executed") is not False:
             raise BoundedFalsificationError(
                 f"preflight outcome row {index} simulation_executed must be false"

@@ -63,6 +63,24 @@ def test_preflight_prepares_equal_budget_controls_without_compute() -> None:
     assert all(row["simulation_executed"] is False for row in report["outcome_rows"])
     assert all(row["native_outcome_digest"] is None for row in report["outcome_rows"])
     assert all(row["replay_digest"] is None for row in report["outcome_rows"])
+    identities = [
+        (
+            row["identity"]["arm"],
+            row["identity"]["search_seed"],
+            row["identity"]["candidate_id"],
+        )
+        for row in report["outcome_rows"]
+    ]
+    assert len(identities) == len(set(identities))
+
+
+def test_preflight_validator_rejects_composite_identity_drift() -> None:
+    """Candidate ID alone is insufficient; the explicit arm/seed identity must remain aligned."""
+    report = build_bounded_falsification_preflight(PACKET, repo_root=REPO_ROOT)
+    report["outcome_rows"][0]["identity"]["search_seed"] += 1
+
+    with pytest.raises(BoundedFalsificationError, match="identity"):
+        validate_bounded_falsification_preflight(report, repo_root=REPO_ROOT)
 
 
 def test_preflight_records_exact_producer_custody() -> None:
@@ -396,7 +414,7 @@ def test_preflight_validator_rejects_shrunk_outcome_ledger() -> None:
             lambda report: report["outcome_rows"][0].update(
                 {"candidate_id": "forged-outcome-candidate"}
             ),
-            "outcome ledger",
+            "identity|outcome ledger",
         ),
         (
             lambda report: report["outcome_rows"][0].update(

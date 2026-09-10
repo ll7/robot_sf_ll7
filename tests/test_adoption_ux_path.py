@@ -28,7 +28,11 @@ def adoption_text() -> str:
 )
 def test_adoption_path_names_each_product_layer_command(adoption_text: str, command: str) -> None:
     """The documented install-to-gallery path must not silently lose a layer."""
-    assert command in adoption_text
+    # Executable doc blocks run through the hardened tagged-command runner
+    # (#8792), which prefixes ``uv run --offline --no-sync``. Normalize the
+    # runner flags so this contract checks the command layer, not the flags.
+    normalized = adoption_text.replace("uv run --offline --no-sync ", "uv run ")
+    assert command in normalized
 
 
 def test_adoption_path_claim_boundary_is_explicit(adoption_text: str) -> None:

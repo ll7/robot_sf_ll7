@@ -45,7 +45,7 @@ import numpy as np
 from robot_sf.benchmark.typed_snapshot import NoOpStep, compare_continuation_traces
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Sequence
 
 LAST_AVOIDABLE_REPLAY_SCHEMA = "last_avoidable_replay.v1"
 

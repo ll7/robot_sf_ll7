@@ -18,17 +18,23 @@ is lineage, not an outcome. Search, certification, deterministic replay, and
 independent confirmation use separate ledgers and technical seed namespaces.
 The inherited diagnostic threshold is three native confirmations of five.
 
-The common counter is explicit: search evaluation/failure consumes one slot and
-one simulator call; invalid proposals consume one slot and zero calls;
-certification consumes zero; replay consumes one; each confirmation consumes
-one. Hidden retries, padding, duplicate calls, and post-outcome changes fail
-closed.
+The common counter is explicit: each cell has a fixed simulator-call budget
+(`budget × 7`) and stops when that budget is reached; search slots remain an
+audit counter. Search evaluation/failure consumes one slot and one simulator
+call; invalid proposals consume one slot and zero calls; certification consumes
+zero; replay consumes one; each confirmation consumes one. Hidden retries,
+padding, duplicate calls, and post-outcome changes fail closed. The primary
+denominator is the per-cell simulator-call budget, not scheduled search slots.
 
-Temporal sidecars require the five frozen properties (`clearance`, `ttc`,
+Temporal mechanism sidecars use the distinct `temporal-mechanism-sidecar.v1`
+schema; the runtime `robustness-report.v1` source report is not accepted. They
+require the five frozen properties (`clearance`, `ttc`,
 `goal`, `progress`, `collision`), signed margins, activation times, three gate
-states, execution mode, packet/source provenance, and monitor metadata. Monitor
-`dt_s` must match evaluation `dt_s`; missing, fallback, degraded, unavailable,
-non-native, or monitor-only artifacts are excluded.
+states, packet/source provenance, and monitor metadata. A confirmed failure
+requires at least one negative signed margin and complete certification, replay,
+and five-record confirmation lineage with the configured three-of-five threshold.
+Monitor `dt_s` must match evaluation `dt_s`; missing, fallback, degraded,
+unavailable, non-native, or monitor-only artifacts are excluded.
 
 The in-memory canary has six disjoint synthetic candidates and 42 planned
 simulator invocations. It creates no output and is diagnostic-only.
@@ -40,6 +46,9 @@ uv run python scripts/validation/check_issue_8891_temporal_robustness_packet.py 
 uv run python scripts/validation/check_issue_8891_temporal_robustness_packet.py --canary --check-only
 ```
 
-Private planning metadata bounds 14,112 maximum simulator invocations and keeps
-raw traces out of Git. No scientific conclusion is asserted until a separately
-authorized campaign and reproducible evidence pass repository benchmark gates.
+Private planning metadata bounds 14,112 simulator invocations and keeps raw
+traces out of Git. The validator resolves the pinned base commit, verifies the
+source tree bytes at that commit, and rejects unknown packet fields/statuses.
+The CLI requires exactly one operation; `--check` explicitly validates the
+packet. No scientific conclusion is asserted until a separately authorized
+campaign and reproducible evidence pass repository benchmark gates.

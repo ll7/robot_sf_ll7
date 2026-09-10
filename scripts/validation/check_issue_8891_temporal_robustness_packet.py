@@ -23,9 +23,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet", type=Path, default=DEFAULT_PACKET)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
-    parser.add_argument("--check", action="store_true")
-    parser.add_argument("--identities", action="store_true")
-    parser.add_argument("--canary", action="store_true")
+    operations = parser.add_mutually_exclusive_group(required=True)
+    operations.add_argument("--check", action="store_true", help="validate the packet contract")
+    operations.add_argument("--identities", action="store_true", help="build planned identities")
+    operations.add_argument(
+        "--canary", action="store_true", help="build the disjoint fixture canary"
+    )
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument("--format", choices=("json", "text"), default="text")
     args = parser.parse_args()
@@ -34,11 +37,15 @@ def main() -> int:
     root = args.repo_root.resolve()
     path = args.packet if args.packet.is_absolute() else root / args.packet
     packet = yaml.safe_load(path.read_text(encoding="utf-8"))
-    summary = validate_packet(packet, repo_root=root)
-    if args.identities:
+    if args.check:
+        summary = validate_packet(packet, repo_root=root)
+        summary["operation"] = "check"
+    elif args.identities:
         summary = build_expected_identities(packet, repo_root=root)
+        summary["operation"] = "identities"
     elif args.canary:
         summary = build_canary_packet(packet, repo_root=root)
+        summary["operation"] = "canary"
     if args.format == "text":
         summary = {
             key: value

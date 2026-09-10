@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ PACKET_SCHEMA_VERSION = "matched-budget-temporal-robustness-packet.v1"
 IDENTITY_SCHEMA_VERSION = "matched-budget-temporal-robustness-identities.v1"
 LEDGER_SCHEMA_VERSION = "temporal-robustness-call-ledger.v1"
 CANARY_SCHEMA_VERSION = "matched-budget-temporal-robustness-canary.v1"
+TEMPORAL_SIDECAR_SCHEMA_VERSION = "temporal-mechanism-sidecar.v1"
 EXPECTED_OBJECTIVES = ("worst_case_snqi", "temporal_robustness")
 EXPECTED_FAMILIES = ("random", "optuna", "cmaes")
 EXPECTED_BUDGETS = (16, 32, 64)
@@ -28,8 +30,28 @@ EXPECTED_MODES = ("native", "fallback", "degraded", "unavailable", "synthetic_fi
 CANARY_SEED_BASE = 8_800_000
 ROLE_SEED_BASE = 8_900_000
 CONFIRMATION_COUNT = 5
-RUN_COUNT = 54
-SLOT_COUNT = 2016
+RUN_COUNT = (
+    len(EXPECTED_OBJECTIVES)
+    * len(EXPECTED_FAMILIES)
+    * len(EXPECTED_BUDGETS)
+    * len(EXPECTED_SEARCH_SEEDS)
+)
+SLOT_COUNT = (
+    len(EXPECTED_OBJECTIVES)
+    * len(EXPECTED_FAMILIES)
+    * len(EXPECTED_SEARCH_SEEDS)
+    * sum(EXPECTED_BUDGETS)
+)
+SIMULATOR_INVOCATIONS_PER_SLOT = 1 + 1 + CONFIRMATION_COUNT
+SIMULATOR_CALL_BUDGET = SLOT_COUNT * SIMULATOR_INVOCATIONS_PER_SLOT
+SIMULATOR_CALL_BUDGET_BY_SEARCH_BUDGET = {
+    budget: budget * SIMULATOR_INVOCATIONS_PER_SLOT for budget in EXPECTED_BUDGETS
+}
+
+EXPECTED_PACKET_ID = "issue_8891_temporal_robustness_matched_budget_v1"
+EXPECTED_PACKET_STATUS = "diagnostic_only_preflight"
+EXPECTED_EVIDENCE_TIER = "preflight_valid"
+CONFIRMATION_THRESHOLD = 3
 
 _REQUIRED_INPUTS = set(
     "parent_manifest scenario_template search_space objective_registry robustness runner certification replay confirmation".split()
@@ -40,11 +62,81 @@ _FORBIDDEN_FIELDS = set(
 _GATE_STATES = ("certification_state", "replay_state", "independent_seed_state")
 _GATE_ORDER = ("certification", "deterministic_replay", "independent_confirmation")
 _GATE_STATE_VALUES = {"not_run", "passed", "failed", "excluded"}
+_ADMISSION_STATUSES = {
+    "not_admitted",
+    "confirmed_failure",
+    "null",
+    "inconclusive",
+    "invalid",
+    "unavailable",
+    "blocked",
+    "excluded",
+}
+_SIDECAR_ALLOWED_KEYS = {
+    "schema_version",
+    "status",
+    "candidate_id",
+    "property_ids",
+    "properties",
+    "monitor",
+    "admission_status",
+    "failure_basis",
+}
+_SIDECAR_PROPERTY_ALLOWED_KEYS = {
+    "property_id",
+    "signed_margin",
+    "activation_time_s",
+    "certification_state",
+    "replay_state",
+    "independent_seed_state",
+    "execution_mode",
+    "provenance",
+}
+_SIDECAR_MONITOR_ALLOWED_KEYS = {"dt_s", "sample_count", "artifact_only"}
+_SIDECAR_PROVENANCE_ALLOWED_KEYS = {"source", "packet_digest"}
+_LINEAGE_STATE_BY_PHASE = {
+    "certification": "certification_state",
+    "replay": "replay_state",
+    "confirmation": "independent_seed_state",
+}
 _SECONDARY_OUTCOMES = "first_confirmed_failure_attempt valid_rate invalid_rate simulator_invocations certification_rate replay_rate confirmation_rate monitor_artifact_exclusions missingness result_class".split()
 _RESULT_CLASSES = "confirmed_failure null inconclusive invalid unavailable blocked".split()
 _PACKET_KEYS = "schema_version issue parent_issue claim_eligible"
+_PACKET_ALLOWED_KEYS = {
+    "schema_version",
+    "packet_id",
+    "issue",
+    "parent_issue",
+    "status",
+    "evidence_tier",
+    "claim_eligible",
+    "claim_boundary",
+    "execution_boundary",
+    "source",
+    "objectives",
+    "excluded_search_families",
+    "search_families",
+    "search_family_builder",
+    "initialization_policy",
+    "scenario",
+    "budget",
+    "seed_policy",
+    "call_accounting",
+    "gates",
+    "monitor_contract",
+    "analysis_contract",
+    "private_ops",
+    "validation",
+}
+_SOURCE_ALLOWED_KEYS = {"base_ref", "base_commit", "hash_algorithm", "inputs"}
+_INPUT_ALLOWED_KEYS = {"path", "sha256"}
 _EXECUTION_KEYS = "run_campaign run_simulator submit_slurm registered_search admit_evidence".split()
-_BUDGET_KEYS = "budgets run_count search_attempt_slots simulator_call_budget_is_separate no_post_outcome_budget_change"
+_BUDGET_KEYS = (
+    "budgets run_count search_attempt_slots simulator_call_budget"
+    " simulator_call_budget_by_search_budget simulator_invocations_per_search_slot"
+    " budget_unit simulator_call_budget_policy simulator_call_budget_is_separate"
+    " no_post_outcome_budget_change"
+)
 _ACCOUNTING_KEYS = (
     "schema_version authoritative_counter search_counter one_row_per_attempt_or_call hidden_retries"
 )
@@ -52,10 +144,10 @@ _LEDGER_KEYS = ("phase", "seed_role", "consumes_search_slot", "simulator_invocat
 _MONITOR_KEYS = "property_ids sidecar_schema monitor_only_excluded"
 _ANALYSIS_KEYS = "primary_estimand primary_unit numerator denominator"
 _ANALYSIS_EXPECTED = (
-    "confirmed_failure_discovery_rate_by_search_budget",
-    "candidate_slot",
+    "confirmed_failure_discovery_rate_by_simulator_call_budget",
+    "simulator_call_budget",
     "candidate_slot_passing_certification_replay_and_independent_confirmation",
-    "scheduled_search_attempt_slots",
+    "simulator_call_budget_per_cell",
 )
 _CALL_RULES = {
     "search_evaluation": ("search", "search", True, 1),
@@ -110,6 +202,15 @@ def _check_values(mapping: Mapping[str, Any], expected: Mapping[str, Any], label
         _expect(_norm(mapping.get(key)), _norm(value), f"{label}.{key}")
 
 
+def _reject_unknown_keys(mapping: Mapping[str, Any], allowed: set[str], label: str) -> None:
+    """Reject fields outside the versioned contract allowlist."""
+    unknown = set(mapping) - allowed
+    _require(
+        not unknown,
+        f"{label} contains unsupported fields: {sorted(str(key) for key in unknown)}",
+    )
+
+
 def _ids(value: Any, name: str) -> tuple[str, ...]:
     return tuple(str(_mapping(item, name).get("id")) for item in _list(value, name))
 
@@ -147,14 +248,80 @@ def _forbid_outcomes(value: Any) -> None:
         _forbid_outcomes(child)
 
 
-def _input_paths(packet: Mapping[str, Any], root: Path) -> dict[str, Path]:
+def _git_output(root: Path, *args: str) -> bytes:
+    """Read immutable Git data and turn lookup failures into packet errors."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), *args],
+            check=True,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        raise PacketError(f"immutable source lookup failed: {' '.join(args)}") from exc
+    return result.stdout
+
+
+def _resolve_source_commit(packet: Mapping[str, Any], root: Path) -> str:
+    """Resolve and ancestry-check the packet's immutable source commit."""
+    source = _mapping(packet.get("source"), "source")
+    commit = str(source.get("base_commit", ""))
+    _require(
+        len(commit) == 40
+        and commit == commit.lower()
+        and not set(commit) - set("0123456789abcdef"),
+        "source.base_commit must be a lowercase full SHA",
+    )
+    try:
+        resolved = (
+            _git_output(root, "rev-parse", "--verify", f"{commit}^{{commit}}").decode().strip()
+        )
+    except PacketError as exc:
+        raise PacketError("source.base_commit cannot be resolved") from exc
+    _expect(resolved, commit, "source.base_commit resolution")
+    base_ref = str(source.get("base_ref", ""))
+    _require(base_ref == "origin/main", "source.base_ref must be origin/main")
+    try:
+        ref_commit = (
+            _git_output(root, "rev-parse", "--verify", f"{base_ref}^{{commit}}").decode().strip()
+        )
+        ancestry = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", commit, ref_commit],
+            check=False,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        raise PacketError("source.base_ref cannot be resolved") from exc
+    _require(ancestry.returncode == 0, "source.base_commit is not an ancestor of source.base_ref")
+    return commit
+
+
+def _input_paths(packet: Mapping[str, Any], root: Path, *, source_commit: str) -> dict[str, Path]:
     inputs = _mapping(_mapping(packet.get("source"), "source").get("inputs"), "source.inputs")
     paths = {}
     for input_id, raw in inputs.items():
         item = _mapping(raw, f"source.inputs.{input_id}")
+        _reject_unknown_keys(item, _INPUT_ALLOWED_KEYS, f"source.inputs.{input_id}")
         path = _repo_file(root, item.get("path"), f"source.inputs.{input_id}.path")
         digest = str(item.get("sha256", "")).lower()
-        _expect(hashlib.sha256(path.read_bytes()).hexdigest(), digest, f"source hash {input_id}")
+        _require(
+            len(digest) == 64 and not set(digest) - set("0123456789abcdef"),
+            f"source hash {input_id} must be SHA-256",
+        )
+        relative_path = path.relative_to(root.resolve()).as_posix()
+        try:
+            immutable_bytes = _git_output(root, "show", f"{source_commit}:{relative_path}")
+        except PacketError as exc:
+            raise PacketError(f"immutable source path cannot be resolved: {relative_path}") from exc
+        _expect(
+            hashlib.sha256(immutable_bytes).hexdigest(),
+            digest,
+            f"immutable source hash {input_id}",
+        )
+        _expect(
+            hashlib.sha256(path.read_bytes()).hexdigest(),
+            digest,
+            f"working-tree source hash {input_id}",
+        )
         paths[str(input_id)] = path
     return paths
 
@@ -199,8 +366,18 @@ def _validate_source_semantics(packet: Mapping[str, Any], paths: Mapping[str, Pa
 def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, Any]:
     """Validate the source-bound, non-executing packet."""
     _require(isinstance(packet, Mapping), "packet must be a mapping")
+    _reject_unknown_keys(packet, _PACKET_ALLOWED_KEYS, "packet")
     _forbid_outcomes(packet)
     _check(packet, _PACKET_KEYS, (PACKET_SCHEMA_VERSION, 8891, 5326, False), "packet")
+    _check_values(
+        packet,
+        {
+            "packet_id": EXPECTED_PACKET_ID,
+            "status": EXPECTED_PACKET_STATUS,
+            "evidence_tier": EXPECTED_EVIDENCE_TIER,
+        },
+        "packet metadata",
+    )
     boundary = str(packet.get("claim_boundary", "")).lower()
     _require(
         all(
@@ -209,8 +386,12 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
         "claim boundary is incomplete",
     )
     execution = _mapping(packet.get("execution_boundary"), "execution_boundary")
+    _reject_unknown_keys(execution, set(_EXECUTION_KEYS), "execution boundary")
     _check_values(execution, dict.fromkeys(_EXECUTION_KEYS, False), "execution boundary")
-    paths = _input_paths(packet, repo_root)
+    source = _mapping(packet.get("source"), "source")
+    _reject_unknown_keys(source, _SOURCE_ALLOWED_KEYS, "source")
+    source_commit = _resolve_source_commit(packet, repo_root)
+    paths = _input_paths(packet, repo_root, source_commit=source_commit)
     _require(_REQUIRED_INPUTS.issubset(paths), "source inputs are incomplete")
     _validate_source_semantics(packet, paths)
     _expect(
@@ -243,7 +424,21 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
     _expect(packet.get("excluded_search_families"), ["coordinate"], "coordinate exclusion")
     budget = _mapping(packet.get("budget"), "budget")
     _check(
-        budget, _BUDGET_KEYS, (EXPECTED_BUDGETS, RUN_COUNT, SLOT_COUNT, True, True), "budget grid"
+        budget,
+        _BUDGET_KEYS,
+        (
+            EXPECTED_BUDGETS,
+            RUN_COUNT,
+            SLOT_COUNT,
+            SIMULATOR_CALL_BUDGET,
+            SIMULATOR_CALL_BUDGET_BY_SEARCH_BUDGET,
+            SIMULATOR_INVOCATIONS_PER_SLOT,
+            "simulator_invocation",
+            "fixed_per_cell_stop_no_padding_or_retry",
+            True,
+            True,
+        ),
+        "budget grid",
     )
     seed = _mapping(packet.get("seed_policy"), "seed_policy")
     _check_values(
@@ -300,7 +495,10 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
     )
     monitor = _mapping(packet.get("monitor_contract"), "monitor_contract")
     _check(
-        monitor, _MONITOR_KEYS, (EXPECTED_PROPERTIES, "robustness-report.v1", True), "property IDs"
+        monitor,
+        _MONITOR_KEYS,
+        (EXPECTED_PROPERTIES, TEMPORAL_SIDECAR_SCHEMA_VERSION, True),
+        "property IDs",
     )
     _expect(
         monitor.get("discretization"),
@@ -340,12 +538,17 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
         "private execution boundary",
     )
     estimate = _mapping(ops.get("resource_estimate"), "resource estimate")
-    _expect(estimate.get("max_simulator_invocations"), SLOT_COUNT * 7, "simulator-call ceiling")
+    _expect(
+        estimate.get("max_simulator_invocations"),
+        SIMULATOR_CALL_BUDGET,
+        "simulator-call ceiling",
+    )
     return {
         "status": "ok",
         "packet_schema": PACKET_SCHEMA_VERSION,
         "run_count": RUN_COUNT,
         "search_attempt_slots": SLOT_COUNT,
+        "simulator_call_budget": SIMULATOR_CALL_BUDGET,
         "claim_eligible": False,
         "campaign_execution_allowed": False,
     }
@@ -412,20 +615,33 @@ def validate_temporal_sidecar(
 ) -> None:
     """Validate mechanism metadata, monitor provenance, and admission mode."""
     _require(isinstance(sidecar, Mapping), "temporal sidecar must be a mapping")
-    _expect(sidecar.get("schema_version"), "robustness-report.v1", "temporal sidecar schema")
+    _reject_unknown_keys(sidecar, _SIDECAR_ALLOWED_KEYS, "temporal sidecar")
+    _expect(
+        sidecar.get("schema_version"),
+        TEMPORAL_SIDECAR_SCHEMA_VERSION,
+        "temporal sidecar schema",
+    )
     status = sidecar.get("status")
     _require(
         status in {"planned", "observed"} and str(sidecar.get("candidate_id", "")).strip(),
         "sidecar identity/status is missing",
     )
+    _require(
+        sidecar.get("admission_status") in _ADMISSION_STATUSES,
+        "sidecar admission status is invalid",
+    )
     observed = status == "observed"
     if candidate_id is not None:
         _expect(sidecar.get("candidate_id"), candidate_id, "sidecar candidate identity")
     properties = _list(sidecar.get("properties"), "temporal sidecar.properties")
+    _expect(len(properties), len(EXPECTED_PROPERTIES), "sidecar property count")
     _expect(tuple(sidecar.get("property_ids", ())), EXPECTED_PROPERTIES, "sidecar property IDs")
     digest = canonical_sha256(packet)
     for property_id, raw in zip(EXPECTED_PROPERTIES, properties, strict=True):
         item = _mapping(raw, f"sidecar property {property_id}")
+        _reject_unknown_keys(
+            item, _SIDECAR_PROPERTY_ALLOWED_KEYS, f"sidecar property {property_id}"
+        )
         _require(
             item.get("property_id") == property_id
             and "signed_margin" in item
@@ -448,11 +664,17 @@ def validate_temporal_sidecar(
                 "fallback/degraded sidecar must be excluded",
             )
         provenance = _mapping(item.get("provenance"), f"sidecar provenance {property_id}")
+        _reject_unknown_keys(
+            provenance,
+            _SIDECAR_PROVENANCE_ALLOWED_KEYS,
+            f"sidecar provenance {property_id}",
+        )
         _require(
             str(provenance.get("source", "")).strip() and provenance.get("packet_digest") == digest,
             f"sidecar packet provenance is missing or mismatched for {property_id}",
         )
     monitor = _mapping(sidecar.get("monitor"), "temporal sidecar.monitor")
+    _reject_unknown_keys(monitor, _SIDECAR_MONITOR_ALLOWED_KEYS, "temporal sidecar.monitor")
     _expect(monitor.get("dt_s"), packet["scenario"]["dt_s"], "monitor discretization dt")
     _expect(monitor.get("artifact_only"), False, "monitor-only artifact")
     sample_count = monitor.get("sample_count")
@@ -472,6 +694,10 @@ def validate_temporal_sidecar(
                 for item in properties
             ),
             "confirmed sidecar gates are incomplete",
+        )
+        _require(
+            any(float(item["signed_margin"]) < 0.0 for item in properties),
+            "confirmed sidecar requires a negative signed margin",
         )
 
 
@@ -541,6 +767,15 @@ def validate_call_ledger(
         else:
             _expect(row.get("simulator_call_id"), None, f"simulator ID for {class_name}")
         counts[class_name] += 1
+    budget = _mapping(packet.get("budget"), "budget")
+    _require(
+        simulator_invocations <= budget["simulator_call_budget"],
+        "simulator call budget exceeded",
+    )
+    _require(
+        len(slots) <= budget["search_attempt_slots"],
+        "search-slot budget exceeded",
+    )
     return {
         "status": "ok",
         "row_count": len(rows),
@@ -548,6 +783,52 @@ def validate_call_ledger(
         "class_counts": counts,
         "search_slots": len(slots),
     }
+
+
+def _validate_result_lineage(
+    packet: Mapping[str, Any], groups: Mapping[str, list[Mapping[str, Any]]]
+) -> None:
+    """Require complete gate records for every non-invalid search candidate."""
+    _expect(
+        packet["gates"]["confirmation_threshold"],
+        "3_of_5_inherited",
+        "confirmation threshold",
+    )
+    for candidate_id, candidate_rows in groups.items():
+        search_rows = [row for row in candidate_rows if row.get("phase") == "search"]
+        _expect(len(search_rows), 1, f"search lineage for {candidate_id}")
+        if search_rows[0].get("call_class") == "search_invalid_proposal":
+            continue
+        for phase, expected_count in (
+            ("certification", 1),
+            ("replay", 1),
+            ("confirmation", CONFIRMATION_COUNT),
+        ):
+            phase_rows = [row for row in candidate_rows if row.get("phase") == phase]
+            _expect(
+                len(phase_rows),
+                expected_count,
+                f"{phase} lineage for {candidate_id}",
+            )
+            state_key = _LINEAGE_STATE_BY_PHASE[phase]
+            _require(
+                all(row.get(state_key) in _GATE_STATE_VALUES for row in phase_rows),
+                f"{phase} lineage state is missing for {candidate_id}",
+            )
+        confirmation_rows = [row for row in candidate_rows if row.get("phase") == "confirmation"]
+        _require(
+            sum(row["independent_seed_state"] == "passed" for row in confirmation_rows)
+            >= CONFIRMATION_THRESHOLD
+            or not any(
+                row.get("admission_status") == "confirmed_failure"
+                or (
+                    isinstance(row.get("temporal_sidecar"), Mapping)
+                    and row["temporal_sidecar"].get("admission_status") == "confirmed_failure"
+                )
+                for row in candidate_rows
+            ),
+            f"confirmation lineage is below the 3-of-5 threshold for {candidate_id}",
+        )
 
 
 def validate_result_rows(
@@ -564,6 +845,7 @@ def validate_result_rows(
         for run in identity["runs"]
         for slot in run["candidate_slots"]
     }
+    groups: dict[str, list[Mapping[str, Any]]] = {}
     for raw in rows:
         row = _mapping(raw, "result row")
         candidate_id = str(row.get("candidate_id", ""))
@@ -606,6 +888,8 @@ def validate_result_rows(
                 packet,
                 candidate_id=candidate_id,
             )
+        groups.setdefault(candidate_id, []).append(row)
+    _validate_result_lineage(packet, groups)
     ledger = validate_call_ledger(packet, rows)
     ledger["validated_candidate_rows"] = len({row.get("candidate_id") for row in rows})
     return ledger
@@ -644,7 +928,7 @@ def _ledger_row(
 def _planned_temporal_sidecar(packet: Mapping[str, Any], candidate_id: str) -> dict[str, Any]:
     digest = canonical_sha256(packet)
     sidecar = {
-        "schema_version": "robustness-report.v1",
+        "schema_version": TEMPORAL_SIDECAR_SCHEMA_VERSION,
         "status": "planned",
         "candidate_id": candidate_id,
         "property_ids": list(EXPECTED_PROPERTIES),

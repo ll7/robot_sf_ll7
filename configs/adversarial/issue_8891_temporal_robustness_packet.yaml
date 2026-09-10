@@ -10,16 +10,16 @@ claim_boundary: "Planning packet only: it does not run a campaign or simulator, 
 execution_boundary: {run_campaign: false, run_simulator: false, submit_slurm: false, registered_search: false, admit_evidence: false}
 source:
   base_ref: origin/main
-  base_commit: 1b94a1a780e4fa4788ed27ca0a0cecb567c75841
+  base_commit: 88bb656f6c9b74b285d98a99a9614f9beabb9213
   hash_algorithm: sha256_raw_file_bytes
   inputs: {parent_manifest: {path: configs/adversarial/issue_5326_objective_comparison.yaml, sha256: 9b5fa1d27b705583b7a0fa5369ff693e1f5664271160ebfb947f23a0a5b936b4}, scenario_template: {path: configs/scenarios/templates/crossing_ttc.yaml, sha256: 4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f}, search_space: {path: configs/adversarial/crossing_ttc_space.yaml, sha256: e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34}, objective_registry: {path: robot_sf/adversarial/objectives.py, sha256: 19c30bbc49ccc11d28998c18517ce91acbb3a403d1282c4cc35b9c8a82e0e6d8}, robustness: {path: robot_sf/adversarial/robustness.py, sha256: c503759f2dd5a2688a847322440aff30480808b597eeb07e69d93bea0ebca954}, monitor_constants: {path: robot_sf/benchmark/near_miss_ttc.py, sha256: b90b0149df125ac4af92ae1fb3a2c1d3804854f26ba36726955a0ea243d8771a}, benchmark_constants: {path: robot_sf/benchmark/constants.py, sha256: a848590cb91fddc0639eb484c9e95a1e885f8f91f219ff2a52f14f49a64987f5}, runner: {path: scripts/tools/compare_adversarial_samplers.py, sha256: 01e2477c5741a5404d793b1e8341cb1f2ec714051453790b946e5a8a0a4cc828}, certification: {path: robot_sf/adversarial/certification.py, sha256: 075f19c69b5d0021b9608f22dbbc4817da9651cb9a8eb52acfcfc616ccb355c8}, replay: {path: robot_sf/adversarial/seed_sensitivity.py, sha256: 706abad9a5a3e9c7a3fdcdda89693ace96b8c8628595efd33aef90606484f5a0}, confirmation: {path: robot_sf/adversarial/independent_outcomes.py, sha256: fccd18d8fe0747fc792661ef3f6062a46eda69bd5f14044cc479efbdb1303260}}
-objectives: [{id: worst_case_snqi, role: existing_criticality_snqi_baseline, owner: robot_sf.adversarial.objectives.worst_case_snqi}, {id: temporal_robustness, role: signed_temporal_robustness, owner: robot_sf.adversarial.objectives.temporal_robustness, sidecar_schema: robustness-report.v1}]
+objectives: [{id: worst_case_snqi, role: existing_criticality_snqi_baseline, owner: robot_sf.adversarial.objectives.worst_case_snqi}, {id: temporal_robustness, role: signed_temporal_robustness, owner: robot_sf.adversarial.objectives.temporal_robustness, sidecar_schema: temporal-mechanism-sidecar.v1}]
 excluded_search_families: [coordinate]
 search_families: [{id: random, role: seeded_random_control, owner: robot_sf.adversarial.samplers.RandomCandidateSampler}, {id: optuna, role: tpe_tree_structured_parzen_estimator, owner: robot_sf.adversarial.samplers.OptunaCandidateSampler}, {id: cmaes, role: cma_es_class, owner: robot_sf.adversarial.samplers.CmaEsCandidateSampler}]
 search_family_builder: robot_sf.adversarial.samplers.build_sampler
 initialization_policy: {mode: cold_start, sampler_instance: one_per_run_cell, proposal_order: ascending_attempt_index, warm_start: forbidden, replacement_rows: forbidden, optimizer_defaults: existing_builder_defaults_source_bound, post_outcome_changes: forbidden}
 scenario: {template: configs/scenarios/templates/crossing_ttc.yaml, search_space: configs/adversarial/crossing_ttc_space.yaml, policy: goal, template_max_episode_steps: 120, horizon_steps: 100, dt_s: 0.1, parameter_order: [start_x, start_y, goal_x, goal_y, spawn_time_s, pedestrian_speed_mps, pedestrian_delay_s, scenario_seed], parameters: [{name: start_x, bounds: {min: 1.0, max: 3.0}}, {name: start_y, bounds: {min: 2.0, max: 4.0}}, {name: goal_x, bounds: {min: 7.0, max: 9.0}}, {name: goal_y, bounds: {min: 2.0, max: 4.0}}, {name: spawn_time_s, bounds: {min: 0.0, max: 2.0}}, {name: pedestrian_speed_mps, bounds: {min: 0.8, max: 1.4}}, {name: pedestrian_delay_s, bounds: {min: 0.0, max: 2.0}}, {name: scenario_seed, bounds: {min: 100, max: 999}}]}
-budget: {budgets: [16, 32, 64], run_count: 54, search_attempt_slots: 2016, budget_unit: search_attempt_slot, matched_across: [objective, search_family, budget, search_seed], simulator_call_budget_is_separate: true, no_post_outcome_budget_change: true}
+budget: {budgets: [16, 32, 64], run_count: 54, search_attempt_slots: 2016, simulator_call_budget: 14112, simulator_call_budget_by_search_budget: {16: 112, 32: 224, 64: 448}, simulator_invocations_per_search_slot: 7, budget_unit: simulator_invocation, simulator_call_budget_policy: fixed_per_cell_stop_no_padding_or_retry, matched_across: [objective, search_family, budget, search_seed], simulator_call_budget_is_separate: true, no_post_outcome_budget_change: true}
 seed_policy: {search_seeds: [1101, 2202, 3303], scenario_seed_domain: {min: 100, max: 999}, candidate_seed_mode: index_derived, role_seed_base: 8900000, canary_seed_base: 8800000, replay: {count_per_candidate: 1, derivation: role_namespace_ordinal_offset_0}, confirmation: {count_per_candidate: 5, threshold: 3_of_5_inherited, derivation: role_namespace_ordinal_offset_1_to_5, source_rule: adversarial_independent_outcomes.v2}, disjointness: search_scenario_replay_confirmation_and_canary_domains_must_be_disjoint}
 call_accounting:
   schema_version: temporal-robustness-call-ledger.v1
@@ -37,7 +37,7 @@ gates:
   combined_failure_rule: all_three_gates_pass
   confirmation_threshold: 3_of_5_inherited
 monitor_contract:
-  sidecar_schema: robustness-report.v1
+  sidecar_schema: temporal-mechanism-sidecar.v1
   property_ids: [clearance, ttc, goal, progress, collision]
   required_mechanism_fields: [property_id, signed_margin, activation_time_s, certification_state, replay_state, independent_seed_state, execution_mode, provenance]
   monitor_artifact_fields: [dt_s, sample_count, artifact_only]
@@ -45,10 +45,10 @@ monitor_contract:
   monitor_only_excluded: true
   source_semantics_unchanged: true
 analysis_contract:
-  primary_estimand: confirmed_failure_discovery_rate_by_search_budget
-  primary_unit: candidate_slot
+  primary_estimand: confirmed_failure_discovery_rate_by_simulator_call_budget
+  primary_unit: simulator_call_budget
   numerator: candidate_slot_passing_certification_replay_and_independent_confirmation
-  denominator: scheduled_search_attempt_slots
+  denominator: simulator_call_budget_per_cell
   secondary_outcomes: [first_confirmed_failure_attempt, valid_rate, invalid_rate, simulator_invocations, certification_rate, replay_rate, confirmation_rate, monitor_artifact_exclusions, missingness, result_class]
   uncertainty: {interval: newcombe_unpooled_wilson, confidence: 0.95, resampling_unit: search_seed}
   resampling_unit: search_seed

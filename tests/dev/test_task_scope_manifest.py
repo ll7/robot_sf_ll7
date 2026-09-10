@@ -92,6 +92,47 @@ def test_missing_profile_field_fails() -> None:
     assert any("plan_required" in error for error in errors)
 
 
+def test_missing_forbidden_ceremony_field_fails() -> None:
+    """Every profile declares which ceremony it forbids, including an intentionally empty list."""
+    manifest = _manifest()
+    del manifest["profiles"]["local"]["forbidden_ceremony"]
+
+    errors = check_task_scope_manifest(REPO_ROOT, manifest=manifest)
+
+    assert any("forbidden_ceremony" in error for error in errors)
+
+
+def test_unknown_manifest_field_fails() -> None:
+    """A schema-versioned manifest rejects a silently ignored top-level field."""
+    manifest = _manifest()
+    manifest["unexpected"] = True
+
+    errors = check_task_scope_manifest(REPO_ROOT, manifest=manifest)
+
+    assert any("unknown field" in error for error in errors)
+
+
+def test_required_context_must_stay_inside_repository(tmp_path: Path) -> None:
+    """Required context cannot use absolute paths or escape the repository root."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside\n", encoding="utf-8")
+    manifest = _manifest()
+    for profile in manifest["profiles"].values():
+        profile["required_context"] = [str(outside)]
+
+    errors = check_task_scope_manifest(root, manifest=manifest)
+
+    assert any("relative repository paths" in error for error in errors)
+
+    for profile in manifest["profiles"].values():
+        profile["required_context"] = ["../outside.md"]
+    errors = check_task_scope_manifest(root, manifest=manifest)
+
+    assert any("within the repository root" in error for error in errors)
+
+
 def test_unknown_profile_fails() -> None:
     """An undeclared profile fails the schema check."""
     manifest = _manifest()

@@ -49,12 +49,19 @@ PROFILE_BOOL_FIELDS = (
     "pr_required",
     "evidence_gates_required",
 )
+PROFILE_FIELDS = frozenset(
+    (*PROFILE_BOOL_FIELDS, "description", "required_context", "forbidden_ceremony")
+)
 ROUTE_IDS = (
     "read-only-observation",
     "documentation-only-edit",
     "implementation-runtime-change",
     "scientific-benchmark-interpretation",
     "environment-worktree-repair",
+)
+ROUTE_FIELDS = frozenset({"default_profile"})
+MANIFEST_FIELDS = frozenset(
+    {"version", "routing_owner", "manifest_owner", "profiles", "escalation", "routes"}
 )
 
 REPO_ROOT_SEGMENTS = frozenset(
@@ -283,12 +290,52 @@ def load_task_scope_manifest(root: Path = REPO_ROOT) -> object:
     return yaml.safe_load((root / TASK_SCOPE_MANIFEST).read_text(encoding="utf-8"))
 
 
+def _check_context_entries(
+    root: Path, prefix: str, context: list[object], errors: list[str]
+) -> None:
+    """Validate that required-context entries are existing paths inside ``root``."""
+    root_resolved = root.resolve()
+    for entry in context:
+        if not isinstance(entry, str) or not entry.strip():
+            errors.append(f"{prefix}.required_context entries must be non-empty strings")
+        elif Path(entry).is_absolute():
+            errors.append(
+                f"{prefix}.required_context paths must be relative repository paths: {entry}"
+            )
+        else:
+            candidate = (root / entry).resolve(strict=False)
+            try:
+                candidate.relative_to(root_resolved)
+            except ValueError:
+                errors.append(
+                    f"{prefix}.required_context path must stay within the repository root: {entry}"
+                )
+            else:
+                if not (root / entry).exists():
+                    errors.append(f"{prefix}.required_context path does not exist: {entry}")
+
+
+def _check_forbidden_ceremony(profile: dict, prefix: str, errors: list[str]) -> None:
+    """Validate the explicit list of ceremony excluded by one profile."""
+    if "forbidden_ceremony" not in profile:
+        errors.append(f"{prefix}.forbidden_ceremony must be a list")
+        return
+    ceremony = profile["forbidden_ceremony"]
+    if not isinstance(ceremony, list):
+        errors.append(f"{prefix}.forbidden_ceremony must be a list")
+    elif any(not isinstance(item, str) or not item.strip() for item in ceremony):
+        errors.append(f"{prefix}.forbidden_ceremony entries must be non-empty strings")
+
+
 def _check_profile(root: Path, profile_id: str, profile: object, errors: list[str]) -> None:
     """Validate one execution-profile entry in the task-scope manifest."""
     prefix = f"{TASK_SCOPE_MANIFEST}: profiles.{profile_id}"
     if not isinstance(profile, dict):
         errors.append(f"{prefix} must be a mapping")
         return
+    unknown = [str(key) for key in profile if key not in PROFILE_FIELDS]
+    if unknown:
+        errors.append(f"{prefix} contains unknown field(s): {', '.join(sorted(unknown))}")
     description = profile.get("description")
     if not isinstance(description, str) or not description.strip():
         errors.append(f"{prefix}.description must be a non-empty string")
@@ -299,19 +346,18 @@ def _check_profile(root: Path, profile_id: str, profile: object, errors: list[st
     if not isinstance(context, list) or not context:
         errors.append(f"{prefix}.required_context must be a non-empty list")
     else:
-        for entry in context:
-            if not isinstance(entry, str) or not entry.strip():
-                errors.append(f"{prefix}.required_context entries must be non-empty strings")
-            elif not (root / entry).exists():
-                errors.append(f"{prefix}.required_context path does not exist: {entry}")
-    ceremony = profile.get("forbidden_ceremony", [])
-    if not isinstance(ceremony, list):
-        errors.append(f"{prefix}.forbidden_ceremony must be a list when present")
+        _check_context_entries(root, prefix, context, errors)
+    _check_forbidden_ceremony(profile, prefix, errors)
 
 
 def _check_manifest_header(manifest: dict, errors: list[str]) -> None:
     """Validate the fixed manifest identity fields."""
-    if manifest.get("version") != 1:
+    unknown = [str(key) for key in manifest if key not in MANIFEST_FIELDS]
+    if unknown:
+        errors.append(
+            f"{TASK_SCOPE_MANIFEST} contains unknown field(s): {', '.join(sorted(unknown))}"
+        )
+    if type(manifest.get("version")) is not int or manifest.get("version") != 1:
         errors.append(f"{TASK_SCOPE_MANIFEST}: version must be 1")
     if manifest.get("routing_owner") != ROUTING_OWNER:
         errors.append(f"{TASK_SCOPE_MANIFEST}: routing_owner must be {ROUTING_OWNER}")
@@ -327,7 +373,7 @@ def _check_profiles(root: Path, profiles: object, errors: list[str]) -> None:
     if set(profiles) != set(PROFILE_IDS):
         errors.append(
             f"{TASK_SCOPE_MANIFEST}: profiles must be exactly {list(PROFILE_IDS)}; "
-            f"found {sorted(profiles)}"
+            f"found {sorted(str(key) for key in profiles)}"
         )
     for profile_id, profile in profiles.items():
         _check_profile(root, str(profile_id), profile, errors)
@@ -341,10 +387,19 @@ def _check_routes(routes: object, errors: list[str]) -> None:
     if set(routes) != set(ROUTE_IDS):
         errors.append(
             f"{TASK_SCOPE_MANIFEST}: routes must be exactly {list(ROUTE_IDS)}; "
-            f"found {sorted(routes)}"
+            f"found {sorted(str(key) for key in routes)}"
         )
     for route_id, route in routes.items():
-        default = route.get("default_profile") if isinstance(route, dict) else None
+        if not isinstance(route, dict):
+            errors.append(f"{TASK_SCOPE_MANIFEST}: routes.{route_id} must be a mapping")
+            continue
+        unknown = [str(key) for key in route if key not in ROUTE_FIELDS]
+        if unknown:
+            errors.append(
+                f"{TASK_SCOPE_MANIFEST}: routes.{route_id} contains unknown field(s): "
+                f"{', '.join(sorted(unknown))}"
+            )
+        default = route.get("default_profile")
         if default not in PROFILE_IDS:
             errors.append(
                 f"{TASK_SCOPE_MANIFEST}: routes.{route_id}.default_profile must be one of "
@@ -357,6 +412,12 @@ def _check_escalation(escalation: object, errors: list[str]) -> None:
     if not isinstance(escalation, dict):
         errors.append(f"{TASK_SCOPE_MANIFEST}: escalation must be a mapping")
         return
+    unknown = [str(key) for key in escalation if key not in {"allowed", "rule"}]
+    if unknown:
+        errors.append(
+            f"{TASK_SCOPE_MANIFEST}: escalation contains unknown field(s): "
+            f"{', '.join(sorted(unknown))}"
+        )
     if escalation.get("allowed") is not True:
         errors.append(f"{TASK_SCOPE_MANIFEST}: escalation.allowed must be true")
     rule = escalation.get("rule")

@@ -105,3 +105,10 @@ def test_manifest_entry_is_registered() -> None:
     ]
     assert len(entries) == 1
     assert entries[0]["ci_enabled"] is True
+
+
+def test_tutorial_reference_points_to_existing_troubleshooting_section() -> None:
+    """The tutorial's documentation reference must resolve to the user guide."""
+    source = _MODULE_PATH.read_text(encoding="utf-8")
+    assert "docs/user-guide.md#8-troubleshoot" in source
+    assert (REPO_ROOT / "docs/user-guide.md").is_file()

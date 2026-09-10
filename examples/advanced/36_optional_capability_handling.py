@@ -18,7 +18,7 @@ Limitations:
 References:
     - robot_sf/common/optional_import.py
     - model/registry.md
-    - docs/troubleshooting.md
+    - docs/user-guide.md#8-troubleshoot
 """
 
 from __future__ import annotations

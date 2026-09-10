@@ -133,6 +133,15 @@ def test_error_handling_missing_scenario_contract() -> None:
         robot_sf.load_scenario("non_existent_scenario_name_123")
 
 
+def test_error_handling_missing_installed_asset_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Installed packages without bundled scenarios explain the required asset boundary."""
+    monkeypatch.setattr("robot_sf.api._find_repo_root", lambda: tmp_path)
+    with pytest.raises(FileNotFoundError, match="installed package does not ship"):
+        robot_sf.load_scenario("francis2023_circular_crossing")
+
+
 def test_error_handling_invalid_planner_contract() -> None:
     """Direct test verifying TypeError on invalid planner object."""
     env = robot_sf.make_env(seed=42)

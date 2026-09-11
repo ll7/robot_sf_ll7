@@ -1082,8 +1082,14 @@ def _frozen_search_space_contract_fields(contract: dict[str, Any]) -> tuple[str,
 
 
 def _raw_file_sha256(path: Path) -> str:
-    """Return the SHA-256 digest of a file's raw bytes."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """Return the SHA-256 digest of a file's raw bytes.
+
+    Delegates to the canonical :func:`robot_sf.evidence.writers.sha256_file`; the
+    import stays function-local to match this script's deferred ``robot_sf`` imports.
+    """
+    from robot_sf.evidence.writers import sha256_file
+
+    return sha256_file(path)
 
 
 def _load_frozen_contract_search_space(

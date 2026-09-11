@@ -862,6 +862,10 @@ def _resolve_coverage_path(coverage_arg: str, repo_root: Path) -> Path:
     return coverage_path
 
 
+# Intentionally standalone (no ``robot_sf`` import): this changed-coverage gate must
+# keep computing digests and verdicts even when the package fails to import, and its
+# fail-soft contract (``None`` for missing/unreadable files) differs from the raising
+# canonical ``robot_sf.evidence.writers.sha256_file`` contract (#8948).
 def _sha256_file(path: Path) -> str | None:
     """Return a file digest, or ``None`` when the artifact is unavailable."""
     if not path.is_file():

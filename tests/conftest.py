@@ -109,7 +109,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 def _import_torch_optional():
-    """TODO docstring. Document this function."""
+    """Import torch if available in the environment, returning None on failure."""
     try:
         return importlib.import_module("torch")  # type: ignore
     except Exception:  # pragma: no cover - torch optional in some envs
@@ -117,10 +117,13 @@ def _import_torch_optional():
 
 
 def _snapshot_torch_determinism(torch_module):
-    """TODO docstring. Document this function.
+    """Snapshot determinism-related flags for PyTorch and cuDNN backends.
 
     Args:
-        torch_module: TODO docstring.
+        torch_module: Loaded PyTorch module from which to capture deterministic settings.
+
+    Returns:
+        Dictionary mapping determinism flag names to their pre-test captured values.
     """
     state: dict[str, object | None] = {
         "algos": None,
@@ -142,11 +145,11 @@ def _snapshot_torch_determinism(torch_module):
 
 
 def _apply_nondeterministic(torch_module, cudnn_backend):
-    """TODO docstring. Document this function.
+    """Apply non-deterministic settings to PyTorch and cuDNN for stress testing.
 
     Args:
-        torch_module: TODO docstring.
-        cudnn_backend: TODO docstring.
+        torch_module: Loaded PyTorch module to configure.
+        cudnn_backend: PyTorch cuDNN backend object to configure, or None.
     """
     try:
         _set_torch_deterministic_algorithms(torch_module, False)
@@ -158,11 +161,11 @@ def _apply_nondeterministic(torch_module, cudnn_backend):
 
 
 def _restore_torch_determinism(torch_module, state):
-    """TODO docstring. Document this function.
+    """Restore previously captured PyTorch and cuDNN determinism flags.
 
     Args:
-        torch_module: TODO docstring.
-        state: TODO docstring.
+        torch_module: Loaded PyTorch module whose settings should be restored.
+        state: State dictionary captured by ``_snapshot_torch_determinism``.
     """
     try:
         prev_algos = state.get("algos")
@@ -276,7 +279,7 @@ def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
 
 @pytest.fixture(scope="session")
 def perf_policy():  # type: ignore[missing-return-type-doc]
-    """TODO docstring. Document this function."""
+    """Provide session-scoped performance budget policy or fallback envelope."""
     if PerformanceBudgetPolicy is not None:
         try:
             return PerformanceBudgetPolicy()
@@ -961,10 +964,10 @@ def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-d
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):  # type: ignore[missing-type-doc]
-    """TODO docstring. Document this function.
+    """Wrap test call execution to record measured duration for the slow report.
 
     Args:
-        item: TODO docstring.
+        item: Pytest test item being executed.
     """
     start = time.perf_counter()
     try:

@@ -20,6 +20,8 @@ CANONICAL_COMMANDS = (
     "tests/dev/test_task_scope_manifest.py",
     "tests/dev/test_maintainer_values.py",
     "tests/dev/test_delivery_and_friction.py",
+    "tests/dev/test_compendium_index.py",
+    "tests/dev/test_slurm_agent_contract.py",
     "tests/dev/test_instruction_task_fixtures.py",
     "tests/dev/test_compact_boot_router.py",
 )

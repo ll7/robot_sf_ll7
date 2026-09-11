@@ -45,7 +45,7 @@ _WEIGHTS = {
 
 
 def _episodes():
-    """TODO docstring. Document this function."""
+    """Return 15 synthetic episodes covering all seven metrics, seeded with 5."""
     rng = np.random.default_rng(5)
     episodes = []
     for i in range(15):
@@ -67,10 +67,10 @@ def _episodes():
 
 
 def _baseline(episodes):
-    """TODO docstring. Document this function.
+    """Compute median/p95 baselines for the four normalized penalty metrics.
 
     Args:
-        episodes: TODO docstring.
+        episodes: Episode records whose ``metrics`` mappings supply the values.
     """
     metrics = {k: [] for k in ["collisions", "near_misses", "force_exceed_events", "jerk_mean"]}
     for e in episodes:
@@ -84,7 +84,12 @@ def _baseline(episodes):
 
 
 def test_normalization_comparison_correlations_range():
-    """TODO docstring. Document this function."""
+    """Normalization strategy comparison reports finite, in-range correlations.
+
+    Recomputes default weights on synthetic episodes, then asserts the
+    ``median_p95`` base strategy and at least one alternate strategy are
+    present and every ``correlation_with_base`` lies within [-1, 1].
+    """
     eps = _episodes()
     base = _baseline(eps)
     recomputer = SNQIWeightRecomputer(eps, base)

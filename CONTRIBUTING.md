@@ -49,6 +49,10 @@ agent-assisted work, use [`AGENTS.md`](AGENTS.md).
 2. Verify examples run correctly
 3. Submit PR with clear explanation
 
+For work continuing after an expiring host or access window, follow the
+[post-access restoration and local-analysis runbook](docs/post_access_local_analysis_runbook.md).
+Keep private pointers, credentials, and restricted paths out of commits and issue reports.
+
 ### 5. Research and Benchmarking
 - **New benchmark configurations**: Additional scenario families
 - **Comparison studies**: Comparing planners on different metrics

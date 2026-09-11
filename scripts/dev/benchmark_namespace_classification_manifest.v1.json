@@ -286,6 +286,7 @@
     "social_compliance.py",
     "social_preference_labels.py",
     "socnavbench_canary.py",
+    "source_bound_component_contrasts.py",
     "step_trace_comparator.py",
     "stress_uncertainty_coverage.py",
     "typed_snapshot.py",

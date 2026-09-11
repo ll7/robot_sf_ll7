@@ -13,56 +13,11 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 44,
-      "occurrences": 270
+      "files": 0,
+      "occurrences": 0
     }
   },
-  "files": {
-    "tests/conftest.py": 12,
-    "tests/fixtures/minimal_manifests/generator.py": 17,
-    "tests/lidar_sensor_obstacle_test.py": 13,
-    "tests/lidar_sensor_pedestrian_test.py": 12,
-    "tests/map_test.py": 8,
-    "tests/maps/test_map_verifier.py": 2,
-    "tests/navigation_test.py": 6,
-    "tests/ped_grouping_test.py": 21,
-    "tests/perf/test_factory_creation_perf.py": 4,
-    "tests/perf_utils/guidance.py": 3,
-    "tests/perf_utils/reporting.py": 7,
-    "tests/perf_utils/test_guidance.py": 3,
-    "tests/perf_utils/test_slow_report_fixture.py": 1,
-    "tests/research/test_extractor_report.py": 2,
-    "tests/robot_env_simple_reward_test.py": 1,
-    "tests/sensor/test_sensor_registry.py": 12,
-    "tests/sim/test_backend_registry.py": 1,
-    "tests/sim/test_backend_selector.py": 8,
-    "tests/sim_config_test.py": 3,
-    "tests/test_baseline_ppo_smoke.py": 3,
-    "tests/test_classic_interactions_matrix.py": 4,
-    "tests/test_cli_run_snqi.py": 3,
-    "tests/test_cli_run_snqi_from.py": 7,
-    "tests/test_cli_snqi_ablation.py": 5,
-    "tests/test_collision_sanity.py": 2,
-    "tests/test_env.py": 2,
-    "tests/test_error_policy.py": 6,
-    "tests/test_eval_env_metrics.py": 12,
-    "tests/test_failure_extractor.py": 5,
-    "tests/test_fast_pysf_wrapper.py": 3,
-    "tests/test_feature_extractors.py": 4,
-    "tests/test_image_sensor_fusion.py": 3,
-    "tests/test_multi_pedestrian.py": 2,
-    "tests/test_reward_default_fallback.py": 1,
-    "tests/test_runner_batch.py": 2,
-    "tests/test_scenario_generator.py": 8,
-    "tests/test_seed_utils.py": 4,
-    "tests/test_trajectory_feature.py": 6,
-    "tests/test_types.py": 17,
-    "tests/tools/test_analyze_imitation_results.py": 8,
-    "tests/tools/test_compare_training_runs.py": 9,
-    "tests/unicycle_drive_test.py": 6,
-    "tests/unit/test_hardware_profile_capture.py": 5,
-    "tests/zone_sampling_test.py": 7
-  },
+  "files": {},
   "roots": [
     "robot_sf",
     "scripts",
@@ -71,7 +26,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 44,
-    "total_occurrences": 270
+    "files": 0,
+    "total_occurrences": 0
   }
 }

@@ -405,11 +405,11 @@ class RobotEnvWithImage(RobotEnv):
     """
 
     def __init__(self, env_config, debug=False):
-        """TODO docstring. Document this function.
+        """Initialize the image-enabled robot env and cache an optional simulation view.
 
         Args:
-            env_config: TODO docstring.
-            debug: TODO docstring.
+            env_config: Environment configuration forwarded to RobotEnv.
+            debug: Whether to enable debug behavior in RobotEnv.
         """
         super().__init__(env_config, debug)
         self.sim_ui = None if not hasattr(self, "sim_view") else self.sim_view

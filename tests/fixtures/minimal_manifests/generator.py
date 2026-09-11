@@ -30,7 +30,7 @@ from pathlib import Path
 
 @dataclass(slots=True)
 class GeneratedManifest:
-    """TODO docstring. Document this class."""
+    """Descriptor for a generated minimal manifest file and associated run metadata."""
 
     path: Path
     run_id: str
@@ -39,13 +39,13 @@ class GeneratedManifest:
 
 
 def _now_run_id(prefix: str) -> str:
-    """TODO docstring. Document this function.
+    """Generate a timestamped run identifier with the provided prefix suffix.
 
     Args:
-        prefix: TODO docstring.
+        prefix: Descriptive token appended to the timestamp prefix.
 
     Returns:
-        TODO docstring.
+        Formatted run identifier string combining timestamp and prefix.
     """
     return f"{time.strftime('%Y%m%d_%H%M%S')}_{prefix}"
 
@@ -57,17 +57,17 @@ def create_minimal_manifest(
     output_dir: str | Path,
     episode_count: int = 3,
 ) -> Path:
-    """TODO docstring. Document this function.
+    """Write a lightweight manifest JSON file containing synthetic episode metrics.
 
     Args:
-        run_id: TODO docstring.
-        seed: TODO docstring.
-        policy_type: TODO docstring.
-        output_dir: TODO docstring.
-        episode_count: TODO docstring.
+        run_id: Explicit run identifier, or None to generate one automatically.
+        seed: Random seed used to generate deterministic synthetic episode stats.
+        policy_type: Policy classification ('baseline' or 'pretrained').
+        output_dir: Directory where the generated manifest JSON is written.
+        episode_count: Number of synthetic episodes to include in the manifest.
 
     Returns:
-        TODO docstring.
+        Path to the written manifest JSON file.
     """
     if not isinstance(episode_count, int) or episode_count <= 0:
         raise ValueError("episode_count must be a positive integer")
@@ -126,16 +126,16 @@ def create_seed_set(
     output_dir: str | Path,
     episode_count: int = 3,
 ) -> list[Path]:
-    """TODO docstring. Document this function.
+    """Generate a sequence of minimal manifest files for multiple evaluation seeds.
 
     Args:
-        policy_type: TODO docstring.
-        seeds: TODO docstring.
-        output_dir: TODO docstring.
-        episode_count: TODO docstring.
+        policy_type: Policy classification ('baseline' or 'pretrained').
+        seeds: Sequence of integer random seeds.
+        output_dir: Directory where generated manifest JSON files are written.
+        episode_count: Number of synthetic episodes per manifest.
 
     Returns:
-        TODO docstring.
+        List of file paths to the generated manifests.
     """
     paths: list[Path] = []
     for seed in seeds:

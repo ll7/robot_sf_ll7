@@ -1,13 +1,7 @@
-#!/usr/bin/env python3
-"""Inventory compute-window output schemas and their exact readers.
-
-Operational preservation check; it binds each role to its schema, reader, dependencies, units,
-source references, and representative bytes without converting or analyzing outputs.
-"""
-
-from __future__ import annotations
+"""Inventory compute-window schemas/readers without converting outputs."""
 
 import argparse
+import ast
 import hashlib
 import json
 import subprocess
@@ -51,10 +45,6 @@ def _error(code: str, location: str, message: str) -> dict[str, str]:
     return {"code": code, "location": location, "message": message}
 
 
-def _add_error(errors: list[dict[str, str]], code: str, location: str, message: str) -> None:
-    errors.append(_error(code, location, message))
-
-
 def _relative_path(value: Any, location: str, errors: list[dict[str, str]]) -> str | None:
     if not isinstance(value, str) or not value:
         errors.append(_error("invalid_path", location, "path must be non-empty"))
@@ -72,19 +62,21 @@ def _relative_path(value: Any, location: str, errors: list[dict[str, str]]) -> s
         or any(ord(character) < 32 for character in value)
     )
     if invalid:
-        _add_error(errors, "hidden_absolute_path", location, "path must be normalized and relative")
+        errors.append(
+            _error("hidden_absolute_path", location, "path must be normalized and relative")
+        )
         return None
     return value
 
 
 def _digest(value: Any, location: str, errors: list[dict[str, str]]) -> str | None:
     if not isinstance(value, str) or len(value) != SHA256_LENGTH:
-        _add_error(errors, "invalid_digest", location, "sha256 must be 64 hex characters")
+        errors.append(_error("invalid_digest", location, "sha256 must be 64 hex characters"))
         return None
     try:
         int(value, 16)
     except ValueError:
-        _add_error(errors, "invalid_digest", location, "sha256 must be hexadecimal")
+        errors.append(_error("invalid_digest", location, "sha256 must be hexadecimal"))
         return None
     return value
 
@@ -139,10 +131,10 @@ def _load_and_validate_bytes(
     payloads, reason = _load_representative_payloads(path, fmt)
     if reason:
         return False, reason
-    for payload in payloads or []:
-        if _representative_schema_version(payload) != expected_version:
-            return False, "representative bytes have a schema-version mismatch"
-    return True, None
+    valid = all(
+        _representative_schema_version(payload) == expected_version for payload in payloads or []
+    )
+    return valid, None if valid else "representative bytes have a schema-version mismatch"
 
 
 def _rooted_path(
@@ -155,7 +147,7 @@ def _rooted_path(
         candidate = (root / relative).resolve()
         candidate.relative_to(root_resolved)
     except (OSError, RuntimeError, ValueError):
-        _add_error(errors, "hidden_absolute_path", location, "path resolves outside source root")
+        errors.append(_error("hidden_absolute_path", location, "path resolves outside source root"))
         return None
     return candidate
 
@@ -166,26 +158,55 @@ def _execute_reader(
     source = _rooted_path(root, str(reader["source_path"]), location, [])
     if source is None or not _digest_matches(source, str(reader["source_sha256"])):
         return _error("reader_schema_mismatch", location, "reader source binding is invalid")
-    try:
-        source_text = source.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return _error("reader_schema_mismatch", location, "reader source is unreadable")
-    if str(reader["symbol"]) not in source_text:
-        return _error("reader_schema_mismatch", location, "reader symbol is absent from source")
     if reader.get("execution") != "python_path":
         return _error("reader_unavailable", f"{location}.execution", "reader hook is missing")
     try:
         process = subprocess.run(
             [sys.executable, "-c", _READER_CHILD, str(source), str(reader["symbol"]), str(output)],
             cwd=root,
-            check=False,
             capture_output=True,
+            check=False,
+            timeout=2,
         )
+    except subprocess.TimeoutExpired:
+        return _error("reader_schema_mismatch", location, "reader timed out")
     except OSError:
         return _error("reader_schema_mismatch", location, "reader execution could not start")
     if process.returncode != 0:
         return _error("reader_schema_mismatch", location, "reader rejected: child process failed")
     return None
+
+
+def _source_declares_schema(text: str, suffix: str, name: str, version: str) -> bool:
+    if suffix == ".json":
+        content = json.loads(text)
+        properties = content.get("properties", {}) if isinstance(content, Mapping) else {}
+        field = (
+            properties.get("schema_version", properties.get("version", {}))
+            if isinstance(properties, Mapping)
+            else {}
+        )
+        return (
+            str(content.get("$id", "") if isinstance(content, Mapping) else "")
+            .rsplit("/", 1)[-1]
+            .removesuffix(".json")
+            == name
+            and isinstance(field, Mapping)
+            and field.get("const") == version
+        )
+    if suffix != ".py" or not (version in {name, f"{name}.v1"} or version.endswith(f".{name}.v1")):
+        return False
+    return any(
+        isinstance(node, (ast.Assign, ast.AnnAssign))
+        and not node.col_offset
+        and isinstance(node.value, ast.Constant)
+        and node.value.value == version
+        and any(
+            isinstance(target, ast.Name) and target.id.removesuffix("_VERSION").endswith("SCHEMA")
+            for target in (getattr(node, "targets", None) or [node.target])
+        )
+        for node in ast.walk(ast.parse(text))
+    )
 
 
 def _schema_source_error(
@@ -201,16 +222,16 @@ def _schema_source_error(
     if source is None:
         return _error("schema_source_mismatch", location, "source is outside root")
     try:
-        text = source.read_text(encoding="utf-8")
-        content = json.loads(text) if source.suffix == ".json" else text
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        valid = _source_declares_schema(
+            source.read_text(encoding="utf-8"), source.suffix, name, version
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, SyntaxError):
         return _error("schema_source_mismatch", location, "source is unreadable")
-    if source.suffix == ".json" and not isinstance(content, Mapping):
-        return _error("schema_source_mismatch", location, "source is not a JSON object")
-    identity = json.dumps(content, sort_keys=True) if isinstance(content, Mapping) else content
-    if name not in identity or version not in identity:
-        return _error("schema_source_mismatch", location, "source does not declare name/version")
-    return None
+    return (
+        None
+        if valid
+        else _error("schema_source_mismatch", location, "source does not declare name/version")
+    )
 
 
 def _source_material_errors(
@@ -455,8 +476,7 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
     return result, errors
 
 
-def build_inventory(packet: Mapping[str, Any], root: Path) -> dict[str, Any]:
-    """Validate and normalize one inventory packet."""
+def build_inventory(packet: Mapping[str, Any], root: Path) -> dict[str, Any]:  # noqa: D103
     errors: list[dict[str, str]] = []
     if packet.get("schema_version") != SCHEMA:
         errors.append(_error("wrong_schema", "schema_version", f"must equal {SCHEMA}"))
@@ -494,17 +514,14 @@ def build_inventory(packet: Mapping[str, Any], root: Path) -> dict[str, Any]:
     }
 
 
-def load_packet(path: Path) -> Mapping[str, Any]:
-    """Load one JSON inventory packet."""
+def load_packet(path: Path) -> Mapping[str, Any]:  # noqa: D103
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, Mapping):
         raise ValueError("packet must be a JSON object")
     return payload
 
 
-def render_table(report: Mapping[str, Any]) -> str:
-    """Render the stable human-readable role summary."""
-
+def render_table(report: Mapping[str, Any]) -> str:  # noqa: D103
     def cell(value: Any) -> str:
         return str(value).replace("|", r"\|").replace("\r", " ").replace("\n", " ")
 
@@ -519,8 +536,7 @@ def render_table(report: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run the inventory checker CLI."""
+def main(argv: list[str] | None = None) -> int:  # noqa: D103
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet", type=Path, required=True)
     parser.add_argument(

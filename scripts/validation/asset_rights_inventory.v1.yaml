@@ -364,7 +364,7 @@ rows:
 
   - id: example-fixture-json
     scope: examples
-    globs: ["examples/plotting/fixtures/**", "examples/fixtures/failed_campaign_dossier.json"]
+    globs: ["examples/plotting/fixtures/**", "examples/fixtures/failed_campaign_dossier.json", "examples/fixtures/artifact_preservation/**"]
     status: project-authored
     source: "Robot SF hand-authored deterministic example fixtures."
     source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."

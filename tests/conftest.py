@@ -772,6 +772,7 @@ _FAST_FILES = {
     # helper module; keep their producer coverage in the exact-head fast lane
     # (issue #8910).
     "test_artifact_paths.py",
+    "test_build_compute_staging_bundle.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

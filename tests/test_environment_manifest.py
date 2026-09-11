@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
+from robot_sf.evidence import environment_manifest as env_mod
 from robot_sf.evidence.environment_manifest import (
     COMPANION_DISTRIBUTIONS,
     ENVIRONMENT_MANIFEST_SCHEMA_VERSION,
@@ -17,8 +19,11 @@ from robot_sf.evidence.environment_manifest import (
     REASON_ACCELERATOR_UNAVAILABLE,
     REASON_CARLA_UNAVAILABLE,
     REASON_COMPANION_PACKAGE_NOT_INSTALLED,
+    REASON_CUDA_UNAVAILABLE,
+    REASON_DRIVER_PROBE_UNAVAILABLE,
     REASON_DRIVER_UNAVAILABLE,
     REASON_FILE_MISSING,
+    REASON_GIT_UNAVAILABLE,
     REASON_NOT_A_REPOSITORY,
     REASON_NOT_SET,
     REASON_PLATFORM_CLASS_MISMATCH,
@@ -36,6 +41,7 @@ from robot_sf.evidence.environment_manifest import (
     evaluate_environment_manifest,
     observed,
     sanitize_text,
+    sanitize_value,
     semantic_digest,
     semantic_payload,
     unavailable,
@@ -323,3 +329,128 @@ def test_check_cli_reports_compatible_and_incompatible(tmp_path: Path) -> None:
         manifest_cli_main(["check", "--manifest", str(manifest_path), "--platform-class", "nope"])
         == 2
     )
+
+
+class _FakeTorchCuda:
+    @staticmethod
+    def is_available() -> bool:
+        return True
+
+    @staticmethod
+    def device_count() -> int:
+        return 1
+
+    @staticmethod
+    def get_device_name(index: int) -> str:
+        return "Fake A100"
+
+    @staticmethod
+    def get_device_capability(index: int) -> tuple[int, int]:
+        return (8, 0)
+
+    @staticmethod
+    def get_device_properties(index: int) -> SimpleNamespace:
+        return SimpleNamespace(total_memory=8 * 1024 * 1024)
+
+
+def _stub_cuda_subprocess(
+    monkeypatch: pytest.MonkeyPatch, *, returncode: int = 0, stdout: str = "550.54\n"
+) -> None:
+    monkeypatch.setattr(
+        env_mod.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=returncode, stdout=stdout),
+    )
+    monkeypatch.setattr(env_mod.shutil, "which", lambda name: "/usr/bin/nvidia-smi")
+
+
+def test_probe_accelerator_real_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(env_mod, "try_import", lambda name: None)
+    assert env_mod.probe_accelerator()["reason"] == REASON_PROBE_DEPENDENCY_MISSING
+
+    fake_torch = SimpleNamespace(version=SimpleNamespace(cuda="12.1"), cuda=_FakeTorchCuda())
+    monkeypatch.setattr(env_mod, "try_import", lambda name: fake_torch)
+    _stub_cuda_subprocess(monkeypatch)
+    cuda_probe = env_mod.probe_accelerator()
+    assert cuda_probe["class"] == observed("cuda")
+    assert cuda_probe["devices"]["value"][0]["name"] == "Fake A100"
+    assert cuda_probe["driver_version"] == observed("550.54")
+
+    _stub_cuda_subprocess(monkeypatch, returncode=1, stdout="")
+    assert (
+        env_mod.probe_accelerator()["driver_version"]["reason"] == REASON_DRIVER_PROBE_UNAVAILABLE
+    )
+
+    class _UnavailableCuda(_FakeTorchCuda):
+        @staticmethod
+        def is_available() -> bool:
+            return False
+
+    unavailable_torch = SimpleNamespace(
+        version=SimpleNamespace(cuda="12.1"), cuda=_UnavailableCuda()
+    )
+    monkeypatch.setattr(env_mod, "try_import", lambda name: unavailable_torch)
+    assert env_mod.probe_accelerator()["reason"] == REASON_DRIVER_UNAVAILABLE
+
+    cpu_built_torch = SimpleNamespace(version=SimpleNamespace(cuda=None), cuda=_UnavailableCuda())
+    monkeypatch.setattr(env_mod, "try_import", lambda name: cpu_built_torch)
+    assert env_mod.probe_accelerator()["reason"] == REASON_CUDA_UNAVAILABLE
+
+
+def test_probe_cuda_driver_version_without_nvidia_smi(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(env_mod.shutil, "which", lambda name: None)
+    assert env_mod._probe_cuda_driver_version() == unavailable(REASON_DRIVER_PROBE_UNAVAILABLE)
+
+
+def test_probe_git_commit_real_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        env_mod.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="b" * 40 + "\n"),
+    )
+    assert env_mod.probe_git_commit(tmp_path) == observed("b" * 40)
+
+    monkeypatch.setattr(
+        env_mod.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=128, stdout=""),
+    )
+    assert env_mod.probe_git_commit(tmp_path)["reason"] == REASON_NOT_A_REPOSITORY
+
+    def _raise(*args: object, **kwargs: object) -> None:
+        raise FileNotFoundError
+
+    monkeypatch.setattr(env_mod.subprocess, "run", _raise)
+    assert env_mod.probe_git_commit(tmp_path)["reason"] == REASON_GIT_UNAVAILABLE
+
+
+def test_probe_companions_real_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(env_mod.importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(env_mod.importlib.metadata, "version", lambda distribution: "9.9")
+    companions = env_mod.probe_companions()
+    assert companions["carla"] == observed(
+        {"module": "carla", "distribution": "carla", "version": "9.9"}
+    )
+
+    monkeypatch.setattr(env_mod.importlib.util, "find_spec", lambda name: None)
+    assert env_mod.probe_companions()["carla"]["reason"] == REASON_COMPANION_PACKAGE_NOT_INSTALLED
+
+
+def test_collect_package_identity_missing_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise(distribution: str) -> None:
+        raise env_mod.importlib.metadata.PackageNotFoundError(distribution)
+
+    monkeypatch.setattr(env_mod.importlib.metadata, "version", _raise)
+    section = env_mod.collect_package_identity({}, RedactionContext())
+    assert section["distribution_version"] == unavailable("not_installed")
+
+
+def test_sanitize_value_handles_sequences() -> None:
+    context = RedactionContext(home="/home/alice", hostname="secret-host")
+    sanitized, changed = sanitize_value(
+        ["/home/alice/data", {"root": "/scratch/cluster/x"}], context
+    )
+    assert changed is True
+    serialized = json.dumps(sanitized)
+    assert "alice" not in serialized
+    assert "scratch" not in serialized

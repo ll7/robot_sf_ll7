@@ -1,4 +1,4 @@
-"""Focused tests for the terminal-job harvest helper (issue #8824)."""
+"""Focused tests for the terminal-job harvest helper (issues #8824 and #9033)."""
 
 from __future__ import annotations
 
@@ -58,6 +58,14 @@ def test_scheduler_and_artifact_axes_stay_separate(tmp_path):
     report = MOD.build_report(request, root)
     assert report["status"] == "blocked" and "job_not_terminal" in report["reason_codes"]
     assert report["artifact_status"] == "complete"
+
+    request, root = _fixture(tmp_path / "unknown", "unknown")
+    request["job"]["terminal"] = True
+    report = MOD.build_report(request, root)
+    assert report["status"] == "blocked"
+    assert report["scheduler"]["terminal"] is False
+    assert "unsupported_scheduler_state" in report["reason_codes"]
+    assert report["cleanup_eligibility"]["eligible"] is False
 
 
 def test_row_dispositions_roles_and_partial_artifacts(tmp_path):
@@ -131,6 +139,40 @@ def test_missing_identity_contract_and_capacity_fail_closed(tmp_path):
     assert "missing_required_role" in MOD.build_report(request, root)["reason_codes"]
 
 
+def test_empty_required_roles_cannot_report_complete(tmp_path):
+    for role in MOD.REQUIRED_ROLES:
+        request, root = _fixture(tmp_path / role)
+        request["inventory"][role] = []
+        if role == "manifest":
+            (root / role).unlink()
+        elif role == "rows":
+            shutil.rmtree(root / role)
+        else:
+            (root / role).unlink()
+        report = MOD.build_report(request, root)
+        assert report["status"] == "blocked"
+        assert report["artifact_status"] != "complete"
+        assert "empty_required_role" in report["reason_codes"]
+        assert report["cleanup_eligibility"]["eligible"] is False
+
+
+def test_conflicting_environment_records_are_not_lexically_selected(tmp_path):
+    request, root = _fixture(tmp_path)
+    alternate = _write(
+        root / "environment-alternate.json",
+        json.dumps({"source_commit": "b" * 40, "config_sha256": CONFIG}),
+    )
+    request["inventory"]["environment"] = [
+        *request["inventory"]["environment"],
+        alternate.name,
+    ]
+    report = MOD.build_report(request, root)
+    assert report["status"] == "blocked"
+    assert "conflicting_environment_records" in report["reason_codes"]
+    assert report["environment"]["record"] is None
+    assert report["cleanup_eligibility"]["eligible"] is False
+
+
 def test_manifest_destination_and_idempotency(tmp_path):
     request, root = _fixture(tmp_path)
     report = MOD.build_report(request, root)
@@ -153,7 +195,15 @@ def test_manifest_destination_and_idempotency(tmp_path):
     shutil.copytree(root, destination)
     verified = MOD.build_report(request, root, destination_root=destination)
     assert verified["destination"]["verification"] == "verified"
+    assert verified["destination"]["unexpected_members"] == 0
     assert verified["cleanup_eligibility"]["eligible"] is True
+    _write(destination / "untracked.txt", "not in the source inventory")
+    extra = MOD.build_report(request, root, destination_root=destination)
+    assert extra["status"] == "blocked"
+    assert extra["destination"]["verification"] == "unexpected_members"
+    assert extra["destination"]["unexpected_members"] == 1
+    assert "destination_unexpected_member" in extra["reason_codes"]
+    assert extra["cleanup_eligibility"]["eligible"] is False
     (destination / "rows/row-0002.json").unlink()
     blocked = MOD.build_report(request, root, destination_root=destination)
     assert blocked["status"] == "blocked"

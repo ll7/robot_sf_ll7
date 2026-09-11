@@ -28,6 +28,31 @@ For non-reference regimes, activation requires at least 80% of pedestrians to re
 
 The required turnaround ledger is also frozen from decision through dissertation evidence-admission decision. Private scheduler topology, credentials, scratch paths, and job IDs do not belong in this tracked protocol note.
 
+## Activation-preflight classifier boundary (#9031)
+
+The disjoint activation-preflight checker is a structural gate over the frozen protocol, not a native
+diagnostics producer. It now requires the exact `192`-identity preflight manifest, reserved seeds
+`311–314`, frozen scenario/planner/config/runtime hashes, the checker-owned diagnostics envelope
+`robot_sf.issue_6561_pedestrian_speed_activation_diagnostics.v2`, finite bounded values, and
+explicit row status. Partial, duplicate, unknown, adapter, degraded, fallback, failed, unavailable,
+provenance-invalid, schema-invalid, or mutated-input rows fail closed.
+
+The repository does not currently contain a canonical native pedestrian activation-diagnostics owner or
+schema. Consequently, a complete synthetic payload may report `activation_ok` and an activation
+verdict as a structural diagnostic, but the overall result is always `ok: false` with
+`status: blocked`, `admission_status: not_admitted`, and
+`reason_code: canonical_native_activation_diagnostics_owner_unavailable`. Explicit top-level
+`not_available` and `failed` outcomes are preserved as non-admitted terminal results. This boundary
+does not establish native execution, runtime activation, benchmark evidence, or dissertation admission;
+the downstream native canary and #6102 integrity gates remain required.
+
+Validate the boundary without executing a campaign:
+
+```bash
+uv run python scripts/validation/check_issue_6561_activation_preflight.py --check-only --format json
+uv run pytest -q tests/validation/test_check_issue_6561_activation_preflight.py
+```
+
 ## Validation
 
 ```bash

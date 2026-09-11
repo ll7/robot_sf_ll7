@@ -135,6 +135,20 @@ See [`docs/ai/open-issue-contract-preparation.md`](../../docs/ai/open-issue-cont
 for the operator contract. Focused offline tests live in
 `tests/dev/test_prepare_open_issue_contracts.py`.
 
+[`ready_triage_reconcile.py`](ready_triage_reconcile.py) repairs the contradictory
+`state:ready` + `needs-triage` pair on open issues (issue #9012): report mode
+derives one evidence-backed action per issue from its classification with the triage
+label ignored, and apply mode performs only the planned label removal with a
+per-issue drift check. It never closes issues, merges pull requests, or edits
+Project #5 state.
+
+```bash
+uv run python scripts/dev/ready_triage_reconcile.py --json
+uv run python scripts/dev/ready_triage_reconcile.py --apply --json
+```
+
+Focused offline tests live in `tests/dev/test_ready_triage_reconcile.py`.
+
 ## Parent goal-autopilot arbitration
 
 [`goal_autopilot_controller.py`](goal_autopilot_controller.py) is the

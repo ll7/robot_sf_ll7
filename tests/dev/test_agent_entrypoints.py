@@ -190,8 +190,11 @@ def test_fresh_worktree_commands_use_shared_environment_wrapper() -> None:
             if "uv run" in line and "--project" not in line:
                 assert SHARED_VENV_WRAPPER in line
 
+    handoff_example = (REPO_ROOT / "docs" / "templates" / "handoff.v2.example.yaml").read_text(
+        encoding="utf-8"
+    )
     assert (
-        f"{SHARED_VENV_WRAPPER} uv run pytest -q tests/dev/test_check_skills.py" in entrypoints_text
+        f"{SHARED_VENV_WRAPPER} uv run pytest -q tests/dev/test_check_skills.py" in handoff_example
     )
 
 
@@ -429,11 +432,11 @@ def test_agents_md_task_scoped_context_and_mode_specific_sync() -> None:
 
 
 def test_relocated_guidance_mode_specific_sync() -> None:
-    """relocated-agents-guidance.md must also reflect mode-specific branch sync."""
+    """The relocated topic index points worktree procedure at its canonical owner."""
     text = RELOCATED_GUIDANCE.read_text(encoding="utf-8")
 
-    assert "branch synchronization is mode-specific:" in text
-    assert "never merge `origin/main` into the implementation branch" in text
+    assert "topic index" in text.lower()
+    assert "docs/dev/worktree_lifecycle.md" in text
 
 
 def test_agents_readme_references_task_routes_and_mode_specific_sync() -> None:

@@ -149,48 +149,9 @@ later retries to avoid duplicate work; every route manifest remains route eviden
 
 The accepted handoff input is a flat `handoff.v2` request (there is no nested `packet`):
 
-<!-- handoff.v2-example:start -->
-
-```yaml
-schema_version: handoff.v2
-handoff_type: request
-task_id: ROBOTSF-EXAMPLE
-provider: opencode_go
-mode: issue_implementation
-goal: Implement the bounded Robot SF packet and return frozen-head evidence.
-owned_paths:
-  - .agents/README.md
-forbidden_actions:
-  - push
-  - open_pr
-  - mutate_remote
-required_context:
-  - target repository frozen HEAD
-  - accepted route-plan contract
-required_output:
-  - changed_files
-  - validation_evidence
-  - final_status
-acceptance_gate:
-  - all declared validation commands pass
-  - changed files stay within owned_paths
-validation_commands:
-  - scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q tests/dev/test_check_skills.py
-execution_mode: external_runtime
-dependencies: []
-budget:
-  runtime_minutes: 30
-stop_conditions:
-  - scope expands beyond owned_paths
-  - a forbidden action is requested
-side_effect_policy:
-  remote_mutation: false
-  local_edits: true
-max_depth: 0
-sync_barrier: null
-```
-
-<!-- handoff.v2-example:end -->
+The accepted handoff example lives next to the routing contract in
+`docs/templates/handoff.v2.example.yaml`; the field contract is enforced by the shared route
+resolver, not restated here.
 
 For a production `--out` plan, pass the explicit identity/risk/head contract
 `--task-id`, `--task-class`, `--risk`, `--handoff-file`, `--frozen-head`, `--target-repo`, and

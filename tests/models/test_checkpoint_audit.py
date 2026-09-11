@@ -1,13 +1,18 @@
-"""Focused contract tests for the checkpoint compatibility audit (#8896)."""
+"""Focused contract tests for the checkpoint compatibility audit (#8896, #8991)."""
 
 from __future__ import annotations
 
+import collections
 import contextlib
+import hashlib
+import io
 import json
+import zipfile
 from io import StringIO
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.models import audit_checkpoint_compatibility as tool
 
@@ -125,3 +130,240 @@ def test_unknown_input_exits_two_and_markdown_is_concise(tmp_path):
     code, stdout = _run(markdown)
     assert code == 0 and stdout.startswith("# Checkpoint Compatibility Audit")
     assert "fixture_compatible_v1" in stdout
+
+
+def _check_args(argv):
+    code, stdout = _run(argv)
+    return code, json.loads(stdout)
+
+
+def _audit_run(tmp_path, *extra):
+    return _check_args(["--check", "--format", "json", "--root", str(tmp_path), *extra])
+
+
+def _write_yaml(tmp_path, document, name):
+    path = tmp_path / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def _registry_file(tmp_path):
+    artifact = tmp_path / "artifacts" / "model.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text('{"policy_class": "fixture.PPO"}', encoding="utf-8")
+    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    return _write_yaml(
+        tmp_path,
+        {
+            "version": 1,
+            "models": [
+                {
+                    "model_id": "mapped_v1",
+                    "local_path": "artifacts/model.json",
+                    "github_release": {"tag": "artifact/test", "sha256": digest},
+                },
+                {"model_id": "private_v1", "local_path": "/home/x/y"},
+                {"local_path": "artifacts/model.json"},
+            ],
+        },
+        "registry.yaml",
+    )
+
+
+def _probe_document(tmp_path, models=None):
+    models = models or [
+        {
+            "model_id": "probed_v1",
+            "artifact_kind": "torch_pt",
+            "artifact_path": "artifact.pt",
+            "locator_class": "local_scratch",
+        }
+    ]
+    return _write(
+        tmp_path, {"schema": tool.INPUT_SCHEMA, "models": models, "consumers": []}, "probe.json"
+    )
+
+
+def _probe_run(tmp_path, document, *, timeout="60"):
+    return _audit_run(tmp_path, "--input", str(document), "--probe", "--probe-timeout", timeout)
+
+
+def test_registry_intake_maps_rows_and_excludes_unsanitizable_entries(tmp_path):
+    registry = _registry_file(tmp_path)
+    code, payload = _audit_run(tmp_path, "--registry", str(registry), "--probe")
+    digest = hashlib.sha256((tmp_path / "artifacts/model.json").read_bytes()).hexdigest()
+    row = _rows(payload)["mapped_v1"]
+    assert code == 1 and payload["status"] == "fail"
+    assert (row["state"], row["load_status"]) == ("public", "verified")
+    assert row["artifact"] == {
+        "kind": "json",
+        "version": "artifact/test",
+        "path": "artifacts/model.json",
+        "sha256": digest,
+        "locator_class": "public_release",
+        "companion_files": [],
+    }
+    assert payload["intake"]["registry"] == "registry.yaml"
+    assert payload["intake"]["exclusions"] == [
+        {"source": "registry.yaml", "model_id": None, "reason": "registry_entry_skipped"},
+        {"source": "registry.yaml", "model_id": "private_v1", "reason": "unsanitized_local_path"},
+    ]
+    assert payload["intake"]["probe"]["skipped"] == [
+        {"model_id": "mapped_v1", "reason": "unsupported_kind"}
+    ]
+    assert "/home/x/y" not in json.dumps(payload)
+
+
+def test_reference_configs_map_consumers_and_unknown_ids_fail_closed(tmp_path):
+    registry = _registry_file(tmp_path)
+    good = _write_yaml(tmp_path, {"model_id": "mapped_v1"}, "configs/good.yaml")
+    bad = _write_yaml(tmp_path, {"model_id": "absent_v1"}, "configs/bad.yaml")
+    empty = _write_yaml(tmp_path, {"learning_rate": 0.1}, "configs/empty.yaml")
+    code, payload = _audit_run(
+        tmp_path,
+        "--registry",
+        str(registry),
+        "--config",
+        str(good),
+        "--config",
+        str(bad),
+        "--config",
+        str(empty),
+    )
+    consumers = {item["consumer_id"]: item for item in payload["consumers"]}
+    assert code == 1 and consumers["configs/good.yaml"]["outcome"] == "pass"
+    assert consumers["configs/bad.yaml"]["failed_model_ids"] == ["absent_v1"]
+    assert "consumer_model_unresolved" in _codes(payload)
+    assert {
+        "source": "configs/empty.yaml",
+        "model_id": None,
+        "reason": "no_model_references",
+    } in payload["intake"]["exclusions"]
+
+
+@pytest.mark.parametrize(
+    ("worker_body", "expected", "timeout"),
+    [
+        ("import time\ntime.sleep(30)\n", {"loader_probe_timeout"}, "0.4"),
+        (
+            'import json, sys\nprint(json.dumps({"ok": False, "error": '
+            '"missing_custom_object"}))\nsys.exit(1)\n',
+            {"loader_probe_failed", "missing_custom_object"},
+            "60",
+        ),
+        (
+            'print(\'{"ok": true, "facts": {"loader": "torch", "observation_shape": "bad"}}\')\n',
+            {"loader_probe_malformed"},
+            "60",
+        ),
+    ],
+    ids=["timeout", "nonzero-custom-object", "malformed-facts"],
+)
+def test_probe_process_failures_fail_closed(tmp_path, monkeypatch, worker_body, expected, timeout):
+    (tmp_path / "artifact.pt").write_bytes(b"fixture-checkpoint-bytes")
+    worker = tmp_path / "worker.py"
+    worker.write_text(worker_body, encoding="utf-8")
+    monkeypatch.setattr(tool, "PROBE_WORKER", worker)
+    code, payload = _probe_run(tmp_path, _probe_document(tmp_path), timeout=timeout)
+    row = _rows(payload)["probed_v1"]
+    assert code == 1 and expected <= set(row["reason_codes"])
+    assert payload["intake"]["probe"]["failed"] == [
+        {"model_id": "probed_v1", "reason_codes": sorted(expected)}
+    ]
+    assert row["load_status"] == "inspected"
+
+
+def test_probe_records_sb3_facts_for_zip_artifact(tmp_path):
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("stable_baselines3")
+    from gymnasium.spaces import Box
+    from stable_baselines3.common.save_util import data_to_json
+
+    buffer = io.BytesIO()
+    torch.save({"weight": torch.tensor([1.0, 2.0])}, buffer)
+    with zipfile.ZipFile(tmp_path / "artifact.zip", "w") as archive:
+        archive.writestr(
+            "data",
+            data_to_json(
+                {
+                    "policy_class": collections.OrderedDict,
+                    "observation_space": Box(low=-1.0, high=1.0, shape=(4,)),
+                    "action_space": Box(low=-1.0, high=1.0, shape=(2,)),
+                }
+            ),
+        )
+        archive.writestr("policy.pth", buffer.getvalue())
+    models = [
+        {
+            "model_id": "probed_v1",
+            "artifact_kind": "sb3_zip",
+            "artifact_path": "artifact.zip",
+            "locator_class": "local_scratch",
+        }
+    ]
+    code, payload = _probe_run(tmp_path, _probe_document(tmp_path, models))
+    row = _rows(payload)["probed_v1"]
+    assert code == 1 and row["load_status"] == "verified"
+    assert row["probe"] == {
+        "kind": "sb3_zip",
+        "loader": "sb3",
+        "policy_class": "collections.OrderedDict",
+        "observation_shape": [4],
+        "action_shape": [2],
+        "parameters_finite": True,
+        "custom_objects_missing": [],
+        "modules_missing": [],
+    }
+
+
+def test_probe_real_corrupt_artifact_fails_closed(tmp_path):
+    pytest.importorskip("torch")
+    (tmp_path / "artifact.pt").write_bytes(b"not-a-checkpoint")
+    code, payload = _probe_run(tmp_path, _probe_document(tmp_path))
+    row = _rows(payload)["probed_v1"]
+    assert code == 1 and row["load_status"] == "inspected"
+    assert {"artifact_unreadable", "loader_probe_failed"} <= set(row["reason_codes"])
+    assert payload["intake"]["probe"]["failed"] == [
+        {"model_id": "probed_v1", "reason_codes": ["artifact_unreadable", "loader_probe_failed"]}
+    ]
+
+
+def test_probe_records_torch_facts_and_nonfinite_parameters(tmp_path):
+    torch = pytest.importorskip("torch")
+    torch.save(
+        {
+            "policy_class": "fixture.PPO",
+            "observation_shape": [4],
+            "action_shape": [2],
+            "weights": torch.tensor([1.0, 2.0]),
+        },
+        tmp_path / "finite.pt",
+    )
+    torch.save({"weights": torch.tensor([1.0, float("inf")])}, tmp_path / "nonfinite.pt")
+    models = [
+        {
+            "model_id": f"{name}_v1",
+            "artifact_kind": "torch_pt",
+            "artifact_path": f"{name}.pt",
+            "locator_class": "local_scratch",
+        }
+        for name in ("finite", "nonfinite")
+    ]
+    code, payload = _probe_run(tmp_path, _probe_document(tmp_path, models))
+    rows = _rows(payload)
+    assert code == 1
+    assert payload["intake"]["probe"]["verified"] == ["finite_v1", "nonfinite_v1"]
+    assert rows["finite_v1"]["load_status"] == "verified"
+    assert rows["finite_v1"]["probe"] == {
+        "kind": "torch_pt",
+        "loader": "torch",
+        "policy_class": "fixture.PPO",
+        "observation_shape": [4],
+        "action_shape": [2],
+        "parameters_finite": True,
+        "custom_objects_missing": [],
+        "modules_missing": [],
+    }
+    assert rows["nonfinite_v1"]["probe"]["parameters_finite"] is False
+    assert "non_finite_parameters" in rows["nonfinite_v1"]["reason_codes"]

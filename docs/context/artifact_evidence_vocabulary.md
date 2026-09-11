@@ -107,9 +107,11 @@ output carries no private paths, hostnames, accounts, credentials, or signed URL
 ## Checkpoint Compatibility Audit
 
 [`scripts/models/audit_checkpoint_compatibility.py`](../../scripts/models/audit_checkpoint_compatibility.py)
-audits a sanitized overlay into a deterministic JSON plus Markdown inventory with nine terminal
-states and stable reason codes; `--check` exits 1 when an active consumer's required model is not
-recoverable and load-verified and 2 for unknown input (see the module docstring).
+audits a sanitized overlay, canonical `--registry`/`--config` intake, or both into a deterministic
+JSON plus Markdown inventory with nine terminal states and stable reason codes. An opt-in `--probe`
+runs a bounded-subprocess loader check (hard timeout, no hidden fallback); `--check` exits 1 when an
+active consumer's required model is not recoverable and load-verified and 2 for unknown input (see
+the module docstring).
 
 ## Sanitized Lineage Index
 

@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
-"""Read-only checkpoint/model compatibility audit (issue #8896).
+"""Read-only checkpoint/model compatibility audit (issues #8896, #8991).
 
 Inventories checkpoints referenced by a sanitized overlay document
-(``robot_sf.checkpoint_compatibility_input.v1``). Each flat row records the stable model id,
-artifact version/digest/locator class, companion files, algorithm/policy class,
+(``robot_sf.checkpoint_compatibility_input.v1``) and/or the canonical ``model/registry.yaml``
+(plus explicitly supplied referencing configs or release manifests). Each flat row records the
+stable model id, artifact version/digest/locator class, companion files, algorithm/policy class,
 observation/action contract, normalizer, source/training lineage, consumer ownership, and
-environment class, and terminates in exactly one availability state. Contract bytes are
-inspected read-only; no framework is imported, no training and no benchmark execution is
-performed, and loader compatibility is represented by sanitized probe facts
-(``policy_class``, observation/action schema, normalizer, parameters, custom objects,
-dependency modules) in the artifact record.
+environment class, and terminates in exactly one availability state. Records that cannot be
+sanitized or probed are explicit exclusions, never silently dropped.
+
+Contract bytes are inspected read-only; the parent process imports no framework, no training and
+no benchmark execution is performed. With ``--probe``, local ``.zip``/``.pt`` artifacts get an
+opt-in bounded-subprocess loader probe (hard timeout; fail closed on timeout, non-zero exit, or
+malformed output) that records sanitized ``policy_class``, observation/action shape,
+finite-parameter, and custom-object facts.
 
 Report schema: ``robot_sf.checkpoint_compatibility_audit.v1``. Exit codes: ``0`` pass or
-report-only, ``1`` ``--check`` failure, ``2`` unknown input. The audit writes no state, starts
-no download, and emits no private path, host, or credential.
+report-only, ``1`` ``--check`` failure, ``2`` unknown or invalid input. The audit writes no
+state, starts no download, and emits no private path, host, or credential.
 
     uv run python scripts/models/audit_checkpoint_compatibility.py \
-        --input tests/models/fixtures/checkpoint_audit/compatible.json --check --format json
+        --registry model/registry.yaml --check --format json
 """
 
 from __future__ import annotations
@@ -25,7 +29,9 @@ import argparse
 import importlib.util
 import json
 import math
+import pickle
 import re
+import subprocess
 import sys
 import zipfile
 from collections import Counter
@@ -33,7 +39,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from robot_sf.models.registry import sha256_of_file
+import yaml
+
+from robot_sf.models.preflight import required_model_ids_for_config
+from robot_sf.models.registry import load_registry, sha256_of_file
 
 INPUT_SCHEMA = "robot_sf.checkpoint_compatibility_input.v1"
 REPORT_SCHEMA = "robot_sf.checkpoint_compatibility_audit.v1"
@@ -59,8 +68,14 @@ LEARNED_ALGORITHMS = frozenset(
     "ppo sac td3 ddpg a2c dreamer imitation predictive_planner cadrl".split()
 )
 ALIAS_VERSIONS = frozenset("latest best best-success current head".split())
-PROBE_CODES = frozenset(
-    "artifact_unreadable invalid_artifact missing_data_member missing_custom_object".split()
+LOADER_PROBE_CODES = frozenset(
+    "loader_probe_timeout loader_probe_failed loader_probe_malformed".split()
+)
+PROBE_CODES = (
+    frozenset(
+        "artifact_unreadable invalid_artifact missing_data_member missing_custom_object".split()
+    )
+    | LOADER_PROBE_CODES
 )
 INCOMPATIBILITY_CODES = (
     frozenset(
@@ -96,6 +111,28 @@ _PRIVATE_PATTERNS = (
     (r"(?i)[?&](?:sig|signature|token|expires|x-amz-|x-goog-)", "signed URL"),
     (r"(?i)(?:api[_-]?key|secret|password|passwd|token|credential|bearer)", "credential-like"),
     (r"(?i)(?:[a-z0-9][a-z0-9-]{0,61}\.){2,}[a-z]{2,24}", "hostname-like content"),
+)
+PROBE_WORKER = Path(__file__).resolve()
+DEFAULT_PROBE_TIMEOUT = 30.0
+PROBE_FACT_KEYS = (
+    "kind loader policy_class observation_shape action_shape parameters_finite "
+    "custom_objects_missing modules_missing".split()
+)
+PROBE_PROBEABLE_KINDS = frozenset(("sb3_zip", "torch_pt"))
+PROBE_ERROR_CODES = frozenset(
+    "unsupported_kind checkpoint_corrupt missing_custom_object dependency_unavailable "
+    "loader_error".split()
+)
+_PROBE_CODE_MAP = {
+    "checkpoint_corrupt": "artifact_unreadable",
+    "missing_custom_object": "missing_custom_object",
+    "dependency_unavailable": "dependency_unavailable",
+}
+_REGISTRY_ALGORITHM_TAGS = (
+    (frozenset(("sacadrl", "ga3c", "cadrl")), "cadrl"),
+    (frozenset(("sac",)), "sac"),
+    (frozenset(("ppo",)), "ppo"),
+    (frozenset(("predictive",)), "predictive_planner"),
 )
 
 
@@ -416,12 +453,401 @@ def _evaluate_model(record, facts, root):
         state=_state(codes, record["locator_class"], _sha_ok(record.get("artifact_sha256"))),
         load_status="verified" if verified else ("inspected" if local else "not_staged"),
         reason_codes=sorted(codes),
-        probe={
-            key: facts.get(key)
-            for key in "kind parameters_finite custom_objects_missing modules_missing".split()
-        },
+        probe={key: facts.get(key) for key in PROBE_FACT_KEYS},
     )
     return row
+
+
+class _ProbeError(Exception):
+    """Fail-closed loader-probe error carrying a stable code."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def _intake_label(path: Path, root: Path) -> str:
+    """Return a private-safe label for an intake document."""
+    try:
+        label = path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        label = path.resolve().name
+    return _relpath(label) or "intake-document"
+
+
+def _relpath(value: Any) -> str | None:
+    """Return one private-safe relative POSIX path, or ``None`` when unsafe."""
+    raw = _text(value)
+    if raw is None:
+        return None
+    raw = raw.replace("\\", "/")
+    if raw.startswith(("/", "~")) or re.match(r"^[A-Za-z]:", raw):
+        return None
+    parts = [part for part in raw.split("/") if part not in ("", ".")]
+    if not parts or ".." in parts:
+        return None
+    candidate = "/".join(parts)
+    if any(re.search(pattern, candidate) for pattern, _ in _PRIVATE_PATTERNS):
+        return None
+    return candidate
+
+
+def _exclusion(source: str, model_id: str | None, reason: str) -> dict[str, Any]:
+    return {"source": source, "model_id": model_id, "reason": reason}
+
+
+def _registry_algorithm(entry: Mapping[str, Any]) -> str:
+    """Map canonical registry tags to the audit's algorithm vocabulary."""
+    raw_tags = entry.get("tags")
+    tags = {str(tag).strip().lower() for tag in raw_tags or [] if str(tag).strip()}
+    for candidates, algorithm in _REGISTRY_ALGORITHM_TAGS:
+        if tags & candidates:
+            return algorithm
+    return "unknown"
+
+
+def _release_sha(release: Mapping[str, Any], path: str | None) -> tuple[str | None, bool]:
+    """Return the digest pinning ``path`` and whether invalid release metadata was seen."""
+    per_file = release.get("per_file_sha256")
+    if path is not None and isinstance(per_file, Mapping):
+        candidate = per_file.get(Path(path).name)
+        if _sha_ok(candidate):
+            return str(candidate).strip().lower(), False
+    raw = release.get("sha256")
+    if raw is None:
+        return None, False
+    normalized = str(raw).strip().lower()
+    return (normalized, False) if _sha_ok(normalized) else (None, True)
+
+
+def _registry_entry_record(  # noqa: C901
+    source: str, model_id: str, entry: Mapping[str, Any], exclusions: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Map one canonical registry entry into the sanitized record schema."""
+    local_raw = entry.get("local_path")
+    path = _relpath(local_raw) if _text(local_raw) else None
+    if _text(local_raw) and path is None:
+        exclusions.append(_exclusion(source, model_id, "unsanitized_local_path"))
+        return None
+    release = entry.get("github_release")
+    if release is not None and not isinstance(release, Mapping):
+        exclusions.append(_exclusion(source, model_id, "invalid_release_metadata"))
+        release = None
+    locator, sha, version = "missing", None, None
+    if release:
+        locator = "public_release"
+        version = _text(release.get("version")) or _text(release.get("tag"))
+        sha, invalid_sha = _release_sha(release, path)
+        if invalid_sha:
+            exclusions.append(_exclusion(source, model_id, "invalid_release_sha"))
+    elif entry.get("local_only") is True:
+        locator = "personal_durable"
+    elif entry.get("wandb_artifact_path") or (
+        entry.get("wandb_run_path") and entry.get("wandb_file")
+    ):
+        locator = "cloud_durable"
+    elif path is not None:
+        locator = "local_scratch"
+    source_config = None
+    if _text(entry.get("config_path")):
+        source_config = _relpath(entry.get("config_path"))
+        if source_config is None:
+            exclusions.append(_exclusion(source, model_id, "unsanitized_source_config"))
+    commit_raw = _text(entry.get("commit"))
+    commit = commit_raw if commit_raw and re.fullmatch(r"[0-9a-f]{7,40}", commit_raw) else None
+    if commit_raw and commit is None:
+        exclusions.append(_exclusion(source, model_id, "invalid_training_commit"))
+    return {
+        "model_id": model_id,
+        "artifact_path": path,
+        "artifact_sha256": sha,
+        "artifact_version": version,
+        "locator_class": locator,
+        "algorithm_class": _registry_algorithm(entry),
+        "source_config": source_config,
+        "training_commit": commit,
+        "active": True,
+        "rights": "unknown",
+    }
+
+
+def _skipped_registry_entries(registry_path: Path, loaded_ids: set[str]) -> list[str | None]:
+    """Return raw registry model ids the canonical loader skipped (explicit accounting only)."""
+    try:
+        data = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return []
+    models = data.get("models") if isinstance(data, Mapping) else None
+    if not isinstance(models, list):
+        return []
+    raw_ids = [(_text(e.get("model_id")) if isinstance(e, Mapping) else None) for e in models]
+    return [model_id for model_id in raw_ids if model_id is None or model_id not in loaded_ids]
+
+
+def _registry_records(
+    registry_path: Path, *, root: Path, exclusions: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Load canonical registry entries and map them into sanitized records."""
+    label = _intake_label(registry_path, root)
+    try:
+        registry = load_registry(registry_path)
+    except (AttributeError, FileNotFoundError, OSError, TypeError, ValueError, yaml.YAMLError):
+        exclusions.append(_exclusion(label, None, "registry_unreadable"))
+        return []
+    for model_id in _skipped_registry_entries(registry_path, set(registry)):
+        exclusions.append(_exclusion(label, model_id, "registry_entry_skipped"))
+    records = []
+    for model_id, entry in sorted(registry.items()):
+        record = _registry_entry_record(label, model_id, entry, exclusions)
+        if record is not None:
+            records.append(record)
+    return records
+
+
+def _reference_consumers(
+    reference_paths: Sequence[Path],
+    *,
+    root: Path,
+    exclusions: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Map referencing configs/release manifests into sanitized consumer records."""
+    consumers = []
+    for path in reference_paths:
+        label = _intake_label(path, root)
+        if not path.is_file():
+            exclusions.append(_exclusion(label, None, "reference_missing"))
+            findings.append(_f("invalid_input", detail=f"{label}: reference missing"))
+            continue
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, yaml.YAMLError):
+            exclusions.append(_exclusion(label, None, "reference_unreadable"))
+            findings.append(_f("invalid_input", detail=f"{label}: unreadable YAML"))
+            continue
+        model_ids = required_model_ids_for_config(payload)
+        if not model_ids:
+            exclusions.append(_exclusion(label, None, "no_model_references"))
+            continue
+        record = _consumer(
+            {
+                "consumer_id": label,
+                "owner": "intake",
+                "active": True,
+                "required_model_ids": model_ids,
+            },
+            f"intake:{label}",
+            findings,
+        )
+        if record is None:
+            exclusions.append(_exclusion(label, None, "consumer_invalid"))
+        else:
+            consumers.append(record)
+    return consumers
+
+
+def _probe_facts_for(record, facts, root, *, timeout, state):
+    """Attach opt-in bounded loader-probe facts to one record's evaluation facts."""
+    model_id = record["model_id"]
+    path = record.get("artifact_path")
+    local = root / path if path else None
+    kind = _kind_for(path, record.get("artifact_kind"))
+    if local is None or not local.is_file():
+        state["skipped"].append({"model_id": model_id, "reason": "not_staged"})
+    elif kind not in PROBE_PROBEABLE_KINDS:
+        state["skipped"].append({"model_id": model_id, "reason": "unsupported_kind"})
+    else:
+        observed, codes = _probe_subprocess(local, kind, timeout=timeout)
+        if not codes:
+            facts.update(observed)
+            facts["checked"] = True
+            state["verified"].append(model_id)
+            return facts
+        facts["issues"] = sorted(set(facts.get("issues") or []) | set(codes))
+        facts["checked"] = False
+        state["failed"].append({"model_id": model_id, "reason_codes": codes})
+    return facts
+
+
+def _child_error(stdout: str) -> str | None:
+    try:
+        payload = json.loads(stdout)
+    except ValueError:
+        return None
+    if isinstance(payload, Mapping) and payload.get("error") in PROBE_ERROR_CODES:
+        return str(payload["error"])
+    return None
+
+
+def _sanitize_probe_facts(raw: Any) -> dict[str, Any] | None:
+    """Validate child output strictly; ``None`` means malformed and fails closed."""
+    if not isinstance(raw, Mapping):
+        return None
+    loader, policy_class = _text(raw.get("loader")), raw.get("policy_class")
+    if loader not in {"sb3", "torch"}:
+        return None
+    if policy_class is not None and (
+        not isinstance(policy_class, str)
+        or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", policy_class) is None
+    ):
+        return None
+    facts: dict[str, Any] = {"loader": loader, "policy_class": policy_class}
+    for key in ("observation_shape", "action_shape"):
+        shape = _shape_list(raw.get(key))
+        if raw.get(key) is not None and shape is None:
+            return None
+        facts[key] = shape
+    finite = raw.get("parameters_finite")
+    if finite is not None and not isinstance(finite, bool):
+        return None
+    facts["parameters_finite"] = finite
+    for key in ("custom_objects_missing", "modules_missing"):
+        values = raw.get(key)
+        if values is not None and (
+            not isinstance(values, list) or len(_strings(values)) != len(values)
+        ):
+            return None
+        facts[key] = sorted(_strings(values))
+    return facts
+
+
+def _probe_subprocess(
+    local: Path, kind: str, *, timeout: float
+) -> tuple[dict[str, Any], list[str]]:
+    """Run the bounded loader-probe child; fail closed on any process anomaly."""
+    command = [sys.executable, str(PROBE_WORKER), "--probe-child", str(local), kind]
+    try:
+        completed = subprocess.run(
+            command, capture_output=True, text=True, timeout=timeout, check=False
+        )
+    except subprocess.TimeoutExpired:
+        return {}, ["loader_probe_timeout"]
+    except OSError:
+        return {}, ["loader_probe_failed"]
+    if completed.returncode != 0:
+        codes = ["loader_probe_failed"]
+        if mapped := _PROBE_CODE_MAP.get(_child_error(completed.stdout) or ""):
+            codes.append(mapped)
+        return {}, sorted(codes)
+    try:
+        payload = json.loads(completed.stdout)
+    except ValueError:
+        return {}, ["loader_probe_malformed"]
+    if not isinstance(payload, Mapping) or payload.get("ok") is not True:
+        return {}, ["loader_probe_failed"]
+    facts = _sanitize_probe_facts(payload.get("facts"))
+    if facts is None:
+        return {}, ["loader_probe_malformed"]
+    return facts, []
+
+
+def _probe_child_main(path: Path, kind: str) -> int:
+    """Run the probe child contract: exactly one JSON object on stdout, fail closed."""
+    try:
+        facts = _probe_artifact(path, kind)
+    except _ProbeError as exc:
+        sys.stdout.write(json.dumps({"ok": False, "error": exc.code}, sort_keys=True) + "\n")
+        return 1
+    sys.stdout.write(json.dumps({"ok": True, "facts": facts}, sort_keys=True) + "\n")
+    return 0
+
+
+def _class_of(instance: Any) -> str:
+    cls = instance if isinstance(instance, type) else type(instance)
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def _shape_list(value: Any) -> list[int] | None:
+    if isinstance(value, Mapping):
+        value = value.get("shape")
+    if not isinstance(value, (list, tuple)):
+        return None
+    if not all(isinstance(item, int) and not isinstance(item, bool) for item in value):
+        return None
+    return [int(item) for item in value]
+
+
+def _collect_tensors(node: Any, tensors: list[Any]) -> None:
+    if isinstance(node, Mapping):
+        for value in node.values():
+            _collect_tensors(value, tensors)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            _collect_tensors(value, tensors)
+    elif hasattr(node, "isfinite") and hasattr(node, "numel"):
+        tensors.append(node)
+
+
+def _probe_sb3(path: Path) -> dict[str, Any]:
+    """Load one Stable-Baselines3 zip via its own loader; return sanitized facts (subprocess)."""
+    try:
+        import torch
+        from stable_baselines3.common.save_util import load_from_zip_file
+    except ImportError as exc:
+        raise _ProbeError("dependency_unavailable") from exc
+    try:
+        data, params, _ = load_from_zip_file(str(path), device="cpu")
+    except (AttributeError, ImportError, ModuleNotFoundError) as exc:
+        raise _ProbeError("missing_custom_object") from exc
+    except (OSError, RuntimeError, TypeError, ValueError, pickle.UnpicklingError) as exc:
+        raise _ProbeError("checkpoint_corrupt") from exc
+    if not isinstance(data, Mapping):
+        raise _ProbeError("checkpoint_corrupt")
+    tensors: list[Any] = []
+    _collect_tensors(params, tensors)
+    policy = data.get("policy_class")
+    return {
+        "loader": "sb3",
+        "policy_class": _class_of(policy) if isinstance(policy, type) else None,
+        "observation_shape": _shape_list(getattr(data.get("observation_space"), "shape", None)),
+        "action_shape": _shape_list(getattr(data.get("action_space"), "shape", None)),
+        "parameters_finite": (
+            all(bool(torch.isfinite(tensor).all()) for tensor in tensors) if tensors else None
+        ),
+        "custom_objects_missing": [],
+        "modules_missing": [],
+    }
+
+
+def _probe_torch(path: Path) -> dict[str, Any]:
+    """Safely load one torch checkpoint and return sanitized facts (subprocess only)."""
+    try:
+        import torch
+    except ImportError as exc:
+        raise _ProbeError("dependency_unavailable") from exc
+    try:
+        payload = torch.load(str(path), map_location="cpu", weights_only=True)
+    except ImportError as exc:
+        raise _ProbeError("dependency_unavailable") from exc
+    except (AttributeError, ModuleNotFoundError) as exc:
+        raise _ProbeError("missing_custom_object") from exc
+    except pickle.UnpicklingError as exc:
+        code = "missing_custom_object" if "Unsupported global" in str(exc) else "checkpoint_corrupt"
+        raise _ProbeError(code) from exc
+    except (EOFError, OSError, RuntimeError, ValueError) as exc:
+        raise _ProbeError("checkpoint_corrupt") from exc
+    mapping = payload if isinstance(payload, Mapping) else {}
+    tensors: list[Any] = []
+    _collect_tensors(payload, tensors)
+    return {
+        "loader": "torch",
+        "policy_class": _text(mapping.get("policy_class")) or _text(mapping.get("class_name")),
+        "observation_shape": _shape_list(mapping.get("observation_shape")),
+        "action_shape": _shape_list(mapping.get("action_shape")),
+        "parameters_finite": (
+            all(bool(torch.isfinite(tensor).all()) for tensor in tensors) if tensors else None
+        ),
+        "custom_objects_missing": [],
+        "modules_missing": [],
+    }
+
+
+def _probe_artifact(path: Path, kind: str) -> dict[str, Any]:
+    if kind == "sb3_zip":
+        return _probe_sb3(path)
+    if kind == "torch_pt":
+        return _probe_torch(path)
+    raise _ProbeError("unsupported_kind")
 
 
 def _contract_mismatch(consumer, row):
@@ -473,15 +899,48 @@ def _evaluate_consumer(consumer, rows, findings):
     }
 
 
-def build_audit(*, inputs=(), root: Path):  # noqa: C901
-    """Build the deterministic audit payload from sanitized overlay records."""
+def build_audit(  # noqa: C901, PLR0912
+    *,
+    inputs=(),
+    registry: Path | None = None,
+    references: Sequence[Path] = (),
+    probe: bool = False,
+    probe_timeout: float = DEFAULT_PROBE_TIMEOUT,
+    root: Path,
+):
+    """Build the deterministic audit payload from sanitized overlay and canonical records."""
     findings: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
     consumers: list[dict[str, Any]] = []
+    exclusions: list[dict[str, Any]] = []
     for input_path in inputs:
         models, loaded = _load_input(Path(input_path), findings)
         records.extend(models)
         consumers.extend(loaded)
+    if registry is not None:
+        for candidate in _registry_records(Path(registry), root=root, exclusions=exclusions):
+            record = _model(candidate, f"intake:{candidate.get('model_id')}", findings)
+            if record is None:
+                exclusions.append(
+                    _exclusion("registry", candidate.get("model_id"), "record_invalid")
+                )
+            else:
+                records.append(record)
+    reference_paths = [Path(path) for path in references]
+    consumers.extend(
+        _reference_consumers(reference_paths, root=root, exclusions=exclusions, findings=findings)
+    )
+    for item in exclusions:
+        findings.append(
+            _f("intake_excluded", item["model_id"], detail=f"{item['source']}:{item['reason']}")
+        )
+    probe_state: dict[str, Any] = {
+        "enabled": bool(probe),
+        "timeout_seconds": float(probe_timeout) if probe else None,
+        "verified": [],
+        "failed": [],
+        "skipped": [],
+    }
     counts = Counter(record["model_id"] for record in records)
     unique: dict[str, dict[str, Any]] = {}
     for record in records:
@@ -491,7 +950,11 @@ def build_audit(*, inputs=(), root: Path):  # noqa: C901
             findings.append(_f("duplicate_model_id", model_id, detail="duplicate inventory id"))
     rows = []
     for model_id in sorted(unique):
-        row = _evaluate_model(unique[model_id], _facts_for(unique[model_id], root), root)
+        record = unique[model_id]
+        facts = _facts_for(record, root)
+        if probe:
+            facts = _probe_facts_for(record, facts, root, timeout=probe_timeout, state=probe_state)
+        row = _evaluate_model(record, facts, root)
         if counts[model_id] > 1:
             row["reason_codes"] = sorted(set(row["reason_codes"]) | {"duplicate_model_id"})
         rows.append(row)
@@ -529,6 +992,21 @@ def build_audit(*, inputs=(), root: Path):  # noqa: C901
             "state_counts": dict(sorted(Counter(row["state"] for row in rows).items())),
             "finding_counts": dict(sorted(Counter(item["code"] for item in ordered).items())),
         },
+        "intake": {
+            "registry": _intake_label(Path(registry), root) if registry is not None else None,
+            "references": sorted({_intake_label(Path(path), root) for path in reference_paths}),
+            "exclusions": sorted(
+                exclusions,
+                key=lambda item: (item["source"], item["model_id"] or "", item["reason"]),
+            ),
+            "probe": {
+                "enabled": probe_state["enabled"],
+                "timeout_seconds": probe_state["timeout_seconds"],
+                "verified": sorted(probe_state["verified"]),
+                "failed": sorted(probe_state["failed"], key=lambda item: item["model_id"]),
+                "skipped": sorted(probe_state["skipped"], key=lambda item: item["model_id"]),
+            },
+        },
         "findings": ordered,
         "models": rows,
         "consumers": evaluated,
@@ -543,12 +1021,17 @@ def render_json(payload):
 def render_markdown(payload):
     """Return the deterministic human-readable Markdown audit projection."""
     summary, findings = payload["summary"], payload["findings"]
+    intake, probe = payload["intake"], payload["intake"]["probe"]
     lines = [
         "# Checkpoint Compatibility Audit",
         "",
         f"- Schema: `{payload['schema']}` | Status: `{payload['status']}`",
         f"- Models: {summary['model_count']} (recoverable: {summary['recoverable_count']})"
         f" | Consumers: {summary['consumer_count']} | Findings: {len(findings)}",
+        f"- Intake: registry=`{intake['registry'] or '-'}`"
+        f" references={len(intake['references'])} exclusions={len(intake['exclusions'])}"
+        f" | Probe: {'on' if probe['enabled'] else 'off'}"
+        f" verified={len(probe['verified'])} failed={len(probe['failed'])}",
         "",
         payload["claim_boundary"],
         "",
@@ -583,21 +1066,67 @@ def render_markdown(payload):
     return "\n".join(lines) + "\n"
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Run the audit and return a shell-friendly exit code."""
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="audit_checkpoint_compatibility", description=__doc__.splitlines()[0]
     )
     parser.add_argument("--input", action="append", default=[], type=Path, help="Overlay.")
+    parser.add_argument(
+        "--registry", type=Path, default=None, help="Canonical model registry YAML to intake."
+    )
+    parser.add_argument(
+        "--config",
+        action="append",
+        default=[],
+        type=Path,
+        dest="references",
+        metavar="PATH",
+        help="Referencing config/release manifest YAML (repeatable).",
+    )
+    parser.add_argument(
+        "--probe",
+        action="store_true",
+        help="Run the opt-in bounded loader probe for local .zip/.pt artifacts.",
+    )
+    parser.add_argument(
+        "--probe-timeout",
+        type=float,
+        default=DEFAULT_PROBE_TIMEOUT,
+        help=f"Hard loader-probe subprocess timeout seconds (default: {DEFAULT_PROBE_TIMEOUT}).",
+    )
     parser.add_argument("--root", type=Path, default=None, help="Artifact resolution root.")
     parser.add_argument("--check", action="store_true", help="Exit 1 on blocking findings.")
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
-    args = parser.parse_args(argv)
-    if not args.input:
-        sys.stderr.write("FAIL invalid_input: --input is required\n")
+    parser.add_argument(
+        "--probe-child",
+        nargs=2,
+        default=None,
+        metavar=("PATH", "KIND"),
+        help=argparse.SUPPRESS,
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the audit and return a shell-friendly exit code."""
+    args = _build_parser().parse_args(argv)
+    if args.probe_child:
+        return _probe_child_main(Path(args.probe_child[0]), args.probe_child[1])
+    if not args.input and args.registry is None and not args.references:
+        sys.stderr.write("FAIL invalid_input: --input, --registry, or --config is required\n")
+        return 2
+    if not math.isfinite(args.probe_timeout) or args.probe_timeout <= 0:
+        sys.stderr.write("FAIL invalid_input: --probe-timeout must be finite and > 0\n")
         return 2
     root = (args.root or Path.cwd()).resolve()
-    payload = build_audit(inputs=args.input, root=root)
+    payload = build_audit(
+        inputs=args.input,
+        registry=args.registry,
+        references=args.references,
+        probe=args.probe,
+        probe_timeout=args.probe_timeout,
+        root=root,
+    )
     sys.stdout.write(
         render_markdown(payload) if args.format == "markdown" else render_json(payload)
     )

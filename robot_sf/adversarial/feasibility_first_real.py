@@ -38,6 +38,7 @@ from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.samplers import build_sampler
 from robot_sf.adversarial.scenario_manifest import compute_control_hash
 from robot_sf.adversarial.search import production_candidate_evaluator
+from robot_sf.evidence.writers import sha256_file
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario
 
 SCHEMA_VERSION = "feasibility_first_real_manifest.v1"
@@ -86,8 +87,11 @@ def _sha256_bytes(raw: bytes) -> str:
 
 
 def _sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest for a file."""
-    return _sha256_bytes(path.read_bytes())
+    """Return the SHA-256 digest for a file.
+
+    Delegates to the canonical :func:`robot_sf.evidence.writers.sha256_file`.
+    """
+    return sha256_file(path)
 
 
 def _canonical_sha256(payload: Mapping[str, Any]) -> str:

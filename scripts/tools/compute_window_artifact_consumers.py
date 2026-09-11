@@ -27,6 +27,11 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "robot_sf.compute_window_artifact_consumers.v1"
+VERIFICATION_CONTRACT = (
+    "replacement_verified requires replacement_verified=true and a present replacement_for target; "
+    "regenerable_verified requires regeneration_verified=true, regenerable=true, and a "
+    "requires_for_resume edge. Flags and relations never imply verification."
+)
 EDGE_TYPES = (
     "loads",
     "validates",
@@ -304,6 +309,20 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                 )
             )
             replacement = None
+        booleans = {}
+        for field in (
+            "regenerable",
+            "regeneration_verified",
+            "orphan_candidate",
+            "replacement_verified",
+        ):
+            value = raw.get(field, False)
+            if not isinstance(value, bool):
+                findings.append(
+                    _finding("invalid_boolean", ident, None, f"{field} must be boolean")
+                )
+                value = False
+            booleans[field] = value
         artifacts.setdefault(
             ident,
             {
@@ -311,8 +330,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                 "kind": kind,
                 "sha256": digest,
                 "path": path,
-                "regenerable": bool(raw.get("regenerable")),
-                "orphan_candidate": bool(raw.get("orphan_candidate")),
+                **booleans,
                 "replacement_for": replacement,
             },
         )
@@ -531,13 +549,23 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
             classification = "unresolved_conflict"
         elif active:
             classification = "active_required"
-        elif artifact["regenerable"] and any(r["edge"] == "requires_for_resume" for r in refs):
+        elif (
+            artifact["regeneration_verified"]
+            and artifact["regenerable"]
+            and any(r["edge"] == "requires_for_resume" for r in refs)
+        ):
             classification = "regenerable_verified"
         elif historical:
             classification = "historical_required"
-        elif artifact.get("replacement_for") and artifact["replacement_for"] in artifacts:
+        elif (
+            artifact["replacement_verified"]
+            and artifact.get("replacement_for")
+            and artifact["replacement_for"] in artifacts
+        ):
             classification = "replacement_verified"
-        elif any(edge["type"] == "supersedes" and edge["target"] == ident for edge in edges):
+        elif artifact["replacement_verified"] and any(
+            edge["type"] == "supersedes" and edge["target"] == ident for edge in edges
+        ):
             classification = "replacement_verified"
         elif artifact["orphan_candidate"]:
             classification = "orphan_candidate"
@@ -551,6 +579,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
     return {
         "schema": SCHEMA,
         "claim_boundary": "Conservative static consumer projection for retention review; absence of a tracked reference never proves absence of a consumer, and no semantic equivalence is inferred.",
+        "verification_contract": VERIFICATION_CONTRACT,
         "ok": not findings,
         "status": "ok" if not findings else "failed",
         "summary": {

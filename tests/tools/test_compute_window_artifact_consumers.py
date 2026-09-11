@@ -30,6 +30,8 @@ def test_requested_fixture_graph_and_classes_are_deterministic() -> None:
         "historical-table": "historical_required",
         "replacement-old": "unresolved_conflict",
         "regenerable": "regenerable_verified",
+        "unverified-replacement": "consumer_unknown",
+        "unverified-regeneration": "historical_required",
         "unknown": "consumer_unknown",
         "orphan": "orphan_candidate",
         "conflict": "unresolved_conflict",
@@ -37,6 +39,7 @@ def test_requested_fixture_graph_and_classes_are_deterministic() -> None:
         "cycle-b": "unresolved_conflict",
     }
     assert {key: classes[key] for key in expected} == expected
+    assert first["verification_contract"].startswith("replacement_verified requires")
     assert {edge["type"] for edge in first["edges"]} == set(tool.EDGE_TYPES)
     assert "private-node" in json.dumps(first)
 
@@ -128,3 +131,24 @@ def test_cycles_and_multiple_superseders_are_unresolved_conflicts() -> None:
 def test_non_check_render_returns_zero_for_findings(capsys) -> None:
     assert tool.main(["--input", str(FIXTURE), "--format", "json"]) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "failed"
+
+
+def test_verification_flags_are_strict_booleans() -> None:
+    payload = {
+        "schema": tool.SCHEMA,
+        "artifacts": [
+            {"logical_id": "old"},
+            {"logical_id": "new", "replacement_for": "old", "replacement_verified": "yes"},
+            {"logical_id": "trace", "regenerable": 1, "regeneration_verified": "true"},
+            {"logical_id": "orphan", "orphan_candidate": "false"},
+        ],
+    }
+    report = tool.build_graph(payload)
+    classes = {row["logical_id"]: row["classification"] for row in report["classifications"]}
+    assert classes == {
+        "new": "consumer_unknown",
+        "old": "consumer_unknown",
+        "orphan": "consumer_unknown",
+        "trace": "consumer_unknown",
+    }
+    assert sum(item["code"] == "invalid_boolean" for item in report["findings"]) == 4

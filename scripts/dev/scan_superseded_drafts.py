@@ -64,7 +64,7 @@ if TYPE_CHECKING:
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 STALE_HOURS = 48
 ISSUE_REF_RE = re.compile(r"(?:Closes|Refs|Fixes|#)\s*(\d+)")
-CLOSES_REF_RE = re.compile(r"Closes\s+#(\d+)", re.IGNORECASE)
+CLOSES_REF_RE = re.compile(r"Closes\s+#(\d+)\b", re.IGNORECASE)
 PER_PAGE = 100
 # Bounded page budget for the closed-PR REST inventory.  Pagination stops early
 # at the true end of history; exhausting this budget is reported as degraded

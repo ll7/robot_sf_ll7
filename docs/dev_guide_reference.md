@@ -656,6 +656,16 @@ was running. Use `scripts/dev/check_prepublication_state.py` around expensive pu
 3. Treat `superseded` and `blocked` as fail-closed stops. Treat `refresh-required` as stale
    evidence; run `sync --integrate` only from a clean worktree, resolve conflicts if needed, then
    rerun readiness and capture a new baseline.
+4. A `blocked` result with reason `undeclared_stack` is a distinct ancestry failure, not a
+   `sync --integrate` case. It means the branch's merge base is older than the live `origin/main`
+   tip, usually because `main` advanced after an earlier merge of `main` into the branch
+   (issue #8864). Reconstruct only the intended commits on current `origin/main`
+   (`git rebase --onto origin/main <merge-base> <branch>`, or recreate the branch from
+   `origin/main` and re-apply the intended changes), then regenerate generated files such as
+   `scripts/validation/docstring_todo_baseline.json`. A rebase or re-creation moves the head, so
+   the local readiness stamp must be refreshed before publication. A canonical
+   `## Stack Declaration` is the alternative only for a genuine stack over a declared parent PR;
+   an ordinary stale-`main` branch must be rebased.
 
 The gate records the exact before/after SHAs, any newly opened covering PR, and any merged PR that
 explicitly closes the issue. An open PR is matched only when its title or body contains an explicit
@@ -826,11 +836,13 @@ Use the three explicit modes as follows:
   it performs no remote mutation.
 - `--mode validate --receipt-file <path>` rereads live state and compares it with the immutable
   receipt; a changed head, base, metadata, check, review, thread, requested reviewer, hold, or
-  ordinary-CAS proof blocks.
+  ordinary-CAS proof blocks. If `--output <path>` is also supplied, it must resolve to a different
+  file so the source receipt cannot be replaced by the validation payload.
 - `--mode apply --receipt-file <path>` repeats validation, rereads the live PR body/head and
   rechecks paginated commit metadata plus current issue metadata immediately before letting the
   receipt owner issue exactly one expected-head squash merge, then rereads the closed/merged PR
-  and records the returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack
+  and records the returned SHA. When `--output` is supplied, it must resolve to a different file
+  than `--receipt-file`. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack
   coordinator and delegates its root merge to the same owner; its stack receipt must carry the
   same explicit closing-discipline result.
 

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for benchmark episode summary generation and metric aggregation functions."""
 
 from __future__ import annotations
 
@@ -18,10 +18,10 @@ from robot_sf.benchmark.summary import (
 
 
 def _write_sample_jsonl(path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Write sample JSONL episode records to a file for testing.
 
     Args:
-        path: TODO docstring.
+        path: Path where the JSONL file should be written.
     """
     records = [
         {
@@ -43,10 +43,10 @@ def _write_sample_jsonl(path: Path) -> None:
 
 
 def test_summary_creates_pngs(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify summarize_to_plots generates metric summary plot PNGs.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture.
     """
     src = tmp_path / "episodes.jsonl"
     _write_sample_jsonl(src)

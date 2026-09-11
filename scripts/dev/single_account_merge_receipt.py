@@ -2271,6 +2271,21 @@ def _load_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     return value, None
 
 
+def _receipt_output_path_error(receipt_file: Path, output: Path) -> str | None:
+    """Reject an output path that could replace the receipt input."""
+    try:
+        resolved_receipt = receipt_file.resolve(strict=False)
+        resolved_output = output.resolve(strict=False)
+        same_file = resolved_receipt == resolved_output
+        if not same_file and receipt_file.exists() and output.exists():
+            same_file = os.path.samefile(receipt_file, output)
+    except (OSError, RuntimeError) as exc:
+        return f"cannot safely compare --receipt-file and --output: {exc}"
+    if same_file:
+        return "--receipt-file and --output must resolve to different files in validate/apply modes"
+    return None
+
+
 def _write_json(path: Path, value: Mapping[str, Any]) -> str | None:
     """Atomically write a human-readable JSON artifact to an explicit caller path."""
     try:
@@ -2319,13 +2334,18 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mode", choices=("report-only", "validate", "apply"), default="report-only"
     )
-    parser.add_argument("--receipt-file", type=Path, help="receipt JSON file for validate/apply")
+    parser.add_argument(
+        "--receipt-file",
+        type=Path,
+        help="receipt JSON input for validate/apply; must differ from --output",
+    )
     parser.add_argument(
         "--output",
         type=Path,
         help=(
             "atomically write the mode's JSON payload to this path; parent directories are "
-            "created automatically and write failures fail closed"
+            "created automatically and write failures fail closed; in validate/apply modes "
+            "this must resolve to a different file than --receipt-file"
         ),
     )
     parser.add_argument("--waiver-actor", default="")
@@ -2342,6 +2362,11 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912 - CLI mod
     if args.mode in {"validate", "apply"} and args.receipt_file is None:
         print("--receipt-file is required for validate/apply", file=sys.stderr)
         return 2
+    if args.mode in {"validate", "apply"} and args.output is not None:
+        path_error = _receipt_output_path_error(args.receipt_file, args.output)
+        if path_error:
+            print(path_error, file=sys.stderr)
+            return 2
 
     def emit(payload: Mapping[str, Any], *, indent: int | None = None) -> int | None:
         """Persist the payload to --output when requested; return a nonzero code on write error."""

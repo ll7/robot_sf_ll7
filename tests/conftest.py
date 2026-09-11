@@ -786,6 +786,9 @@ _FAST_FILES = {
     # The terminal-job harvest helper (issue #8824) is deterministic fixture and
     # fail-closed receipt coverage for the changed operational tooling module.
     "test_harvest_terminal_job.py",
+    # The artifact transfer verifier (issue #8825) is deterministic fixture and
+    # fail-closed custody coverage for the changed operational tooling module.
+    "test_verify_artifact_transfer.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

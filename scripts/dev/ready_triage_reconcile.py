@@ -15,9 +15,10 @@ the triage label ignored, and derives exactly one action:
 - ``report_only``: another blocking label is present, so the row needs manual review.
 - ``deferred``: a live re-read or label write failed or drifted; the row is retried on a later run.
 
-``--report`` (default) performs no GitHub mutation. ``--apply`` re-reads each issue immediately
-before mutating, aborts the row on drift, and never closes issues, merges pull requests, or edits
-Project #5 state.
+``--report`` (default) performs no GitHub mutation. ``--apply`` re-reads and reclassifies each
+issue immediately before mutating, requires an open issue with a complete contract, aborts the row
+on drift, and never closes issues, merges pull requests, or edits Project #5 state. Bounded REST
+inventory scans fail closed when the page budget is invalid or cannot prove complete coverage.
 """
 
 from __future__ import annotations
@@ -56,6 +57,19 @@ STALE_READINESS_CLASSIFICATIONS = frozenset(
 )
 
 
+class InventoryIncompleteError(RuntimeError):
+    """Raised when the bounded issue inventory cannot prove complete coverage."""
+
+    def __init__(self, *, pages_read: int, max_pages: int) -> None:
+        """Record the exhausted page budget for a structured fail-closed result."""
+        self.pages_read = pages_read
+        self.max_pages = max_pages
+        super().__init__(
+            f"issue inventory incomplete: max_pages={max_pages} exhausted after a full "
+            f"page ({pages_read} pages read); increase --max-pages"
+        )
+
+
 def _label_names(raw: Any) -> list[str]:
     """Normalize REST or normalized label values to a sorted unique name list."""
     names: list[str] = []
@@ -76,10 +90,30 @@ def _blocking_labels(labels: set[str]) -> list[str]:
     )
 
 
+def _issue_without_triage(raw_issue: dict[str, Any]) -> dict[str, Any]:
+    """Return a private issue copy with the contradictory triage label removed."""
+    without_triage = dict(raw_issue)
+    without_triage["labels"] = [
+        label for label in _label_names(raw_issue.get("labels")) if label != TRIAGE_LABEL
+    ]
+    return without_triage
+
+
+def _evaluate_without_triage(raw_issue: dict[str, Any], *, repo: str) -> dict[str, Any]:
+    """Evaluate one issue through the canonical implementability contract."""
+    claim = {"ok": True, "claimed": False, "claim_ref": None, "sha": None}
+    return issue_implementability.evaluate_issue(
+        _issue_without_triage(raw_issue), claim, repository=repo
+    )
+
+
 def list_contradictory_issues(
     repo: str, *, max_pages: int = DEFAULT_MAX_PAGES
 ) -> list[dict[str, Any]]:
     """Return open issues carrying both the ready and triage labels, via REST."""
+    if not isinstance(max_pages, int) or isinstance(max_pages, bool) or max_pages < 1:
+        raise ValueError(f"max_pages must be >= 1, got {max_pages}")
+
     issues: list[dict[str, Any]] = []
     for page in range(1, max_pages + 1):
         path = (
@@ -95,8 +129,8 @@ def list_contradictory_issues(
         rows = [row for row in payload if isinstance(row, dict) and "pull_request" not in row]
         issues.extend(rows)
         if len(payload) < PAGE_SIZE:
-            break
-    return issues
+            return issues
+    raise InventoryIncompleteError(pages_read=max_pages, max_pages=max_pages)
 
 
 def plan_row(raw_issue: dict[str, Any], *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
@@ -110,6 +144,7 @@ def plan_row(raw_issue: dict[str, Any], *, repo: str = DEFAULT_REPO) -> dict[str
         "blocking_labels": blocking,
         "action": "report_only",
         "classification_without_triage": None,
+        "contract_complete": None,
         "reason": "",
         "applied": False,
     }
@@ -117,13 +152,8 @@ def plan_row(raw_issue: dict[str, Any], *, repo: str = DEFAULT_REPO) -> dict[str
         row["reason"] = "other blocking labels present; requires manual review"
         return row
 
-    without_triage = dict(raw_issue)
-    without_triage["labels"] = [
-        label for label in _label_names(raw_issue.get("labels")) if label != TRIAGE_LABEL
-    ]
-    claim = {"ok": True, "claimed": False, "claim_ref": None, "sha": None}
     try:
-        report = issue_implementability.evaluate_issue(without_triage, claim, repository=repo)
+        report = _evaluate_without_triage(raw_issue, repo=repo)
     except (TypeError, ValueError) as exc:
         row["action"] = "deferred"
         row["reason"] = f"classification failed: {exc}"
@@ -131,9 +161,14 @@ def plan_row(raw_issue: dict[str, Any], *, repo: str = DEFAULT_REPO) -> dict[str
 
     classification = report["classification"]
     row["classification_without_triage"] = classification
+    contract = report.get("contract")
+    row["contract_complete"] = isinstance(contract, dict) and contract.get("complete") is True
     if classification == "error":
         row["action"] = "deferred"
         row["reason"] = "classification returned an error state; retry before mutating"
+    elif classification == "closed":
+        row["action"] = "deferred"
+        row["reason"] = "issue is not open; no label mutation is permitted"
     elif classification in STALE_READINESS_CLASSIFICATIONS:
         row["action"] = "remove_ready"
         row["reason"] = (
@@ -156,14 +191,23 @@ def apply_row(
     label_remover: Callable[..., dict[str, Any]] = remove_label,
 ) -> dict[str, Any]:
     """Apply one planned label removal with a live drift check, fail closed per row."""
-    if row["action"] not in ("remove_triage", "remove_ready"):
+    planned_action = row.get("action")
+    if planned_action not in ("remove_triage", "remove_ready"):
         return row
-    number = row["issue"]
+    number = row.get("issue")
     try:
         live = fetch_issue(number, repo=repo)
     except (RuntimeError, ValueError) as exc:
         row["action"] = "deferred"
         row["reason"] = f"live re-read failed before apply: {exc}"
+        return row
+
+    live_state = str(live.get("state") or "").strip().lower()
+    if live_state != "open":
+        row["action"] = "deferred"
+        row["reason"] = (
+            f"live issue state is {live_state or 'unknown'}, not open; refusing to apply"
+        )
         return row
 
     live_labels = set(_label_names(live.get("labels")))
@@ -176,7 +220,19 @@ def apply_row(
         row["reason"] = "another blocking label appeared before apply; re-run the report"
         return row
 
-    target = TRIAGE_LABEL if row["action"] == "remove_triage" else READY_LABEL
+    live_plan = plan_row(live, repo=repo)
+    if live_plan.get("contract_complete") is not True:
+        row["action"] = "deferred"
+        row["reason"] = "live issue contract is incomplete; refusing to apply"
+        return row
+    if live_plan.get("action") != planned_action or live_plan.get(
+        "classification_without_triage"
+    ) != row.get("classification_without_triage"):
+        row["action"] = "deferred"
+        row["reason"] = "stale plan: live classification/action changed; re-run the report"
+        return row
+
+    target = TRIAGE_LABEL if live_plan["action"] == "remove_triage" else READY_LABEL
     result = label_remover(number, target, repo=repo)
     if isinstance(result, dict) and result.get("status") == "ok":
         row["applied"] = True
@@ -206,9 +262,32 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the reconciliation planner; non-zero exit means deferred rows remain."""
+    """Run the reconciliation planner; incomplete inventory and deferred rows fail closed."""
     args = _build_parser().parse_args(argv)
-    raw_issues = list_contradictory_issues(args.repo, max_pages=args.max_pages)
+    try:
+        raw_issues = list_contradictory_issues(args.repo, max_pages=args.max_pages)
+    except (RuntimeError, ValueError) as exc:
+        failure_plan = {
+            "schema": SCHEMA,
+            "mode": "apply" if args.apply else "report",
+            "repo": args.repo,
+            "scanned": 0,
+            "actions": dict.fromkeys(ACTIONS, 0),
+            "rows": [],
+            "inventory": {
+                "complete": False,
+                "truncated": isinstance(exc, InventoryIncompleteError),
+                "page_size": PAGE_SIZE,
+                "max_pages": args.max_pages,
+                "pages_read": exc.pages_read if isinstance(exc, InventoryIncompleteError) else 0,
+                "error": str(exc),
+            },
+        }
+        if args.json:
+            print(json.dumps(failure_plan, indent=2, sort_keys=True))
+        else:
+            print(f"ready/triage reconcile blocked: {exc}", file=sys.stderr)
+        return 2
     rows = [plan_row(issue, repo=args.repo) for issue in raw_issues]
     if args.apply:
         rows = [apply_row(row, repo=args.repo) for row in rows]
@@ -221,6 +300,12 @@ def main(argv: list[str] | None = None) -> int:
         "scanned": len(rows),
         "actions": counts,
         "rows": rows,
+        "inventory": {
+            "complete": True,
+            "truncated": False,
+            "page_size": PAGE_SIZE,
+            "max_pages": args.max_pages,
+        },
     }
     if args.json:
         print(json.dumps(plan, indent=2, sort_keys=True))

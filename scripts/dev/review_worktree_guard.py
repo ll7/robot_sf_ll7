@@ -34,6 +34,7 @@ import argparse
 import ctypes
 import errno
 import hashlib
+import importlib
 import json
 import os
 import platform
@@ -810,17 +811,116 @@ def _restore_implementation_mode(
     return _configure_result(identity, IMPLEMENTATION_MODE, None, 0)
 
 
+def _sibling_module(name: str) -> Any:
+    """Import a scripts/dev sibling in package and direct-execution modes."""
+    if __package__:
+        return importlib.import_module(f"scripts.dev.{name}")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    return importlib.import_module(name)
+
+
+def _check_receipt_identity(worktree: Path, receipt: str | Path) -> str:
+    """Validate a delegated-worker receipt against the selected worktree."""
+    receipt_script = Path(__file__).resolve().with_name("worktree_receipt.py")
+    if not receipt_script.is_file():
+        raise GuardError(f"review receipt checker is unavailable: {receipt_script}")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(receipt_script),
+            "check",
+            "--receipt",
+            str(Path(receipt).resolve(strict=False)),
+            "--worktree",
+            ".",
+            "--json",
+        ],
+        cwd=worktree,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+    )
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise GuardError("review receipt check did not return JSON evidence") from exc
+    if completed.returncode != 0 or not payload.get("ok"):
+        failure = payload.get("failure") or "receipt check failed"
+        raise GuardError(f"review receipt does not match the selected worktree: {failure}")
+    task_id = payload.get("task_id")
+    if not isinstance(task_id, str) or not task_id:
+        raise GuardError("review receipt is missing its task id")
+    return task_id
+
+
+def _check_review_task_ownership(
+    identity: dict[str, Path],
+    *,
+    task_id: str | None,
+    receipt: str | Path | None,
+) -> None:
+    """Refuse review setup on a worktree owned by another live task.
+
+    A live path-scoped lease identifies the task that owns the worktree.  Review
+    mode may only be configured when the caller proves the same task through
+    ``--task-id`` or a delegated-worker receipt, so a reviewer cannot capture a
+    live implementation/publication worktree.
+    """
+    receipt_task_id: str | None = None
+    if receipt is not None:
+        receipt_task_id = _check_receipt_identity(identity["path"], receipt)
+    if task_id is not None and receipt_task_id is not None and task_id != receipt_task_id:
+        raise GuardError(
+            "review task id does not match the supplied receipt: "
+            f"receipt identifies '{receipt_task_id}', got '{task_id}'"
+        )
+    effective_task_id = task_id or receipt_task_id
+    pr_gate_lease = _sibling_module("pr_gate_lease")
+    try:
+        lease = pr_gate_lease.load_lease(pr_gate_lease.lease_path(identity["path"]))
+    except RuntimeError as exc:
+        raise GuardError(f"review setup cannot read the worktree lease: {exc}") from exc
+    if lease is None or lease.is_expired():
+        if effective_task_id is not None and receipt_task_id is None:
+            raise GuardError(
+                "review setup requires the review task's active lease on the selected "
+                f"worktree; no live lease exists for task '{effective_task_id}'"
+            )
+        return
+    lease_owners = {value for value in (lease.owner, lease.gate_id) if value}
+    if effective_task_id is None:
+        owner = lease.owner or lease.gate_id or "unknown"
+        raise GuardError(
+            "review setup refused: selected worktree has a live lease owned by "
+            f"'{owner}' (expires {lease.expires_at}); pass the review task's --task-id "
+            "or --receipt to prove ownership"
+        )
+    if effective_task_id not in lease_owners:
+        owner = lease.owner or lease.gate_id or "unknown"
+        raise GuardError(
+            "review setup refused: selected worktree has a live lease owned by "
+            f"'{owner}' (expires {lease.expires_at}), not by review task "
+            f"'{effective_task_id}'"
+        )
+
+
 def configure_worktree(
     worktree: str | Path,
     *,
     mode: str,
     hook_source_root: str | Path | None = None,
+    task_id: str | None = None,
+    receipt: str | Path | None = None,
 ) -> dict[str, Any]:
     """Configure or restore one linked worktree's review protection."""
     if mode not in (REVIEW_MODE, IMPLEMENTATION_MODE):
         raise GuardError(f"unsupported worktree mode: {mode}")
+    if mode != REVIEW_MODE and (task_id is not None or receipt is not None):
+        raise GuardError("--task-id and --receipt are only valid with review mode")
     identity = _identity(worktree)
     if mode == REVIEW_MODE:
+        _check_review_task_ownership(identity, task_id=task_id, receipt=receipt)
         initial_mode = _configured_mode(identity)
         _reject_inherited_url_push_insteadof_values(
             identity,
@@ -1111,6 +1211,14 @@ def _parser() -> argparse.ArgumentParser:
         "--hook-source-root",
         help="use this scripts/dev directory when the target base lacks the guard files",
     )
+    configure.add_argument(
+        "--task-id",
+        help="review task/run id; review mode refuses a live lease owned by another task",
+    )
+    configure.add_argument(
+        "--receipt",
+        help="delegated-worker receipt proving the selected worktree belongs to this review task",
+    )
 
     pre_push = subparsers.add_parser("pre-push", help="run the review worktree push guard")
     pre_push.add_argument("--worktree", default=".")
@@ -1140,6 +1248,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.worktree,
                 mode=args.mode,
                 hook_source_root=args.hook_source_root,
+                task_id=args.task_id,
+                receipt=args.receipt,
             )
             return_code = 0
         elif args.command == "pre-push":

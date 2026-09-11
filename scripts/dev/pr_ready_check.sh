@@ -959,7 +959,18 @@ for changed_file in "${changed_files[@]}"; do
   fi
 done
 if [[ ${#format_changed_files[@]} -gt 0 ]]; then
+  # Issue #8971: fail with an explicit formatting signal before any test that requires a clean
+  # tree. Previously the scoped Ruff fix ran here, and a later clean-tree materialization test
+  # failed with a misleading "source checkout has tracked changes" error.
+  pre_format_diff="$(git diff HEAD -- "${format_changed_files[@]}" | git hash-object --stdin)"
   "$SCRIPT_DIR/ruff_fix_format.sh" "${format_changed_files[@]}"
+  post_format_diff="$(git diff HEAD -- "${format_changed_files[@]}" | git hash-object --stdin)"
+  if [[ "$pre_format_diff" != "$post_format_diff" ]]; then
+    printf 'Ruff formatting changed tracked files in the working tree:\n' >&2
+    git diff --name-only HEAD -- "${format_changed_files[@]}" >&2
+    printf 'Commit the formatting changes, then rerun this readiness command (issue #8971).\n' >&2
+    exit 2
+  fi
 else
   printf 'No changed Python files require scoped Ruff formatting.\n' >&2
 fi
@@ -1153,13 +1164,37 @@ if [[ -n "$VALIDATED_BASE_SHA" ]]; then
       fi
       ;;
     1)
-      # Drift intersects the PR's changed files: the validated base no longer
-      # matches reality, so the stamp would be misleading.  Fail closed and name
-      # the exact base to revalidate.
-      printf '%s\n' "$drift_msg" >&2
-      printf 'Base drifted during readiness lanes and touches PR-changed files; ' >&2
-      printf 'revalidate against %s before recording the stamp (issue #5782).\n' "$BASE_REF" >&2
-      exit 1
+      # Issue #9049: the shared docstring TODO baseline is canonically regenerable,
+      # so when it is the only drift intersection, re-running the targeted
+      # docstring gates is sufficient revalidation and does not require restarting
+      # the full readiness lanes. Any other drift keeps the fail-closed path.
+      baseline_only_tmp="$(mktemp)"
+      if [[ ${#drift_changed_files[@]} -gt 0 ]]; then
+        printf '%s\n' "${drift_changed_files[@]}" > "$baseline_only_tmp"
+      fi
+      baseline_only_rc=0
+      uv run python "$SCRIPT_DIR/check_base_drift.py" \
+        --base-ref "$BASE_REF" \
+        --validated-base-sha "$VALIDATED_BASE_SHA" \
+        --changed-files "$baseline_only_tmp" \
+        --baseline-only || baseline_only_rc=$?
+      if [[ "$baseline_only_rc" -eq 0 ]] \
+        && "$SCRIPT_DIR/check_docstring_todos_ratchet.sh" \
+        && "$SCRIPT_DIR/check_docstring_todos_baseline_freshness.sh"; then
+        drift_msg="$(uv run python "$SCRIPT_DIR/check_base_drift.py" \
+          --base-ref "$BASE_REF" \
+          --validated-base-sha "$VALIDATED_BASE_SHA" \
+          --changed-files "$baseline_only_tmp" \
+          --docstring-baseline-revalidated)"
+        rm -f "$baseline_only_tmp"
+        printf '%s\n' "$drift_msg" >&2
+      else
+        rm -f "$baseline_only_tmp"
+        printf '%s\n' "$drift_msg" >&2
+        printf 'Base drifted during readiness lanes and touches PR-changed files; ' >&2
+        printf 'revalidate against %s before recording the stamp (issue #5782).\n' "$BASE_REF" >&2
+        exit 1
+      fi
       ;;
     *)
       # Indeterminate (rc 2): the base ref could not be resolved/compared (e.g.

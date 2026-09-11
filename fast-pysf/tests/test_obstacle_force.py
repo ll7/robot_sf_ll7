@@ -17,9 +17,12 @@ from pysocialforce.config import (
 )
 from pysocialforce.forces import (
     ObstacleForce,
+    all_obstacle_forces_for_law,
     obstacle_force,
     obstacle_force_for_law,
     obstacle_force_surface_distance_unit_normal,
+    surface_distance_unit_normal_force,
+    surface_distance_unit_normal_force_vectors,
 )
 
 
@@ -102,19 +105,34 @@ def test_surface_distance_unit_normal_matches_point_endpoint_and_segment_analyti
 
 
 @pytest.mark.parametrize(
-    ("obstacle", "ortho_vec", "ped_pos", "ped_radius"),
+    ("obstacle", "ortho_vec", "ped_pos", "ped_radius", "surface_point"),
     [
-        ((1.0, 1.0, 1.0, 1.0), (0.0, 1.0), (2.0, 2.0), 0.2),
-        ((0.0, 0.0, 1.0, 0.0), (0.0, 1.0), (2.0, 2.0), 0.2),
-        ((0.0, 0.0, 2.0, 0.0), (0.0, 1.0), (1.0, 1.0), 0.2),
+        ((1.0, 1.0, 1.0, 1.0), (0.0, 1.0), (2.0, 2.0), 0.2, (1.0, 1.0)),
+        ((0.0, 0.0, 1.0, 0.0), (0.0, 1.0), (2.0, 2.0), 0.2, (1.0, 0.0)),
+        ((0.0, 0.0, 2.0, 0.0), (0.0, 1.0), (1.0, 1.0), 0.2, (1.0, 0.0)),
     ],
 )
 def test_unversioned_dispatch_reproduces_legacy_obstacle_force_exactly(
-    obstacle, ortho_vec, ped_pos, ped_radius
+    obstacle, ortho_vec, ped_pos, ped_radius, surface_point
 ):
     """Unversioned and default dispatch preserve the pre-versioning kernel exactly."""
+    dx = ped_pos[0] - surface_point[0]
+    dy = ped_pos[1] - surface_point[1]
+    shifted_distance = max(math.hypot(dx, dy) - ped_radius, 1e-5)
+    expected = (dx / shifted_distance**4, dy / shifted_distance**4)
     legacy = obstacle_force(obstacle, ortho_vec, ped_pos, ped_radius)
 
+    assert legacy == pytest.approx(expected, rel=1e-12, abs=1e-12)
+    assert (
+        obstacle_force_for_law(
+            obstacle,
+            ortho_vec,
+            ped_pos,
+            ped_radius,
+            LEGACY_SHIFTED_GRADIENT_V1,
+        )
+        == legacy
+    )
     assert obstacle_force_for_law(obstacle, ortho_vec, ped_pos, ped_radius) == legacy
     assert (
         obstacle_force_for_law(
@@ -126,6 +144,39 @@ def test_unversioned_dispatch_reproduces_legacy_obstacle_force_exactly(
         )
         == legacy
     )
+
+
+@pytest.mark.parametrize("law_version", [None, SURFACE_DISTANCE_UNIT_NORMAL_V2])
+def test_line_segment_batch_dispatch_matches_scalar_geometry(law_version):
+    """The fast-pysf batch path matches its point/endpoint/segment scalar owner."""
+    obstacles = np.array(
+        [
+            [1.0, 1.0, 1.0, 1.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 2.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=float,
+    )
+    ped_positions = np.array([[2.0, 2.0], [1.0, 1.0]], dtype=float)
+    ped_radius = 0.2
+    actual = np.zeros((len(ped_positions), 2), dtype=float)
+
+    all_obstacle_forces_for_law(
+        actual,
+        ped_positions,
+        obstacles,
+        ped_radius,
+        law_version,
+    )
+
+    expected = np.zeros_like(actual)
+    for ped_index, ped_pos in enumerate(ped_positions):
+        for obstacle in obstacles:
+            expected[ped_index] += obstacle_force_for_law(
+                obstacle[:4], obstacle[4:], ped_pos, ped_radius, law_version
+            )
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
 
 def test_obstacle_force_law_resolution_and_metadata_are_explicit():
@@ -254,7 +305,9 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
     legacy_component = ObstacleForce(legacy_config, _Simulation())
     legacy_expected = obstacle_force((1.0, 1.0, 1.0, 1.0), (0.0, 1.0), (2.0, 2.0), -0.57)
     np.testing.assert_array_equal(legacy_component()[0], np.asarray(legacy_expected) * 10.0)
-    assert legacy_component.law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
+    legacy_metadata = legacy_component.law_metadata()
+    assert legacy_metadata["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
+    assert legacy_metadata["resolution_mode"] == "defaulted_missing"
 
     corrected_config = ObstacleForceConfig(
         threshold=-0.57,
@@ -265,7 +318,9 @@ def test_obstacle_force_component_dispatches_corrected_law_without_changing_defa
         (1.0, 1.0, 1.0, 1.0), (0.0, 1.0), (2.0, 2.0), -0.57
     )
     np.testing.assert_array_equal(corrected_component()[0], np.asarray(corrected_expected) * 10.0)
-    assert corrected_component.law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
+    corrected_metadata = corrected_component.law_metadata()
+    assert corrected_metadata["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
+    assert corrected_metadata["resolution_mode"] == "explicit"
 
 
 def test_corrected_point_force_is_finite_and_monotonic_near_contact():
@@ -292,3 +347,103 @@ def test_corrected_point_force_is_finite_and_monotonic_near_contact():
         -0.57,
         SURFACE_DISTANCE_UNIT_NORMAL_V2,
     ) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    ("obstacle", "ortho_vec", "surface_point"),
+    [
+        ((0.0, 0.0, 0.0, 0.0), (0.0, 1.0), (0.0, 0.0)),
+        ((0.0, 0.0, 1.0, 0.0), (0.0, 1.0), (1.0, 0.0)),
+        ((0.0, 0.0, 2.0, 0.0), (0.0, 1.0), (1.0, 0.0)),
+    ],
+)
+def test_corrected_line_segment_branches_are_finite_and_monotonic_at_clamp_boundary(
+    obstacle, ortho_vec, surface_point
+):
+    """Point, endpoint, and segment branches retain finite clamped contact behavior."""
+    ped_radius = 0.2
+    floor = 1e-5
+    raw_distances = (
+        ped_radius + 3 * floor,
+        ped_radius + 2 * floor,
+        ped_radius + floor,
+        ped_radius + 0.5 * floor,
+        ped_radius + 0.1 * floor,
+    )
+    magnitudes = []
+    for raw_distance in raw_distances:
+        if obstacle == (0.0, 0.0, 0.0, 0.0):
+            ped_pos = (raw_distance, 0.0)
+        elif obstacle == (0.0, 0.0, 1.0, 0.0):
+            ped_pos = (surface_point[0] + raw_distance, surface_point[1])
+        else:
+            ped_pos = (surface_point[0], surface_point[1] + raw_distance)
+        force = obstacle_force_for_law(
+            obstacle,
+            ortho_vec,
+            ped_pos,
+            ped_radius,
+            SURFACE_DISTANCE_UNIT_NORMAL_V2,
+        )
+        assert all(math.isfinite(component) for component in force)
+        magnitudes.append(math.hypot(*force))
+
+    assert all(left <= right for left, right in pairwise(magnitudes))
+    assert magnitudes[-2] == pytest.approx(magnitudes[-1], rel=1e-12, abs=1e-3)
+
+    if obstacle == (0.0, 0.0, 0.0, 0.0):
+        contact_pos = (0.0, 0.0)
+    else:
+        contact_pos = surface_point
+    assert obstacle_force_for_law(
+        obstacle,
+        ortho_vec,
+        contact_pos,
+        ped_radius,
+        SURFACE_DISTANCE_UNIT_NORMAL_V2,
+    ) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    ("raw_distance", "dx_to_surface", "dy_to_surface", "ped_radius"),
+    [
+        (math.nan, 1.0, 0.0, 0.2),
+        (math.inf, 1.0, 0.0, 0.2),
+        (1.0, math.nan, 0.0, 0.2),
+        (1.0, math.inf, 0.0, 0.2),
+        (1.0, 1.0, 0.0, math.nan),
+        (1.0, 1.0, 0.0, math.inf),
+    ],
+)
+def test_corrected_scalar_force_rejects_nonfinite_inputs(
+    raw_distance, dx_to_surface, dy_to_surface, ped_radius
+):
+    """The opt-in scalar law fails closed for non-finite geometric inputs."""
+    assert surface_distance_unit_normal_force(
+        raw_distance, dx_to_surface, dy_to_surface, ped_radius
+    ) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    ("obstacle", "ortho_vec", "ped_pos", "ped_radius"),
+    [
+        ((math.nan, 0.0, 0.0, 0.0), (0.0, 1.0), (1.0, 0.0), 0.2),
+        ((0.0, 0.0, 1.0, 0.0), (math.nan, 1.0), (1.0, 0.0), 0.2),
+        ((0.0, 0.0, 1.0, 0.0), (0.0, 1.0), (math.nan, 0.0), 0.2),
+        ((0.0, 0.0, 1.0, 0.0), (0.0, 1.0), (1.0, 0.0), math.nan),
+    ],
+)
+def test_corrected_geometry_rejects_nonfinite_inputs(obstacle, ortho_vec, ped_pos, ped_radius):
+    """The opt-in geometry dispatcher never emits a non-finite force."""
+    assert obstacle_force_surface_distance_unit_normal(
+        obstacle, ortho_vec, ped_pos, ped_radius
+    ) == (0.0, 0.0)
+
+
+def test_corrected_vector_force_rejects_nonfinite_offsets():
+    """Planner-style point forces reject infinite effective radius offsets."""
+    positions = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=float)
+    actual = surface_distance_unit_normal_force_vectors(positions, np.array([np.inf, 0.2]))
+
+    np.testing.assert_array_equal(actual[0], np.zeros(2))
+    assert np.all(np.isfinite(actual))

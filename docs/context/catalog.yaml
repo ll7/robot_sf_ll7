@@ -7583,3 +7583,16 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/artifact_retention_and_cleanup.md
+  status: current
+  freshness: policy
+  area: workflow_policy
+- path: docs/context/evidence_registry_historical_bindings.v1.md
+  status: evidence
+  freshness: evidence
+  area: evidence_policy
+- path: docs/context/issue_1496_bc_warm_start_comparison_packet.md
+  status: historical
+  freshness: dated
+  area: training
+

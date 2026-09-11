@@ -878,6 +878,19 @@ def test_build_merged_pr_index_matches_closes_patterns() -> None:
     assert 99 not in index
 
 
+def test_build_merged_pr_index_rejects_malformed_closes_suffix() -> None:
+    """A word suffix is not part of a valid ``Closes #N`` reference."""
+    rows = [
+        _rest_pr_row(10, body="Closes #42foo"),
+        _rest_pr_row(11, body="Closes #42."),
+        _rest_pr_row(12, body="closes #42"),
+    ]
+
+    index = scanner.build_merged_pr_index(rows, [42])
+
+    assert [row["number"] for row in index[42]] == [11, 12]
+
+
 def test_build_merged_pr_index_is_deterministically_ordered() -> None:
     """Index rows are ordered by PR number regardless of inventory order."""
     rows = [

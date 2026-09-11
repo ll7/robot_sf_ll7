@@ -54,4 +54,5 @@ def test_package_helpers_match_canonical_missing_path_failure(
     with pytest.raises(FileNotFoundError) as helper_error:
         helper(missing)
 
+    assert type(helper_error.value) is type(canonical_error.value)
     assert helper_error.value.args == canonical_error.value.args

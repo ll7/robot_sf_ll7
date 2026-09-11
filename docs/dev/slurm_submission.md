@@ -112,6 +112,29 @@ checksums, claim boundary) must survive, and over-redaction that erases it fails
 classes are reported `unsupported_receipt_class`, never partially projected. Exit codes: 0 valid,
 2 invalid or unsupported, 3 malformed input; the tool is check-only and changes no state.
 
+## Scheduler-job reconciliation (check-only)
+
+Before access ends, join a sanitized scheduler inventory projection with public issue/PR states,
+immutable launch-manifest packet digests, expected row counts, and artifact owner/harvest metadata
+so unbound, duplicate, stale, or ownerless jobs stay visible without exposing private infrastructure:
+
+```bash
+uv run python scripts/tools/reconcile_scheduler_jobs.py \
+  --check --projection <sanitized-projection.json> [--public <public-snapshot.json>] --format json
+```
+
+Each output row binds one sanitized job alias (plus optional array index and parent lineage) to its
+exact public owner, immutable input packet digest, artifact root, owner, harvest state, transfer
+state, and next action. Rows classify as `owned_active`, `owned_terminal_unharvested`,
+`owned_harvested`, `duplicate_candidate`, `orphan_unknown`, `stale_input`, `missing_output_owner`,
+or `projection_unavailable`. Ownership is never inferred from mutable job names: missing or
+unsanitized identity fails closed, equivalent active duplicates and conflicting owner bindings are
+reported, and `scheduler_state == completed` never implies artifact completeness or result
+validity. The report is byte-stable after documented volatile-field normalization (`generated_at`,
+`snapshot_at`, `observed_at`, and peers are dropped). Exit codes: 0 every row active or harvested,
+1 actionable rows, 2 malformed input. The tool is check-only: it never submits, cancels, relabels,
+claims, comments, or deletes scheduler, GitHub, or artifact state.
+
 ## Staged source isolation verification
 
 Before submitting compute-window or cluster jobs, verify that staged commands run

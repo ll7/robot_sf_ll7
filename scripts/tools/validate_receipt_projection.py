@@ -337,6 +337,11 @@ def _private_content_reason(text: str) -> str:
     return ""
 
 
+def private_content_reason(text: str) -> str:
+    """Return why ``text`` is not public-safe, or ``""`` when it is public-safe."""
+    return _private_content_reason(text)
+
+
 def _scan_content(
     contract: Contract, value: Any, issues: list[Issue], *, origin: str, location: str = ""
 ) -> None:

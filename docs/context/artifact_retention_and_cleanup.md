@@ -115,6 +115,21 @@ hardlink/special-file, path, collision, and partial-manifest conditions.
 Hydrate the artifact from the durable copy into a scratch path and rerun the owning verification
 command. A successful restore test is required before claiming preservation or cleanup eligibility.
 
+For a declared campaign capsule, the bounded cold-restore verifier records a versioned receipt and
+retains the task-owned destination, including a fail-closed receipt when validation fails:
+
+```bash
+uv run python scripts/validation/verify_cold_restore.py restore \
+  --capsule tests/validation/fixtures/cold_restore/synthetic_capsule.json \
+  --destination "$(mktemp -d)/robot-sf-cold-restore" --offline --json
+uv run python scripts/validation/verify_cold_restore.py verify \
+  --destination "<RESTORE_ROOT>" --json
+```
+
+The committed capsule is synthetic diagnostic plumbing only; `--mode real` remains explicitly
+unavailable until a permitted durable capsule is declared. The verifier never runs simulation or
+training and never uses ambient artifact or model caches.
+
 ### 4.5 Check cleanup eligibility
 
 ```bash

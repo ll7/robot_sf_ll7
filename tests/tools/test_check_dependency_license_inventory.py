@@ -801,18 +801,22 @@ def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None
     assert inventory["summary"]["policy_pending_package_count"] != 155
 
 
-def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
-    """Pending review status does not turn an external disposition into review-required."""
+def test_policy_pending_count_excludes_reviewed_external_policy_rows() -> None:
+    """The staged external disposition rows remain outside review-required counts."""
     root = Path(__file__).resolve().parents[2]
     policy = json.loads(
         (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
     )
-    pending_exact = [
-        row for row in policy["package_dispositions"] if row.get("status") == "pending_review"
+    reviewed_exact = [
+        row for row in policy["package_dispositions"] if row.get("status") == "reviewed"
     ]
-    assert len(pending_exact) == 36
-    assert all(
-        row.get("disposition") == "external_dependency_not_redistributed" for row in pending_exact
+    assert len(reviewed_exact) == 37
+    assert (
+        sum(
+            row.get("disposition") == "external_dependency_not_redistributed"
+            for row in reviewed_exact
+        )
+        == 37
     )
 
     inventory = build_inventory(root, distributions=[], selected_profile_ids=["all"])
@@ -1153,9 +1157,10 @@ def test_issue_8163_policy_records_retain_metadata_and_archive_evidence() -> Non
         assert record["source"]["metadata_url"] == (
             f"https://pypi.org/pypi/{name}/{record['version']}/json"
         )
-        assert record["status"] == "pending_review"
-        assert record["reviewer"] is None
-        assert record["reviewed_at"] is None
+        assert record["status"] == "reviewed"
+        assert "gpt-6-astra/medium" in record["reviewer"]
+        assert "Luna/max" in record["reviewer"]
+        assert record["reviewed_at"] == "2026-09-11T08:28:09.073217Z"
         assert record["upstream"]["archive_notice_paths"]
         assert record["upstream"]["archive_notice_absences"] == []
 
@@ -1358,12 +1363,15 @@ def test_moving_notice_url_requires_a_pending_durable_blocker() -> None:
     )
     moving_row.pop("evidence_blockers", None)
     _rules, _components, _by_name, _records, issues = _policy_records(moving, root)
-    assert any("durable blocker for moving notice URLs" in issue for issue in issues)
+    assert any("reviewed evidence contains moving" in issue for issue in issues)
 
     pending = copy.deepcopy(moving)
     pending_row = next(
         row for row in pending["package_dispositions"] if row["package"] == "python-dotenv"
     )
+    pending_row["status"] = "pending_review"
+    pending_row["reviewer"] = None
+    pending_row["reviewed_at"] = None
     pending_row["evidence_blockers"] = [
         "The tag URL is moving; immutable source pinning remains unresolved."
     ]

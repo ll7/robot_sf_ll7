@@ -1,0 +1,2390 @@
+{
+  "authority": {
+    "confidence": 0.97,
+    "evidence": {
+      "authority_judgment": {
+        "artifact_path": "resume-20260911/P06-8163-authority/judgment.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-authority/judgment.json",
+        "sha256": "8873a6152f4b6d63084c44a796cbe5bb44a88a41804494aea4cc1b9354e88db9",
+        "size_bytes": 24544
+      },
+      "authority_result": {
+        "artifact_path": "resume-20260911/P06-8163-authority/result.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-authority/result.json",
+        "schema_version": "robot-sf.p06.authority-result.v1",
+        "sha256": "6ad1ce35604d0a38b212b885b9762303145113d0ab2066498703a61faba0b94b",
+        "size_bytes": 4553,
+        "status": "COMPLETED_36_ROW_STAGED_EXTERNAL_ONLY_DISPOSITION_ACCEPTED"
+      },
+      "candidate_bound_strict_command": {
+        "artifact_path": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.command",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.command",
+        "sha256": "a605c9d2fc51b66897387f337c9e76da373315ae5d32c5571bdd83b66edb3ca5",
+        "size_bytes": 684
+      },
+      "candidate_bound_strict_log": {
+        "artifact_path": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.log",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.log",
+        "sha256": "1545c58756c3c166728642fca306d256b81d6b464bdc6a4f7bea131cbe12a73e",
+        "size_bytes": 827
+      },
+      "candidate_bound_strict_rc": {
+        "artifact_path": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.rc",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.rc",
+        "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+        "size_bytes": 2
+      },
+      "candidate_bound_strict_report": {
+        "artifact_path": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.json",
+        "schema_version": "robot-sf.dependency-license-inventory.v1",
+        "sha256": "e19f26d5031ae372caea0f689cbbf81f15614c646ac29b02a32d0766cb5b875d",
+        "size_bytes": 4607784,
+        "status": "blocked"
+      },
+      "decision_comment_custody": {
+        "artifact_path": "resume-20260911/P06-8163-authority/decision-comment-custody.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-authority/decision-comment-custody.json",
+        "sha256": "e5e4993cd1db56be33d5b2c85c0657d03c6ef0db94fc55db777bf1e180793e06",
+        "size_bytes": 572
+      },
+      "post_integration_identity": {
+        "artifact_path": "resume-20260911/P06-8163-integration/26-post-identity-check.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/26-post-identity-check.json",
+        "schema_version": "robot-sf.p06.8163.integration-identity-check.v1",
+        "sha256": "b0c7fae7ce21f7208fae83df7c6a49fcc5e8a69bb7a73758458e45a37d141277",
+        "size_bytes": 1644,
+        "status": "pass"
+      },
+      "post_integration_identity_command": {
+        "artifact_path": "resume-20260911/P06-8163-integration/26-post-identity-check.command",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/26-post-identity-check.command",
+        "sha256": "0061d806ce459df8c240755df792e7e055db0132de4eb03f5b201ab911f66f62",
+        "size_bytes": 240
+      },
+      "post_integration_identity_log": {
+        "artifact_path": "resume-20260911/P06-8163-integration/26-post-identity-check.log",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/26-post-identity-check.log",
+        "sha256": "803591dbbba12726d622d2f98014706177cdd5b787baf96f5c589df838fa95b6",
+        "size_bytes": 2000
+      },
+      "post_integration_identity_rc": {
+        "artifact_path": "resume-20260911/P06-8163-integration/26-post-identity-check.rc",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/26-post-identity-check.rc",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "size_bytes": 2
+      },
+      "source_only_strict_report": {
+        "artifact_path": "resume-20260911/P06-8163-integration/10-strict-all.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/10-strict-all.json",
+        "schema_version": "robot-sf.dependency-license-inventory.v1",
+        "sha256": "975b7c56e909516247701ccfb592fc679dfe1d524e30dfcdb475ec39f381f296",
+        "size_bytes": 4844226,
+        "status": "blocked"
+      },
+      "source_only_strict_summary": {
+        "artifact_path": "resume-20260911/P06-8163-integration/11-strict-all-summary.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/11-strict-all-summary.json",
+        "schema_version": "robot-sf.p06.8163.strict-all-summary.v1",
+        "sha256": "9ae44dd8af09b5534ba5f2715e864d73a552973a51b58455003e5541bda34a13",
+        "size_bytes": 48314,
+        "status": "blocked"
+      },
+      "surface_decision_inputs": {
+        "artifact_path": "R00-P06-8163-surface/decision-inputs.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "R00-P06-8163-surface/decision-inputs.json",
+        "schema_version": "robot-sf.r00.p06.8163.surface-decision-inputs.v1",
+        "sha256": "a983dc43d601b659c1a64171866e29662a74bbae4c70161a33fe16403737bcf2",
+        "size_bytes": 153105,
+        "status": "factual_surface_inputs_ready_for_medium_policy_authority"
+      },
+      "surface_facts_sha256": "42bffadffdb518f626b44e8184910bb7b2ef6e4d71ef2543357bdade654f08a9",
+      "surface_review": {
+        "artifact_path": "R00-P06-8163-surface/result.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "R00-P06-8163-surface/result.json",
+        "schema_version": "robot-sf.r00.p06.8163.surface-review.v1",
+        "sha256": "ecd57454244f212f64074244463eef0b6140fbbb0d3bfaf70a3643b196820759",
+        "size_bytes": 49256,
+        "status": "FACTUAL_SURFACE_REVIEW_ACCEPTED_WITH_EXPLICIT_EXCEPTIONS"
+      },
+      "surface_row_facts_sha256": "32a13c0e7767b84e5f3d218a72429db1a71b14be1ccd7b688a2af0a2fa7a8be1",
+      "upstream_final36": {
+        "artifact_path": "R00-P06-8163-upstream/final36-result.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "R00-P06-8163-upstream/final36-result.json",
+        "schema_version": "robot-sf.r00.p06.8163-final36-result.v1",
+        "sha256": "96daf4095fecdeb177913c1c0fed8028aab5f60e8597a9dbae698ceece79f0ac",
+        "size_bytes": 24989,
+        "status": "FACTUAL_REVIEW_READY_FOR_POLICY_AUTHORITY_WITH_EXCEPTIONS"
+      },
+      "upstream_two_ref_addendum": {
+        "artifact_path": "R00-P06-8163-upstream/two-ref-gap-addendum.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "R00-P06-8163-upstream/two-ref-gap-addendum.json",
+        "schema_version": "robot-sf.r00.p06.8163-two-ref-gap-addendum.v1",
+        "sha256": "96af9a421282e812f1d8938432a7b17634f23b776c43823f3e396bbc280ba98a",
+        "size_bytes": 18699,
+        "status": "FACTUAL_REVIEW_ADDENDUM_ACCEPTED_FOR_POLICY_REVIEW"
+      }
+    },
+    "factual_reviewed_at_utc": "2026-09-11T08:21:51.925081+00:00",
+    "factual_reviewer": "Luna/max independent factual surface reviewer",
+    "recorded_at_utc": "2026-09-11T08:28:09.073217+00:00",
+    "retained_exceptions_by_package": {
+      "absl-py": [
+        "unattributed_shared_apache_hash_match:4"
+      ],
+      "alembic": [
+        "bundled_component_exception:3",
+        "historical_surface_packet_upstream_blocker_resolved_by_two_row_addendum"
+      ],
+      "attrs": [],
+      "click": [],
+      "cma": [
+        "source_archive_mapping_exception_inherited"
+      ],
+      "cyclopts": [],
+      "fsspec": [],
+      "geopandas": [],
+      "idna": [],
+      "imageio": [],
+      "joblib": [],
+      "jsonschema": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "jsonschema-specifications": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "lazy-loader": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "markdown": [],
+      "narwhals": [
+        "selected_wheel_record_exception:18"
+      ],
+      "networkx": [],
+      "opentelemetry-api": [
+        "source_archive_mapping_exception_inherited"
+      ],
+      "opt-einsum": [
+        "historical_surface_packet_upstream_blocker_resolved_by_two_row_addendum"
+      ],
+      "osmnx": [
+        "selected_wheel_record_exception:3"
+      ],
+      "platformdirs": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "pooch": [],
+      "proglog": [],
+      "pydantic": [],
+      "pyparsing": [
+        "partial_sdist:pyparsing-3.3.2/docs/CONTRIBUTING.md"
+      ],
+      "python-dotenv": [
+        "source_archive_mapping_exception_inherited",
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "pyvista": [
+        "source_archive_mapping_exception_inherited",
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "referencing": [
+        "optional_commit_api_403_metadata_caveat",
+        "partial_sdist:referencing-0.37.0/CHANGELOG.rst"
+      ],
+      "rich-rst": [
+        "optional_commit_api_403_metadata_caveat",
+        "bundled_component_exception:84"
+      ],
+      "scooby": [],
+      "setuptools": [
+        "bundled_component_exception:309",
+        "selected_wheel_record_exception:180"
+      ],
+      "termcolor": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "typing-inspection": [],
+      "urllib3": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "werkzeug": [],
+      "wheel": []
+    },
+    "reviewer": "gpt-6-astra/medium verified (AI technical authority; no human or legal identity claimed)",
+    "verdict": "Accept all 36 exact identities for staged external_dependency_not_redistributed disposition in user_installed/not_distributed modes only. Retained exceptions do not contradict the accepted frozen-archive absence evidence. Release admission remains blocked."
+  },
+  "candidate_binding": {
+    "archive_shipping": "not_recorded",
+    "candidate_admission": false,
+    "historical_candidate": {
+      "candidate_admission": false,
+      "candidate_commit_sha": "f537fa5661b2d3adba3acf9ee7564bcadbcc406e",
+      "candidate_manifest_sha256": "d1ed5ca826eff94123b5e781173df7e67026d3db31e8a334ee10e96aaef992d0",
+      "candidate_tree_sha": "1ca7f58207e7425942498d27368c3fd4ade2047b",
+      "source": "P06-final-staged-reconciliation exact_candidate_binding; retained for historical context only",
+      "status": "diagnostic_only_historical"
+    },
+    "status": "unavailable_diagnostic_only"
+  },
+  "claim_boundary": "This receipt records an AI-reviewed, staged external-only dependency disposition for the exact selected identities. It grants no legal rights, redistribution authorization, bundled or vendored permission, candidate custody, release approval, or release-wide admission.",
+  "issue": 8163,
+  "notes": [
+    "All 36 exact identities are reviewed only for user_installed and not_distributed surfaces. Bundled, built, mirrored, vendored, container-bundled, unknown, unavailable, and conflicting surfaces remain blocked.",
+    "The retained historical candidate tuple is diagnostic context and is not current candidate custody or release admission.",
+    "The policy keeps the prior 2026-09-01 evidence path for historical continuity; this receipt is the durable staged integration record."
+  ],
+  "policy_binding": {
+    "archive_license_member_count": 125,
+    "archive_license_member_manifest_sha256": "1f9ea1d3d62bdfb4c9ea57da8667280b7037290f633d88715f8d6ddce2a4191b",
+    "normalized_batch_record_count": 36,
+    "normalized_batch_records_sha256": "1a67da82b1e717280e2b65837051449fa6096e416816ad52cffd94b359212eeb",
+    "row_manifest_sha256": "30d22cf51654a62124c7d5c8c2e72953e1048a82178b6daef0657fa6834abe2a"
+  },
+  "public_decision_custody": {
+    "app": "1144995/openai/chatgpt-codex-connector",
+    "body_sha256": "8d3c5cc26a98c3db867c321eb4683cac9ccf3df37178d3313080f43ed27ca5c5",
+    "body_utf8_bytes": 26207,
+    "custody_artifact": {
+      "artifact_path": "resume-20260911/P06-8163-authority/decision-comment-custody.json",
+      "location": "private run artifact; retained outside the repository evidence tree",
+      "path_hint": "resume-20260911/P06-8163-authority/decision-comment-custody.json",
+      "sha256": "e5e4993cd1db56be33d5b2c85c0657d03c6ef0db94fc55db777bf1e180793e06",
+      "size_bytes": 572
+    },
+    "direct_list_original_equal": true,
+    "publisher": "ll7",
+    "url": "https://github.com/ll7/robot_sf_ll7/issues/8163#issuecomment-5631667479"
+  },
+  "retained_exceptions": {
+    "addendum_rows": [
+      "alembic",
+      "opt-einsum"
+    ],
+    "bundled_rows": {
+      "alembic": 3,
+      "rich-rst": 84,
+      "setuptools": 309
+    },
+    "mapping_rows": [
+      "cma",
+      "opentelemetry-api",
+      "python-dotenv",
+      "pyvista"
+    ],
+    "optional_commit_api_403_rows": [
+      "jsonschema",
+      "jsonschema-specifications",
+      "lazy-loader",
+      "platformdirs",
+      "python-dotenv",
+      "pyvista",
+      "referencing",
+      "rich-rst",
+      "termcolor",
+      "urllib3"
+    ],
+    "partial_archive_rows": {
+      "pyparsing": "pyparsing-3.3.2/docs/CONTRIBUTING.md",
+      "referencing": "referencing-0.37.0/CHANGELOG.rst"
+    },
+    "record_rows": {
+      "narwhals": 18,
+      "osmnx": 3,
+      "setuptools": 180
+    }
+  },
+  "review": {
+    "legal_or_redistribution_approval": false,
+    "reviewed_at": null,
+    "reviewer": null,
+    "status": "pending_independent_maintainer_review"
+  },
+  "rows": [
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "absl_py-2.4.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "8c6af82722b35cf71e0f4d1d47dcaebfff286e27110a99fc359349b247dfb5d4",
+          "size": 116543
+        },
+        {
+          "filename": "absl_py-2.4.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "88476fd881ca8aab94ffa78b7b6c632a782ab3ba1cd19c9bd423abc4fb4cd28d",
+          "size": 135750
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "5f5597a4805be1e89ac0e895d2dbe6975cb3a5521820651fe4922a88e5d97719",
+      "package": "absl-py",
+      "package_id": "absl-py@2.4.0#5f5597a4805be1e8",
+      "policy_row_id": "absl-py-2-4-0-external-install",
+      "retained_exceptions": [
+        "unattributed_shared_apache_hash_match:4"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "71589d08b7eb9d20779eee3dc718a6e17ceb1b0023fa30e29c9c0f218e6dc8d1",
+        "commit_sha": "862e5d80cb61501745d0d345cf419d36495af493",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "54c4a4631bcf65838b3ad191718451ff75c7467e26b9d1c11711462458f668a4",
+        "repository": "https://github.com/abseil/abseil-py",
+        "tag": "v2.4.0"
+      },
+      "version": "2.4.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "alembic-1.18.4.tar.gz",
+          "kind": "sdist",
+          "sha256": "cb6e1fd84b6174ab8dbb2329f86d631ba9559dd78df550b57804d607672cedbc",
+          "size": 2056725
+        },
+        {
+          "filename": "alembic-1.18.4-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "a5ed4adcf6d8a4cb575f3d759f071b03cd6e5c7618eb796cb52497be25bfe19a",
+          "size": 263893
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "53c9ce9b5b825a8147e47ee5601c3e2c2c0898a40ab45ef208f4966edb6a3011",
+      "package": "alembic",
+      "package_id": "alembic@1.18.4#53c9ce9b5b825a81",
+      "policy_row_id": "alembic-1-18-4-external-install",
+      "retained_exceptions": [
+        "bundled_component_exception:3",
+        "historical_surface_packet_upstream_blocker_resolved_by_two_row_addendum"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 6,
+        "archive_notice_paths_sha256": "8be575c520aedf7a4c0175daf3e93a090b745dbcc883ed40d082810e8bfbb848",
+        "commit_sha": "766b5ee98e0aeea85a18f272a1ac813712ee0697",
+        "notice_path_count": 6,
+        "notice_paths_sha256": "bcf2665d778ec308bd89b205ddccb3392e5dc60d33773dfc78449d84508ba836",
+        "repository": "https://github.com/sqlalchemy/alembic",
+        "tag": "rel_1_18_4"
+      },
+      "version": "1.18.4"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "attrs-25.4.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "16d5969b87f0859ef33a48b35d55ac1be6e42ae49d5e853b597db70c35c57e11",
+          "size": 934251
+        },
+        {
+          "filename": "attrs-25.4.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "adcf7e2a1fb3b36ac48d97835bb6d8ade15b8dcce26aba8bf1d14847b57a3373",
+          "size": 67615
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "34a9477930ed3831e7a9f26bdd08d9400bb22f7c87397552ed26bf0f9e2cd473",
+      "package": "attrs",
+      "package_id": "attrs@25.4.0#34a9477930ed3831",
+      "policy_row_id": "attrs-25-4-0-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "470bbbe4a77b0328c3db4aa35fd3c966299fb1a320f48106b357310fe5e37f5d",
+        "commit_sha": "9a98e00a7c078360add417c5d62db820d4645ab1",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "deea1bde8c29d7337e2cf3cefffeadd5b279a5ea524335f0eebfe555ebe1b2c2",
+        "repository": "https://github.com/python-attrs/attrs",
+        "tag": "25.4.0"
+      },
+      "version": "25.4.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "click-8.3.1.tar.gz",
+          "kind": "sdist",
+          "sha256": "12ff4785d337a1bb490bb7e9c2b1ee5da3112e94a8622f26a6c77f5d2fc6842a",
+          "size": 295065
+        },
+        {
+          "filename": "click-8.3.1-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "981153a64e25f12d547d3426c367a4857371575ee7ad18df2a6183ab0545b2a6",
+          "size": 108274
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "6e000ef82b4ec9b4a4a87657d7cdd1c15239bbfcc4f4850f82d5af1dd97d679b",
+      "package": "click",
+      "package_id": "click@8.3.1#6e000ef82b4ec9b4",
+      "policy_row_id": "click-8-3-1-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "2520dbf484f57ab1d9d1c392c24cfffeb30ab2d509bf316719719bbc71eb514d",
+        "commit_sha": "1d038f270701498433cb432f54db89f95f07a845",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "bc761d222207ff8a700fcdb49b98e7eccf76e4a14d8c63cb0af066f4b6c22fef",
+        "repository": "https://github.com/pallets/click",
+        "tag": "8.3.1"
+      },
+      "version": "8.3.1"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "cma-4.4.4.tar.gz",
+          "kind": "sdist",
+          "sha256": "632bd654b5dce04c0eaa3166679d3e4773ce7a79eab7934e7f363c341b9a8170",
+          "size": 316645
+        },
+        {
+          "filename": "cma-4.4.4-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "edb6d02eb2aac2d54650f16a8f0c70711ff17445957de7c9de92ff7fd4b7ef38",
+          "size": 328311
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "abe77c5211ffcabda5cdb11a7784be522b779f6621aeb7c65cc97fc6e9220eab",
+      "package": "cma",
+      "package_id": "cma@4.4.4#abe77c5211ffcabd",
+      "policy_row_id": "cma-4-4-4-external-install",
+      "retained_exceptions": [
+        "source_archive_mapping_exception_inherited"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "33d84814d94ec5167057c683bf2515c5b71d960266be46aa2f092b5352391359",
+        "commit_sha": "83089d1d681165b8cc849f4a05c9f1c1869d79a3",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "05655266de83b6fa04e07885c8f838dc9a5c964516ca95d1a98dc27d1d28d6d2",
+        "repository": "https://github.com/CMA-ES/pycma",
+        "tag": "r4.4.4"
+      },
+      "version": "4.4.4"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "cyclopts-4.18.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "fb7b730f21932e0784f7e54462df0447aaa1fbf034d65b605bd8a25dce58b188",
+          "size": 182821
+        },
+        {
+          "filename": "cyclopts-4.18.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "18ba2912e48e890a97ecc8a05c9beddf30a407b43f4e14cccfd40efddc41f029",
+          "size": 221216
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "1dc3da4d4b4e65c661d95c7b0921bf9739295de8948d5de33ad3f477803f85ac",
+      "package": "cyclopts",
+      "package_id": "cyclopts@4.18.0#1dc3da4d4b4e65c6",
+      "policy_row_id": "cyclopts-4-18-0-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "6d18e32862d4762f0b8a607171e7d84e10a04860149da341b99e050a8741f735",
+        "commit_sha": "039060a76468d98b64e31c22303bea2ce602e83b",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "7dc031502cf1f61baef59074fa536901a1628ac1a598f6315967801db1ab2e1f",
+        "repository": "https://github.com/BrianPugh/cyclopts",
+        "tag": "v4.18.0"
+      },
+      "version": "4.18.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "fsspec-2026.2.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "6544e34b16869f5aacd5b90bdf1a71acb37792ea3ddf6125ee69a22a53fb8bff",
+          "size": 313441
+        },
+        {
+          "filename": "fsspec-2026.2.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "98de475b5cb3bd66bedd5c4679e87b4fdfe1a3bf4d707b151b3c07e58c9a2437",
+          "size": 202505
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "d7fbcbba0f597b389b5a3228a761eadeb2ff7a02fb9cdf4d7f255c710c8291cd",
+      "package": "fsspec",
+      "package_id": "fsspec@2026.2.0#d7fbcbba0f597b38",
+      "policy_row_id": "fsspec-2026-2-0-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "f7144e6f3aafad069d67cc0d86fb357197e611be9ca49fe8b29afdbb45688dbd",
+        "commit_sha": "e6668a146cd07b9f50530c49ea3916d8ab13e169",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "8a6b53aae238e4fa6292be6490f93676f0e4f6fefb6820d612cba2da9f7b3809",
+        "repository": "https://github.com/fsspec/filesystem_spec",
+        "tag": "2026.2.0"
+      },
+      "version": "2026.2.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "geopandas-1.1.4.tar.gz",
+          "kind": "sdist",
+          "sha256": "06f2890a07e1a239047daa14b486a7c6ae5ce82dcf7405e13c46bf31f5d0dd66",
+          "size": 337445
+        },
+        {
+          "filename": "geopandas-1.1.4-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "1a0c459cbdb1537cd154dafe6174be20d1760844b7f1c967dc8520b180f2e773",
+          "size": 343292
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "41ea6af6edd81e58c587faaaa1e7a0aa80d9f7a2b728801adc2dc420b49ac994",
+      "package": "geopandas",
+      "package_id": "geopandas@1.1.4#41ea6af6edd81e58",
+      "policy_row_id": "geopandas-1-1-4-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "23ecc8d4a3ea17ab715e229a40a22b64331788f31051545a6768b4854837f4b6",
+        "commit_sha": "91ec4af3c502be268ee147a3a832387534c0be3d",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "4d98787c5e950c0dc1e62c3fb590eea6dc71e6d5d4f9856cfb199d2ece76aeb7",
+        "repository": "https://github.com/geopandas/geopandas",
+        "tag": "v1.1.4"
+      },
+      "version": "1.1.4"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "idna-3.11.tar.gz",
+          "kind": "sdist",
+          "sha256": "795dafcc9c04ed0c1fb032c2aa73654d8e8c5023a7df64a53f39190ada629902",
+          "size": 194582
+        },
+        {
+          "filename": "idna-3.11-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea",
+          "size": 71008
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "8ce1af221c7db795dde9ae3dbf9104f8fbb64e63dd3a209623c7859823959d0c",
+      "package": "idna",
+      "package_id": "idna@3.11#8ce1af221c7db795",
+      "policy_row_id": "idna-3-11-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "cd9b30cee9091b1f73e02a26a36db09179853954e1796bf61a46e2b9714c3920",
+        "commit_sha": "ad949ee3052c2265c66e3df2dd8871a5832ba327",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "c8a85195ae8fad2542c8073fe516c68a46e860165f19d63c339eb7384fbcceef",
+        "repository": "https://github.com/kjd/idna",
+        "tag": "v3.11"
+      },
+      "version": "3.11"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "imageio-2.37.2.tar.gz",
+          "kind": "sdist",
+          "sha256": "0212ef2727ac9caa5ca4b2c75ae89454312f440a756fcfc8ef1993e718f50f8a",
+          "size": 389600
+        },
+        {
+          "filename": "imageio-2.37.2-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "ad9adfb20335d718c03de457358ed69f141021a333c40a53e57273d8a5bd0b9b",
+          "size": 317646
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "a831a650cbfe7afef6b8f43e375d965984aeb1f39dc3b33b6135c7d3bf310910",
+      "package": "imageio",
+      "package_id": "imageio@2.37.2#a831a650cbfe7afe",
+      "policy_row_id": "imageio-2-37-2-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "2950d927632e98e5d8b20515fd7dcf0e131c458cf949584bdab452d9bf8a488c",
+        "commit_sha": "761929cc6ae6503f93f2431e0b47d504837ba77a",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "a1b29ee7332575a47a4ac251b91ea824c8a10564f46ce6ce557a9c814318c19f",
+        "repository": "https://github.com/imageio/imageio",
+        "tag": "v2.37.2"
+      },
+      "version": "2.37.2"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "joblib-1.5.3.tar.gz",
+          "kind": "sdist",
+          "sha256": "8561a3269e6801106863fd0d6d84bb737be9e7631e33aaed3fb9ce5953688da3",
+          "size": 331603
+        },
+        {
+          "filename": "joblib-1.5.3-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "5fc3c5039fc5ca8c0276333a188bbd59d6b7ab37fe6632daa76bc7f9ec18e713",
+          "size": 309071
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "1aedc2802b8de2fd40f8eb7d13b87d6edd279978eb855910c0ffb6c74ec94882",
+      "package": "joblib",
+      "package_id": "joblib@1.5.3#1aedc2802b8de2fd",
+      "policy_row_id": "joblib-1-5-3-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "c5249a4971b245bbdf49f367944c9054745a51c379d58fd6262a2ac8b63f5965",
+        "commit_sha": "40cd002ae1765195dfc4738a6bc7f5534b420a21",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "47f44c6f3c2e6744b9f92ec75e8fa6a1757725ca3f9485cdff5ed2724078191c",
+        "repository": "https://github.com/joblib/joblib",
+        "tag": "1.5.3"
+      },
+      "version": "1.5.3"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "jsonschema-4.26.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326",
+          "size": 366583
+        },
+        {
+          "filename": "jsonschema-4.26.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce",
+          "size": 90630
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "500e44721bbee3fa4ca46701b72e3189851a22840544444d3635763266ae69b6",
+      "package": "jsonschema",
+      "package_id": "jsonschema@4.26.0#500e44721bbee3fa",
+      "policy_row_id": "jsonschema-4-26-0-external-install",
+      "retained_exceptions": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "43f62eaa5008b2cbbc5317d23b8ee0465f303e358a2438756381ece0630de93d",
+        "commit_sha": "a7277432b0f7bcd0551f6e589d30457017125df4",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "49bad4b4cff85ccc036588062c903d68271d60fd863cbc06d049f2cca036da86",
+        "repository": "https://github.com/python-jsonschema/jsonschema",
+        "tag": "v4.26.0"
+      },
+      "version": "4.26.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "jsonschema_specifications-2025.9.1.tar.gz",
+          "kind": "sdist",
+          "sha256": "b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d",
+          "size": 32855
+        },
+        {
+          "filename": "jsonschema_specifications-2025.9.1-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe",
+          "size": 18437
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "09113af48bc815cdb1209fd31202eca32c04384e86beb910f13f8bfd3ea7edaf",
+      "package": "jsonschema-specifications",
+      "package_id": "jsonschema-specifications@2025.9.1#09113af48bc815cd",
+      "policy_row_id": "jsonschema-specifications-2025-9-1-external-install",
+      "retained_exceptions": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "8486f43458020c1010529a4eced4dc10023b8f016a7b1586526c3fd42e6c8027",
+        "commit_sha": "3b846010c34ce254d8ced23023451d1d64de37f5",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "dde8d22d9fd7c641923c3b4f608dc26023a9811d1d376d44b2d778426becae64",
+        "repository": "https://github.com/python-jsonschema/jsonschema-specifications",
+        "tag": "v2025.9.1"
+      },
+      "version": "2025.9.1"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "lazy_loader-0.5.tar.gz",
+          "kind": "sdist",
+          "sha256": "717f9179a0dbed357012ddad50a5ad3d5e4d9a0b8712680d4e687f5e6e6ed9b3",
+          "size": 15294
+        },
+        {
+          "filename": "lazy_loader-0.5-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "ab0ea149e9c554d4ffeeb21105ac60bed7f3b4fd69b1d2360a4add51b170b005",
+          "size": 8044
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "7773b21290d1e43a1e7b441d78ac1bc61a99fa948dcb55ef6770f3ef45a49f56",
+      "package": "lazy-loader",
+      "package_id": "lazy-loader@0.5#7773b21290d1e43a",
+      "policy_row_id": "lazy-loader-0-5-external-install",
+      "retained_exceptions": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "c6fc7f7b54f92e57ec0fe5b12b70e19fe3b65781c3a78ef4dfb2b61aa0dfad30",
+        "commit_sha": "2566bebe6a36ecd0bc5dc5a69e8767f7e68fb6d0",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "3d19ab0f0eeab7537419a9018e5c5fabdceef9e89ee84727423dcb17bd5ee50b",
+        "repository": "https://github.com/scientific-python/lazy-loader",
+        "tag": "v0.5"
+      },
+      "version": "0.5"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "markdown-3.10.2.tar.gz",
+          "kind": "sdist",
+          "sha256": "994d51325d25ad8aa7ce4ebaec003febcce822c3f8c911e3b17c52f7f589f950",
+          "size": 368805
+        },
+        {
+          "filename": "markdown-3.10.2-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "e91464b71ae3ee7afd3017d9f358ef0baf158fd9a298db92f1d4761133824c36",
+          "size": 108180
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "680c5a2499c00d4fab08f749a63786d40ed5fd27f85202954771818889b746d7",
+      "package": "markdown",
+      "package_id": "markdown@3.10.2#680c5a2499c00d4f",
+      "policy_row_id": "markdown-3-10-2-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "d8e73ddbf11fdac2c4d9cd190d36a6f573d3ac0d002cf8dbcaf47167c01c7b3d",
+        "commit_sha": "e7a0efb3a7c36d6b8005403122705662bc17c904",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "08fb0081a9c86160a6efc0712355818c11b75b9936c116e74665cde295961c21",
+        "repository": "https://github.com/Python-Markdown/markdown",
+        "tag": "3.10.2"
+      },
+      "version": "3.10.2"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "narwhals-2.22.1.tar.gz",
+          "kind": "sdist",
+          "sha256": "d62920805a0a43b7ff8b54b0c0d3142d796f8a9301836ada37e573d6a33cbcd9",
+          "size": 647493
+        },
+        {
+          "filename": "narwhals-2.22.1-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "60567d774edf77db53906f89d9fbd164e66e56d66d388e1e6990f17ac33cfb53",
+          "size": 454815
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "76bd107d769c1ad311d76d0fdfe9906a0f96ec28a8eb9b87a5f3db1072c66130",
+      "package": "narwhals",
+      "package_id": "narwhals@2.22.1#76bd107d769c1ad3",
+      "policy_row_id": "narwhals-2-22-1-external-install",
+      "retained_exceptions": [
+        "selected_wheel_record_exception:18"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "76460058ca998186e1584fe0013b1a3139bf2cbecbac868db51015ff47dc3cb1",
+        "commit_sha": "27bf8dbac2b44d048e26b5c9042fe35575878a4d",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "655faf1bf6d4aa3286452a8a1915703c374541e19512d97aec2c08d40d7dba01",
+        "repository": "https://github.com/narwhals-dev/narwhals",
+        "tag": "v2.22.1"
+      },
+      "version": "2.22.1"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "networkx-3.6.1.tar.gz",
+          "kind": "sdist",
+          "sha256": "26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509",
+          "size": 2517025
+        },
+        {
+          "filename": "networkx-3.6.1-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762",
+          "size": 2068504
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "efc9b7bd4a7c0271d134867ef1d0f86864923b8d63f52cc87ceb1d5807132f41",
+      "package": "networkx",
+      "package_id": "networkx@3.6.1#efc9b7bd4a7c0271",
+      "policy_row_id": "networkx-3-6-1-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "8209e1527ae4adf2f90455673d21875ccdbd9574b47359778549c425aa8384f6",
+        "commit_sha": "7530809bfa1ea7ed6fdf918a4d1431488953cb1f",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "2eb967a14dfcc46602dbc474c4a48667f880a72bc5276d9bef0afc81c8a855ab",
+        "repository": "https://github.com/networkx/networkx",
+        "tag": "networkx-3.6.1"
+      },
+      "version": "3.6.1"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "opentelemetry_api-1.44.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "67647e5e9566edcf421166fdf022b3537f818635daa852b289e34604dc6fb33a",
+          "size": 72406
+        },
+        {
+          "filename": "opentelemetry_api-1.44.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "94b98c893a91b88657eaac1e3ba89618cdb85be6918196705354f34728b2cdef",
+          "size": 60018
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "60bb95e06cae244fa3ada9ba60a5ba2a2efb173bb169cfd1e75698e37da60204",
+      "package": "opentelemetry-api",
+      "package_id": "opentelemetry-api@1.44.0#60bb95e06cae244f",
+      "policy_row_id": "opentelemetry-api-1-44-0-external-install",
+      "retained_exceptions": [
+        "source_archive_mapping_exception_inherited"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "dbc2bb66f32bf75d1e32f4fae4b513a44a3322124895526b7c0531c24bf693fc",
+        "commit_sha": "53a5a40c9604583c501bcf13970a635f00e62df4",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "289a3b60ff254f706eef76d49c50faeccb00f7116be9ee1e11a02422b502d5f4",
+        "repository": "https://github.com/open-telemetry/opentelemetry-python",
+        "tag": "v1.44.0"
+      },
+      "version": "1.44.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "opt_einsum-3.4.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "96ca72f1b886d148241348783498194c577fa30a8faac108586b14f1ba4473ac",
+          "size": 63004
+        },
+        {
+          "filename": "opt_einsum-3.4.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "69bb92469f86a1565195ece4ac0323943e83477171b91d24c35afe028a90d7cd",
+          "size": 71932
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "0e164d49651f98a3be1c9aecf405cade3cd8eb2b66dd51baf7e1030b04748f46",
+      "package": "opt-einsum",
+      "package_id": "opt-einsum@3.4.0#0e164d49651f98a3",
+      "policy_row_id": "opt-einsum-3-4-0-external-install",
+      "retained_exceptions": [
+        "historical_surface_packet_upstream_blocker_resolved_by_two_row_addendum"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "8adebdc98298ca3defba7d1e3d1f5346f5bc0ea1bb617e792e46aeae3bba7f00",
+        "commit_sha": "c15aec2c7dbbcaf5b9790b980f699bf295baa7d9",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "6ea8d40db97932e3e2545f86830b52291fdedd9758137a2944a9a5d27910c7f2",
+        "repository": "https://github.com/dgasmith/opt_einsum",
+        "tag": "v3.4.0"
+      },
+      "version": "3.4.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "osmnx-2.1.1.tar.gz",
+          "kind": "sdist",
+          "sha256": "0785166487d4d8da5a551dac3d1562fe114fb39f3bf66f261c8b4d60baee9295",
+          "size": 90368
+        },
+        {
+          "filename": "osmnx-2.1.1-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "6680c98312a8c327dea01da8ec59328bf1d7b0e0cab42db6ce500d0cb83b87e5",
+          "size": 104711
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "3af8f7e6950dcdf2f051a62ebab1e8550d8f7c51468065f45025d6329c3e6712",
+      "package": "osmnx",
+      "package_id": "osmnx@2.1.1#3af8f7e6950dcdf2",
+      "policy_row_id": "osmnx-2-1-1-external-install",
+      "retained_exceptions": [
+        "selected_wheel_record_exception:3"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "ae904086d46153320aca0eed649c0138328b923ef8e77cebce3b95e829798d84",
+        "commit_sha": "2fc39cb2792ff869881b99f724a2d97f0e958667",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "683e202517dc3e894580bafb9cd54714bf8b848f4cbf62cc2ae31f82544c47e3",
+        "repository": "https://github.com/gboeing/osmnx",
+        "tag": "v2.1.1"
+      },
+      "version": "2.1.1"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "platformdirs-4.5.1.tar.gz",
+          "kind": "sdist",
+          "sha256": "61d5cdcc6065745cdd94f0f878977f8de9437be93de97c1c12f853c9c0cdcbda",
+          "size": 21715
+        },
+        {
+          "filename": "platformdirs-4.5.1-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "d03afa3963c806a9bed9d5125c8f4cb2fdaf74a55ab60e5d59b3fde758104d31",
+          "size": 18731
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "27cb6f7204bf97a255c64cdf10e5dcad8297fdf4374f3bee6a4f4c82124bb997",
+      "package": "platformdirs",
+      "package_id": "platformdirs@4.5.1#27cb6f7204bf97a2",
+      "policy_row_id": "platformdirs-4-5-1-external-install",
+      "retained_exceptions": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "73e65925fd040572821c6db47505d9e11efacd68be641652d30e06d4867a0e2c",
+        "commit_sha": "e4dbdb8c8ed8e448b7cdbbdce4a4ff5c54c5d685",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "6b3e9b408c87eccc3fa046f4025fa45c4e4df19e615eac2a3c459427e85bb161",
+        "repository": "https://github.com/tox-dev/platformdirs",
+        "tag": "4.5.1"
+      },
+      "version": "4.5.1"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "pooch-1.9.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "de46729579b9857ffd3e741987a2f6d5e0e03219892c167c6578c0091fb511ed",
+          "size": 61788
+        },
+        {
+          "filename": "pooch-1.9.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "f265597baa9f760d25ceb29d0beb8186c243d6607b0f60b83ecf14078dbc703b",
+          "size": 67175
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "45abd666a1712704e2db068e396d6114a0e4aee789701a70f61590c565798b4d",
+      "package": "pooch",
+      "package_id": "pooch@1.9.0#45abd666a1712704",
+      "policy_row_id": "pooch-1-9-0-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "d0ac47e27e0ea8e6bb4977a976e5d6128382b0f5961a8cea8be9699813483e11",
+        "commit_sha": "6aab6f90569774d335edb7197729005c9e99f7c1",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "6c9bbd7d526933e5a30a2674cbd89e3c5f7edea92943c9c0d34b54be35e98ead",
+        "repository": "https://github.com/fatiando/pooch",
+        "tag": "v1.9.0"
+      },
+      "version": "1.9.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "proglog-0.1.12.tar.gz",
+          "kind": "sdist",
+          "sha256": "361ee074721c277b89b75c061336cb8c5f287c92b043efa562ccf7866cda931c",
+          "size": 8794
+        },
+        {
+          "filename": "proglog-0.1.12-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "ccaafce51e80a81c65dc907a460c07ccb8ec1f78dc660cfd8f9ec3a22f01b84c",
+          "size": 6337
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "395fe152a6292ea9a9ed4cc2fc27c6533c715a7f4000ef63b0a4fd18ceb5acdc",
+      "package": "proglog",
+      "package_id": "proglog@0.1.12#395fe152a6292ea9",
+      "policy_row_id": "proglog-0-1-12-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "65833a1853372f02a17d725f9aed551013b5d697e7cc4a554f962398b6faba8f",
+        "commit_sha": "0e38f134beded47852e931fb25e5c853a23d7ab0",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "2f5cfe71bf2868f3f51567d976c14266d022315d63ccc1056239f57a732ecd82",
+        "repository": "https://github.com/Edinburgh-Genome-Foundry/proglog",
+        "tag": "v0.1.12"
+      },
+      "version": "0.1.12"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "pydantic-2.12.5.tar.gz",
+          "kind": "sdist",
+          "sha256": "4d351024c75c0f085a9febbb665ce8c0c6ec5d30e903bdb6394b7ede26aebb49",
+          "size": 821591
+        },
+        {
+          "filename": "pydantic-2.12.5-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "e561593fccf61e8a20fc46dfc2dfe075b8be7d0188df33f221ad1f0139180f9d",
+          "size": 463580
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "c6348d0b726173eedc77b604fb2774851ac5d9280079e26d662497424b9ebeef",
+      "package": "pydantic",
+      "package_id": "pydantic@2.12.5#c6348d0b726173ee",
+      "policy_row_id": "pydantic-2-12-5-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "cfc26385856ad71976090d80892b2bde2900e3d7a8812758010662c9e54cef3c",
+        "commit_sha": "bd2d0dd0137dfa1a8fdff2529b9dfb1547980150",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "d81da0f522a9e261c72d1a0fc8902e3570adbe7348bed9fbd9c29ffb86c70121",
+        "repository": "https://github.com/pydantic/pydantic",
+        "tag": "v2.12.5"
+      },
+      "version": "2.12.5"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "pyparsing-3.3.2.tar.gz",
+          "kind": "sdist",
+          "sha256": "c777f4d763f140633dcb6d8a3eda953bf7a214dc4eff598413c070bcdc117cbc",
+          "size": 6851574
+        },
+        {
+          "filename": "pyparsing-3.3.2-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d",
+          "size": 122781
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "e878c3604b577b9d6c46821a05800aec0c4f5a79c27cdb7ca28e4d09cf450c0c",
+      "package": "pyparsing",
+      "package_id": "pyparsing@3.3.2#e878c3604b577b9d",
+      "policy_row_id": "pyparsing-3-3-2-external-install",
+      "retained_exceptions": [
+        "partial_sdist:pyparsing-3.3.2/docs/CONTRIBUTING.md"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "91a86be7d024df4241a09a112bbcf297f2289d5eec9c354748f179a2a2622a36",
+        "commit_sha": "fa24016d953353f8ba566abb5c8fc12e1d07556c",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "9ebb0376be9d5af9c894cadc57cf7aac9303acbf6d40a09f881fd1e6adf43dce",
+        "repository": "https://github.com/pyparsing/pyparsing",
+        "tag": "3.3.2"
+      },
+      "version": "3.3.2"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "python_dotenv-1.2.1.tar.gz",
+          "kind": "sdist",
+          "sha256": "42667e897e16ab0d66954af0e60a9caa94f0fd4ecf3aaf6d2d260eec1aa36ad6",
+          "size": 44221
+        },
+        {
+          "filename": "python_dotenv-1.2.1-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "b81ee9561e9ca4004139c6cbba3a238c32b03e4894671e181b671e8cb8425d61",
+          "size": 21230
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "4f005101a264cada0e607d307d8d85c0aaf616ebb9b4513e05e0e1aae3796622",
+      "package": "python-dotenv",
+      "package_id": "python-dotenv@1.2.1#4f005101a264cada",
+      "policy_row_id": "python-dotenv-1-2-1-external-install",
+      "retained_exceptions": [
+        "source_archive_mapping_exception_inherited",
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "e34a8df72a78aad24a7fae40613c2ab3319a61bb92aba00df9efa9748da945ef",
+        "commit_sha": "eaf2a9129ccec6febda0f741eb3bb852c3f947bd",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "b5c30adee7de755d411c6fb1ee351461c8250fe233f85dd04551e6fe1b959316",
+        "repository": "https://github.com/theskumar/python-dotenv",
+        "tag": "v1.2.1"
+      },
+      "version": "1.2.1"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "pyvista-0.48.4.tar.gz",
+          "kind": "sdist",
+          "sha256": "c639dad1bddff5e366d77371f66f783f6e6a0581446810a66439902222d8db07",
+          "size": 2581423
+        },
+        {
+          "filename": "pyvista-0.48.4-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "a46eda178e10e279afda550c341676a82dcee607c86db74565fa455ac0bd23e2",
+          "size": 2629373
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "3a4ab62c46a114e17ae6d69d9e74496c19314c0280536c853289e649ca84a6d0",
+      "package": "pyvista",
+      "package_id": "pyvista@0.48.4#3a4ab62c46a114e1",
+      "policy_row_id": "pyvista-0-48-4-external-install",
+      "retained_exceptions": [
+        "source_archive_mapping_exception_inherited",
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "10a25fea3cd5fa6df0d13f58ea0721b2cae39d3ff004a7138df7b61df0ed6488",
+        "commit_sha": "d91b8b7b9d7b07874a3d95c73a9790b67f5e0f58",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "553c07cabbd1abfb1616c7ba405d905208ba3c4d2e566d8ce72f229e05ce41a2",
+        "repository": "https://github.com/pyvista/pyvista",
+        "tag": "v0.48.4"
+      },
+      "version": "0.48.4"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "referencing-0.37.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8",
+          "size": 78036
+        },
+        {
+          "filename": "referencing-0.37.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231",
+          "size": 26766
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "591aa4ba27002e64d6402c58e3936841e6811113dafdf73c0d027546ea63f740",
+      "package": "referencing",
+      "package_id": "referencing@0.37.0#591aa4ba27002e64",
+      "policy_row_id": "referencing-0-37-0-external-install",
+      "retained_exceptions": [
+        "optional_commit_api_403_metadata_caveat",
+        "partial_sdist:referencing-0.37.0/CHANGELOG.rst"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "b980a3138ccba754c51713822e2b8a14eb07a4058ba3f6049c2aa82f37432443",
+        "commit_sha": "944ed5a20bc5125f2349156cbdc365daac0e67e6",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "970512520edb76faa93d8847e6b9708ac97a183b70586368d6bac454279f2e07",
+        "repository": "https://github.com/python-jsonschema/referencing",
+        "tag": "v0.37.0"
+      },
+      "version": "0.37.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "rich_rst-2.0.1.tar.gz",
+          "kind": "sdist",
+          "sha256": "cbe236ed0901d1ec8427cc6a50bf0a34353ba28ad014dc24def68bfe7f3b9e68",
+          "size": 300570
+        },
+        {
+          "filename": "rich_rst-2.0.1-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "7ee15f345ce25fa02b582c272a6cdbaf0c21243e38061cea273cff659bf3ef61",
+          "size": 272922
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "cab3a40445bb3963fd5b3e6bc5c742185738f0c85f99033b7b8a1a0f995125e5",
+      "package": "rich-rst",
+      "package_id": "rich-rst@2.0.1#cab3a40445bb3963",
+      "policy_row_id": "rich-rst-2-0-1-external-install",
+      "retained_exceptions": [
+        "optional_commit_api_403_metadata_caveat",
+        "bundled_component_exception:84"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 5,
+        "archive_notice_paths_sha256": "1b3538d59c1fd785c93e0e4335a8e134f9763b3483366458f73c8a5b9a8b0e5e",
+        "commit_sha": "7a0e1ad49cdff41708831e50f81d016acd1fed1f",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "0c20754bfa016c8a6721fd1b16baa709150553769fc13d5c6317606818319c94",
+        "repository": "https://github.com/wasi-master/rich-rst",
+        "tag": "v2.0.1"
+      },
+      "version": "2.0.1"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "scooby-0.11.2.tar.gz",
+          "kind": "sdist",
+          "sha256": "0575c73636ec4c2587bea1f8a038798ddcb249e02067fae897dac3bf4f4e444d",
+          "size": 242928
+        },
+        {
+          "filename": "scooby-0.11.2-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "f34c36bbee749b2c55816a080521f216d88304e635017e911c12249607d38c49",
+          "size": 20142
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "c5e495e36696e894724fcc6f12756abe8d106e0acca80eeebc28023af6c50482",
+      "package": "scooby",
+      "package_id": "scooby@0.11.2#c5e495e36696e894",
+      "policy_row_id": "scooby-0-11-2-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "5a9db594ec6e4b16891123406ce094c8b7dbb45c11f7a6eda8009220970c3775",
+        "commit_sha": "93816e93aeeea2e6ca5f694862386dc3882b4a8a",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "0d105eccdfec601e005ae4199b0eabf47b5ee449f2682b6fe7ff78f22f7220cf",
+        "repository": "https://github.com/banesullivan/scooby",
+        "tag": "v0.11.2"
+      },
+      "version": "0.11.2"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "setuptools-83.0.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "025bccbbf0fa05b6192bc64ae1e7b16e001fd6d6d4d5de03c97b1c1ade523bef",
+          "size": 1154254
+        },
+        {
+          "filename": "setuptools-83.0.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3",
+          "size": 1008090
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "8172c6f4fe6b1a3324e2a7b75cbc78536ed77076b9ac52a31a732b7f57e1b4ae",
+      "package": "setuptools",
+      "package_id": "setuptools@83.0.0#8172c6f4fe6b1a33",
+      "policy_row_id": "setuptools-83-0-0-external-install",
+      "retained_exceptions": [
+        "bundled_component_exception:309",
+        "selected_wheel_record_exception:180"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 38,
+        "archive_notice_paths_sha256": "b05a32ef44a235ead5fbc7fa1325b9285b4be3c878df5995635b12eca5a1a4da",
+        "commit_sha": "6519f728c6f23c992df81a5691ef7655184a20eb",
+        "notice_path_count": 20,
+        "notice_paths_sha256": "f88f5101dd8cd035187b412b69ce0ae2224a8de7f009e6409559326b67572bb8",
+        "repository": "https://github.com/pypa/setuptools",
+        "tag": "v83.0.0"
+      },
+      "version": "83.0.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "termcolor-3.3.0.tar.gz",
+          "kind": "sdist",
+          "sha256": "348871ca648ec6a9a983a13ab626c0acce02f515b9e1983332b17af7979521c5",
+          "size": 14434
+        },
+        {
+          "filename": "termcolor-3.3.0-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "cf642efadaf0a8ebbbf4bc7a31cec2f9b5f21a9f726f4ccbb08192c9c26f43a5",
+          "size": 7734
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "64a2fa1c82460ab257f5fd73a7c135c98c0a6e264b6353af50c316b64b5dded7",
+      "package": "termcolor",
+      "package_id": "termcolor@3.3.0#64a2fa1c82460ab2",
+      "policy_row_id": "termcolor-3-3-0-external-install",
+      "retained_exceptions": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "7eb249d19f48bd5dfd6e2e4cfef2a9c8332d021e6e72c2fc40818eb462530b5f",
+        "commit_sha": "0980eb52aa867fc32f70859a61c0609501b73a99",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "76f56bf161342cae3f67db0aed7de997e147d7a52eec693219b8765c591bd194",
+        "repository": "https://github.com/termcolor/termcolor",
+        "tag": "3.3.0"
+      },
+      "version": "3.3.0"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "typing_inspection-0.4.2.tar.gz",
+          "kind": "sdist",
+          "sha256": "ba561c48a67c5958007083d386c3295464928b01faa735ab8547c5692e87f464",
+          "size": 75949
+        },
+        {
+          "filename": "typing_inspection-0.4.2-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7",
+          "size": 14611
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "2a4401918a3ed27473cec9291b484ce5a964329a744cf4472cc363088cdac468",
+      "package": "typing-inspection",
+      "package_id": "typing-inspection@0.4.2#2a4401918a3ed274",
+      "policy_row_id": "typing-inspection-0-4-2-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "4020659b3f879492a7ba362d677b97523a0c1a08d68b3699ebeb384067577cad",
+        "commit_sha": "8db011350942f33ac4b5d7db60d4d9ea83ab480f",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "01dbd2b24767fbd33815091b21d9373df2ea847b62cc679f3ef1364a9e7a355b",
+        "repository": "https://github.com/pydantic/typing-inspection",
+        "tag": "v0.4.2"
+      },
+      "version": "0.4.2"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "urllib3-2.6.3.tar.gz",
+          "kind": "sdist",
+          "sha256": "1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed",
+          "size": 435556
+        },
+        {
+          "filename": "urllib3-2.6.3-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4",
+          "size": 131584
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "1c5efdbb1f54b25b10962ca2d3b86a9e63410193acb0ad940315f83079238060",
+      "package": "urllib3",
+      "package_id": "urllib3@2.6.3#1c5efdbb1f54b25b",
+      "policy_row_id": "urllib3-2-6-3-external-install",
+      "retained_exceptions": [
+        "optional_commit_api_403_metadata_caveat"
+      ],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "5f6e33baceaac77afb2636e2a18ff7671826c014a6a1184afbf41105ba9672bd",
+        "commit_sha": "0248277dd7ac0239204889ca991353ad3e3a1ddc",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "295c533e0e7c319a08cd0f609f9ee690446d95db29a789ec9c44eba3bbd0569b",
+        "repository": "https://github.com/urllib3/urllib3",
+        "tag": "2.6.3"
+      },
+      "version": "2.6.3"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "werkzeug-3.1.5.tar.gz",
+          "kind": "sdist",
+          "sha256": "6a548b0e88955dd07ccb25539d7d0cc97417ee9e179677d22c7041c8f078ce67",
+          "size": 864754
+        },
+        {
+          "filename": "werkzeug-3.1.5-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "5111e36e91086ece91f93268bb39b4a35c1e6f1feac762c9c822ded0a4e322dc",
+          "size": 225025
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "9963a7baa4c1588ade2caaf4fe07f53c06bf94350633ae452e449ba30a43f64f",
+      "package": "werkzeug",
+      "package_id": "werkzeug@3.1.5#9963a7baa4c1588a",
+      "policy_row_id": "werkzeug-3-1-5-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 3,
+        "archive_notice_paths_sha256": "a8f8f68871567ed618935e37bc008ff1b7c5edd45d7c0d1da69bce1fd309115c",
+        "commit_sha": "e3d06f4b1f7ff40a63eba78f81d9cda18f805d6d",
+        "notice_path_count": 3,
+        "notice_paths_sha256": "0f3d96de95fbaf6cde42eb8ebd2d97ddcb711e24bf4254b69a569833bed5c5a0",
+        "repository": "https://github.com/pallets/werkzeug",
+        "tag": "3.1.5"
+      },
+      "version": "3.1.5"
+    },
+    {
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "artifact_location": "private immutable upstream archive cache; retained outside the repository",
+      "artifacts": [
+        {
+          "filename": "wheel-0.46.3.tar.gz",
+          "kind": "sdist",
+          "sha256": "e3e79874b07d776c40bd6033f8ddf76a7dad46a7b8aa1b2787a83083519a1803",
+          "size": 60605
+        },
+        {
+          "filename": "wheel-0.46.3-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "4b399d56c9d9338230118d705d9737a2a468ccca63d5e813e2a4fc7815d8bc4d",
+          "size": 30557
+        }
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "disposition": "external_dependency_not_redistributed",
+      "identity_sha256": "4d48daff797d01ae39511dc45d1fb9f41d0a40f92698b7ccaf3c73687345ccd4",
+      "package": "wheel",
+      "package_id": "wheel@0.46.3#4d48daff797d01ae",
+      "policy_row_id": "wheel-0-46-3-external-install",
+      "retained_exceptions": [],
+      "status": "reviewed",
+      "upstream": {
+        "archive_notice_absences": [],
+        "archive_notice_path_count": 2,
+        "archive_notice_paths_sha256": "2236d1cd85b3249aa7743d88fa414d85fe19637ec91b81850d2a4dcbd883f677",
+        "commit_sha": "8b6fa740a7101edacb42b0f8e83a1b659ff61033",
+        "notice_path_count": 2,
+        "notice_paths_sha256": "91536964dc8cf0f91613aa70212c8a38f88ff04b219ba34cc4f469a7f41f5db6",
+        "repository": "https://github.com/pypa/wheel",
+        "tag": "0.46.3"
+      },
+      "version": "0.46.3"
+    }
+  ],
+  "schema_version": "robot-sf.p06.8163.staged-external-only-receipt.v1",
+  "scope": {
+    "all_profile_extra_count": 12,
+    "all_profile_extras": [
+      "viz",
+      "maps",
+      "benchmark",
+      "training",
+      "gpu",
+      "recurrent",
+      "progress",
+      "analytics",
+      "browser",
+      "sacadrl",
+      "socnav",
+      "criticality"
+    ],
+    "allowed_distribution_modes": [
+      "user_installed",
+      "not_distributed"
+    ],
+    "artifact_count": 72,
+    "blocked_distribution_modes": [
+      "bundled_source",
+      "built_companion"
+    ],
+    "blocked_surface_conditions": [
+      "mirrored",
+      "vendored",
+      "container_bundled",
+      "unknown",
+      "unavailable",
+      "conflicting"
+    ],
+    "excluded_issues": [
+      8169,
+      8171
+    ],
+    "issue_outside_selected_rows": 9,
+    "outside_selected_lock_package_count": 300,
+    "package_count": 36,
+    "policy_disposition": "external_dependency_not_redistributed",
+    "profile_id": "all",
+    "selected_profile_package_count": 156
+  },
+  "source": {
+    "base_ref": "origin/main",
+    "base_sha": "4944e7a75d7a3d08d2879c500780ee0d7725bd67",
+    "integration_parent_sha": "cbdcc3245b47e4d0ccbde011f60551889172d819",
+    "integration_parent_tree_sha": "d797dfb3e2ee82c2977a41a37bd97c6166f496c0",
+    "policy": {
+      "path": "scripts/validation/dependency_license_policy.v1.json",
+      "sha256": "6ba0e661bd7a61b60061706f3fab2f6aeb8ec0bd7b581b5097d74e3c8f1b62c7"
+    },
+    "profile_manifest": {
+      "path": "scripts/validation/dependency_license_profiles.v1.json",
+      "sha256": "14e7fb3dd4b9364f0edcca160157eb503611d50d3708fc578eb8db640cac8b13"
+    },
+    "profile_package_ids_sha256": "0db3c0662fa0e378b69cf8a703b3b9e51bd2eaf23f58529034d642d1505acf6f",
+    "pyproject_sha256": "77ace5438bcef4c1176a42ae58edb31d1864212b4bb65e253c761e79d262a0cf",
+    "repository": "ll7/robot_sf_ll7",
+    "uv_lock_sha256": "d01cbbf7fb7215d140b3c78f66202e0c48e449601f809036f5e02e9a9bfb79c7"
+  },
+  "status": "reviewed_staged_external_only",
+  "validation": {
+    "candidate_bound_replay": {
+      "candidate_archive_location": "private P04v2 diagnostic bundle; retained outside the repository",
+      "candidate_archive_members": [
+        {
+          "filename": "robot_sf-0.0.6-py3-none-any.whl",
+          "kind": "wheel",
+          "sha256": "2348a67ef889f050d677f4c4d6660ca71372b56f73e25bd8932296eb564ecb7c",
+          "size": 5324995
+        },
+        {
+          "filename": "robot_sf-0.0.6.tar.gz",
+          "kind": "sdist",
+          "sha256": "35e9ba11cb855489a1594d54ce9a509426ee6ce39a97f00feb6250cb80db4f54",
+          "size": 4602364
+        },
+        {
+          "filename": "robot_sf-0.0.6.cyclonedx.json",
+          "kind": "sbom",
+          "sha256": "a6c2d0ee46740647ad0caa036601f40c6f6ae12d54687856df0540172855c11d",
+          "size": 49891
+        },
+        {
+          "filename": "candidate-provenance.json",
+          "kind": "provenance",
+          "sha256": "68e82d94b44f341db8249d3b568a460d9fd1dad6112da3ae63ff97875b31052a",
+          "size": 2757
+        }
+      ],
+      "candidate_bound": true,
+      "candidate_bundle_sbom_sha256": "a6c2d0ee46740647ad0caa036601f40c6f6ae12d54687856df0540172855c11d",
+      "candidate_expected_component_count": 155,
+      "candidate_manifest_sha256": "d1ed5ca826eff94123b5e781173df7e67026d3db31e8a334ee10e96aaef992d0",
+      "candidate_profile_ids": [
+        "all"
+      ],
+      "candidate_source_sha": "fb6896576a9240838901f2b0994f288ec510c827",
+      "candidate_tree_sha": "1ca7f58207e7425942498d27368c3fd4ade2047b",
+      "command": "/home/luttkule/git/robot_sf_ll7/scripts/dev/run_worktree_shared_venv.sh -- uv run python /home/luttkule/git/robot_sf_ll7.worktrees/issue-8163-staged-external-dispositions-20260911/scripts/tools/check_dependency_license_inventory.py --repo-root /home/luttkule/git/robot_sf_ll7.worktrees/issue-8163-staged-external-dispositions-20260911 --output /home/luttkule/git/robot_sf_ll7/.git/codex-agent-runs/release-handoff-20260910-01a08b4d/resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.json --candidate-bundle /home/luttkule/git/robot_sf_ll7/.git/codex-agent-runs/release-handoff-20260910-01a08b4d/P04-policy-fix/diagnostic-bundle-v2 --profile all --fail-on-unresolved",
+      "current_source_sha": "cbdcc3245b47e4d0ccbde011f60551889172d819",
+      "current_source_tree_sha": "d797dfb3e2ee82c2977a41a37bd97c6166f496c0",
+      "exit_code": 2,
+      "log": {
+        "artifact_path": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.log",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.log",
+        "sha256": "1545c58756c3c166728642fca306d256b81d6b464bdc6a4f7bea131cbe12a73e",
+        "size_bytes": 827
+      },
+      "rc": {
+        "artifact_path": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.rc",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.rc",
+        "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+        "size_bytes": 2
+      },
+      "report": {
+        "artifact_path": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.json",
+        "schema_version": "robot-sf.dependency-license-inventory.v1",
+        "sha256": "e19f26d5031ae372caea0f689cbbf81f15614c646ac29b02a32d0766cb5b875d",
+        "size_bytes": 4607784,
+        "status": "blocked"
+      },
+      "source_candidate_same_as_current": false,
+      "status": "diagnostic_candidate_bound_replay",
+      "summary": {
+        "candidate_bound": true,
+        "policy_exact_disposition_count": 37,
+        "policy_exact_match_count": 37,
+        "policy_pending_package_count": 119,
+        "selected_package_count": 156,
+        "status": "blocked",
+        "structural_issue_count": 0,
+        "unrepresented_unresolved_count": 3,
+        "unresolved_count": 119
+      },
+      "validator_sha256": "d3fbdadcd03ac70b5e87fb45eb7cec55e0623a602b0cf7b89054f71a89e53b34"
+    },
+    "post_integration_identity": {
+      "artifact": {
+        "artifact_path": "resume-20260911/P06-8163-integration/26-post-identity-check.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/26-post-identity-check.json",
+        "schema_version": "robot-sf.p06.8163.integration-identity-check.v1",
+        "sha256": "b0c7fae7ce21f7208fae83df7c6a49fcc5e8a69bb7a73758458e45a37d141277",
+        "size_bytes": 1644,
+        "status": "pass"
+      },
+      "artifact_matches": 36,
+      "decision_rows": 36,
+      "identity_matches": 36,
+      "selected_name_matches": 36,
+      "status": "pass"
+    },
+    "source_only_diagnostic": {
+      "candidate_bound": false,
+      "report": {
+        "artifact_path": "resume-20260911/P06-8163-integration/10-strict-all.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/10-strict-all.json",
+        "schema_version": "robot-sf.dependency-license-inventory.v1",
+        "sha256": "975b7c56e909516247701ccfb592fc679dfe1d524e30dfcdb475ec39f381f296",
+        "size_bytes": 4844226,
+        "status": "blocked"
+      },
+      "status": "blocked",
+      "summary": {
+        "artifact_path": "resume-20260911/P06-8163-integration/11-strict-all-summary.json",
+        "location": "private run artifact; retained outside the repository evidence tree",
+        "path_hint": "resume-20260911/P06-8163-integration/11-strict-all-summary.json",
+        "schema_version": "robot-sf.p06.8163.strict-all-summary.v1",
+        "sha256": "9ae44dd8af09b5534ba5f2715e864d73a552973a51b58455003e5541bda34a13",
+        "size_bytes": 48314,
+        "status": "blocked"
+      }
+    },
+    "status": "blocked_remaining_selected_rows",
+    "strict_all_candidate_binding": "diagnostic candidate-bound replay; not current/final candidate custody or release admission",
+    "strict_all_selected_unresolved_rows": 119,
+    "strict_all_structural_issue_count": 0,
+    "strict_all_unrepresented_unresolved_rows": 3,
+    "strict_all_unresolved_rows": 119
+  }
+}

@@ -102,9 +102,10 @@ def test_issue_8163_policy_batch_has_exact_scope_and_fail_closed_surfaces() -> N
             "unavailable",
             "vendored",
         }
-        assert row["status"] == "pending_review"
-        assert row["reviewer"] is None
-        assert row["reviewed_at"] is None
+        assert row["status"] == "reviewed"
+        assert "gpt-6-astra/medium" in row["reviewer"]
+        assert "Luna/max" in row["reviewer"]
+        assert row["reviewed_at"] == "2026-09-11T08:28:09.073217Z"
         assert re.fullmatch(r"[0-9a-f]{40}", row["upstream"]["commit_sha"])
         assert all(
             re.search(r"/(?:blob|tree)/[0-9a-f]{40}(?:/|$)", url)

@@ -115,6 +115,7 @@ Feature-focused demos for developers exploring capabilities.
 | [36 Optional Capability Handling](./advanced/36_optional_capability_handling.py) | Handle unavailable optional capabilities without fallback or fabricated success. | _None_ | tutorial, errors, fixtures, validation | ✅ |
 | [37 Custom Planner Protocol](./advanced/37_custom_planner_protocol.py) | Implement and run the smallest planner compatible with LocalPlannerProtocol. | _None_ | tutorial, planner, protocol, validation | ✅ |
 | [38 Compare Resolved Configs](./advanced/38_compare_resolved_configs.py) | Compare two resolved training configurations and explain semantic drift. | uv sync --all-extras | config, provenance, analysis | ⚠️ Imports the canonical training-config resolver, which pulls the training stack; run locally with the fixture pair. |
+| [39 Failed Campaign Diagnosis](./advanced/39_failed_campaign_diagnosis.py) | Inspect a retained failed-campaign dossier without rerunning it. | _None_ | campaign, diagnostics, provenance, validation | ✅ |
 
 ## Benchmarks
 

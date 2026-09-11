@@ -165,12 +165,15 @@ def test_documented_python_commands_use_project_environment() -> None:
 def test_fresh_worktree_commands_use_shared_environment_wrapper() -> None:
     """Fresh linked-worktree commands must show the complete shared-venv wrapper."""
     agents_text = AGENTS_MD.read_text(encoding="utf-8")
-    agents_fresh_section = agents_text.split("## Fresh Worktree Bootstrap", maxsplit=1)[1].split(
-        "If the current branch is not `main`", maxsplit=1
-    )[0]
-    for line in agents_fresh_section.splitlines():
-        if "uv run" in line:
-            assert SHARED_VENV_WRAPPER in line
+    assert "docs/dev/worktree_lifecycle.md" in agents_text
+    assert "uv venv .venv && uv sync --all-extras" not in agents_text, (
+        "worktree bootstrap procedure belongs to docs/dev/worktree_lifecycle.md"
+    )
+
+    lifecycle_text = (REPO_ROOT / "docs" / "dev" / "worktree_lifecycle.md").read_text(
+        encoding="utf-8"
+    )
+    assert SHARED_VENV_WRAPPER in lifecycle_text
 
     entrypoints_text = ENTRYPOINTS_DOC.read_text(encoding="utf-8")
     route_table = entrypoints_text.split("## Task Routes And Preflight Discipline", maxsplit=1)[
@@ -400,12 +403,16 @@ def test_agents_md_task_scoped_context_and_mode_specific_sync() -> None:
     assert "AGENTS.md" in text
     assert "docs/ai/agent_workflow_entrypoints.md" in text
 
-    # Verify mode-specific branch sync distinction
-    assert "branch synchronization is mode-specific:" in text
-    assert "For implementation worktrees, fetch latest `origin/main` and merge it early" in text
-    assert "never merge `origin/main` into the implementation branch" in text
-    assert "review_worktree_guard.py" in text
-    assert "#8321" in text
+    # Worktree and branch procedure is owned by the lifecycle document, not restated here.
+    assert "## Mutation And Delivery Triggers" in text
+    assert "docs/dev/worktree_lifecycle.md" in text
+    lifecycle_text = (REPO_ROOT / "docs" / "dev" / "worktree_lifecycle.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Branch synchronization" in lifecycle_text
+    assert "merge `origin/main` into the implementation branch" in lifecycle_text
+    assert "review_worktree_guard.py" in lifecycle_text
+    assert "#8321" in lifecycle_text
 
     passive_route_bullet = "- **Read-only observation / review**:"
     assert passive_route_bullet not in text, (

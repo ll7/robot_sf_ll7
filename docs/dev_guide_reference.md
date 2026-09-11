@@ -656,6 +656,16 @@ was running. Use `scripts/dev/check_prepublication_state.py` around expensive pu
 3. Treat `superseded` and `blocked` as fail-closed stops. Treat `refresh-required` as stale
    evidence; run `sync --integrate` only from a clean worktree, resolve conflicts if needed, then
    rerun readiness and capture a new baseline.
+4. A `blocked` result with reason `undeclared_stack` is a distinct ancestry failure, not a
+   `sync --integrate` case. It means the branch's merge base is older than the live `origin/main`
+   tip, usually because `main` advanced after an earlier merge of `main` into the branch
+   (issue #8864). Reconstruct only the intended commits on current `origin/main`
+   (`git rebase --onto origin/main <merge-base> <branch>`, or recreate the branch from
+   `origin/main` and re-apply the intended changes), then regenerate generated files such as
+   `scripts/validation/docstring_todo_baseline.json`. A rebase or re-creation moves the head, so
+   the local readiness stamp must be refreshed before publication. A canonical
+   `## Stack Declaration` is the alternative only for a genuine stack over a declared parent PR;
+   an ordinary stale-`main` branch must be rebased.
 
 The gate records the exact before/after SHAs, any newly opened covering PR, and any merged PR that
 explicitly closes the issue. An open PR is matched only when its title or body contains an explicit

@@ -432,6 +432,9 @@ _FAST_FILES = {
     # PR shards exclude slow tests, so without this registration a cleanup PR
     # can skip the guard and turn main red only after merge (issue #9000).
     "test_check_docstring_todos.py",
+    # Routed-worker path/hash contract tests are deterministic and provide
+    # exact-head changed-line coverage for the manifest producer (issue #8925).
+    "test_routed_worker_manifest.py",
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",

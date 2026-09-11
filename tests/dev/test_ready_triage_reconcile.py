@@ -6,7 +6,10 @@ labels without a current, drift-checked classification.
 
 from __future__ import annotations
 
+import json
 from typing import Any
+
+import pytest
 
 from scripts.dev import ready_triage_reconcile as reconcile
 
@@ -110,6 +113,70 @@ def test_apply_removes_triage_after_drift_check() -> None:
     assert removed == [(7611, "needs-triage")]
 
 
+def test_apply_defers_when_live_classification_changes_even_if_action_does_not() -> None:
+    raw = _raw_issue(labels=["state:ready", "needs-triage", "type:workflow"])
+    row = reconcile.plan_row(raw, repo="ll7/robot_sf_ll7")
+    live = _raw_issue(
+        labels=["state:ready", "needs-triage", "type:workflow", "slurm"],
+    )
+    removed: list[tuple[int, str]] = []
+
+    applied = reconcile.apply_row(
+        row,
+        repo="ll7/robot_sf_ll7",
+        fetch_issue=lambda number, repo="": live,
+        label_remover=lambda number, label, repo="": (
+            removed.append((number, label)) or {"status": "ok"}
+        ),
+    )
+
+    assert applied["action"] == "deferred"
+    assert "stale plan" in applied["reason"]
+    assert removed == []
+
+
+def test_apply_defers_when_live_issue_is_closed() -> None:
+    raw = _raw_issue(labels=["state:ready", "needs-triage", "type:workflow"])
+    row = reconcile.plan_row(raw, repo="ll7/robot_sf_ll7")
+    live = _raw_issue(labels=["state:ready", "needs-triage", "type:workflow"])
+    live["state"] = "closed"
+    removed: list[tuple[int, str]] = []
+
+    applied = reconcile.apply_row(
+        row,
+        repo="ll7/robot_sf_ll7",
+        fetch_issue=lambda number, repo="": live,
+        label_remover=lambda number, label, repo="": (
+            removed.append((number, label)) or {"status": "ok"}
+        ),
+    )
+
+    assert applied["action"] == "deferred"
+    assert "not open" in applied["reason"]
+    assert removed == []
+
+
+def test_apply_defers_when_live_contract_is_incomplete() -> None:
+    live = _raw_issue(labels=["state:ready", "needs-triage"], body=INCOMPLETE_BODY)
+    row = reconcile.plan_row(live, repo="ll7/robot_sf_ll7")
+    planned_action = row["action"]
+    removed: list[tuple[int, str]] = []
+
+    applied = reconcile.apply_row(
+        row,
+        repo="ll7/robot_sf_ll7",
+        fetch_issue=lambda number, repo="": live,
+        label_remover=lambda number, label, repo="": (
+            removed.append((number, label)) or {"status": "ok"}
+        ),
+    )
+
+    assert planned_action == "remove_ready"
+    assert applied["action"] == "deferred"
+    assert "contract is incomplete" in applied["reason"]
+    assert removed == []
+
+
 def test_apply_defers_on_label_drift() -> None:
     raw = _raw_issue(labels=["state:ready", "needs-triage", "type:workflow"])
     row = reconcile.plan_row(raw, repo="ll7/robot_sf_ll7")
@@ -157,3 +224,61 @@ def test_apply_never_mutates_report_only_rows() -> None:
     )
 
     assert applied == row
+
+
+@pytest.mark.parametrize("max_pages", [0, -1])
+def test_inventory_rejects_nonpositive_page_budgets(
+    max_pages: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_if_called(path: str) -> object:
+        raise AssertionError(f"REST must not run for max_pages={max_pages}: {path}")
+
+    monkeypatch.setattr(reconcile, "run_gh_api_or_raise", fail_if_called)
+
+    with pytest.raises(ValueError, match="max_pages must be >= 1"):
+        reconcile.list_contradictory_issues("ll7/robot_sf_ll7", max_pages=max_pages)
+
+
+def test_inventory_fails_closed_when_page_budget_ends_on_full_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    full_page = [
+        _raw_issue(
+            labels=["state:ready", "needs-triage", "type:workflow"],
+            number=number,
+        )
+        for number in range(1, reconcile.PAGE_SIZE + 1)
+    ]
+    paths: list[str] = []
+
+    def fake_run(path: str) -> object:
+        paths.append(path)
+        return object()
+
+    monkeypatch.setattr(reconcile, "run_gh_api_or_raise", fake_run)
+    monkeypatch.setattr(reconcile, "parse_json", lambda result, *, what: (full_page, None))
+
+    with pytest.raises(reconcile.InventoryIncompleteError, match="incomplete"):
+        reconcile.list_contradictory_issues("ll7/robot_sf_ll7", max_pages=1)
+
+    assert paths == [
+        "repos/ll7/robot_sf_ll7/issues?state=open&labels=state:ready,needs-triage"
+        "&per_page=100&page=1"
+    ]
+
+
+def test_main_reports_incomplete_inventory_without_planning(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fail_scan(repo: str, *, max_pages: int) -> list[dict[str, Any]]:
+        raise reconcile.InventoryIncompleteError(pages_read=max_pages, max_pages=max_pages)
+
+    monkeypatch.setattr(reconcile, "list_contradictory_issues", fail_scan)
+
+    exit_code = reconcile.main(["--json", "--max-pages", "1"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 2
+    assert payload["inventory"]["complete"] is False
+    assert payload["inventory"]["truncated"] is True
+    assert payload["rows"] == []

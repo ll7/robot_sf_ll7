@@ -39,6 +39,10 @@ workflow or change branch protection.
   preflight; use `--preflight <skill>` before relying on a skill's declared requirements.
 - `scripts/tools/sync_ai_config.py --check` keeps provider adapters thin, scoped, and linked to
   canonical sources (see [`.agents/README.md`](../../.agents/README.md)).
+- [`check_agent_instructions.sh`](check_agent_instructions.sh) composes the three checks above into
+  one entry point for instruction-contract changes; run
+  `scripts/dev/check_agent_instructions.sh` (optional `--json`). It is also available as the VS Code
+  task `Agent Instruction Checks`.
 
 These are contract checks for repository instructions, not PR merge gates;
 `pr_ready_check.sh` remains the required readiness entry point.

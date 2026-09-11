@@ -15,10 +15,10 @@ from robot_sf.benchmark.full_classic.planning import plan_scenarios
 
 
 def test_plan_scenarios_seed_count(config_factory):  # uses test double BenchmarkConfig
-    """TODO docstring. Document this function.
+    """Verify plan_scenarios plans exactly cfg.initial_episodes seeds per scenario.
 
     Args:
-        config_factory: TODO docstring.
+        config_factory: Fixture building a config double with initial_episodes=7.
     """
     cfg = config_factory(initial_episodes=7)
     raw = [

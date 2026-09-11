@@ -104,6 +104,13 @@ separate. No scientific score or admission decision is computed; stale, missing,
 duplicate, wrong-schema, or unsanitized input masks affected rows as explicit `unavailable`, and
 output carries no private paths, hostnames, accounts, credentials, or signed URLs.
 
+## Checkpoint Compatibility Audit
+
+[`scripts/models/audit_checkpoint_compatibility.py`](../../scripts/models/audit_checkpoint_compatibility.py)
+audits a sanitized overlay into a deterministic JSON plus Markdown inventory with nine terminal
+states and stable reason codes; `--check` exits 1 when an active consumer's required model is not
+recoverable and load-verified and 2 for unknown input (see the module docstring).
+
 ## Sanitized Lineage Index
 
 [`scripts/tools/lineage_index.py`](../../scripts/tools/lineage_index.py) joins compact sanitized

@@ -14,10 +14,10 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 def test_precision_report_structure(config_factory):
-    """TODO docstring. Document this function.
+    """Verify a smoke run writes a statistical sufficiency report with required keys.
 
     Args:
-        config_factory: TODO docstring.
+        config_factory: Fixture building the smoke-mode benchmark config.
     """
     cfg = config_factory(smoke=True)
     manifest = run_full_benchmark(cfg)

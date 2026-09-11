@@ -15,11 +15,11 @@ from robot_sf.benchmark.full_classic.plots import generate_plots
 
 
 def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
-    """TODO docstring. Document this function.
+    """Verify smoke-mode plotting writes a PDF and reports artifact kind/status.
 
     Args:
-        temp_results_dir: TODO docstring.
-        synthetic_episode_record: TODO docstring.
+        temp_results_dir: Temporary directory receiving the plot output.
+        synthetic_episode_record: Factory building the single episode record.
     """
     out_dir = Path(temp_results_dir) / "plots"
     records = [
@@ -31,14 +31,14 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
     ]
 
     class _Metric:
-        """TODO docstring. Document this class."""
+        """Minimal metric double carrying mean and percentile fields."""
 
         def __init__(self, name, mean):
-            """TODO docstring. Document this function.
+            """Store the metric identity and mean used across all aggregates.
 
             Args:
-                name: TODO docstring.
-                mean: TODO docstring.
+                name: Metric identifier.
+                mean: Central value mirrored into median and p95.
             """
             self.name = name
             self.mean = mean
@@ -48,10 +48,10 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
             self.median_ci = None
 
     class _Group:
-        """TODO docstring. Document this class."""
+        """Minimal aggregate-group double with rate metrics for one archetype."""
 
         def __init__(self):
-            """TODO docstring. Document this function."""
+            """Initialize a crossing/low group with collision and success metrics."""
             self.archetype = "crossing"
             self.density = "low"
             self.count = 1
@@ -63,7 +63,7 @@ def test_generate_plots_smoke(temp_results_dir, synthetic_episode_record):
     groups = [_Group()]
 
     class _Cfg:
-        """TODO docstring. Document this class."""
+        """Minimal config stub enabling smoke mode."""
 
         smoke = True
 

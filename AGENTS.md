@@ -99,7 +99,7 @@ matrix is owned by `docs/code_review.md`; benchmark governance by `docs/benchmar
 
 Use conventional commits. A PR states intent, linked issues, validation commands, artifact
 disposition, and downstream propagation; because merges squash, reconcile the final title and body
-with `scripts/dev/gh_pr_body_rest.py` and pass Markdown-heavy comments through
+with `uv run python scripts/dev/gh_pr_body_rest.py` and pass Markdown-heavy comments through
 `scripts/dev/gh_comment.sh` or a body file. Prefer concise-but-explanatory reporting: what changed,
 why it matters, remaining risk, and uncertainty separated from observed evidence. When a persistent
 plan is required (Coordinated and Evidence-critical profiles), follow `.agents/PLANS.md`; delivery

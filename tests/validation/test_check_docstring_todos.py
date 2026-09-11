@@ -305,7 +305,11 @@ def test_committed_baseline_matches_base_ref_no_phantom_keys():
     drift, reverse = check_docstring_todos.compare_baseline_drift(ref_report, baseline)
 
     assert drift == [], f"baseline is stale vs base ref: {drift}"
-    assert reverse == [], f"baseline exceeds base ref (phantom keys): {reverse}"
+    assert reverse == [], (
+        "baseline exceeds base ref (phantom keys): "
+        f"{reverse}; regenerate with: uv run python scripts/validation/check_docstring_todos.py "
+        "--mode write-baseline"
+    )
 
 
 def test_committed_baseline_matches_working_tree_backlog(monkeypatch):
@@ -330,7 +334,11 @@ def test_committed_baseline_matches_working_tree_backlog(monkeypatch):
     drift, reverse = check_docstring_todos.compare_baseline_drift(report, baseline)
 
     assert drift == []
-    assert reverse == []
+    assert reverse == [], (
+        "committed baseline exceeds the working tree; regenerate with: "
+        "uv run python scripts/validation/check_docstring_todos.py --mode write-baseline "
+        f"({reverse})"
+    )
 
 
 def test_detect_working_tree_drift_flags_stale_baseline_after_cleanup(tmp_path):

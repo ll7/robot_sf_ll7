@@ -111,6 +111,22 @@ declared companion (`--companion NAME=PATH`), checks git tree cleanliness, and e
 sanitized `staged_source_isolation_receipt.v1` artifact without revealing private host paths.
 Exit codes: `0` passed, `1` blocked, `2` malformed.
 
+## SLURM launcher static audit (check-only)
+
+Before submitting or handing off SLURM scripts and wrappers, audit them for stale partitions,
+missing job names, missing timeouts, unsafe log paths, hardcoded host/user paths, unbounded
+arrays, conflicting GPU requests, stale module commands, missing preflight, and non-portable resume:
+
+```bash
+uv run python scripts/validation/audit_slurm_launchers.py \
+  [<launcher-files>...] --check --format json
+```
+
+The audit tool is static, credential-safe, and read-only. It parses `#SBATCH` directives and
+wrapper flags, compares them against sanitized capability classes, and reports violations
+with exit code 0 (clean) or 1 (errors found).
+
+
 ## Training submission queue
 
 Use `experiments/submission_queue.yaml` for reviewable planned training submissions that should be

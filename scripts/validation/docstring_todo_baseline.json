@@ -13,8 +13,8 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 60,
-      "occurrences": 418
+      "files": 38,
+      "occurrences": 261
     }
   },
   "files": {
@@ -27,24 +27,12 @@
     "tests/perf_utils/test_guidance.py": 3,
     "tests/perf_utils/test_slow_report_fixture.py": 1,
     "tests/research/test_extractor_report.py": 2,
-    "tests/test_aggregate.py": 9,
     "tests/test_baseline_ppo_smoke.py": 3,
-    "tests/test_baseline_stats.py": 4,
     "tests/test_benchmark_imitation_manifest.py": 14,
     "tests/test_classic_interactions_matrix.py": 4,
-    "tests/test_cli.py": 14,
-    "tests/test_cli_aggregate.py": 9,
-    "tests/test_cli_extract_failures.py": 9,
-    "tests/test_cli_plot_distributions.py": 6,
-    "tests/test_cli_plot_distributions_ci.py": 6,
-    "tests/test_cli_ranking.py": 6,
     "tests/test_cli_run_snqi.py": 3,
     "tests/test_cli_run_snqi_from.py": 7,
-    "tests/test_cli_run_video.py": 3,
-    "tests/test_cli_seed_variance.py": 6,
     "tests/test_cli_snqi_ablation.py": 5,
-    "tests/test_cli_table.py": 3,
-    "tests/test_cli_table_tex.py": 6,
     "tests/test_error_policy.py": 6,
     "tests/test_failure_extractor.py": 5,
     "tests/test_force_field_figure.py": 2,
@@ -52,19 +40,11 @@
     "tests/test_full_classic_visuals_missing_matplotlib.py": 8,
     "tests/test_full_classic_visuals_renderer_toggle.py": 12,
     "tests/test_full_classic_visuals_simview_fallback.py": 15,
-    "tests/test_generate_figures_summary_ci_missing_and_suffix.py": 8,
-    "tests/test_generate_figures_table_tex.py": 2,
     "tests/test_lidar_render.py": 11,
     "tests/test_manifest_resume.py": 8,
-    "tests/test_metrics.py": 25,
-    "tests/test_metrics_success_rate.py": 7,
-    "tests/test_plots_pareto.py": 10,
-    "tests/test_ranking.py": 6,
     "tests/test_render_error_message.py": 1,
     "tests/test_runner_batch.py": 2,
     "tests/test_runner_resume.py": 2,
-    "tests/test_seed_variance.py": 7,
-    "tests/test_summary.py": 4,
     "tests/test_svg_classic_maps_format.py": 3,
     "tests/test_tracking/test_history.py": 8,
     "tests/test_tracking/test_manifest_writer.py": 6,
@@ -73,9 +53,7 @@
     "tests/test_visualizablesimstate.py": 1,
     "tests/tools/test_analyze_imitation_results.py": 8,
     "tests/tools/test_compare_training_runs.py": 9,
-    "tests/unit/test_cli_logging_flags.py": 2,
     "tests/unit/test_hardware_profile_capture.py": 5,
-    "tests/unit/test_metrics_edge_cases.py": 5,
     "tests/unit/test_resume_manifest.py": 18,
     "tests/unit/test_runner_video.py": 10
   },
@@ -87,7 +65,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 60,
-    "total_occurrences": 418
+    "files": 38,
+    "total_occurrences": 261
   }
 }

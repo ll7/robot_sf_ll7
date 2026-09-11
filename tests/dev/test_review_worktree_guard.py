@@ -46,9 +46,18 @@ def _fixture_repo(tmp_path: Path) -> tuple[Path, Path]:
     return repo, remote
 
 
-def _configure(worktree: Path, mode: str) -> subprocess.CompletedProcess[str]:
+def _configure(worktree: Path, mode: str, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(GUARD), "configure", "--worktree", str(worktree), "--mode", mode],
+        [
+            sys.executable,
+            str(GUARD),
+            "configure",
+            "--worktree",
+            str(worktree),
+            "--mode",
+            mode,
+            *extra,
+        ],
         cwd=worktree,
         capture_output=True,
         text=True,
@@ -906,3 +915,226 @@ def test_hook_is_executable_and_shell_valid() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+PR_GATE_LEASE = REPO_ROOT / "scripts" / "dev" / "pr_gate_lease.py"
+WORKTREE_RECEIPT = REPO_ROOT / "scripts" / "dev" / "worktree_receipt.py"
+
+
+def _lease_create(worktree: Path, task_id: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(PR_GATE_LEASE),
+            "create",
+            "--worktree",
+            str(worktree),
+            "--gate-id",
+            task_id,
+            "--owner",
+            task_id,
+        ],
+        cwd=worktree,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _receipt_create(worktree: Path, task_id: str, output: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(WORKTREE_RECEIPT),
+            "create",
+            "--worktree",
+            str(worktree),
+            "--task-id",
+            task_id,
+            "--base-ref",
+            "HEAD",
+            "--output",
+            str(output),
+        ],
+        cwd=worktree,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _create_worktree(
+    repo: Path,
+    path: Path,
+    branch: str,
+    *,
+    mode: str = "implementation",
+    task_id: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command = [
+        str(CREATE_WORKTREE),
+        "--path",
+        str(path),
+        "--branch",
+        branch,
+        "--base",
+        "HEAD",
+        "--minimum-free-bytes",
+        "0",
+        "--mode",
+        mode,
+    ]
+    if task_id is not None:
+        command.extend(["--task-id", task_id])
+    return subprocess.run(command, cwd=repo, capture_output=True, text=True, check=False)
+
+
+def test_review_configure_refuses_a_live_foreign_lease(tmp_path: Path) -> None:
+    """A reviewer must not capture a worktree that another task actively leases."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "publication"
+    branch = "task/publication"
+    try:
+        created = _create_worktree(repo, worktree, branch)
+        assert created.returncode == 0, created.stdout + created.stderr
+        leased = _lease_create(worktree, "coordinator-task")
+        assert leased.returncode == 0, leased.stdout + leased.stderr
+
+        refused = _configure(worktree, "review", "--task-id", "review-task")
+
+        assert refused.returncode == 1
+        payload = json.loads(refused.stdout)
+        assert payload["ok"] is False
+        assert "coordinator-task" in payload["error"]
+        assert "live lease" in payload["error"]
+        mode = _git(worktree, "config", "--get", "robot-sf.worktree-mode", check=False)
+        assert mode.stdout.strip() == ""
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_review_configure_refuses_a_live_lease_without_identity_evidence(tmp_path: Path) -> None:
+    """Review setup fails closed when it cannot prove who owns a live lease."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "publication"
+    branch = "task/publication"
+    try:
+        created = _create_worktree(repo, worktree, branch)
+        assert created.returncode == 0, created.stdout + created.stderr
+        leased = _lease_create(worktree, "coordinator-task")
+        assert leased.returncode == 0, leased.stdout + leased.stderr
+
+        refused = _configure(worktree, "review")
+
+        assert refused.returncode == 1
+        assert "coordinator-task" in json.loads(refused.stdout)["error"]
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_review_configure_accepts_the_matching_task_lease(tmp_path: Path) -> None:
+    """The review task's own live lease permits review setup."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review"
+    branch = "review/owned"
+    try:
+        created = _create_worktree(repo, worktree, branch)
+        assert created.returncode == 0, created.stdout + created.stderr
+        leased = _lease_create(worktree, "review-task")
+        assert leased.returncode == 0, leased.stdout + leased.stderr
+
+        accepted = _configure(worktree, "review", "--task-id", "review-task")
+
+        assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+        assert json.loads(accepted.stdout)["mode"] == "review"
+        assert (
+            _git(worktree, "config", "--get", "robot-sf.worktree-mode").stdout.strip() == "review"
+        )
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_review_configure_requires_a_lease_when_task_id_is_given(tmp_path: Path) -> None:
+    """A task id without its active lease is refused instead of silently trusted."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review"
+    branch = "review/unleased"
+    try:
+        created = _create_worktree(repo, worktree, branch)
+        assert created.returncode == 0, created.stdout + created.stderr
+
+        refused = _configure(worktree, "review", "--task-id", "review-task")
+
+        assert refused.returncode == 1
+        assert "active lease" in json.loads(refused.stdout)["error"]
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_review_configure_validates_a_receipt_against_the_selected_worktree(
+    tmp_path: Path,
+) -> None:
+    """A receipt for another worktree is refused; the matching receipt is accepted."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review"
+    branch = "review/receipt"
+    foreign = tmp_path / "foreign-receipt.json"
+    matching = tmp_path / "matching-receipt.json"
+    try:
+        created = _create_worktree(repo, worktree, branch)
+        assert created.returncode == 0, created.stdout + created.stderr
+        assert _receipt_create(repo, "other-task", foreign).returncode == 0
+
+        refused = _configure(worktree, "review", "--receipt", str(foreign))
+
+        assert refused.returncode == 1
+        assert "does not match" in json.loads(refused.stdout)["error"]
+
+        assert _receipt_create(worktree, "review-task", matching).returncode == 0
+        accepted = _configure(worktree, "review", "--receipt", str(matching))
+
+        assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+        assert json.loads(accepted.stdout)["mode"] == "review"
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_review_configure_rejects_identity_arguments_in_implementation_mode(tmp_path: Path) -> None:
+    """Task identity arguments are review-only switches."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review"
+    branch = "review/misuse"
+    try:
+        created = _create_worktree(repo, worktree, branch)
+        assert created.returncode == 0, created.stdout + created.stderr
+
+        refused = _configure(worktree, "implementation", "--task-id", "review-task")
+
+        assert refused.returncode == 1
+        assert "only valid with review mode" in json.loads(refused.stdout)["error"]
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_create_review_worktree_forwards_task_id_for_ownership_checks(tmp_path: Path) -> None:
+    """create_worktree --mode review --task-id reaches review mode with a live lease."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review"
+    branch = "review/forwarded"
+    try:
+        created = _create_worktree(repo, worktree, branch, mode="review", task_id="review-task")
+
+        assert created.returncode == 0, created.stdout + created.stderr
+        assert (
+            _git(worktree, "config", "--get", "robot-sf.worktree-mode").stdout.strip() == "review"
+        )
+        status = subprocess.run(
+            [sys.executable, str(PR_GATE_LEASE), "is-active", "--worktree", str(worktree)],
+            cwd=worktree,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert status.returncode == 0, status.stdout + status.stderr
+    finally:
+        _remove_worktree(repo, worktree, branch)

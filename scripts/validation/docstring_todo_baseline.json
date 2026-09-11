@@ -13,8 +13,8 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 146,
-      "occurrences": 1027
+      "files": 122,
+      "occurrences": 871
     }
   },
   "files": {
@@ -105,30 +105,6 @@
     "tests/test_scenario_generator.py": 8,
     "tests/test_seed_utils.py": 4,
     "tests/test_seed_variance.py": 7,
-    "tests/test_snqi/test_bootstrap_cli.py": 10,
-    "tests/test_snqi/test_bootstrap_intervals.py": 10,
-    "tests/test_snqi/test_cli_snqi.py": 11,
-    "tests/test_snqi/test_jsonschema_validation.py": 12,
-    "tests/test_snqi/test_loader_robustness.py": 14,
-    "tests/test_snqi/test_small_dataset_warning.py": 8,
-    "tests/test_snqi_ablation.py": 2,
-    "tests/test_snqi_cli_optimization.py": 2,
-    "tests/test_snqi_cli_recompute.py": 2,
-    "tests/test_snqi_determinism.py": 6,
-    "tests/test_snqi_drift_detection.py": 2,
-    "tests/test_snqi_external_weights_cli.py": 11,
-    "tests/test_snqi_fixture_minimal.py": 2,
-    "tests/test_snqi_generate_figures_minimal.py": 3,
-    "tests/test_snqi_malformed_skip_cli.py": 3,
-    "tests/test_snqi_missing_optional_metrics.py": 6,
-    "tests/test_snqi_normalization_comparison.py": 4,
-    "tests/test_snqi_pareto_determinism.py": 5,
-    "tests/test_snqi_parity.py": 9,
-    "tests/test_snqi_schema.py": 9,
-    "tests/test_snqi_schema_snapshot.py": 10,
-    "tests/test_snqi_sensitivity_monotonic.py": 5,
-    "tests/test_snqi_strategies.py": 7,
-    "tests/test_snqi_weight_aliases.py": 3,
     "tests/test_summary.py": 4,
     "tests/test_svg_classic_maps_format.py": 3,
     "tests/test_tracking/test_history.py": 8,
@@ -173,7 +149,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 146,
-    "total_occurrences": 1027
+    "files": 122,
+    "total_occurrences": 871
   }
 }

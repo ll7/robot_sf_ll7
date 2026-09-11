@@ -959,7 +959,18 @@ for changed_file in "${changed_files[@]}"; do
   fi
 done
 if [[ ${#format_changed_files[@]} -gt 0 ]]; then
+  # Issue #8971: fail with an explicit formatting signal before any test that requires a clean
+  # tree. Previously the scoped Ruff fix ran here, and a later clean-tree materialization test
+  # failed with a misleading "source checkout has tracked changes" error.
+  pre_format_diff="$(git diff HEAD -- "${format_changed_files[@]}" | git hash-object --stdin)"
   "$SCRIPT_DIR/ruff_fix_format.sh" "${format_changed_files[@]}"
+  post_format_diff="$(git diff HEAD -- "${format_changed_files[@]}" | git hash-object --stdin)"
+  if [[ "$pre_format_diff" != "$post_format_diff" ]]; then
+    printf 'Ruff formatting changed tracked files in the working tree:\n' >&2
+    git diff --name-only HEAD -- "${format_changed_files[@]}" >&2
+    printf 'Commit the formatting changes, then rerun this readiness command (issue #8971).\n' >&2
+    exit 2
+  fi
 else
   printf 'No changed Python files require scoped Ruff formatting.\n' >&2
 fi

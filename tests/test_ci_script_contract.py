@@ -1465,6 +1465,20 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
     assert "pr_ready_freshness.py" in script_text
 
 
+def test_pr_ready_check_fails_with_explicit_format_signal_before_clean_tree_tests() -> None:
+    """A scoped format fix must fail with an explicit signal before clean-tree tests (issue #8971)."""
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    assert "Ruff formatting changed tracked files in the working tree" in script_text
+    assert "Commit the formatting changes, then rerun this readiness command" in script_text
+
+    format_signal_index = script_text.find(
+        "Ruff formatting changed tracked files in the working tree"
+    )
+    test_lane_index = script_text.find('"$SCRIPT_DIR/run_tests_parallel.sh" --lane core')
+    assert 0 < format_signal_index < test_lane_index
+
+
 def test_pr_ready_check_final_mode_runs_evidence_hygiene_contract() -> None:
     """Final local readiness must invoke the hosted evidence-hygiene contract (issue #7812)."""
     script_text = PR_READY_CHECK.read_text(encoding="utf-8")

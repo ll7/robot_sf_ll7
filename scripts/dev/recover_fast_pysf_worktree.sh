@@ -4,22 +4,35 @@
 #
 # This helper never refreshes the owning checkout.  It only mutates the
 # current linked worktree's ignored .venv, after a repository-scoped lock and
-# capacity check, then verifies the installed package before returning. Every
-# non-interpreter symlink below .venv must remain inside that environment.
+# capacity check, then verifies the installed package and the requested
+# dependency profile before returning (issue #8811: recovery results must
+# satisfy the wrapper's own profile preflight). Every non-interpreter symlink
+# below .venv must remain inside that environment.
 
 set -euo pipefail
 
 show_help() {
   cat <<'EOF'
-Usage: scripts/dev/recover_fast_pysf_worktree.sh
+Usage: scripts/dev/recover_fast_pysf_worktree.sh [--profile NAME]
 
 Create or refresh the current linked worktree's .venv with the pinned fast-pysf
 package and verify package freshness before a caller runs project code.
+
+After syncing, the helper also certifies that the requested dependency import
+profile is complete via scripts/dev/check_worktree_optional_deps.py. An
+existing environment is refreshed when either the installed fast-pysf package
+or the requested profile is incomplete, so a previous interrupted sync cannot
+be reported as a successful recovery.
 
 This is an explicit recovery operation. It refuses the main checkout, refuses
 dirty dependency inputs, serializes recovery per repository with a kernel-backed
 lock, and fails closed when the worktree filesystem is below the
 ROBOT_SF_WORKTREE_MIN_FREE_BYTES threshold (default: 2 GiB).
+
+Options:
+  --profile NAME   Dependency import profile the postcondition must certify
+                   after sync (default: core). Use all-extras or a named
+                   pyproject extra when the caller needs it.
 
 The helper is normally invoked through:
   scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- <command>
@@ -31,24 +44,37 @@ The --frozen flag prevents this recovery path from changing dependency locks.
 EOF
 }
 
+dependency_profile="core"
 locked_recovery=0
 
-if [[ "$#" -gt 0 ]]; then
-  if [[ "$#" -eq 1 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
-    show_help
-    exit 0
-  fi
-  # Internal re-entry flag: the portable-lock fallback re-executes this script
-  # under worktree_creation_lock.py --non-blocking so recovery runs while a
-  # Python fcntl holder owns the shared lock file. Never pass this directly.
-  if [[ "$#" -eq 1 && "$1" == "--__locked-recovery" ]]; then
-    locked_recovery=1
-  else
-    echo "recover_fast_pysf_worktree: this helper accepts no arguments" >&2
-    show_help >&2
-    exit 2
-  fi
-fi
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --profile)
+      if [[ "$#" -lt 2 || -z "${2:-}" ]]; then
+        echo "recover_fast_pysf_worktree: --profile requires a dependency profile name" >&2
+        exit 2
+      fi
+      dependency_profile="$2"
+      shift 2
+      ;;
+    # Internal re-entry flag: the portable-lock fallback re-executes this script
+    # under worktree_creation_lock.py --non-blocking so recovery runs while a
+    # Python fcntl holder owns the shared lock file. Never pass this directly.
+    --__locked-recovery)
+      locked_recovery=1
+      shift
+      ;;
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    *)
+      echo "recover_fast_pysf_worktree: this helper accepts no arguments: $1" >&2
+      show_help >&2
+      exit 2
+      ;;
+  esac
+done
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "recover_fast_pysf_worktree: current directory is not a Git worktree" >&2
@@ -87,9 +113,10 @@ if [[ ! -f "$repo_root/.git" ]]; then
 fi
 
 checker="$repo_root/scripts/dev/check_fast_pysf_runtime.py"
+profile_checker="$repo_root/scripts/dev/check_worktree_optional_deps.py"
 capacity_checker="$repo_root/scripts/dev/check_worktree_capacity.py"
-if [[ ! -f "$checker" || ! -f "$capacity_checker" ]]; then
-  echo "recover_fast_pysf_worktree: required freshness or capacity checker is missing" >&2
+if [[ ! -f "$checker" || ! -f "$profile_checker" || ! -f "$capacity_checker" ]]; then
+  echo "recover_fast_pysf_worktree: required freshness, profile, or capacity checker is missing" >&2
   exit 2
 fi
 
@@ -312,7 +339,8 @@ else
   echo "recover_fast_pysf_worktree: flock CLI not used; holding portable lock on $lock_path" >&2
   python_lock_rc=0
   python3 "$repo_root/scripts/dev/worktree_creation_lock.py" --non-blocking "$lock_path" -- \
-    "$repo_root/scripts/dev/recover_fast_pysf_worktree.sh" --__locked-recovery || python_lock_rc=$?
+    "$repo_root/scripts/dev/recover_fast_pysf_worktree.sh" --__locked-recovery \
+    --profile "$dependency_profile" || python_lock_rc=$?
   if [[ "$python_lock_rc" -eq 75 ]]; then
     echo "recover_fast_pysf_worktree: another fast-pysf recovery is active for this repository" >&2
     echo "Wait for it to finish, then retry this explicit command." >&2
@@ -338,10 +366,27 @@ fi
 sync_needed=1
 if [[ -x "$local_venv/bin/python" ]]; then
   existing_report=""
+  fast_pysf_coherent=0
   if existing_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$checker" 2>&1)"; then
+    fast_pysf_coherent=1
+  fi
+
+  # Issue #8811: a profile-incomplete environment is repair-worthy even when
+  # fast-pysf is already coherent, so an interrupted sync cannot be certified.
+  profile_report=""
+  dependency_profile_complete=0
+  if profile_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$profile_checker" \
+    --profile "$dependency_profile" 2>&1)"; then
+    dependency_profile_complete=1
+  fi
+
+  if [[ "$fast_pysf_coherent" -eq 1 && "$dependency_profile_complete" -eq 1 ]]; then
     printf '%s\n' "$existing_report" >&2
-    echo "recover_fast_pysf_worktree: local environment is already fast-pysf coherent; sync skipped" >&2
+    echo "recover_fast_pysf_worktree: local environment is already fast-pysf coherent and dependency profile '$dependency_profile' is complete; sync skipped" >&2
     sync_needed=0
+  elif [[ "$fast_pysf_coherent" -eq 1 ]]; then
+    echo "recover_fast_pysf_worktree: existing local environment is missing dependency profile '$dependency_profile'; refreshing it" >&2
+    printf '%s\n' "$profile_report" >&2
   else
     echo "recover_fast_pysf_worktree: existing local environment is not coherent; refreshing it" >&2
     printf '%s\n' "$existing_report" >&2
@@ -381,6 +426,20 @@ if ! final_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$checker" 2>&1)
 fi
 printf '%s\n' "$final_report" >&2
 
+# Issue #8811: certify the requested dependency profile as part of the recovery
+# postcondition, so callers can rely on a successful recovery satisfying the
+# shared wrapper's own profile preflight.
+profile_final_report=""
+if ! profile_final_report="$(env -u PYTHONPATH "$local_venv/bin/python" "$profile_checker" \
+  --profile "$dependency_profile" 2>&1)"; then
+  echo "recover_fast_pysf_worktree: post-sync dependency profile '$dependency_profile' is incomplete in $local_venv" >&2
+  printf '%s\n' "$profile_final_report" >&2
+  echo "No wrapped command was started because the requested dependency profile is incomplete." >&2
+  echo "Repair: run 'cd $repo_root && scripts/dev/bootstrap_worktree.sh', then retry." >&2
+  exit 2
+fi
+printf '%s\n' "$profile_final_report" >&2
+
 remaining_dirty_inputs="$(git status --porcelain=v1 -- "${dependency_inputs[@]}")" || {
   echo "recover_fast_pysf_worktree: could not verify dependency inputs after recovery" >&2
   exit 2
@@ -393,3 +452,4 @@ if [[ -n "$remaining_dirty_inputs" ]]; then
 fi
 
 echo "recover_fast_pysf_worktree: verified worktree-owned fast-pysf environment: $local_venv" >&2
+echo "recover_fast_pysf_worktree: verified dependency profile '$dependency_profile': $local_venv" >&2

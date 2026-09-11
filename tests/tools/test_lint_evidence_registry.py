@@ -101,6 +101,154 @@ def _write_projection_entry(
     return path
 
 
+def _historical_binding_fixture(
+    tmp_path: Path,
+    linter,
+    *,
+    producer_consumer_contents: list[bytes] | None = None,
+    duplicate_producer_reference_keys: bool = False,
+):
+    """Create two historical source transitions and their current mismatching consumers."""
+    repo, evidence, _base_commit, _config_sha256 = _make_repo(tmp_path / "historical")
+    sources = [
+        repo / "docs/context/historical-source-one.md",
+        repo / "docs/context/historical-source-two.md",
+    ]
+    baseline_bytes = [b"before-one\n", b"before-two\n"]
+    historical_bytes = [b"historical-one\n", b"historical-two\n"]
+    current_bytes = [b"current-one\n", b"current-two\n"]
+    for source, content in zip(sources, baseline_bytes, strict=True):
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(content)
+    _git(
+        repo,
+        "add",
+        "docs/context/historical-source-one.md",
+        "docs/context/historical-source-two.md",
+    )
+    _git(repo, "commit", "-qm", "historical source baseline")
+    parent_commit = _git(repo, "rev-parse", "HEAD")
+
+    consumers = [
+        evidence / "historical-consumer-one.json",
+        evidence / "historical-consumer-two.json",
+    ]
+    for index, (source, before, content, consumer) in enumerate(
+        zip(sources, baseline_bytes, historical_bytes, consumers, strict=True)
+    ):
+        source.write_bytes(content)
+        source_path = source.relative_to(repo).as_posix()
+        reference_digest = hashlib.sha256(content).hexdigest()
+        if duplicate_producer_reference_keys:
+            reference_bytes = (
+                '{"reference":{"path":'
+                + json.dumps(source_path)
+                + ',"sha256":'
+                + json.dumps(reference_digest)
+                + ',"sha256":'
+                + json.dumps(reference_digest)
+                + "}}"
+            ).encode()
+        else:
+            reference_bytes = json.dumps(
+                {"reference": {"path": source_path, "sha256": reference_digest}},
+                sort_keys=True,
+            ).encode()
+        consumer.write_bytes(
+            producer_consumer_contents[index]
+            if producer_consumer_contents is not None
+            else reference_bytes
+        )
+    _git(
+        repo,
+        "add",
+        "docs/context/historical-source-one.md",
+        "docs/context/historical-source-two.md",
+    )
+    _git(
+        repo,
+        "add",
+        "docs/context/evidence/historical-consumer-one.json",
+        "docs/context/evidence/historical-consumer-two.json",
+    )
+    _git(repo, "commit", "-qm", "historical source transition")
+    producer_commit = _git(repo, "rev-parse", "HEAD")
+    producer_tree = _git(repo, "rev-parse", f"{producer_commit}^{{tree}}")
+    producer_consumer_bytes = [consumer.read_bytes() for consumer in consumers]
+
+    for source, content, consumer in zip(sources, historical_bytes, consumers, strict=True):
+        source_path = source.relative_to(repo).as_posix()
+        consumer.write_bytes(
+            json.dumps(
+                {"reference": {"path": source_path, "sha256": hashlib.sha256(content).hexdigest()}},
+                sort_keys=True,
+            ).encode()
+        )
+
+    bindings = []
+    for index, (source, before, content, consumer) in enumerate(
+        zip(sources, baseline_bytes, historical_bytes, consumers, strict=True)
+    ):
+        source_path = source.relative_to(repo).as_posix()
+        consumer_path = consumer.relative_to(repo).as_posix()
+        consumer_bytes = consumer.read_bytes()
+        bindings.append(
+            {
+                "repository": "ll7/robot_sf_ll7",
+                "reviewed_ancestry_anchor": producer_commit,
+                "consumer_path": consumer_path,
+                "consumer_sha256": hashlib.sha256(consumer_bytes).hexdigest(),
+                "consumer_blob_sha1": linter._blob_sha1(consumer_bytes),
+                "reference_locator": "/reference",
+                "reference_path": source_path,
+                "declared_sha256": hashlib.sha256(content).hexdigest(),
+                "producer_commit": producer_commit,
+                "producer_tree": producer_tree,
+                "producer_reference_sha256": hashlib.sha256(content).hexdigest(),
+                "producer_reference_blob_sha1": _git(
+                    repo, "rev-parse", f"{producer_commit}:{source_path}"
+                ),
+                "producer_consumer_sha256": hashlib.sha256(
+                    producer_consumer_bytes[index]
+                ).hexdigest(),
+                "producer_consumer_blob_sha1": _git(
+                    repo, "rev-parse", f"{producer_commit}:{consumer_path}"
+                ),
+                "parent_commit": parent_commit,
+                "parent_reference_sha256": hashlib.sha256(before).hexdigest(),
+            }
+        )
+
+    manifest = repo / linter.HISTORICAL_BINDING_MANIFEST
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(
+        json.dumps(
+            {
+                "$schema": "scripts/validation/evidence_registry_historical_bindings.v1.schema.json",
+                "schema_version": linter.HISTORICAL_BINDING_SCHEMA,
+                "repository": "ll7/robot_sf_ll7",
+                "reviewed_ancestry_anchor": producer_commit,
+                "bindings": bindings,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    for source, content in zip(sources, current_bytes, strict=True):
+        source.write_bytes(content)
+    _git(repo, "add", str(manifest.relative_to(repo)))
+    _git(
+        repo,
+        "add",
+        "docs/context/historical-source-one.md",
+        "docs/context/historical-source-two.md",
+        "docs/context/evidence/historical-consumer-one.json",
+        "docs/context/evidence/historical-consumer-two.json",
+    )
+    _git(repo, "commit", "-qm", "current source transition")
+    return repo, evidence, manifest, consumers, sources
+
+
 def _write_ch7_companion_fixture(
     repo: Path,
     *,
@@ -275,6 +423,37 @@ def test_ch7_portfolio_companion_binding_duplicate_ambiguity_fails_closed(
         linter.lint_evidence_registry(repo, package)
 
 
+def test_json_pointer_array_indices_use_rfc6901_ascii_decimal_tokens() -> None:
+    """Array traversal rejects coercible integers while mappings keep exact keys."""
+    linter = _load_linter()
+    document = {
+        "array": ["zero", "one", "two", "three", "four", "five", "six"],
+        "object": {"+1": "plus", "01": "leading", "-6": "negative", " 1": "space"},
+        "escaped": {"/": "slash", "~": "tilde"},
+    }
+
+    assert linter._json_pointer_get(document, "/array/0") == "zero"
+    assert linter._json_pointer_get(document, "/array/6") == "six"
+    assert linter._json_pointer_get(document, "/object/+1") == "plus"
+    assert linter._json_pointer_get(document, "/object/01") == "leading"
+    assert linter._json_pointer_get(document, "/object/-6") == "negative"
+    assert linter._json_pointer_get(document, "/object/ 1") == "space"
+    assert linter._json_pointer_get(document, "/escaped/~1") == "slash"
+    assert linter._json_pointer_get(document, "/escaped/~0") == "tilde"
+
+    for token in ("+1", "01", "-6", " 1", "1 ", "\t1", "١"):
+        with pytest.raises(KeyError):
+            linter._json_pointer_get(document, f"/array/{token}")
+
+
+def test_json_pointer_rejects_malformed_tilde_escape() -> None:
+    """RFC 6901 escape validation applies before object or array lookup."""
+    linter = _load_linter()
+
+    with pytest.raises(ValueError, match="invalid JSON pointer escape"):
+        linter._json_pointer_get({"literal~2": "value"}, "/literal~2")
+
+
 def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:
     """A campaign with committed config and matching artifact hash passes."""
     linter = _load_linter()
@@ -293,6 +472,202 @@ def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:
 
     assert report["issues"] == []
     assert report["campaign_ids"] == ["campaign-valid"]
+
+
+def test_historical_bindings_resolve_only_the_two_exact_consumer_mismatches(
+    tmp_path: Path,
+) -> None:
+    """Verified producer transitions may resolve their exact current consumers."""
+    linter = _load_linter()
+    repo, evidence, _manifest, consumers, _sources = _historical_binding_fixture(tmp_path, linter)
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert report["issues"] == []
+    assert report["historical_bindings"]["status"] == "validated"
+    assert report["historical_bindings"]["validated"] == 2
+    assert [item["consumer_path"] for item in report["historical_bindings"]["applied"]] == [
+        path.relative_to(repo).as_posix() for path in consumers
+    ]
+
+
+def test_historical_binding_rejects_current_consumer_drift(tmp_path: Path) -> None:
+    """A changed consumer cannot inherit historical clearance from its old digest."""
+    linter = _load_linter()
+    repo, evidence, _manifest, consumers, _sources = _historical_binding_fixture(tmp_path, linter)
+    consumer = consumers[0]
+    consumer.write_text(
+        consumer.read_text(encoding="utf-8").replace("}", ', "drift": true}'), encoding="utf-8"
+    )
+
+    with pytest.raises(linter.HistoricalBindingError, match="evaluated consumer digest mismatch"):
+        linter.lint_evidence_registry(repo, evidence)
+
+
+def test_historical_binding_rejects_duplicate_and_unknown_records(tmp_path: Path) -> None:
+    """The tracked contract rejects duplicate and unrecognized binding records."""
+    linter = _load_linter()
+    repo, evidence, manifest, _consumers, _sources = _historical_binding_fixture(tmp_path, linter)
+    value = json.loads(manifest.read_text(encoding="utf-8"))
+    value["bindings"][1] = dict(value["bindings"][0])
+    manifest.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(linter.HistoricalBindingError, match="duplicate or conflicting"):
+        linter.lint_evidence_registry(repo, evidence)
+
+    repo, evidence, manifest, _consumers, _sources = _historical_binding_fixture(
+        tmp_path / "unknown", linter
+    )
+    value = json.loads(manifest.read_text(encoding="utf-8"))
+    value["bindings"][0]["unknown"] = "rejected"
+    manifest.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(linter.HistoricalBindingError, match="unknown fields"):
+        linter.lint_evidence_registry(repo, evidence)
+
+
+def test_historical_binding_rejects_invalid_git_transition(tmp_path: Path) -> None:
+    """A binding with an unknown producer tree cannot suppress a mismatch."""
+    linter = _load_linter()
+    repo, evidence, manifest, _consumers, _sources = _historical_binding_fixture(tmp_path, linter)
+    value = json.loads(manifest.read_text(encoding="utf-8"))
+    value["bindings"][0]["producer_tree"] = "0" * 40
+    manifest.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(linter.HistoricalBindingError, match="producer tree object is unavailable"):
+        linter.lint_evidence_registry(repo, evidence)
+
+
+def test_historical_binding_rejects_disconnected_reviewed_anchor(tmp_path: Path) -> None:
+    """A side-history commit object cannot authorize a frozen-base binding."""
+    linter = _load_linter()
+    repo, evidence, manifest, _consumers, _sources = _historical_binding_fixture(tmp_path, linter)
+    base_commit = _git(repo, "rev-parse", "HEAD~3")
+    current_head = _git(repo, "rev-parse", "HEAD")
+    producer_commit = json.loads(manifest.read_text(encoding="utf-8"))["bindings"][0][
+        "producer_commit"
+    ]
+    _git(repo, "checkout", "-qb", "disconnected-reviewed-anchor", producer_commit)
+    _git(repo, "commit", "--allow-empty", "-qm", "disconnected reviewed anchor")
+    disconnected_anchor = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "--detach", "-q", current_head)
+
+    value = json.loads(manifest.read_text(encoding="utf-8"))
+    value["reviewed_ancestry_anchor"] = disconnected_anchor
+    for binding in value["bindings"]:
+        binding["reviewed_ancestry_anchor"] = disconnected_anchor
+    manifest.write_text(json.dumps(value), encoding="utf-8")
+    _git(repo, "add", str(manifest.relative_to(repo)))
+    _git(repo, "commit", "-qm", "candidate with disconnected reviewed anchor")
+    candidate_head = _git(repo, "rev-parse", "HEAD")
+
+    with pytest.raises(linter.HistoricalBindingError, match="not reachable"):
+        linter.lint_evidence_registry(
+            repo,
+            evidence,
+            candidate_head=candidate_head,
+            frozen_base=base_commit,
+        )
+
+
+def test_historical_binding_rejects_producer_consumer_reference_drift(tmp_path: Path) -> None:
+    """A historical consumer must contain the exact reference it claims to bind."""
+    linter = _load_linter()
+    repo, evidence, _manifest, _consumers, _sources = _historical_binding_fixture(
+        tmp_path,
+        linter,
+        producer_consumer_contents=[b'{"unrelated": true}\n', b'{"unrelated": true}\n'],
+    )
+
+    with pytest.raises(
+        linter.HistoricalBindingError,
+        match="producer consumer reference_locator does not resolve",
+    ):
+        linter.lint_evidence_registry(repo, evidence)
+
+
+def test_historical_binding_rejects_duplicate_json_object_keys_in_producer_consumer(
+    tmp_path: Path,
+) -> None:
+    """Raw duplicate members cannot collapse into an apparently valid reference mapping."""
+    linter = _load_linter()
+    repo, evidence, _manifest, _consumers, _sources = _historical_binding_fixture(
+        tmp_path,
+        linter,
+        duplicate_producer_reference_keys=True,
+    )
+
+    with pytest.raises(
+        linter.HistoricalBindingError,
+        match="producer consumer contains duplicate JSON object key",
+    ):
+        linter.lint_evidence_registry(repo, evidence)
+
+
+def test_historical_binding_rejects_duplicate_json_object_keys_in_current_consumer(
+    tmp_path: Path,
+) -> None:
+    """The current consumer must preserve unambiguous path/checksum member semantics."""
+    linter = _load_linter()
+    repo, evidence, manifest, consumers, _sources = _historical_binding_fixture(tmp_path, linter)
+    reference = json.loads(consumers[0].read_text(encoding="utf-8"))["reference"]
+    duplicate = (
+        '{"reference":{"path":'
+        + json.dumps(reference["path"])
+        + ',"sha256":'
+        + json.dumps(reference["sha256"])
+        + ',"sha256":'
+        + json.dumps(reference["sha256"])
+        + "}}"
+    ).encode()
+    consumers[0].write_bytes(duplicate)
+    value = json.loads(manifest.read_text(encoding="utf-8"))
+    value["bindings"][0]["consumer_sha256"] = hashlib.sha256(duplicate).hexdigest()
+    value["bindings"][0]["consumer_blob_sha1"] = linter._blob_sha1(duplicate)
+    manifest.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(
+        linter.HistoricalBindingError,
+        match="current consumer contains duplicate JSON object key",
+    ):
+        linter.lint_evidence_registry(repo, evidence)
+
+
+def test_historical_binding_rejects_duplicate_json_object_keys_in_manifest(tmp_path: Path) -> None:
+    """The manifest itself must not rely on a parser's last-value-wins behavior."""
+    linter = _load_linter()
+    repo, evidence, manifest, _consumers, _sources = _historical_binding_fixture(tmp_path, linter)
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8").replace(
+            '"repository": "ll7/robot_sf_ll7",',
+            '"repository": "ll7/robot_sf_ll7", "repository": "ll7/robot_sf_ll7",',
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        linter.HistoricalBindingError,
+        match="manifest contains duplicate JSON object key",
+    ):
+        linter.lint_evidence_registry(repo, evidence)
+
+
+def test_historical_binding_does_not_apply_to_copied_consumer_path(tmp_path: Path) -> None:
+    """A copied record at another path remains an ordinary checksum mismatch."""
+    linter = _load_linter()
+    repo, evidence, _manifest, consumers, _sources = _historical_binding_fixture(tmp_path, linter)
+    copied = evidence / "historical-consumer-copy.json"
+    copied.write_bytes(consumers[0].read_bytes())
+    _git(repo, "add", str(copied.relative_to(repo)))
+    _git(repo, "commit", "-qm", "copied consumer fixture")
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert any(
+        item["path"] == copied.relative_to(repo).as_posix()
+        and item["code"] == "artifact_hash_mismatch"
+        for item in report["issues"]
+    )
+    assert len(report["historical_bindings"]["applied"]) == 2
 
 
 def test_dangling_commit_is_classified(tmp_path: Path) -> None:

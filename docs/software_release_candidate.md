@@ -18,6 +18,29 @@ The next protected promotion stage is documented in
 immutable artifact ID and digest, publishes to TestPyPI and PyPI through separate protected
 environments, and requires a byte-checked TestPyPI cold-install receipt before production.
 
+## v0.0.6 preparation boundary
+
+The untagged preparation tree may stage `0.0.6` in `CITATION.cff` through
+[`configs/releases/release_0_0_6_preparation.yaml`](../configs/releases/release_0_0_6_preparation.yaml).
+The marker requires `awaiting_maintainer_approval` and `publication_authorized: false`; it is an
+alignment exception only. The package version remains dynamic through the VCS mechanism, and the
+historical `0.0.5` metadata and release records remain unchanged. The prepared citation carries
+the existing creator union, Lennart Luttkus and Marco Tröster, without inventing a release date or
+ownership decision. `.zenodo.json` remains the existing descriptive software template and does not
+assert a DOI, date, hash, or related identifier.
+
+The planned sanitized software surface is `all` plus exactly these twelve extras: `viz`, `maps`,
+`benchmark`, `training`, `gpu`, `recurrent`, `progress`, `analytics`, `browser`, `sacadrl`,
+`socnav`, and `criticality`. `rllib` remains development-only; ORCA and `pyrvo2` remain external
+optional infrastructure. Repository-level `examples/`, `model/`, and `maps/` payloads are excluded
+from the sanitized candidate source, so their development-checkout commands are not candidate
+runtime proof. The preparation packet records diagnostic archive and source observations only;
+metadata changes require re-materialization and fresh exact-head checks before any final binding.
+
+This preparation does not create a tag, package upload, GitHub Release, Zenodo deposit, DOI, or
+publication. Rights/disposition, exact candidate acceptance, clean wheel-install proof, GitHub
+automatic source-archive equivalence, and downstream publication remain separate gates.
+
 ## Dispatching the producer
 
 Use a clean checkout and an exact lowercase 40-character commit SHA:

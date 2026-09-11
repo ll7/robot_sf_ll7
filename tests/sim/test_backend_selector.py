@@ -8,11 +8,11 @@ from robot_sf.sim import registry
 
 
 def _stub_factory(*_: object, **__: object) -> None:  # pragma: no cover - helper
-    """TODO docstring. Document this function.
+    """No-op backend factory used to register stub backends in tests.
 
     Args:
-        _: TODO docstring.
-        __: TODO docstring.
+        _: Positional arguments supplied by the registry, ignored.
+        __: Keyword arguments supplied by the registry, ignored.
     """
     return None
 
@@ -25,7 +25,7 @@ def _reset_registry(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_select_best_backend_prefers_explicit_choice() -> None:
-    """TODO docstring. Document this function."""
+    """An explicitly preferred backend name overrides fastest-backend selection."""
     registry.register_backend("fast-pysf", _stub_factory)
     registry.register_backend("dummy", _stub_factory)
 
@@ -33,10 +33,10 @@ def test_select_best_backend_prefers_explicit_choice() -> None:
 
 
 def test_select_best_backend_respects_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """TODO docstring. Document this function.
+    """ROBOT_SF_BACKEND selects the named backend when no preference is passed.
 
     Args:
-        monkeypatch: TODO docstring.
+        monkeypatch: Pytest fixture used to set the environment variable.
     """
     registry.register_backend("fast-pysf", _stub_factory)
     registry.register_backend("dummy", _stub_factory)
@@ -46,7 +46,7 @@ def test_select_best_backend_respects_environment(monkeypatch: pytest.MonkeyPatc
 
 
 def test_select_best_backend_falls_back_to_fastest() -> None:
-    """TODO docstring. Document this function."""
+    """Without preference or environment override, selection returns the fastest backend."""
     registry.register_backend("dummy", _stub_factory)
     registry.register_backend("fast-pysf", _stub_factory)
     registry.register_backend("experimental", _stub_factory)
@@ -55,6 +55,6 @@ def test_select_best_backend_falls_back_to_fastest() -> None:
 
 
 def test_select_best_backend_errors_when_empty() -> None:
-    """TODO docstring. Document this function."""
+    """Selecting a backend when none are registered raises RuntimeError."""
     with pytest.raises(RuntimeError):
         registry.select_best_backend()

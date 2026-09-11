@@ -1082,7 +1082,12 @@ def _frozen_search_space_contract_fields(contract: dict[str, Any]) -> tuple[str,
 
 
 def _raw_file_sha256(path: Path) -> str:
-    """Return the SHA-256 digest of a file's raw bytes."""
+    """Return the SHA-256 digest of a file's raw bytes.
+
+    Keep this helper standalone because this direct-run contract-check script
+    intentionally remains usable with only its standard-library imports; the
+    package evidence writer is not needed for its raw-byte check.
+    """
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 

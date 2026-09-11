@@ -863,7 +863,12 @@ def _resolve_coverage_path(coverage_arg: str, repo_root: Path) -> Path:
 
 
 def _sha256_file(path: Path) -> str | None:
-    """Return a file digest, or ``None`` when the artifact is unavailable."""
+    """Return a file digest, or ``None`` when the artifact is unavailable.
+
+    Keep this helper standalone because this lightweight direct-run coverage
+    script intentionally maps missing or unreadable coverage artifacts to
+    ``None``; the package helper propagates those filesystem failures.
+    """
     if not path.is_file():
         return None
     digest = hashlib.sha256()

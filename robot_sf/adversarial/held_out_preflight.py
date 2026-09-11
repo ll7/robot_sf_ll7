@@ -45,6 +45,7 @@ from robot_sf.adversarial.scenario_manifest import (
     compute_control_hash,
     validate_candidate_manifest,
 )
+from robot_sf.evidence.writers import sha256_file as _evidence_sha256_file
 
 PREFLIGHT_SCHEMA_VERSION = "issue_3275_held_out_preflight.v1"
 CANDIDATE_POOL_MANIFEST_SCHEMA = "issue_3275_candidate_pool_manifest.v1"
@@ -111,8 +112,11 @@ def payload_sha256(payload: Any) -> str:
 
 
 def raw_sha256(path: Path) -> str:
-    """Return the SHA-256 of a file's raw bytes."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """Return a file's raw-byte SHA-256 through the shared evidence writer.
+
+    Filesystem errors from the canonical helper propagate unchanged.
+    """
+    return _evidence_sha256_file(path)
 
 
 def _repo_relative_path(repo_root: Path, path: Path) -> str:

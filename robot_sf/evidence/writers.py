@@ -71,6 +71,10 @@ def _git_commit() -> str:
 def sha256_file(path: Path) -> str:
     """Compute a SHA-256 hex digest for ``path``.
 
+    The file is read in chunks. Filesystem errors from opening or reading the
+    path propagate unchanged, including ``FileNotFoundError`` for a missing
+    path and ``IsADirectoryError`` for a directory.
+
     Returns:
         Hex-encoded SHA-256 digest string.
     """

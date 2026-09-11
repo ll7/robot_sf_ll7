@@ -22,13 +22,13 @@ OPTIONAL_IMPORTS = {
 
 
 def _run(cmd: list[str]) -> str:
-    """TODO docstring. Document this function.
+    """Run a command and return its standard output.
 
     Args:
-        cmd: TODO docstring.
+        cmd: Command argument vector.
 
     Returns:
-        TODO docstring.
+        Captured standard output.
     """
     return subprocess.check_output(cmd, text=True)
 
@@ -61,14 +61,14 @@ def _run_core_cli(tmp_path: Path, script: str, *arguments: str) -> subprocess.Co
 
 
 def test_generate_report_cli_help():
-    """TODO docstring. Document this function."""
+    """Check that the report generator help lists its experiment options."""
     out = _run(["uv", "run", "python", "scripts/research/generate_report.py", "--help"])
     assert "--experiment-name" in out
     assert "--tracker-run" in out or "--baseline" in out  # fallback if interface evolved
 
 
 def test_compare_ablations_cli_help():
-    """TODO docstring. Document this function."""
+    """Check that the ablation comparison help exposes its config options."""
     out = _run(["uv", "run", "python", "scripts/research/compare_ablations.py", "--help"])
     assert "--config" in out or "--ablation-config" in out
     assert "ablation" in out.lower()

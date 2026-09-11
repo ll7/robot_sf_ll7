@@ -35,6 +35,17 @@ scripts/dev/create_worktree.sh \
   --exec git rev-parse --show-toplevel
 ```
 
+## Branch synchronization
+
+Implementation branches fetch the latest `origin/main` and merge it early:
+`git fetch origin main && git merge origin/main`.
+
+Read-only review worktrees or passes record target/base/head SHAs and inspect or fetch as needed.
+Never merge `origin/main` into the implementation branch or push to it during review. Ordinary Git
+invocations use the machine guard (`scripts/dev/review_worktree_guard.py`, issue #8321); deliberate
+override or alternate receive-pack probes must run as descendants of its Linux Landlock `run`
+boundary, because raw commands launched outside that process are not adversarially isolated.
+
 ## Cleanup safety invariant
 
 Repository-owned automatic cleanup is fail-closed: a linked worktree is not removable when its

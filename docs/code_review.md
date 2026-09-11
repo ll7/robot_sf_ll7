@@ -350,3 +350,30 @@ BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
 
 For docs-only or context-stack changes, still verify the modified markdown paths and any repo-local skill references.
+
+## Validation Depth And Delivery Contract
+
+Match proof to the change class; claim strength overrides the nominal row:
+
+| Change class | Minimum proof | Full `pr_ready_check` required when |
+| --- | --- | --- |
+| Docs or instruction only | Inspect diff; verify changed links and paths; run lightweight markdown, index, or sync checks. | Generated indexes, compatibility surfaces, or evidence-sensitive claims change. |
+| Workflow/tooling docs or skills | Cheap docs proof plus relevant skill/schema/sync checks. | Scripts, schemas, generated indexes, routing, or automation behavior changes. |
+| Runtime code | Focused tests for changed behavior plus lint and format gates. | The change is user-facing, cross-module, release-facing, or on a shared execution path. |
+| Benchmark, metric, schema, model-provenance | Executable proof on the intended contract with provenance and fallback/degraded exclusions. | Almost always; skip only for explicit diagnostic-only docs with no semantic change. |
+| Paper-facing or public claims | Reproducible evidence matching the claim boundary, caveats, uncertainty, and artifact provenance. | Always before treating the claim as established. |
+
+A docs or workflow edit that asserts a benchmark, metric, schema, model-provenance, or paper-facing
+result uses the stronger tier for that claim.
+
+PR delivery contract: a PR states intent, linked issues, validation commands, artifact disposition,
+and downstream propagation. Because merges squash, after every revision push rebuild the title and
+body from the final diff and run:
+
+```bash
+uv run python scripts/dev/gh_pr_body_rest.py <pr-number> \
+  --reconcile --title "<final title>" --repo <owner>/<repo> --body-file <final-body.md>
+```
+
+A trusted exact-head review must carry `pr-metadata: reconciled @ <digest>`. Pass Markdown-heavy
+comments through `scripts/dev/gh_comment.sh` or a body file, never through an inline shell string.

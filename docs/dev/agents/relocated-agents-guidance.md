@@ -16,11 +16,11 @@ Git history, and historical issue references stay discoverable through `docs/con
 | Knowledge capture, context notes, durable memory | `docs/context/README.md` and `memory/MEMORY.md` | reusable findings or handoffs |
 | Cross-agent compatibility stance | `docs/context/issue_728_coding_agents_compatibility.md` | adapting external agent workflow sources |
 | Project structure and module organization | `docs/ai/repo_overview.md` | orienting in the repository |
-| Canonical owner check before new modules | `AGENTS.md` Project Structure And Ownership | adding a module, script, or config |
+| Canonical owner check before new modules | `docs/ai/repo_overview.md` and `docs/maintainer_values.md` (`Reuse before abstraction`) | adding a module, script, or config |
 | Build, test, style, and config-first workflows | `docs/dev_guide.md` | contributor execution |
 | Research claim validation and benchmark fallback | `docs/benchmark_governance.md` and `docs/context/issue_691_benchmark_fallback_policy.md` | benchmark or paper-facing work |
 | Commit and pull request workflow | `docs/dev_guide.md` and `docs/code_review.md` | requested delivery or review |
-| Communication depth | `AGENTS.md` Planning And Communication | user-facing reporting |
+| Communication depth | `AGENTS.md` Delivery And Communication | user-facing reporting |
 | Planning convention | `.agents/PLANS.md` | coordinated or evidence-critical work |
 | GitHub workflow batching and Project #5 metadata | `docs/context/issue_713_batch_first_issue_workflow.md` | issue batches and metadata |
 | Exact-head REST review publication | `scripts/dev/gh_pr_review_rest.py` | publishing review verdicts |

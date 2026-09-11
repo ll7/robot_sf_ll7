@@ -296,7 +296,7 @@ def _stage(capability_id: str, callback: Callable[[], Any], reason_code: str) ->
         _require(callback() is not False, reason_code)
     except SmokeFailure as exc:
         return Capability(capability_id, True, STATUS_FAILED, exc.reason_code)
-    except Exception:  # noqa: BLE001 - details must not enter the receipt
+    except (OSError, RuntimeError, TypeError, ValueError, ImportError, AttributeError, LookupError):
         return Capability(capability_id, True, STATUS_FAILED, reason_code)
     return Capability(capability_id, True, STATUS_PASSED, REASONS["ok"])
 
@@ -712,7 +712,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "error_code": exc.reason_code,
             }
         )
-    except Exception:  # noqa: BLE001 - never expose environment or path details
+    except (OSError, RuntimeError, TypeError, ValueError, ImportError, AttributeError, LookupError):
         receipt = _with_digest(
             {
                 "schema": SCHEMA,

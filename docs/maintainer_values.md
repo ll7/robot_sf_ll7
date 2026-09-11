@@ -37,8 +37,8 @@ code block is reintroduced.
 
 ## Procedure Owners
 
-- Validation depth and claim strength: the proportional validation matrix in `AGENTS.md` and
-  `docs/benchmark_governance.md`.
+- Validation depth and claim strength: the proportional validation matrix in `docs/code_review.md`
+  and benchmark claim boundaries in `docs/benchmark_governance.md`.
 - Task routing and command entrypoints: `docs/ai/agent_workflow_entrypoints.md`.
 - Development workflow, optional tooling, and review expectations: `docs/dev_guide.md`,
   `docs/dev_guide_reference.md`, and `docs/code_review.md`.

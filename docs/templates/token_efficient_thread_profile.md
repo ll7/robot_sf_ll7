@@ -246,3 +246,38 @@ Workers should not create labels, comments, PRs, merges, or other GitHub
 mutations unless the parent explicitly delegates that mutation. Parent Codex
 acceptance requires local diff review plus the validation tier named in the
 active profile.
+
+## Native Worker Feedback And Capacity
+
+Native subagent sessions share a bounded active-thread limit. Sending feedback to a *completed*
+worker can fail even when no new task is requested; this is separate from that worker's task result.
+Observed in issue #8870: `collaboration.send_message` to a completed worker returned
+`collab tool failed: agent thread limit reached`, and the following `collaboration.list_agents`
+showed the coordinator plus three running workers, with the completed recipient absent.
+
+That is one observed failure, not proof of the tool's internal allocation behavior. The coordinator
+contract is:
+
+- An **active-worker message** is ordinary dispatch and may run immediately.
+- **Completed-worker feedback** is not a retry trigger. If delivery fails at the active-thread
+  limit, queue the feedback, record the raw failure, and deliver it after a slot frees. Do not
+  resend the identical message in a loop.
+- If the feedback requires new work, define an **explicit follow-up task** with its own bounded
+  packet and dispatch it once capacity allows, instead of relying on a lifecycle message to reopen
+  the worker.
+- Preserve the reproduction for the tool owner when the supported non-triggering message contract
+  contradicts the observed failure.
+
+Deterministic four-slot example (one coordinator plus a three-worker active limit):
+
+| Slot | Occupant | Message class | Handling |
+| --- | --- | --- | --- |
+| 1 | Coordinator | - | Holds the loop. |
+| 2 | Worker A, running | Active-worker message | Dispatch now. |
+| 3 | Worker B, running | Active-worker message | Dispatch now. |
+| 4 | Worker C, running | Active-worker message | Dispatch now. |
+| none | Worker D, completed | Completed-worker feedback | Queue; deliver when a slot frees. |
+| none | Worker D, completed | Explicit follow-up task | New bounded packet after a slot frees. |
+
+With no free slot, feedback to Worker D fails at the active-thread limit. The correct response is to
+queue it or define the bounded follow-up task, not to retry the identical failure.

@@ -341,15 +341,15 @@ class _FakeTorchCuda:
         return 1
 
     @staticmethod
-    def get_device_name(index: int) -> str:
+    def get_device_name(_index: int) -> str:
         return "Fake A100"
 
     @staticmethod
-    def get_device_capability(index: int) -> tuple[int, int]:
+    def get_device_capability(_index: int) -> tuple[int, int]:
         return (8, 0)
 
     @staticmethod
-    def get_device_properties(index: int) -> SimpleNamespace:
+    def get_device_properties(_index: int) -> SimpleNamespace:
         return SimpleNamespace(total_memory=8 * 1024 * 1024)
 
 

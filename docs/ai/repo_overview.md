@@ -39,6 +39,7 @@ Then branch by task type:
 - training/eval workflow: `docs/AGENT_INDEX.md`, `docs/training/`
 - end-to-end AI workflow: `docs/ai/ai-workflow.md`
 - command entrypoints and targeted large-file reads: `docs/ai/agent_workflow_entrypoints.md`
+- testing and QA: `tests/README.md`, `docs/qa_test_strategy.md`
 - prediction/forecast research lane routing: `docs/ai/prediction_lane.md`
 - issue execution history and handoff knowledge base: `docs/context/`
 - context note workflow: `docs/context/README.md`

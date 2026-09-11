@@ -2840,10 +2840,19 @@ def test_production_runners_reject_results_returned_after_the_deadline(
     or not hasattr(issue_audit_core.signal, "setitimer"),
     reason="requires POSIX interval timers",
 )
+@pytest.mark.timeout(120, method="thread")
 def test_slow_in_process_classification_is_interrupted_by_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A classifier that does not return cannot extend the CLI budget indefinitely."""
+    if (
+        hasattr(issue_audit_core.signal, "getitimer")
+        and hasattr(issue_audit_core.signal, "ITIMER_REAL")
+        and issue_audit_core.signal.getitimer(issue_audit_core.signal.ITIMER_REAL)[0] > 0
+    ):
+        pytest.skip(
+            "pre-existing SIGALRM timer is active, which disables in-process deadline interrupt"
+        )
 
     def slow_classifier(*_args: Any, **_kwargs: Any) -> object:
         time.sleep(1.0)
@@ -2880,11 +2889,20 @@ def test_slow_in_process_classification_is_interrupted_by_deadline(
     or not hasattr(issue_audit_core.signal, "setitimer"),
     reason="requires POSIX interval timers",
 )
+@pytest.mark.timeout(120, method="thread")
 def test_slow_in_process_discovery_emits_a_timeout_plan(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """A discovery phase that does not return cannot escape the CLI deadline."""
+    if (
+        hasattr(issue_audit_core.signal, "getitimer")
+        and hasattr(issue_audit_core.signal, "ITIMER_REAL")
+        and issue_audit_core.signal.getitimer(issue_audit_core.signal.ITIMER_REAL)[0] > 0
+    ):
+        pytest.skip(
+            "pre-existing SIGALRM timer is active, which disables in-process deadline interrupt"
+        )
 
     def slow_discovery(*_args: Any, **_kwargs: Any) -> dict[str, object]:
         time.sleep(1.0)

@@ -2,13 +2,10 @@
 
 This file is the compact boot contract and the entry point into repository instructions. It owns
 the Instruction Precedence contract below; other surfaces link to it instead of restating their own
-authority order. Long-form workflow guidance is mapped to topic owners by the index at
-`docs/dev/agents/relocated-agents-guidance.md`; read the linked section before that workflow.
-Prefer reusable shell entry points under `scripts/dev/` for automation and AI skills.
-Use `.vscode/tasks.json` as thin wrappers around those scripts.
-Keep agent prompts, internal instructions, and handoff notes token-efficient while preserving meaning.
-For human-facing surfaces (README, `docs/`, feature names, `CHANGELOG.md`, public docstrings, PR/issue titles),
-clarity wins: define acronyms/project terms on first use or link `docs/glossary.md`, and lead with a plain-language summary.
+authority order. Topic owners for long-form workflow guidance are indexed at
+`docs/dev/agents/relocated-agents-guidance.md`.
+Prefer reusable shell entry points under `scripts/dev/`. Keep agent prompts and handoff notes
+token-efficient; clarity wins on human-facing surfaces (expand terms or link `docs/glossary.md`).
 
 ## Instruction Precedence
 
@@ -16,21 +13,17 @@ clarity wins: define acronyms/project terms on first use or link `docs/glossary.
 Repository-internal sources, highest first:
 
 1. **Repository invariants** — safety, evidence integrity, honest validation reporting, and
-   recoverability of local work. No lower source may weaken these; benchmark, metric, schema,
-   model-provenance, and paper-facing contracts are invariant-class.
-2. **Current maintainer direction** in the active issue, PR, or thread. It overrides stale workflow
-   prose and lower sources, but it cannot waive an invariant or authorize an unproven claim.
-3. **Nearest scoped guidance** (for example `SLURM/AGENTS.md` or a task-owned procedure doc). It may
-   specialize root guidance for its scope; it cannot silently weaken root invariants.
-4. **`AGENTS.md`** (this file): the boot router, the invariant list, and the owner of this
-   precedence contract.
-5. **Task-owned procedures and skills** selected through the route table in
-   `docs/ai/agent_workflow_entrypoints.md`: `.agents/PLANS.md`, `.agents/skills/`,
-   `docs/dev/worktree_lifecycle.md`, and other canonical owners.
-6. **`docs/maintainer_values.md`**: stable rationale and tie-breakers for ambiguous trade-offs; not
-   a second executable rulebook.
-7. **`docs/dev_guide.md`, context notes, historical reports, and provider adapters**: supporting
-   detail and provider mechanics.
+   recoverability of local work; benchmark, metric, schema, model-provenance, and paper-facing
+   contracts are invariant-class.
+2. **Current maintainer direction** in the active issue, PR, or thread; it overrides stale workflow
+   prose but cannot waive an invariant or authorize an unproven claim.
+3. **Nearest scoped guidance** (`SLURM/AGENTS.md`, task-owned procedure docs); it specializes root
+   guidance and cannot silently weaken root invariants.
+4. **`AGENTS.md`** (this file): boot router, invariant list, and owner of this precedence contract.
+5. **Task-owned procedures and skills** selected through `docs/ai/agent_workflow_entrypoints.md`.
+6. **`docs/maintainer_values.md`**: rationale and tie-breakers, not a second rulebook.
+7. **`docs/dev_guide.md`, context notes, historical reports, and provider adapters**: detail and
+   provider mechanics.
 
 Resolution rules:
 
@@ -45,73 +38,38 @@ Resolution rules:
   does not define a competing runtime precedence.
 <!-- instruction-precedence:end -->
 
-When this contract resolves a recurring conflict, make it visible: update the active issue or PR,
-patch the stale instruction, or open a bounded follow-up issue.
-
-## Maintainer Value Hierarchy
-
-`docs/maintainer_values.md` records the stable principles and tie-breakers that resolve trade-offs
-when procedure is silent; it is linked, not restated, here. The hard rule is honest, transparent,
-reproducible work, and process scales with risk and claim strength. When instruction surfaces
-conflict, the Instruction Precedence contract above is the single normative source.
-
-Routine workflow cleanup should proceed autonomously when the scope is bounded; label assumptions,
-uncertainty, and evidence grade instead of pausing for confirmation. Treat Project #5 ordering and
-scores as advisory when they conflict with fresh maintainer direction or newly observed evidence;
-record the override and update Project metadata later when quota and API limits allow.
-
-Use validation proportional to the file/change type, with claim strength as an escalation override:
-
-| Change class | Minimum proof | Full `pr_ready_check` required when |
-| --- | --- | --- |
-| Docs-only or instruction-only | Inspect diff; verify changed links or paths where practical; run available lightweight markdown, index, or sync checks. On human-facing surfaces, also run a clarity pass: expand acronyms/project terms or link `docs/glossary.md`, and lead with a plain-language summary. | The text changes generated indexes, compatibility surfaces, or makes evidence-sensitive claims. |
-| Workflow/tooling docs or skills | Cheap docs proof plus relevant skill/schema/sync checks such as `uv run python scripts/dev/check_skills.py --preflight <skill>` or `uv run python scripts/tools/sync_ai_config.py --check`. | Scripts, schemas, generated indexes, routing behavior, or automation behavior changes. |
-| Runtime code | Focused tests for changed behavior plus lint/format gates. | The change is user-facing, cross-module, release-facing, or affects shared execution paths. |
-| Benchmark, metric, schema, model-provenance | Executable proof on the intended contract with provenance and fallback/degraded exclusions. | Almost always; skip only for explicit diagnostic-only docs with no semantic change. |
-| Paper-facing or public claims | Reproducible evidence matching the claim boundary, caveats, uncertainty, and artifact provenance. | Always before treating the claim as established. |
-
-Claim strength overrides the nominal row: a docs or workflow edit that asserts a benchmark, metric,
-schema, model-provenance, or paper-facing result must use the stronger proof tier for that claim.
+When this contract resolves a recurring conflict, update the active issue or PR, patch the stale
+instruction, or open a bounded follow-up issue.
 
 ## Task-Scoped Context Entrypoints
 
-Read only the surfaces relevant to the task. The machine-readable profile and route mapping is
-`.agents/task_scope_manifest.yaml`; the human route table is owned by
-`docs/ai/agent_workflow_entrypoints.md`. Select one execution profile from the changed surfaces and
-risk, load only that profile's required context, and escalate when inspection reveals more risk.
-
-| Profile | Typical work | Minimum context and action |
-| --- | --- | --- |
-| **Observe** | inspect, explain, triage, read-only review | root router + nearest scoped guidance; no environment, branch, plan, worktree, or PR ceremony |
-| **Local** | bounded docs/code/test edit | scoped guidance + targeted validation for the changed behavior |
-| **Coordinated** | multi-module, API, migration, or ambiguous change | execution plan, isolated worktree when collision risk exists, integration validation |
-| **Evidence-critical** | benchmark evidence, research claim, release, security, publication artifacts | full evidence, custody, reproducibility, exact-head, and release gates |
+The machine-readable profile and route mapping is `.agents/task_scope_manifest.yaml`; the human route
+table is owned by `docs/ai/agent_workflow_entrypoints.md`. Select one profile from the changed
+surfaces and risk, load only its required context, and escalate when inspection reveals more risk:
+Observe (inspect, explain, triage; no environment, branch, plan, worktree, or PR ceremony), Local
+(bounded edit; scoped guidance plus targeted validation), Coordinated (multi-module, API, migration,
+or ambiguous; plan, isolated worktree when collision risk exists, integration validation),
+Evidence-critical (benchmark, research, release, security, publication; full evidence, custody,
+reproducibility, exact-head, and release gates).
 
 Always-required core context:
 - `docs/maintainer_values.md`: maintainer principles and tie-breakers.
 - `AGENTS.md`: invariants, precedence, and this router.
-- `docs/ai/agent_workflow_entrypoints.md`: route table, canonical command entrypoints, handoff format, and large-file navigation.
+- `docs/ai/agent_workflow_entrypoints.md`: route table, command entrypoints, handoff format, and large-file navigation.
 
-The route table in `docs/ai/agent_workflow_entrypoints.md` is the single owner of task-to-guidance
-routing. Select the matching route there, use the profile mapping in `.agents/task_scope_manifest.yaml`,
-and load only the required context; do not restate the route mapping in this file. References in
-instruction surfaces are required by default. A reference is optional only when it is marked
-optional/illustrative, is itself generated, or is explicitly scoped as background.
-
-For the token-efficient active thread profile, phase audits, meta-workflow PR gate, SLURM lane rules,
-shared knowledge graph, cross-agent compatibility, and context-note policy, use the topic index at
-`docs/dev/agents/relocated-agents-guidance.md` to select the canonical owner.
+The route table is the single owner of task-to-guidance routing; references are required by default
+and optional only when marked optional/illustrative, generated, or explicitly background. For the
+token-efficient thread profile, phase audits, meta-workflow gate, SLURM lanes, knowledge graph,
+cross-agent compatibility, and context-note policy, use the topic index at
+`docs/dev/agents/relocated-agents-guidance.md`.
 
 ## Local Machine Context
 
 If `local.machine.md` or `local.machine.<name>.md` exists at the repository root, read it before
-running expensive commands. Follow local limits for concurrency, execution location, GPU/SLURM
-requirements, and machine-specific constraints. If no local context exists, use conservative
-repository-safe commands. Never store secrets in local machine context files.
+expensive commands and follow its concurrency, location, and hardware limits. Never store secrets
+there.
 
 ## Mutation And Delivery Triggers
-
-Match repository mutation and delivery ceremony to the selected profile and the actual risk:
 
 | Situation | Required response |
 | --- | --- |
@@ -120,126 +78,32 @@ Match repository mutation and delivery ceremony to the selected profile and the 
 | Concurrent, multi-step, or artifact-bearing mutation | Use an isolated linked worktree and follow `docs/dev/worktree_lifecycle.md` |
 | Requested delivery, review, or merge | Follow `docs/code_review.md` and `docs/dev_guide.md` for PR metadata, exact-head review, readiness, and landing |
 
-Every durable implementation ends with a clear outcome: a delivered PR or commit, a requested direct
-change, or an explicit handoff. Destructive Git operations, losing dirty worktrees, publishing
-ignored-but-durable artifacts, and reporting validation that was not performed remain forbidden
-regardless of profile.
-
+Every durable implementation ends with a delivered PR or commit, a requested direct change, or an
+explicit handoff. Destructive Git operations, losing dirty worktrees, publishing ignored-but-durable
+artifacts, and reporting validation that was not performed remain forbidden regardless of profile.
 Worktree creation, bootstrap, branch synchronization, teardown, artifact custody, and stash safety
-are owned by `docs/dev/worktree_lifecycle.md`; read it when the trigger applies instead of restating
-its steps here.
+are owned by `docs/dev/worktree_lifecycle.md`.
 
-## Project Structure And Ownership
+## Validation And Evidence
 
-Core simulation code lives in `robot_sf/` with `gym_env`, `sim`, `nav`, and `render` subpackages.
-Training and evaluation entry points sit in `scripts/`; demos and notebooks live under `examples/`.
-Tests are split between `tests/`, `tests/pygame/`, and `fast-pysf/`. Assets and checkpoints are
-versioned under `maps/svg_maps/` and `model/`.
+Match proof to risk: docs and instruction changes use the cheap path (inspect the diff, verify
+links); runtime changes need focused tests plus lint and format; benchmark and planner changes need
+benchmark, policy-analysis, or equivalent executable evidence; metric and schema changes need
+targeted assertions with a reproducible sample; paper-facing claims need reproducible evidence at
+the claim boundary. Claim strength overrides the nominal class. Fallback or degraded benchmark
+execution is never success evidence. If proof fails or cannot be gathered, close as `blocked`,
+`diagnostic`, or `not benchmark evidence` and record the next smallest step. The full validation
+matrix is owned by `docs/code_review.md`; benchmark governance by `docs/benchmark_governance.md`.
 
-Before creating a new module, script, config family, or asset registration, find the canonical owner
-and extend it instead of duplicating it. Search first with `rg`, read relevant matches, and reuse
-shared primitives in `robot_sf/benchmark/`, `robot_sf/research/`, `scripts/tools/`, or
-`scripts/validation/` when they already own the concern. Per-issue scripts are for genuinely new
-orchestration, not re-deriving existing capability. If a new owner is unavoidable, state what it
-supersedes in the PR.
+## Delivery And Communication
 
-When changing a pinned external GitHub Action (`uses: owner/action@<40-hex-SHA>`) in
-`.github/workflows/`, search for the old exact action reference and update coupled workflow or test
-references in the same change. Run `uv run python scripts/dev/check_dependabot_update_policy.py
---base-ref origin/main --json` and the focused policy tests before handoff; this is the canonical
-guard for base-to-head action-pin drift.
-
-## Build, Test, And Style
-
-Set up dependencies with `uv sync --all-extras` and hooks with `uv run pre-commit install`. Format
-and lint with `uv run ruff check .` followed by `uv run ruff format .`. Run the main suite with
-`uv run pytest tests`; add `-m "not slow"` for long benches. Headless GUI checks use
-`DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest tests/pygame`. Validate SocialForce
-with `uv run python -m pytest fast-pysf/tests -v`.
-
-Prefer shared development entry points:
-
-- `scripts/dev/ruff_fix_format.sh`
-- `uv run python scripts/dev/run_compact_validation.py -- <command>`
-- `scripts/dev/run_tests_parallel.sh`
-- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
-- `scripts/dev/gh_comment.sh` for Markdown-heavy GitHub comments
-
-Use config-first workflows for reproducibility: stable experiments belong under `configs/` with a
-canonical `--config <path>` command. CLI flags are for short-lived local overrides. Ruff enforces
-4-space indent, 100-character lines, and double-quoted strings. Prefer type-annotated interfaces,
-factory functions as public entry points, `snake_case` modules, `PascalCase` classes/dataclasses,
-`test_<feature>.py` tests, fixtures in `conftest.py`, and structured logging instead of ad-hoc prints.
-
-## Research And Benchmark Discipline
-
-Research progress is primary, but claim strength controls proof. Benchmark-facing, metric-facing,
-schema-facing, skill, and test changes require concrete evidence appropriate to risk. New local
-planners must be proven with an actual benchmark or targeted execution path in this repository.
-Metric changes need proof that values compute as intended or fix the regression. New skills must be
-checked against their real invocation path and referenced files. New tests should fail for the right
-reason before the fix when practical, or include direct evidence for the intended contract.
-
-Fallback/degraded benchmark execution is not success evidence unless the task explicitly measures
-that mode. If a planner, environment, or dependency cannot satisfy an accurate benchmark contract,
-fail closed with a clear error and `not available` or `failed` status. If intended proof fails or
-cannot be gathered, close as `blocked`, `diagnostic`, or `not benchmark evidence`; record the next
-smallest proof step. Benchmark reports and issue follow-ups must identify `native`, `adapter`,
-`fallback`, or `degraded` mode and treat fallback/degraded as caveats.
-
-Match proof to risk: benchmark/planner changes need benchmark, policy-analysis, or equivalent
-executable evidence; training/config workflow changes need canonical command or smoke path;
-metrics/schema changes need targeted assertions and a reproducible sample; docs/skill/instruction
-changes need referenced path, command, and discoverability checks.
-
-## Commit And Pull Request Workflow
-
-Apply this section when remote delivery, review, or merge is requested or required by the selected
-profile or tool workflow; a bounded local change ends with the direct change and an explicit handoff.
-
-Use conventional commit style from history. Each PR should summarize intent, reference related
-issues, and list validation commands. Include screenshots or GIFs when UI playback changes, and note
-new assets under `maps/` or `model/`. Before opening a PR, fetch latest `origin/main`, merge or
-rebase into the feature branch, and validate against the fresh base. Docs-only low-risk instruction
-branches may use the cheaper official path: inspect diff, verify referenced paths where practical,
-and state when full readiness was not run.
-
-Before PR creation, inspect newly created `output/*` with a compact count-first view and classify
-artifact handling. Fill downstream propagation for evidence-producing PRs; for low-risk or
-not-applicable changes, state why. Research, benchmark, metric, paper-facing, or other evidence-producing
-PRs must state target claim/hypothesis/blocker, comparator/baseline, evidence tier, result
-classification, decision/stop rule, and synthesis/update target. Support/tooling/docs-only PRs with
-no research claim may use `NA` and explain why.
-
-Because repository merges default to squash, the final PR title and body are part of the delivered
-change. After every revision or fix push, rebuild the body from the final diff, validation, claims,
-and follow-ups and run `uv run python scripts/dev/gh_pr_body_rest.py --reconcile` with the final title. The helper
-is idempotent; change the title only when final scope, intent, type, or issue linkage changed. A
-trusted exact-head review must carry `pr-metadata: reconciled @ <digest>` for the resulting title/body,
-and direct or native queue admission must fail closed when that evidence is missing or stale.
-
-Use repository-root-relative paths in PRs, issue comments, docs, and agent responses. For GitHub
-comments with Markdown-heavy bodies, do not pass body inline through the shell; use
-`scripts/dev/gh_comment.sh`, `gh issue/pr comment --body-file`, or REST JSON input.
-
-For batching, GraphQL quota, Project #5 metadata, shared model routing, and autonomous stop guard
-details, follow the topic index at `docs/dev/agents/relocated-agents-guidance.md` to the owner.
-
-## Planning And Communication
-
-A persistent execution plan is required for the Coordinated and Evidence-critical profiles and
-optional otherwise (see `.agents/task_scope_manifest.yaml`); when required, follow
-`.agents/PLANS.md`. Prefer concise-but-explanatory responses over terse status-only updates. For
-benchmark or planner findings, include what changed, why it matters, and what risk or limitation
-remains. Separate observed evidence from hypothesis when uncertainty remains.
-
-## Key Codex Skills
-
-Use repo-local skills under `.agents/skills/` when task primarily involves issue delivery, PR review,
-benchmark/planner context, validation, or GitHub workflow automation. Start with `.agents/skills/README.md`
-when choosing among them. Common delivery skills include `goal-issue-implementation` (including
-selected-issue mode), `implementation-verification`, `pr-ready-check`, `gh-pr-opener`,
-`goal-pr-review`, and `gh-pr-merger`.
+Use conventional commits. A PR states intent, linked issues, validation commands, artifact
+disposition, and downstream propagation; because merges squash, reconcile the final title and body
+with `uv run python scripts/dev/gh_pr_body_rest.py` and pass Markdown-heavy comments through
+`scripts/dev/gh_comment.sh` or a body file. Prefer concise-but-explanatory reporting: what changed,
+why it matters, remaining risk, and uncertainty separated from observed evidence. When a persistent
+plan is required (Coordinated and Evidence-critical profiles), follow `.agents/PLANS.md`; delivery
+and context skills are indexed in `.agents/skills/README.md`.
 
 ## Friction And Follow-Up
 
@@ -255,12 +119,9 @@ Findings observed while working get a proportional response:
 Examples: a missing validation script that blocks a gate is addressed or escalated; a repeated
 manual release step with demonstrated value is tracked once and may become a checked-in helper; a
 harmless one-off inconvenience and an unrelated code smell get no action; stale documentation found
-outside the task gets a handoff note.
-
-Automation is justified by demonstrated repetition, error reduction, custody or reproducibility
-value, or a clear net maintenance benefit — not by a blanket expectation that a sequence may recur.
-Friction issues use the existing `friction:` title prefix and `technical-debt` or `documentation`
-label, naming the command or file and the concrete change; do not invent labels or priorities.
+outside the task gets a handoff note. Automation is justified by demonstrated repetition, error
+reduction, custody or reproducibility value, or clear net maintenance benefit. Friction issues use
+the existing `friction:` prefix and `technical-debt` or `documentation` labels.
 
 ## Donts
 

@@ -20,10 +20,13 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -2269,12 +2272,39 @@ def _load_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
 
 
 def _write_json(path: Path, value: Mapping[str, Any]) -> str | None:
-    """Write a human-readable JSON artifact to an explicit caller path."""
+    """Atomically write a human-readable JSON artifact to an explicit caller path."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        payload = json.dumps(value, indent=2, sort_keys=True) + "\n"
+        handle, temp_name = tempfile.mkstemp(
+            dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                stream.write(payload)
+            os.replace(temp_name, path)
+        finally:
+            with suppress(OSError):
+                os.unlink(temp_name)
     except (OSError, ValueError) as exc:
         return f"failed to write output receipt: {exc}"
+    return None
+
+
+def _emit_payload(
+    payload: Mapping[str, Any], output: Path | None, *, indent: int | None = None
+) -> int | None:
+    """Persist the payload to ``output`` when requested, then print it.
+
+    Returns a nonzero exit code when the requested artifact cannot be written so
+    every mode fails closed instead of reporting success without the declared file.
+    """
+    if output is not None:
+        write_error = _write_json(output, payload)
+        if write_error:
+            print(json.dumps({"status": "error", "error": write_error}, sort_keys=True))
+            return 1
+    print(json.dumps(payload, indent=indent, sort_keys=True))
     return None
 
 
@@ -2293,14 +2323,17 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        help="write a report-only receipt to this path (parent directories created automatically)",
+        help=(
+            "atomically write the mode's JSON payload to this path; parent directories are "
+            "created automatically and write failures fail closed"
+        ),
     )
     parser.add_argument("--waiver-actor", default="")
     parser.add_argument("--waiver-reason", default="")
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are explicit and fail closed.
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912 - CLI modes are explicit and fail closed.
     """Run a read-only receipt report, validation, or guarded apply."""
     args = _parser().parse_args(argv)
     if args.expected_head is not None and not _full_sha(args.expected_head):
@@ -2309,29 +2342,27 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
     if args.mode in {"validate", "apply"} and args.receipt_file is None:
         print("--receipt-file is required for validate/apply", file=sys.stderr)
         return 2
+
+    def emit(payload: Mapping[str, Any], *, indent: int | None = None) -> int | None:
+        """Persist the payload to --output when requested; return a nonzero code on write error."""
+        return _emit_payload(payload, args.output, indent=indent)
+
     if args.mode == "report-only":
         evidence, error = build_live_evidence(args.pr, repository=args.repo)
         if error or evidence is None:
-            print(
-                json.dumps(
-                    {"status": "error", "error": error or "evidence unavailable"}, sort_keys=True
-                )
-            )
+            emit({"status": "error", "error": error or "evidence unavailable"})
             return 1
         if (
             args.expected_head is not None
             and _string(evidence.get("head_sha")).lower() != args.expected_head.lower()
         ):
-            print(
-                json.dumps(
-                    {
-                        "status": "blocked",
-                        "error": "live PR head does not match expected head",
-                        "expected_head_sha": args.expected_head,
-                        "live_head_sha": evidence.get("head_sha"),
-                    },
-                    sort_keys=True,
-                )
+            emit(
+                {
+                    "status": "blocked",
+                    "error": "live PR head does not match expected head",
+                    "expected_head_sha": args.expected_head,
+                    "live_head_sha": evidence.get("head_sha"),
+                }
             )
             return 2
         receipt = build_receipt(
@@ -2342,43 +2373,31 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
                 "reason": args.waiver_reason,
             },
         )
-        if args.output:
-            write_error = _write_json(args.output, receipt)
-            if write_error:
-                print(json.dumps({"status": "error", "error": write_error}, sort_keys=True))
-                return 1
-        print(json.dumps(receipt, indent=2, sort_keys=True))
+        emit_error = emit(receipt, indent=2)
+        if emit_error is not None:
+            return emit_error
         return 0 if receipt.get("status") == "ready" else 1
 
     receipt, error = _load_json(args.receipt_file)
     if error or receipt is None:
-        print(
-            json.dumps({"status": "error", "error": error or "receipt unavailable"}, sort_keys=True)
-        )
+        emit({"status": "error", "error": error or "receipt unavailable"})
         return 1
     if (
         args.expected_head is not None
         and _string(receipt.get("head_sha")).lower() != args.expected_head.lower()
     ):
-        print(
-            json.dumps(
-                {
-                    "status": "blocked",
-                    "error": "receipt head does not match expected head",
-                    "expected_head_sha": args.expected_head,
-                    "receipt_head_sha": receipt.get("head_sha"),
-                },
-                sort_keys=True,
-            )
+        emit(
+            {
+                "status": "blocked",
+                "error": "receipt head does not match expected head",
+                "expected_head_sha": args.expected_head,
+                "receipt_head_sha": receipt.get("head_sha"),
+            }
         )
         return 2
     evidence, error = build_live_evidence(args.pr, repository=args.repo)
     if error or evidence is None:
-        print(
-            json.dumps(
-                {"status": "error", "error": error or "live evidence unavailable"}, sort_keys=True
-            )
-        )
+        emit({"status": "error", "error": error or "live evidence unavailable"})
         return 1
     merge_result = receipt.get("merge_result")
     merge_status = merge_result.get("status") if isinstance(merge_result, Mapping) else None
@@ -2387,10 +2406,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
         receipt, live_evidence=evidence, allow_terminal_transition=allow_terminal
     )
     if args.mode == "validate":
-        print(json.dumps(verification, indent=2, sort_keys=True))
+        emit_error = emit(verification, indent=2)
+        if emit_error is not None:
+            return emit_error
         return 0 if verification.get("passed") is True else 1
     if verification.get("passed") is not True:
-        print(json.dumps(verification, indent=2, sort_keys=True))
+        emit_error = emit(verification, indent=2)
+        if emit_error is not None:
+            return emit_error
         return 1
     if args.mode == "apply" and verification.get("terminal_transition") == "merged":
         merged_sha = _string(
@@ -2407,17 +2430,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
             },
             observed_at=evidence.get("observed_at"),
         )
-        print(
-            json.dumps(
-                {
-                    "pr": args.pr,
-                    "merge_commit_sha": merged_sha,
-                    "receipt": merged_receipt,
-                },
-                indent=2,
-                sort_keys=True,
-            )
+        emit_error = emit(
+            {
+                "pr": args.pr,
+                "merge_commit_sha": merged_sha,
+                "receipt": merged_receipt,
+            },
+            indent=2,
         )
+        if emit_error is not None:
+            return emit_error
         return 0
 
     merged, merge_error = apply_guarded_merge(receipt, repository=args.repo, api=_run_gh_api)
@@ -2428,9 +2450,11 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
         }
         if isinstance(merged, Mapping) and "receipt_digest" in merged:
             output["receipt"] = merged
-        print(json.dumps(output, sort_keys=True))
+        emit(output)
         return 1
-    print(json.dumps(merged, indent=2, sort_keys=True))
+    emit_error = emit(merged, indent=2)
+    if emit_error is not None:
+        return emit_error
     return 0
 
 

@@ -117,6 +117,11 @@ profile target, notice references, and allowed release surfaces without
 generalizing the exception:
 [dependency_license_inventory.md](dependency_license_inventory.md).
 
+Bounded dependency archive evidence collector: exact package/source/archive
+identity checks, offline replay, bounded inspection, and diagnostic-only output
+without rights or release admission:
+[dependency_archive_evidence_collector.md](dependency_archive_evidence_collector.md).
+
 Issue #7340 real-manifest feasibility-first diagnostic: a config-first native probe over a fixed
 station-platform candidate pool, with route certification, loader-backed pedestrian binding,
 separate rejection/unavailability accounting, and a fail-closed comparison contract. The bounded

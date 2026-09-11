@@ -27,6 +27,8 @@ For operational retention classes, preservation proof, and cleanup-eligibility w
 [Artifact Retention, Preservation, and Cleanup Guide](artifact_retention_and_cleanup.md).
 For the check-only guard that decides when one artifact or output identity may be deleted, see the
 [Cleanup Eligibility Guard](cleanup_eligibility.md).
+For the complete post-access restore and local-analysis sequence, see the
+[post-access restoration and local-analysis runbook](../post_access_local_analysis_runbook.md).
 
 ## Vocabulary
 
@@ -101,6 +103,13 @@ and next owner, with implementation/compute/scheduler/artifact/evidence/review/c
 separate. No scientific score or admission decision is computed; stale, missing, contradictory,
 duplicate, wrong-schema, or unsanitized input masks affected rows as explicit `unavailable`, and
 output carries no private paths, hostnames, accounts, credentials, or signed URLs.
+
+## Checkpoint Compatibility Audit
+
+[`scripts/models/audit_checkpoint_compatibility.py`](../../scripts/models/audit_checkpoint_compatibility.py)
+audits a sanitized overlay into a deterministic JSON plus Markdown inventory with nine terminal
+states and stable reason codes; `--check` exits 1 when an active consumer's required model is not
+recoverable and load-verified and 2 for unknown input (see the module docstring).
 
 ## Sanitized Lineage Index
 

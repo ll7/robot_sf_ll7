@@ -68,7 +68,7 @@ started outside that process are not adversarially isolated. See
 ### Route Boundaries and Negative Rules
 
 - **Read-only review never mutates branches**: A reviewer records target/base/head SHAs and inspects or fetches according to existing policy; it must never merge `origin/main` into the implementation branch or push to it. Ordinary Git invocations use the machine guard (`scripts/dev/review_worktree_guard.py`, issue #8321); deliberate override probes require its Linux Landlock `run` boundary.
-- **Validation proportional to change risk**: A pure documentation edit does not trigger an expensive simulation campaign; conversely, a runtime or benchmark change cannot pass on documentation or lint checks alone (see maintainer value hierarchy in `AGENTS.md`).
+- **Validation proportional to change risk**: A pure documentation edit does not trigger an expensive simulation campaign; conversely, a runtime or benchmark change cannot pass on documentation or lint checks alone (see maintainer values in `docs/maintainer_values.md`).
 - **Environment blockers are not relaxation licenses**: Missing optional or native dependencies remain visible. An environment blocker is an explicit blocker that routes to environment repair or closes as `blocked`; it never authorizes lowering scientific gates or claiming fallback/degraded execution as benchmark success.
 - **Freshness before expensive proof**: A moved PR head/base or changed material metadata invalidates prior readiness proof; re-validate against the exact current head before handoff (issue #7649).
 - **Separation of observer/audit collection from mutations**: Observers and audit scripts emit bounded snapshots with producer revision, freshness timestamp, and data completeness marker. Quota exhaustion, truncated pagination, or a stale producer must never be treated as an empty-success result or authorize state mutations, issue updates, or label writes (issues #8304 and #8307).
@@ -149,48 +149,9 @@ later retries to avoid duplicate work; every route manifest remains route eviden
 
 The accepted handoff input is a flat `handoff.v2` request (there is no nested `packet`):
 
-<!-- handoff.v2-example:start -->
-
-```yaml
-schema_version: handoff.v2
-handoff_type: request
-task_id: ROBOTSF-EXAMPLE
-provider: opencode_go
-mode: issue_implementation
-goal: Implement the bounded Robot SF packet and return frozen-head evidence.
-owned_paths:
-  - .agents/README.md
-forbidden_actions:
-  - push
-  - open_pr
-  - mutate_remote
-required_context:
-  - target repository frozen HEAD
-  - accepted route-plan contract
-required_output:
-  - changed_files
-  - validation_evidence
-  - final_status
-acceptance_gate:
-  - all declared validation commands pass
-  - changed files stay within owned_paths
-validation_commands:
-  - scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q tests/dev/test_check_skills.py
-execution_mode: external_runtime
-dependencies: []
-budget:
-  runtime_minutes: 30
-stop_conditions:
-  - scope expands beyond owned_paths
-  - a forbidden action is requested
-side_effect_policy:
-  remote_mutation: false
-  local_edits: true
-max_depth: 0
-sync_barrier: null
-```
-
-<!-- handoff.v2-example:end -->
+The accepted handoff example lives next to the routing contract in
+`docs/templates/handoff.v2.example.yaml`; the field contract is enforced by the shared route
+resolver, not restated here.
 
 For a production `--out` plan, pass the explicit identity/risk/head contract
 `--task-id`, `--task-class`, `--risk`, `--handoff-file`, `--frozen-head`, `--target-repo`, and

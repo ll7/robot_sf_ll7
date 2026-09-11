@@ -24,17 +24,12 @@ def _load_check_skills_module():
 
 
 def _documented_handoff(readme: str) -> tuple[dict[str, object], str]:
-    """Extract the flat handoff and resolver command blocks."""
-    start_marker = "<!-- handoff.v2-example:start -->"
-    end_marker = "<!-- handoff.v2-example:end -->"
-    start = readme.index(start_marker)
-    end = readme.index(end_marker, start)
-    yaml_start = readme.index("```yaml", start) + len("```yaml")
-    yaml_end = readme.index("```", yaml_start)
-    assert yaml_end < end
-    handoff = yaml.safe_load(readme[yaml_start:yaml_end])
+    """Load the moved flat handoff template and extract the resolver command block."""
+    template = Path(__file__).parents[2] / "docs/templates/handoff.v2.example.yaml"
+    handoff = yaml.safe_load(template.read_text(encoding="utf-8"))
     assert isinstance(handoff, dict)
-    bash_start = readme.index("```bash", end) + len("```bash")
+    command_section = readme.index("The equivalent checkout-based command below")
+    bash_start = readme.index("```bash", command_section) + len("```bash")
     bash_end = readme.index("```", bash_start)
     return handoff, readme[bash_start:bash_end]
 

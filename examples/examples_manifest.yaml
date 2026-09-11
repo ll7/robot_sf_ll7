@@ -743,6 +743,16 @@ examples:
     doc_reference: null
     tags: [campaign, diagnostics, provenance, validation]
     expected_runtime: "~1s"
+  - path: advanced/40_restore_campaign_capsule.py
+    name: "40 Restore Campaign Capsule"
+    summary: "Restore and validate one preserved campaign capsule without running simulation."
+    category_slug: advanced
+    prerequisites: []
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: examples/advanced/README_restore_campaign_capsule.md
+    tags: [campaign, offline, fixtures, provenance, validation]
+    expected_runtime: "~1s"
   - path: advanced/41_artifact_preservation.py
     name: "41 Artifact Preservation"
     summary: "Convert a task-owned fixture tree into a verified preservation manifest."

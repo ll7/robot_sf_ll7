@@ -74,6 +74,27 @@ evidence stays `unknown`; an application nonzero exit is never auto-retried as
 infrastructure, and a completed scheduler state is never scientific success. Exit code 2
 means the receipt was unreadable or malformed, not that the job failed.
 
+## Running-job monitor (check-only)
+
+While a job is pending or running, reduce explicit sanitized observations without cancelling,
+retrying, or harvesting anything:
+
+```bash
+uv run python scripts/tools/monitor_running_jobs.py \
+  --check --projection <sanitized-projection.json> --once --format json
+```
+
+The projection lists only the intended job identities plus expected artifacts/rows and the
+harvest request/artifact-root packet. The monitor verifies job, source, and immutable
+submission-receipt identity before every state reduction, records transitions, observation
+timestamps, evidence digests, and array summaries, and emits `running_job_harvest_handoff.v1`
+naming the canonical `scripts/validation/harvest_terminal_job.py --check` command when a
+terminal state is observed. For live polling, pass `--state-query "<read-only command with
+{job_id}>"` with `--interval` and a hard `--max-wall-seconds`; expiry emits
+`monitor_window_expired` with the current state instead of classifying the job terminal. The
+monitor never cancels, retries, submits, or harvests, and scheduler completion is never
+artifact or scientific success.
+
 ## Training submission queue
 
 Use `experiments/submission_queue.yaml` for reviewable planned training submissions that should be

@@ -30,6 +30,12 @@ For the check-only guard that decides when one artifact or output identity may b
 For the complete post-access restore and local-analysis sequence, see the
 [post-access restoration and local-analysis runbook](../post_access_local_analysis_runbook.md).
 
+Tool-specific contracts live in their own `docs/context/<tool>.md` note and are linked from a stable
+location in this file (this section), not as a new top-level section per tool. Keeping the shared
+vocabulary free of appended per-tool sections avoids parallel-merge conflicts and CI restarts when
+several tooling PRs land together; the note-maintenance convention is documented in the
+[Context Notes Workflow](README.md#per-tool-contract-notes).
+
 ## Vocabulary
 
 | Category | Meaning | May cite `output/`? | Acceptable reference |
@@ -107,9 +113,11 @@ output carries no private paths, hostnames, accounts, credentials, or signed URL
 ## Checkpoint Compatibility Audit
 
 [`scripts/models/audit_checkpoint_compatibility.py`](../../scripts/models/audit_checkpoint_compatibility.py)
-audits a sanitized overlay into a deterministic JSON plus Markdown inventory with nine terminal
-states and stable reason codes; `--check` exits 1 when an active consumer's required model is not
-recoverable and load-verified and 2 for unknown input (see the module docstring).
+audits a sanitized overlay, canonical `--registry`/`--config` intake, or both into a deterministic
+JSON plus Markdown inventory with nine terminal states and stable reason codes. An opt-in `--probe`
+runs a bounded-subprocess loader check (hard timeout, no hidden fallback); `--check` exits 1 when an
+active consumer's required model is not recoverable and load-verified and 2 for unknown input (see
+the module docstring).
 
 ## Sanitized Lineage Index
 

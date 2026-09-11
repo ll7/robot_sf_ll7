@@ -7,6 +7,16 @@ For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-f
 current entry points, status rules, and curated context-pack scopes. This README remains the note
 maintenance workflow and full discoverability surface.
 
+## Per-tool contract notes
+
+Each tool-specific contract lives in its own `docs/context/<tool>.md` note (for example
+[cleanup_eligibility.md](cleanup_eligibility.md) or
+[expiring_resource_deadlines.md](expiring_resource_deadlines.md)). The shared
+[artifact evidence vocabulary](artifact_evidence_vocabulary.md) links per-tool notes from a stable
+list near its top; do not append a new top-level section to that file for every new tool, because
+parallel tooling PRs then conflict on every merge and restart full CI. Add the note, add one stable
+link, and keep the shared vocabulary as the cross-cutting category contract.
+
 The issue #8068 observation-only goal-posterior baseline is documented in
 [issue_8068_goal_posterior_actor_baseline.md](issue_8068_goal_posterior_actor_baseline.md); its
 tracked smoke receipt is implementation-integrity evidence only.

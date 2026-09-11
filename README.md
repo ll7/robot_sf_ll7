@@ -140,6 +140,22 @@ CARLA is not installed by `uv sync --all-extras`. On CARLA-capable Linux x86_64 
 the pinned host-side client with `uv sync --all-extras --group carla` and check the Docker runtime
 with `scripts/dev/check_carla_runtime.sh`.
 
+### Prepared software release metadata
+
+This untagged tree carries non-authorizing preparation metadata for the planned software release
+`v0.0.6`. It is awaiting maintainer approval; no package upload, GitHub Release, Zenodo deposit,
+DOI, or tag is created by this preparation.
+
+The planned sanitized package surface includes the `all` extra and these twelve supported extras:
+`viz`, `maps`, `benchmark`, `training`, `gpu`, `recurrent`, `progress`, `analytics`, `browser`,
+`sacadrl`, `socnav`, and `criticality`. `rllib` remains development-only and is omitted from the
+sanitized candidate metadata. ORCA and `pyrvo2` remain external optional infrastructure.
+
+The sanitized candidate source excludes repository-level `examples/`, `model/`, and `maps/` payloads.
+The quickstart commands above that read those paths require a development checkout; they are not
+candidate-package runtime proof. A clean wheel-install check and exact candidate source/archive
+proof remain release gates.
+
 These three scripts provide the fastest first-touch path:
 
 1. `01_basic_robot.py` introduces the environment factory and a headless rollout.

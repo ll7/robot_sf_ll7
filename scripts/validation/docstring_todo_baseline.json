@@ -13,8 +13,8 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 152,
-      "occurrences": 1089
+      "files": 149,
+      "occurrences": 1043
     }
   },
   "files": {
@@ -54,7 +54,6 @@
     "tests/perf_utils/test_slow_report_fixture.py": 1,
     "tests/research/test_cli_help.py": 5,
     "tests/research/test_extractor_report.py": 2,
-    "tests/research/test_schemas.py": 12,
     "tests/research/test_success_criteria.py": 4,
     "tests/robot_env_simple_reward_test.py": 1,
     "tests/sensor/test_sensor_registry.py": 12,
@@ -93,8 +92,6 @@
     "tests/test_full_classic_visuals_simview_fallback.py": 15,
     "tests/test_generate_figures_summary_ci_missing_and_suffix.py": 8,
     "tests/test_generate_figures_table_tex.py": 2,
-    "tests/test_guard/test_artifact_paths.py": 24,
-    "tests/test_guard/test_check_artifact_root.py": 10,
     "tests/test_guard/test_migrate_artifacts.py": 7,
     "tests/test_image_sensor_fusion.py": 3,
     "tests/test_lidar_render.py": 11,
@@ -179,7 +176,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 152,
-    "total_occurrences": 1089
+    "files": 149,
+    "total_occurrences": 1043
   }
 }

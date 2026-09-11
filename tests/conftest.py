@@ -425,6 +425,13 @@ _FAST_FILES = {
     # in the exact-head changed-coverage gate.
     "test_check_cuda_runtime.py",
     "test_gpu_telemetry.py",
+    # The environment-manifest owner is deterministic schema, redaction, and
+    # digest coverage for the changed capture/check command (issue #8894).
+    "test_environment_manifest.py",
+    # TODO-docstring baseline guards must run in pull-request fast shards.
+    # PR shards exclude slow tests, so without this registration a cleanup PR
+    # can skip the guard and turn main red only after merge (issue #9000).
+    "test_check_docstring_todos.py",
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",
@@ -440,6 +447,11 @@ _FAST_FILES = {
     # Pareto plotting tests use Agg and deterministic fixtures; keep the
     # save_pareto_png SVG output branch in the exact-head fast lane.
     "test_plots_pareto.py",
+    # Digest-helper reuse (#8948) touches these deterministic owner modules;
+    # keep their owner tests in the exact-head fast lane.
+    "test_held_out_preflight.py",
+    "test_artifact_catalog.py",
+    "test_sha256_file_reuse_issue_8948.py",
     # CLI distribution-control regressions are deterministic input-boundary
     # contracts and exercise the benchmark error path in PR fast shards.
     "test_cli_plot_distributions_ci.py",

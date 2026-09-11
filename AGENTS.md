@@ -109,67 +109,25 @@ running expensive commands. Follow local limits for concurrency, execution locat
 requirements, and machine-specific constraints. If no local context exists, use conservative
 repository-safe commands. Never store secrets in local machine context files.
 
-## Fresh Worktree Bootstrap
+## Mutation And Delivery Triggers
 
-When working in a linked Git worktree, detect bootstrap state before running expensive commands.
-Honor explicit user/native-tool worktree locations first. Otherwise prefer a sibling container such
-as `../robot_sf_ll7.worktrees/<branch-or-issue-slug>`; use issue number plus a short slug when possible.
-Create it with `scripts/dev/create_worktree.sh`, which performs a read-only filesystem-capacity
-check before invoking `git worktree add` and refuses low-space targets before partial checkout.
-Treat a checkout as linked when `.git` is a file pointing into `.git/worktrees/...`, or when
-`git rev-parse --git-common-dir` differs from `git rev-parse --git-dir`.
+Match repository mutation and delivery ceremony to the selected profile and the actual risk:
 
-A linked worktree is fresh only when it lacks both `local.machine.md` and `.venv` plus any
-team-specific initialized marker. In a fresh worktree, default to
-`scripts/dev/run_worktree_shared_venv.sh -- <command>`. It reuses the initialized main checkout
-environment, pins imports to the active worktree, and avoids materializing one full `.venv` per
-worker. Use `scripts/dev/bootstrap_worktree.sh` only when a worktree-local environment is explicitly
-required; it still performs `uv venv .venv && uv sync --all-extras`, verifies `.venv/bin/python`,
-and adds `UV_NO_SYNC=1` to the activation script. For a dependency-only check that separates
-missing optional packages from changed-code failures, run
-`scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras`.
-Use a matching named profile such as `--profile training` when a local environment was bootstrapped
-with `--extra training`. Before manual reclaim, run
-`scripts/dev/check_worktree_capacity.py --inventory --json`; it never deletes files. Preserve
-durable evidence before pruning `output/`, remove only clean pushed worktrees, and remove only
-task-owned no-longer-running `/dev/shm` scratch. Do not include CARLA in routine `--all-extras`;
-opt into `--group carla` only for CARLA-capable worktrees and prove runtime with
-`scripts/dev/check_carla_runtime.sh` when needed.
+| Situation | Required response |
+| --- | --- |
+| No mutation and no durable artifact (inspect, explain, triage, review) | No branch, worktree, PR, or landing procedure; report findings only |
+| Bounded mutation without collision or custody risk | Work in the active task checkout according to caller/tool ownership; run targeted validation; report the diff |
+| Concurrent, multi-step, or artifact-bearing mutation | Use an isolated linked worktree and follow `docs/dev/worktree_lifecycle.md` |
+| Requested delivery, review, or merge | Follow `docs/code_review.md` and `docs/dev_guide.md` for PR metadata, exact-head review, readiness, and landing |
 
-If the current branch is not `main`, branch synchronization is mode-specific:
-- For implementation worktrees, fetch latest `origin/main` and merge it early: `git fetch origin main && git merge origin/main`.
-- For read-only review worktrees/passes, record target/base/head SHAs and inspect or fetch as
-  needed; never merge `origin/main` into the implementation branch or push to it during review.
-  Ordinary Git invocations use the machine Git guard (issue #8321,
-  `scripts/dev/review_worktree_guard.py`); deliberate override or alternate receive-pack probes
-  must run as descendants of its Linux Landlock `run` boundary, because raw commands launched
-  outside that process are not adversarially isolated.
-Do not create divergent per-worktree machine contexts unless the worktree truly needs machine-specific behavior.
+Every durable implementation ends with a clear outcome: a delivered PR or commit, a requested direct
+change, or an explicit handoff. Destructive Git operations, losing dirty worktrees, publishing
+ignored-but-durable artifacts, and reporting validation that was not performed remain forbidden
+regardless of profile.
 
-## Worktree Teardown And Artifacts
-
-After PR review, issue implementation, publishing, or abandoned exploration, either remove no-longer-needed
-worktrees safely or record why they are preserved. Before removal, enumerate worktrees and inspect
-status. Preserve relevant tracked, untracked, and ignored-but-important local change by committing,
-stashing, saving a patch, promoting a durable artifact, or recording an explicit handoff. Do not
-remove dirty worktrees or worktrees with unpushed commits unless the preservation record says what
-was kept or why nothing needed preservation. Inspect large ignored directories such as `output/`
-before removal; classify them as disposable, ignored cache, tracked manifest/evidence,
-durable-required, or handoff-needed.
-
-Treat `output/` as temporary, worktree-local, and generally untracked. Do not rely on it for durable
-dependencies unless the launcher hydrates from a canonical source. Promote artifacts required by
-future runs, benchmarks, reports, or release workflows to durable storage and track lightweight
-manifests or registry entries. Keep raw episode JSONL, videos, large SLURM logs, coverage HTML,
-model caches, and checkpoints out of git unless there is a narrow fixture reason. Do not use Git LFS
-as the default answer for generated benchmark artifacts.
-
-All linked worktrees share one `refs/stash` namespace: never run a bare `git stash pop` in a linked
-worktree (issue #7700). Prefer temp commits (`git commit -m "WIP <branch>"`), or
-`git stash push -m "<branch> <purpose>"` with the fail-closed
-`scripts/dev/safe_stash_pop.sh` / an explicit `git stash pop stash@{n}` after verifying the entry.
-
-For compact worktree hygiene and the full teardown procedure, read `docs/dev/agents/relocated-agents-guidance.md`.
+Worktree creation, bootstrap, branch synchronization, teardown, artifact custody, and stash safety
+are owned by `docs/dev/worktree_lifecycle.md`; read it when the trigger applies instead of restating
+its steps here.
 
 ## Project Structure And Ownership
 
@@ -236,6 +194,9 @@ changes need referenced path, command, and discoverability checks.
 
 ## Commit And Pull Request Workflow
 
+Apply this section when remote delivery, review, or merge is requested or required by the selected
+profile or tool workflow; a bounded local change ends with the direct change and an explicit handoff.
+
 Use conventional commit style from history. Each PR should summarize intent, reference related
 issues, and list validation commands. Include screenshots or GIFs when UI playback changes, and note
 new assets under `maps/` or `model/`. Before opening a PR, fetch latest `origin/main`, merge or
@@ -280,21 +241,26 @@ when choosing among them. Common delivery skills include `goal-issue-implementat
 selected-issue mode), `implementation-verification`, `pr-ready-check`, `gh-pr-opener`,
 `goal-pr-review`, and `gh-pr-merger`.
 
-## Friction And Automation
+## Friction And Follow-Up
 
-Standing policy (2026-07-13): any friction observed during work — a flaky command, a
-misleading readout, a manual step that should be automatic, or a repeated failure class — is
-either fixed inline when the change is small, or tracked durably as an issue before moving on.
-Never just navigate around it: un-tracked friction gets re-paid on every future encounter, and
-self-improvement is part of this system. Track friction with the existing convention: an issue
-titled with a `friction:` prefix and the `technical-debt` label (or `documentation` for a docs
-gap), naming the file/command and the concrete suggested change (see Issue #5468, Issue #5475).
-Do not invent new labels or priorities.
+Findings observed while working get a proportional response:
 
-Standing policy (2026-07-13): anything that can be improved or automated without an LLM must
-become a reusable script or automation — never a repeated manual step or an LLM prompt. If a
-deterministic sequence runs twice, promote it to a checked-in helper under `scripts/dev/`
-rather than re-typing or re-prompting it.
+| Finding | Response |
+| --- | --- |
+| Threatens correctness, security, evidence integrity, or blocks the task | Address it, or explicitly block or escalate before delivery |
+| Small, clearly in scope, and cheaper to fix than to work around | Fix inline |
+| Repeated and materially valuable | Search for an existing issue first; track once only if none exists |
+| Incidental, speculative, cosmetic, or unrelated | Do not widen the task; mention it briefly in the handoff if useful |
+
+Examples: a missing validation script that blocks a gate is addressed or escalated; a repeated
+manual release step with demonstrated value is tracked once and may become a checked-in helper; a
+harmless one-off inconvenience and an unrelated code smell get no action; stale documentation found
+outside the task gets a handoff note.
+
+Automation is justified by demonstrated repetition, error reduction, custody or reproducibility
+value, or a clear net maintenance benefit — not by a blanket expectation that a sequence may recur.
+Friction issues use the existing `friction:` title prefix and `technical-debt` or `documentation`
+label, naming the command or file and the concrete change; do not invent labels or priorities.
 
 ## Donts
 

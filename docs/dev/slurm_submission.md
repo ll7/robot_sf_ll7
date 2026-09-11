@@ -53,6 +53,27 @@ until a retrievable durable artifact URI is recorded with `--durable-uri`; local
 are not durable evidence. Keep the issue/PR traceability checklist below in the public handoff,
 and keep private host, account, QoS, and scratch details out of public comments.
 
+## Failure classification (check-only)
+
+Before deciding whether to resubmit, classify an operational failure from a sanitized
+scheduler/launcher receipt and optional bounded log excerpt:
+
+```bash
+uv run python scripts/tools/classify_scheduler_failure.py \
+  --check --receipt <sanitized-receipt.json> \
+  [--log-excerpt <bounded-stderr-tail.log>] --format json
+```
+
+The classifier is versioned (`robot_sf.scheduler_failure_vocabulary.v1`) and always
+read-only: it never submits, retries, cancels, or interprets scientific outcomes. Structured
+scheduler, launcher, artifact, and job-manifest fields take precedence; log fingerprints are
+secondary evidence at lower confidence. Every report records the class, evidence source,
+confidence, retryability under the existing policy, owner, required remediation, and whether
+outputs may still require harvest. Contradictory evidence stays `multiple_causes`; missing
+evidence stays `unknown`; an application nonzero exit is never auto-retried as
+infrastructure, and a completed scheduler state is never scientific success. Exit code 2
+means the receipt was unreadable or malformed, not that the job failed.
+
 ## Training submission queue
 
 Use `experiments/submission_queue.yaml` for reviewable planned training submissions that should be

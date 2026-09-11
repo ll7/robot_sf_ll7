@@ -25,6 +25,23 @@ Design notes
 - ``--check`` exits nonzero when hard candidates (rules 1-2) exist.
 - ``--markdown`` emits a human-readable summary suitable for GitHub comments.
 - The scanner is read-only against GitHub; it never mutates PR state.
+
+REST-first merged-PR inventory (issue #8927)
+--------------------------------------------
+Rule 2 previously resolved each draft reference with a ``gh search prs``
+request, which draws on the low-volume, shared search bucket (30 requests per
+minute) and failed closed with HTTP 403 while core REST quota was healthy.  The
+scanner now reads closed pull requests once through a bounded
+``gh api repos/<repo>/pulls?state=closed`` pass, filters to merged pull
+requests locally, and builds the reference index in-process.  Search is no
+longer on the default path.
+
+If that REST inventory cannot be completed (transport failure, API error, or
+page-budget truncation), the report carries ``quota_degraded: true`` with a
+``degraded_reason`` and a ``merged_pr_inventory`` metadata block, and the
+process exits nonzero even in ``--check`` mode, so unknown Rule 2 coverage is
+never mistaken for a clean "no candidates" result.  ``--max-pr-pages`` raises
+the bounded page budget.
 """
 
 from __future__ import annotations
@@ -36,13 +53,23 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
+from scripts.dev._gh_rest import run_gh_api_or_raise as _gh_api_get
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 STALE_HOURS = 48
 ISSUE_REF_RE = re.compile(r"(?:Closes|Refs|Fixes|#)\s*(\d+)")
+CLOSES_REF_RE = re.compile(r"Closes\s+#(\d+)", re.IGNORECASE)
+PER_PAGE = 100
+# Bounded page budget for the closed-PR REST inventory.  Pagination stops early
+# at the true end of history; exhausting this budget is reported as degraded
+# coverage rather than being treated as a complete inventory.
+DEFAULT_MAX_PR_PAGES = 80
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +188,7 @@ class ReferenceLookupError(RuntimeError):
 
 
 def _run_json(command: list[str], *, default: Any = None) -> Any:
-    """Run a gh/gh-search command and parse JSON output."""
+    """Run a gh command and parse JSON output."""
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
     except FileNotFoundError as exc:
@@ -296,47 +323,119 @@ def fetch_issue_state(*, repo: str, number: int) -> str | None:
     return state
 
 
-def fetch_merged_prs_for_issue(
+def _is_merged_pr_row(row: dict[str, Any]) -> bool:
+    """Return whether a REST pull-request row represents a merged pull request.
+
+    The ``pulls?state=closed`` list endpoint returns both merged and
+    closed-unmerged pull requests.  The list payload does not populate the
+    ``merged`` boolean (it comes back as ``null``), so a non-null ``merged_at``
+    timestamp is the reliable merged signal there; an explicit boolean is
+    honored when a caller supplies the single-PR payload shape.
+    """
+    merged = row.get("merged")
+    if merged is True:
+        return True
+    if merged is False:
+        return False
+    return bool(row.get("merged_at"))
+
+
+def _normalize_merged_pr_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Project a REST pull payload onto the merged-PR row shape rule 2 consumes."""
+    return {
+        "number": int(row.get("number", 0)),
+        "title": str(row.get("title", "")),
+        "url": str(row.get("html_url", "") or row.get("url", "") or ""),
+        "body": str(row.get("body", "") or ""),
+    }
+
+
+def fetch_merged_pr_inventory(
     *,
     repo: str,
-    issue_number: int,
-    limit: int = 30,
-) -> list[dict[str, Any]]:
-    """Find merged PRs that claim 'Closes #N' for a given issue."""
-    cmd = [
-        "gh",
-        "search",
-        "prs",
-        f"#{issue_number}",
-        "--repo",
-        repo,
-        "--state",
-        "closed",
-        "--merged",
-        "--json",
-        "number,title,url,body",
-        "--limit",
-        str(limit),
-    ]
-    raw = _run_json(cmd)
-    if not isinstance(raw, list):
-        return []
+    max_pages: int = DEFAULT_MAX_PR_PAGES,
+    per_page: int = PER_PAGE,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Read merged pull requests once through a bounded core-REST inventory.
 
-    results: list[dict[str, Any]] = []
-    pattern = re.compile(rf"Closes\s+#{re.escape(str(issue_number))}\b", re.IGNORECASE)
-    for row in raw:
-        if not isinstance(row, dict):
-            continue
+    Closed pull requests are read page by page from
+    ``repos/<repo>/pulls?state=closed`` (core quota, never the rate-limited
+    search endpoint), merged rows are filtered locally, and pagination stops as
+    soon as a page returns fewer than ``per_page`` rows.  Exhausting the page
+    budget with full pages marks the inventory as potentially truncated so the
+    caller reports degraded coverage instead of an authoritative empty result.
+
+    Returns ``(merged_pr_rows, inventory_metadata)``.
+    """
+    if max_pages < 1:
+        raise ValueError(f"max_pages must be >= 1, got {max_pages}")
+    rows: list[dict[str, Any]] = []
+    pages_read = 0
+    for page in range(1, max_pages + 1):
+        path = (
+            f"repos/{repo}/pulls?state=closed&sort=updated&direction=desc"
+            f"&per_page={per_page}&page={page}"
+        )
+        result = _gh_api_get(path)
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip() or (
+                f"exit code {result.returncode}"
+            )
+            raise RuntimeError(f"GitHub REST read failed ({path}): {detail}")
+        try:
+            payload = json.loads(result.stdout or "[]")
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON from GitHub REST ({path}): {exc.msg}") from exc
+        if not isinstance(payload, list):
+            raise ValueError(f"Expected JSON list from GitHub REST ({path})")
+        page_rows = [row for row in payload if isinstance(row, dict)]
+        rows.extend(page_rows)
+        pages_read = page
+        if len(page_rows) < per_page:
+            break
+
+    merged_rows = [_normalize_merged_pr_row(row) for row in rows if _is_merged_pr_row(row)]
+    truncated = is_likely_truncated(len(rows), limit=max_pages * per_page)
+    metadata: dict[str, Any] = {
+        "mode": "rest",
+        "source": f"repos/{repo}/pulls?state=closed",
+        "closed_rows": len(rows),
+        "merged_count": len(merged_rows),
+        "pages_read": pages_read,
+        "per_page": per_page,
+        "page_budget": max_pages,
+        "truncated": truncated,
+    }
+    return merged_rows, metadata
+
+
+def build_merged_pr_index(
+    merged_pr_rows: list[dict[str, Any]],
+    issue_numbers: Iterable[int],
+) -> dict[int, list[dict[str, Any]]]:
+    """Build the issue-reference index from one flat merged-PR inventory.
+
+    Each merged PR body is scanned once for ``Closes #N`` references; matches
+    for the requested issue numbers are grouped in-process so rule 2 never
+    issues a per-reference search request.  Index rows are ordered by PR number
+    for deterministic reports.
+    """
+    index: dict[int, list[dict[str, Any]]] = {number: [] for number in sorted(set(issue_numbers))}
+    wanted = set(index)
+    if not wanted:
+        return index
+    for row in sorted(merged_pr_rows, key=lambda item: int(item.get("number", 0))):
         body = str(row.get("body", "") or "")
-        if pattern.search(body):
-            results.append(
+        referenced = {int(match.group(1)) for match in CLOSES_REF_RE.finditer(body)}
+        for issue_number in sorted(referenced & wanted):
+            index[issue_number].append(
                 {
                     "number": int(row.get("number", 0)),
                     "title": str(row.get("title", "")),
                     "url": str(row.get("url", "")),
                 }
             )
-    return results
+    return index
 
 
 def get_modified_files_on_main_since(
@@ -446,17 +545,43 @@ def _append_reference_state_rule(
         evidence.append(f"Rule 2: reference #{issue_num} resolves to a MERGED pull request")
 
 
+def _merged_prs_for_issue(
+    issue_number: int,
+    *,
+    repo: str,
+    merged_pr_index: Mapping[int, list[dict[str, Any]]] | None,
+    get_merged_prs: Any,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Resolve rule-2 merged PRs from the pre-built index or an injected lookup.
+
+    Exactly one source must be available; refusing to guess coverage keeps a
+    missing inventory from silently reading as "no merged PR matches".
+    """
+    if merged_pr_index is not None:
+        return merged_pr_index.get(issue_number, [])
+    if get_merged_prs is not None:
+        return get_merged_prs(repo=repo, issue_number=issue_number, limit=limit)
+    raise RuntimeError("rule 2 requires a merged-PR index or lookup; refusing to guess coverage")
+
+
 def evaluate_rules(
     draft: DraftPr,
     *,
     repo: str,
     get_issue_state: Any = fetch_issue_state,
-    get_merged_prs: Any = fetch_merged_prs_for_issue,
+    get_merged_prs: Any = None,
     get_modified_files: Any = get_modified_files_on_main_since,
+    merged_pr_index: Mapping[int, list[dict[str, Any]]] | None = None,
     merged_pr_limit: int = 30,
     warnings: list[dict[str, Any]] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Evaluate all rules for one draft PR.
+
+    Rule 2 resolves references from the pre-built ``merged_pr_index`` when one
+    is supplied (the REST-first default path).  The ``get_merged_prs`` callable
+    remains injectable for focused tests; callers must supply exactly one of
+    the two so unknown coverage can never be silently treated as "no match".
 
     Returns (rules_triggered, evidence_lines).
     """
@@ -488,9 +613,11 @@ def evaluate_rules(
     for issue_num in linked:
         if issue_num in unresolved_references:
             continue
-        merged = get_merged_prs(
+        merged = _merged_prs_for_issue(
+            issue_num,
             repo=repo,
-            issue_number=issue_num,
+            merged_pr_index=merged_pr_index,
+            get_merged_prs=get_merged_prs,
             limit=merged_pr_limit,
         )
         for pr_info in merged:
@@ -520,8 +647,9 @@ def scan_drafts(
     *,
     repo: str,
     get_issue_state: Any = fetch_issue_state,
-    get_merged_prs: Any = fetch_merged_prs_for_issue,
+    get_merged_prs: Any = None,
     get_modified_files: Any = get_modified_files_on_main_since,
+    merged_pr_index: Mapping[int, list[dict[str, Any]]] | None = None,
     warnings: list[dict[str, Any]] | None = None,
 ) -> list[SupersededCandidate]:
     """Run all rules over all draft PRs and return candidates."""
@@ -533,6 +661,7 @@ def scan_drafts(
             get_issue_state=get_issue_state,
             get_merged_prs=get_merged_prs,
             get_modified_files=get_modified_files,
+            merged_pr_index=merged_pr_index,
             warnings=warnings,
         )
         if rules:
@@ -558,27 +687,46 @@ def build_report(
     scanned_count: int,
     truncated: bool = False,
     warnings: list[dict[str, Any]] | None = None,
+    quota_degraded: bool = False,
+    degraded_reason: str | None = None,
+    merged_pr_inventory: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build the machine-readable JSON report."""
+    """Build the machine-readable JSON report.
+
+    ``quota_degraded`` marks a merged-PR REST inventory that could not be
+    completed; the report then fails closed (``ok: false``) even with zero
+    candidates so unknown rule-2 coverage is never read as a clean result.
+    """
     hard_candidates = [c for c in candidates if c.has_hard_rule]
-    return {
-        "schema": "superseded_draft_scanner.v1",
-        "ok": not hard_candidates,
-        "read_only": True,
-        "repo": repo,
-        "scanned_drafts": scanned_count,
-        "truncated": truncated,
-        "candidate_count": len(candidates),
-        "hard_candidate_count": len(hard_candidates),
-        "candidates": [c.to_payload() for c in candidates],
-        "warnings": list(warnings or []),
-        "failure_summary": {
+    if hard_candidates:
+        failure_summary: dict[str, Any] | None = {
             "reason": "superseded_draft_candidates_found",
             "hard_count": len(hard_candidates),
             "total_count": len(candidates),
         }
-        if hard_candidates
-        else None,
+    elif quota_degraded:
+        failure_summary = {
+            "reason": "merged_pr_inventory_degraded",
+            "hard_count": 0,
+            "total_count": len(candidates),
+        }
+    else:
+        failure_summary = None
+    return {
+        "schema": "superseded_draft_scanner.v1",
+        "ok": not hard_candidates and not quota_degraded,
+        "read_only": True,
+        "repo": repo,
+        "scanned_drafts": scanned_count,
+        "truncated": truncated,
+        "quota_degraded": quota_degraded,
+        "degraded_reason": degraded_reason,
+        "merged_pr_inventory": merged_pr_inventory or {},
+        "candidate_count": len(candidates),
+        "hard_candidate_count": len(hard_candidates),
+        "candidates": [c.to_payload() for c in candidates],
+        "warnings": list(warnings or []),
+        "failure_summary": failure_summary,
     }
 
 
@@ -590,6 +738,13 @@ def build_markdown(report: dict[str, Any]) -> str:
 
     if report.get("truncated"):
         lines.append("WARNING: results may be truncated (hit gh search limit).")
+        lines.append("")
+
+    if report.get("quota_degraded"):
+        reason = report.get("degraded_reason") or "merged-PR inventory incomplete"
+        lines.append(
+            f"WARNING: merged-PR inventory degraded ({reason}); rule 2 coverage is unknown."
+        )
         lines.append("")
 
     lines.append(f"**Repo**: {report['repo']}")
@@ -655,7 +810,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Exit nonzero when hard close-candidates exist (rules 1-2).",
+        help=(
+            "Exit nonzero when hard close-candidates exist (rules 1-2) or the "
+            "merged-PR inventory is degraded."
+        ),
+    )
+    parser.add_argument(
+        "--max-pr-pages",
+        type=int,
+        default=DEFAULT_MAX_PR_PAGES,
+        help=(
+            "Maximum REST pages of closed PRs to read for the merged-PR inventory "
+            f"(each {PER_PAGE} rows, default {DEFAULT_MAX_PR_PAGES}); exhausting the "
+            "budget reports quota_degraded."
+        ),
     )
     parser.add_argument(
         "--markdown",
@@ -671,6 +839,77 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _resolve_merged_pr_index(
+    *,
+    repo: str,
+    referenced_issues: list[int],
+    max_pages: int,
+) -> tuple[dict[int, list[dict[str, Any]]], bool, str | None, dict[str, Any]]:
+    """Build the rule-2 index from the REST inventory, marking degraded coverage.
+
+    Returns ``(index, quota_degraded, degraded_reason, inventory_metadata)``.
+    An unavailable or page-budget-truncated inventory yields an empty index and
+    a degraded status so the caller fails closed instead of reporting a clean
+    empty candidate set.
+    """
+    if not referenced_issues:
+        return {}, False, None, {"mode": "rest", "skipped": "no_linked_references"}
+    try:
+        merged_pr_rows, metadata = fetch_merged_pr_inventory(repo=repo, max_pages=max_pages)
+    except (OSError, RuntimeError, ValueError) as exc:
+        return (
+            {},
+            True,
+            f"merged-PR REST inventory unavailable: {exc}",
+            {"mode": "rest", "error": str(exc)},
+        )
+    if metadata.get("truncated"):
+        reason = (
+            "merged-PR REST inventory truncated at "
+            f"{metadata.get('page_budget')} pages; raise --max-pr-pages"
+        )
+        return build_merged_pr_index(merged_pr_rows, referenced_issues), True, reason, metadata
+    return build_merged_pr_index(merged_pr_rows, referenced_issues), False, None, metadata
+
+
+def _write_json_report(report: dict[str, Any], *, output: str | None) -> None:
+    """Write a JSON report to ``output`` or stdout."""
+    serialized = json.dumps(report, indent=2, sort_keys=True)
+    if output:
+        output_path = Path(output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(serialized + "\n", encoding="utf-8")
+    else:
+        print(serialized)
+
+
+def _emit_error_report(
+    *,
+    repo: str,
+    error: str,
+    output: str | None,
+    markdown: bool,
+    warnings: list[dict[str, Any]],
+) -> int:
+    """Write the deterministic error report JSON and optional markdown note."""
+    error_report = {
+        "schema": "superseded_draft_scanner.v1",
+        "ok": False,
+        "read_only": True,
+        "repo": repo,
+        "scanned_drafts": 0,
+        "candidate_count": 0,
+        "hard_candidate_count": 0,
+        "candidates": [],
+        "warnings": warnings,
+        "error": error,
+    }
+    _write_json_report(error_report, output=output)
+    if markdown:
+        print(f"Scanner failed: {error}", file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _build_parser().parse_args(argv)
@@ -678,6 +917,8 @@ def main(argv: list[str] | None = None) -> int:
     warnings: list[dict[str, Any]] = []
 
     try:
+        if args.max_pr_pages < 1:
+            raise ValueError(f"--max-pr-pages must be >= 1, got {args.max_pr_pages}")
         draft_prs, truncated = fetch_draft_prs(repo=repo, limit=args.limit)
 
         # Enrich with file lists for Rule 3
@@ -687,37 +928,30 @@ def main(argv: list[str] | None = None) -> int:
             pr.files = files
             enriched.append(pr)
 
+        referenced_issues = sorted(
+            {number for pr in enriched for number in pr.linked_issue_numbers()}
+        )
+        merged_pr_index, quota_degraded, degraded_reason, inventory_meta = _resolve_merged_pr_index(
+            repo=repo,
+            referenced_issues=referenced_issues,
+            max_pages=args.max_pr_pages,
+        )
         candidates = scan_drafts(
             enriched,
             repo=repo,
             get_issue_state=fetch_issue_state,
-            get_merged_prs=fetch_merged_prs_for_issue,
+            merged_pr_index=merged_pr_index,
             get_modified_files=get_modified_files_on_main_since,
             warnings=warnings,
         )
     except (OSError, RuntimeError, ValueError) as exc:
-        error_report = {
-            "schema": "superseded_draft_scanner.v1",
-            "ok": False,
-            "read_only": True,
-            "repo": repo,
-            "scanned_drafts": 0,
-            "candidate_count": 0,
-            "hard_candidate_count": 0,
-            "candidates": [],
-            "warnings": warnings,
-            "error": str(exc),
-        }
-        serialized = json.dumps(error_report, indent=2, sort_keys=True)
-        if args.output:
-            output_path = Path(args.output)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(serialized + "\n", encoding="utf-8")
-        else:
-            print(serialized)
-        if args.markdown:
-            print(f"Scanner failed: {exc}", file=sys.stderr)
-        return 2
+        return _emit_error_report(
+            repo=repo,
+            error=str(exc),
+            output=args.output,
+            markdown=args.markdown,
+            warnings=warnings,
+        )
 
     report = build_report(
         repo=repo,
@@ -725,14 +959,12 @@ def main(argv: list[str] | None = None) -> int:
         scanned_count=len(draft_prs),
         truncated=truncated,
         warnings=warnings,
+        quota_degraded=quota_degraded,
+        degraded_reason=degraded_reason,
+        merged_pr_inventory=inventory_meta,
     )
 
-    if args.output:
-        with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2, sort_keys=True)
-            f.write("\n")
-    else:
-        print(json.dumps(report, indent=2, sort_keys=True))
+    _write_json_report(report, output=args.output)
 
     if args.markdown:
         md = build_markdown(report)
@@ -743,6 +975,12 @@ def main(argv: list[str] | None = None) -> int:
         if hard:
             print(
                 f"FAIL: {hard} hard close-candidate(s) found among {len(candidates)} candidate(s).",
+                file=sys.stderr,
+            )
+            return 1
+        if quota_degraded:
+            print(
+                "FAIL: merged-PR inventory degraded; --check cannot verify rule-2 coverage.",
                 file=sys.stderr,
             )
             return 1

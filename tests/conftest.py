@@ -435,6 +435,10 @@ _FAST_FILES = {
     # Routed-worker path/hash contract tests are deterministic and provide
     # exact-head changed-line coverage for the manifest producer (issue #8925).
     "test_routed_worker_manifest.py",
+    # Pedestrian-speed protocol and activation-preflight guards are deterministic
+    # check-only contracts; keep them in PR fast shards (issue #8888).
+    "test_check_issue_6561_pedestrian_speed_protocol.py",
+    "test_check_issue_6561_activation_preflight.py",
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",

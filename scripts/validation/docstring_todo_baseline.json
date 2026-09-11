@@ -13,8 +13,8 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 180,
-      "occurrences": 1243
+      "files": 179,
+      "occurrences": 1219
     }
   },
   "files": {
@@ -117,7 +117,6 @@
     "tests/test_full_classic_visuals_simview_fallback.py": 15,
     "tests/test_generate_figures_summary_ci_missing_and_suffix.py": 8,
     "tests/test_generate_figures_table_tex.py": 2,
-    "tests/test_guard/test_artifact_paths.py": 24,
     "tests/test_guard/test_check_artifact_root.py": 10,
     "tests/test_guard/test_migrate_artifacts.py": 7,
     "tests/test_image_sensor_fusion.py": 3,
@@ -207,7 +206,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 180,
-    "total_occurrences": 1243
+    "files": 179,
+    "total_occurrences": 1219
   }
 }

@@ -29,6 +29,20 @@ The native merge queue enforcement path is
 on `merge_group`. The standalone protection audit below does not replace that
 workflow or change branch protection.
 
+## Agent instruction and skill checks
+
+- [`check_instruction_references.py`](check_instruction_references.py) validates the agent
+  instruction graph: the single task-route owner, the `Instruction Precedence` block, the
+  execution-profile manifest, the maintainer-values drift rule, and repository-local reference
+  resolution. Run `uv run python scripts/dev/check_instruction_references.py [--json]`.
+- [`check_skills.py`](check_skills.py) validates the repo-local skill registry and runs a skill
+  preflight; use `--preflight <skill>` before relying on a skill's declared requirements.
+- `scripts/tools/sync_ai_config.py --check` keeps provider adapters thin, scoped, and linked to
+  canonical sources (see [`.agents/README.md`](../../.agents/README.md)).
+
+These are contract checks for repository instructions, not PR merge gates;
+`pr_ready_check.sh` remains the required readiness entry point.
+
 ## Explicit issue-scoped verification
 
 [`check_pr_closing_reference.py`](check_pr_closing_reference.py) verifies that

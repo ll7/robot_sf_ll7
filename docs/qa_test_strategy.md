@@ -61,6 +61,20 @@ The repository classifies tests into 12 distinct categories. Understanding these
 | **Reproducibility** | Verify that identical seeds yield bitwise or statistical equivalence across environment instances. | `scripts/benchmark_repro_check.py` | Diagnostic/campaign evidence. The CI job runs for pull requests and `workflow_dispatch`; contributors can also run the targeted local check. See the policy reconciliation above. |
 | **Acceptance** | End-to-end contributor workflow or feature verification using structured scenario specifications. | `tests/` | High-level user story verification. Follows the selective `pytest-bdd` policy when specified. |
 
+### Test Tree Layout
+
+| Path | Contents |
+| --- | --- |
+| `tests/` (top level) | Unit, contract, integration, scenario, compatibility, and acceptance suites. |
+| `tests/dev/` | Repository-automation and tooling contract checks (skills, instruction graph, worktrees, CI helpers). |
+| `tests/validation/` | Validation-gate and evidence-integrity checks. |
+| `tests/benchmark/`, `tests/benchmark_full/`, `tests/unit/benchmark/` | Benchmark contract, statistics, resume, and report-format suites. |
+| `tests/pygame/` | Headless GUI and playback regressions. |
+| `fast-pysf/tests/` | Pysocialforce backend tests. |
+| `tests/conftest.py` | Shared markers, fixtures, and slow-test classification. |
+
+See [`tests/README.md`](../tests/README.md) for the quick-start version of this map.
+
 ---
 
 ## Selective `pytest-bdd` Policy
@@ -94,6 +108,7 @@ Contributors must run validation commands matching their change class. The repos
 | **Smoke Lane** | `scripts/dev/ci_driver.sh smoke artifact-policy` | Map verification, environment smoke, telemetry check, artifact root enforcement. | Validates runtime integration and canonical `output/` layout. |
 | **Headless GUI** | `DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest tests/pygame` | Pygame GUI rendering and visual overlay tests. | Verifies visual/display components in headless environments. |
 | **PR Readiness Gate** | `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` | Ruff, unit tests, coverage delta gate, docstring ratchet, changed paths check. | Full local PR readiness check before pushing feature branches. |
+| **Docstring Ratchet** | `uv run python scripts/validation/check_docstring_todos.py --mode ratchet` | Increase-only `TODO docstring` placeholder baseline; regenerate with `--mode write-baseline` after an intentional cleanup. | Keeps new test docstrings real instead of placeholder debt. |
 | **Compact Validation** | `uv run python scripts/dev/run_compact_validation.py -- <command>` | Wraps any validation command with compact summary output. | Efficient local validation without verbose log spam. |
 | **Coverage Analysis** | `uv run pytest --cov=robot_sf tests` | Measures statement and branch coverage in `robot_sf/`. | Diagnostic coverage collection (see [Coverage Guide](./coverage_guide.md)). |
 | **Coverage Comparison** | `uv run python scripts/coverage/compare_coverage.py --current output/coverage/coverage.json --baseline output/coverage/.coverage-baseline.json --format terminal` | Compares current coverage against saved baseline. | Prevents silent coverage regressions. |

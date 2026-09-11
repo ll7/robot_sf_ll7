@@ -58,6 +58,12 @@ def test_private_projection_is_rejected_without_echoing_locator() -> None:
     assert "/secret/node" not in json.dumps(report)
 
 
+def test_root_does_not_infer_unrelated_text_as_a_consumer() -> None:
+    payload = {"schema": tool.SCHEMA, "artifacts": [{"logical_id": "a"}]}
+    report = tool.build_graph(payload, root=Path(__file__).parents[2])
+    assert report["ok"] is True and report["edges"] == []
+
+
 def test_cli_formats_and_check_exit_code(capsys) -> None:
     assert tool.main(["--input", str(FIXTURE), "--check", "--format", "json"]) == 2
     report = json.loads(capsys.readouterr().out)
@@ -152,3 +158,19 @@ def test_verification_flags_are_strict_booleans() -> None:
         "trace": "consumer_unknown",
     }
     assert sum(item["code"] == "invalid_boolean" for item in report["findings"]) == 4
+
+
+def test_malformed_collections_fail_closed_and_cli_check_exits_two(capsys, tmp_path) -> None:
+    cases = [(group, None) for group in tool.CONSUMER_GROUPS]
+    cases += [(group, [None]) for group in tool.CONSUMER_GROUPS]
+    cases += [("private_projection", {}), ("private_projection", [None])]
+    for field, value in cases:
+        input_path = tmp_path / "input.json"
+        input_path.write_text(
+            json.dumps({"schema": tool.SCHEMA, "artifacts": [{"logical_id": "a"}], field: value}),
+            encoding="utf-8",
+        )
+        assert tool.main(["--input", str(input_path), "--check"]) == 2
+        report = json.loads(capsys.readouterr().out)
+        assert report["ok"] is False
+        assert report["findings"]

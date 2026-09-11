@@ -4,11 +4,12 @@
 The input is a compact JSON manifest with ``artifacts`` and optional consumer
 collections (``configs``, ``registries``, ``manifests``, ``scripts``,
 ``reports``, ``releases``, ``papers``, and ``active_tasks``).  References are
-explicit semantic identities, not filename guesses.  A private operational
-system may provide only a sanitized ``private_projection`` containing the same
-identity/reference shape.  The tool never moves, deletes, or reads private
-content.  Missing static evidence is ``consumer_unknown`` rather than proof of
-orphanhood.
+explicit semantic identities, not filename guesses.  The legacy ``--root``
+option is accepted for compatibility but does not scan tracked files.  A
+private operational system may provide only a sanitized ``private_projection``
+containing the same identity/reference shape.  The tool never moves, deletes,
+or reads private content.  Missing static evidence is ``consumer_unknown``
+rather than proof of orphanhood.
 
 CLI: ``compute_window_artifact_consumers.py --input PATH [--root PATH]
 [--check] [--format json|dot|markdown]``. Rendering always exits 0 after
@@ -20,7 +21,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -203,40 +203,41 @@ def _record_id(item: Mapping[str, Any], fallback: str) -> str:
     return _key(item.get("consumer_id", item.get("id", item.get("name", fallback))))
 
 
-def _tracked_refs(root: Path, artifacts: Mapping[str, Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """Derive only public, tracked-file references; never emit file contents."""
-    try:
-        names = (
-            subprocess.run(["git", "ls-files", "-z"], cwd=root, check=True, capture_output=True)
-            .stdout.decode()
-            .split("\0")
-        )
-    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
+def _record_entries(
+    value: Any, group: str, findings: list[dict[str, Any]]
+) -> list[tuple[int, Mapping[str, Any]]]:
+    """Validate one explicit consumer collection without echoing malformed input."""
+    invalid_code = (
+        "invalid_private_projection" if group == "private_projection" else "invalid_records"
+    )
+    collection_detail = (
+        "private_projection must be a list"
+        if group == "private_projection"
+        else "consumer collection must be a list or mapping"
+    )
+    entry_detail = (
+        "private projection entry must be a mapping"
+        if group == "private_projection"
+        else "consumer entry must be a mapping"
+    )
+    if isinstance(value, Mapping) and group != "private_projection":
+        value = list(value.values())
+    if not isinstance(value, list):
+        findings.append(_finding(invalid_code, f"/{group}", None, collection_detail))
         return []
-    found = []
-    for name in sorted(n for n in names if n and not n.startswith("output/")):
-        path = root / name
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        hits = sorted(ident for ident in artifacts if ident in text)
-        if hits:
-            found.append(
-                {
-                    "consumer_id": f"tracked:{name}",
-                    "kind": "tracked_file",
-                    "state": "historical",
-                    "refs": hits,
-                }
-            )
-    return found
+    entries = []
+    for index, item in enumerate(value):
+        if isinstance(item, Mapping):
+            entries.append((index, item))
+        else:
+            findings.append(_finding(invalid_code, f"/{group}[{index}]", None, entry_detail))
+    return entries
 
 
 def build_graph(  # noqa: C901, PLR0912, PLR0915
     payload: Mapping[str, Any], *, root: Path | None = None
 ) -> dict[str, Any]:
-    """Build the graph from a sanitized manifest and optional repository root."""
+    """Build the graph from explicit manifest references; ``root`` is legacy-only."""
     findings: list[dict[str, Any]] = []
     if payload.get("schema") not in {SCHEMA, "compute-window-artifact-consumers.v1"}:
         findings.append(_finding("invalid_schema", "/schema", None, "unexpected schema"))
@@ -345,37 +346,19 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                 )
             )
     records: list[tuple[str, Mapping[str, Any]]] = []
-    for group in CONSUMER_GROUPS:
-        value = payload.get(group, [])
-        if isinstance(value, Mapping):
-            value = list(value.values())
-        if isinstance(value, list):
-            records.extend(
-                (_safe_id(_record_id(item, f"{group}:{i}"), f"redacted-consumer-{group}-{i}"), item)
-                for i, item in enumerate(value)
-                if isinstance(item, Mapping)
-            )
-        elif value not in (None, []):
-            findings.append(
-                _finding(
-                    "invalid_records",
-                    f"/{group}",
-                    None,
-                    "consumer collection must be a list or mapping",
+    for group in (*CONSUMER_GROUPS, "private_projection"):
+        if group not in payload:
+            continue
+        label = "private" if group == "private_projection" else group
+        for index, item in _record_entries(payload[group], group, findings):
+            records.append(
+                (
+                    _safe_id(
+                        _record_id(item, f"{label}:{index}"), f"redacted-consumer-{label}-{index}"
+                    ),
+                    item,
                 )
             )
-    if root is not None:
-        records.extend(
-            (_safe_id(_record_id(item, "tracked"), "redacted-consumer-tracked"), item)
-            for item in _tracked_refs(root, artifacts)
-        )
-    private_projection = payload.get("private_projection", [])
-    if isinstance(private_projection, list):
-        records.extend(
-            (_safe_id(_record_id(item, f"private:{i}"), f"redacted-consumer-private-{i}"), item)
-            for i, item in enumerate(private_projection)
-            if isinstance(item, Mapping)
-        )
     nodes = [
         {"id": ident, "kind": item["kind"], "sha256": item["sha256"], "path": item["path"]}
         for ident, item in sorted(artifacts.items())

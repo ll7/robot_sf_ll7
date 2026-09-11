@@ -21,11 +21,11 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 @pytest.mark.timeout(60)
 def test_adaptive_early_stop(config_factory, perf_policy):
-    """TODO docstring. Document this function.
+    """Run the adaptive loop to completion and verify artifacts and timing bounds.
 
     Args:
-        config_factory: TODO docstring.
-        perf_policy: TODO docstring.
+        config_factory: Fixture building a config with a small per-scenario cap.
+        perf_policy: Timing policy used to reject hard-threshold overruns.
     """
     start = time.perf_counter()
     cfg = config_factory(

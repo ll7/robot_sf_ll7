@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for feature extractor evaluation reporting and LaTeX summary generation."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from robot_sf.research.extractor_report import ReportConfig, generate_extractor_
 
 
 def test_generate_extractor_report_smoke(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that extractor report generation creates output reports and LaTeX tables.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory fixture used as the report output root.
     """
     summary = {
         "run_id": "demo-run",

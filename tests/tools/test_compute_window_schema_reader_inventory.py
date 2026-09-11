@@ -35,7 +35,7 @@ def _role(root: Path, name: str, fmt: str, *, adapter: bool = False) -> dict:
     source = _write(
         root,
         f"readers/{name}.py",
-        f'SCHEMA = "{name}"\nSCHEMA_VERSION = "{version}"\ndef read_{name}(path): return path\n',
+        f'{name.upper().replace("-", "_")}_SCHEMA_VERSION = "{version}"\ndef read_{name}(path): return path\n',
     )
     source_path = source.relative_to(root).as_posix()
     source_sha = _sha(source)
@@ -183,7 +183,7 @@ def test_reader_hook_fail_closed(tmp_path: Path, reader_body: str, expected_mess
     source = _write(
         tmp_path,
         "readers/reject.py",
-        f'SCHEMA = "fixture"\nSCHEMA_VERSION = "fixture.v1"\n{reader_body}',
+        f'FIXTURE_SCHEMA_VERSION = "fixture.v1"\n{reader_body}',
     )
     source_path, source_sha = source.relative_to(tmp_path).as_posix(), _sha(source)
     role["schema"].update(source_path=source_path, source_sha256=source_sha)
@@ -200,7 +200,7 @@ def test_reader_hook_fail_closed(tmp_path: Path, reader_body: str, expected_mess
 
 def test_schema_binding_rejects_unrelated_digest_valid_source(tmp_path: Path) -> None:
     role = _role(tmp_path, "fixture", "json")
-    unrelated = _write(tmp_path, "readers/unrelated.py", 'NOTE = "fixture.schema fixture.v1"\n')
+    unrelated = _write(tmp_path, "readers/unrelated.py", 'OTHER_SCHEMA_VERSION = "fixture.v1"\n')
     path, digest = unrelated.relative_to(tmp_path).as_posix(), _sha(unrelated)
     role["source_material"][0] = {"kind": "schema", "path": path, "sha256": digest}
     report = inventory.build_inventory(_packet(role), tmp_path)

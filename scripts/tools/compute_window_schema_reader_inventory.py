@@ -22,8 +22,7 @@ CONFLICT_CODES = set(
     "schema_source_mismatch".split()
 )
 _READER_CHILD = """import importlib.util,sys;from pathlib import Path
-s=importlib.util.spec_from_file_location('r',sys.argv[1]);m=importlib.util.module_from_spec(s);sys.modules[s.name]=m
-s.loader.exec_module(m);getattr(m,sys.argv[2])(Path(sys.argv[3]))"""
+s=importlib.util.spec_from_file_location('r',sys.argv[1]);m=importlib.util.module_from_spec(s);sys.modules[s.name]=m;s.loader.exec_module(m);getattr(m,sys.argv[2])(Path(sys.argv[3]))"""
 
 
 def _sha256_file(path: Path) -> str:
@@ -194,15 +193,19 @@ def _source_declares_schema(text: str, suffix: str, name: str, version: str) -> 
             and isinstance(field, Mapping)
             and field.get("const") == version
         )
-    if suffix != ".py" or not (version in {name, f"{name}.v1"} or version.endswith(f".{name}.v1")):
-        return False
-    return any(
+    return suffix == ".py" and any(
         isinstance(node, (ast.Assign, ast.AnnAssign))
         and not node.col_offset
         and isinstance(node.value, ast.Constant)
         and node.value.value == version
         and any(
-            isinstance(target, ast.Name) and target.id.removesuffix("_VERSION").endswith("SCHEMA")
+            isinstance(target, ast.Name)
+            and target.id.removesuffix("_VERSION").removesuffix("_SCHEMA")
+            and name.removesuffix(".v1")
+            .replace("-", "_")
+            .replace(".", "_")
+            .upper()
+            .endswith(target.id.removesuffix("_VERSION").removesuffix("_SCHEMA"))
             for target in (getattr(node, "targets", None) or [node.target])
         )
         for node in ast.walk(ast.parse(text))
@@ -442,9 +445,7 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
         elif codes & CONFLICT_CODES:
             status = "conflict"
         elif "reader_unavailable" in codes or not reader_available:
-            status = (
-                "reader_unavailable" if not errors or "reader_unavailable" in codes else "conflict"
-            )
+            status = "reader_unavailable" if "reader_unavailable" in codes else "conflict"
         elif "missing_output" in codes or "missing_source_material" in codes:
             status = "schema_only"
         else:

@@ -52,8 +52,9 @@ Host tools and optional machine capabilities that are not installed by `uv` are 
 
 Use the maintainer hierarchy and readiness matrix in `AGENTS.md` before older workflow prose or
 tool-specific compatibility pointers. In short: active maintainer direction wins over stale
-instructions, `docs/maintainer_values.md` defines the hard contracts, and Project #5 scores are
-advisory when fresh evidence or maintainer direction conflicts with them.
+instructions, `AGENTS.md` owns the hard contracts, `docs/maintainer_values.md` records stable
+principles, and Project #5 scores are advisory when fresh evidence or maintainer direction
+conflicts with them.
 
 Routine workflow cleanup can proceed without extra confirmation when it is bounded and the PR or
 handoff clearly labels assumptions, uncertainty, evidence grade, and any deferred follow-up issue.
@@ -1077,15 +1078,22 @@ timestamp source, run/job IDs, and exact-head matching. When a job is actively r
 in environment setup (such as Python runtime or dependency provisioning) beyond
 `--actions-stale-after-seconds`, the payload emits `checks.setup_starvation: true`,
 `checks.pending_reason: "setup_starvation"`, and `checks.diagnostic: "actions_gate_setup_starvation"`.
-Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`. Cancellation
-or rerun requires explicit operator authorization, and merge admission stays strictly blocked until
-a fresh exact-head run succeeds. `checks.age_warnings` marks gates that exceed the configured
+Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`.
+`scripts/dev/recover_stale_ci_run.py` is the repository-owned, exact-head-guarded operator recovery
+path: it is report-only by default, and `--apply` requires an explicit `--reason`, re-reads the live
+PR CI state under the host-local PR write lock, then requests exactly one `gh run rerun` only after
+every fail-closed guard passes. Cancellation or rerun still requires explicit operator
+authorization, and merge admission stays strictly blocked until a fresh exact-head run succeeds.
+A requested rerun is route evidence only and is never implementation proof.
+`checks.age_warnings` marks gates that exceed the configured
 threshold without changing the fail-closed `checks.overall: "pending"` result.
 `checks.superseded_runs` names an older exact-head run and its newer same-workflow replacement
 rather than hiding the replacement relationship behind a count. When a stale run has an
-independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
-monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
-and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
+independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, guarded recovery,
+and bounded monitor commands. These are explicit suggestions only: the monitor itself does not
+cancel or rerun Actions, and it never authorizes a merge. The `guarded_recovery_command` names the
+repository-owned exact-head-guarded path (`scripts/dev/recover_stale_ci_run.py`), whose `--apply`
+remains explicit operator authorization. Missing REST metadata or a mismatching run head suppresses
 mutation commands and leaves the route evidence incomplete.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
@@ -2651,6 +2659,12 @@ distinctly so the gate can hold for a *fresh run* rather than treat it as a main
 regression. The `--quiet` flag suppresses the human line; the existing
 exit-code contract is unchanged.
 
+The gate's default fetch is deliberately one bounded `gh run list --limit`
+window (default 5 runs, 30s timeout) so merge-hold evaluation stays fast; when
+cancellation churn fills that window it fails closed to `stale` instead of
+reading further back. Callers that need the decisive verdict behind a
+cancelled-run flood use the paginated reader below.
+
 ### Scheduled main-CI incident reconciliation
 
 Open issues carrying the canonical `ll7-main-red-incident:v1` body marker (or
@@ -2670,13 +2684,23 @@ incidents instead of GitHub's semantic closing keywords (`Closes`, `Fixes`, or
 the canonical body marker or its compatibility label, leaving the scheduled
 reconciler as the sole closer after the two-green criterion is met.
 
-The Actions run evidence window is paginated. The reconciler reads full
-workflow-run pages and stops only after two decisive completed green/red runs
-are visible, so a cancellation-saturated newest page cannot hide the decisive
-history. The default page budget is ten; `--max-run-pages N` changes it, and
-the legacy `--run-limit N` option is retained as an alias for that page budget.
-If the budget is exhausted before two decisive runs are found, the helper
-fails closed instead of classifying an incomplete window.
+The Actions run evidence window is paginated in both consumers through the
+shared reader `main_ci_is_green.fetch_run_window`, so a cancellation-saturated
+newest page cannot hide the decisive history. The classifier behind
+`main_ci_incident_reconcile.py` stops after one decisive completed green/red
+run and defaults to a ten-page budget (`--max-pages N` changes it); passing a
+raw `--limit N` keeps the legacy single `gh run list` window instead. When the
+page budget is exhausted without a decisive run, the classifier stays
+fail-closed `pending` and reports `window_exhausted: true` with
+`decisive_run_found: false`, which cannot be confused with a genuine red
+(`active`).
+
+The scheduled reconciler requires two decisive runs and stops only after two
+completed green/red runs are visible. Its default page budget is ten;
+`--max-run-pages N` changes it, and the legacy `--run-limit N` option is
+retained as an alias for that page budget. If the budget is exhausted before
+two decisive runs are found, the helper fails closed instead of classifying an
+incomplete window.
 
 The helper is report-only unless `--apply` is supplied, so an offline or local
 inspection can use:
@@ -3088,7 +3112,8 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Advisory typecheck reviewed. Fix practical findings in touched files and stable contracts, and
   document any meaningful remaining findings in the PR when they affect the change.
 - Docs updated (README in feature folder, diagrams if changed).
-- Validation matched to risk per [maintainer_values.md](./maintainer_values.md): runtime, benchmark, metric, schema,
+- Validation matched to risk per the [AGENTS.md](../AGENTS.md) readiness matrix and
+  [maintainer_values.md](./maintainer_values.md) principles: runtime, benchmark, metric, schema,
   model-provenance, and paper-facing changes need executable proof; low-risk docs/instruction
   changes use diff review, referenced path/link checks, and lightweight automated checks when
   available. State explicitly in the PR which heavier gates were skipped and why.
@@ -3161,8 +3186,9 @@ phase exits zero.
 
 ### Proportional validation
 
-Validation depth follows [`docs/maintainer_values.md`](./maintainer_values.md): apply proof in
-proportion to risk. Do not treat the heaviest path as the default for every change.
+Validation depth follows the readiness matrix in [`AGENTS.md`](../AGENTS.md), informed by the
+proportional-process principle in [`docs/maintainer_values.md`](./maintainer_values.md): apply proof
+in proportion to risk. Do not treat the heaviest path as the default for every change.
 
 - **Low-risk docs/instruction changes** use the cheap path by default: inspect the diff, verify
   changed links or referenced paths, and run lightweight automated checks when they exist
@@ -3174,14 +3200,15 @@ proportion to risk. Do not treat the heaviest path as the default for every chan
   change that makes a benchmark, metric, schema, model-provenance, or paper-facing claim still
   needs the corresponding strength of evidence.
 
-If this section conflicts with current maintainer direction or [maintainer_values.md](./maintainer_values.md),
-follow the higher-precedence source and make the smallest doc update needed to remove the drift.
+If this section conflicts with current maintainer direction or [`AGENTS.md`](../AGENTS.md), follow
+the higher-precedence source and make the smallest doc update needed to remove the drift; use
+[`maintainer_values.md`](./maintainer_values.md) for stable rationale and tie-breakers.
 
 ### TL;DR workflow checklist
 
 1) Clarify requirements and pick the validation path by change type (see
-   [Proportional validation](#proportional-validation) above; `docs/maintainer_values.md` is the
-   higher-precedence source).
+   [Proportional validation](#proportional-validation) above and the readiness matrix in
+   `AGENTS.md`).
 2) For non-trivial runtime/benchmark/metric/schema/paper-facing changes, draft a design doc under
    `docs/` and link the issue; for low-risk docs/instruction changes, skip the design doc unless
    it clarifies scope.

@@ -120,6 +120,9 @@ Policy caveats:
   benchmark-strength, paper-grade, or scientifically sufficient claim;
 - fallback/degraded/diagnostic status must be preserved in `claim_boundary` or a payload note.
 
+See also: [Artifact Retention, Preservation, and Cleanup Guide](../artifact_retention_and_cleanup.md)
+for retention classes, preservation proof, and cleanup-eligibility workflows.
+
 ## Current Bundles
 
 - `issue_7322_ch7_evidence_package_v2/`: deterministic, collision-excluded Chapter 7 v2 package

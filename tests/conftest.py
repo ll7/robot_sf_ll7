@@ -377,6 +377,28 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    # Differential-drive kinematics tests are deterministic unit coverage for
+    # the changed robot motion module; keep them in the exact-head fast lane.
+    "differential_drive_test.py",
+    # Native replay adapter and engine tests are deterministic fixture contracts
+    # for the exact-head changed-coverage gate (issue #5442).
+    "test_simulator_counterfactual_adapter_issue_5442.py",
+    "test_last_avoidable_replay_issue_5442.py",
+    "test_collision_causal_report.py",
+    "test_collision_causal_report_join_5442.py",
+    # Deterministic examples metadata, CLI, and tutorial contracts belong in
+    # the fast coverage shards; only the subprocess-heavy example runner stays
+    # in the dedicated examples-smoke phase.
+    "test_examples_manifest.py",
+    "test_examples_cli.py",
+    # Fixture-based check-only prerequisite contracts are deterministic and
+    # provide the exact-head changed-line coverage for the shared example
+    # prerequisite checker (issue #8735).
+    "test_example_prerequisites.py",
+    # Deterministic resolved-config drift contracts for the compute-sunset
+    # configuration example (issue #8904).
+    "test_compare_resolved_configs.py",
+    "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
     "test_global_route.py",
     "test_open_coverage_report.py",
@@ -415,6 +437,9 @@ _FAST_FILES = {
     # Distribution plotting tests use Agg and deterministic fixtures; keep their
     # changed-line coverage in the exact-head fast lane.
     "test_distributions.py",
+    # Pareto plotting tests use Agg and deterministic fixtures; keep the
+    # save_pareto_png SVG output branch in the exact-head fast lane.
+    "test_plots_pareto.py",
     # CLI distribution-control regressions are deterministic input-boundary
     # contracts and exercise the benchmark error path in PR fast shards.
     "test_cli_plot_distributions_ci.py",
@@ -441,6 +466,10 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # The issue #8891 packet tests are deterministic diagnostic-only contract
+    # checks; keep them in pull-request fast shards so the repaired producer
+    # participates in the exact-head changed-coverage gate.
+    "test_issue_8891_temporal_robustness_packet.py",
     # The bounded answerability packet uses deterministic schema, digest, and
     # provenance fixtures; keep its changed-module coverage in fast shards.
     "test_research_answerability.py",
@@ -554,6 +583,10 @@ _FAST_FILES = {
     "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
+    # Doctor JSON and top-level CLI tests are deterministic readiness contracts;
+    # keep both source-adjacent owners in the exact-head changed-coverage lane.
+    "test_doctor.py",
+    "test_cli_doctor.py",
     "test_post_execution_release_doctor.py",
     # Checkpoint provenance and Predictive MPPI adapter tests are deterministic
     # contract coverage for release-smoke producer changes; keep them in the
@@ -710,6 +743,23 @@ _FAST_FILES = {
     # shells, no environments) for the changed recording-save path; keep them in
     # PR fast shards for the exact-head changed-coverage gate (issue #8422).
     "test_recording_save_policy.py",
+    # Typed simulator snapshots are deterministic serialization and compatibility
+    # contracts for the preparation-only continuation prototype (issue #8620).
+    "test_typed_snapshot.py",
+    # Continuation-plan tests are deterministic admission and cost-table
+    # contracts for the preparation-only research scaffold (issue #8622).
+    "test_continuation_experiment_plan.py",
+    # Relevance-window tests are deterministic selector, manifest, and missing
+    # signal contracts for the preparation-only research scaffold (issue #8622).
+    "test_relevance_windows.py",
+    # Source-bound fixture and provenance contracts are deterministic analysis
+    # coverage for the issue #8566 diagnostic packet.
+    "test_issue_8566_source_bound_component_contrasts.py",
+    # Canonical artifact-path helper tests (tests/research and tests/test_guard)
+    # are deterministic path and override contracts for the changed reusable
+    # helper module; keep their producer coverage in the exact-head fast lane
+    # (issue #8910).
+    "test_artifact_paths.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

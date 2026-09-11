@@ -1,0 +1,8 @@
+{
+  "schema_version": "cross_host_conformance_capsule.v1", "capsule_id": "classic_crossing_low_goal_seed42_h8", "source_commit": null,
+  "scenario": {"path": "configs/scenarios/archetypes/classic_crossing.yaml", "id": "classic_crossing_low", "schema_path": "robot_sf/benchmark/schemas/episode.schema.v1.json"},
+  "planner": "goal", "seed": 42, "horizon": 8,
+  "deterministic_controls": {"pin_thread_env": true, "workers": 1, "resume": false, "record_simulation_step_trace": true},
+  "numeric_policy": {"default_abs_tol": 1e-09, "default_rel_tol": 1e-06},
+  "expected_structure": {"min_step_count": 1, "max_step_count": 8, "required_pedestrian_id_prefix": "simulator-slot-", "allowed_row_statuses": ["success", "failure"], "allowed_termination_reasons": ["max_steps", "goal_reached", "collision"]}
+}

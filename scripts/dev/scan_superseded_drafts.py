@@ -145,6 +145,16 @@ class SupersededCandidate:
         }
 
 
+class ReferenceLookupError(RuntimeError):
+    """An individual issue/PR reference could not be resolved.
+
+    This is distinct from a GitHub/API failure.  The scanner can report one
+    unresolved reference and continue evaluating the other drafts, while
+    authentication and transport failures still fail the whole read-only
+    report closed.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Low-level GitHub CLI helpers
 # ---------------------------------------------------------------------------
@@ -233,11 +243,30 @@ def fetch_pr_files(*, repo: str, pr_number: int) -> list[str]:
         return []
 
 
+def _is_unresolvable_reference_error(error: RuntimeError) -> bool:
+    """Return whether a GitHub lookup failed because the number is unknown."""
+    message = str(error).lower()
+    return any(
+        marker in message
+        for marker in (
+            "could not resolve to an issue",
+            "could not resolve to a pullrequest",
+            "no pull requests found",
+        )
+    )
+
+
 def fetch_issue_state(*, repo: str, number: int) -> str | None:
-    """Return ``CLOSED`` or ``OPEN`` for an issue number.
+    """Return the state for an issue or pull-request number.
+
+    GitHub CLI resolves pull-request numbers through ``gh issue view`` too and
+    returns ``MERGED`` for a merged pull request.  Keeping that state explicit
+    lets rule evaluation classify a draft that references a merged PR as
+    superseded instead of treating the reference as malformed.
 
     Raises:
-        RuntimeError: If GitHub cannot return a valid issue state.
+        ReferenceLookupError: If GitHub returns an unexpected reference state.
+        RuntimeError: If GitHub cannot return a valid state payload.
     """
     cmd = [
         "gh",
@@ -249,12 +278,21 @@ def fetch_issue_state(*, repo: str, number: int) -> str | None:
         "--json",
         "state",
     ]
-    payload = _run_json(cmd)
+    try:
+        payload = _run_json(cmd)
+    except RuntimeError as exc:
+        if _is_unresolvable_reference_error(exc):
+            raise ReferenceLookupError(
+                f"GitHub could not resolve issue/PR #{number}: {exc}"
+            ) from exc
+        raise
     if not isinstance(payload, dict):
         raise RuntimeError(f"GitHub returned an invalid state payload for issue #{number}")
     state = str(payload.get("state", "")).upper()
-    if state not in {"CLOSED", "OPEN"}:
-        raise RuntimeError(f"GitHub returned an invalid state for issue #{number}: {state!r}")
+    if state not in {"CLOSED", "OPEN", "MERGED"}:
+        raise ReferenceLookupError(
+            f"GitHub returned an unresolvable state for issue/PR #{number}: {state!r}"
+        )
     return state
 
 
@@ -368,6 +406,46 @@ def get_modified_files_on_main_since(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_reference_state(
+    draft: DraftPr,
+    *,
+    repo: str,
+    number: int,
+    get_issue_state: Any,
+    warnings: list[dict[str, Any]] | None,
+) -> tuple[str | None, bool]:
+    """Resolve one reference, returning ``(state, unresolved)``."""
+    try:
+        return get_issue_state(repo=repo, number=number), False
+    except ReferenceLookupError as exc:
+        if warnings is not None:
+            warnings.append(
+                {
+                    "type": "skipped_reference",
+                    "draft_pr": draft.number,
+                    "reference": number,
+                    "reason": str(exc),
+                }
+            )
+        return None, True
+
+
+def _append_reference_state_rule(
+    state: str | None,
+    *,
+    issue_num: int,
+    rules: list[str],
+    evidence: list[str],
+) -> None:
+    """Append the hard rule represented by a resolved reference state."""
+    if state == "CLOSED":
+        rules.append("linked_issue_closed")
+        evidence.append(f"Rule 1: linked issue #{issue_num} is CLOSED")
+    elif state == "MERGED":
+        rules.append("superseded_by_merged_pr")
+        evidence.append(f"Rule 2: reference #{issue_num} resolves to a MERGED pull request")
+
+
 def evaluate_rules(
     draft: DraftPr,
     *,
@@ -376,6 +454,7 @@ def evaluate_rules(
     get_merged_prs: Any = fetch_merged_prs_for_issue,
     get_modified_files: Any = get_modified_files_on_main_since,
     merged_pr_limit: int = 30,
+    warnings: list[dict[str, Any]] | None = None,
 ) -> tuple[list[str], list[str]]:
     """Evaluate all rules for one draft PR.
 
@@ -384,16 +463,31 @@ def evaluate_rules(
     rules: list[str] = []
     evidence: list[str] = []
     linked = draft.linked_issue_numbers()
+    unresolved_references: set[int] = set()
 
     # Rule 1: linked issue closed
     for issue_num in linked:
-        state = get_issue_state(repo=repo, number=issue_num)
-        if state == "CLOSED":
-            rules.append("linked_issue_closed")
-            evidence.append(f"Rule 1: linked issue #{issue_num} is CLOSED")
+        state, unresolved = _resolve_reference_state(
+            draft,
+            repo=repo,
+            number=issue_num,
+            get_issue_state=get_issue_state,
+            warnings=warnings,
+        )
+        if unresolved:
+            unresolved_references.add(issue_num)
+            continue
+        _append_reference_state_rule(
+            state,
+            issue_num=issue_num,
+            rules=rules,
+            evidence=evidence,
+        )
 
     # Rule 2: superseded by merged PR
     for issue_num in linked:
+        if issue_num in unresolved_references:
+            continue
         merged = get_merged_prs(
             repo=repo,
             issue_number=issue_num,
@@ -428,6 +522,7 @@ def scan_drafts(
     get_issue_state: Any = fetch_issue_state,
     get_merged_prs: Any = fetch_merged_prs_for_issue,
     get_modified_files: Any = get_modified_files_on_main_since,
+    warnings: list[dict[str, Any]] | None = None,
 ) -> list[SupersededCandidate]:
     """Run all rules over all draft PRs and return candidates."""
     candidates: list[SupersededCandidate] = []
@@ -438,6 +533,7 @@ def scan_drafts(
             get_issue_state=get_issue_state,
             get_merged_prs=get_merged_prs,
             get_modified_files=get_modified_files,
+            warnings=warnings,
         )
         if rules:
             candidates.append(
@@ -461,6 +557,7 @@ def build_report(
     candidates: list[SupersededCandidate],
     scanned_count: int,
     truncated: bool = False,
+    warnings: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build the machine-readable JSON report."""
     hard_candidates = [c for c in candidates if c.has_hard_rule]
@@ -474,6 +571,7 @@ def build_report(
         "candidate_count": len(candidates),
         "hard_candidate_count": len(hard_candidates),
         "candidates": [c.to_payload() for c in candidates],
+        "warnings": list(warnings or []),
         "failure_summary": {
             "reason": "superseded_draft_candidates_found",
             "hard_count": len(hard_candidates),
@@ -499,6 +597,16 @@ def build_markdown(report: dict[str, Any]) -> str:
     lines.append(f"**Candidates**: {report['candidate_count']}")
     lines.append(f"**Hard (rules 1-2)**: {report['hard_candidate_count']}")
     lines.append("")
+
+    warnings = report.get("warnings", [])
+    if warnings:
+        lines.append(f"**Warnings**: {len(warnings)} individual reference(s) skipped")
+        for warning in warnings:
+            lines.append(
+                f"- PR #{warning.get('draft_pr')}: reference #{warning.get('reference')} "
+                f"skipped: {warning.get('reason', 'unresolved reference')}"
+            )
+        lines.append("")
 
     candidates = report.get("candidates", [])
     if not candidates:
@@ -567,6 +675,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _build_parser().parse_args(argv)
     repo = args.repo
+    warnings: list[dict[str, Any]] = []
 
     try:
         draft_prs, truncated = fetch_draft_prs(repo=repo, limit=args.limit)
@@ -584,6 +693,7 @@ def main(argv: list[str] | None = None) -> int:
             get_issue_state=fetch_issue_state,
             get_merged_prs=fetch_merged_prs_for_issue,
             get_modified_files=get_modified_files_on_main_since,
+            warnings=warnings,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         error_report = {
@@ -595,6 +705,7 @@ def main(argv: list[str] | None = None) -> int:
             "candidate_count": 0,
             "hard_candidate_count": 0,
             "candidates": [],
+            "warnings": warnings,
             "error": str(exc),
         }
         serialized = json.dumps(error_report, indent=2, sort_keys=True)
@@ -613,6 +724,7 @@ def main(argv: list[str] | None = None) -> int:
         candidates=candidates,
         scanned_count=len(draft_prs),
         truncated=truncated,
+        warnings=warnings,
     )
 
     if args.output:

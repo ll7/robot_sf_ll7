@@ -9,6 +9,7 @@ import gc
 import os
 from typing import TYPE_CHECKING
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -221,10 +222,13 @@ def save_pareto_png(  # noqa: PLR0913
     title: str | None = None,
     out_pdf: str | None = None,
     observation_track_mode: str = "strict",
+    *,
+    out_svg: str | None = None,
 ) -> dict[str, object]:
     """Render and save a Pareto scatter with non-dominated points highlighted.
 
     When out_pdf is provided, also save a LaTeX-friendly vector PDF with consistent rcParams.
+    When out_svg is provided, also save a vector SVG next to the PNG.
 
     Returns:
         Metadata dict with plot info, point counts, and output paths.
@@ -276,6 +280,14 @@ def save_pareto_png(  # noqa: PLR0913
             if pdf_dir:
                 os.makedirs(pdf_dir, exist_ok=True)
             fig.savefig(out_pdf)
+        if out_svg is not None:
+            svg_dir = os.path.dirname(out_svg)
+            if svg_dir:
+                os.makedirs(svg_dir, exist_ok=True)
+            # Matplotlib otherwise embeds the current time and randomizes SVG ids.
+            # Keep this scoped to SVG output so PNG/PDF behavior is unchanged.
+            with mpl.rc_context({"svg.hashsalt": "robot_sf_pareto"}):
+                fig.savefig(out_svg, format="svg", metadata={"Date": None})
 
         plt.close(fig)
 
@@ -293,4 +305,6 @@ def save_pareto_png(  # noqa: PLR0913
     }
     if out_pdf is not None:
         payload["pdf"] = out_pdf
+    if out_svg is not None:
+        payload["svg"] = out_svg
     return payload

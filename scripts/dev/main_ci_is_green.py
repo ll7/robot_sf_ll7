@@ -21,6 +21,14 @@ conclusion it decided from. The ``--json`` flag emits the machine-readable
 main-signal schema (``main_ci_is_green.v1``) with the same green/red/stale
 classification the gate contract consumes, so the gate need not parse the
 human line.
+
+The gate's default fetch is deliberately one small bounded window (a single
+``gh run list --limit`` call, default 5 runs, 30s timeout): the merge hold must
+stay cheap and quick, and a cancellation-saturated window fails closed to
+``stale`` rather than blocking on a slower search.  :func:`fetch_run_window`
+is the paginated REST reader for callers that need the decisive verdict behind
+a cancelled-run flood; :mod:`main_ci_incident_reconcile` uses it.  This module
+owns both fetch paths so there is exactly one pagination implementation.
 """
 
 from __future__ import annotations
@@ -29,10 +37,23 @@ import argparse
 import json
 import subprocess
 import sys
-from typing import Any
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, NamedTuple
+from urllib.parse import quote, urlencode
+
+from scripts.dev._gh_rest import parse_json, run_gh_api
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_WORKFLOW = "CI"
+
+# Bounded pagination budget for the decisive-run REST search.  GitHub's
+# latest-main-wins concurrency can fill whole raw pages with ``cancelled``
+# runs, so a raw ``--limit`` does not identify a sufficient evidence window.
+# The reader examines at most ``max_pages`` full pages before reporting the
+# window as exhausted; hitting that bound means "no verdict found", never red.
+REST_PAGE_SIZE = 100
+DEFAULT_MAX_PAGES = 10
+REST_RUN_TIMEOUT = 90
 
 
 def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
@@ -56,6 +77,222 @@ def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
             stdout="",
             stderr=f"gh not executable: {exc}",
         )
+
+
+class MainCiRunFetchError(RuntimeError):
+    """Raised when the bounded paginated main-CI run window cannot be read."""
+
+
+class MainCiRunWindow(NamedTuple):
+    """Result of a bounded paginated main-CI run read.
+
+    ``window_exhausted`` is True when the page budget ran out before
+    ``stop_after_decisive`` decisive runs (or a complete short page) were seen.
+    Callers must fail closed on an exhausted window instead of treating the
+    partial read as complete history.
+    """
+
+    runs: list[dict[str, Any]]
+    window_exhausted: bool
+
+
+def _default_rest_runner(
+    path: str,
+    payload: object | None = None,
+    *,
+    method: str | None = None,
+    extra_args: list[str] | None = None,
+) -> Any:
+    """Run one REST request through the shared JSON-stdin transport."""
+    return run_gh_api(
+        path,
+        payload,
+        method=method,
+        extra_args=extra_args,
+        timeout=REST_RUN_TIMEOUT,
+        timeout_context="main-CI run window was not verified",
+    )
+
+
+def _rest_json(
+    path: str,
+    *,
+    runner: Callable[..., Any],
+    operation: str,
+) -> Any:
+    """Call a REST endpoint and fail closed on transport or JSON errors."""
+    result = runner(path, None, method=None, extra_args=None)
+    data, error = parse_json(result, what=operation)
+    if error:
+        raise MainCiRunFetchError(error)
+    return data
+
+
+def resolve_workflow_selector(
+    *,
+    repo: str,
+    workflow: str,
+    max_pages: int,
+    runner: Callable[..., Any],
+) -> str:
+    """Resolve a workflow display name to a stable REST workflow selector."""
+    selector = workflow.strip()
+    if not selector:
+        raise MainCiRunFetchError("workflow must not be empty")
+    if selector.isdecimal() or selector.lower().endswith((".yml", ".yaml")):
+        return selector
+
+    rows: list[Mapping[str, Any]] = []
+    for page in range(1, max_pages + 1):
+        endpoint = (
+            f"repos/{quote(repo, safe='/')}/actions/workflows?per_page={REST_PAGE_SIZE}&page={page}"
+        )
+        payload = _rest_json(
+            endpoint,
+            runner=runner,
+            operation="Actions workflow inventory",
+        )
+        if not isinstance(payload, Mapping):
+            raise MainCiRunFetchError("Actions workflow inventory returned a non-object payload")
+        page_rows = payload.get("workflows")
+        if not isinstance(page_rows, list) or any(
+            not isinstance(row, Mapping) for row in page_rows
+        ):
+            raise MainCiRunFetchError("Actions workflow inventory returned malformed rows")
+        rows.extend(row for row in page_rows if isinstance(row, Mapping))
+        if len(page_rows) < REST_PAGE_SIZE:
+            break
+    else:
+        raise MainCiRunFetchError(
+            f"Actions workflow inventory exceeded the {max_pages}-page budget; "
+            "refusing an ambiguous workflow selector"
+        )
+
+    matches = [
+        row
+        for row in rows
+        if row.get("name") == selector
+        or row.get("path") == selector
+        or str(row.get("path") or "").rsplit("/", 1)[-1] == selector
+    ]
+    if not matches:
+        raise MainCiRunFetchError(f"workflow {workflow!r} was not found")
+    if len(matches) > 1:
+        raise MainCiRunFetchError(f"workflow {workflow!r} resolved to multiple workflows")
+    workflow_id = _positive_int(matches[0].get("id"), field="workflow id")
+    return str(workflow_id)
+
+
+def _positive_int(value: Any, *, field: str) -> int:
+    """Return a positive integer, rejecting booleans and malformed IDs."""
+    if isinstance(value, bool):
+        raise MainCiRunFetchError(f"{field} must be a positive integer")
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise MainCiRunFetchError(f"{field} is not an integer: {value!r}") from exc
+    if number < 1:
+        raise MainCiRunFetchError(f"{field} must be positive")
+    return number
+
+
+def normalize_actions_run(row: Mapping[str, Any], *, index: int) -> dict[str, Any]:
+    """Normalize one Actions REST run to the existing classifier schema."""
+    run_id = _positive_int(row.get("id"), field=f"Actions run row {index} id")
+    status = row.get("status")
+    if not isinstance(status, str) or not status:
+        raise MainCiRunFetchError(f"Actions run row {index} has no usable status")
+    conclusion = row.get("conclusion")
+    if conclusion is not None and not isinstance(conclusion, str):
+        raise MainCiRunFetchError(f"Actions run row {index} has a malformed conclusion")
+    created_at = row.get("created_at")
+    if not isinstance(created_at, str) or not created_at:
+        raise MainCiRunFetchError(f"Actions run row {index} has no usable created_at")
+    head_sha = row.get("head_sha")
+    if head_sha is not None and not isinstance(head_sha, str):
+        raise MainCiRunFetchError(f"Actions run row {index} has a malformed head_sha")
+    return {
+        "databaseId": run_id,
+        "status": status,
+        "conclusion": conclusion,
+        "headSha": head_sha,
+        "createdAt": created_at,
+    }
+
+
+def count_decisive_runs(runs: Sequence[Any]) -> int:
+    """Count completed runs carrying a decisive (green/red) verdict."""
+    decisive = 0
+    for index, run in enumerate(runs):
+        if not isinstance(run, dict):
+            raise MainCiRunFetchError(f"run window row {index} is malformed")
+        if str(run.get("status") or "") != "completed":
+            continue
+        if classify(run.get("conclusion")) in {"green", "red"}:
+            decisive += 1
+    return decisive
+
+
+def fetch_run_window(
+    repo: str = DEFAULT_REPO,
+    workflow: str = DEFAULT_WORKFLOW,
+    *,
+    max_pages: int = DEFAULT_MAX_PAGES,
+    stop_after_decisive: int = 1,
+    runner: Callable[..., Any] | None = None,
+) -> MainCiRunWindow:
+    """Read a bounded paginated main-CI run window until decisive runs are seen.
+
+    The raw ``gh run list --limit`` window used by the merge-hold gate can be
+    entirely ``cancelled`` during high-throughput windows, hiding the decisive
+    green/red verdict behind the flood.  This reader pages full REST pages and
+    stops as soon as ``stop_after_decisive`` completed green/red runs are
+    visible, or when a complete short page proves history is exhausted.
+
+    Fail-closed contract: when ``max_pages`` is reached first, the returned
+    window has ``window_exhausted=True`` and the caller must not read that
+    partial window as a verdict.
+    """
+    if max_pages <= 0:
+        raise ValueError("max_pages must be positive")
+    if stop_after_decisive <= 0:
+        raise ValueError("stop_after_decisive must be positive")
+    rest_runner = runner or _default_rest_runner
+    selector = resolve_workflow_selector(
+        repo=repo,
+        workflow=workflow,
+        max_pages=max_pages,
+        runner=rest_runner,
+    )
+    endpoint_base = (
+        f"repos/{quote(repo, safe='/')}/actions/workflows/{quote(selector, safe='')}/runs"
+        f"?{urlencode({'branch': 'main'})}"
+    )
+    runs: list[dict[str, Any]] = []
+    for page in range(1, max_pages + 1):
+        endpoint = f"{endpoint_base}&per_page={REST_PAGE_SIZE}&page={page}"
+        payload = _rest_json(
+            endpoint,
+            runner=rest_runner,
+            operation=f"main-CI runs page {page}",
+        )
+        if not isinstance(payload, Mapping):
+            raise MainCiRunFetchError(f"main-CI runs page {page} returned a non-object payload")
+        page_rows = payload.get("workflow_runs")
+        if not isinstance(page_rows, list) or any(
+            not isinstance(row, Mapping) for row in page_rows
+        ):
+            raise MainCiRunFetchError(f"main-CI runs page {page} returned malformed rows")
+        runs.extend(
+            normalize_actions_run(row, index=index)
+            for index, row in enumerate(page_rows, start=len(runs))
+            if isinstance(row, Mapping)
+        )
+        if count_decisive_runs(runs) >= stop_after_decisive:
+            return MainCiRunWindow(runs=runs, window_exhausted=False)
+        if len(page_rows) < REST_PAGE_SIZE:
+            return MainCiRunWindow(runs=runs, window_exhausted=False)
+    return MainCiRunWindow(runs=runs, window_exhausted=True)
 
 
 # A completed run's ``conclusion`` is DECISIVE only when it actually evaluated
@@ -155,7 +392,14 @@ def build_signal(
 def fetch_runs(
     repo: str = DEFAULT_REPO, workflow: str = DEFAULT_WORKFLOW, limit: int = 5
 ) -> list[dict[str, Any]]:
-    """Fetch recent completed main CI runs. ``--status completed`` is load-bearing."""
+    """Fetch recent completed main CI runs in one bounded ``gh run list`` call.
+
+    ``--status completed`` is load-bearing.  This is the fast merge-hold path:
+    a single window of ``limit`` runs (default 5) with the 30s CLI timeout, so
+    the gate cannot become slow or expensive.  A cancellation-saturated window
+    fails closed to ``stale``; use :func:`fetch_run_window` when the decisive
+    verdict behind such a flood is required.
+    """
     proc = _gh(
         [
             "run",

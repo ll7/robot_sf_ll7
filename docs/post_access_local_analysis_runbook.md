@@ -449,7 +449,8 @@ This runbook routes to existing owners:
   [`docs/dev_runtime_requirements.md`](dev_runtime_requirements.md), and `pyproject.toml`.
 - Host/status checks: [`scripts/dev/check_runtime_requirements.sh`](../scripts/dev/check_runtime_requirements.sh),
   `robot-sf doctor`, and [`docs/troubleshooting/doctor.md`](troubleshooting/doctor.md).
-- Preservation and manifests: [`scripts/tools/chunk_manifest.py`](../scripts/tools/chunk_manifest.py),
+- Preservation and manifests: [`examples/advanced/41_artifact_preservation.py`](../examples/advanced/41_artifact_preservation.py)
+  when present, [`scripts/tools/chunk_manifest.py`](../scripts/tools/chunk_manifest.py),
   [`scripts/tools/lineage_index.py`](../scripts/tools/lineage_index.py), and the retention guide.
 - Models and evidence vocabulary: [`model/registry.md`](../model/registry.md) and
   [`docs/context/artifact_evidence_vocabulary.md`](context/artifact_evidence_vocabulary.md).
@@ -459,8 +460,9 @@ This runbook routes to existing owners:
 
 Issue [#8900](https://github.com/ll7/robot_sf_ll7/issues/8900) owns the companion synthetic
 campaign-capsule restore/summary example. Issue
-[#8909](https://github.com/ll7/robot_sf_ll7/issues/8909) owns the companion task-owned output-tree
-preservation manifest example. Those owners may be unavailable in an older checkout; this
+Issue [#8909](https://github.com/ll7/robot_sf_ll7/issues/8909) owns the companion
+[`examples/advanced/41_artifact_preservation.py`](../examples/advanced/41_artifact_preservation.py)
+task-owned output-tree preservation manifest example. Those owners may be unavailable in an older checkout; this
 runbook does not duplicate their implementations or depend on their future paths. If a companion
 owner is not present at the selected source commit, use the current owner commands above and
 record the companion lane as `not_available`.

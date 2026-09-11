@@ -34,6 +34,7 @@ SOURCE_PATHS = (
     "scripts/validation/validate_artifact_catalog.py",
     "examples/advanced/36_optional_capability_handling.py",
     "examples/advanced/39_failed_campaign_diagnosis.py",
+    "examples/advanced/41_artifact_preservation.py",
     "configs/baselines/example_matrix.yaml",
     "model/registry.yaml",
     "robot_sf/benchmark/schemas/episode.schema.v1.json",

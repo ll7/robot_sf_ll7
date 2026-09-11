@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Inventory compute-window output schemas and their exact readers.
 
-This is an operational preservation check, not a converter or an analysis tool.  A packet
-contains one record per output role and binds its schema, reader source, dependencies, units,
-and compact source references.  The checker reads representative bytes when possible and emits
-stable JSON or a concise table.  It deliberately keeps unavailable readers visible.
+Operational preservation check; it binds each role to its schema, reader, dependencies, units,
+source references, and representative bytes without converting or analyzing outputs.
 """
 
 from __future__ import annotations
@@ -18,32 +16,18 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 SCHEMA = "compute-window-schema-reader-inventory.v1"
-STATUSES = (
-    "readable_verified",
-    "readable_with_declared_adapter",
-    "schema_only",
-    "reader_unavailable",
-    "unversioned",
-    "conflict",
-)
 FORMATS = {"json", "jsonl", "parquet-like", "trace", "snapshot", "migrated"}
 SHA256_LENGTH = 64
 REQUIRED_ROLE_FIELDS = {
-    "role",
-    "path",
-    "format",
-    "schema",
-    "reader",
-    "dependencies",
-    "compatibility",
-    "units_display",
-    "source_material",
-    "check_command",
+    *"role path format schema reader dependencies compatibility units_display source_material check_command".split()
 }
+CONFLICT_CODES = set(
+    "hidden_absolute_path reader_schema_mismatch optional_dependency_gap stale_adapter "
+    "unit_display_drift ambiguous_role missing_check_command source_material_mismatch".split()
+)
 
 
-def sha256_file(path: Path) -> str:
-    """Return the content digest for one file."""
+def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
@@ -52,9 +36,8 @@ def sha256_file(path: Path) -> str:
 
 
 def _digest_matches(path: Path, expected: str) -> bool:
-    """Return whether a regular file has the expected digest, failing closed on I/O errors."""
     try:
-        return path.is_file() and sha256_file(path) == expected
+        return path.is_file() and _sha256_file(path) == expected
     except OSError:
         return False
 
@@ -99,8 +82,7 @@ def _digest(value: Any, location: str, errors: list[dict[str, str]]) -> str | No
 
 
 def _representative_schema_version(payload: Mapping[str, Any]) -> Any:
-    """Extract a conventional schema version from a representative payload."""
-    version = payload.get("schema_version", payload.get("schema"))
+    version = payload.get("schema_version", payload.get("schema", payload.get("version")))
     if isinstance(version, Mapping):
         version = version.get("version")
     if version is None and isinstance(payload.get("metadata"), Mapping):
@@ -109,7 +91,6 @@ def _representative_schema_version(payload: Mapping[str, Any]) -> Any:
 
 
 def _load_jsonl_payloads(text: str) -> tuple[list[Mapping[str, Any]] | None, str | None]:
-    """Parse non-empty JSONL objects without loading an optional data engine."""
     rows: list[Mapping[str, Any]] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
         if not line.strip():
@@ -129,7 +110,6 @@ def _load_jsonl_payloads(text: str) -> tuple[list[Mapping[str, Any]] | None, str
 def _load_representative_payloads(
     path: Path, fmt: str
 ) -> tuple[list[Mapping[str, Any]] | None, str | None]:
-    """Read lightweight representative objects without optional data engines."""
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -148,7 +128,6 @@ def _load_representative_payloads(
 def _load_and_validate_bytes(
     path: Path, fmt: str, expected_version: str
 ) -> tuple[bool, str | None]:
-    """Read lightweight representative bytes and require the exact schema version."""
     payloads, reason = _load_representative_payloads(path, fmt)
     if reason:
         return False, reason
@@ -162,7 +141,6 @@ def _load_and_validate_bytes(
 def _rooted_path(
     root: Path, relative: str | None, location: str, errors: list[dict[str, str]]
 ) -> Path | None:
-    """Resolve a relative packet path and reject symlinks that escape the source root."""
     if relative is None:
         return None
     try:
@@ -173,6 +151,41 @@ def _rooted_path(
         errors.append(_error("hidden_absolute_path", location, "path resolves outside source root"))
         return None
     return candidate
+
+
+def _source_material_errors(
+    source_material: Any,
+    expected: Mapping[str, tuple[str | None, str | None]],
+    root: Path,
+    location: str,
+) -> list[dict[str, str]]:
+    if not isinstance(source_material, list) or not source_material:
+        return [_error("missing_source_material", location, "exact source reference is required")]
+    errors: list[dict[str, str]] = []
+    add = errors.append
+    present: set[str] = set()
+    for ref_index, ref in enumerate(source_material):
+        ref_location = f"{location}[{ref_index}]"
+        if not isinstance(ref, Mapping):
+            add(_error("missing_source_material", ref_location, "source ref must be an object"))
+            continue
+        ref_path = _relative_path(ref.get("path"), f"{ref_location}.path", errors)
+        ref_digest = _digest(ref.get("sha256"), f"{ref_location}.sha256", errors)
+        kind = ref.get("kind")
+        if not isinstance(kind, str) or kind not in expected:
+            add(_error("missing_source_material", f"{ref_location}.kind", "unknown source kind"))
+        elif (ref_path, ref_digest) != expected[kind]:
+            add(_error("source_material_mismatch", ref_location, "source binding differs"))
+        else:
+            present.add(kind)
+        reference = _rooted_path(root, ref_path, f"{ref_location}.path", errors)
+        if reference and ref_digest and not _digest_matches(reference, ref_digest):
+            add(_error("missing_source_material", ref_location, "source digest mismatch"))
+    errors.extend(
+        _error("missing_source_material", location, f"{kind} source reference is required")
+        for kind in sorted(set(expected) - present)
+    )
+    return errors
 
 
 def _role_result(  # noqa: C901, PLR0912, PLR0915
@@ -201,6 +214,16 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
         errors.append(_error("ambiguous_role", location, "role and supported format are required"))
     schema = role.get("schema")
     version = schema.get("version") if isinstance(schema, Mapping) else None
+    schema_path = (
+        _relative_path(schema.get("source_path"), f"{location}.schema.source_path", errors)
+        if isinstance(schema, Mapping)
+        else None
+    )
+    schema_digest = (
+        _digest(schema.get("source_sha256"), f"{location}.schema.source_sha256", errors)
+        if isinstance(schema, Mapping)
+        else None
+    )
     if (
         not isinstance(schema, Mapping)
         or not isinstance(schema.get("name"), str)
@@ -303,6 +326,7 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
                 )
             )
     compatibility = role.get("compatibility")
+    adapter_path = adapter_digest = None
     if not isinstance(compatibility, Mapping) or compatibility.get("mode") not in {
         "native",
         "declared_adapter",
@@ -317,7 +341,26 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
         errors.append(
             _error("stale_adapter", f"{location}.compatibility", "adapter symbol is required")
         )
-    elif (
+    elif compatibility.get("mode") == "declared_adapter":
+        adapter_path = _relative_path(
+            compatibility.get("adapter_source_path"),
+            f"{location}.compatibility.adapter_source_path",
+            errors,
+        )
+        adapter_digest = _digest(
+            compatibility.get("adapter_source_sha256"),
+            f"{location}.compatibility.adapter_source_sha256",
+            errors,
+        )
+        if not adapter_path or not adapter_digest:
+            errors.append(
+                _error(
+                    "stale_adapter",
+                    f"{location}.compatibility",
+                    "adapter source path and digest are required",
+                )
+            )
+    if (
         compatibility.get("target_schema") is not None
         and compatibility.get("target_schema") != version
     ):
@@ -362,46 +405,19 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
                 "validation command is required",
             )
         )
+    expected_material: dict[str, tuple[str | None, str | None]] = {
+        "schema": (schema_path, schema_digest)
+    }
+    if reader_path and reader_digest:
+        expected_material["reader"] = (reader_path, reader_digest)
+    if adapter_path and adapter_digest:
+        expected_material["adapter"] = (adapter_path, adapter_digest)
     source_material = role.get("source_material")
-    if not isinstance(source_material, list) or not source_material:
-        errors.append(
-            _error(
-                "missing_source_material",
-                f"{location}.source_material",
-                "exact source reference is required",
-            )
+    errors.extend(
+        _source_material_errors(
+            source_material, expected_material, root, f"{location}.source_material"
         )
-    else:
-        for ref_index, ref in enumerate(source_material):
-            if not isinstance(ref, Mapping):
-                errors.append(
-                    _error(
-                        "missing_source_material",
-                        f"{location}.source_material[{ref_index}]",
-                        "source reference must be an object",
-                    )
-                )
-                continue
-            ref_path = _relative_path(
-                ref.get("path"), f"{location}.source_material[{ref_index}].path", errors
-            )
-            ref_digest = _digest(
-                ref.get("sha256"), f"{location}.source_material[{ref_index}].sha256", errors
-            )
-            reference = _rooted_path(
-                root,
-                ref_path,
-                f"{location}.source_material[{ref_index}].path",
-                errors,
-            )
-            if reference and ref_digest and not _digest_matches(reference, ref_digest):
-                errors.append(
-                    _error(
-                        "missing_source_material",
-                        f"{location}.source_material[{ref_index}]",
-                        "source reference is not content-addressed to this tree",
-                    )
-                )
+    )
     output_path = _rooted_path(root, path_value, f"{location}.path", errors)
     if output_path is None or not output_path.is_file():
         errors.append(
@@ -422,15 +438,7 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
         codes = {item["code"] for item in errors}
         if "unversioned" in codes:
             status = "unversioned"
-        elif codes & {
-            "hidden_absolute_path",
-            "reader_schema_mismatch",
-            "optional_dependency_gap",
-            "stale_adapter",
-            "unit_display_drift",
-            "ambiguous_role",
-            "missing_check_command",
-        }:
+        elif codes & CONFLICT_CODES:
             status = "conflict"
         elif "reader_unavailable" in codes or not reader_available:
             status = (
@@ -457,7 +465,7 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
         "units_display": dict(units_display) if isinstance(units_display, Mapping) else {},
         "source_material": sorted(
             (dict(ref) for ref in source_material if isinstance(ref, Mapping)),
-            key=lambda item: str(item.get("path", "")),
+            key=lambda item: (str(item.get("kind", "")), str(item.get("path", ""))),
         )
         if isinstance(source_material, list)
         else [],

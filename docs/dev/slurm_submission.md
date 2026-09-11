@@ -92,6 +92,26 @@ off-by-one bounds, zero- vs one-based index mismatches, chunk tail truncations, 
 reorderings, resume/retry collisions, and invalid array concurrency specs. It exits with code
 0 on success, 1 on mapping errors (or warnings under `--strict`), and 2 on invalid invocation.
 
+## Receipt public projection (check-only)
+
+Before a private scheduler, harvest, or custody receipt is quoted publicly, validate the proposed
+sanitized projection against `scripts/tools/receipt_projection_policies.json`:
+
+```bash
+uv run python scripts/tools/validate_receipt_projection.py \
+  --check --private <private-receipt.json> --public <proposed-public-receipt.json> --format json
+```
+
+Policies are explicit per field path (`keep`, alias transforms, `digest`, `omit`, `reject`).
+Unknown or credential-named fields, private paths, hostnames, IPs, signed URLs, accounts, and
+queue topology fail closed. Approved stable aliases replace private IDs and artifact roots, and
+the public receipt binds `source_binding.receipt_sha256` to the canonical SHA-256 of the full
+private receipt without publishing private bytes; repeated projection is byte-stable. Required
+identity (source/config digests, environment class, row counts, terminal status, artifact
+checksums, claim boundary) must survive, and over-redaction that erases it fails. Unsupported
+classes are reported `unsupported_receipt_class`, never partially projected. Exit codes: 0 valid,
+2 invalid or unsupported, 3 malformed input; the tool is check-only and changes no state.
+
 ## Staged source isolation verification
 
 Before submitting compute-window or cluster jobs, verify that staged commands run

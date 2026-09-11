@@ -13,8 +13,8 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 38,
-      "occurrences": 261
+      "files": 28,
+      "occurrences": 186
     }
   },
   "files": {
@@ -35,27 +35,17 @@
     "tests/test_cli_snqi_ablation.py": 5,
     "tests/test_error_policy.py": 6,
     "tests/test_failure_extractor.py": 5,
-    "tests/test_force_field_figure.py": 2,
-    "tests/test_full_classic_visuals_edge_cases.py": 12,
-    "tests/test_full_classic_visuals_missing_matplotlib.py": 8,
-    "tests/test_full_classic_visuals_renderer_toggle.py": 12,
-    "tests/test_full_classic_visuals_simview_fallback.py": 15,
-    "tests/test_lidar_render.py": 11,
     "tests/test_manifest_resume.py": 8,
-    "tests/test_render_error_message.py": 1,
     "tests/test_runner_batch.py": 2,
     "tests/test_runner_resume.py": 2,
-    "tests/test_svg_classic_maps_format.py": 3,
     "tests/test_tracking/test_history.py": 8,
     "tests/test_tracking/test_manifest_writer.py": 6,
     "tests/test_tracking/test_progress_tracker.py": 15,
     "tests/test_tracking/test_telemetry.py": 7,
-    "tests/test_visualizablesimstate.py": 1,
     "tests/tools/test_analyze_imitation_results.py": 8,
     "tests/tools/test_compare_training_runs.py": 9,
     "tests/unit/test_hardware_profile_capture.py": 5,
-    "tests/unit/test_resume_manifest.py": 18,
-    "tests/unit/test_runner_video.py": 10
+    "tests/unit/test_resume_manifest.py": 18
   },
   "roots": [
     "robot_sf",
@@ -65,7 +55,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 38,
-    "total_occurrences": 261
+    "files": 28,
+    "total_occurrences": 186
   }
 }

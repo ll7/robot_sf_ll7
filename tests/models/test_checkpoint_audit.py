@@ -257,8 +257,25 @@ def test_reference_configs_map_consumers_and_unknown_ids_fail_closed(tmp_path):
             {"loader_probe_malformed"},
             "60",
         ),
+        (
+            'print(\'{"ok": true, "facts": {"loader": "torch"}}\')\n',
+            {"loader_probe_malformed"},
+            "60",
+        ),
+        (
+            'print(\'{"ok": true, "facts": {"loader": "sb3", "policy_class": "fixture.PPO", '
+            '"observation_shape": [4], "action_shape": [2], "parameters_finite": true}}\')\n',
+            {"loader_probe_malformed"},
+            "60",
+        ),
     ],
-    ids=["timeout", "nonzero-custom-object", "malformed-facts"],
+    ids=[
+        "timeout",
+        "nonzero-custom-object",
+        "malformed-facts",
+        "incomplete-facts",
+        "loader-kind-mismatch",
+    ],
 )
 def test_probe_process_failures_fail_closed(tmp_path, monkeypatch, worker_body, expected, timeout):
     (tmp_path / "artifact.pt").write_bytes(b"fixture-checkpoint-bytes")
@@ -340,7 +357,15 @@ def test_probe_records_torch_facts_and_nonfinite_parameters(tmp_path):
         },
         tmp_path / "finite.pt",
     )
-    torch.save({"weights": torch.tensor([1.0, float("inf")])}, tmp_path / "nonfinite.pt")
+    torch.save(
+        {
+            "policy_class": "fixture.PPO",
+            "observation_shape": [4],
+            "action_shape": [2],
+            "weights": torch.tensor([1.0, float("inf")]),
+        },
+        tmp_path / "nonfinite.pt",
+    )
     models = [
         {
             "model_id": f"{name}_v1",

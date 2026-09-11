@@ -679,14 +679,14 @@ def _child_error(stdout: str) -> str | None:
     return None
 
 
-def _sanitize_probe_facts(raw: Any) -> dict[str, Any] | None:
-    """Validate child output strictly; ``None`` means malformed and fails closed."""
+def _sanitize_probe_facts(raw: Any, *, expected_loader: str) -> dict[str, Any] | None:
+    """Validate complete child output; ``None`` means malformed and fails closed."""
     if not isinstance(raw, Mapping):
         return None
     loader, policy_class = _text(raw.get("loader")), raw.get("policy_class")
-    if loader not in {"sb3", "torch"}:
+    if loader != expected_loader:
         return None
-    if policy_class is not None and (
+    if (
         not isinstance(policy_class, str)
         or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", policy_class) is None
     ):
@@ -694,11 +694,11 @@ def _sanitize_probe_facts(raw: Any) -> dict[str, Any] | None:
     facts: dict[str, Any] = {"loader": loader, "policy_class": policy_class}
     for key in ("observation_shape", "action_shape"):
         shape = _shape_list(raw.get(key))
-        if raw.get(key) is not None and shape is None:
+        if shape is None:
             return None
         facts[key] = shape
     finite = raw.get("parameters_finite")
-    if finite is not None and not isinstance(finite, bool):
+    if not isinstance(finite, bool):
         return None
     facts["parameters_finite"] = finite
     for key in ("custom_objects_missing", "modules_missing"):
@@ -735,7 +735,10 @@ def _probe_subprocess(
         return {}, ["loader_probe_malformed"]
     if not isinstance(payload, Mapping) or payload.get("ok") is not True:
         return {}, ["loader_probe_failed"]
-    facts = _sanitize_probe_facts(payload.get("facts"))
+    expected_loader = {"sb3_zip": "sb3", "torch_pt": "torch"}.get(kind)
+    if expected_loader is None:
+        return {}, ["loader_probe_malformed"]
+    facts = _sanitize_probe_facts(payload.get("facts"), expected_loader=expected_loader)
     if facts is None:
         return {}, ["loader_probe_malformed"]
     return facts, []

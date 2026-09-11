@@ -454,6 +454,86 @@ def test_json_pointer_rejects_malformed_tilde_escape() -> None:
         linter._json_pointer_get({"literal~2": "value"}, "/literal~2")
 
 
+def test_historical_binding_helpers_fail_closed_at_boundary_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Low-level historical helpers reject unsafe paths, pointers, and missing bytes."""
+    historical = importlib.import_module("robot_sf.evidence.historical_bindings")
+    repo, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    config_path = "configs/campaign.yaml"
+
+    assert historical._is_tracked(
+        repo, config_path, content_ref="HEAD", tracked_paths={config_path}
+    )
+    assert historical._is_tracked(
+        repo, config_path, content_ref="HEAD", content_cache={config_path: b"cached"}
+    )
+    assert historical._is_tracked(repo, config_path, content_ref="HEAD", content_cache={})
+    assert (
+        historical._repository_file_bytes(
+            repo, config_path, content_ref="HEAD", content_cache={config_path: b"cached"}
+        )
+        == b"cached"
+    )
+    assert historical._repository_file_bytes(repo, "missing.json") is None
+    assert historical._resolve_repo_path(repo, "https://example.invalid/artifact") is None
+    assert historical._resolve_repo_path(repo, "urn:example:artifact") is None
+    assert historical._resolve_repo_path(repo, "../outside") is None
+
+    document_path = tmp_path / "document.json"
+    document_path.write_text('{"value": 1}', encoding="utf-8")
+    assert historical._load_document(document_path) == {"value": 1}
+    with pytest.raises(ValueError, match="not JSON"):
+        historical._load_document(tmp_path / "document.txt", raw=b"{}")
+
+    document = {"array": ["zero"], "scalar": "value"}
+    assert historical._json_pointer_get(document, "") is document
+    with pytest.raises(ValueError, match="invalid JSON pointer"):
+        historical._json_pointer_get(document, "array")
+    with pytest.raises(KeyError):
+        historical._json_pointer_get(document, "/array/1")
+    with pytest.raises(KeyError):
+        historical._json_pointer_get(document, "/array/not-an-index")
+    with pytest.raises(KeyError):
+        historical._json_pointer_get(document, "/scalar/value")
+
+    assert historical._historical_binding_occurrences("not an object", "x", "y") == []
+    assert not historical._historical_binding_locator_is_valid("reference")
+    with pytest.raises(
+        historical.HistoricalBindingError, match="canonical repository-relative path"
+    ):
+        historical._historical_binding_path(repo, "../outside", "reference_path")
+    with pytest.raises(historical.HistoricalBindingError, match="repository-relative"):
+        historical._historical_binding_path(repo, "/absolute", "reference_path")
+    with pytest.raises(historical.HistoricalBindingError, match="requires non-empty"):
+        historical._historical_binding_text({}, "reference_locator")
+    with pytest.raises(historical.HistoricalBindingError, match="full hexadecimal"):
+        historical._historical_binding_sha({"digest": "short"}, "digest", historical.SHA256_RE)
+
+    monkeypatch.setattr(historical, "_git_bytes", lambda *_args: b"\xff")
+    assert historical._historical_binding_git_text(repo, "rev-parse", "HEAD") is None
+
+    with pytest.raises(historical.HistoricalBindingError, match="is not tracked"):
+        historical._historical_binding_file(
+            repo,
+            "missing.json",
+            content_ref=None,
+            content_cache=None,
+            tracked_paths=None,
+            label="test",
+        )
+    monkeypatch.setattr(historical, "_repository_file_bytes", lambda *_args, **_kwargs: None)
+    with pytest.raises(historical.HistoricalBindingError, match="cannot be read"):
+        historical._historical_binding_file(
+            repo,
+            config_path,
+            content_ref=None,
+            content_cache=None,
+            tracked_paths={config_path},
+            label="test",
+        )
+
+
 def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:
     """A campaign with committed config and matching artifact hash passes."""
     linter = _load_linter()

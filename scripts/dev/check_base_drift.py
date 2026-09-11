@@ -17,6 +17,14 @@ reviewable reuse path is recommended (exit 0, ``reuse_recommended``).  When the
 drift intersects the PR's changed files, the check fails closed (exit 1) and
 names the exact base SHA that must be revalidated.
 
+Issue #9049 adds one narrow exception: when the only intersecting PR-changed
+file is the regenerable shared ``scripts/validation/docstring_todo_baseline.json``
+and the caller sets ``--docstring-baseline-revalidated`` after re-running the
+targeted docstring gates, the check recommends reuse with an explicit
+``baseline_revalidation`` record instead of requiring full-lane revalidation.
+Without that flag the baseline-only case keeps the ordinary fail-closed exit 1
+and points at the revalidation flag.
+
 Exit codes:
     0  No base drift, or drift unrelated to changed paths (reuse recommended).
     1  Base drift affects the PR's changed paths; revalidation required.
@@ -31,6 +39,8 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+DOCSTRING_TODO_BASELINE_PATH = "scripts/validation/docstring_todo_baseline.json"
 
 
 def _run_git(args: list[str]) -> tuple[int, str]:
@@ -104,11 +114,17 @@ def _pr_changed_files(
     return _diff_name_only(merge_base, "HEAD")
 
 
+def is_docstring_baseline_only_drift(affected_files: list[str] | None) -> bool:
+    """Return whether *affected_files* is exactly the docstring TODO baseline."""
+    return list(affected_files or []) == [DOCSTRING_TODO_BASELINE_PATH]
+
+
 def check_base_drift(
     *,
     base_ref: str,
     validated_base_sha: str | None,
     changed_files: list[str] | None = None,
+    docstring_baseline_revalidated: bool = False,
 ) -> dict[str, Any]:
     """Compare the validated base SHA against the current base and classify drift.
 
@@ -158,13 +174,44 @@ def check_base_drift(
     result["affected_files"] = affected
 
     if affected:
-        result["status"] = "revalidate_required"
-        result["exit_code"] = 1
-        result["message"] = (
-            f"Base drifted to {current_base_sha[:8]}; revalidate against "
-            f"{base_ref} (was {validated_base_sha[:8]}). Drift touches "
-            f"{len(affected)} PR-changed file(s): {', '.join(affected[:10])}"
-        )
+        baseline_only = is_docstring_baseline_only_drift(affected)
+        result["docstring_baseline_only"] = baseline_only
+        if baseline_only and docstring_baseline_revalidated:
+            result["status"] = "reuse_recommended"
+            result["exit_code"] = 0
+            result["baseline_revalidation"] = {
+                "applied": True,
+                "baseline_file": DOCSTRING_TODO_BASELINE_PATH,
+            }
+            result["message"] = (
+                f"Base drifted to {current_base_sha[:8]}; drift intersects only the "
+                f"docstring TODO baseline ({DOCSTRING_TODO_BASELINE_PATH}), which the "
+                f"targeted docstring gates revalidated; reuse the passing run "
+                f"(issue #9049)."
+            )
+        elif baseline_only:
+            result["status"] = "revalidate_required"
+            result["exit_code"] = 1
+            result["baseline_revalidation"] = {
+                "applied": False,
+                "baseline_file": DOCSTRING_TODO_BASELINE_PATH,
+                "reason": "targeted_gates_not_confirmed",
+            }
+            result["message"] = (
+                f"Base drifted to {current_base_sha[:8]}; revalidate against "
+                f"{base_ref} (was {validated_base_sha[:8]}). Drift touches only the "
+                f"docstring TODO baseline ({DOCSTRING_TODO_BASELINE_PATH}); rerun the "
+                f"targeted docstring gates and pass --docstring-baseline-revalidated "
+                f"(issue #9049)."
+            )
+        else:
+            result["status"] = "revalidate_required"
+            result["exit_code"] = 1
+            result["message"] = (
+                f"Base drifted to {current_base_sha[:8]}; revalidate against "
+                f"{base_ref} (was {validated_base_sha[:8]}). Drift touches "
+                f"{len(affected)} PR-changed file(s): {', '.join(affected[:10])}"
+            )
     else:
         result["status"] = "reuse_recommended"
         result["exit_code"] = 0
@@ -216,6 +263,23 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Path to a file with one PR-changed file path per line (otherwise computed via git).",
     )
+    parser.add_argument(
+        "--docstring-baseline-revalidated",
+        action="store_true",
+        help=(
+            "Set only after the targeted docstring gates revalidated a regenerated "
+            "docstring TODO baseline (issue #9049)."
+        ),
+    )
+    parser.add_argument(
+        "--baseline-only",
+        action="store_true",
+        help=(
+            "Exit 0 only when drift intersects exactly the docstring TODO baseline "
+            "path; used by the readiness gate to select the targeted revalidation "
+            "path (issue #9049)."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args(argv)
 
@@ -224,7 +288,10 @@ def main(argv: list[str] | None = None) -> None:
         base_ref=args.base_ref,
         validated_base_sha=args.validated_base_sha,
         changed_files=changed_files,
+        docstring_baseline_revalidated=args.docstring_baseline_revalidated,
     )
+    if args.baseline_only:
+        raise SystemExit(0 if is_docstring_baseline_only_drift(result.get("affected_files")) else 1)
     _emit(result, as_json=args.json)
 
 

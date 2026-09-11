@@ -748,6 +748,10 @@ _FAST_FILES = {
     # Relevance-window tests are deterministic selector, manifest, and missing
     # signal contracts for the preparation-only research scaffold (issue #8622).
     "test_relevance_windows.py",
+    # Scenario route-override contract tests cover the changed runtime guard in
+    # robot_sf/training/scenario_loader.py and must run in the exact-head fast
+    # lane so changed-line coverage includes both rejection paths (issue #8571).
+    "test_scenario_loader_route_overrides.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

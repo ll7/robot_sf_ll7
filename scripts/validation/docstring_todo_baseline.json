@@ -13,34 +13,14 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 108,
-      "occurrences": 684
+      "files": 85,
+      "occurrences": 582
     }
   },
   "files": {
-    "tests/classic_interactions/test_model_path_failure.py": 2,
-    "tests/classic_interactions/test_reward_integration.py": 1,
-    "tests/classic_interactions/test_scenario_selection.py": 3,
-    "tests/classic_interactions/test_seed_determinism.py": 2,
-    "tests/classic_interactions/test_smoke_demo.py": 2,
-    "tests/classic_interactions/test_summary_schema.py": 2,
     "tests/conftest.py": 12,
-    "tests/contract/test_multi_extractor_summary_json.py": 2,
-    "tests/contract/test_multi_extractor_summary_markdown.py": 2,
-    "tests/examples/test_examples_run.py": 13,
-    "tests/factories/test_factory_import_purity.py": 1,
-    "tests/factories/test_factory_logging_enforcement.py": 1,
-    "tests/factories/test_incompatible_combinations.py": 5,
-    "tests/factories/test_logging_diagnostics.py": 12,
-    "tests/factories/test_normalization.py": 6,
     "tests/factories/test_recording_integration.py": 2,
     "tests/fixtures/minimal_manifests/generator.py": 17,
-    "tests/integration/test_classic_benchmark_alg_grouping.py": 4,
-    "tests/integration/test_expert_trajectory_dataset.py": 9,
-    "tests/integration/test_multi_extractor_single_thread.py": 2,
-    "tests/integration/test_multi_extractor_vectorized.py": 7,
-    "tests/integration/test_random_baseline_smoke.py": 3,
-    "tests/integration/test_train_expert_ppo.py": 3,
     "tests/lidar_sensor_obstacle_test.py": 13,
     "tests/lidar_sensor_pedestrian_test.py": 12,
     "tests/map_test.py": 8,
@@ -116,9 +96,6 @@
     "tests/test_visualizablesimstate.py": 1,
     "tests/tools/test_analyze_imitation_results.py": 8,
     "tests/tools/test_compare_training_runs.py": 9,
-    "tests/training/test_imitation_analysis_figures.py": 3,
-    "tests/training/test_multi_extractor_analysis.py": 6,
-    "tests/training/test_observation_wrappers.py": 11,
     "tests/unicycle_drive_test.py": 6,
     "tests/unit/test_cli_logging_flags.py": 2,
     "tests/unit/test_hardware_profile_capture.py": 5,
@@ -135,7 +112,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 108,
-    "total_occurrences": 684
+    "files": 85,
+    "total_occurrences": 582
   }
 }

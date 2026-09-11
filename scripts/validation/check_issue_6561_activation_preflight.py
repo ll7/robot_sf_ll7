@@ -213,7 +213,10 @@ def _finite_float(value: Any, field: str) -> float:
         isinstance(value, (int, float)) and not isinstance(value, bool),
         f"{field} must be a finite number",
     )
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, ValueError) as exc:
+        raise PreflightError(f"{field} must be a finite number") from exc
     _require(math.isfinite(result), f"{field} must be finite")
     return result
 
@@ -1242,7 +1245,7 @@ def _error_result(exc: Exception) -> dict[str, Any]:
         "reason_code": "invalid_diagnostics_contract",
         "reason": str(exc),
         "error": str(exc),
-        "registered_seed_overlap": False,
+        "registered_seed_overlap": None,
         "per_regime": {},
         "rows": [],
     }

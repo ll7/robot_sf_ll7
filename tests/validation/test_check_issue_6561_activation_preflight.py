@@ -9,6 +9,8 @@ canonical native diagnostics owner exists.
 from __future__ import annotations
 
 import copy
+import json
+import sys
 from typing import Any
 
 import pytest
@@ -470,3 +472,34 @@ def test_error_result_is_structured_failed_and_not_admitted() -> None:
     assert result["ok"] is False
     assert result["admission_status"] == "not_admitted"
     assert result["reason_code"] == "invalid_diagnostics_contract"
+    assert result["registered_seed_overlap"] is None
+
+
+def test_cli_rejects_oversized_json_integer_as_structured_failure(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """An integer too large for float conversion must not escape as a traceback."""
+    payload, protocol = preflight.load_preflight()
+    diagnostics = _diagnostics(payload, protocol)
+    diagnostics["rows"][0]["diagnostics"]["time_to_desired_speed_target_seconds"] = 10**1000
+    diagnostics_path = tmp_path / "oversized.json"
+    diagnostics_path.write_text(json.dumps(diagnostics), encoding="utf-8")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check_issue_6561_activation_preflight.py",
+            "--diagnostics",
+            str(diagnostics_path),
+        ],
+    )
+
+    assert preflight.main() == 2
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "failed"
+    assert result["reason_code"] == "invalid_diagnostics_contract"
+    assert result["registered_seed_overlap"] is None
+    assert "must be a finite number" in result["reason"]

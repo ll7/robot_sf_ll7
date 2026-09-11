@@ -7,8 +7,9 @@ still needs local diff review and validation.
 
 Each attempt may declare ``expected_output_root`` and ``artifact_references``.
 Declared artifact locations and referenced SHA-256 values are verified under
-``path_contract``; findings (missing artifact, unexpected nesting, missing or
-stale reference) are route evidence and never change task aggregation.
+``path_contract``; findings (missing artifact, unexpected nesting, missing,
+stale, or invalid reference) are route evidence and never change task
+aggregation.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import enum
 import json
+import re
 import subprocess
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
@@ -54,7 +56,11 @@ PATH_FINDING_UNEXPECTED_NESTING = "unexpected_nesting"
 PATH_FINDING_MISSING_REFERENCE = "missing_reference"
 PATH_FINDING_STALE_REFERENCE = "stale_reference"
 PATH_FINDING_REFERENCE_OUTSIDE_RUN_DIR = "reference_outside_run_dir"
+PATH_FINDING_INVALID_REFERENCE = "invalid_reference"
+PATH_FINDING_INVALID_REFERENCE_COLLECTION = "invalid_reference_collection"
+PATH_FINDING_INVALID_SHA256 = "invalid_sha256"
 PATH_CONTRACT_NESTING_SEARCH_DEPTH = 2
+_SHA256_RE = re.compile(r"[0-9a-fA-F]{64}\Z")
 _STARTUP_BACKEND_404_FAILURE_CLASSES = frozenset(
     {
         "startup_backend_404",
@@ -725,9 +731,9 @@ def verify_output_path_contract(
     return [asdict(finding) for finding in findings]
 
 
-def verify_referenced_hashes(
+def verify_referenced_hashes(  # noqa: C901 - malformed inputs stay explicit and fail closed.
     run_dir: str | Path,
-    references: Mapping[str, str | Mapping[str, str]],
+    references: object,
     *,
     expected_output_root: str | Path | None = None,
     target_repo: str | Path = ".",
@@ -735,38 +741,92 @@ def verify_referenced_hashes(
     """Verify referenced files exist and, when declared, match their SHA-256.
 
     Each reference is either a run-relative path string or a mapping with
-    ``path`` and an optional ``sha256``. A declared hash that no longer matches
-    the referenced bytes is reported as ``stale_reference`` with both hashes.
+    ``path`` and an optional ``sha256``. A declared hash must be a 64-character
+    hexadecimal SHA-256 value; malformed declarations and reference collections
+    are reported as explicit findings. A valid declared hash that no longer
+    matches the referenced bytes is reported as ``stale_reference`` with both
+    hashes.
+
+    Relative references are rooted at ``run_dir``. ``expected_output_root``
+    only controls the expected compact-artifact location and must not change
+    the meaning of a reference path.
 
     Returns:
         JSON-ready reference findings ordered by reference key.
     """
     repo_root = Path(target_repo).resolve(strict=False)
     run_root = _resolve_run_dir(run_dir, target_repo=repo_root)
-    expected_root = _resolve_expected_output_root(run_root, expected_output_root)
+    _resolve_expected_output_root(run_root, expected_output_root)
     findings: list[PathContractFinding] = []
-    for key in sorted(references):
-        raw_reference = references[key]
+    if not isinstance(references, Mapping):
+        return [
+            asdict(
+                PathContractFinding(
+                    kind=PATH_FINDING_INVALID_REFERENCE_COLLECTION,
+                    key="artifact_references",
+                    expected_path="<mapping>",
+                    actual_path=type(references).__name__,
+                )
+            )
+        ]
+
+    for raw_key in sorted(references, key=str):
+        key = str(raw_key)
+        raw_reference = references[raw_key]
+        has_expected_sha256 = False
+        expected_sha256: object = None
         if isinstance(raw_reference, Mapping):
             path_text = raw_reference.get("path")
+            if isinstance(path_text, Path):
+                path_text = str(path_text)
+            has_expected_sha256 = "sha256" in raw_reference
             expected_sha256 = raw_reference.get("sha256")
+        elif isinstance(raw_reference, (str, Path)):
+            path_text = str(raw_reference)
         else:
-            path_text = raw_reference
-            expected_sha256 = None
-        if not isinstance(path_text, str) or not path_text:
             findings.append(
                 PathContractFinding(
-                    kind=PATH_FINDING_MISSING_REFERENCE,
-                    key=str(key),
-                    expected_path="<invalid reference>",
+                    kind=PATH_FINDING_INVALID_REFERENCE,
+                    key=key,
+                    expected_path="<path string or mapping>",
+                    actual_path=type(raw_reference).__name__,
                 )
             )
             continue
+
+        invalid_sha256 = has_expected_sha256 and (
+            not isinstance(expected_sha256, str) or _SHA256_RE.fullmatch(expected_sha256) is None
+        )
+        if invalid_sha256:
+            findings.append(
+                PathContractFinding(
+                    kind=PATH_FINDING_INVALID_SHA256,
+                    key=key,
+                    expected_path=(
+                        path_text
+                        if isinstance(path_text, str) and path_text
+                        else "<invalid reference>"
+                    ),
+                    expected_sha256=(expected_sha256 if isinstance(expected_sha256, str) else None),
+                )
+            )
+
+        if not isinstance(path_text, str) or not path_text:
+            findings.append(
+                PathContractFinding(
+                    kind=PATH_FINDING_INVALID_REFERENCE,
+                    key=key,
+                    expected_path="<path string>",
+                    actual_path=type(path_text).__name__,
+                )
+            )
+            continue
+
         candidate = Path(path_text)
         resolved = (
             candidate.resolve(strict=False)
             if candidate.is_absolute()
-            else (expected_root / candidate).resolve(strict=False)
+            else (run_root / candidate).resolve(strict=False)
         )
         if not resolved.is_relative_to(run_root):
             findings.append(
@@ -787,7 +847,7 @@ def verify_referenced_hashes(
                 )
             )
             continue
-        if isinstance(expected_sha256, str) and expected_sha256:
+        if has_expected_sha256 and not invalid_sha256:
             actual_sha256 = sha256_file(resolved)
             if actual_sha256.lower() != expected_sha256.lower():
                 findings.append(
@@ -806,7 +866,7 @@ def build_path_contract(
     run_dir: str | Path,
     *,
     expected_output_root: str | Path | None = None,
-    references: Mapping[str, str | Mapping[str, str]] | None = None,
+    references: object | None = None,
     artifact_filenames: dict[str, str] | None = None,
     target_repo: str | Path = ".",
 ) -> dict[str, Any]:
@@ -824,7 +884,7 @@ def build_path_contract(
         artifact_filenames=artifact_filenames,
         target_repo=target_repo,
     )
-    if references:
+    if references is not None:
         findings.extend(
             verify_referenced_hashes(
                 run_dir,

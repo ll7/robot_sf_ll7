@@ -198,6 +198,10 @@ uv run pytest tests/test_your_feature.py -v
 uv run pytest --cov=robot_sf tests/test_your_feature.py
 ```
 
+For the test-tree map, suite categories, and failure/rerun policy, see
+[`tests/README.md`](tests/README.md) and the canonical
+[`docs/qa_test_strategy.md`](docs/qa_test_strategy.md).
+
 New features should include:
 - Unit tests for core logic
 - Integration tests if relevant

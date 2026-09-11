@@ -419,6 +419,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Data Analysis Utilities](./DATA_ANALYSIS.md)** - Analysis helpers and data processing tools
 * **[Imitation Results Analysis](./imitation_results_analysis.md)** - Compare baseline vs pre-trained runs, emit training summaries and figures
 * **[SVG Inspection Workflow](./dev/svg_inspection_workflow.md)** - Inspect route/zone consistency, parser-risky path commands, and obstacle crossings with `scripts/validation/svg_inspect.py`
+* **[Compute-Window Schema/Reader Inventory](./compute_window_schema_reader_inventory.md)** - Preserve exact output schemas, readers, compatibility metadata, validation commands, and fixture-readability status
 
 ### Architecture & Refactoring
 

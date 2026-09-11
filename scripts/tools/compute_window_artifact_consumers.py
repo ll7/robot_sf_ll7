@@ -11,8 +11,8 @@ content.  Missing static evidence is ``consumer_unknown`` rather than proof of
 orphanhood.
 
 CLI: ``compute_window_artifact_consumers.py --input PATH [--root PATH]
-[--check] [--format json|dot|markdown]``. Exit 2 means the graph is
-fail-closed because an integrity conflict was found.
+[--check] [--format json|dot|markdown]``. Rendering always exits 0 after
+producing a report; ``--check`` exits 2 when the report is fail-closed.
 """
 
 from __future__ import annotations
@@ -61,7 +61,10 @@ CONSUMER_GROUPS = (
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 PRIVATE_RE = re.compile(
-    r"(?i)(?:://|api[_-]?key|secret|password|token|credential|bearer|^[/~\\]|@[A-Za-z])"
+    r"(?i)(?:://|api[_-]?key|secret|password|token|credential|bearer|^[/~\\]|@[A-Za-z]|(?:[a-z0-9][a-z0-9-]{0,61}\.){2,}[a-z]{2,24})"
+)
+PRIVATE_KEYS = frozenset(
+    "command environment host hostname locator password secret token url".split()
 )
 
 
@@ -79,10 +82,7 @@ def _valid_sha(value: Any) -> bool:
 
 def _private(value: Any) -> bool:
     if isinstance(value, Mapping):
-        return any(
-            str(k).lower() in {"locator", "url", "host", "command", "environment"} or _private(v)
-            for k, v in value.items()
-        )
+        return any(str(k).lower() in PRIVATE_KEYS or _private(v) for k, v in value.items())
     if isinstance(value, list):
         return any(_private(v) for v in value)
     return isinstance(value, str) and PRIVATE_RE.search(value) is not None
@@ -92,7 +92,23 @@ def _finding(code: str, source: str, target: str | None, detail: str) -> dict[st
     return {"code": code, "source": source, "target": target, "detail": detail}
 
 
-def _refs(item: Mapping[str, Any]) -> list[tuple[str, str, str | None, str | None]]:
+def _safe_id(value: Any, fallback: str) -> str:
+    """Return an output-safe identifier without exposing invalid input."""
+    return value if _valid_id(value) and not _private(value) else fallback
+
+
+def _safe_path(value: Any) -> bool:
+    if not isinstance(value, str) or not value or _private(value):
+        return False
+    path = value.replace("\\", "/")
+    return not (
+        path != value or ":" in value or path.startswith(("/", "~")) or ".." in path.split("/")
+    )
+
+
+def _refs(  # noqa: C901
+    item: Mapping[str, Any], source: str, findings: list[dict[str, Any]]
+) -> list[tuple[str, str, str | None, str | None]]:
     """Return (logical id, edge type, digest, path) references from one record."""
     raw = item.get("refs", item.get("references", []))
     if isinstance(raw, Mapping):
@@ -104,27 +120,77 @@ def _refs(item: Mapping[str, Any]) -> list[tuple[str, str, str | None, str | Non
         ]
     if isinstance(raw, str):
         raw = [raw]
+    if not isinstance(raw, list):
+        findings.append(
+            _finding("invalid_refs", source, None, "references must be a list, mapping, or string")
+        )
+        return []
     result = []
-    for ref in raw if isinstance(raw, list) else []:
+    for index, ref in enumerate(raw):
         if isinstance(ref, str):
-            result.append((ref, "loads", None, None))
+            if _valid_id(ref) and not _private(ref):
+                result.append((ref, "loads", None, None))
+            else:
+                findings.append(
+                    _finding(
+                        "invalid_reference_id",
+                        source,
+                        None,
+                        f"reference {index} has an invalid logical ID",
+                    )
+                )
             continue
         if not isinstance(ref, Mapping):
+            findings.append(
+                _finding(
+                    "invalid_ref", source, None, f"reference {index} must be a mapping or string"
+                )
+            )
             continue
         logical_id = ref.get("logical_id", ref.get("artifact_id", ref.get("id")))
         edge = ref.get("edge", ref.get("relation", "loads"))
-        if _valid_id(logical_id) and edge in EDGE_TYPES:
-            digest = ref.get("sha256", ref.get("content_identity"))
-            if isinstance(digest, Mapping):
-                digest = digest.get("sha256")
-            result.append(
-                (
-                    logical_id,
-                    edge,
-                    digest if isinstance(digest, str) else None,
-                    ref.get("path") if isinstance(ref.get("path"), str) else None,
+        if not _valid_id(logical_id) or _private(logical_id):
+            findings.append(
+                _finding(
+                    "invalid_reference_id",
+                    source,
+                    None,
+                    f"reference {index} has an invalid logical ID",
                 )
             )
+            continue
+        if not isinstance(edge, str) or edge not in EDGE_TYPES:
+            findings.append(
+                _finding(
+                    "invalid_edge_type",
+                    source,
+                    logical_id if _valid_id(logical_id) else None,
+                    f"reference {index} has an invalid edge type",
+                )
+            )
+            continue
+        digest = ref.get("sha256", ref.get("content_identity"))
+        if isinstance(digest, Mapping):
+            digest = digest.get("sha256")
+        if digest is not None and not _valid_sha(digest):
+            findings.append(
+                _finding(
+                    "invalid_content_identity",
+                    source,
+                    logical_id,
+                    f"reference {index} has an invalid content identity",
+                )
+            )
+            digest = None
+        path = ref.get("path")
+        if path is not None and not _safe_path(path):
+            findings.append(
+                _finding(
+                    "invalid_path", source, logical_id, f"reference {index} has an unsafe path"
+                )
+            )
+            path = None
+        result.append((logical_id, edge, digest, path))
     return result
 
 
@@ -177,12 +243,29 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
         findings.append(_finding("invalid_artifacts", "/artifacts", None, "list required"))
         raw_artifacts = []
     for index, raw in enumerate(raw_artifacts):
-        if not isinstance(raw, Mapping) or not _valid_id(raw.get("logical_id", raw.get("id"))):
+        if not isinstance(raw, Mapping):
             findings.append(
-                _finding("invalid_artifact", f"/artifacts[{index}]", None, "logical_id required")
+                _finding(
+                    "invalid_artifact", f"/artifacts[{index}]", None, "artifact must be a mapping"
+                )
             )
             continue
-        ident = _key(raw.get("logical_id", raw.get("id")))
+        raw_ident = raw.get("logical_id", raw.get("id"))
+        ident = _safe_id(raw_ident, f"redacted-artifact-{index}")
+        if ident != raw_ident:
+            findings.append(
+                _finding(
+                    "invalid_artifact_id",
+                    f"/artifacts[{index}]",
+                    None,
+                    "logical ID is invalid or private",
+                )
+            )
+        if ident in artifacts:
+            findings.append(
+                _finding("duplicate_logical_id", ident, None, "artifact declaration is duplicated")
+            )
+            continue
         digest = raw.get("sha256", raw.get("content_identity"))
         if isinstance(digest, Mapping):
             digest = digest.get("sha256")
@@ -190,20 +273,47 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
             findings.append(
                 _finding("invalid_identity", ident, None, "content identity must be sha256")
             )
+            digest = None
         identities.setdefault(ident, set()).add(_key(digest) if digest else "unknown")
         path = raw.get("path")
+        if path is not None and not _safe_path(path):
+            findings.append(
+                _finding("invalid_path", ident, None, "artifact path is unsafe or private")
+            )
+            path = None
         if path:
             paths.setdefault(ident, set()).add(_key(path))
+        for field in PRIVATE_KEYS:
+            if field in raw:
+                findings.append(
+                    _finding(
+                        "redacted_private_field", ident, None, f"artifact field {field} was omitted"
+                    )
+                )
+        kind = raw.get("kind", "artifact")
+        if not isinstance(kind, str) or _private(kind):
+            findings.append(
+                _finding("invalid_artifact_metadata", ident, None, "artifact kind was omitted")
+            )
+            kind = "artifact"
+        replacement = raw.get("replacement_for")
+        if replacement is not None and (not _valid_id(replacement) or _private(replacement)):
+            findings.append(
+                _finding(
+                    "invalid_replacement_for", ident, None, "replacement_for must be a logical ID"
+                )
+            )
+            replacement = None
         artifacts.setdefault(
             ident,
             {
                 "logical_id": ident,
-                "kind": raw.get("kind", "artifact"),
+                "kind": kind,
                 "sha256": digest,
                 "path": path,
                 "regenerable": bool(raw.get("regenerable")),
                 "orphan_candidate": bool(raw.get("orphan_candidate")),
-                "replacement_for": raw.get("replacement_for"),
+                "replacement_for": replacement,
             },
         )
     for ident, values in identities.items():
@@ -223,18 +333,28 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
             value = list(value.values())
         if isinstance(value, list):
             records.extend(
-                (_record_id(item, f"{group}:{i}"), item)
+                (_safe_id(_record_id(item, f"{group}:{i}"), f"redacted-consumer-{group}-{i}"), item)
                 for i, item in enumerate(value)
                 if isinstance(item, Mapping)
             )
+        elif value not in (None, []):
+            findings.append(
+                _finding(
+                    "invalid_records",
+                    f"/{group}",
+                    None,
+                    "consumer collection must be a list or mapping",
+                )
+            )
     if root is not None:
         records.extend(
-            (_record_id(item, "tracked"), item) for item in _tracked_refs(root, artifacts)
+            (_safe_id(_record_id(item, "tracked"), "redacted-consumer-tracked"), item)
+            for item in _tracked_refs(root, artifacts)
         )
     private_projection = payload.get("private_projection", [])
     if isinstance(private_projection, list):
         records.extend(
-            (_record_id(item, f"private:{i}"), item)
+            (_safe_id(_record_id(item, f"private:{i}"), f"redacted-consumer-private-{i}"), item)
             for i, item in enumerate(private_projection)
             if isinstance(item, Mapping)
         )
@@ -246,8 +366,30 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
     consumers: dict[str, dict[str, Any]] = {}
     known: dict[str, list[dict[str, Any]]] = {ident: [] for ident in artifacts}
     for consumer_id, item in records:
-        state = _key(item.get("state", item.get("status", "unknown")))
-        kind = _key(item.get("kind", "consumer"))
+        raw_state = item.get("state", item.get("status", "unknown"))
+        raw_kind = item.get("kind", "consumer")
+        state = _key(raw_state)
+        kind = _key(raw_kind)
+        if not isinstance(raw_kind, str) or not isinstance(raw_state, str):
+            findings.append(
+                _finding(
+                    "invalid_record_metadata",
+                    consumer_id,
+                    None,
+                    "consumer kind and state must be strings",
+                )
+            )
+            kind, state = "consumer", "unknown"
+        elif _private(raw_kind) or _private(raw_state):
+            findings.append(
+                _finding(
+                    "redacted_record_metadata",
+                    consumer_id,
+                    None,
+                    "private consumer metadata was omitted",
+                )
+            )
+            kind, state = "consumer", "unknown"
         if _private(item) and kind != "tracked_file":
             findings.append(
                 _finding(
@@ -274,7 +416,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
         consumer = consumers.setdefault(
             consumer_id, {"id": consumer_id, "kind": kind, "state": state, "refs": []}
         )
-        for logical_id, edge, digest, path in _refs(item):
+        for logical_id, edge, digest, path in _refs(item, consumer_id, findings):
             target = artifacts.get(logical_id)
             if target is None:
                 unknown_code = {
@@ -329,12 +471,33 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
         for path in paths.get(ident, set()):
             if root is not None and not (root / path).is_file():
                 findings.append(_finding("stale_path", ident, path, "manifest path does not exist"))
-    supersedes = {edge["target"]: edge["source"] for edge in edges if edge["type"] == "supersedes"}
+    superseders: dict[str, set[str]] = {}
+    for edge in edges:
+        if edge["type"] == "supersedes":
+            superseders.setdefault(edge["target"], set()).add(edge["source"])
+    ambiguous_targets = {target for target, sources in superseders.items() if len(sources) > 1}
+    for target in sorted(ambiguous_targets):
+        findings.append(
+            _finding(
+                "ambiguous_superseders",
+                target,
+                None,
+                "multiple superseding sources exist",
+            )
+        )
+    supersedes = {
+        source: target
+        for target, sources in superseders.items()
+        for source in sources
+        if source in artifacts
+    }
+    cycle_nodes: set[str] = set()
     for start in sorted(artifacts):
         seen: set[str] = set()
         current = start
         while current in supersedes:
             if current in seen:
+                cycle_nodes.update(seen)
                 findings.append(
                     _finding(
                         "supersession_cycle", start, current, "supersession graph contains a cycle"
@@ -355,8 +518,15 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
         conflict = any(
             f["target"] == ident or f["source"] == ident
             for f in findings
-            if f["code"] in {"conflicting_identity", "stale_path"}
+            if f["code"]
+            in {
+                "conflicting_identity",
+                "stale_path",
+                "ambiguous_superseders",
+                "supersession_cycle",
+            }
         )
+        conflict = conflict or ident in cycle_nodes or ident in ambiguous_targets
         if conflict:
             classification = "unresolved_conflict"
         elif active:
@@ -469,7 +639,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         report
     )
     sys.stdout.write(rendered)
-    return 0 if report["ok"] else 2
+    return 0 if report["ok"] or not args.check else 2
 
 
 if __name__ == "__main__":

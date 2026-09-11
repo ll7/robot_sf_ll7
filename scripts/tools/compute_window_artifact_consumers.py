@@ -4,12 +4,10 @@
 The input is a compact JSON manifest with ``artifacts`` and optional consumer
 collections (``configs``, ``registries``, ``manifests``, ``scripts``,
 ``reports``, ``releases``, ``papers``, and ``active_tasks``).  References are
-explicit semantic identities, not filename guesses.  The legacy ``--root``
-option is accepted for compatibility but does not scan tracked files.  A
-private operational system may provide only a sanitized ``private_projection``
-containing the same identity/reference shape.  The tool never moves, deletes,
-or reads private content.  Missing static evidence is ``consumer_unknown``
-rather than proof of orphanhood.
+explicit manifest identities or whole-line ``robot_sf-artifact-ref:
+<logical-id>`` markers (optionally ``#``-prefixed); ``--root`` parses only
+those markers from tracked text.  Private projections are sanitized and
+missing static evidence is ``consumer_unknown``, never proof of orphanhood.
 
 CLI: ``compute_window_artifact_consumers.py --input PATH [--root PATH]
 [--check] [--format json|dot|markdown]``. Rendering always exits 0 after
@@ -21,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -32,36 +31,19 @@ VERIFICATION_CONTRACT = (
     "regenerable_verified requires regeneration_verified=true, regenerable=true, and a "
     "requires_for_resume edge. Flags and relations never imply verification."
 )
-EDGE_TYPES = (
-    "loads",
-    "validates",
-    "reports_from",
-    "releases",
-    "cites",
-    "replays",
-    "restores",
-    "requires_for_resume",
-    "supersedes",
+EDGE_TYPES = tuple(
+    "loads validates reports_from releases cites replays restores "
+    "requires_for_resume supersedes".split()
 )
-CLASSES = (
-    "active_required",
-    "historical_required",
-    "replacement_verified",
-    "regenerable_verified",
-    "consumer_unknown",
-    "orphan_candidate",
-    "unresolved_conflict",
+CLASSES = tuple(
+    "active_required historical_required replacement_verified regenerable_verified "
+    "consumer_unknown orphan_candidate unresolved_conflict".split()
 )
-CONSUMER_GROUPS = (
-    "consumers",
-    "configs",
-    "registries",
-    "manifests",
-    "scripts",
-    "reports",
-    "releases",
-    "papers",
-    "active_tasks",
+CONSUMER_GROUPS = tuple(
+    "consumers configs registries manifests scripts reports releases papers active_tasks".split()
+)
+PUBLIC_REF_RE = re.compile(
+    r"(?m)^[ \t]*(?:#\s*)?robot_sf-artifact-ref:\s*([A-Za-z0-9][A-Za-z0-9._:/-]{0,127})\s*$"
 )
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -207,31 +189,51 @@ def _record_entries(
     value: Any, group: str, findings: list[dict[str, Any]]
 ) -> list[tuple[int, Mapping[str, Any]]]:
     """Validate one explicit consumer collection without echoing malformed input."""
-    invalid_code = (
-        "invalid_private_projection" if group == "private_projection" else "invalid_records"
+    private = group == "private_projection"
+    invalid_code = "invalid_private_projection" if private else "invalid_records"
+    details = (
+        ("private_projection must be a list", "private projection entry must be a mapping")
+        if private
+        else ("consumer collection must be a list or mapping", "consumer entry must be a mapping")
     )
-    collection_detail = (
-        "private_projection must be a list"
-        if group == "private_projection"
-        else "consumer collection must be a list or mapping"
-    )
-    entry_detail = (
-        "private projection entry must be a mapping"
-        if group == "private_projection"
-        else "consumer entry must be a mapping"
-    )
-    if isinstance(value, Mapping) and group != "private_projection":
+    if isinstance(value, Mapping) and not private:
         value = list(value.values())
     if not isinstance(value, list):
-        findings.append(_finding(invalid_code, f"/{group}", None, collection_detail))
+        findings.append(_finding(invalid_code, f"/{group}", None, details[0]))
         return []
     entries = []
     for index, item in enumerate(value):
         if isinstance(item, Mapping):
             entries.append((index, item))
         else:
-            findings.append(_finding(invalid_code, f"/{group}[{index}]", None, entry_detail))
+            findings.append(_finding(invalid_code, f"/{group}[{index}]", None, details[1]))
     return entries
+
+
+def _tracked_refs(root: Path) -> list[dict[str, Any]]:
+    """Derive only safe whole-line public markers from tracked text."""
+    try:
+        names = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
+    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
+        return []
+    found = []
+    for name in sorted(n for n in names if n and not n.startswith("output/")):
+        try:
+            text = (root / name).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        hits = sorted(set(PUBLIC_REF_RE.findall(text)))
+        hits = [hit for hit in hits if not _private(hit)]
+        if hits:
+            found.append(
+                {
+                    "id": f"tracked:{name}",
+                    "kind": "tracked_file",
+                    "state": "historical",
+                    "refs": hits,
+                }
+            )
+    return found
 
 
 def build_graph(  # noqa: C901, PLR0912, PLR0915
@@ -359,6 +361,11 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                     item,
                 )
             )
+    if root is not None:
+        records.extend(
+            (_safe_id(_record_id(item, "tracked"), "redacted-consumer-tracked"), item)
+            for item in _tracked_refs(root)
+        )
     nodes = [
         {"id": ident, "kind": item["kind"], "sha256": item["sha256"], "path": item["path"]}
         for ident, item in sorted(artifacts.items())

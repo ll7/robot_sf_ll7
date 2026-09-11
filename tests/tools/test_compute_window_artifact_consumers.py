@@ -58,10 +58,18 @@ def test_private_projection_is_rejected_without_echoing_locator() -> None:
     assert "/secret/node" not in json.dumps(report)
 
 
-def test_root_does_not_infer_unrelated_text_as_a_consumer() -> None:
-    payload = {"schema": tool.SCHEMA, "artifacts": [{"logical_id": "a"}]}
+# robot_sf-artifact-ref: explicit-marker
+def test_root_discovers_only_explicit_markers() -> None:
+    payload = {
+        "schema": tool.SCHEMA,
+        "artifacts": [{"logical_id": "explicit-marker"}, {"logical_id": "unrelated-marker"}],
+    }
+    # unrelated-marker is ordinary text, not a marker.
     report = tool.build_graph(payload, root=Path(__file__).parents[2])
-    assert report["ok"] is True and report["edges"] == []
+    edges = report["edges"]
+    assert report["ok"] is True and len(edges) == 1
+    assert edges[0]["source"].startswith("tracked:")
+    assert edges[0]["target"] == "explicit-marker"
 
 
 def test_cli_formats_and_check_exit_code(capsys) -> None:
@@ -172,5 +180,4 @@ def test_malformed_collections_fail_closed_and_cli_check_exits_two(capsys, tmp_p
         )
         assert tool.main(["--input", str(input_path), "--check"]) == 2
         report = json.loads(capsys.readouterr().out)
-        assert report["ok"] is False
-        assert report["findings"]
+        assert report["ok"] is False and report["findings"]

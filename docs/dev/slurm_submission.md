@@ -399,3 +399,25 @@ explicit config and either `CAMERA_READY_BENCHMARK_LABEL` or `CAMERA_READY_BENCH
 so queued jobs have a reviewable identity before they consume cluster time. Slurm logs stay under
 `output/slurm/`; campaign outputs should stay under `output/benchmarks/...` unless a small
 manifest, summary, or durable artifact pointer is intentionally promoted.
+
+## Campaign input drift verification (check-only)
+
+Before mutating the scheduler or submitting scarce compute-window jobs, verify that the live
+submission packet has not drifted from the preflight receipt using the compare-and-swap binding
+validator:
+
+```bash
+uv run python scripts/validation/validate_campaign_submission_binding.py --check \
+  --preflight path/to/preflight_receipt.json \
+  --submission path/to/live_submission_packet.json \
+  --format json
+```
+
+The validator operates in check-only mode and fails closed: it recomputes and compares all
+authority-bearing identities (Git commit SHA, working tree dirty state, config content SHA-256,
+seed ordering, model checkpoint hash, Python/lock environment, expected row count, resource
+allocations, output root, command tokens, admission claim, and duplicate execution state).
+Permitted volatile fields (`observed_at_utc`, `submission_nonce`, `pid`, `hostname`, `host`,
+`process_id`, `job_id_pending`) are tracked and reported in `volatile_fields_observed` without
+causing false drift failures, while any unpermitted or unknown field divergence blocks submission
+and exits with code 1.

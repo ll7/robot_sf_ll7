@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Minimal SNQI fixture test running the grid optimizer with CI-placeholder validation."""
 
 import json
 from pathlib import Path
@@ -10,10 +10,11 @@ FIXTURE_DIR = Path(__file__).parent / "data" / "snqi"
 
 
 def test_snqi_minimal_grid(tmp_path):
-    """TODO docstring. Document this function.
+    """Run the grid optimizer on small SNQI fixtures and validate the finite output with a
+    placeholder confidence-interval status.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory for the optimizer result JSON.
     """
     episodes = FIXTURE_DIR / "episodes_small.jsonl"
     baseline = FIXTURE_DIR / "baseline_stats.json"

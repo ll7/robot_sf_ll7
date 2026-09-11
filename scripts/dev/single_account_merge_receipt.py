@@ -2283,10 +2283,9 @@ def _write_json(path: Path, value: Mapping[str, Any]) -> str | None:
             with os.fdopen(handle, "w", encoding="utf-8") as stream:
                 stream.write(payload)
             os.replace(temp_name, path)
-        except BaseException:
+        finally:
             with suppress(OSError):
                 os.unlink(temp_name)
-            raise
     except (OSError, ValueError) as exc:
         return f"failed to write output receipt: {exc}"
     return None

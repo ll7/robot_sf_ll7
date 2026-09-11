@@ -316,6 +316,7 @@
     "reviewer": null,
     "status": "pending_independent_maintainer_review"
   },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "rows": [
     {
       "allowed_distribution_modes": [
@@ -2246,8 +2247,8 @@
   "source": {
     "base_ref": "origin/main",
     "base_sha": "4944e7a75d7a3d08d2879c500780ee0d7725bd67",
-    "integration_parent_sha": "cbdcc3245b47e4d0ccbde011f60551889172d819",
-    "integration_parent_tree_sha": "d797dfb3e2ee82c2977a41a37bd97c6166f496c0",
+    "integration_parent_sha": "e87312c6d81844afa5ec5380431cc1802b2d9204",
+    "integration_parent_tree_sha": "c818725022704f85bc7c7369ea3961102cd224ec",
     "policy": {
       "path": "scripts/validation/dependency_license_policy.v1.json",
       "sha256": "6ba0e661bd7a61b60061706f3fab2f6aeb8ec0bd7b581b5097d74e3c8f1b62c7"
@@ -2301,8 +2302,8 @@
       "candidate_source_sha": "fb6896576a9240838901f2b0994f288ec510c827",
       "candidate_tree_sha": "1ca7f58207e7425942498d27368c3fd4ade2047b",
       "command": "/home/luttkule/git/robot_sf_ll7/scripts/dev/run_worktree_shared_venv.sh -- uv run python /home/luttkule/git/robot_sf_ll7.worktrees/issue-8163-staged-external-dispositions-20260911/scripts/tools/check_dependency_license_inventory.py --repo-root /home/luttkule/git/robot_sf_ll7.worktrees/issue-8163-staged-external-dispositions-20260911 --output /home/luttkule/git/robot_sf_ll7/.git/codex-agent-runs/release-handoff-20260910-01a08b4d/resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.json --candidate-bundle /home/luttkule/git/robot_sf_ll7/.git/codex-agent-runs/release-handoff-20260910-01a08b4d/P04-policy-fix/diagnostic-bundle-v2 --profile all --fail-on-unresolved",
-      "current_source_sha": "cbdcc3245b47e4d0ccbde011f60551889172d819",
-      "current_source_tree_sha": "d797dfb3e2ee82c2977a41a37bd97c6166f496c0",
+      "current_source_sha": "e87312c6d81844afa5ec5380431cc1802b2d9204",
+      "current_source_tree_sha": "c818725022704f85bc7c7369ea3961102cd224ec",
       "exit_code": 2,
       "log": {
         "artifact_path": "resume-20260911/P06-8163-integration/25-candidate-bound-strict-final.log",

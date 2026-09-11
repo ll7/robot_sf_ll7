@@ -826,11 +826,13 @@ Use the three explicit modes as follows:
   it performs no remote mutation.
 - `--mode validate --receipt-file <path>` rereads live state and compares it with the immutable
   receipt; a changed head, base, metadata, check, review, thread, requested reviewer, hold, or
-  ordinary-CAS proof blocks.
+  ordinary-CAS proof blocks. If `--output <path>` is also supplied, it must resolve to a different
+  file so the source receipt cannot be replaced by the validation payload.
 - `--mode apply --receipt-file <path>` repeats validation, rereads the live PR body/head and
   rechecks paginated commit metadata plus current issue metadata immediately before letting the
   receipt owner issue exactly one expected-head squash merge, then rereads the closed/merged PR
-  and records the returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack
+  and records the returned SHA. When `--output` is supplied, it must resolve to a different file
+  than `--receipt-file`. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack
   coordinator and delegates its root merge to the same owner; its stack receipt must carry the
   same explicit closing-discipline result.
 

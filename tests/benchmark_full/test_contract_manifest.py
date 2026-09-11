@@ -15,20 +15,20 @@ from robot_sf.benchmark.full_classic.io_utils import write_manifest
 
 
 def test_write_manifest_creates_file(temp_results_dir):
-    """TODO docstring. Document this function.
+    """Verify write_manifest serializes a manifest object to the requested path.
 
     Args:
-        temp_results_dir: TODO docstring.
+        temp_results_dir: Temporary directory receiving the manifest file.
     """
     manifest_path = Path(temp_results_dir) / "manifest.json"
 
     class _Config:
-        """TODO docstring. Document this class."""
+        """Minimal config stub carrying the algorithm label for the manifest."""
 
         algo = "ppo"
 
     class _Manifest:
-        """TODO docstring. Document this class."""
+        """Minimal manifest double with provenance hashes and config payload."""
 
         git_hash = "deadbeef"
         scenario_matrix_hash = "cafebabe"

@@ -685,6 +685,9 @@ _FAST_FILES = {
     # Forecast-preparation packet tests are deterministic schema/provenance
     # contracts; keep their changed producer covered by the fast lane.
     "test_forecast_preparation.py",
+    # Evidence-registry tests include deterministic historical-binding resolver
+    # boundaries; keep the shared resolver covered in exact-head fast shards.
+    "test_lint_evidence_registry.py",
     # Figure-interpretation replay tests are provider-free deterministic contracts;
     # keep their exact-head mutation and provenance coverage in fast shards.
     "test_agent_figure_interpretation_eval.py",

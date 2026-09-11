@@ -92,6 +92,25 @@ off-by-one bounds, zero- vs one-based index mismatches, chunk tail truncations, 
 reorderings, resume/retry collisions, and invalid array concurrency specs. It exits with code
 0 on success, 1 on mapping errors (or warnings under `--strict`), and 2 on invalid invocation.
 
+## Staged source isolation verification
+
+Before submitting compute-window or cluster jobs, verify that staged commands run
+strictly from the immutable staged source without leakage from ambient `PYTHONPATH`,
+user-site packages, sibling worktree checkouts, stale editable installations, or `.pth`
+injections:
+
+```bash
+uv run python scripts/validation/verify_staged_source_isolation.py \
+  --packet <staging-packet-or-bundle.json> \
+  --format json
+```
+
+The verifier executes bounded import and startup probes in an isolated subprocess,
+validates that all first-party imports resolve inside the staged source or an explicitly
+declared companion (`--companion NAME=PATH`), checks git tree cleanliness, and emits a
+sanitized `staged_source_isolation_receipt.v1` artifact without revealing private host paths.
+Exit codes: `0` passed, `1` blocked, `2` malformed.
+
 ## Training submission queue
 
 Use `experiments/submission_queue.yaml` for reviewable planned training submissions that should be

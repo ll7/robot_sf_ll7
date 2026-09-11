@@ -43,8 +43,7 @@ pointer_files:
     allowed_sections:
       - tool-specific entry points
       - machine context
-      - claude code model and mode selection
-      - preferred command interfaces
+      - provider mechanics
     forbidden_sections:
       - test failure evaluation
       - evidence grading for claims

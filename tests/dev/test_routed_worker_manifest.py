@@ -809,6 +809,111 @@ def test_referenced_hash_check_missing_and_matching(tmp_path: Path) -> None:
     ]
 
 
+def test_referenced_hash_check_uses_run_root_not_expected_output_root(tmp_path: Path) -> None:
+    """Relative references must not accept a decoy below expected_output_root."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-ref-root"
+    (run_dir / "RUN").mkdir(parents=True)
+    canonical = b"canonical payload\n"
+    decoy = b"decoy payload\n"
+    (run_dir / "payload.json").write_bytes(canonical)
+    (run_dir / "RUN" / "payload.json").write_bytes(decoy)
+
+    findings = manifest.verify_referenced_hashes(
+        str(run_dir),
+        {
+            "binding": {
+                "path": "payload.json",
+                "sha256": hashlib.sha256(decoy).hexdigest(),
+            }
+        },
+        expected_output_root="RUN",
+        target_repo=repo,
+    )
+
+    assert len(findings) == 1
+    assert findings[0]["kind"] == "stale_reference"
+    assert findings[0]["expected_path"] == "payload.json"
+    assert findings[0]["actual_sha256"] == hashlib.sha256(canonical).hexdigest()
+
+
+@pytest.mark.parametrize("malformed_sha256", ["0" * 63, "g" * 64, 123, None, ""])
+def test_referenced_hash_check_rejects_present_malformed_sha256(
+    tmp_path: Path, malformed_sha256: object
+) -> None:
+    """Every present malformed SHA-256 declaration must fail closed."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-ref-invalid-hash"
+    run_dir.mkdir(parents=True)
+    (run_dir / "payload.json").write_text("payload\n", encoding="utf-8")
+
+    findings = manifest.verify_referenced_hashes(
+        str(run_dir),
+        {"binding": {"path": "payload.json", "sha256": malformed_sha256}},
+        target_repo=repo,
+    )
+
+    assert len(findings) == 1
+    assert findings[0]["kind"] == "invalid_sha256"
+    assert findings[0]["key"] == "binding"
+    assert findings[0]["expected_path"] == "payload.json"
+
+
+def test_manifest_records_non_mapping_artifact_references(tmp_path: Path) -> None:
+    """A malformed reference collection must not abort manifest creation."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-ref-invalid-collection"
+    run_dir.mkdir(parents=True)
+
+    data = manifest.build_routing_manifest(
+        [
+            {
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "run_dir": str(run_dir),
+                "artifact_references": ["payload.json"],
+            }
+        ],
+        chosen_index=0,
+        target_repo=repo,
+    )
+
+    contract = data["chosen_path_contract"]
+    assert contract["ok"] is False
+    assert contract["findings"][-1] == {
+        "kind": "invalid_reference_collection",
+        "key": "artifact_references",
+        "expected_path": "<mapping>",
+        "actual_path": "list",
+        "expected_sha256": None,
+        "actual_sha256": None,
+    }
+    json.dumps(data)
+
+
+def test_referenced_hash_check_records_non_mapping_reference_entry(tmp_path: Path) -> None:
+    """A malformed individual reference entry must produce an explicit finding."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-ref-invalid-entry"
+    run_dir.mkdir(parents=True)
+
+    findings = manifest.verify_referenced_hashes(
+        str(run_dir), {"binding": ["payload.json"]}, target_repo=repo
+    )
+
+    assert findings == [
+        {
+            "kind": "invalid_reference",
+            "key": "binding",
+            "expected_path": "<path string or mapping>",
+            "actual_path": "list",
+            "expected_sha256": None,
+            "actual_sha256": None,
+        }
+    ]
+
+
 def test_manifest_path_contract_findings_do_not_change_aggregation(tmp_path: Path) -> None:
     """Path-contract findings stay route evidence and cannot alter task aggregation."""
     repo = _init_repo(tmp_path / "repo")

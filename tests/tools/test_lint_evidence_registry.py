@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[2]
 LINTER = ROOT / "scripts" / "tools" / "lint_evidence_registry.py"
@@ -532,6 +533,42 @@ def test_historical_binding_helpers_fail_closed_at_boundary_inputs(
             tracked_paths={config_path},
             label="test",
         )
+
+
+def test_historical_binding_digest_validation_matches_schema_for_every_field() -> None:
+    """Every manifest digest field must share the schema's lowercase-only contract."""
+    historical = importlib.import_module("robot_sf.evidence.historical_bindings")
+    schema_path = ROOT / "scripts/validation/evidence_registry_historical_bindings.v1.schema.json"
+    manifest_path = ROOT / "scripts/validation/evidence_registry_historical_bindings.v1.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema)
+    digest_fields = {
+        "consumer_sha256": (historical.SHA256_RE, "a" * 64),
+        "consumer_blob_sha1": (historical.FULL_SHA1_RE, "a" * 40),
+        "declared_sha256": (historical.SHA256_RE, "a" * 64),
+        "producer_commit": (historical.FULL_SHA1_RE, "a" * 40),
+        "producer_tree": (historical.FULL_SHA1_RE, "a" * 40),
+        "producer_reference_sha256": (historical.SHA256_RE, "a" * 64),
+        "producer_reference_blob_sha1": (historical.FULL_SHA1_RE, "a" * 40),
+        "producer_consumer_sha256": (historical.SHA256_RE, "a" * 64),
+        "producer_consumer_blob_sha1": (historical.FULL_SHA1_RE, "a" * 40),
+        "parent_commit": (historical.FULL_SHA1_RE, "a" * 40),
+        "parent_reference_sha256": (historical.SHA256_RE, "a" * 64),
+    }
+
+    for field, (pattern, lowercase_value) in digest_fields.items():
+        assert (
+            historical._historical_binding_sha({field: lowercase_value}, field, pattern)
+            == lowercase_value
+        )
+        with pytest.raises(historical.HistoricalBindingError, match=f"bindings {field}"):
+            historical._historical_binding_sha({field: lowercase_value.upper()}, field, pattern)
+
+        uppercase_manifest = json.loads(json.dumps(manifest))
+        original_value = uppercase_manifest["bindings"][0][field]
+        uppercase_manifest["bindings"][0][field] = original_value.upper()
+        assert list(validator.iter_errors(uppercase_manifest)), field
 
 
 def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:

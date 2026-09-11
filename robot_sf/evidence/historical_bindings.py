@@ -264,10 +264,12 @@ def _historical_binding_text(binding: Mapping[str, Any], field: str) -> str:
 def _historical_binding_sha(
     binding: Mapping[str, Any], field: str, pattern: re.Pattern[str]
 ) -> str:
-    """Return one canonical hexadecimal binding digest."""
+    """Return one canonical lowercase hexadecimal binding digest."""
     value = _historical_binding_text(binding, field)
-    if not pattern.fullmatch(value):
-        raise _historical_binding_error(f"bindings {field} must be a full hexadecimal digest")
+    if not pattern.fullmatch(value) or value != value.lower():
+        raise _historical_binding_error(
+            f"bindings {field} must be a full hexadecimal digest in lowercase"
+        )
     return value.lower()
 
 

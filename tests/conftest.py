@@ -425,6 +425,9 @@ _FAST_FILES = {
     # in the exact-head changed-coverage gate.
     "test_check_cuda_runtime.py",
     "test_gpu_telemetry.py",
+    # The environment-manifest owner is deterministic schema, redaction, and
+    # digest coverage for the changed capture/check command (issue #8894).
+    "test_environment_manifest.py",
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",

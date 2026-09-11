@@ -27,6 +27,8 @@ For operational retention classes, preservation proof, and cleanup-eligibility w
 [Artifact Retention, Preservation, and Cleanup Guide](artifact_retention_and_cleanup.md).
 For the check-only guard that decides when one artifact or output identity may be deleted, see the
 [Cleanup Eligibility Guard](cleanup_eligibility.md).
+For the complete post-access restore and local-analysis sequence, see the
+[post-access restoration and local-analysis runbook](../post_access_local_analysis_runbook.md).
 
 ## Vocabulary
 

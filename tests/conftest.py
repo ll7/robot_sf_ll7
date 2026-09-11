@@ -444,6 +444,7 @@ _FAST_FILES = {
     # keep their owner tests in the exact-head fast lane.
     "test_held_out_preflight.py",
     "test_artifact_catalog.py",
+    "test_sha256_file_reuse_issue_8948.py",
     # CLI distribution-control regressions are deterministic input-boundary
     # contracts and exercise the benchmark error path in PR fast shards.
     "test_cli_plot_distributions_ci.py",

@@ -13,8 +13,8 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 122,
-      "occurrences": 871
+      "files": 108,
+      "occurrences": 684
     }
   },
   "files": {
@@ -125,20 +125,6 @@
     "tests/unit/test_metrics_edge_cases.py": 5,
     "tests/unit/test_resume_manifest.py": 18,
     "tests/unit/test_runner_video.py": 10,
-    "tests/visuals/test_deterministic_selection.py": 6,
-    "tests/visuals/test_encode_wrapper.py": 22,
-    "tests/visuals/test_encode_write_clip_fallbacks.py": 35,
-    "tests/visuals/test_insufficient_replay_skip.py": 3,
-    "tests/visuals/test_moviepy_missing.py": 4,
-    "tests/visuals/test_moviepy_missing_artifact.py": 21,
-    "tests/visuals/test_performance_flags.py": 23,
-    "tests/visuals/test_schema_validation_mode.py": 7,
-    "tests/visuals/test_sim_view_fallback_to_synthetic.py": 25,
-    "tests/visuals/test_sim_view_frame_cap_env.py": 9,
-    "tests/visuals/test_simulation_view_success.py": 22,
-    "tests/visuals/test_skip_notes.py": 2,
-    "tests/visuals/test_synthetic_fallback.py": 3,
-    "tests/visuals/test_video_performance_budget.py": 5,
     "tests/zone_sampling_test.py": 7
   },
   "roots": [
@@ -149,7 +135,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 122,
-    "total_occurrences": 871
+    "files": 108,
+    "total_occurrences": 684
   }
 }

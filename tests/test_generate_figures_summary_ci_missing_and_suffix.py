@@ -16,14 +16,14 @@ if TYPE_CHECKING:
 
 
 def _base_cmd(episodes: Path, out_dir: Path) -> list[str]:
-    """TODO docstring. Document this function.
+    """Construct standard base CLI argument list for generate_figures script.
 
     Args:
-        episodes: TODO docstring.
-        out_dir: TODO docstring.
+        episodes: Path to the input episodes JSONL file.
+        out_dir: Output directory path for generated figure and table artifacts.
 
     Returns:
-        TODO docstring.
+        List of command-line argument tokens.
     """
     return [
         "uv",
@@ -47,11 +47,7 @@ def _base_cmd(episodes: Path, out_dir: Path) -> list[str]:
 
 
 def test_missing_ci_warning(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify a warning is emitted and blank cells generated when CI data is missing."""
     episodes = tmp_path / "eps.jsonl"
     episodes.write_text("{}\n", encoding="utf-8")
     # Summary without mean_ci
@@ -75,11 +71,7 @@ def test_missing_ci_warning(tmp_path: Path):
 
 
 def test_custom_ci_suffix(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify custom CI column suffix is correctly reflected in Markdown and LaTeX tables."""
     episodes = tmp_path / "eps.jsonl"
     episodes.write_text("{}\n", encoding="utf-8")
     summary = {"algoA": {"collisions": {"mean": 0.2, "mean_ci": [0.1, 0.3]}}}

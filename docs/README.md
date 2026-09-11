@@ -136,6 +136,7 @@ design. See `CONTRIBUTING.md` for the strict-build contract and the curated sour
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, setup, testing, quality gates, and coding standards
 * **[Pinned Scenario-Archetype Validation](./dev/scenario_archetype_validation.md)** - Exact waiver schema and fail-closed CI checks for the four pinned archetypes
 * **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, test taxonomy, command matrix, failure classification, and CI rerun rules
+* **[Test Suite Orientation](../tests/README.md)** - Top-level test-tree map with pointers to the QA runbook and dev guide for targeted suite execution
 * **[Maintainer Values](./maintainer_values.md)** - Compact source of stable trade-off principles for honest, transparent, reproducible research progress
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
 * **[Doctor Troubleshooting](./troubleshooting/doctor.md)** - Per-check remedies for every `robot-sf doctor` identifier: meaning, minimal fix, and verification command

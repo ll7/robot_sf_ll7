@@ -120,18 +120,8 @@ output carries no private paths, hostnames, accounts, credentials, or signed URL
 
 ## Artifact Transfer Custody
 
-[`scripts/validation/verify_artifact_transfer.py`](../../scripts/validation/verify_artifact_transfer.py)
-consumes one existing `terminal_job_harvest.v1` or `compute_staging_bundle.v1` receipt and copies
-only its manifest-declared members from an explicit source root to an explicit destination root
-(local/fixture copy only). Every destination member is re-hashed before any copy, so verified
-members are reported `already_verified` and never re-copied, interrupted `.transfer-partial` files
-are cleaned and resumed, and conflicting bytes fail closed without being overwritten. `--apply`
-writes a deterministic `artifact_transfer_custody.v1` receipt under the destination root with
-per-file states, byte counts, capacity, and independently re-hashed destination bytes; `--check`
-is read-only. Receipts carry normalized relative paths only, and live SSH/private-host transfer
-stays routed through private operations: `uv run python
-scripts/validation/verify_artifact_transfer.py --check --manifest <receipt> --source-root <root>
---destination-root <root> --format json`.
+[`scripts/validation/verify_artifact_transfer.py`](../../scripts/validation/verify_artifact_transfer.py) consumes one existing `terminal_job_harvest.v1` or `compute_staging_bundle.v1` receipt and copies only its manifest-declared members between explicit local roots. Destination members are re-hashed first (`already_verified` avoids re-copy), conflicts fail closed without overwrite, and interrupted `.transfer-partial` files are cleaned and resumed. `--apply` writes a deterministic `artifact_transfer_custody.v1` receipt (per-file states, byte counts, capacity, independently re-hashed destination bytes); `--check` is read-only and receipts carry normalized relative paths only.
+Validate with `uv run python scripts/validation/verify_artifact_transfer.py --check --manifest <receipt> --source-root <root> --destination-root <root> --format json`; live SSH/private-host transfer stays routed through private operations.
 
 ## Checkpoint Compatibility Audit
 

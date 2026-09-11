@@ -9,14 +9,14 @@ from robot_sf.benchmark.full_classic import orchestrator
 
 
 def _make_base_record(algo: str, episode_suffix: int) -> dict[str, object]:
-    """TODO docstring. Document this function.
+    """Build a minimal episode record with algorithm metadata injected.
 
     Args:
-        algo: TODO docstring.
-        episode_suffix: TODO docstring.
+        algo: Algorithm identifier mirrored into scenario_params.algo.
+        episode_suffix: Suffix used to derive unique episode and scenario ids.
 
     Returns:
-        TODO docstring.
+        Episode record with algorithm metadata applied by the orchestrator helper.
     """
     record: dict[str, object] = {
         "episode_id": f"{algo}-{episode_suffix}",

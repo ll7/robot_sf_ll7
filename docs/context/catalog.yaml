@@ -7575,3 +7575,15 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_8566_source_bound_component_contrasts_2026-09-10/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8566_source_bound_component_contrasts_2026-09-10/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8566_source_bound_component_contrasts_2026-09-10/report.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

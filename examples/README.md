@@ -112,7 +112,12 @@ Feature-focused demos for developers exploring capabilities.
 | [33 Three.js Recording Viewer](./advanced/33_threejs_recording_viewer.py) | Export a JSONL or pickle recording to a static browser viewer. | _None_ | visualization, recording, threejs | ✅ |
 | [34 Trace Three.js Viewer](./advanced/34_trace_threejs_viewer.py) | Export a simulation_trace_export.v1 trace to a static browser viewer. | _None_ | visualization, trace, annotation, threejs | ✅ |
 | [35 Custom Scenario Authoring](./advanced/35_custom_scenario_authoring.py) | Author a custom corridor scenario programmatically, validate, reload, and smoke-test it. | maps/svg_maps/classic_head_on_corridor.svg | scenarios, authoring, validation, tutorial | ✅ |
+| [36 Optional Capability Handling](./advanced/36_optional_capability_handling.py) | Handle unavailable optional capabilities without fallback or fabricated success. | _None_ | tutorial, errors, fixtures, validation | ✅ |
 | [37 Custom Planner Protocol](./advanced/37_custom_planner_protocol.py) | Implement and run the smallest planner compatible with LocalPlannerProtocol. | _None_ | tutorial, planner, protocol, validation | ✅ |
+| [38 Compare Resolved Configs](./advanced/38_compare_resolved_configs.py) | Compare two resolved training configurations and explain semantic drift. | uv sync --all-extras | config, provenance, analysis | ⚠️ Imports the canonical training-config resolver, which pulls the training stack; run locally with the fixture pair. |
+| [39 Failed Campaign Diagnosis](./advanced/39_failed_campaign_diagnosis.py) | Inspect a retained failed-campaign dossier without rerunning it. | _None_ | campaign, diagnostics, provenance, validation | ✅ |
+| [40 Restore Campaign Capsule](./advanced/40_restore_campaign_capsule.py) | Restore and validate one preserved campaign capsule without running simulation. | _None_ | campaign, offline, fixtures, provenance, validation | ✅ |
+| [41 Artifact Preservation](./advanced/41_artifact_preservation.py) | Convert a task-owned fixture tree into a verified preservation manifest. | _None_ | artifacts, provenance, fixture | ✅ |
 
 ## Benchmarks
 
@@ -144,6 +149,6 @@ Visualization and analysis scripts built atop benchmark outputs.
 | [Plot Force Field Save](./plotting/plot_force_field_save.py) | Generate and save static images of the force field for documentation. | _None_ | visualization, force-field | ✅ |
 | [Plot Map](./plotting/plot_map.py) | Plot a MapDefinition as a quick visual sanity check. | _None_ | maps, visualization | ✅ |
 | [Plot Micro Pedestrian Scene](./plotting/plot_micro_pedestrian_scene.py) | Render a static micro-scale pedestrian-simulation snapshot for publications. | _None_ | visualization, pedestrian, publication | ⚠️ Publication figure workflow; requires manual figure inspection. |
-| [Plot Pareto](./plotting/plot_pareto.py) | Generate Pareto front plots from benchmark episodes or synthetic data. | _None_ | visualization, pareto | ⚠️ CLI expects --in dataset argument; no default input for CI. |
+| [Plot Pareto](./plotting/plot_pareto.py) | Generate Pareto front plots from benchmark episodes, synthetic data, or a fixture demo. | _None_ | visualization, pareto | ✅ |
 | [Plot Pedestrian Position KDE](./plotting/plot_pedestrian_position_kde.py) | Plot a KDE of pedestrian positions on top of the source map. | _None_ | visualization, pedestrian | ✅ |
 | [SNQI Figures Example](./plotting/snqi_figures_example.py) | Generate SNQI figures from real episodes or a diagnostic fixture. | _None_ | fixture, visualization, snqi | ✅ |

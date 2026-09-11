@@ -19,6 +19,7 @@ import pytest
 
 from scripts.dev import check_worktree_capacity as capacity
 from scripts.dev import worktree_creation_lock
+from scripts.dev.pr_gate_lease import lease_path
 from tests.support.environment_guards import git_identity_environment
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -46,6 +47,60 @@ def _worktree_target(tmp_path: Path, branch: str) -> Path:
     """Give Git's shared worktree-admin directory a test-unique basename."""
     basename_digest = hashlib.sha256(branch.encode("utf-8")).hexdigest()[:10]
     return tmp_path / f"new-worktree-{basename_digest}"
+
+
+def _create_isolated_worktree_config_repo(tmp_path: Path) -> tuple[Path, Path]:
+    """Create a tiny repository whose worktree config will be inherited on add."""
+    repo = tmp_path / "source-repo"
+    repo.mkdir()
+    env = git_identity_environment()
+    subprocess.run(
+        ["git", "init", "--initial-branch=main", str(repo)],
+        cwd=tmp_path,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for key, value in (
+        ("user.name", "Robot SF test"),
+        ("user.email", "robot-sf-test@example.invalid"),
+        ("extensions.worktreeConfig", "true"),
+    ):
+        subprocess.run(
+            ["git", "-C", str(repo), "config", key, value],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    (repo / "README.md").write_text("worktree fallback fixture\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "README.md"],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "fixture"],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    git_dir = Path(
+        subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-dir"],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    source_config = git_dir / "config.worktree"
+    source_config.write_text("[issue8820-fixture]\n\tinherited = true\n", encoding="utf-8")
+    return repo, source_config
 
 
 def _cleanup_owned_worktree(target: Path, branch: str) -> None:
@@ -1241,6 +1296,150 @@ def test_create_worktree_without_flock_cli_uses_python_fallback(tmp_path: Path) 
         _cleanup_owned_worktree(target, branch)
 
 
+def test_create_worktree_without_flock_cli_clears_inherited_worktree_config(
+    tmp_path: Path,
+) -> None:
+    """The minimal-PATH fallback removes copied config without requiring ``rm``."""
+    repo, source_config = _create_isolated_worktree_config_repo(tmp_path)
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    for tool in ("bash", "sh", "git", "git-lfs", "python3", "dirname", "cat", "grep", "du"):
+        resolved = shutil.which(tool)
+        assert resolved is not None, f"test host is missing required tool: {tool}"
+        (stub_bin / tool).symlink_to(resolved)
+    assert shutil.which("flock", path=str(stub_bin)) is None, "stub PATH must hide flock"
+
+    branch = _unique_branch(tmp_path, "no-flock-inherited-config")
+    target = _worktree_target(tmp_path, branch)
+    environment = {**git_identity_environment(os.environ), "PATH": str(stub_bin)}
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--base",
+                "HEAD",
+                "--minimum-free-bytes",
+                "0",
+            ],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=environment,
+        )
+        assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        assert "portable lock" in result.stderr
+        assert source_config.is_file()
+        target_git_dir = Path(
+            subprocess.run(
+                ["git", "-C", str(target), "rev-parse", "--path-format=absolute", "--git-dir"],
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                check=True,
+                env=git_identity_environment(),
+            ).stdout.strip()
+        )
+        assert not (target_git_dir / "config.worktree").exists()
+        assert target.is_dir()
+    finally:
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", str(target)],
+            cwd=repo,
+            capture_output=True,
+            check=False,
+            env=git_identity_environment(),
+        )
+        subprocess.run(
+            ["git", "branch", "-D", branch],
+            cwd=repo,
+            capture_output=True,
+            check=False,
+            env=git_identity_environment(),
+        )
+
+
+def test_create_worktree_without_flock_cli_cleans_failed_task_lease(
+    tmp_path: Path,
+) -> None:
+    """Portable rollback removes a task lease when the normal release command fails."""
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    for tool in ("bash", "sh", "git", "git-lfs", "dirname", "cat", "grep", "du"):
+        resolved = shutil.which(tool)
+        assert resolved is not None, f"test host is missing required tool: {tool}"
+        (stub_bin / tool).symlink_to(resolved)
+    python_stub = stub_bin / "python3"
+    python_stub.write_text(
+        f"#!{sys.executable}\n"
+        "import os\n"
+        "import sys\n"
+        "if (\n"
+        "    len(sys.argv) > 2\n"
+        "    and sys.argv[1].endswith('/pr_gate_lease.py')\n"
+        "    and sys.argv[2] == 'release'\n"
+        "):\n"
+        "    print('injected lease release failure', file=sys.stderr)\n"
+        "    raise SystemExit(74)\n"
+        f"os.execv({sys.executable!r}, [{sys.executable!r}, '-S', *sys.argv[1:]])\n",
+        encoding="utf-8",
+    )
+    python_stub.chmod(0o755)
+    assert shutil.which("flock", path=str(stub_bin)) is None
+    assert shutil.which("rm", path=str(stub_bin)) is None
+
+    branch = _unique_branch(tmp_path, "no-flock-failed-task-lease")
+    target = _worktree_target(tmp_path, branch)
+    lease_file = lease_path(target)
+    receipt_parent = tmp_path / "receipt-parent-file"
+    receipt_parent.write_text("not a directory\n", encoding="utf-8")
+    receipt_path = receipt_parent / "receipt.json"
+    environment = {**git_identity_environment(os.environ), "PATH": str(stub_bin)}
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--base",
+                "HEAD",
+                "--minimum-free-bytes",
+                "0",
+                "--task-id",
+                "issue-8820-lease-cleanup",
+                "--receipt",
+                str(receipt_path),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=environment,
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "injected lease release failure" in result.stderr
+        assert "rollback was incomplete" not in result.stderr
+        assert not target.exists()
+        assert not lease_file.exists()
+        assert not subprocess.run(
+            ["git", "branch", "--list", branch],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            env=git_identity_environment(),
+        ).stdout.strip()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+        lease_file.unlink(missing_ok=True)
+
+
 def test_create_worktree_python_fallback_runs_exec_exactly_once(tmp_path: Path) -> None:
     """--exec must survive the fallback re-entry and run exactly once."""
     branch = _unique_branch(tmp_path, "py-fallback-exec")
@@ -1352,7 +1551,9 @@ def test_create_worktree_exec_can_create_nested_worktree(
         "result = subprocess.run(\n"
         "    [sys.argv[1], '--path', sys.argv[2], '--branch', sys.argv[3],\n"
         "     '--minimum-free-bytes', '0'],\n"
-        "    cwd=sys.argv[4], capture_output=True, text=True, timeout=10, check=False\n"
+        # Nested checkout is intentionally still bounded, but ten seconds is
+        # below the observed loaded-runner envelope (issue #8890).
+        "    cwd=sys.argv[4], capture_output=True, text=True, timeout=30, check=False\n"
         ")\n"
         "if result.returncode != 0:\n"
         "    print(result.stdout)\n"

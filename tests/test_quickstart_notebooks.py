@@ -9,6 +9,7 @@ a slow-marked test here also executes them end-to-end for local confidence.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import types
@@ -426,3 +427,128 @@ def test_notebook_03_setup_failure_closes_environment(monkeypatch: pytest.Monkey
         exec(compile(env_source, "<notebook-03-env>", "exec"), namespace)  # noqa: S102
 
     assert fake_env.close_calls == 1, "failed setup must close the created environment"
+
+
+def test_canonical_notebook_strips_transient_state() -> None:
+    """Canonicalization removes ids, outputs, execution counts, and env metadata."""
+    gen = _load_notebook_generator()
+    nb = gen.build_notebook_01()
+    nb.cells[0].id = "abc123"
+    nb.cells[0].metadata["kernelspec"] = {"display_name": "Local Python"}
+    nb.metadata["kernelspec"] = {
+        "display_name": "Local Python",
+        "language": "python",
+        "name": "python3",
+    }
+    code_cells = [cell for cell in nb.cells if cell.cell_type == "code"]
+    code_cells[0]["execution_count"] = 7
+    code_cells[0]["outputs"] = [{"output_type": "stream", "name": "stdout", "text": "leak"}]
+
+    code_index = next(index for index, cell in enumerate(nb.cells) if cell.cell_type == "code")
+    canonical = gen._canonical_notebook(nb)
+    payload = json.dumps(canonical)
+
+    assert "abc123" not in payload
+    assert "execution_count" not in json.dumps(canonical["cells"][code_index])
+    assert "output_type" not in payload
+    assert canonical["metadata"]["kernelspec"] == {"language": "python", "name": "python3"}
+    assert gen._transient_state_issues(nb) == [
+        f"cells[{code_index}].outputs",
+        f"cells[{code_index}].execution_count",
+    ]
+
+
+def test_parity_report_matches_committed_notebooks() -> None:
+    """The committed notebooks are canonical generator output."""
+    gen = _load_notebook_generator()
+
+    report = gen.notebook_parity_report()
+
+    assert report["schema"] == "quickstart_notebook_parity.v1"
+    assert report["status"] == "match"
+    assert report["mismatch_count"] == 0
+    assert len(report["notebooks"]) == 3
+
+
+def test_parity_detects_cell_source_drift(tmp_path: Path) -> None:
+    """A manual source edit is reported with the exact mismatch path."""
+    gen = _load_notebook_generator()
+    gen.OUT_DIR = tmp_path
+    gen.main()
+    target = tmp_path / "01_run_first_episode.ipynb"
+    nb = nbformat.read(target, as_version=4)
+    code_cell = next(cell for cell in nb.cells if cell.cell_type == "code")
+    code_cell.source = code_cell.source + "\n# manual edit\n"
+    nbformat.write(nb, target)
+
+    report = gen.notebook_parity_report(out_dir=tmp_path)
+
+    entry = next(item for item in report["notebooks"] if item["notebook"] == target.name)
+    assert entry["status"] == "drift"
+    assert "cell_source_changed" in entry["reason_codes"]
+    assert any(path.endswith(".source") for path in entry["mismatch_paths"])
+
+
+def test_parity_detects_committed_execution_state(tmp_path: Path) -> None:
+    """Committed outputs or execution counts fail the parity check."""
+    gen = _load_notebook_generator()
+    gen.OUT_DIR = tmp_path
+    gen.main()
+    target = tmp_path / "01_run_first_episode.ipynb"
+    nb = nbformat.read(target, as_version=4)
+    code_cell = next(cell for cell in nb.cells if cell.cell_type == "code")
+    code_cell.execution_count = 1
+    code_cell.outputs = [nbformat.v4.new_output("stream", name="stdout", text="executed")]
+    nbformat.write(nb, target)
+
+    report = gen.notebook_parity_report(out_dir=tmp_path)
+
+    entry = next(item for item in report["notebooks"] if item["notebook"] == target.name)
+    assert entry["status"] == "drift"
+    assert "transient_state_present" in entry["reason_codes"]
+    assert entry["transient_state_issues"]
+
+
+def test_parity_detects_missing_notebook(tmp_path: Path) -> None:
+    """A missing committed notebook fails closed."""
+    gen = _load_notebook_generator()
+
+    report = gen.notebook_parity_report(("01_run_first_episode.ipynb",), out_dir=tmp_path)
+
+    assert report["status"] == "drift"
+    entry = report["notebooks"][0]
+    assert entry["status"] == "missing"
+    assert entry["reason_codes"] == ["missing_committed_notebook"]
+
+
+def test_parity_ignores_transient_ids_and_display_names(tmp_path: Path) -> None:
+    """Transient ids and environment-specific kernelspec names do not drift."""
+    gen = _load_notebook_generator()
+    gen.OUT_DIR = tmp_path
+    gen.main()
+    target = tmp_path / "02_compare_two_planners.ipynb"
+    nb = nbformat.read(target, as_version=4)
+    for index, cell in enumerate(nb.cells):
+        cell.id = f"transient-{index}"
+    nb.metadata["kernelspec"] = {
+        "display_name": "Different local kernel",
+        "language": "python",
+        "name": "python3",
+    }
+    nbformat.write(nb, target)
+
+    report = gen.notebook_parity_report(out_dir=tmp_path)
+
+    assert report["status"] == "match"
+    assert all(entry["status"] == "match" for entry in report["notebooks"])
+
+
+def test_parity_report_is_deterministic(tmp_path: Path) -> None:
+    """Repeated parity reports are equal."""
+    gen = _load_notebook_generator()
+    gen.OUT_DIR = tmp_path
+    gen.main()
+
+    assert gen.notebook_parity_report(out_dir=tmp_path) == gen.notebook_parity_report(
+        out_dir=tmp_path
+    )

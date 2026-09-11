@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import importlib.util
 import os
 import re
@@ -10,6 +11,7 @@ import textwrap
 import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -31,6 +33,43 @@ def _load_generator():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _evaluate_seccomp_filter(
+    gen: object, machine: str, syscall_number: int, arch: int | None = None
+) -> int:
+    """Evaluate the generated classic-BPF policy for one synthetic syscall record."""
+    instructions = gen._probe_seccomp_instructions(machine)
+    accumulator = 0
+    program_counter = 0
+    expected_arch = gen._SECCOMP_ARCHITECTURES[machine] if arch is None else arch
+
+    for _ in instructions:
+        if not 0 <= program_counter < len(instructions):
+            raise AssertionError(f"filter jumped outside its program: {program_counter}")
+        instruction = instructions[program_counter]
+        code = int(instruction.code)
+        if code == gen.BPF_LD_W_ABS:
+            if instruction.k == 0:
+                accumulator = syscall_number
+            elif instruction.k == 4:
+                accumulator = expected_arch
+            else:
+                raise AssertionError(f"unexpected seccomp data offset: {instruction.k}")
+            program_counter += 1
+        elif code in (gen.BPF_JMP_JEQ_K, gen.BPF_JMP_JSET_K):
+            matches = (
+                accumulator == instruction.k
+                if code == gen.BPF_JMP_JEQ_K
+                else bool(accumulator & instruction.k)
+            )
+            offset = instruction.jt if matches else instruction.jf
+            program_counter += int(offset) + 1
+        elif code == gen.BPF_RET_K:
+            return int(instruction.k)
+        else:
+            raise AssertionError(f"unexpected seccomp opcode: {code:#x}")
+    raise AssertionError("seccomp filter did not return")
 
 
 def _project_scripts() -> dict[str, str]:
@@ -127,6 +166,7 @@ def test_entry_point_reference_has_no_handwritten_counts() -> None:
     assert "uv run python scripts/dev/generate_cli_reference.py" in text
     assert "Landlock" in text
     assert "seccomp" in text
+    assert "x32 ABI" in text
     assert "unsupported hosts fail closed" in lowered
 
 
@@ -327,6 +367,148 @@ def test_entry_point_probe_denies_real_side_effect_escape_attempts(
         listener.close()
         os.close(inherited_fd)
         os.close(credential_fd)
+
+
+def test_seccomp_policy_blocks_queued_signal_syscalls_on_supported_architectures() -> None:
+    """Both queued-signal syscall variants use the policy's EPERM deny path."""
+    gen = _load_generator()
+    expected = {
+        "x86_64": (129, 297),
+        "aarch64": (138, 240),
+    }
+    for machine, syscall_numbers in expected.items():
+        instructions = gen._probe_seccomp_instructions(machine)
+        denied = {
+            instruction.k
+            for instruction in instructions
+            if instruction.code == gen.BPF_JMP_JEQ_K and instruction.jf == 1
+        }
+        assert set(syscall_numbers) <= denied
+
+
+def test_seccomp_policy_rejects_x32_abi_without_weakening_native_paths() -> None:
+    """The x32 ABI is denied wholesale while native policy results stay unchanged."""
+    gen = _load_generator()
+    denied = gen.SECCOMP_RET_ERRNO | errno.EPERM
+
+    for machine in ("x86_64", "aarch64"):
+        blocked = set(gen._BLOCKED_SYSCALLS[machine])
+        for syscall_number in blocked:
+            assert _evaluate_seccomp_filter(gen, machine, syscall_number) == denied, (
+                f"native syscall {syscall_number} is not denied on {machine}"
+            )
+        allowed = next(number for number in range(512) if number not in blocked)
+        assert _evaluate_seccomp_filter(gen, machine, allowed) == gen.SECCOMP_RET_ALLOW
+        assert (
+            _evaluate_seccomp_filter(
+                gen,
+                machine,
+                allowed,
+                arch=gen._SECCOMP_ARCHITECTURES[machine] ^ 1,
+            )
+            == gen.SECCOMP_RET_KILL_PROCESS
+        )
+
+    x86_blocked = set(gen._BLOCKED_SYSCALLS["x86_64"])
+    assert {62, 129, 297} <= x86_blocked
+    for syscall_number in (*x86_blocked, 0, 0x7FFF):
+        assert (
+            _evaluate_seccomp_filter(gen, "x86_64", syscall_number | gen.X32_SYSCALL_BIT) == denied
+        ), f"x32 syscall {syscall_number} is not denied"
+
+
+def test_entry_point_probe_denies_queued_signal_syscalls(tmp_path: Path) -> None:
+    """The isolated child cannot queue even a harmless signal to its parent."""
+    gen = _load_generator()
+    queue_syscalls = {
+        "x86_64": (129, 297),
+        "aarch64": (138, 240),
+    }
+    machine = gen._probe_machine()
+    if machine not in queue_syscalls:
+        pytest.skip(f"queued-signal child probe is unsupported on {machine!r}")
+    first_syscall, second_syscall = queue_syscalls[machine]
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    module_name = f"cli_probe_queued_signal_{os.getpid()}"
+    module_path = source_root / f"{module_name}.py"
+    x32_probe = ""
+    if machine == "x86_64":
+        x32_probe = f"""
+                print(
+                    "x32-kill:"
+                    + syscall_status(
+                        {gen.X32_SYSCALL_BIT | 62},
+                        (os.getpid(), 0),
+                    )
+                )
+                print(
+                    "x32-rt-sigqueueinfo:"
+                    + syscall_status(
+                        {gen.X32_SYSCALL_BIT | first_syscall},
+                        (os.getppid(), signal.SIGCHLD),
+                    )
+                )
+                print(
+                    "x32-rt-tgsigqueueinfo:"
+                    + syscall_status(
+                        {gen.X32_SYSCALL_BIT | second_syscall},
+                        (os.getppid(), os.getpid(), signal.SIGCHLD),
+                    )
+                )
+"""
+
+    module_path.write_text(
+        textwrap.dedent(
+            f"""
+            import ctypes
+            import os
+            import signal
+
+            LIBC = ctypes.CDLL(None, use_errno=True)
+            LIBC.syscall.restype = ctypes.c_long
+
+            def syscall_status(number, arguments):
+                siginfo = (ctypes.c_ubyte * 128)()
+                ctypes.set_errno(0)
+                result = LIBC.syscall(number, *arguments, ctypes.byref(siginfo))
+                return f"{{result}}:{{ctypes.get_errno()}}"
+
+            def main(argv):
+                if argv != ["--help"]:
+                    return 1
+                print("usage: queued-signal-probe [--help]")
+                print(
+                    "rt-sigqueueinfo:"
+                    + syscall_status({first_syscall}, (os.getppid(), signal.SIGCHLD))
+                )
+                print(
+                    "rt-tgsigqueueinfo:"
+                    + syscall_status(
+                        {second_syscall},
+                        (os.getppid(), os.getpid(), signal.SIGCHLD),
+                    )
+                )
+                {x32_probe}
+                return 0
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+
+    result = gen.probe_help(
+        "queued-signal-probe",
+        f"{module_name}:main",
+        source_root,
+        timeout_s=2,
+    )
+    assert result.help_ok, result.help_error
+    assert f"rt-sigqueueinfo:-1:{errno.EPERM}" in result.help_text
+    assert f"rt-tgsigqueueinfo:-1:{errno.EPERM}" in result.help_text
+    if machine == "x86_64":
+        assert f"x32-kill:-1:{errno.EPERM}" in result.help_text
+        assert f"x32-rt-sigqueueinfo:-1:{errno.EPERM}" in result.help_text
+        assert f"x32-rt-tgsigqueueinfo:-1:{errno.EPERM}" in result.help_text
 
 
 def test_entry_point_negative_unimportable_callable() -> None:

@@ -1,0 +1,5 @@
+schema: locator_overlay.v1
+entries:
+  campaign.adversarial.2026w36:
+    locator: s3://robot-sf-private-invalid/compute-window/campaign-2026w36/index.jsonl
+    locator_class: artifact_uri

@@ -1,0 +1,73 @@
+# Public contract for consuming the private #1496 BC-compatible artifact.
+# The concrete artifact is deliberately not copied into the repository. Use an authorized
+# private artifact root for the strict loader gate; contract-only checks remain public-safe.
+schema_version: oracle-imitation-dataset-consumer.v1
+dataset_id: expert_traj_v1
+dataset_version: issue1496-job13520-v1
+dataset_digest: 433c797f6e3635f133d7541c9dd9edd3849cdee7b89e23c930b458e463979388
+artifact:
+  uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/dataset/expert_traj_v1.npz
+  sha256: 433c797f6e3635f133d7541c9dd9edd3849cdee7b89e23c930b458e463979388
+  size_bytes: 363117931
+  availability: private_required
+
+splits:
+  train:
+    sample_ids:
+      - train__planner_sanity_simple__seed201
+      - train__classic_head_on_corridor_low__seed202
+      - train__classic_crossing_low__seed203
+      - train__classic_doorway_low__seed204
+      - train__classic_overtaking_low__seed205
+      - train__francis2023_following_human__seed206
+    shards:
+      - uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/train/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+        sha256: 79347c9674a55ee849eb39fc1872cc4ca11198c53a052ee286f86538c6c892ea
+        sample_ids:
+          - train__planner_sanity_simple__seed201
+          - train__classic_head_on_corridor_low__seed202
+          - train__classic_crossing_low__seed203
+          - train__classic_doorway_low__seed204
+          - train__classic_overtaking_low__seed205
+          - train__francis2023_following_human__seed206
+  validation:
+    sample_ids:
+      - validation__planner_sanity_simple__seed101
+      - validation__classic_crossing_low__seed102
+      - validation__classic_doorway_low__seed103
+    shards:
+      - uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/validation/validation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+        sha256: 319a9ff013f48f6cacb2886c8b6093afd0d328d3dbe1c27c6a5171648b68ed9c
+        sample_ids:
+          - validation__planner_sanity_simple__seed101
+          - validation__classic_crossing_low__seed102
+          - validation__classic_doorway_low__seed103
+  evaluation:
+    sample_ids:
+      - evaluation__planner_sanity_simple__seed111
+      - evaluation__classic_crossing_low__seed112
+      - evaluation__classic_doorway_low__seed113
+    shards:
+      - uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/evaluation/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+        sha256: f26b1c62441c27fa50209ed269d570698816ba0cdafc6f0616a8bf9fb7801720
+        sample_ids:
+          - evaluation__planner_sanity_simple__seed111
+          - evaluation__classic_crossing_low__seed112
+          - evaluation__classic_doorway_low__seed113
+
+feature_contract:
+  schema_id: expert_traj_v1.observation_contract
+  dtype: float32
+  dimension: null
+action_contract:
+  schema_id: expert_traj_v1.action_contract
+  dtype: float32
+  dimension: null
+normalization:
+  policy: consume_the_persisted_observation_contract_and_normalizer
+  source: dataset_metadata
+quality:
+  admitted_statuses: [valid]
+  excluded_statuses: [invalid, fallback, degraded, not_available]
+sample_inventory:
+  status: private_required

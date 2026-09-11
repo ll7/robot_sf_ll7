@@ -3,9 +3,9 @@
 [Back to Documentation Index](./README.md)
 
 Canonical definitions for acronyms and project-specific terms used across Robot SF. This file is the
-single source of truth referenced by the `## Clarity` rule in
-[`maintainer_values.md`](./maintainer_values.md#clarity): when a human-facing surface uses one of these
-terms, expand it on first use or link here.
+single source of truth referenced by the human-facing clarity guidance in
+[`AGENTS.md`](../AGENTS.md): when a human-facing surface uses one of these terms, expand it on first
+use or link here.
 
 If you add a new acronym or domain term to the codebase or docs, add it here in the same change.
 When the repository expands the same acronym several ways, treat the expansion below as canonical and
@@ -43,7 +43,7 @@ converge on it.
 ## Evidence ladder
 
 Robot SF grades every claim by how strong its evidence is. Always label results with one of these
-(weakest to strongest). Full definitions live in [`docs/maintainer_values.md`](./maintainer_values.md).
+(weakest to strongest). Full definitions live in this glossary.
 
 | Tier | Plain-language meaning |
 | --- | --- |
@@ -79,4 +79,4 @@ Robot SF grades every claim by how strong its evidence is. Always label results 
 
 **Last updated**: 2026-09-09
 **Source of truth for**: acronyms and project-specific terms on human-facing surfaces (see the
-`## Clarity` rule in [`maintainer_values.md`](./maintainer_values.md#clarity)).
+human-facing clarity guidance in [`AGENTS.md`](../AGENTS.md)).

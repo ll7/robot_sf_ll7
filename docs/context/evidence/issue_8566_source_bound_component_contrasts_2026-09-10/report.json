@@ -1,0 +1,511 @@
+{
+  "analysis": {
+    "clustering_key": "scenario_id",
+    "estimand": "comparison_minus_reference_mean",
+    "multiplicity": {
+      "alpha": 0.05,
+      "applied_to": [
+        "terminal_outcome",
+        "safety_wrapper",
+        "snqi"
+      ],
+      "family": "fixture_component_contrasts",
+      "method": "holm_step_down",
+      "n_comparisons": 3
+    },
+    "pairing_key": [
+      "corpus_id",
+      "release_id",
+      "contrast_id",
+      "scenario_id",
+      "seed"
+    ],
+    "uncertainty": {
+      "confidence": 0.95,
+      "method": "paired_scenario_block_percentile_bootstrap",
+      "replicates": 2000,
+      "seed": 8566001
+    }
+  },
+  "artifact": {
+    "receipt_path": "docs/context/evidence/issue_8566_source_bound_component_contrasts_2026-09-10/SHA256SUMS",
+    "report_path": "docs/context/evidence/issue_8566_source_bound_component_contrasts_2026-09-10/report.json"
+  },
+  "artifact_identity": {
+    "hash_scope": "canonical report JSON with artifact_identity.sha256 omitted",
+    "sha256": "3499093cc7461b310499838cf79bc65153c901914fb30b9f56a353db79b62593"
+  },
+  "blockers": [],
+  "claim_boundary": {
+    "allowed": [
+      "Tracked source-binding, pairing, uncertainty, determinism, and fail-closed behavior of this fixture packet."
+    ],
+    "forbidden": [
+      "Any empirical, benchmark, causal, safety, planner-ranking, release, paper, or dissertation claim.",
+      "Pooling August b1d5 and September 59577 release lineages.",
+      "Treating fallback, degraded, inactive, or unavailable input as success or zero."
+    ],
+    "status": "diagnostic_only"
+  },
+  "component_contrasts": [
+    {
+      "availability_status": "available",
+      "comparison_arm": "component_probe",
+      "component_family": "terminal_outcome",
+      "component_id": "terminal_outcome",
+      "denominator": 6,
+      "effect": -0.16666666666666666,
+      "estimand": "comparison_minus_reference_mean",
+      "excluded_cells": [],
+      "interpretation_boundary": "Synthetic fixture calculation only; not release or benchmark evidence.",
+      "multiplicity": {
+        "declared": true,
+        "method": "holm_step_down",
+        "n_comparisons": 3,
+        "rejected": false,
+        "status": "applied"
+      },
+      "reference_arm": "baseline",
+      "source_ids": [
+        "issue_8566_fixture_rows"
+      ],
+      "source_refs": [
+        {
+          "path": "tests/fixtures/issue_8566_source_bound_component_contrasts/paired_rows.json",
+          "sha256": "49824d8a10e4865917de6ca501be8b00d1fe09bb34ce71ec3865b6bed797434b",
+          "source_id": "issue_8566_fixture_rows"
+        }
+      ],
+      "status": "diagnostic_only",
+      "support": 6,
+      "uncertainty": {
+        "ci_high": 0.0,
+        "ci_low": -0.5,
+        "confidence": 0.95,
+        "declared": true,
+        "method": "paired_scenario_block_percentile_bootstrap",
+        "p_value_adjusted": 1.0,
+        "p_value_raw": 0.6136931534232883,
+        "replicates": 2000,
+        "seed": 8566001
+      },
+      "unit": "probability"
+    },
+    {
+      "availability_status": "available",
+      "comparison_arm": "component_probe",
+      "component_family": "safety_wrapper",
+      "component_id": "safety_wrapper",
+      "denominator": 6,
+      "effect": -0.01666666666666667,
+      "estimand": "comparison_minus_reference_mean",
+      "excluded_cells": [],
+      "interpretation_boundary": "Synthetic fixture calculation only; not release or benchmark evidence.",
+      "multiplicity": {
+        "declared": true,
+        "method": "holm_step_down",
+        "n_comparisons": 3,
+        "rejected": false,
+        "status": "applied"
+      },
+      "reference_arm": "baseline",
+      "source_ids": [
+        "issue_8566_fixture_rows"
+      ],
+      "source_refs": [
+        {
+          "path": "tests/fixtures/issue_8566_source_bound_component_contrasts/paired_rows.json",
+          "sha256": "49824d8a10e4865917de6ca501be8b00d1fe09bb34ce71ec3865b6bed797434b",
+          "source_id": "issue_8566_fixture_rows"
+        }
+      ],
+      "status": "diagnostic_only",
+      "support": 6,
+      "uncertainty": {
+        "ci_high": 0.0,
+        "ci_low": -0.05000000000000001,
+        "confidence": 0.95,
+        "declared": true,
+        "method": "paired_scenario_block_percentile_bootstrap",
+        "p_value_adjusted": 1.0,
+        "p_value_raw": 0.6136931534232883,
+        "replicates": 2000,
+        "seed": 8566001
+      },
+      "unit": "rate"
+    },
+    {
+      "availability_status": "available",
+      "comparison_arm": "component_probe",
+      "component_family": "snqi",
+      "component_id": "snqi",
+      "denominator": 6,
+      "effect": 0.003333333333333336,
+      "estimand": "comparison_minus_reference_mean",
+      "excluded_cells": [],
+      "interpretation_boundary": "Synthetic fixture calculation only; not release or benchmark evidence.",
+      "multiplicity": {
+        "declared": true,
+        "method": "holm_step_down",
+        "n_comparisons": 3,
+        "rejected": false,
+        "status": "applied"
+      },
+      "reference_arm": "baseline",
+      "source_ids": [
+        "issue_8566_fixture_rows"
+      ],
+      "source_refs": [
+        {
+          "path": "tests/fixtures/issue_8566_source_bound_component_contrasts/paired_rows.json",
+          "sha256": "49824d8a10e4865917de6ca501be8b00d1fe09bb34ce71ec3865b6bed797434b",
+          "source_id": "issue_8566_fixture_rows"
+        }
+      ],
+      "status": "diagnostic_only",
+      "support": 6,
+      "uncertainty": {
+        "ci_high": 0.020000000000000018,
+        "ci_low": -0.015000000000000013,
+        "confidence": 0.95,
+        "declared": true,
+        "method": "paired_scenario_block_percentile_bootstrap",
+        "p_value_adjusted": 1.0,
+        "p_value_raw": 0.7446276861569215,
+        "replicates": 2000,
+        "seed": 8566001
+      },
+      "unit": "score"
+    }
+  ],
+  "evidence_status": "not_benchmark_evidence",
+  "fixture": {
+    "comparison_arm": "component_probe",
+    "contrast_id": "fixture_reference_vs_component_probe",
+    "corpus_id": "issue_8566_synthetic_fixture",
+    "expected_pair_cells": 6,
+    "missing_pair_cells": [],
+    "observed_pair_cells": 6,
+    "reference_arm": "baseline",
+    "release_id": "issue_8566_synthetic_fixture_v1"
+  },
+  "fixture_coverage": [
+    {
+      "component_id": "terminal_outcome",
+      "reason": null,
+      "scenario_id": "fixture_corridor",
+      "seed": 111,
+      "status": "available"
+    },
+    {
+      "component_id": "safety_wrapper",
+      "reason": null,
+      "scenario_id": "fixture_corridor",
+      "seed": 111,
+      "status": "available"
+    },
+    {
+      "component_id": "snqi",
+      "reason": null,
+      "scenario_id": "fixture_corridor",
+      "seed": 111,
+      "status": "available"
+    },
+    {
+      "component_id": "terminal_outcome",
+      "reason": null,
+      "scenario_id": "fixture_corridor",
+      "seed": 112,
+      "status": "available"
+    },
+    {
+      "component_id": "safety_wrapper",
+      "reason": null,
+      "scenario_id": "fixture_corridor",
+      "seed": 112,
+      "status": "available"
+    },
+    {
+      "component_id": "snqi",
+      "reason": null,
+      "scenario_id": "fixture_corridor",
+      "seed": 112,
+      "status": "available"
+    },
+    {
+      "component_id": "terminal_outcome",
+      "reason": null,
+      "scenario_id": "fixture_crossing",
+      "seed": 111,
+      "status": "available"
+    },
+    {
+      "component_id": "safety_wrapper",
+      "reason": null,
+      "scenario_id": "fixture_crossing",
+      "seed": 111,
+      "status": "available"
+    },
+    {
+      "component_id": "snqi",
+      "reason": null,
+      "scenario_id": "fixture_crossing",
+      "seed": 111,
+      "status": "available"
+    },
+    {
+      "component_id": "terminal_outcome",
+      "reason": null,
+      "scenario_id": "fixture_crossing",
+      "seed": 112,
+      "status": "available"
+    },
+    {
+      "component_id": "safety_wrapper",
+      "reason": null,
+      "scenario_id": "fixture_crossing",
+      "seed": 112,
+      "status": "available"
+    },
+    {
+      "component_id": "snqi",
+      "reason": null,
+      "scenario_id": "fixture_crossing",
+      "seed": 112,
+      "status": "available"
+    },
+    {
+      "component_id": "terminal_outcome",
+      "reason": null,
+      "scenario_id": "fixture_doorway",
+      "seed": 111,
+      "status": "available"
+    },
+    {
+      "component_id": "safety_wrapper",
+      "reason": null,
+      "scenario_id": "fixture_doorway",
+      "seed": 111,
+      "status": "available"
+    },
+    {
+      "component_id": "snqi",
+      "reason": null,
+      "scenario_id": "fixture_doorway",
+      "seed": 111,
+      "status": "available"
+    },
+    {
+      "component_id": "terminal_outcome",
+      "reason": null,
+      "scenario_id": "fixture_doorway",
+      "seed": 112,
+      "status": "available"
+    },
+    {
+      "component_id": "safety_wrapper",
+      "reason": null,
+      "scenario_id": "fixture_doorway",
+      "seed": 112,
+      "status": "available"
+    },
+    {
+      "component_id": "snqi",
+      "reason": null,
+      "scenario_id": "fixture_doorway",
+      "seed": 112,
+      "status": "available"
+    }
+  ],
+  "issue": 8566,
+  "lineage_guard": {
+    "prohibited_pooling": [
+      "august_b1d5",
+      "september_59577"
+    ],
+    "retained_lineages": [
+      {
+        "id": "august_b1d5",
+        "release_id": "paper-matrix-v2-h600-s30-2026-08-cd831d7582c1",
+        "source_commit": "b1d5ab6de708385c0828c99501a9d1c29727ec11",
+        "source_ids": [
+          "august_b1d5_release_metadata"
+        ]
+      },
+      {
+        "id": "september_59577",
+        "release_id": "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1",
+        "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+        "source_ids": [
+          "september_59577_erratum_metadata",
+          "september_59577_recovery_metadata"
+        ]
+      }
+    ],
+    "rule": "Keep release lineages separate; no cross-release pooled estimate is emitted.",
+    "status": "enforced"
+  },
+  "provenance": {
+    "base_commit": "0a60f9c225599be21581d9b44e2f02bb4eee31bf",
+    "config": {
+      "path": "configs/analysis/issue_8566_source_bound_uncertainty_component_contrasts.yaml",
+      "sha256": "35a943944181040bc6acc54fca5bb72e75f89904daaebd88e14584343847609b"
+    },
+    "fixture": {
+      "path": "tests/fixtures/issue_8566_source_bound_component_contrasts/paired_rows.json",
+      "sha256": "49824d8a10e4865917de6ca501be8b00d1fe09bb34ce71ec3865b6bed797434b",
+      "source_id": "issue_8566_fixture_rows"
+    },
+    "generator": {
+      "path": "robot_sf/benchmark/source_bound_component_contrasts.py",
+      "sha256": "24be6fbb2b36db6048f58d39aadedb6278faa5cb39991a373573f4be77b793c1"
+    },
+    "source_bindings": [
+      {
+        "kind": "synthetic_fixture",
+        "path": "tests/fixtures/issue_8566_source_bound_component_contrasts/paired_rows.json",
+        "sha256": "49824d8a10e4865917de6ca501be8b00d1fe09bb34ce71ec3865b6bed797434b",
+        "source_commit": null,
+        "source_id": "issue_8566_fixture_rows",
+        "tracked_commit": null
+      },
+      {
+        "kind": "release_metadata",
+        "path": "configs/publication/dissertation_coverage_v1.yaml",
+        "release_id": "paper-matrix-v2-h600-s30-2026-08-cd831d7582c1",
+        "sha256": "4e6cc0ea1c1cf5da0db1607d1bdfa5779a40ac051f8b7d43d8b21cf16cd01f4c",
+        "source_commit": "b1d5ab6de708385c0828c99501a9d1c29727ec11",
+        "source_id": "august_b1d5_release_metadata",
+        "tracked_commit": "0a60f9c225599be21581d9b44e2f02bb4eee31bf"
+      },
+      {
+        "kind": "release_metadata",
+        "path": "configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json",
+        "release_id": "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1",
+        "sha256": "94a572c4e61174b952501c6ea836c3b41b18425f29f2c693fe43a6a711402bfc",
+        "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+        "source_id": "september_59577_erratum_metadata",
+        "tracked_commit": "0a60f9c225599be21581d9b44e2f02bb4eee31bf"
+      },
+      {
+        "kind": "release_metadata",
+        "path": "configs/benchmarks/releases/recovery/job_15180_59577bad_recovery_v1.json",
+        "release_id": "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880",
+        "sha256": "00d046f727a587a3541e91ace136b4c20cf9e238937de7ba2ec8c47474128693",
+        "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+        "source_id": "september_59577_recovery_metadata",
+        "tracked_commit": "0a60f9c225599be21581d9b44e2f02bb4eee31bf"
+      }
+    ]
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_8566_source_bound_component_contrasts.v1",
+  "semantics": {
+    "benchmark_evidence": false,
+    "campaign_executed": false,
+    "claim_promotion": "none",
+    "degraded_rows": 0,
+    "external_artifact_hydrated": false,
+    "fallback_rows": 0,
+    "new_episode_created": false
+  },
+  "source_coverage": [
+    {
+      "component_coverage": [
+        {
+          "component_id": "terminal_outcome",
+          "denominator": 24,
+          "denominator_status": "declared",
+          "reason": "The authenticated immutable #7980 source packet is intentionally not hydrated by this fixture-only slice; no external artifact bytes were consumed.",
+          "status": "unavailable",
+          "support": 0,
+          "uncertainty": {
+            "method": "paired_scenario_block_percentile_bootstrap",
+            "status": "not_available"
+          }
+        },
+        {
+          "component_id": "safety_wrapper",
+          "denominator": 24,
+          "denominator_status": "declared",
+          "reason": "The authenticated immutable #7980 source packet is intentionally not hydrated by this fixture-only slice; no external artifact bytes were consumed.",
+          "status": "unavailable",
+          "support": 0,
+          "uncertainty": {
+            "method": "paired_scenario_block_percentile_bootstrap",
+            "status": "not_available"
+          }
+        },
+        {
+          "component_id": "snqi",
+          "denominator": 24,
+          "denominator_status": "declared",
+          "reason": "The authenticated immutable #7980 source packet is intentionally not hydrated by this fixture-only slice; no external artifact bytes were consumed.",
+          "status": "unavailable",
+          "support": 0,
+          "uncertainty": {
+            "method": "paired_scenario_block_percentile_bootstrap",
+            "status": "not_available"
+          }
+        }
+      ],
+      "expected_contrast_count": 24,
+      "expected_source_rows": 2160,
+      "owner_issue": 7980,
+      "release_id": "issue_5578_native_speed_tier_job_13828_v0",
+      "source_commit": "481164b08d861e4af9777fe35734f88bda2754e9",
+      "source_uri": "wandb-artifact://ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
+      "status": "unavailable_in_fixture_slice",
+      "target_id": "issue_7980_exact_24_contrasts"
+    },
+    {
+      "component_coverage": [
+        {
+          "component_id": "terminal_outcome",
+          "denominator": null,
+          "denominator_status": "not_available",
+          "reason": "September release metadata is tracked, but source-complete episode rows are not a tracked input here; component contrast coverage remains unavailable until independently supplied.",
+          "status": "unavailable",
+          "support": 0,
+          "uncertainty": {
+            "method": "paired_scenario_block_percentile_bootstrap",
+            "status": "not_available"
+          }
+        },
+        {
+          "component_id": "safety_wrapper",
+          "denominator": null,
+          "denominator_status": "not_available",
+          "reason": "September release metadata is tracked, but source-complete episode rows are not a tracked input here; component contrast coverage remains unavailable until independently supplied.",
+          "status": "unavailable",
+          "support": 0,
+          "uncertainty": {
+            "method": "paired_scenario_block_percentile_bootstrap",
+            "status": "not_available"
+          }
+        },
+        {
+          "component_id": "snqi",
+          "denominator": null,
+          "denominator_status": "not_available",
+          "reason": "September release metadata is tracked, but source-complete episode rows are not a tracked input here; component contrast coverage remains unavailable until independently supplied.",
+          "status": "unavailable",
+          "support": 0,
+          "uncertainty": {
+            "method": "paired_scenario_block_percentile_bootstrap",
+            "status": "not_available"
+          }
+        }
+      ],
+      "expected_contrast_count": null,
+      "expected_source_rows": 20160,
+      "owner_issue": 6102,
+      "release_id": "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1",
+      "source_commit": "59577bad289dd692ba3580e1600c4a649ae27880",
+      "source_uri": "recorded_source_campaign_root_not_hydrated",
+      "status": "unavailable_in_fixture_slice",
+      "target_id": "september_s30_h600_source_rows"
+    }
+  ],
+  "status": "diagnostic_only"
+}

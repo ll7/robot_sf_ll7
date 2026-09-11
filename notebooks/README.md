@@ -68,7 +68,20 @@ stays in sync:
 uv run python scripts/dev/generate_quickstart_notebooks.py
 # Verify committed notebooks match the generator without writing:
 uv run python scripts/dev/generate_quickstart_notebooks.py --check
+# Same check with the full canonical parity report:
+uv run python scripts/dev/generate_quickstart_notebooks.py --check --json
 ```
+
+`--check` rebuilds each notebook in memory, strips execution counts, outputs, transient cell ids,
+widget state, and environment-specific metadata, and compares canonical JSON against the committed
+file. It fails closed when a committed notebook is missing, drifts in source or stable metadata, or
+contains executed output or an execution count. The report names the exact mismatch paths and stable
+reason codes (`cell_source_changed`, `metadata_changed`, `cell_structure_changed`,
+`content_changed`, `transient_state_present`, `missing_committed_notebook`).
+
+The notebook smoke (`scripts/validation/run_notebooks_smoke.py`) runs the same parity check before
+executing the notebooks, so a hand-edited or executed notebook fails CI before any kernel starts.
+Use `--skip-parity` only for a deliberately local execution-only probe.
 
 ## CI
 

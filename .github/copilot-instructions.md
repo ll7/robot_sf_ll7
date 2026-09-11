@@ -8,15 +8,15 @@ official [dev_guide](../docs/dev_guide.md) as the primary reference.
 
 ## Copilot-Specific Instructions
 
+- Task-to-guidance routing is owned by `docs/ai/agent_workflow_entrypoints.md`; select the matching
+  route there and load only its required context.
 - Use scriptable interfaces instead of CLI interfaces when possible.
-- Source the environment before using python or uv: `source .venv/bin/activate`.
 - For GitHub issue batches and Project #5 writes, follow the batch-first workflow in
   `docs/context/issue_713_batch_first_issue_workflow.md`.
 - For interactive issue, PR, and project work, prefer GitHub MCP / GitHub app tools; keep `gh`
   for deterministic batch automation, score sync, and auth/debugging fallback.
 - Follow the [coding-agent compatibility note](../docs/context/issue_728_coding_agents_compatibility.md).
-- For any changes that affect users, update the `CHANGELOG.md` file.
-- Link new documentation (sub-)pages in the appropriate section of `docs/README.md`.
+- For human-facing changes, follow `docs/dev_guide.md` for changelog and documentation-index updates.
 
-All other workflow, validation, evidence, and publication rules live in `AGENTS.md`,
-`docs/maintainer_values.md`, and `docs/dev_guide.md` — do not duplicate them here.
+All other workflow, validation, evidence, and publication rules live in `AGENTS.md`, the
+canonical task-owner guides, and `docs/dev_guide.md`; do not duplicate them here.

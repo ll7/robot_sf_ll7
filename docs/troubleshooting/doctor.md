@@ -15,6 +15,11 @@ uv run robot-sf doctor
 uv run robot-sf doctor --format json --skip-env-smoke --skip-quickstart-smoke
 ```
 
+If a university host, scheduler, or private mount is no longer available, continue with the
+[post-access restoration and local-analysis runbook](../post_access_local_analysis_runbook.md). It
+keeps optional capabilities and unavailable artifacts explicit instead of treating them as setup
+success.
+
 The shell examples are cross-platform `uv` commands. Where a later example
 uses POSIX-shell syntax such as `VAR=value`, `touch`, `rm`, or a pipeline, use
 the equivalent command for PowerShell or another platform shell.

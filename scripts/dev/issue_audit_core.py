@@ -172,6 +172,10 @@ TYPE_PREFIX = "type:"
 EVIDENCE_PREFIX = "evidence:"
 DECISION_LABEL = "decision-required"
 TRIAGE_LABEL = "needs-triage"
+# Readiness already records a completed triage decision. Never add the triage
+# label on top of it: ready and triage are mutually exclusive, and a later
+# bulk sweep must not re-block an issue the repository has already triaged.
+READY_LABEL = "state:ready"
 REVIEW_STATE_LABEL = "state:review"
 PARENT_LABELS = frozenset({"epic", "parent", "type:epic"})
 BLOCKED_LABELS = frozenset({"state:blocked", "state:blocked-external-input"})
@@ -4085,7 +4089,11 @@ def classify_issue(
                     "declined state:blocked label because no blocked-triage-v1 or "
                     "Blocked-by reference is present"
                 )
-                if TRIAGE_LABEL not in labels and _available(TRIAGE_LABEL, available_labels):
+                if (
+                    TRIAGE_LABEL not in labels
+                    and READY_LABEL not in labels
+                    and _available(TRIAGE_LABEL, available_labels)
+                ):
                     mutations.append(
                         _mutation(
                             "add_label",
@@ -4098,6 +4106,11 @@ def classify_issue(
                             evidence=[item["text"] for item in blocker_evidence],
                         )
                     )
+                elif READY_LABEL in labels:
+                    findings.append(
+                        "declined needs-triage because state:ready already records triage; "
+                        "the unexplained blocker is reported for maintainer review"
+                    )
         else:
             findings.append(f"cannot add unavailable blocker label {target}")
     elif gate_blocked:
@@ -4105,7 +4118,11 @@ def classify_issue(
             "already-present" if blocked_reason_evidence else "existing-unexplained"
         )
         if not blocked_reason_evidence:
-            if TRIAGE_LABEL not in labels and _available(TRIAGE_LABEL, available_labels):
+            if (
+                TRIAGE_LABEL not in labels
+                and READY_LABEL not in labels
+                and _available(TRIAGE_LABEL, available_labels)
+            ):
                 mutations.append(
                     _mutation(
                         "add_label",
@@ -4117,6 +4134,11 @@ def classify_issue(
                         ),
                         evidence=[item["text"] for item in blocker_evidence],
                     )
+                )
+            elif READY_LABEL in labels:
+                findings.append(
+                    "declined needs-triage because state:ready already records triage; "
+                    "the existing unexplained blocker is reported for maintainer review"
                 )
             findings.append("existing blocked state lacks a blocked-triage-v1 or Blocked-by reason")
 

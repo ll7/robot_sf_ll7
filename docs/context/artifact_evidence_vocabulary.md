@@ -30,6 +30,12 @@ For the check-only guard that decides when one artifact or output identity may b
 For the complete post-access restore and local-analysis sequence, see the
 [post-access restoration and local-analysis runbook](../post_access_local_analysis_runbook.md).
 
+Tool-specific contracts live in their own `docs/context/<tool>.md` note and are linked from a stable
+location in this file (this section), not as a new top-level section per tool. Keeping the shared
+vocabulary free of appended per-tool sections avoids parallel-merge conflicts and CI restarts when
+several tooling PRs land together; the note-maintenance convention is documented in the
+[Context Notes Workflow](README.md#per-tool-contract-notes).
+
 ## Vocabulary
 
 | Category | Meaning | May cite `output/`? | Acceptable reference |

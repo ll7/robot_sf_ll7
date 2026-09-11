@@ -23,6 +23,17 @@ When quoting readiness counts, use the named selectors in
 [`docs/dev/local_ci.md`](../../docs/dev/local_ci.md#readiness-count-selectors),
 including `--collect-only -q` when only the collected count is needed.
 
+[`check_base_drift.py`](check_base_drift.py) backs the readiness gate's base-drift recheck (issue
+#5782). The gate captures the concrete base SHA before the expensive lanes and invokes this check
+immediately before recording the stamp, so it can tell whether `origin/main` moved during the run.
+Drift that touches none of the PR's changed files recommends reuse; drift that intersects them
+requires revalidation. One regenerable exception exists: when the intersection is exactly
+`scripts/validation/docstring_todo_baseline.json`, the gate re-runs the targeted docstring baseline
+and ratchet gates and, only on success, revalidates through that narrow path with a recorded
+`baseline_revalidation` receipt; mixed drift stays fail-closed. The checker exits `0` when the base
+is current or the drift is reusable, `1` when revalidation is required, and `2` when the base ref
+or drift cannot be resolved.
+
 The native merge queue enforcement path is
 [`merge_queue_gate.py`](merge_queue_gate.py), invoked by
 [`.github/workflows/merge-queue-gate.yml`](../../.github/workflows/merge-queue-gate.yml)

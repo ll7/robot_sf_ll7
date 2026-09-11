@@ -11,7 +11,7 @@ from robot_sf.nav.map_config import MapDefinitionPool
 
 
 def test_multi_pedestrian_map_definition():
-    """TODO docstring. Document this function."""
+    """The multi-pedestrian map holds four pedestrians whose goal/trajectory fields match their type."""
     map_def = create_multi_pedestrian_map()
     assert len(map_def.single_pedestrians) == 4  # T033: exactly 4 single pedestrians
     ids = {ped.id for ped in map_def.single_pedestrians}
@@ -30,7 +30,7 @@ def test_multi_pedestrian_map_definition():
 
 
 def test_multi_pedestrian_env_smoke():
-    """TODO docstring. Document this function."""
+    """An env built from the multi-pedestrian map resets and steps for ten random actions."""
     map_def = create_multi_pedestrian_map()
     pool = MapDefinitionPool(map_defs={"multi_ped": map_def})
     config = RobotSimulationConfig()

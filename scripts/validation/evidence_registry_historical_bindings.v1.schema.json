@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot.sf/schemas/evidence_registry_historical_bindings.v1.schema.json",
+  "title": "Robot SF historical evidence registry bindings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "repository",
+    "reviewed_ancestry_anchor",
+    "bindings"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "scripts/validation/evidence_registry_historical_bindings.v1.schema.json"
+    },
+    "schema_version": {
+      "const": "robot_sf.evidence_registry_historical_bindings.v1"
+    },
+    "repository": {
+      "const": "ll7/robot_sf_ll7"
+    },
+    "reviewed_ancestry_anchor": {
+      "$ref": "#/$defs/sha1"
+    },
+    "bindings": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/binding"
+      }
+    }
+  },
+  "$defs": {
+    "sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\].*(?<!/)$"
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "reviewed_ancestry_anchor",
+        "consumer_path",
+        "consumer_sha256",
+        "consumer_blob_sha1",
+        "reference_locator",
+        "reference_path",
+        "declared_sha256",
+        "producer_commit",
+        "producer_tree",
+        "producer_reference_sha256",
+        "producer_reference_blob_sha1",
+        "producer_consumer_sha256",
+        "producer_consumer_blob_sha1",
+        "parent_commit",
+        "parent_reference_sha256"
+      ],
+      "properties": {
+        "repository": {
+          "const": "ll7/robot_sf_ll7"
+        },
+        "reviewed_ancestry_anchor": {
+          "$ref": "#/$defs/sha1"
+        },
+        "consumer_path": {
+          "$ref": "#/$defs/path"
+        },
+        "consumer_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "consumer_blob_sha1": {
+          "$ref": "#/$defs/sha1"
+        },
+        "reference_locator": {
+          "type": "string",
+          "description": "RFC 6901 pointer syntax; array-index grammar is enforced during evaluation.",
+          "pattern": "^/(?:[^~/]|~[01])*(?:/(?:[^~/]|~[01])*)*$"
+        },
+        "reference_path": {
+          "$ref": "#/$defs/path"
+        },
+        "declared_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "producer_commit": {
+          "$ref": "#/$defs/sha1"
+        },
+        "producer_tree": {
+          "$ref": "#/$defs/sha1"
+        },
+        "producer_reference_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "producer_reference_blob_sha1": {
+          "$ref": "#/$defs/sha1"
+        },
+        "producer_consumer_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "producer_consumer_blob_sha1": {
+          "$ref": "#/$defs/sha1"
+        },
+        "parent_commit": {
+          "$ref": "#/$defs/sha1"
+        },
+        "parent_reference_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

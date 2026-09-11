@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
+import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -27,6 +27,9 @@ CONFLICT_CODES = set(
     "unit_display_drift ambiguous_role missing_check_command source_material_mismatch "
     "schema_source_mismatch".split()
 )
+_READER_CHILD = """import importlib.util,sys;from pathlib import Path
+s=importlib.util.spec_from_file_location('r',sys.argv[1]);m=importlib.util.module_from_spec(s);sys.modules[s.name]=m
+s.loader.exec_module(m);getattr(m,sys.argv[2])(Path(sys.argv[3]))"""
 
 
 def _sha256_file(path: Path) -> str:
@@ -160,28 +163,28 @@ def _rooted_path(
 def _execute_reader(
     root: Path, output: Path, reader: Mapping[str, Any], location: str
 ) -> dict[str, str] | None:
+    source = _rooted_path(root, str(reader["source_path"]), location, [])
+    if source is None or not _digest_matches(source, str(reader["source_sha256"])):
+        return _error("reader_schema_mismatch", location, "reader source binding is invalid")
     try:
-        source = (root / str(reader["source_path"])).resolve()
-        source.relative_to(root.resolve())
-        if not _digest_matches(source, str(reader["source_sha256"])):
-            raise ImportError("reader source digest differs")
-        if str(reader["symbol"]) not in source.read_text(encoding="utf-8"):
-            raise ImportError("reader symbol is absent from source")
-        if reader.get("execution") != "python_path":
-            return _error("reader_unavailable", f"{location}.execution", "reader hook is missing")
-        spec = importlib.util.spec_from_file_location("_compute_window_inventory_reader", source)
-        if spec is None or spec.loader is None:
-            raise ImportError("reader source has no import loader")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-        reader_fn = getattr(module, str(reader["symbol"]))
-        if not callable(reader_fn):
-            raise TypeError("reader symbol is not callable")
-        reader_fn(output)
-        sys.modules.pop(spec.name, None)
-    except Exception as exc:  # noqa: BLE001 - reader failures must fail closed.
-        return _error("reader_schema_mismatch", location, f"reader rejected: {type(exc).__name__}")
+        source_text = source.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return _error("reader_schema_mismatch", location, "reader source is unreadable")
+    if str(reader["symbol"]) not in source_text:
+        return _error("reader_schema_mismatch", location, "reader symbol is absent from source")
+    if reader.get("execution") != "python_path":
+        return _error("reader_unavailable", f"{location}.execution", "reader hook is missing")
+    try:
+        process = subprocess.run(
+            [sys.executable, "-c", _READER_CHILD, str(source), str(reader["symbol"]), str(output)],
+            cwd=root,
+            check=False,
+            capture_output=True,
+        )
+    except OSError:
+        return _error("reader_schema_mismatch", location, "reader execution could not start")
+    if process.returncode != 0:
+        return _error("reader_schema_mismatch", location, "reader rejected: child process failed")
     return None
 
 

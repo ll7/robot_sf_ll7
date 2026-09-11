@@ -14,10 +14,8 @@ from scripts.tools import compute_window_schema_reader_inventory as inventory
 def _write(root: Path, relative: str, payload: object) -> Path:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
-    if isinstance(payload, str):
-        path.write_text(payload, encoding="utf-8")
-    else:
-        path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    text = payload if isinstance(payload, str) else json.dumps(payload, sort_keys=True) + "\n"
+    path.write_text(text, encoding="utf-8")
     return path
 
 
@@ -25,16 +23,31 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _packet(*roles: dict) -> dict:
+    return {"schema_version": inventory.SCHEMA, "issue": 8861, "roles": list(roles)}
+
+
 def _role(root: Path, name: str, fmt: str, *, adapter: bool = False) -> dict:
     version = f"{name}.v1"
     units_display = {"distance": {"unit": "m", "display": "Distance (m)"}}
     schema_units_display = json.loads(json.dumps(units_display))
     output = _write(root, f"outputs/{name}.json", {"schema_version": version, "rows": []})
-    source = _write(root, f"readers/{name}.py", f"def read_{name}(): pass\n")
+    source = _write(
+        root,
+        f"readers/{name}.py",
+        f"# {name}.schema {version}\ndef read_{name}(path): return path\n",
+    )
     source_path = source.relative_to(root).as_posix()
     source_sha = _sha(source)
     source_ref = {"path": source_path, "sha256": source_sha}
     source_kinds = ["schema", "reader"] + (["adapter"] if adapter else [])
+    compatibility = {"mode": "declared_adapter" if adapter else "native"}
+    if adapter:
+        compatibility.update(
+            adapter_symbol=f"read_{name}",
+            adapter_source_path=source_path,
+            adapter_source_sha256=source_sha,
+        )
     return {
         "role": name,
         "path": output.relative_to(root).as_posix(),
@@ -51,18 +64,10 @@ def _role(root: Path, name: str, fmt: str, *, adapter: bool = False) -> dict:
             "source_path": source_path,
             "source_sha256": source_sha,
             "available": True,
+            "execution": "python_path",
         },
         "dependencies": [],
-        "compatibility": (
-            {
-                "mode": "declared_adapter",
-                "adapter_symbol": f"read_{name}",
-                "adapter_source_path": source_path,
-                "adapter_source_sha256": source_sha,
-            }
-            if adapter
-            else {"mode": "native"}
-        ),
+        "compatibility": compatibility,
         "units_display": units_display,
         "source_material": [{**source_ref, "kind": kind} for kind in source_kinds],
         "check_command": f"uv run python scripts/tools/check_{name}.py --check",
@@ -81,13 +86,14 @@ def test_all_representative_formats_are_deterministic(tmp_path: Path) -> None:
     (tmp_path / "outputs/episodes.json").write_text(
         '{"schema_version": "episodes.v1", "episode_id": "e1"}\n', encoding="utf-8"
     )
-    packet = {"schema_version": inventory.SCHEMA, "issue": 8861, "roles": list(reversed(roles))}
+    packet = _packet(*reversed(roles))
     first = inventory.build_inventory(packet, tmp_path)
     second = inventory.build_inventory(packet, tmp_path)
     assert first == second and first["ok"]
     assert [role["role"] for role in first["roles"]] == sorted(role["role"] for role in roles)
-    assert next(role for role in first["roles"] if role["role"] == "migrated")["status"] == (
-        "readable_with_declared_adapter"
+    assert (
+        next(role for role in first["roles"] if role["role"] == "migrated")["status"]
+        == "readable_with_declared_adapter"
     )
 
 
@@ -101,6 +107,8 @@ def test_all_representative_formats_are_deterministic(tmp_path: Path) -> None:
         ("wrong_digest", "conflict", "reader_schema_mismatch"),
         ("missing_dependency", "conflict", "optional_dependency_gap"),
         ("unit_drift", "conflict", "unit_display_drift"),
+        ("missing_source_material", "schema_only", "missing_source_material"),
+        ("stale_adapter", "conflict", "stale_adapter"),
         ("absolute_path", "conflict", "hidden_absolute_path"),
         ("missing_check_command", "conflict", "missing_field"),
         ("missing_role", "conflict", "ambiguous_role"),
@@ -122,14 +130,14 @@ def test_fail_closed_states_are_explicit(
             dependencies=[{"name": "pyarrow", "required": True, "available": False}]
         ),
         "unit_drift": lambda: role["units_display"]["distance"].update(unit="km"),
+        "missing_source_material": lambda: role.update(source_material=[]),
+        "stale_adapter": lambda: role.update(compatibility={"mode": "declared_adapter"}),
         "absolute_path": lambda: role.update(path="/tmp/fixture.json"),
         "missing_check_command": lambda: role.pop("check_command"),
         "missing_role": lambda: role.update(role=""),
     }
     mutations[mutation]()
-    report = inventory.build_inventory(
-        {"schema_version": inventory.SCHEMA, "issue": 8861, "roles": [role]}, tmp_path
-    )
+    report = inventory.build_inventory(_packet(role), tmp_path)
     assert report["ok"] is False
     assert report["roles"][0]["status"] == status
     assert code in {error["code"] for error in report["errors"]}
@@ -137,13 +145,12 @@ def test_fail_closed_states_are_explicit(
 
 def test_cli_json_and_table_exit_codes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     role = _role(tmp_path, "fixture", "json")
-    packet = _write(
-        tmp_path,
-        "packet.json",
-        {"schema_version": inventory.SCHEMA, "issue": 8861, "roles": [role]},
-    )
+    packet = _write(tmp_path, "packet.json", _packet(role))
     assert inventory.main(["--packet", str(packet), "--check"]) == 0
-    assert json.loads(capsys.readouterr().out)["status"] == "ok"
+    first = capsys.readouterr().out
+    assert json.loads(first)["status"] == "ok"
+    assert inventory.main(["--packet", str(packet), "--check"]) == 0
+    assert capsys.readouterr().out == first
     assert inventory.main(["--packet", str(packet), "--format", "table"]) == 0
     assert "role | format | schema | status" in capsys.readouterr().out
 
@@ -151,11 +158,7 @@ def test_cli_json_and_table_exit_codes(tmp_path: Path, capsys: pytest.CaptureFix
 def test_cli_table_is_fail_closed_for_malformed_role(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    packet = _write(
-        tmp_path,
-        "packet.json",
-        {"schema_version": inventory.SCHEMA, "issue": 8861, "roles": [{"role": "broken"}]},
-    )
+    packet = _write(tmp_path, "packet.json", _packet({"role": "broken"}))
     assert inventory.main(["--packet", str(packet), "--format", "table"]) == 2
     assert "broken | ? | ?@? | conflict" in capsys.readouterr().out
 
@@ -166,20 +169,50 @@ def test_checked_in_active_role_manifest_is_readable() -> None:
         root / "tests/fixtures/compute_window_schema_reader_inventory/active_roles.json"
     )
     report = inventory.build_inventory(packet, root)
-    assert report["ok"], report
     assert {role["format"] for role in report["roles"]} == inventory.FORMATS
+    assert not report["ok"]
+    statuses = {role["role"]: role["status"] for role in report["roles"]}
+    assert statuses["simulation_trace_export"] == "readable_verified"
+    assert statuses["research_yield_snapshot"] == "readable_verified"
+    assert set(statuses.values()) == {"readable_verified", "reader_unavailable"}
 
 
-def test_source_material_cannot_be_an_unrelated_digest_valid_file(tmp_path: Path) -> None:
+def test_reader_hook_rejects_bytes_accepted_by_lightweight_parser(tmp_path: Path) -> None:
     role = _role(tmp_path, "fixture", "json")
-    unrelated = _write(tmp_path, "readers/unrelated.py", "def unrelated(): pass\n")
-    role["source_material"][0] = {
-        "kind": "schema",
-        "path": unrelated.relative_to(tmp_path).as_posix(),
-        "sha256": _sha(unrelated),
-    }
-    report = inventory.build_inventory(
-        {"schema_version": inventory.SCHEMA, "issue": 8861, "roles": [role]}, tmp_path
+    source = _write(
+        tmp_path,
+        "readers/reject.py",
+        "# fixture.schema fixture.v1\ndef read_fixture(path): raise ValueError('reject')\n",
     )
+    source_path, source_sha = source.relative_to(tmp_path).as_posix(), _sha(source)
+    for part in (role["schema"], role["reader"]):
+        part.update(source_path=source_path, source_sha256=source_sha)
+    role["source_material"] = [
+        {"kind": kind, "path": source_path, "sha256": source_sha} for kind in ("schema", "reader")
+    ]
+    report = inventory.build_inventory(_packet(role), tmp_path)
+    assert report["roles"][0]["status"] == "conflict"
+    assert any(
+        error["code"] == "reader_schema_mismatch" and "reader rejected" in error["message"]
+        for error in report["errors"]
+    )
+
+
+def test_schema_binding_rejects_unrelated_digest_valid_source(tmp_path: Path) -> None:
+    role = _role(tmp_path, "fixture", "json")
+    unrelated = _write(tmp_path, "readers/unrelated.py", "def unrelated(path): pass\n")
+    path, digest = unrelated.relative_to(tmp_path).as_posix(), _sha(unrelated)
+    role["source_material"][0] = {"kind": "schema", "path": path, "sha256": digest}
+    report = inventory.build_inventory(_packet(role), tmp_path)
     assert report["roles"][0]["status"] == "conflict"
     assert "source_material_mismatch" in {error["code"] for error in report["errors"]}
+    role["schema"].update(source_path=path, source_sha256=digest)
+    report = inventory.build_inventory(_packet(role), tmp_path)
+    assert "schema_source_mismatch" in {error["code"] for error in report["errors"]}
+
+
+def test_duplicate_roles_are_conflicts(tmp_path: Path) -> None:
+    role = _role(tmp_path, "fixture", "json")
+    report = inventory.build_inventory(_packet(role, role), tmp_path)
+    assert report["ok"] is False
+    assert sum(error["code"] == "ambiguous_role" for error in report["errors"]) == 1

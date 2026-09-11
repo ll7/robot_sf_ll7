@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import sys
 from collections.abc import Mapping
@@ -23,7 +24,8 @@ REQUIRED_ROLE_FIELDS = {
 }
 CONFLICT_CODES = set(
     "hidden_absolute_path reader_schema_mismatch optional_dependency_gap stale_adapter "
-    "unit_display_drift ambiguous_role missing_check_command source_material_mismatch".split()
+    "unit_display_drift ambiguous_role missing_check_command source_material_mismatch "
+    "schema_source_mismatch".split()
 )
 
 
@@ -46,13 +48,17 @@ def _error(code: str, location: str, message: str) -> dict[str, str]:
     return {"code": code, "location": location, "message": message}
 
 
+def _add_error(errors: list[dict[str, str]], code: str, location: str, message: str) -> None:
+    errors.append(_error(code, location, message))
+
+
 def _relative_path(value: Any, location: str, errors: list[dict[str, str]]) -> str | None:
     if not isinstance(value, str) or not value:
         errors.append(_error("invalid_path", location, "path must be non-empty"))
         return None
     path = PurePosixPath(value)
     windows_path = PureWindowsPath(value)
-    if (
+    invalid = (
         path.is_absolute()
         or windows_path.is_absolute()
         or windows_path.drive
@@ -61,22 +67,21 @@ def _relative_path(value: Any, location: str, errors: list[dict[str, str]]) -> s
         or "\\" in value
         or value.startswith("~")
         or any(ord(character) < 32 for character in value)
-    ):
-        errors.append(
-            _error("hidden_absolute_path", location, "path must be normalized and relative")
-        )
+    )
+    if invalid:
+        _add_error(errors, "hidden_absolute_path", location, "path must be normalized and relative")
         return None
     return value
 
 
 def _digest(value: Any, location: str, errors: list[dict[str, str]]) -> str | None:
     if not isinstance(value, str) or len(value) != SHA256_LENGTH:
-        errors.append(_error("invalid_digest", location, "sha256 must be 64 hex characters"))
+        _add_error(errors, "invalid_digest", location, "sha256 must be 64 hex characters")
         return None
     try:
         int(value, 16)
     except ValueError:
-        errors.append(_error("invalid_digest", location, "sha256 must be hexadecimal"))
+        _add_error(errors, "invalid_digest", location, "sha256 must be hexadecimal")
         return None
     return value
 
@@ -131,8 +136,7 @@ def _load_and_validate_bytes(
     payloads, reason = _load_representative_payloads(path, fmt)
     if reason:
         return False, reason
-    assert payloads is not None
-    for payload in payloads:
+    for payload in payloads or []:
         if _representative_schema_version(payload) != expected_version:
             return False, "representative bytes have a schema-version mismatch"
     return True, None
@@ -148,9 +152,62 @@ def _rooted_path(
         candidate = (root / relative).resolve()
         candidate.relative_to(root_resolved)
     except (OSError, RuntimeError, ValueError):
-        errors.append(_error("hidden_absolute_path", location, "path resolves outside source root"))
+        _add_error(errors, "hidden_absolute_path", location, "path resolves outside source root")
         return None
     return candidate
+
+
+def _execute_reader(
+    root: Path, output: Path, reader: Mapping[str, Any], location: str
+) -> dict[str, str] | None:
+    try:
+        source = (root / str(reader["source_path"])).resolve()
+        source.relative_to(root.resolve())
+        if not _digest_matches(source, str(reader["source_sha256"])):
+            raise ImportError("reader source digest differs")
+        if str(reader["symbol"]) not in source.read_text(encoding="utf-8"):
+            raise ImportError("reader symbol is absent from source")
+        if reader.get("execution") != "python_path":
+            return _error("reader_unavailable", f"{location}.execution", "reader hook is missing")
+        spec = importlib.util.spec_from_file_location("_compute_window_inventory_reader", source)
+        if spec is None or spec.loader is None:
+            raise ImportError("reader source has no import loader")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        reader_fn = getattr(module, str(reader["symbol"]))
+        if not callable(reader_fn):
+            raise TypeError("reader symbol is not callable")
+        reader_fn(output)
+        sys.modules.pop(spec.name, None)
+    except Exception as exc:  # noqa: BLE001 - reader failures must fail closed.
+        return _error("reader_schema_mismatch", location, f"reader rejected: {type(exc).__name__}")
+    return None
+
+
+def _schema_source_error(
+    root: Path,
+    path: str | None,
+    name: Any,
+    version: Any,
+    location: str,
+) -> dict[str, str] | None:
+    if not path or not isinstance(name, str) or not isinstance(version, str):
+        return None
+    source = _rooted_path(root, path, location, [])
+    if source is None:
+        return _error("schema_source_mismatch", location, "source is outside root")
+    try:
+        text = source.read_text(encoding="utf-8")
+        content = json.loads(text) if source.suffix == ".json" else text
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return _error("schema_source_mismatch", location, "source is unreadable")
+    if source.suffix == ".json" and not isinstance(content, Mapping):
+        return _error("schema_source_mismatch", location, "source is not a JSON object")
+    identity = json.dumps(content, sort_keys=True) if isinstance(content, Mapping) else content
+    if name not in identity or version not in identity:
+        return _error("schema_source_mismatch", location, "source does not declare name/version")
+    return None
 
 
 def _source_material_errors(
@@ -181,10 +238,8 @@ def _source_material_errors(
         reference = _rooted_path(root, ref_path, f"{ref_location}.path", errors)
         if reference and ref_digest and not _digest_matches(reference, ref_digest):
             add(_error("missing_source_material", ref_location, "source digest mismatch"))
-    errors.extend(
-        _error("missing_source_material", location, f"{kind} source reference is required")
-        for kind in sorted(set(expected) - present)
-    )
+    for kind in sorted(set(expected) - present):
+        add(_error("missing_source_material", location, f"{kind} source reference is required"))
     return errors
 
 
@@ -193,9 +248,13 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
 ) -> tuple[dict[str, Any], list[dict[str, str]]]:
     errors: list[dict[str, str]] = []
     location = f"roles[{index}]"
+
+    def add(code: str, suffix: str, message: str) -> None:
+        errors.append(_error(code, f"{location}.{suffix}" if suffix else location, message))
+
     missing = sorted(REQUIRED_ROLE_FIELDS - set(role))
     for field in missing:
-        errors.append(_error("missing_field", f"{location}.{field}", "required field is missing"))
+        add("missing_field", field, "required field is missing")
     if missing:
         return {
             "role": role.get("role", f"#{index}"),
@@ -211,7 +270,7 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
         or not isinstance(fmt, str)
         or fmt not in FORMATS
     ):
-        errors.append(_error("ambiguous_role", location, "role and supported format are required"))
+        add("ambiguous_role", "", "role and supported format are required")
     schema = role.get("schema")
     version = schema.get("version") if isinstance(schema, Mapping) else None
     schema_path = (
@@ -229,11 +288,18 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
         or not isinstance(schema.get("name"), str)
         or not schema.get("name", "").strip()
     ):
-        errors.append(_error("missing_schema", f"{location}.schema", "schema name is required"))
+        add("missing_schema", "schema", "schema name is required")
     if not isinstance(version, str) or not version.strip():
-        errors.append(
-            _error("unversioned", f"{location}.schema.version", "schema version is required")
-        )
+        add("unversioned", "schema.version", "schema version is required")
+    schema_error = _schema_source_error(
+        root,
+        schema_path,
+        schema.get("name") if isinstance(schema, Mapping) else None,
+        version,
+        f"{location}.schema",
+    )
+    if schema_error:
+        errors.append(schema_error)
     reader = role.get("reader")
     reader_available = isinstance(reader, Mapping) and reader.get("available") is True
     reader_path = (
@@ -251,97 +317,40 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
         or not isinstance(reader.get("symbol"), str)
         or not reader.get("symbol", "").strip()
     ):
-        errors.append(
-            _error("reader_unavailable", f"{location}.reader", "reader symbol is required")
-        )
+        add("reader_unavailable", "reader", "reader symbol is required")
     elif not reader_available:
-        errors.append(
-            _error("reader_unavailable", f"{location}.reader", "declared reader is unavailable")
-        )
+        add("reader_unavailable", "reader", "declared reader is unavailable")
     elif reader.get("schema_version") is not None and reader.get("schema_version") != version:
-        errors.append(
-            _error(
-                "reader_schema_mismatch",
-                f"{location}.reader.schema_version",
-                "reader version differs from schema",
-            )
-        )
-    if reader_available and reader_path and reader_digest:
-        source = _rooted_path(root, reader_path, f"{location}.reader.source_path", errors)
-        if source is None or not _digest_matches(source, reader_digest):
-            errors.append(
-                _error(
-                    "reader_schema_mismatch",
-                    f"{location}.reader",
-                    "reader source is missing or digest differs",
-                )
-            )
-        else:
-            try:
-                source_text = source.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                errors.append(
-                    _error(
-                        "reader_schema_mismatch",
-                        f"{location}.reader.source_path",
-                        "reader source is not readable text",
-                    )
-                )
-            else:
-                if reader["symbol"] not in source_text:
-                    errors.append(
-                        _error(
-                            "reader_schema_mismatch",
-                            f"{location}.reader.symbol",
-                            "reader symbol is absent from the bound source",
-                        )
-                    )
+        add("reader_schema_mismatch", "reader.schema_version", "reader version differs from schema")
     dependencies = role.get("dependencies")
     if not isinstance(dependencies, list):
-        errors.append(
-            _error("missing_field", f"{location}.dependencies", "dependencies must be a list")
-        )
+        add("missing_field", "dependencies", "dependencies must be a list")
         dependencies = []
     for dep_index, dep in enumerate(dependencies):
-        if (
+        invalid = (
             not isinstance(dep, Mapping)
             or not isinstance(dep.get("name"), str)
             or not dep.get("name", "").strip()
             or not isinstance(dep.get("required"), bool)
             or not isinstance(dep.get("available"), bool)
-        ):
-            errors.append(
-                _error(
-                    "optional_dependency_gap",
-                    f"{location}.dependencies[{dep_index}]",
-                    "dependency name is required",
-                )
+        )
+        if invalid or (dep["required"] is True and dep["available"] is not True):
+            message = (
+                "dependency name is required" if invalid else "required dependency is unavailable"
             )
-        elif dep["required"] is True and dep["available"] is not True:
-            errors.append(
-                _error(
-                    "optional_dependency_gap",
-                    f"{location}.dependencies[{dep_index}]",
-                    "required dependency is unavailable",
-                )
-            )
+            add("optional_dependency_gap", f"dependencies[{dep_index}]", message)
     compatibility = role.get("compatibility")
     adapter_path = adapter_digest = None
-    if not isinstance(compatibility, Mapping) or compatibility.get("mode") not in {
+    mode = compatibility.get("mode") if isinstance(compatibility, Mapping) else None
+    if mode not in {
         "native",
         "declared_adapter",
         "none",
     }:
-        errors.append(
-            _error("stale_adapter", f"{location}.compatibility", "compatibility mode is required")
-        )
-    elif compatibility.get("mode") == "declared_adapter" and not compatibility.get(
-        "adapter_symbol"
-    ):
-        errors.append(
-            _error("stale_adapter", f"{location}.compatibility", "adapter symbol is required")
-        )
-    elif compatibility.get("mode") == "declared_adapter":
+        add("stale_adapter", "compatibility", "compatibility mode is required")
+    elif mode == "declared_adapter" and not compatibility.get("adapter_symbol"):
+        add("stale_adapter", "compatibility", "adapter symbol is required")
+    elif mode == "declared_adapter":
         adapter_path = _relative_path(
             compatibility.get("adapter_source_path"),
             f"{location}.compatibility.adapter_source_path",
@@ -353,58 +362,30 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
             errors,
         )
         if not adapter_path or not adapter_digest:
-            errors.append(
-                _error(
-                    "stale_adapter",
-                    f"{location}.compatibility",
-                    "adapter source path and digest are required",
-                )
-            )
-    if (
-        compatibility.get("target_schema") is not None
-        and compatibility.get("target_schema") != version
-    ):
-        errors.append(
-            _error(
-                "stale_adapter",
-                f"{location}.compatibility.target_schema",
-                "adapter target differs from schema",
-            )
-        )
+            add("stale_adapter", "compatibility", "adapter source path and digest are required")
+    if isinstance(compatibility, Mapping) and compatibility.get("target_schema") not in {
+        None,
+        version,
+    }:
+        add("stale_adapter", "compatibility.target_schema", "adapter target differs from schema")
     units_display = role.get("units_display")
     if not isinstance(units_display, Mapping):
-        errors.append(
-            _error(
-                "unit_display_drift",
-                f"{location}.units_display",
-                "units/display metadata is required",
-            )
-        )
+        add("unit_display_drift", "units_display", "units/display metadata is required")
     elif not isinstance(schema, Mapping) or not isinstance(schema.get("units_display"), Mapping):
-        errors.append(
-            _error(
-                "unit_display_drift",
-                f"{location}.schema.units_display",
-                "schema-bound units/display metadata is required",
-            )
+        add(
+            "unit_display_drift",
+            "schema.units_display",
+            "schema-bound units/display metadata is required",
         )
     elif dict(schema["units_display"]) != dict(units_display):
-        errors.append(
-            _error(
-                "unit_display_drift",
-                f"{location}.units_display",
-                "metadata differs from schema-bound units/display",
-            )
+        add(
+            "unit_display_drift",
+            "units_display",
+            "metadata differs from schema-bound units/display",
         )
     check_command = role.get("check_command")
     if not isinstance(check_command, str) or not check_command.strip():
-        errors.append(
-            _error(
-                "missing_check_command",
-                f"{location}.check_command",
-                "validation command is required",
-            )
-        )
+        add("missing_check_command", "check_command", "validation command is required")
     expected_material: dict[str, tuple[str | None, str | None]] = {
         "schema": (schema_path, schema_digest)
     }
@@ -420,19 +401,15 @@ def _role_result(  # noqa: C901, PLR0912, PLR0915
     )
     output_path = _rooted_path(root, path_value, f"{location}.path", errors)
     if output_path is None or not output_path.is_file():
-        errors.append(
-            _error("missing_output", f"{location}.path", "representative output is missing")
-        )
+        add("missing_output", "path", "representative output is missing")
     elif fmt in FORMATS and isinstance(version, str) and version.strip():
         readable, reason = _load_and_validate_bytes(output_path, fmt, version)
         if not readable:
-            errors.append(
-                _error(
-                    "reader_schema_mismatch",
-                    f"{location}.path",
-                    reason or "representative bytes are unreadable",
-                )
-            )
+            add("reader_schema_mismatch", "path", reason or "representative bytes are unreadable")
+        elif reader_available and reader_path and reader_digest:
+            reader_error = _execute_reader(root, output_path, reader, f"{location}.reader")
+            if reader_error:
+                errors.append(reader_error)
     status = "readable_verified"
     if errors:
         codes = {item["code"] for item in errors}
@@ -490,15 +467,8 @@ def build_inventory(packet: Mapping[str, Any], root: Path) -> dict[str, Any]:
     seen: set[str] = set()
     for index, role in enumerate(roles):
         if not isinstance(role, Mapping):
-            results.append(
-                {
-                    "role": f"#{index}",
-                    "status": "conflict",
-                    "errors": [
-                        _error("ambiguous_role", f"roles[{index}]", "role must be an object")
-                    ],
-                }
-            )
+            error = _error("ambiguous_role", f"roles[{index}]", "role must be an object")
+            results.append({"role": f"#{index}", "status": "conflict", "errors": [error]})
             continue
         normalized, role_errors = _role_result(role, root, index)
         role_name = str(normalized.get("role"))

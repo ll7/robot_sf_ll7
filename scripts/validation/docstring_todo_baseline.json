@@ -13,31 +13,11 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 19,
-      "occurrences": 106
+      "files": 0,
+      "occurrences": 0
     }
   },
-  "files": {
-    "tests/conftest.py": 12,
-    "tests/fixtures/minimal_manifests/generator.py": 17,
-    "tests/perf/test_factory_creation_perf.py": 4,
-    "tests/perf_utils/guidance.py": 3,
-    "tests/perf_utils/reporting.py": 7,
-    "tests/perf_utils/test_guidance.py": 3,
-    "tests/perf_utils/test_slow_report_fixture.py": 1,
-    "tests/research/test_extractor_report.py": 2,
-    "tests/test_baseline_ppo_smoke.py": 3,
-    "tests/test_classic_interactions_matrix.py": 4,
-    "tests/test_cli_run_snqi.py": 3,
-    "tests/test_cli_run_snqi_from.py": 7,
-    "tests/test_cli_snqi_ablation.py": 5,
-    "tests/test_error_policy.py": 6,
-    "tests/test_failure_extractor.py": 5,
-    "tests/test_runner_batch.py": 2,
-    "tests/tools/test_analyze_imitation_results.py": 8,
-    "tests/tools/test_compare_training_runs.py": 9,
-    "tests/unit/test_hardware_profile_capture.py": 5
-  },
+  "files": {},
   "roots": [
     "robot_sf",
     "scripts",
@@ -46,7 +26,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 19,
-    "total_occurrences": 106
+    "files": 0,
+    "total_occurrences": 0
   }
 }

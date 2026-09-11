@@ -428,6 +428,10 @@ _FAST_FILES = {
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",
+    # TODO-docstring baseline guards must run in pull-request fast shards.
+    # PR shards exclude slow tests, so without this registration a cleanup PR
+    # can skip the guard and turn main red only after merge (issue #9000).
+    "test_check_docstring_todos.py",
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",

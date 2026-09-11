@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for RouteNavigator waypoint/destination detection and route rebasing."""
 
 from math import dist
 
@@ -8,12 +8,12 @@ from robot_sf.nav.navigation import RouteNavigator
 
 
 def west_east_route():
-    """TODO docstring. Document this function."""
+    """Return a four-waypoint west-to-east route along y = 1."""
     return [(0, 1), (2, 1), (4, 1), (6, 1)]
 
 
 def test_can_detect_when_waypoint_reached():
-    """TODO docstring. Document this function."""
+    """A position within the first waypoint's radius sets reached_waypoint."""
     route = west_east_route()
     navi = RouteNavigator(route)
     navi.update_position((0.5, 1.5))
@@ -21,7 +21,7 @@ def test_can_detect_when_waypoint_reached():
 
 
 def test_can_detect_when_waypoint_not_reached():
-    """TODO docstring. Document this function."""
+    """A position far from the route leaves reached_waypoint false."""
     route = west_east_route()
     navi = RouteNavigator(route)
     navi.update_position((-0.5, -1.5))
@@ -29,7 +29,7 @@ def test_can_detect_when_waypoint_not_reached():
 
 
 def test_can_detect_when_destination_reached():
-    """TODO docstring. Document this function."""
+    """A position near the final waypoint sets reached_destination."""
     route = west_east_route()
     navi = RouteNavigator(route)
     navi.update_position((6.5, 1.5))
@@ -37,7 +37,7 @@ def test_can_detect_when_destination_reached():
 
 
 def test_can_detect_when_destination_not_reached():
-    """TODO docstring. Document this function."""
+    """A position near the first waypoint leaves reached_destination false."""
     route = west_east_route()
     navi = RouteNavigator(route)
     navi.update_position((0.5, 1.5))
@@ -45,7 +45,7 @@ def test_can_detect_when_destination_not_reached():
 
 
 def test_can_drive_route_from_start_to_finish():
-    """TODO docstring. Document this function."""
+    """Stepping east along the route reaches every waypoint and then the destination."""
     route = west_east_route()
     navi = RouteNavigator(route)
     step = 0.1

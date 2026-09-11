@@ -214,10 +214,12 @@ def _canonical_state(value: Any) -> str | None:
 
 
 def _transition_problem(previous: str, current: str) -> str | None:
-    if previous in (current, "unavailable") or current == "unavailable":
+    if previous in (current, "unavailable"):
         return None
     if previous in TERMINAL_STATES:
         return "contradictory_states"
+    if current == "unavailable":
+        return None
     if current in TERMINAL_STATES or current in _ALLOWED_NEXT[previous]:
         return None
     return "contradictory_states"
@@ -638,6 +640,8 @@ def _make_query(template: str, timeout: float) -> Callable[[str], Mapping[str, A
     argv = shlex.split(template)
     if not argv:
         raise MonitorContractError("--state-query must not be empty")
+    if "{job_id}" not in template:
+        raise MonitorContractError("--state-query must include the {job_id} placeholder")
 
     def query(job_id: str) -> Mapping[str, Any] | None:
         command = [part.replace("{job_id}", job_id) for part in argv]

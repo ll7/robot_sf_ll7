@@ -173,6 +173,15 @@ def test_requeue_is_legal_and_changed_identity_is_rejected() -> None:
     assert report["jobs"][0]["handoff"] is None
 
 
+def test_terminal_state_remains_latched_after_unavailable_observation() -> None:
+    record = _record(_job(observations=[_obs("COMPLETED", 0), _obs("MISSING", 1)]))
+    assert record["scheduler"]["state"] == "completed"
+    assert record["scheduler"]["terminal"] is True
+    assert record["scheduler"]["first_terminal_state"] == "completed"
+    assert record["handoff"]["observed_terminal_state"] == "completed"
+    assert "contradictory_states" in _codes(record)
+
+
 REJECTIONS = (
     ("clock_regression", (_obs("RUNNING", 2), _obs("COMPLETED", 1))),
     ("contradictory_states", (_obs("COMPLETED", 0), _obs("RUNNING", 1))),
@@ -298,7 +307,7 @@ def test_cli_once_json_text_and_malformed(tmp_path: Path, capsys: Any) -> None:
 
 def test_cli_live_state_query_is_bounded(tmp_path: Path, capsys: Any) -> None:
     identity = _identity()
-    response = tmp_path / "response.json"
+    response = tmp_path / identity["job_id"]
     response.write_text(json.dumps(_obs("RUNNING", 0, identity=identity)), encoding="utf-8")
     path = tmp_path / "projection.json"
     path.write_text(json.dumps(_projection(_job(identity))), encoding="utf-8")
@@ -308,7 +317,7 @@ def test_cli_live_state_query_is_bounded(tmp_path: Path, capsys: Any) -> None:
             "--projection",
             str(path),
             "--state-query",
-            f"cat {response}",
+            f"cat {tmp_path}/{{job_id}}",
             "--interval",
             "0.01",
             "--max-wall-seconds",
@@ -318,3 +327,13 @@ def test_cli_live_state_query_is_bounded(tmp_path: Path, capsys: Any) -> None:
     report = json.loads(capsys.readouterr().out)
     assert code == 0 and report["status"] == "monitor_window_expired"
     assert report["jobs"][0]["scheduler"]["terminal"] is False
+
+
+def test_cli_state_query_requires_job_id_binding(tmp_path: Path, capsys: Any) -> None:
+    path = tmp_path / "projection.json"
+    path.write_text(json.dumps(_projection(_job())), encoding="utf-8")
+    code = tool.main(
+        ["--check", "--projection", str(path), "--state-query", "true", "--max-wall-seconds", "1"]
+    )
+    assert code == 2
+    assert "{job_id} placeholder" in capsys.readouterr().err

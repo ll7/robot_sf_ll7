@@ -516,16 +516,10 @@ def build_transfer_report(  # noqa: C901, PLR0912, PLR0915 - one fail-closed tra
         },
         "claim_boundary": CLAIM_BOUNDARY,
     }
-    if (
-        apply
-        and destination_ready
-        and not any(
-            problem["code"] in ("destination_manifest_conflict", "receipt_corrupt")
-            for problem in problems
-        )
-    ):
-        report["destination"]["receipt_written"] = True
     report = _finalize(report, problems)
+    if apply and report["status"] == "verified":
+        report["destination"]["receipt_written"] = True
+        report = _finalize(report, problems)
     if report["destination"]["receipt_written"]:
         try:
             temp = receipt_target.with_name(f".{receipt_target.name}{PARTIAL_SUFFIX}")

@@ -140,6 +140,51 @@ def test_capacity_partial_and_unexpected_members_fail_closed(tmp_path: Path) -> 
     assert "unexpected_destination_member" in _reasons(manifest, source, destination, apply=True)
 
 
+def test_blocked_apply_never_writes_or_overwrites_receipt(tmp_path: Path, monkeypatch) -> None:
+    manifest, source = _fixture(tmp_path, {"a.txt": b"alpha"})
+    receipt_name = MOD.DEFAULT_RECEIPT_NAME
+
+    limited_destination = tmp_path / "limited"
+    limited = MOD.build_transfer_report(
+        manifest, source, limited_destination, apply=True, capacity_bytes=1
+    )
+    assert limited["status"] == "blocked"
+    assert not (limited_destination / receipt_name).exists()
+
+    unexpected_destination = tmp_path / "unexpected"
+    _write(unexpected_destination, "extra.txt", b"extra")
+    unexpected = MOD.build_transfer_report(manifest, source, unexpected_destination, apply=True)
+    assert unexpected["status"] == "blocked"
+    assert not (unexpected_destination / receipt_name).exists()
+
+    mismatch_destination = tmp_path / "source-mismatch"
+    (source / "a.txt").write_bytes(b"changed")
+    mismatch = MOD.build_transfer_report(manifest, source, mismatch_destination, apply=True)
+    assert mismatch["status"] == "blocked"
+    assert not (mismatch_destination / receipt_name).exists()
+    (source / "a.txt").write_bytes(b"alpha")
+
+    failed_destination = tmp_path / "copy-failed"
+
+    def fail_copy(*_args) -> None:
+        raise OSError("interrupted")
+
+    monkeypatch.setattr(MOD, "_copy_member", fail_copy)
+    failed = MOD.build_transfer_report(manifest, source, failed_destination, apply=True)
+    assert failed["status"] == "blocked"
+    assert not (failed_destination / receipt_name).exists()
+
+    monkeypatch.undo()
+    valid_destination = tmp_path / "valid"
+    valid = MOD.build_transfer_report(manifest, source, valid_destination, apply=True)
+    assert valid["status"] == "verified"
+    receipt_before = (valid_destination / receipt_name).read_bytes()
+    _write(valid_destination, "extra.txt", b"extra")
+    overwritten = MOD.build_transfer_report(manifest, source, valid_destination, apply=True)
+    assert overwritten["status"] == "blocked"
+    assert (valid_destination / receipt_name).read_bytes() == receipt_before
+
+
 def test_source_integrity_failures_block_before_any_copy(tmp_path: Path) -> None:
     manifest, source = _fixture(tmp_path, {"a.txt": b"alpha"})
     destination = tmp_path / "destination"

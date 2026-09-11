@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for batch runner resume skipping and track identity enforcement."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ SCHEMA_PATH = str(
 
 
 def test_run_batch_resume_skips_existing(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that batch runner resume correctly skips previously executed and recorded episodes.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for episode records output.
     """
     scenarios = [
         {

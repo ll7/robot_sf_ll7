@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for EnvSettings and SimulationSettings defaults, validation, and robot factories."""
 
 from dataclasses import replace
 
@@ -21,7 +21,7 @@ from robot_sf.gym_env.env_config import (
 
 
 def test_env_settings_initialization():
-    """TODO docstring. Document this function."""
+    """Default EnvSettings constructs concrete simulation, lidar, robot, and map-pool configs."""
     env_settings = EnvSettings()
     assert isinstance(env_settings.sim_config, SimulationSettings)
     assert isinstance(env_settings.lidar_config, LidarScannerSettings)
@@ -30,13 +30,13 @@ def test_env_settings_initialization():
 
 
 def test_env_settings_post_init():
-    """TODO docstring. Document this function."""
+    """Passing sim_config=None to EnvSettings raises ValueError during initialization."""
     with pytest.raises(ValueError):
         _env_settings = EnvSettings(sim_config=None)  # type: ignore
 
 
 def test_robot_factory():
-    """TODO docstring. Document this function."""
+    """robot_factory builds the robot matching robot_config and rejects unsupported types."""
     env_settings = EnvSettings()
     robot = env_settings.robot_factory()
     assert isinstance(robot, DifferentialDriveRobot)

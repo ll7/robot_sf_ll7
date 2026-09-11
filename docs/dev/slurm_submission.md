@@ -74,6 +74,24 @@ evidence stays `unknown`; an application nonzero exit is never auto-retried as
 infrastructure, and a completed scheduler state is never scientific success. Exit code 2
 means the receipt was unreadable or malformed, not that the job failed.
 
+## Array-index mapping verification (check-only)
+
+Before launching array-based SLURM jobs or retries, verify that array task IDs map
+bijectively and without bounds errors to campaign matrix rows:
+
+```bash
+uv run python scripts/validation/verify_slurm_array_mapping.py \
+  --manifest path/to/campaign_manifest.json \
+  --array-spec 0-99%10 \
+  --step-chunk 1 \
+  --output-dir output/benchmarks/campaign_1/
+```
+
+The verifier is read-only and fail-closed: it checks for gaps, duplicate row mappings,
+off-by-one bounds, zero- vs one-based index mismatches, chunk tail truncations, shard
+reorderings, resume/retry collisions, and invalid array concurrency specs. It exits with code
+0 on success, 1 on mapping errors (or warnings under `--strict`), and 2 on invalid invocation.
+
 ## Training submission queue
 
 Use `experiments/submission_queue.yaml` for reviewable planned training submissions that should be

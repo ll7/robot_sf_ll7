@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for imitation-analysis figure generation and metric sample extraction."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from robot_sf.training.imitation_analysis import _generate_figures
 
 
 def test_generate_figures_creates_all_expected_files(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """_generate_figures writes all five expected comparison PNGs for two metric sets.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary output directory receiving the generated figures.
     """
     baseline_metrics = {
         "timesteps_to_convergence": 1000.0,
@@ -57,7 +57,7 @@ def test_generate_figures_creates_all_expected_files(tmp_path: Path):
 
 
 def test_metric_samples_handles_suffix_and_filtering():
-    """TODO docstring. Document this function."""
+    """Keep numeric samples, fall back to the base key, and return empty when absent."""
     payload = {
         "metrics": {
             "foo_samples": [1, 2.0, "bad", None],

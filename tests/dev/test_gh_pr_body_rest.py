@@ -531,3 +531,122 @@ def test_direct_invocation_without_ambient_pythonpath(tmp_path: Path) -> None:
     )
     assert proc.returncode == 0
     assert "reconcile" in proc.stdout
+
+
+_VALID_V2_BODY = """## Summary
+
+Human-authored summary.
+
+<!-- pr-contract:v2
+change_class: tooling
+linked_issues:
+  closes: []
+  relates: []
+deferred_work:
+  status: none
+  issues: []
+evidence:
+  applicability: na
+  tier: null
+  result: na
+domain_approval:
+  required: false
+  status: not_required
+performance:
+  claimed: false
+-->
+"""
+
+_DUPLICATE_ROLE_V2_BODY = """## Summary
+
+Human-authored summary.
+
+<!-- pr-contract:v2
+change_class: tooling
+linked_issues:
+  closes: []
+  relates: [42]
+deferred_work:
+  status: open
+  issues: [42]
+  reason: "follow-up work"
+evidence:
+  applicability: na
+  tier: null
+  result: na
+domain_approval:
+  required: false
+  status: not_required
+performance:
+  claimed: false
+-->
+"""
+
+
+def test_reconcile_rejects_invalid_v2_contract_before_remote_write(tmp_path: Path) -> None:
+    """A present-but-invalid v2 contract fails closed before any PATCH (issue #8962)."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(_DUPLICATE_ROLE_V2_BODY, encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "error"
+    assert "duplicate issue references" in result["error"]
+    mock_patch.assert_not_called()
+
+
+def test_update_pr_body_rejects_invalid_v2_contract_before_remote_write(tmp_path: Path) -> None:
+    """The direct body updater also fails closed on an invalid v2 contract."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(_DUPLICATE_ROLE_V2_BODY, encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch:
+        result = update_pr_body(5220, body_file)
+
+    assert result["status"] == "error"
+    assert "duplicate issue references" in result["error"]
+    mock_patch.assert_not_called()
+
+
+def test_reconcile_accepts_valid_v2_contract_and_patches(tmp_path: Path) -> None:
+    """A valid v2 body still reconciles through the verified atomic PATCH."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(_VALID_V2_BODY, encoding="utf-8")
+    response = {
+        "title": "final title",
+        "body": _VALID_V2_BODY,
+        "html_url": "https://example/pr/5220",
+    }
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.side_effect = [
+            _proc(stdout=json.dumps({"title": "old title", "body": "old body"})),
+            _proc(stdout=json.dumps(response)),
+        ]
+        mock_patch.return_value = _proc(stdout=json.dumps(response))
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "ok"
+    mock_patch.assert_called_once()
+
+
+def test_reconcile_keeps_unchanged_invalid_v2_body_as_explicit_noop(tmp_path: Path) -> None:
+    """An already-published invalid body is not rewritten and stays an explicit no-op."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(_DUPLICATE_ROLE_V2_BODY, encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(
+            stdout=json.dumps({"title": "final title", "body": _DUPLICATE_ROLE_V2_BODY})
+        )
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "unchanged"
+    mock_patch.assert_not_called()

@@ -33,11 +33,11 @@ CONFIG_GPU = ROOT / "configs" / "scenarios" / "multi_extractor_gpu.yaml"
 
 
 def _detect_cuda_available() -> bool:
-    """TODO docstring. Document this function.
+    """Report whether torch can see a CUDA device in this environment.
 
 
     Returns:
-        TODO docstring.
+        True when torch is importable and torch.cuda.is_available() is truthy.
     """
     if torch is None:
         return False
@@ -48,13 +48,13 @@ def _detect_cuda_available() -> bool:
 
 
 def _resolve_cuda_expectation(env: dict[str, str]) -> bool:
-    """TODO docstring. Document this function.
+    """Resolve the CUDA expectation from the environment or local detection.
 
     Args:
-        env: TODO docstring.
+        env: Environment mapping read and updated with CI_EXPECTS_CUDA.
 
     Returns:
-        TODO docstring.
+        True when CUDA is expected to be available for the run.
     """
     override = env.get(CI_EXPECTS_CUDA_ENV)
     if override in {"0", "1"}:
@@ -66,10 +66,10 @@ def _resolve_cuda_expectation(env: dict[str, str]) -> bool:
 
 @pytest.mark.skipif(not CONFIG_GPU.exists(), reason="GPU multi-extractor config missing")
 def test_vectorized_run_handles_cuda_availability(tmp_path):
-    """TODO docstring. Document this function.
+    """A vectorized GPU run succeeds, or skips CUDA cleanly when unavailable.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary output root set via ROBOT_SF_MULTI_EXTRACTOR_TMP.
     """
     env = os.environ.copy()
     env["ROBOT_SF_MULTI_EXTRACTOR_TMP"] = str(tmp_path)

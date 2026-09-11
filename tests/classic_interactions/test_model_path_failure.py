@@ -23,12 +23,17 @@ import pytest
 
 
 def _demo_module():
-    """TODO docstring. Document this function."""
+    """Import the classic interactions Pygame demo through its legacy module path."""
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_model_path_missing_provides_actionable_message():
-    """TODO docstring. Document this function."""
+    """Verify a missing PPO model path raises an actionable error message.
+
+    Disables DRY_RUN, points MODEL_PATH at a sentinel missing file, and expects
+    FileNotFoundError or RuntimeError whose message mentions 'download' or 'pre-trained'.
+    Restores the patched constants afterwards.
+    """
     mod = _demo_module()
     # Patch constants: ensure DRY_RUN disabled and model path points to definitely-missing file.
     original_dry = getattr(mod, "DRY_RUN", None)

@@ -49,12 +49,12 @@ from scripts.dev._gh_rest import gh_api_metadata_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_patch as _gh_api_patch
 from scripts.dev._gh_rest import subprocess
 from scripts.dev.github_transport_policy import get_transport_contract
+from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 from scripts.dev.pr_loop_policy import (
     extract_sha_carriers,
     invalid_sha_carriers,
     metadata_conflict_handoff,
 )
-from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 from scripts.dev.pr_metadata import metadata_digest, validate_pr_title
 
 if TYPE_CHECKING:

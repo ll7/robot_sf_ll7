@@ -591,9 +591,7 @@ def test_reconcile_rejects_invalid_v2_contract_before_remote_write(tmp_path: Pat
         patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
         patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
     ):
-        mock_get.return_value = _proc(
-            stdout=json.dumps({"title": "old title", "body": "old body"})
-        )
+        mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
         result = reconcile_pr_metadata(5220, "final title", body_file)
 
     assert result["status"] == "error"

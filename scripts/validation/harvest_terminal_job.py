@@ -10,7 +10,8 @@ execution modes (native/adapter/fallback/degraded) never convert a failed or deg
 into a passing one. Every expected row receives one explicit disposition and reason. Output
 holds normalized relative paths only; the helper never copies, uploads, or deletes, and it
 reads only explicit local inputs. Cleanup eligibility is emitted only after a destination
-copy verifies against the manifest. Exit codes: 0 ready, 2 harvest_blocked, 3 malformed.
+copy verifies against the exact manifest member set. Exit codes: 0 ready, 2 harvest_blocked,
+3 malformed.
 """
 
 from __future__ import annotations
@@ -77,7 +78,7 @@ ROW_STATUS = {
 }
 TERMINAL_STATES = frozenset(("completed", "failed", "cancelled", "timeout"))
 NONTERMINAL_STATES = frozenset(("pending", "running"))
-SCHEDULER_STATES = frozenset(TERMINAL_STATES | NONTERMINAL_STATES | {"unknown"})
+SCHEDULER_STATES = frozenset(TERMINAL_STATES | NONTERMINAL_STATES)
 EXIT_READY, EXIT_BLOCKED, EXIT_MALFORMED = 0, 2, 3
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -192,7 +193,7 @@ def _identity_contract(
 
 def _output_contract(  # noqa: C901, PLR0912 - bounded row/inventory/capacity validation pass
     request: Mapping[str, Any], problems: Problems
-) -> tuple[list[dict[str, str]], list[tuple[str, str]], int]:
+) -> tuple[list[dict[str, str]], list[tuple[str, str]], int, bool]:
     rows_raw = request.get("rows")
     contract: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -212,6 +213,7 @@ def _output_contract(  # noqa: C901, PLR0912 - bounded row/inventory/capacity va
                 contract.append({"row_id": row_id, "sha256": digest})
     inventory_raw = request.get("inventory")
     surfaces: list[tuple[str, str]] = []
+    required_role_path_counts = dict.fromkeys(REQUIRED_ROLES, 0)
     if not isinstance(inventory_raw, Mapping):
         _add(problems, "missing_field", "inventory", "inventory mapping required")
     else:
@@ -235,16 +237,31 @@ def _output_contract(  # noqa: C901, PLR0912 - bounded row/inventory/capacity va
                             _add(problems, exc.code, location, str(exc))
                     if relative is not None:
                         surfaces.append((role, relative))
+                        if role in required_role_path_counts:
+                            required_role_path_counts[role] += 1
         for role in REQUIRED_ROLES:
             if role not in inventory_raw:
                 _add(problems, "missing_required_role", f"inventory.{role}", "required role")
+            elif not isinstance(inventory_raw[role], list):
+                required_role_path_counts[role] = 0
+            elif not inventory_raw[role]:
+                _add(
+                    problems,
+                    "empty_required_role",
+                    f"inventory.{role}",
+                    "required role must contain at least one path",
+                )
+                required_role_path_counts[role] = 0
     capacity = _int_at_least(_get(request, "destination", "capacity_bytes"), 1)
     if capacity is None:
         capacity = 0
         _add(
             problems, "missing_capacity_receipt", "destination.capacity_bytes", "positive capacity"
         )
-    return contract, surfaces, capacity
+    required_roles_valid = isinstance(inventory_raw, Mapping) and all(
+        required_role_path_counts[role] > 0 for role in REQUIRED_ROLES
+    )
+    return contract, surfaces, capacity, required_roles_valid
 
 
 def _scan_artifact_root(root: Path, problems: Problems) -> list[dict[str, Any]]:
@@ -338,20 +355,45 @@ def _bind_environment(
     covered: dict[str, dict[str, Any]], source: Mapping[str, Any], problems: Problems
 ) -> dict[str, Any]:
     record: dict[str, Any] = {"record": None, "source_commit": None, "config_sha256": None}
-    candidates = [entry for entry in covered.values() if "environment" in entry["roles"]]
+    candidates = sorted(
+        (entry for entry in covered.values() if "environment" in entry["roles"]),
+        key=lambda item: item["relative_path"].encode("utf-8"),
+    )
     if not candidates:
         _add(problems, "missing_environment_record", "environment", "environment record required")
         return record
-    entry = min(candidates, key=lambda item: item["relative_path"].encode("utf-8"))
-    record["record"] = entry["relative_path"]
-    try:
-        payload = json.loads(entry["path"].read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        payload = None
-    if not isinstance(payload, Mapping):
-        _add(problems, "corrupt_environment_record", entry["relative_path"], "unreadable JSON")
+
+    parsed: list[tuple[dict[str, Any], str | None, str | None]] = []
+    for entry in candidates:
+        try:
+            payload = json.loads(entry["path"].read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            payload = None
+        if not isinstance(payload, Mapping):
+            _add(problems, "corrupt_environment_record", entry["relative_path"], "unreadable JSON")
+            continue
+        commit, config = payload.get("source_commit"), payload.get("config_sha256")
+        parsed.append(
+            (
+                entry,
+                commit if isinstance(commit, str) else None,
+                config if isinstance(config, str) else None,
+            )
+        )
+    if not parsed:
         return record
-    commit, config = payload.get("source_commit"), payload.get("config_sha256")
+    if len({(commit, config) for _entry, commit, config in parsed}) > 1:
+        for entry, _commit, _config in parsed:
+            _add(
+                problems,
+                "conflicting_environment_records",
+                entry["relative_path"],
+                "environment identity differs from another record",
+            )
+        return record
+
+    entry, commit, config = parsed[0]
+    record["record"] = entry["relative_path"]
     record["source_commit"] = commit if isinstance(commit, str) else None
     record["config_sha256"] = config if isinstance(config, str) else None
     if source["commit"] is not None and record["source_commit"] != source["commit"]:
@@ -466,14 +508,24 @@ def _byte_counts(inventory: list[dict[str, Any]]) -> dict[str, Any]:
     return {"member_count": len(present), "total_bytes": sum(item["byte_size"] for item in present)}
 
 
-def verify_destination(
+def verify_destination(  # noqa: C901 - one exact destination membership verification pass
     destination_root: Path, inventory: list[dict[str, Any]], problems: Problems
 ) -> dict[str, Any]:
-    """Verify an existing destination copy against the inventory; never writes."""
+    """Verify an exact destination copy against the inventory; never writes.
+
+    The destination member set must match the present source inventory exactly, following the
+    canonical chunk-manifest verifier. Missing, mismatched, or unexpected members therefore keep
+    the copy unverified and block cleanup eligibility.
+    """
     expected = {
         item["relative_path"]: item["sha256"] for item in inventory if item["status"] == "present"
     }
-    unavailable = {"verification": "unavailable", "missing_members": 0, "mismatched_members": 0}
+    unavailable = {
+        "verification": "unavailable",
+        "missing_members": 0,
+        "mismatched_members": 0,
+        "unexpected_members": 0,
+    }
     root = Path(destination_root)
     if root.is_symlink() or not root.is_dir():
         _add(problems, "destination_unavailable", "destination", "root must be a directory")
@@ -484,9 +536,12 @@ def verify_destination(
         _add(problems, exc.code, "destination", str(exc))
         return unavailable
     found = {relative: path for relative, path, _identity in members}
-    missing = sorted(set(expected) - set(found))
+    expected_paths = set(expected)
+    found_paths = set(found)
+    missing = sorted(expected_paths - found_paths)
+    unexpected = sorted(found_paths - expected_paths)
     mismatched = []
-    for relative in sorted(set(expected) & set(found)):
+    for relative in sorted(expected_paths & found_paths):
         try:
             observed = _sha256_file(found[relative])
         except OSError:
@@ -496,6 +551,7 @@ def verify_destination(
     for code, locations, message in (
         ("destination_incomplete", missing, "member is missing"),
         ("destination_digest_mismatch", mismatched, "digest differs"),
+        ("destination_unexpected_member", unexpected, "member is not in the source inventory"),
     ):
         for relative in locations:
             _add(problems, code, relative, message)
@@ -503,12 +559,15 @@ def verify_destination(
         verification = "incomplete"
     elif mismatched:
         verification = "digest_mismatch"
+    elif unexpected:
+        verification = "unexpected_members"
     else:
         verification = "verified"
     return {
         "verification": verification,
         "missing_members": len(missing),
         "mismatched_members": len(mismatched),
+        "unexpected_members": len(unexpected),
     }
 
 
@@ -554,7 +613,7 @@ def build_report(
     if request.get("schema_version") != REQUEST_SCHEMA:
         _add(problems, "schema_version_mismatch", "schema_version", f"must be {REQUEST_SCHEMA}")
     identity = _identity_contract(request, problems, expected_issue)
-    contract, surfaces, capacity = _output_contract(request, problems)
+    contract, surfaces, capacity, required_roles_valid = _output_contract(request, problems)
     root = Path(artifact_root)
     root_ok = root.is_dir() and not root.is_symlink()
     members = _scan_artifact_root(root, problems) if root_ok else []
@@ -565,8 +624,10 @@ def build_report(
     rows = _reconcile_rows(contract, covered, problems)
     if not root_ok or not inventory:
         artifact_status = "unavailable"
-    elif all(item["status"] == "present" for item in inventory) and all(
-        row["disposition"] == "present" for row in rows["rows"]
+    elif (
+        required_roles_valid
+        and all(item["status"] == "present" for item in inventory)
+        and all(row["disposition"] == "present" for row in rows["rows"])
     ):
         artifact_status = "complete"
     else:
@@ -582,6 +643,7 @@ def build_report(
         "verification": "not_attempted",
         "missing_members": 0,
         "mismatched_members": 0,
+        "unexpected_members": 0,
     }
     if destination_root is not None:
         destination.update(verify_destination(destination_root, inventory, problems))

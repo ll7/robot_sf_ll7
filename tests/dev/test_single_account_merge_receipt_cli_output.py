@@ -1,4 +1,4 @@
-"""CLI `--output` behavior tests for the single-account merge receipt (issue #9001).
+"""CLI `--output` behavior tests for the single-account merge receipt (issues #9001 and #9028).
 
 These cases are self-contained: they monkeypatch the live-evidence, verification, and merge
 functions, so they do not depend on base-relative receipt fixtures. Keeping them in their own
@@ -73,6 +73,77 @@ def test_cli_validate_writes_output(tmp_path, monkeypatch, capsys) -> None:
     assert exit_code == 0
     assert json.loads(output.read_text(encoding="utf-8")) == {"passed": True}
     assert json.loads(capsys.readouterr().out) == {"passed": True}
+
+
+def test_cli_rejects_same_receipt_and_output_path_before_touching_receipt(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """A same-path validate request fails before loading or replacing the source receipt."""
+    receipt_file = _write_receipt_input(tmp_path)
+    original = receipt_file.read_bytes()
+    evidence_calls = []
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *a, **k: evidence_calls.append((a, k)),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--mode",
+            "validate",
+            "--receipt-file",
+            str(receipt_file),
+            "--output",
+            str(receipt_file),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert evidence_calls == []
+    assert captured.out == ""
+    assert "must resolve to different files" in captured.err
+    assert receipt_file.read_bytes() == original
+
+
+def test_cli_rejects_symlink_alias_for_receipt_and_output(tmp_path, monkeypatch, capsys) -> None:
+    """A symlink alias is rejected because it resolves to the source receipt."""
+    receipt_file = _write_receipt_input(tmp_path)
+    output = tmp_path / "output.json"
+    output.symlink_to(receipt_file)
+    original = receipt_file.read_bytes()
+    monkeypatch.setattr(receipt_module, "build_live_evidence", lambda *a, **k: ({}, None))
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--mode",
+            "apply",
+            "--receipt-file",
+            str(receipt_file),
+            "--output",
+            str(output),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "must resolve to different files" in captured.err
+    assert receipt_file.read_bytes() == original
+
+
+def test_cli_help_documents_distinct_receipt_and_output_paths() -> None:
+    """CLI help states that validate/apply input and output paths must differ."""
+    help_text = receipt_module._parser().format_help()
+
+    assert "receipt JSON input for validate/apply" in help_text
+    assert "must differ" in help_text
+    assert "different file than --receipt-file" in help_text
 
 
 def test_cli_apply_writes_output(tmp_path, monkeypatch, capsys) -> None:

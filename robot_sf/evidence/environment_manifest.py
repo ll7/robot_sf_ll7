@@ -22,7 +22,6 @@ module installs packages, creates environments, mutates the repository, or runs 
 from __future__ import annotations
 
 import hashlib
-import importlib
 import importlib.metadata
 import importlib.util
 import json
@@ -37,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf._numerical_thread_env import THREAD_ENV_VARS
+from robot_sf.common.optional_import import try_import
 from robot_sf.evidence.writers import sha256_file
 
 ENVIRONMENT_MANIFEST_SCHEMA_VERSION = "environment_manifest.v1"
@@ -318,9 +318,8 @@ def probe_accelerator() -> dict[str, Any]:
     Returns:
         A section mapping accelerator class, library, runtime, driver, and devices.
     """
-    try:
-        torch = importlib.import_module("torch")
-    except ImportError:
+    torch = try_import("torch")
+    if torch is None:
         return {
             "class": unavailable(REASON_PROBE_DEPENDENCY_MISSING),
             "library": unavailable(REASON_PROBE_DEPENDENCY_MISSING),
@@ -397,7 +396,7 @@ def probe_companions() -> dict[str, dict[str, Any]]:
     for module_name, distribution_name in COMPANION_DISTRIBUTIONS.items():
         try:
             found = importlib.util.find_spec(module_name) is not None
-        except (ImportError, ModuleNotFoundError, ValueError):
+        except ValueError:
             found = False
         if not found:
             companions[module_name] = unavailable(REASON_COMPANION_PACKAGE_NOT_INSTALLED)

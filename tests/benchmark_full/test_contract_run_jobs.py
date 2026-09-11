@@ -21,7 +21,7 @@ from robot_sf.benchmark.full_classic.orchestrator import run_episode_jobs
 
 @dataclass
 class _Job:
-    """TODO docstring. Document this class."""
+    """Minimal episode-job double with scenario and seed identity."""
 
     job_id: str
     scenario_id: str
@@ -34,30 +34,30 @@ class _Job:
 
 @dataclass
 class _Manifest:
-    """TODO docstring. Document this class."""
+    """Minimal manifest double exposing the episodes output path."""
 
     episodes_path: str
 
 
 def _episode_id(job: _Job) -> str:  # simplistic deterministic id for test
-    """TODO docstring. Document this function.
+    """Derive the deterministic episode id used for resume deduplication.
 
     Args:
-        job: TODO docstring.
+        job: Episode job whose scenario id and seed form the identifier.
 
     Returns:
-        TODO docstring.
+        Episode id in ``scenario_id-seed`` form.
     """
     return f"{job.scenario_id}-{job.seed}"
 
 
 def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record, monkeypatch):
-    """TODO docstring. Document this function.
+    """Verify run_episode_jobs skips an existing episode and appends only the new one.
 
     Args:
-        temp_results_dir: TODO docstring.
-        synthetic_episode_record: TODO docstring.
-        monkeypatch: TODO docstring.
+        temp_results_dir: Temporary directory holding the episodes file.
+        synthetic_episode_record: Factory building records for the stub builder.
+        monkeypatch: Fixture replacing the record builder with a deterministic stub.
     """
     episodes_dir = Path(temp_results_dir) / "episodes"
     episodes_dir.mkdir()
@@ -85,11 +85,11 @@ def test_run_episode_jobs_resume(temp_results_dir, synthetic_episode_record, mon
     cfg.scenario_matrix_path = "configs/scenarios/classic_interactions.yaml"
 
     def _stub_make_episode(job, _cfg):
-        """TODO docstring. Document this function.
+        """Build a synthetic record for the given job, mirroring the real builder seam.
 
         Args:
-            job: TODO docstring.
-            _cfg: TODO docstring.
+            job: Episode job being executed.
+            _cfg: Orchestrator config (unused by the stub).
         """
         return synthetic_episode_record(
             episode_id=_episode_id(job),

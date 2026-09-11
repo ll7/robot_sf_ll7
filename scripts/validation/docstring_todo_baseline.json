@@ -13,35 +13,11 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 180,
-      "occurrences": 1243
+      "files": 152,
+      "occurrences": 1089
     }
   },
   "files": {
-    "tests/benchmark/test_aggregation_algorithms.py": 6,
-    "tests/benchmark_full/conftest.py": 6,
-    "tests/benchmark_full/test_contract_adaptive_sampling.py": 4,
-    "tests/benchmark_full/test_contract_aggregate_metrics.py": 3,
-    "tests/benchmark_full/test_contract_effect_sizes.py": 11,
-    "tests/benchmark_full/test_contract_expand_jobs.py": 4,
-    "tests/benchmark_full/test_contract_manifest.py": 4,
-    "tests/benchmark_full/test_contract_plan_scenarios.py": 2,
-    "tests/benchmark_full/test_contract_plots.py": 10,
-    "tests/benchmark_full/test_contract_precision.py": 11,
-    "tests/benchmark_full/test_contract_run_jobs.py": 12,
-    "tests/benchmark_full/test_contract_videos.py": 4,
-    "tests/benchmark_full/test_integration_adaptive_stop.py": 3,
-    "tests/benchmark_full/test_integration_aggregate_effect_sizes.py": 4,
-    "tests/benchmark_full/test_integration_effect_sizes_present.py": 2,
-    "tests/benchmark_full/test_integration_precision_report.py": 2,
-    "tests/benchmark_full/test_integration_resume.py": 14,
-    "tests/benchmark_full/test_integration_smoke_run.py": 3,
-    "tests/benchmark_full/test_integration_video_failure.py": 10,
-    "tests/benchmark_full/test_replay_and_metrics.py": 3,
-    "tests/benchmark_full/test_unit_bootstrap_seed.py": 6,
-    "tests/benchmark_full/test_unit_edge_cases.py": 3,
-    "tests/benchmark_full/test_unit_video_selection.py": 2,
-    "tests/benchmark_full/test_unit_wilson.py": 6,
     "tests/classic_interactions/test_model_path_failure.py": 2,
     "tests/classic_interactions/test_reward_integration.py": 1,
     "tests/classic_interactions/test_scenario_selection.py": 3,
@@ -174,10 +150,6 @@
     "tests/training/test_multi_extractor_analysis.py": 6,
     "tests/training/test_observation_wrappers.py": 11,
     "tests/unicycle_drive_test.py": 6,
-    "tests/unit/benchmark/test_contract_format_summary_table.py": 2,
-    "tests/unit/benchmark/test_contract_frame_shape.py": 7,
-    "tests/unit/benchmark/test_contract_overlay_text.py": 9,
-    "tests/unit/benchmark/test_utils_episode_helpers.py": 1,
     "tests/unit/test_cli_logging_flags.py": 2,
     "tests/unit/test_hardware_profile_capture.py": 5,
     "tests/unit/test_metrics_edge_cases.py": 5,
@@ -207,7 +179,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 180,
-    "total_occurrences": 1243
+    "files": 152,
+    "total_occurrences": 1089
   }
 }

@@ -780,6 +780,9 @@ _FAST_FILES = {
     # (issue #8910).
     "test_artifact_paths.py",
     "test_build_compute_staging_bundle.py",
+    # The terminal-job harvest helper (issue #8824) is deterministic fixture and
+    # fail-closed receipt coverage for the changed operational tooling module.
+    "test_harvest_terminal_job.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

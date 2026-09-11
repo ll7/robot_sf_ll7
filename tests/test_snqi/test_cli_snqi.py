@@ -29,10 +29,12 @@ BIN = ["uv", "run", "robot_sf_bench"]  # rely on project script entry via uv
 
 @pytest.fixture()
 def snqi_inputs(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Provide minimal valid SNQI input files and an output path in tmp_path.
+
+    Yields a dict mapping "episodes", "baseline", and "output" to file paths.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory where the fixture files are created.
     """
     episodes = tmp_path / "episodes.jsonl"
     baseline = tmp_path / "baseline.json"
@@ -51,14 +53,14 @@ def _run_cmd(
     args: list[str],
     env_extra: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
-    """TODO docstring. Document this function.
+    """Run a CLI command with the SNQI light-test fast path enabled.
 
     Args:
-        args: TODO docstring.
-        env_extra: TODO docstring.
+        args: Command argument vector to execute.
+        env_extra: Optional environment variable overrides for the subprocess.
 
     Returns:
-        TODO docstring.
+        Completed process with captured stdout/stderr and unchecked exit status.
     """
     env = os.environ.copy()
     env["ROBOT_SF_SNQI_LIGHT_TEST"] = "1"  # ensure fast path
@@ -68,10 +70,10 @@ def _run_cmd(
 
 
 def test_snqi_optimize_fast_path(snqi_inputs: dict[str, Path]):
-    """TODO docstring. Document this function.
+    """Verify `snqi optimize` exits 0 in light-test mode with fixture inputs.
 
     Args:
-        snqi_inputs: TODO docstring.
+        snqi_inputs: Fixture-provided mapping of input and output paths.
     """
     cp = _run_cmd(
         [
@@ -90,10 +92,10 @@ def test_snqi_optimize_fast_path(snqi_inputs: dict[str, Path]):
 
 
 def test_snqi_recompute_fast_path(snqi_inputs: dict[str, Path]):
-    """TODO docstring. Document this function.
+    """Verify `snqi recompute` exits 0 in light-test mode with fixture inputs.
 
     Args:
-        snqi_inputs: TODO docstring.
+        snqi_inputs: Fixture-provided mapping of input and output paths.
     """
     cp = _run_cmd(
         [
@@ -112,7 +114,7 @@ def test_snqi_recompute_fast_path(snqi_inputs: dict[str, Path]):
 
 
 def test_snqi_missing_subcommand():
-    """TODO docstring. Document this function."""
+    """Verify `snqi` without a subcommand exits 2 and shows usage with subcommands."""
     cp = _run_cmd([*BIN, "snqi"])  # no subcommand
     # Argparse prints help and we expect non-zero exit (2 from our dispatcher)
     assert cp.returncode == 2, cp.stderr

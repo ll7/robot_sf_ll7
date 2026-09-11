@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Test SNQI dynamic loader handling of sys.modules anomalies and caching."""
 
 from __future__ import annotations
 
@@ -26,10 +26,10 @@ def test_dynamic_loader_handles_sys_modules_edge_cases(monkeypatch):
     # - module_from_spec returns a lightweight module-like object with run() -> 0
     # - spec_from_file_location returns a dummy spec with a no-op loader
     def fake_module_from_spec(spec):  # type: ignore[no-untyped-def]
-        """TODO docstring. Document this function.
+        """Return a lightweight stub module whose ``run`` method returns 0.
 
         Args:
-            spec: TODO docstring.
+            spec: Import spec assigned to the stub module's ``__spec__``.
         """
         mod = types.SimpleNamespace()
         # mimic minimal module attrs the loader might expect
@@ -39,38 +39,38 @@ def test_dynamic_loader_handles_sys_modules_edge_cases(monkeypatch):
         return mod
 
     class _DummyLoader:  # minimal loader; exec_module is a no-op
-        """TODO docstring. Document this class."""
+        """Minimal import loader whose ``exec_module`` is a no-op."""
 
         def exec_module(self, _mod):  # type: ignore[no-untyped-def]
-            """TODO docstring. Document this function.
+            """No-op module execution hook required by the import machinery.
 
             Args:
-                _mod: TODO docstring.
+                _mod: Module object that would be executed; ignored.
             """
             return None
 
     class _DummySpec:
-        """TODO docstring. Document this class."""
+        """Minimal module spec with a name, string origin, and no-op loader."""
 
         def __init__(self, name, origin):
-            """TODO docstring. Document this function.
+            """Initialize the dummy spec, storing name and origin as strings.
 
             Args:
-                name: TODO docstring.
-                origin: TODO docstring.
+                name: Module name stored on the spec.
+                origin: Source file path stored as the spec origin.
             """
             self.name = name
             self.origin = str(origin)
             self.loader = _DummyLoader()
 
     def fake_spec_from_file_location(name, path, *_args, **_kwargs):  # type: ignore[no-untyped-def]
-        """TODO docstring. Document this function.
+        """Return a ``_DummySpec`` for the requested module name and path.
 
         Args:
-            name: TODO docstring.
-            path: TODO docstring.
-            _args: TODO docstring.
-            _kwargs: TODO docstring.
+            name: Module name passed by the dynamic loader.
+            path: Source path the loader intends to import.
+            _args: Extra positional arguments; ignored.
+            _kwargs: Extra keyword arguments; ignored.
         """
         return _DummySpec(name, path)
 

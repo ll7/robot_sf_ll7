@@ -114,6 +114,10 @@ output carries no private paths, hostnames, accounts, credentials, or signed URL
 
 [`scripts/validation/build_compute_staging_bundle.py`](../../scripts/validation/build_compute_staging_bundle.py) binds one authorized workload's source/config/seed/checkpoint/lock identities into a deterministic `compute_staging_bundle.v1` receipt plus `SHA256SUMS`/inventory/transfer instructions; `--help` lists the stable fail-closed reason codes.
 
+## Terminal-Job Harvest Receipts
+
+[`scripts/validation/harvest_terminal_job.py`](../../scripts/validation/harvest_terminal_job.py) consumes one explicit `terminal_job_harvest_request.v1` plus a local artifact root and writes a deterministic `terminal_job_harvest.v1` public receipt, a private detailed receipt, and `SHA256SUMS`. Scheduler state and artifact completeness stay separate; every expected row gets one explicit disposition (present/duplicate/corrupt/failed/unavailable/missing) and execution mode (native/adapter/fallback/degraded); missing identity/contract/capacity, checksum, membership, stale source, and destination-verification conflicts fail closed. Validate with `uv run python scripts/validation/harvest_terminal_job.py --check --fixture <fixture-root> --format json`.
+
 ## Checkpoint Compatibility Audit
 
 [`scripts/models/audit_checkpoint_compatibility.py`](../../scripts/models/audit_checkpoint_compatibility.py)

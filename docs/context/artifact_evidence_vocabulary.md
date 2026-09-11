@@ -110,6 +110,10 @@ separate. No scientific score or admission decision is computed; stale, missing,
 duplicate, wrong-schema, or unsanitized input masks affected rows as explicit `unavailable`, and
 output carries no private paths, hostnames, accounts, credentials, or signed URLs.
 
+## Compute Staging Bundles
+
+[`scripts/validation/build_compute_staging_bundle.py`](../../scripts/validation/build_compute_staging_bundle.py) binds one authorized workload's source/config/seed/checkpoint/lock identities into a deterministic `compute_staging_bundle.v1` receipt plus `SHA256SUMS`/inventory/transfer instructions; `--help` lists the stable fail-closed reason codes.
+
 ## Checkpoint Compatibility Audit
 
 [`scripts/models/audit_checkpoint_compatibility.py`](../../scripts/models/audit_checkpoint_compatibility.py)

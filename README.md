@@ -18,6 +18,7 @@ pedestrian-filled environments.
 | I want to... | Go to |
 | --- | --- |
 | **Install and use Robot SF (newcomer path)** | [`docs/user-guide.md`](docs/user-guide.md) — task-oriented: install, run a demo, load a map, choose a planner, run a benchmark, visualize results, troubleshoot |
+| Continue after a host or access window ends | [`docs/post_access_local_analysis_runbook.md`](docs/post_access_local_analysis_runbook.md) — restore public-safe inputs, verify them locally, and label unavailable capabilities |
 | Understand the project quickly | [Why Robot SF?](#why-robot-sf) |
 | Decode an acronym or project term | [`docs/glossary.md`](docs/glossary.md) |
 | Install dependencies and run the first demos | [Quickstart](#quickstart) |

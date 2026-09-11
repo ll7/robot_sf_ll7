@@ -49,6 +49,10 @@ agent-assisted work, use [`AGENTS.md`](AGENTS.md).
 2. Verify examples run correctly
 3. Submit PR with clear explanation
 
+For work continuing after an expiring host or access window, follow the
+[post-access restoration and local-analysis runbook](docs/post_access_local_analysis_runbook.md).
+Keep private pointers, credentials, and restricted paths out of commits and issue reports.
+
 ### 5. Research and Benchmarking
 - **New benchmark configurations**: Additional scenario families
 - **Comparison studies**: Comparing planners on different metrics
@@ -296,7 +300,7 @@ Then open a PR on GitHub with:
 - [ ] Pre-commit checks pass: `scripts/dev/ruff_fix_format.sh`
 - [ ] PR readiness verified: `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 - [ ] Docstrings and comments are clear
-- [ ] Acronyms and project terms are expanded on first use or linked to [`glossary.md`](docs/glossary.md); user-facing changes lead with a plain-language summary (see the `## Clarity` rule in [`maintainer_values.md`](docs/maintainer_values.md#clarity))
+- [ ] Acronyms and project terms are expanded on first use or linked to [`glossary.md`](docs/glossary.md); user-facing changes lead with a plain-language summary (see the human-facing clarity guidance in [`AGENTS.md`](AGENTS.md))
 - [ ] Examples work (if relevant)
 
 ### In the PR Description

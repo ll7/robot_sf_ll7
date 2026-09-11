@@ -12,11 +12,11 @@ from robot_sf.benchmark.full_classic.videos import generate_videos
 
 
 def test_generate_videos_smoke_skip(temp_results_dir, synthetic_episode_record):
-    """TODO docstring. Document this function.
+    """Verify smoke mode skips video rendering but still reports an artifact.
 
     Args:
-        temp_results_dir: TODO docstring.
-        synthetic_episode_record: TODO docstring.
+        temp_results_dir: Temporary directory used as the output root.
+        synthetic_episode_record: Factory building the single episode record.
     """
     records = [
         synthetic_episode_record(
@@ -27,7 +27,7 @@ def test_generate_videos_smoke_skip(temp_results_dir, synthetic_episode_record):
     ]
 
     class _Cfg:
-        """TODO docstring. Document this class."""
+        """Minimal config stub with smoke mode and temporary output root."""
 
         smoke = True
         output_root = str(temp_results_dir)

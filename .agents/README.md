@@ -14,11 +14,16 @@ Tool-specific directories should point here when their formats allow it.
 | `.agents/commands/gemini/` | `.gemini/commands/` | Gemini command definitions. |
 
 `AGENTS.md` remains the top-level instruction source for repository rules and task-scoped context
-entrypoints, and `docs/maintainer_values.md` is the compact source for current values and hard
-contracts. Use `docs/ai/agent_workflow_entrypoints.md` for task route selection (read-only observation,
-documentation edit, runtime change, scientific interpretation, or environment repair), correct `uv run`
-command entrypoints, model registry lookup, shared routing handoff format, and targeted large-file
-navigation. Branch synchronization is mode-specific: implementation branches merge `origin/main` early,
+entrypoints, and `docs/maintainer_values.md` is the compact source for current values and
+tie-breakers. `AGENTS.md` owns the repository invariants and hard contracts.
+`docs/ai/agent_workflow_entrypoints.md` is the single owner of task route selection
+(read-only observation, documentation edit, runtime change, scientific interpretation, or
+environment repair), correct `uv run` command entrypoints, model registry lookup, shared routing
+handoff format, and targeted large-file navigation. `.agents/task_scope_manifest.yaml` is the
+machine-readable execution-profile and route mapping validated by
+`scripts/dev/check_instruction_references.py`. Other surfaces link to the route table instead
+of restating the mapping; references are required by default unless marked optional or generated.
+Branch synchronization is mode-specific: implementation branches merge `origin/main` early,
 while read-only review worktrees never merge or push to implementation branches (enforced by
 `scripts/dev/review_worktree_guard.py` / issue #8321).
 Tool-specific instruction files, such as `.github/copilot-instructions.md`, `.claude/CLAUDE.md`,
@@ -30,13 +35,14 @@ cannot live there; `scripts/tools/sync_ai_config.py` enforces their line and sec
 The shared dual-tier resolver is the sole source of truth for delegated model and provider
 selection: see the [`ai-delegation-routing` skill](https://github.com/ll7/codex-personal-skills/blob/main/skills/system/ai-delegation-routing/SKILL.md)
 and the [shared route planner](https://github.com/ll7/codex-personal-skills/blob/main/scripts/resolve-route.py).
-The accepted handoff input and the checkout-based dispatch command are documented with a complete
-`handoff.v2` example in `docs/ai/agent_workflow_entrypoints.md` (search for "handoff.v2").
+The accepted handoff input and the checkout-based dispatch command are documented in
+`docs/ai/agent_workflow_entrypoints.md`, with the example template in
+`docs/templates/handoff.v2.example.yaml`.
 Route output never substitutes for repository-local artifact, diff, validation, benchmark,
 evidence-admission, or paper-facing acceptance proof.
 
-When canonical and compatibility surfaces disagree, follow the precedence rule in `AGENTS.md`.
-Patch the canonical source first, then update generated or mirrored compatibility surfaces when a
+When canonical and compatibility surfaces disagree, follow the `Instruction Precedence` contract in
+`AGENTS.md`. Patch the canonical source first, then update generated or mirrored compatibility surfaces when a
 sync command exists. If a broad mirror update would be risky, keep the canonical change bounded and
 open a follow-up issue that names the affected compatibility entry points.
 

@@ -79,6 +79,57 @@ def test_missing_authoritative_creator_is_rejected(tmp_path: Path) -> None:
     assert any("omit authoritative" in error for error in errors)
 
 
+def test_duplicate_creator_within_zenodo_output_is_rejected(tmp_path: Path) -> None:
+    metadata = _repository_metadata()
+    metadata["creators"] = [
+        metadata["creators"][0],
+        metadata["creators"][0],
+        metadata["creators"][1],
+    ]
+    paths = _write_inputs(tmp_path, metadata)
+
+    errors = validate_release_metadata(*paths)
+
+    assert any(
+        ".zenodo.json creators must not contain duplicate names" in error for error in errors
+    )
+
+
+def test_duplicate_creator_within_citation_source_is_rejected(tmp_path: Path) -> None:
+    metadata = _repository_metadata()
+    zenodo_path, citation_path, pyproject_path = _write_inputs(tmp_path, metadata)
+    citation = yaml.safe_load(citation_path.read_text(encoding="utf-8"))
+    citation["authors"].append(copy.deepcopy(citation["authors"][0]))
+    citation_path.write_text(yaml.safe_dump(citation, sort_keys=False), encoding="utf-8")
+
+    errors = validate_release_metadata(zenodo_path, citation_path, pyproject_path)
+
+    assert any(
+        "authoritative metadata contains duplicate creator names" in error for error in errors
+    )
+    assert any("within CITATION.cff" in error for error in errors)
+
+
+def test_extra_authoritative_output_creator_is_rejected(tmp_path: Path) -> None:
+    metadata = _repository_metadata()
+    metadata["creators"].append({"name": "Other Person"})
+    paths = _write_inputs(tmp_path, metadata)
+
+    errors = validate_release_metadata(*paths)
+
+    assert any("non-authoritative names" in error for error in errors)
+
+
+def test_malformed_output_creator_is_rejected(tmp_path: Path) -> None:
+    metadata = _repository_metadata()
+    metadata["creators"] = [None, metadata["creators"][1]]
+    paths = _write_inputs(tmp_path, metadata)
+
+    errors = validate_release_metadata(*paths)
+
+    assert any("creators[0] must be an object" in error for error in errors)
+
+
 def test_title_drift_is_rejected(tmp_path: Path) -> None:
     metadata = _repository_metadata()
     metadata["title"] = "stale-title"

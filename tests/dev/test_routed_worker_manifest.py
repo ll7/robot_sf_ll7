@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from typing import TYPE_CHECKING
@@ -703,3 +704,131 @@ def test_manifest_explicit_no_findings_stays_inconclusive(tmp_path: Path) -> Non
 
     assert data["aggregation"] == "inconclusive"
     assert data["aggregation_reason"] == "useful_findings_absent"
+
+
+def test_output_path_contract_accepts_declared_absolute_root(tmp_path: Path) -> None:
+    """Artifacts at the declared absolute output root produce no findings."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-path-ok"
+    _write_artifacts(run_dir, ALL_ARTIFACTS)
+
+    findings = manifest.verify_output_path_contract(
+        str(run_dir), expected_output_root=str(run_dir), target_repo=repo
+    )
+
+    assert findings == []
+
+
+def test_output_path_contract_flags_unexpected_run_nesting(tmp_path: Path) -> None:
+    """Artifacts one directory below the declared root are reported as nested."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-path-nested"
+    _write_artifacts(run_dir / "RUN", ALL_ARTIFACTS)
+
+    findings = manifest.verify_output_path_contract(
+        str(run_dir), expected_output_root=str(run_dir), target_repo=repo
+    )
+
+    nested = [finding for finding in findings if finding["kind"] == "unexpected_nesting"]
+    assert len(nested) == len(ALL_ARTIFACTS)
+    assert {finding["actual_path"] for finding in nested} >= {"RUN/result.json", "RUN/RESULT.md"}
+    assert "result.json" in {finding["expected_path"] for finding in nested}
+
+
+def test_output_path_contract_reports_missing_artifact(tmp_path: Path) -> None:
+    """An artifact absent at every searched depth is reported as missing."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-path-missing"
+    _write_artifacts(run_dir, ["result.json", "RESULT.md", "diffstat.txt", "status.txt"])
+
+    findings = manifest.verify_output_path_contract(
+        str(run_dir), expected_output_root=str(run_dir), target_repo=repo
+    )
+
+    assert findings == [
+        {
+            "kind": "missing_artifact",
+            "key": "validation",
+            "expected_path": "validation.txt",
+            "actual_path": None,
+            "expected_sha256": None,
+            "actual_sha256": None,
+        }
+    ]
+
+
+def test_referenced_hash_check_flags_stale_reference(tmp_path: Path) -> None:
+    """A recorded hash that no longer matches the referenced bytes is stale."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-ref-stale"
+    _write_artifacts(run_dir, ALL_ARTIFACTS)
+    (run_dir / "payload.json").write_text("new payload\n", encoding="utf-8")
+    stale_sha256 = hashlib.sha256(b"old payload\n").hexdigest()
+
+    findings = manifest.verify_referenced_hashes(
+        str(run_dir),
+        {"binding": {"path": "payload.json", "sha256": stale_sha256}},
+        target_repo=repo,
+    )
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding["kind"] == "stale_reference"
+    assert finding["key"] == "binding"
+    assert finding["expected_path"] == "payload.json"
+    assert finding["expected_sha256"] == stale_sha256
+    assert finding["actual_sha256"] == hashlib.sha256(b"new payload\n").hexdigest()
+
+
+def test_referenced_hash_check_missing_and_matching(tmp_path: Path) -> None:
+    """Matching references pass while absent referenced files are reported."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-ref-mixed"
+    run_dir.mkdir(parents=True)
+    (run_dir / "payload.json").write_text("ok\n", encoding="utf-8")
+    matching_sha256 = hashlib.sha256(b"ok\n").hexdigest()
+
+    findings = manifest.verify_referenced_hashes(
+        str(run_dir),
+        {
+            "payload": {"path": "payload.json", "sha256": matching_sha256},
+            "absent": "missing.json",
+        },
+        target_repo=repo,
+    )
+
+    assert findings == [
+        {
+            "kind": "missing_reference",
+            "key": "absent",
+            "expected_path": "missing.json",
+            "actual_path": None,
+            "expected_sha256": None,
+            "actual_sha256": None,
+        }
+    ]
+
+
+def test_manifest_path_contract_findings_do_not_change_aggregation(tmp_path: Path) -> None:
+    """Path-contract findings stay route evidence and cannot alter task aggregation."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-separation"
+    _write_artifacts(run_dir, ALL_ARTIFACTS)
+    (run_dir / "payload.json").write_text("new\n", encoding="utf-8")
+    attempts = [
+        {
+            "route": {"provider": "qwen"},
+            "returncode": 0,
+            "failure_class": "none",
+            "run_dir": ".git/codex-agent-runs/run-separation",
+            "artifact_references": {"payload": {"path": "payload.json", "sha256": "0" * 64}},
+        }
+    ]
+
+    data = manifest.build_routing_manifest(attempts, chosen_index=0, target_repo=repo)
+
+    assert data["chosen_path_contract"]["schema"] == "routed_worker_path_contract.v1"
+    assert data["chosen_path_contract"]["ok"] is False
+    assert data["chosen_path_contract"]["findings"][0]["kind"] == "stale_reference"
+    assert data["chosen_terminal_state"] == "none"
+    assert data["aggregation"] == "confirmed"

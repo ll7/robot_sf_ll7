@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import shlex
 import subprocess
@@ -96,6 +97,7 @@ _JOB_KEYS = (
     "harvest_artifact_root",
     "observations",
 )
+_PROJECTION_KEYS = frozenset(("schema_version", "jobs"))
 _OBSERVATION_KEYS = ("schema_version", "job_id", "observed_at", "state", "identity_sha256", "array")
 EXIT_REPORT, EXIT_MALFORMED, EXIT_UNAVAILABLE = 0, 2, 3
 MAX_WALL_SECONDS = 86400.0
@@ -489,6 +491,8 @@ def parse_projection(payload: Any) -> tuple[list[ProjectedJob], _Problems]:
         raise MonitorContractError("projection must be a JSON object")
     if payload.get("schema_version") != PROJECTION_SCHEMA:
         raise MonitorContractError(f"projection schema must be {PROJECTION_SCHEMA}")
+    if set(payload) - _PROJECTION_KEYS:
+        raise MonitorContractError("projection contains unknown fields")
     jobs_raw = payload.get("jobs")
     if not isinstance(jobs_raw, list) or not jobs_raw:
         raise MonitorContractError("projection must list at least one explicit job")
@@ -570,34 +574,105 @@ def monitor_once(projection_payload: Any) -> dict[str, Any]:
     )
 
 
+def _valid_live_bounds(interval: float, max_wall_seconds: float, query_timeout: float) -> bool:
+    return (
+        math.isfinite(interval)
+        and interval > 0
+        and math.isfinite(max_wall_seconds)
+        and 0 < max_wall_seconds <= MAX_WALL_SECONDS
+        and math.isfinite(query_timeout)
+        and 0 < query_timeout <= MAX_WALL_SECONDS
+    )
+
+
+def _seed_monitors(monitors: list[JobMonitor]) -> None:
+    for monitor in monitors:
+        for payload in monitor.job.observations:
+            monitor.apply(payload, source="projection")
+
+
+def _poll_monitor(
+    monitor: JobMonitor,
+    query: Callable[[str, float], Any],
+    *,
+    timeout: float,
+    clock: Callable[[], float],
+    started: float,
+    max_wall_seconds: float,
+) -> bool:
+    try:
+        payload: Any = query(monitor.job.identity["job_id"], timeout)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        payload = None
+    if clock() - started >= max_wall_seconds:
+        return True
+    if payload is None:
+        monitor.query_failure_count += 1
+        _add(monitor.problems, "query_unavailable", "observation", "no evidence")
+    else:
+        monitor.apply(payload, source="state_query")
+    return False
+
+
+def _poll_round(
+    monitors: list[JobMonitor],
+    query: Callable[[str, float], Any],
+    *,
+    query_timeout: float,
+    clock: Callable[[], float],
+    started: float,
+    max_wall_seconds: float,
+) -> bool:
+    for monitor in monitors:
+        if monitor.terminal or monitor.identity_rejected:
+            continue
+        remaining = max_wall_seconds - (clock() - started)
+        if remaining <= 0:
+            return True
+        if _poll_monitor(
+            monitor,
+            query,
+            timeout=min(query_timeout, remaining),
+            clock=clock,
+            started=started,
+            max_wall_seconds=max_wall_seconds,
+        ):
+            return True
+    return False
+
+
 def monitor_live(
     projection_payload: Any,
-    query: Callable[[str], Any],
+    query: Callable[[str, float], Any],
     *,
     interval: float,
     max_wall_seconds: float,
+    query_timeout: float = DEFAULT_QUERY_TIMEOUT_SECONDS,
     clock: Callable[[], float] | None = None,
     sleeper: Callable[[float], None] | None = None,
 ) -> dict[str, Any]:
     """Poll explicit jobs until terminal or the hard wall-clock bound expires."""
+    if not _valid_live_bounds(interval, max_wall_seconds, query_timeout):
+        raise MonitorContractError(
+            "live monitor bounds must be finite and within the allowed range"
+        )
     clock, sleeper = clock or time.monotonic, sleeper or time.sleep
     jobs, problems = parse_projection(projection_payload)
     monitors = [JobMonitor(job) for job in jobs]
+    _seed_monitors(monitors)
     started = clock()
     expired = False
     while True:
-        for monitor in monitors:
-            if monitor.terminal or monitor.identity_rejected:
-                continue
-            try:
-                payload: Any = query(monitor.job.identity["job_id"])
-            except (OSError, ValueError, subprocess.SubprocessError):
-                payload = None
-            if payload is None:
-                monitor.query_failure_count += 1
-                _add(monitor.problems, "query_unavailable", "observation", "no evidence")
-            else:
-                monitor.apply(payload, source="state_query")
+        if _poll_round(
+            monitors,
+            query,
+            query_timeout=query_timeout,
+            clock=clock,
+            started=started,
+            max_wall_seconds=max_wall_seconds,
+        ):
+            expired = True
+            break
         if all(m.terminal or m.identity_rejected for m in monitors):
             break
         remaining = max_wall_seconds - (clock() - started)
@@ -636,17 +711,22 @@ def render_report_text(report: Mapping[str, Any]) -> str:
     )
 
 
-def _make_query(template: str, timeout: float) -> Callable[[str], Mapping[str, Any] | None]:
+def _make_query(template: str, timeout: float) -> Callable[[str, float], Mapping[str, Any] | None]:
     argv = shlex.split(template)
     if not argv:
         raise MonitorContractError("--state-query must not be empty")
     if "{job_id}" not in template:
         raise MonitorContractError("--state-query must include the {job_id} placeholder")
 
-    def query(job_id: str) -> Mapping[str, Any] | None:
+    def query(job_id: str, budget_seconds: float) -> Mapping[str, Any] | None:
         command = [part.replace("{job_id}", job_id) for part in argv]
         try:
-            completed = subprocess.run(command, capture_output=True, timeout=timeout, check=False)
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                timeout=min(timeout, budget_seconds),
+                check=False,
+            )
         except (OSError, subprocess.SubprocessError):
             return None
         if completed.returncode != 0 or len(completed.stdout) > MAX_RESPONSE_BYTES:
@@ -673,8 +753,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--query-timeout", type=float, default=DEFAULT_QUERY_TIMEOUT_SECONDS)
     parser.add_argument("--format", choices=("json", "text"), default="json")
     args = parser.parse_args(argv)
-    if args.interval <= 0 or not 0 < args.max_wall_seconds <= MAX_WALL_SECONDS:
-        print("error: --interval must be positive and --max-wall-seconds within (0, 86400]")
+    if (
+        not math.isfinite(args.interval)
+        or args.interval <= 0
+        or not math.isfinite(args.max_wall_seconds)
+        or not 0 < args.max_wall_seconds <= MAX_WALL_SECONDS
+        or not math.isfinite(args.query_timeout)
+        or not 0 < args.query_timeout <= MAX_WALL_SECONDS
+    ):
+        print(
+            "error: --interval, --max-wall-seconds, and --query-timeout must be finite; "
+            "interval/query-timeout must be positive and bounds must be within (0, 86400]",
+            file=sys.stderr,
+        )
         return EXIT_MALFORMED
     try:
         payload = json.loads(args.projection.read_text(encoding="utf-8"))
@@ -688,6 +779,7 @@ def main(argv: list[str] | None = None) -> int:
                 _make_query(args.state_query, args.query_timeout),
                 interval=args.interval,
                 max_wall_seconds=args.max_wall_seconds,
+                query_timeout=args.query_timeout,
             )
         )
     except (OSError, ValueError) as exc:

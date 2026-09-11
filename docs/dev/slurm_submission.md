@@ -129,8 +129,9 @@ naming the canonical `scripts/validation/harvest_terminal_job.py --check` comman
 terminal state is observed. For live polling, pass `--state-query "<read-only command with
 {job_id}>"` with `--interval` and a hard `--max-wall-seconds`; expiry emits
 `monitor_window_expired` with the current state instead of classifying the job terminal. The
-monitor never cancels, retries, submits, or harvests, and scheduler completion is never
-artifact or scientific success.
+query subprocess timeout is clamped to the remaining wall-clock budget. The monitor never
+cancels, retries, submits, or harvests, and scheduler completion is never artifact or scientific
+success.
 
 ## Training submission queue
 

@@ -230,11 +230,11 @@ def test_reduction_and_rendering_are_deterministic() -> None:
 def test_monitor_window_expiry_is_not_terminal() -> None:
     identity = _identity()
     counter = iter(range(10))
-    ticks = [0.0, 0.5, 0.5, 10.0]
+    ticks = [0.0, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.5, 1.5, 10.0]
     slept: list[float] = []
     report = tool.monitor_live(
         _projection(_job(identity)),
-        lambda _job_id: _obs("RUNNING", next(counter), identity=identity),
+        lambda _job_id, _timeout: _obs("RUNNING", next(counter), identity=identity),
         interval=0.5,
         max_wall_seconds=10.0,
         clock=lambda: ticks.pop(0) if ticks else 10.0,
@@ -253,18 +253,14 @@ def test_monitor_window_expiry_is_not_terminal() -> None:
 
 
 def test_query_outage_stays_non_terminal_and_explicit() -> None:
-    elapsed = {"value": 0.0}
-
-    def clock() -> float:
-        elapsed["value"] += 1.0
-        return elapsed["value"]
+    ticks = iter((0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0))
 
     report = tool.monitor_live(
         _projection(_job()),
-        lambda _job_id: None,
+        lambda _job_id, _timeout: None,
         interval=0.5,
         max_wall_seconds=2.0,
-        clock=clock,
+        clock=ticks.__next__,
         sleeper=lambda _seconds: None,
     )
     record = report["jobs"][0]
@@ -272,6 +268,67 @@ def test_query_outage_stays_non_terminal_and_explicit() -> None:
     assert "query_unavailable" in report["reason_codes"]
     assert record["query_failure_count"] == 2
     assert record["scheduler"]["terminal"] is False and record["handoff"] is None
+
+
+def test_live_mode_reduces_embedded_history_before_query() -> None:
+    identity = _identity()
+    report = tool.monitor_live(
+        _projection(
+            _job(
+                identity,
+                [_obs("PENDING", 0, identity=identity), _obs("RUNNING", 1, identity=identity)],
+            )
+        ),
+        lambda _job_id, _timeout: _obs("COMPLETED", 2, identity=identity),
+        interval=1.0,
+        max_wall_seconds=10.0,
+        clock=iter((0.0, 0.0, 0.0)).__next__,
+        sleeper=lambda _seconds: None,
+    )
+    assert [transition["to"] for transition in report["jobs"][0]["transitions"]] == [
+        "pending",
+        "running",
+        "completed",
+    ]
+
+
+def test_projection_rejects_unknown_top_level_fields() -> None:
+    with pytest.raises(tool.MonitorContractError, match="unknown fields"):
+        tool.parse_projection({**_projection(_job()), "unexpected": True})
+
+
+def test_live_mode_clamps_query_timeout_to_remaining_budget() -> None:
+    identity = _identity()
+    received: list[float] = []
+    report = tool.monitor_live(
+        _projection(_job(identity)),
+        lambda _job_id, timeout: received.append(timeout) or _obs("RUNNING", 0, identity=identity),
+        interval=1.0,
+        max_wall_seconds=2.0,
+        query_timeout=10.0,
+        clock=iter((0.0, 0.25, 0.25, 2.0)).__next__,
+        sleeper=lambda _seconds: None,
+    )
+    assert received == [1.75]
+    assert report["status"] == "monitor_window_expired"
+
+
+def test_cli_rejects_non_finite_query_timeout(tmp_path: Path, capsys: Any) -> None:
+    path = tmp_path / "projection.json"
+    path.write_text(json.dumps(_projection(_job())), encoding="utf-8")
+    code = tool.main(
+        [
+            "--check",
+            "--projection",
+            str(path),
+            "--state-query",
+            "true {job_id}",
+            "--query-timeout",
+            "inf",
+        ]
+    )
+    assert code == 2
+    assert "query-timeout" in capsys.readouterr().err
 
 
 def test_projection_failures_are_explicit() -> None:

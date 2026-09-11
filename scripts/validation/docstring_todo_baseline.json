@@ -13,13 +13,12 @@
       "occurrences": 0
     },
     "tests": {
-      "files": 63,
-      "occurrences": 425
+      "files": 54,
+      "occurrences": 345
     }
   },
   "files": {
     "tests/conftest.py": 12,
-    "tests/factories/test_recording_integration.py": 2,
     "tests/fixtures/minimal_manifests/generator.py": 17,
     "tests/lidar_sensor_obstacle_test.py": 13,
     "tests/lidar_sensor_pedestrian_test.py": 12,
@@ -39,7 +38,6 @@
     "tests/sim/test_backend_selector.py": 8,
     "tests/sim_config_test.py": 3,
     "tests/test_baseline_ppo_smoke.py": 3,
-    "tests/test_benchmark_imitation_manifest.py": 14,
     "tests/test_classic_interactions_matrix.py": 4,
     "tests/test_cli_run_snqi.py": 3,
     "tests/test_cli_run_snqi_from.py": 7,
@@ -58,19 +56,13 @@
     "tests/test_full_classic_visuals_simview_fallback.py": 15,
     "tests/test_image_sensor_fusion.py": 3,
     "tests/test_lidar_render.py": 11,
-    "tests/test_manifest_resume.py": 8,
     "tests/test_multi_pedestrian.py": 2,
     "tests/test_render_error_message.py": 1,
     "tests/test_reward_default_fallback.py": 1,
     "tests/test_runner_batch.py": 2,
-    "tests/test_runner_resume.py": 2,
     "tests/test_scenario_generator.py": 8,
     "tests/test_seed_utils.py": 4,
     "tests/test_svg_classic_maps_format.py": 3,
-    "tests/test_tracking/test_history.py": 8,
-    "tests/test_tracking/test_manifest_writer.py": 6,
-    "tests/test_tracking/test_progress_tracker.py": 15,
-    "tests/test_tracking/test_telemetry.py": 7,
     "tests/test_trajectory_feature.py": 6,
     "tests/test_types.py": 17,
     "tests/test_visualizablesimstate.py": 1,
@@ -78,7 +70,6 @@
     "tests/tools/test_compare_training_runs.py": 9,
     "tests/unicycle_drive_test.py": 6,
     "tests/unit/test_hardware_profile_capture.py": 5,
-    "tests/unit/test_resume_manifest.py": 18,
     "tests/unit/test_runner_video.py": 10,
     "tests/zone_sampling_test.py": 7
   },
@@ -90,7 +81,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 63,
-    "total_occurrences": 425
+    "files": 54,
+    "total_occurrences": 345
   }
 }

@@ -1,4 +1,9 @@
-"""TODO docstring. Document this module."""
+"""Integration checks for video performance budget reporting.
+
+The module writes a one-scenario matrix, runs run_batch with video enabled, and
+inspects the JSONL video manifest for soft-breach warnings and hard-enforcement
+failures.
+"""
 
 from __future__ import annotations
 
@@ -17,10 +22,10 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _write_minimal_matrix(path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Write a one-scenario open-field matrix to path as YAML.
 
     Args:
-        path: TODO docstring.
+        path: Destination path for the scenario matrix.
     """
     scenarios = [
         {
@@ -96,11 +101,14 @@ def test_video_perf_soft_warn(tmp_path: Path, monkeypatch):
 @pytest.mark.skipif(moviepy_spec is None, reason="moviepy/ffmpeg not available")
 def test_video_perf_hard_enforce_fails(tmp_path: Path, monkeypatch):
     # Force hard breach and enforce; expect batch to record a failure
-    """TODO docstring. Document this function.
+    """Assert a hard overhead breach with enforcement fails the batch.
+
+    Both overhead thresholds are set to 0.0 with ROBOT_SF_PERF_ENFORCE=1; the batch
+    writes no episodes and records exactly one failure.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Directory receiving the matrix and JSONL output.
+        monkeypatch: Pytest fixture used to set the budget env vars.
     """
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_SOFT", "0.0")
     monkeypatch.setenv("ROBOT_SF_VIDEO_OVERHEAD_HARD", "0.0")

@@ -534,6 +534,15 @@ Recent camera-ready GPU lifecycle and cross-arm VRAM leak fix:
 Soft Social Navigation Quality Index (SNQI) warning exit-lane integration state:
 [issue_5244_state.yaml](issue_5244_state.yaml).
 
+Artifact retention, preservation, and cleanup guide: operational reference defining which Robot SF outputs are disposable, diagnostic, promoted, or protected; what counts as verified preservation; and when cleanup is safe:
+[artifact_retention_and_cleanup.md](artifact_retention_and_cleanup.md).
+
+Historical evidence registry bindings (`evidence_registry_historical_bindings.v1`): records reviewed historical references that remain valid for current evidence records after source file moves in repository history, verifying records against immutable Git identities before suppressing artifact checksum mismatches:
+[evidence_registry_historical_bindings.v1.md](evidence_registry_historical_bindings.v1.md).
+
+Issue #1496 BC-warm-start comparison packet: freezes the outcome-free comparison contract between an RL-only PPO arm and a behavior-cloning (BC) warm-start followed by approved PPO fine-tuning, with matched training seeds and validation checkpoints:
+[issue_1496_bc_warm_start_comparison_packet.md](issue_1496_bc_warm_start_comparison_packet.md).
+
 Recent hard-guarded hybrid-learning synthesis closure audit:
 [issue_1489_closure_audit_2026-07-05.md](evidence/issue_1489_closure_audit_2026-07-05.md).
 

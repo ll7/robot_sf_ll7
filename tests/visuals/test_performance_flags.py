@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class Cfg:
-    """TODO docstring. Document this class."""
+    """Config stub using synthetic rendering with one video and replay capture."""
 
     smoke = False
     disable_videos = False
@@ -29,11 +29,15 @@ class Cfg:
 
 def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
     # Provide simple record with minimal replay (synthetic path ignores replay)
-    """TODO docstring. Document this function.
+    """Assert plots_over_budget and video_over_budget fire for inflated timings.
+
+    The video builder is stubbed with a 6.2s successful synthetic artifact and
+    time.perf_counter follows a scripted sequence; the performance summary reports
+    both budget flags as True.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
+        monkeypatch: Pytest fixture used to stub the builder and perf_counter.
     """
     records = [
         {
@@ -49,10 +53,10 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
 
     # Monkeypatch build to simulate long encode time & over-budget plots
     class FakeVideoArtifact:
-        """TODO docstring. Document this class."""
+        """Successful synthetic video artifact with a 6.2s encode time."""
 
         def __init__(self):
-            """TODO docstring. Document this function."""
+            """Initialize identifiers, output path, success status, and over-budget metrics."""
             self.artifact_id = "video_ep1"
             self.scenario_id = "sc1"
             self.episode_id = "ep1"
@@ -64,13 +68,13 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
             self.peak_rss_mb = 30.0
 
     def fake_build(_cfg, _recs, _vdir, _rmap):
-        """TODO docstring. Document this function.
+        """Return one over-budget fake video artifact, ignoring all arguments.
 
         Args:
-            _cfg: TODO docstring.
-            _recs: TODO docstring.
-            _vdir: TODO docstring.
-            _rmap: TODO docstring.
+            _cfg: Config accepted and ignored.
+            _recs: Records accepted and ignored.
+            _vdir: Video directory accepted and ignored.
+            _rmap: Replay map accepted and ignored.
         """
         return [FakeVideoArtifact()]
 
@@ -80,7 +84,10 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
     timeline = [base, base + 3.1, base + 3.2, base + 3.25]
 
     def fake_perf_counter2():
-        """TODO docstring. Document this function."""
+        """Pop and return the next scripted perf_counter value.
+
+        The final value is repeated once the sequence is exhausted.
+        """
         if len(timeline) == 1:
             return timeline[0]
         return timeline.pop(0)
@@ -96,19 +103,22 @@ def test_performance_flags_over_budget(tmp_path: Path, monkeypatch):
 @pytest.mark.parametrize("peak", [101.0, 150.0])
 def test_memory_over_budget_flag(tmp_path: Path, monkeypatch, peak):
     # Monkeypatch encoding to inject a synthetic success with high peak memory
-    """TODO docstring. Document this function.
+    """Assert peak memory above the budget sets memory_over_budget.
+
+    Parametrized over 101 MB and 150 MB peak RSS values on a successful synthetic
+    artifact; the performance summary reports memory_over_budget True for both.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
-        peak: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
+        monkeypatch: Pytest fixture used to stub the video builder.
+        peak: Peak RSS value in MB injected into the fake artifact.
     """
 
     class FakeVideoArtifact:
-        """TODO docstring. Document this class."""
+        """Successful synthetic video artifact with a parametrized peak RSS."""
 
         def __init__(self):
-            """TODO docstring. Document this function."""
+            """Initialize identifiers, success status, and the injected peak memory value."""
             self.artifact_id = "video_ep1"
             self.scenario_id = "sc1"
             self.episode_id = "ep1"
@@ -120,13 +130,13 @@ def test_memory_over_budget_flag(tmp_path: Path, monkeypatch, peak):
             self.peak_rss_mb = peak
 
     def fake_build_video(_cfg, _records, _videos_dir, _replay_map):
-        """TODO docstring. Document this function.
+        """Return one peak-memory fake video artifact, ignoring all arguments.
 
         Args:
-            _cfg: TODO docstring.
-            _records: TODO docstring.
-            _videos_dir: TODO docstring.
-            _replay_map: TODO docstring.
+            _cfg: Config accepted and ignored.
+            _records: Records accepted and ignored.
+            _videos_dir: Video directory accepted and ignored.
+            _replay_map: Replay map accepted and ignored.
         """
         return [FakeVideoArtifact()]
 

@@ -23,6 +23,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
 | Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
 | Checkpoint preservation custody check | [check_checkpoint_preservation.py](../../scripts/validation/check_checkpoint_preservation.py) |
+| Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
 ## 1. Retention classes in operational terms
 
@@ -192,7 +193,19 @@ publication. Load status is reported separately (`verified_metadata`, `loadabili
 `loadability_failed`, `not_checked`) and is never preservation, performance, or benchmark evidence.
 The tool is read-only and emits no private paths.
 
-### 4.9 Report a blocker
+### 4.9 Generate complete post-access handoff
+
+```bash
+uv run python scripts/tools/generate_post_access_handoff.py --check \
+  --inventory <COMPUTE_INVENTORY_JSON> --format json
+```
+
+The generator produces a deterministic, sanitized post-access handoff report in JSON or Markdown
+summarizing workloads, scheduler receipts, artifact custody, and environment recreation states.
+It redacts private paths, internal hosts, and credentials, rejects contradictory statuses and
+orphan records, and enforces actionable next commands for incomplete runs.
+
+### 4.10 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

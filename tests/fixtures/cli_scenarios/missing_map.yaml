@@ -1,0 +1,7 @@
+# Missing map reference fixture
+scenarios:
+  - name: missing_map_scenario
+    map_file: maps/nonexistent_dummy_map_file.svg
+    simulation_config:
+      max_episode_steps: 100
+      ped_density: 0.02

@@ -222,6 +222,49 @@ def test_assemble_is_deterministic_and_offline_verify_reuses_exact_bytes(tmp_pat
     assert "PASS" in result.stdout
 
 
+def test_dispatch_source_identity_is_bound_in_provenance_and_verified(tmp_path: Path) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    dist = _distributions(tmp_path / "dist")
+    raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
+    bundle = tmp_path / "bundle"
+    _run(
+        *_assemble_args(source, source_sha, dist, raw_sbom, bundle),
+        "--requested-source-sha",
+        source_sha,
+    )
+
+    provenance = json.loads((bundle / "candidate-provenance.json").read_text(encoding="utf-8"))
+    assert provenance["source_identity"] == {
+        "observed_source_sha": source_sha,
+        "requested_source_sha": source_sha,
+    }
+    _run(
+        "verify",
+        "--bundle-dir",
+        str(bundle),
+        "--expected-source-sha",
+        source_sha,
+        "--expected-workflow-run-id",
+        "123456",
+        "--expected-workflow-run-attempt",
+        "1",
+    )
+
+
+def test_assemble_rejects_requested_source_drift(tmp_path: Path) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    dist = _distributions(tmp_path / "dist")
+    raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
+    result = _run(
+        *_assemble_args(source, source_sha, dist, raw_sbom, tmp_path / "bundle"),
+        "--requested-source-sha",
+        "b" * 40,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "requested source SHA does not match" in result.stderr
+
+
 def test_sbom_volatile_identity_is_removed_deterministically(tmp_path: Path) -> None:
     source, source_sha = _source_repo(tmp_path / "source")
     dist = _distributions(tmp_path / "dist")

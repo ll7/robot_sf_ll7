@@ -38,6 +38,98 @@ CLAIM_BOUNDARY = (
     "force_coupled_potential_field to reference baselines on analytic fixtures; "
     "no ranking, social compliance, or paper-grade claim is established."
 )
+FAILURE_CLASS_PATH_GENERATION = "path_generation"
+FAILURE_CLASS_TRACKING = "tracking"
+FAILURE_CLASS_SOCIAL_COMPLIANCE = "social_compliance"
+FAILURE_CLASS_SIMULATOR = "simulator"
+
+VALID_FAILURE_CLASSES: tuple[str, ...] = (
+    FAILURE_CLASS_PATH_GENERATION,
+    FAILURE_CLASS_TRACKING,
+    FAILURE_CLASS_SOCIAL_COMPLIANCE,
+    FAILURE_CLASS_SIMULATOR,
+)
+
+
+def classify_failure(
+    *,
+    status: str,
+    degraded: bool = False,
+    degradation_reasons: tuple[str, ...] | list[str] = (),
+    collision_obstacle: bool = False,
+    collision_pedestrian: bool = False,
+    completed: bool = True,
+    plan_exception: bool = False,
+    simulator_error: bool = False,
+) -> str | None:
+    """Classify the failure mode of a non-ok rollout into the four-way taxonomy.
+
+    The four explicit failure classes are:
+      - 'path_generation': planner exceptions, solver infeasibility, or goal unreachable timeouts.
+      - 'tracking': obstacle collision or kinematic/steering/actuation limit violations.
+      - 'social_compliance': pedestrian collision or proximity/comfort violations.
+      - 'simulator': runtime simulation errors or environment step crashes.
+
+    Args:
+        status: Rollout status ('ok', 'error', 'degraded').
+        degraded: Whether planner or rollout operated in degraded mode.
+        degradation_reasons: Sequence of reasons for degradation.
+        collision_obstacle: Whether collision with an obstacle occurred.
+        collision_pedestrian: Whether collision with a pedestrian occurred.
+        completed: Whether the robot reached the goal within max steps.
+        plan_exception: Whether an exception occurred during planning.
+        simulator_error: Whether an error occurred in the simulation/environment.
+
+    Returns:
+        One of the four failure classes if the rollout is non-ok, or None if rollout succeeded (status=='ok').
+    """
+    if (
+        status == "ok"
+        and not degraded
+        and not collision_obstacle
+        and not collision_pedestrian
+        and completed
+        and not plan_exception
+        and not simulator_error
+    ):
+        return None
+
+    reasons_str = " ".join(degradation_reasons).lower()
+
+    # 1. Simulator errors
+    if simulator_error or "simulator" in reasons_str or "sim_error" in reasons_str:
+        return FAILURE_CLASS_SIMULATOR
+
+    # 2. Social compliance (pedestrian collision or social proximity violation)
+    if collision_pedestrian or "pedestrian" in reasons_str or "social" in reasons_str:
+        return FAILURE_CLASS_SOCIAL_COMPLIANCE
+
+    # 3. Tracking (obstacle collision, steering/speed limit saturation, kinematic limits)
+    if (
+        collision_obstacle
+        or "obstacle" in reasons_str
+        or "tracking" in reasons_str
+        or "kinematic" in reasons_str
+        or "steering" in reasons_str
+        or "speed_limit" in reasons_str
+        or "rate_limit" in reasons_str
+        or "actuation" in reasons_str
+    ):
+        return FAILURE_CLASS_TRACKING
+
+    # 4. Path generation (planner exceptions, solver failures, goal unreachable timeouts)
+    if (
+        plan_exception
+        or "plan_exception" in reasons_str
+        or "solver" in reasons_str
+        or "infeasible" in reasons_str
+        or "no_path" in reasons_str
+        or not completed
+    ):
+        return FAILURE_CLASS_PATH_GENERATION
+
+    # Fallback for remaining non-ok conditions
+    return FAILURE_CLASS_PATH_GENERATION
 
 
 @dataclass(frozen=True)
@@ -95,6 +187,7 @@ class ComparatorRunResult:
     status: str
     degraded: bool
     degradation_reasons: tuple[str, ...]
+    failure_class: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize result for receipt output.
@@ -130,6 +223,7 @@ class ComparatorRunResult:
             "status": self.status,
             "degraded": self.degraded,
             "degradation_reasons": list(self.degradation_reasons),
+            "failure_class": self.failure_class,
         }
 
 
@@ -325,7 +419,7 @@ def _update_clearance(
     return new_min, collision, near_miss
 
 
-def execute_rollout(  # noqa: C901, PLR0915
+def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     planner: LocalPlannerProtocol,
     scenario: ComparatorScenarioSpec,
 ) -> ComparatorRunResult:
@@ -355,6 +449,11 @@ def execute_rollout(  # noqa: C901, PLR0915
     degraded = False
     degradation_reasons: list[str] = []
     status = "ok"
+    planner_id = type(planner).__name__
+    col_obs_occurred = False
+    col_ped_occurred = False
+    plan_exception_occurred = False
+    simulator_error_occurred = False
 
     last_v = 0.0
     last_a = 0.0
@@ -378,6 +477,8 @@ def execute_rollout(  # noqa: C901, PLR0915
             )
             collision = collision or col_obs
             near_miss = near_miss or nm_obs
+            if col_obs:
+                col_obs_occurred = True
 
         if scenario.pedestrians:
             min_ped_dist, col_ped, nm_ped = _update_clearance(
@@ -390,6 +491,8 @@ def execute_rollout(  # noqa: C901, PLR0915
             )
             collision = collision or col_ped
             near_miss = near_miss or nm_ped
+            if col_ped:
+                col_ped_occurred = True
 
         obs = {
             "robot": [rx, ry, rtheta],
@@ -410,10 +513,12 @@ def execute_rollout(  # noqa: C901, PLR0915
         except (ArithmeticError, IndexError, KeyError, TypeError, ValueError) as exc:
             status = "error"
             degraded = True
+            plan_exception_occurred = True
             degradation_reasons.append(f"plan_exception: {exc}")
             break
 
         diag = planner.diagnostics()
+        planner_id = str(diag.get("planner_type", planner_id))
         if diag.get("status") == "degraded":
             degraded = True
             for reason in diag.get("degradation_reasons", []):
@@ -444,11 +549,33 @@ def execute_rollout(  # noqa: C901, PLR0915
     max_angular = float(np.max(np.abs(angular_rates))) if angular_rates else 0.0
     mean_latency = float(np.mean(latencies_ms)) if latencies_ms else 0.0
 
-    if status == "ok" and degraded:
-        status = "degraded"
+    if status == "ok":
+        if degraded or collision or not completed:
+            status = "degraded"
+            if collision:
+                degraded = True
+                if col_obs_occurred and "obstacle_collision" not in degradation_reasons:
+                    degradation_reasons.append("obstacle_collision")
+                if col_ped_occurred and "pedestrian_collision" not in degradation_reasons:
+                    degradation_reasons.append("pedestrian_collision")
+            elif not completed:
+                degraded = True
+                if "max_steps_exceeded" not in degradation_reasons:
+                    degradation_reasons.append("max_steps_exceeded")
+
+    failure_class = classify_failure(
+        status=status,
+        degraded=degraded,
+        degradation_reasons=degradation_reasons,
+        collision_obstacle=col_obs_occurred,
+        collision_pedestrian=col_ped_occurred,
+        completed=completed,
+        plan_exception=plan_exception_occurred,
+        simulator_error=simulator_error_occurred,
+    )
 
     return ComparatorRunResult(
-        planner_id=diag.get("planner_type", type(planner).__name__),
+        planner_id=planner_id,
         scenario_id=scenario.scenario_id,
         seed=scenario.seed,
         steps=step,
@@ -467,6 +594,7 @@ def execute_rollout(  # noqa: C901, PLR0915
         status=status,
         degraded=degraded,
         degradation_reasons=tuple(degradation_reasons),
+        failure_class=failure_class,
     )
 
 
@@ -498,6 +626,13 @@ def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, 
         for r in runs:
             status_counts[r.status] = status_counts.get(r.status, 0) + 1
 
+        failure_class_counts: dict[str, int] = dict.fromkeys(VALID_FAILURE_CLASSES, 0)
+        for r in runs:
+            if r.failure_class is not None:
+                if r.failure_class not in failure_class_counts:
+                    raise ValueError(f"unknown failure class: {r.failure_class!r}")
+                failure_class_counts[r.failure_class] += 1
+
         summary.append(
             {
                 "planner_id": pid,
@@ -509,6 +644,7 @@ def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, 
                 "mean_jerk_metric": round(mean_jerk, 4),
                 "mean_latency_ms": round(mean_lat, 4),
                 "status_counts": status_counts,
+                "failure_class_counts": failure_class_counts,
             }
         )
     return summary

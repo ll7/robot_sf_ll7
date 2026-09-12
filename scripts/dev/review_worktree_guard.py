@@ -15,6 +15,13 @@ This is a Git-level workflow guard, not an operating-system sandbox; a caller
 who deliberately overrides the worktree's Git configuration can bypass these
 local barriers.
 
+``run --worktree <path> -- <command>`` is the explicit stronger boundary for
+commands that must withstand those overrides.  On Linux it installs a
+descendant-inherited Landlock policy that allows filesystem mutation only in
+the review worktree and its linked administrative directory, denies TCP
+connect/bind, and fails closed when the required kernel capability is absent.
+Commands launched outside ``run`` are not covered by that process boundary.
+
 ``integrate`` is the canonical read-only merge probe.  It snapshots all refs
 reported by ``git ls-remote --refs`` before and after a ``--no-commit --no-ff``
 merge, always attempts ``git merge --abort``, and succeeds only when the
@@ -24,9 +31,12 @@ worktree and remote snapshot are unchanged.
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import json
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -42,6 +52,35 @@ IMPLEMENTATION_MODE = "implementation"
 HOOK_RELATIVE_PATH = Path("scripts/dev/git_hooks/pre-push")
 GUARD_RELATIVE_PATH = Path("scripts/dev/review_worktree_guard.py")
 DEFAULT_TIMEOUT_SECONDS = 120
+LANDLOCK_CREATE_RULESET_SYSCALL = 444
+LANDLOCK_ADD_RULE_SYSCALL = 445
+LANDLOCK_RESTRICT_SELF_SYSCALL = 446
+LANDLOCK_CREATE_RULESET_VERSION = 1 << 0
+LANDLOCK_RULE_PATH_BENEATH = 1
+LANDLOCK_MINIMUM_ABI = 4
+PR_SET_NO_NEW_PRIVS = 38
+LANDLOCK_ACCESS_FS_EXECUTE = 1 << 0
+LANDLOCK_ACCESS_FS_WRITE_FILE = 1 << 1
+LANDLOCK_ACCESS_FS_READ_FILE = 1 << 2
+LANDLOCK_ACCESS_FS_READ_DIR = 1 << 3
+LANDLOCK_ACCESS_FS_REMOVE_DIR = 1 << 4
+LANDLOCK_ACCESS_FS_REMOVE_FILE = 1 << 5
+LANDLOCK_ACCESS_FS_MAKE_CHAR = 1 << 6
+LANDLOCK_ACCESS_FS_MAKE_DIR = 1 << 7
+LANDLOCK_ACCESS_FS_MAKE_REG = 1 << 8
+LANDLOCK_ACCESS_FS_MAKE_SOCK = 1 << 9
+LANDLOCK_ACCESS_FS_MAKE_FIFO = 1 << 10
+LANDLOCK_ACCESS_FS_MAKE_BLOCK = 1 << 11
+LANDLOCK_ACCESS_FS_MAKE_SYM = 1 << 12
+LANDLOCK_ACCESS_FS_REFER = 1 << 13
+LANDLOCK_ACCESS_FS_TRUNCATE = 1 << 14
+LANDLOCK_ACCESS_NET_BIND_TCP = 1 << 0
+LANDLOCK_ACCESS_NET_CONNECT_TCP = 1 << 1
+LANDLOCK_ACCESS_FS_ALL = (1 << 15) - 1
+LANDLOCK_ACCESS_FS_READ_EXECUTE = (
+    LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR
+)
+LANDLOCK_ACCESS_NET_ALL = LANDLOCK_ACCESS_NET_BIND_TCP | LANDLOCK_ACCESS_NET_CONNECT_TCP
 PROTOCOL_POLICY_KEYS = (
     "protocol.allow",
     "protocol.ext.allow",
@@ -53,8 +92,191 @@ PROTOCOL_POLICY_KEYS = (
 )
 
 
+class _LandlockRulesetAttr(ctypes.Structure):
+    """Stable prefix of Linux's extensible landlock ruleset structure."""
+
+    _fields_ = [
+        ("handled_access_fs", ctypes.c_uint64),
+        ("handled_access_net", ctypes.c_uint64),
+    ]
+
+
+class _LandlockPathBeneathAttr(ctypes.Structure):
+    """Packed path rule structure required by the Landlock user-space API."""
+
+    _pack_ = 1
+    _fields_ = [
+        ("allowed_access", ctypes.c_uint64),
+        ("parent_fd", ctypes.c_int32),
+    ]
+
+
 class GuardError(ValueError):
     """A deterministic, user-actionable guard failure."""
+
+
+SUPPORTED_LINUX_MACHINES = frozenset(
+    {"aarch64", "amd64", "arm64", "ppc64le", "riscv64", "s390x", "x86_64"}
+)
+
+
+def _isolation_libc() -> ctypes.CDLL:
+    """Load libc only on architectures with the stable Linux syscall ABI."""
+    if sys.platform != "linux":
+        raise GuardError(
+            "review process isolation is unavailable: Linux Landlock is required; "
+            f"current platform is {sys.platform}"
+        )
+    machine = platform.machine().lower()
+    if machine not in SUPPORTED_LINUX_MACHINES:
+        raise GuardError(
+            f"review process isolation is unavailable: unsupported Linux architecture {machine!r}"
+        )
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+    except OSError as exc:
+        raise GuardError(f"review process isolation cannot load libc: {exc}") from exc
+    libc.syscall.restype = ctypes.c_long
+    libc.prctl.restype = ctypes.c_int
+    return libc
+
+
+def _raise_isolation_errno(action: str) -> None:
+    error_number = ctypes.get_errno()
+    detail = os.strerror(error_number) if error_number else "unknown error"
+    raise GuardError(f"review process isolation {action} failed: {detail}")
+
+
+def _landlock_abi(libc: ctypes.CDLL) -> int:
+    """Return the kernel Landlock ABI, or fail closed when it is unavailable."""
+    result = libc.syscall(
+        LANDLOCK_CREATE_RULESET_SYSCALL,
+        ctypes.c_void_p(),
+        ctypes.c_size_t(0),
+        ctypes.c_uint(LANDLOCK_CREATE_RULESET_VERSION),
+    )
+    if result < 0:
+        error_number = ctypes.get_errno()
+        detail = os.strerror(error_number) if error_number else "unknown error"
+        raise GuardError(
+            "review process isolation is unavailable: Linux Landlock ABI "
+            f"{LANDLOCK_MINIMUM_ABI}+ is required ({detail})"
+        )
+    abi = int(result)
+    if abi < LANDLOCK_MINIMUM_ABI:
+        raise GuardError(
+            "review process isolation is unavailable: Linux Landlock ABI "
+            f"{abi} is older than required ABI {LANDLOCK_MINIMUM_ABI}"
+        )
+    return abi
+
+
+def _close_inherited_fds() -> None:
+    """Close inherited descriptors so pre-opened remote handles cannot bypass Landlock."""
+    try:
+        descriptor_names = os.listdir("/proc/self/fd")
+    except OSError as exc:
+        raise GuardError(
+            f"review process isolation cannot verify inherited file descriptors: {exc}"
+        ) from exc
+    for descriptor_name in descriptor_names:
+        try:
+            descriptor = int(descriptor_name)
+        except ValueError:
+            continue
+        if descriptor <= 2:
+            continue
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            if exc.errno != errno.EBADF:
+                raise GuardError(
+                    "review process isolation could not close inherited file descriptor "
+                    f"{descriptor}: {exc}"
+                ) from exc
+
+
+def _add_landlock_path_rule(
+    libc: ctypes.CDLL,
+    ruleset_fd: int,
+    path: Path,
+    allowed_access: int,
+) -> None:
+    try:
+        path_fd = os.open(path, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
+    except (AttributeError, OSError) as exc:
+        raise GuardError(f"review process isolation cannot open policy path {path}: {exc}") from exc
+    try:
+        rule = _LandlockPathBeneathAttr(allowed_access=allowed_access, parent_fd=path_fd)
+        result = libc.syscall(
+            LANDLOCK_ADD_RULE_SYSCALL,
+            ruleset_fd,
+            LANDLOCK_RULE_PATH_BENEATH,
+            ctypes.byref(rule),
+            ctypes.c_uint(0),
+        )
+        if result < 0:
+            _raise_isolation_errno(f"could not add path rule for {path}")
+    finally:
+        os.close(path_fd)
+
+
+def _install_os_isolation(identity: dict[str, Path]) -> None:
+    """Install a descendant-inherited Landlock policy before an untrusted command runs.
+
+    The policy permits read/execute access throughout the host, permits all filesystem
+    mutation rights only below the review worktree and its linked administrative directory,
+    and handles TCP bind/connect without adding any network rule (deny by default).  The
+    policy is intentionally Linux-specific and requires Landlock ABI 4 or newer.
+    """
+    libc = _isolation_libc()
+    _landlock_abi(libc)
+    _close_inherited_fds()
+
+    ruleset = _LandlockRulesetAttr(
+        handled_access_fs=LANDLOCK_ACCESS_FS_ALL,
+        handled_access_net=LANDLOCK_ACCESS_NET_ALL,
+    )
+    ruleset_fd = libc.syscall(
+        LANDLOCK_CREATE_RULESET_SYSCALL,
+        ctypes.byref(ruleset),
+        ctypes.sizeof(ruleset),
+        ctypes.c_uint(0),
+    )
+    if ruleset_fd < 0:
+        _raise_isolation_errno("could not create Landlock ruleset")
+
+    try:
+        _add_landlock_path_rule(libc, int(ruleset_fd), Path("/"), LANDLOCK_ACCESS_FS_READ_EXECUTE)
+        for writable_path in (identity["path"], identity["git_dir"]):
+            _add_landlock_path_rule(
+                libc,
+                int(ruleset_fd),
+                writable_path,
+                LANDLOCK_ACCESS_FS_ALL,
+            )
+        if libc.prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
+            _raise_isolation_errno("could not set no-new-privileges")
+        result = libc.syscall(LANDLOCK_RESTRICT_SELF_SYSCALL, int(ruleset_fd), ctypes.c_uint(0))
+        if result < 0:
+            _raise_isolation_errno("could not restrict the child process")
+    finally:
+        os.close(int(ruleset_fd))
+
+
+def run_isolated(worktree: str | Path, command: list[str]) -> None:
+    """Run a command inside the fail-closed review process boundary."""
+    if not command or not command[0]:
+        raise GuardError("review process isolation requires a command after '--'")
+    identity = _identity(worktree)
+    if _configured_mode(identity) != REVIEW_MODE:
+        raise GuardError("process isolation requires a review-mode worktree")
+    os.chdir(identity["path"])
+    _install_os_isolation(identity)
+    try:
+        os.execvpe(command[0], command, os.environ.copy())  # noqa: S606 - intentional argv boundary
+    except OSError as exc:
+        raise GuardError(f"isolated command could not be executed: {exc}") from exc
 
 
 def _run_git(
@@ -528,7 +750,7 @@ def _prepare_review_barriers(
     # like git ls-remote and git fetch (issue #8321). Git deliberately does not
     # apply pushInsteadOf to an explicit remote.<name>.pushurl added later; the
     # ordinary pre-push hook still protects that path, while --no-verify and
-    # command-line config overrides belong to the stronger #8343 boundary.
+    # command-line config overrides belong to the stronger ``run`` boundary.
     _worktree_add(identity, rule_key, "")
     # Disable preconfigured custom transports without blocking standard read protocols.
     for key in _protocol_policy_keys(identity):
@@ -894,6 +1116,13 @@ def _parser() -> argparse.ArgumentParser:
     pre_push.add_argument("--worktree", default=".")
     pre_push.add_argument("hook_arguments", nargs="*", help=argparse.SUPPRESS)
 
+    isolated = subparsers.add_parser(
+        "run",
+        help="run a command inside the fail-closed Linux process boundary",
+    )
+    isolated.add_argument("--worktree", default=".")
+    isolated.add_argument("command_argv", nargs=argparse.REMAINDER, help="command after --")
+
     integrate = subparsers.add_parser("integrate", help="run an aborting synthetic merge probe")
     integrate.add_argument("--worktree", default=".")
     integrate.add_argument("--source-ref", default="origin/main")
@@ -903,7 +1132,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the review-worktree guard CLI and emit one JSON result."""
+    """Run the review-worktree guard CLI; ``run`` preserves the child command's streams."""
     args = _parser().parse_args(argv)
     try:
         if args.command == "configure":
@@ -915,6 +1144,12 @@ def main(argv: list[str] | None = None) -> int:
             return_code = 0
         elif args.command == "pre-push":
             payload, return_code = pre_push_check(args.worktree)
+        elif args.command == "run":
+            command = list(args.command_argv)
+            if command and command[0] == "--":
+                command = command[1:]
+            run_isolated(args.worktree, command)
+            return_code = 0
         else:
             payload, return_code = integrate_worktree(
                 args.worktree,
@@ -923,6 +1158,9 @@ def main(argv: list[str] | None = None) -> int:
                 timeout=args.timeout,
             )
     except (GuardError, OSError) as exc:
+        if args.command == "run":
+            print(f"review process isolation failed closed: {exc}", file=sys.stderr)
+            return 2
         payload = {
             "schema": SCHEMA_VERSION,
             "command": args.command,

@@ -14,7 +14,11 @@ from robot_sf.benchmark.aggregate import (
     read_jsonl,
     write_episode_csv,
 )
-from robot_sf.benchmark.errors import AggregationMetadataError, EpisodeRecordInputError
+from robot_sf.benchmark.errors import (
+    AggregationInputError,
+    AggregationMetadataError,
+    EpisodeRecordInputError,
+)
 from robot_sf.benchmark.runner import run_batch
 
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
@@ -759,6 +763,18 @@ def test_compute_aggregates_with_ci_pairwise_contrasts_are_seed_deterministic() 
         bootstrap_seed=456,
     )
     assert first["pairwise_contrasts"] == second["pairwise_contrasts"]
+
+
+def test_compute_aggregates_with_ci_rejects_invalid_pairwise_confidence() -> None:
+    """Paired bootstrap contrasts must use the same validated confidence contract."""
+    with pytest.raises(AggregationInputError, match="bootstrap_confidence"):
+        compute_aggregates_with_ci(
+            _paired_contrast_records(),
+            group_by="scenario_params.algo",
+            bootstrap_samples=50,
+            bootstrap_confidence=1.5,
+            bootstrap_seed=123,
+        )
 
 
 def _observation_track_records() -> list[dict]:

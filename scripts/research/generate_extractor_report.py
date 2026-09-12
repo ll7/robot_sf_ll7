@@ -7,17 +7,18 @@ from pathlib import Path
 
 from loguru import logger
 
-from robot_sf.research.extractor_report import ReportConfig, generate_extractor_report
-
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """TODO docstring. Document this function.
+    """Parse command-line arguments for the extractor report CLI.
 
     Args:
-        argv: TODO docstring.
+        argv: Argument list to parse. When ``None``, ``argparse`` reads
+            ``sys.argv[1:]`` instead.
 
     Returns:
-        TODO docstring.
+        Parsed namespace holding the required summary path, output root,
+        experiment name, optional hypothesis and baseline extractor,
+        significance level, LaTeX-export flag, and optional config path.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -71,15 +72,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Generate an extractor report from CLI arguments and return an exit code.
+
+    Parsing happens before importing the report module, so ``--help`` and argument
+    errors work without the optional analytics extra. The parsed options are
+    converted into a report configuration and passed to the report generator; the
+    report path is logged on success.
 
     Args:
-        argv: TODO docstring.
+        argv: Argument list forwarded to :func:`parse_args`. When ``None``,
+            ``argparse`` reads ``sys.argv[1:]`` instead.
 
     Returns:
-        TODO docstring.
+        ``0`` when the report has been generated.
     """
     args = parse_args(argv)
+    from robot_sf.research.extractor_report import ReportConfig, generate_extractor_report
+
     cfg = ReportConfig(
         experiment_name=args.experiment_name,
         hypothesis=args.hypothesis,

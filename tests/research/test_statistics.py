@@ -5,11 +5,13 @@ import pytest
 from robot_sf.research.statistics import (
     HypothesisEvaluator,
     cohen_d,
+    cohen_d_independent,
     compare_to_threshold,
     evaluate_hypothesis,
     format_test_results,
     paired_t_test,
     validate_sample_size,
+    welch_t_test,
 )
 
 
@@ -181,3 +183,77 @@ def test_evaluate_hypothesis_zero_baseline():
 
     assert result["decision"] == "INCOMPLETE"
     assert "zero" in result["note"].lower() or "mean" in result["note"].lower()
+
+
+def test_paired_statistics_drop_nonfinite_pairs_and_report_effective_n():
+    """NaN/∞ pairs cannot contaminate paired research statistics."""
+    x = [1.0, float("nan"), 3.0, float("inf")]
+    y = [1.2, 2.2, 3.7, 4.4]
+
+    result = paired_t_test(x, y)
+    assert result["n"] == 2
+    assert result["t_stat"] is not None
+    assert result["p_value"] is not None
+    assert cohen_d(x, y) == pytest.approx(cohen_d([1.0, 3.0], [1.2, 3.7]))
+    assert validate_sample_size(x, y) == {"valid": True, "n": 2}
+
+
+def test_independent_statistics_drop_nonfinite_values_and_report_effective_n():
+    """Independent tests use finite values from each sample independently."""
+    x = [1.0, float("nan"), 2.0]
+    y = [2.0, float("inf"), 4.0]
+
+    result = welch_t_test(x, y)
+    assert result["n_x"] == 2
+    assert result["n_y"] == 2
+    assert result["n"] == 4
+    assert result["t_stat"] is not None
+    assert result["p_value"] is not None
+    assert cohen_d_independent(x, y) == pytest.approx(cohen_d_independent([1.0, 2.0], [2.0, 4.0]))
+
+
+def test_threshold_statistics_ignore_nonfinite_values_and_report_effective_n():
+    """Threshold comparisons never turn non-finite samples into decisions."""
+    baseline = [500.0, float("nan")]
+    treatment = [280.0, float("inf")]
+
+    hypothesis = evaluate_hypothesis(baseline, treatment, threshold=40.0)
+    assert hypothesis["decision"] == "PASS"
+    assert hypothesis["n_baseline"] == 1
+    assert hypothesis["n_pretrained"] == 1
+
+    comparison = compare_to_threshold(baseline, treatment, threshold=40.0)
+    assert comparison["decision"] == "PASS"
+    assert comparison["n_baseline"] == 1
+    assert comparison["n_treatment"] == 1
+
+
+def test_statistics_return_incomplete_when_no_finite_samples_remain():
+    """All-invalid inputs fail closed instead of returning NaN evidence."""
+    invalid = [float("nan"), float("-inf")]
+
+    assert paired_t_test(invalid, invalid) == {"t_stat": None, "p_value": None, "n": 0}
+    assert welch_t_test(invalid, [1.0, 2.0])["t_stat"] is None
+    assert cohen_d(invalid, invalid) is None
+    assert cohen_d_independent(invalid, [1.0, 2.0]) is None
+    assert cohen_d_independent([1.0, 1.0], [2.0, 2.0]) is None
+    assert evaluate_hypothesis(invalid, [1.0]) == {
+        "decision": "INCOMPLETE",
+        "note": "Insufficient finite data for hypothesis evaluation",
+        "n_baseline": 0,
+        "n_pretrained": 1,
+    }
+    assert compare_to_threshold(invalid, [1.0], threshold=40.0) == {
+        "decision": "INCOMPLETE",
+        "improvement_pct": None,
+        "threshold": 40.0,
+        "n_baseline": 0,
+        "n_treatment": 1,
+    }
+    assert compare_to_threshold([0.0], [1.0], threshold=40.0) == {
+        "decision": "INCOMPLETE",
+        "improvement_pct": None,
+        "threshold": 40.0,
+        "n_baseline": 1,
+        "n_treatment": 1,
+    }

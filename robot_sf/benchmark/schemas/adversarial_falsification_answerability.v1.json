@@ -1,0 +1,571 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/adversarial_falsification_answerability.v1.json",
+  "title": "Robot SF adversarial falsification answerability packet v1",
+  "description": "A source-bound, diagnostic-only design packet. It authorizes no compute by itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "packet_id",
+    "issue",
+    "claim_boundary",
+    "evidence_tier",
+    "claim_eligible",
+    "source",
+    "variable_order",
+    "variable_map",
+    "feasibility",
+    "objective",
+    "search_methods",
+    "seed_policy",
+    "budget",
+    "stop_rule",
+    "outcome_vocabulary",
+    "artifact_plan",
+    "compute_ceiling",
+    "answerability",
+    "compute_authorization",
+    "self_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": "adversarial_falsification_answerability.v1"},
+    "packet_id": {"const": "issue_8570_bounded_falsification_first_slice"},
+    "issue": {"const": 8570},
+    "claim_boundary": {
+      "const": "diagnostic-only preparation packet: source-bound adversarial falsification design; no simulator, planner, optimizer, campaign, benchmark, safety, or scientific claim"
+    },
+    "evidence_tier": {"const": "diagnostic-only"},
+    "claim_eligible": {"const": false},
+    "source": {"$ref": "#/$defs/source"},
+    "variable_order": {
+      "type": "array",
+      "const": [
+        "start_x",
+        "start_y",
+        "goal_x",
+        "goal_y",
+        "spawn_time_s",
+        "pedestrian_speed_mps",
+        "pedestrian_delay_s",
+        "scenario_seed"
+      ]
+    },
+    "variable_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_x",
+        "start_y",
+        "goal_x",
+        "goal_y",
+        "spawn_time_s",
+        "pedestrian_speed_mps",
+        "pedestrian_delay_s",
+        "scenario_seed"
+      ],
+      "properties": {
+        "start_x": {"$ref": "#/$defs/variable"},
+        "start_y": {"$ref": "#/$defs/variable"},
+        "goal_x": {"$ref": "#/$defs/variable"},
+        "goal_y": {"$ref": "#/$defs/variable"},
+        "spawn_time_s": {"$ref": "#/$defs/variable"},
+        "pedestrian_speed_mps": {"$ref": "#/$defs/variable"},
+        "pedestrian_delay_s": {"$ref": "#/$defs/variable"},
+        "scenario_seed": {"$ref": "#/$defs/variable"}
+      }
+    },
+    "feasibility": {"$ref": "#/$defs/feasibility"},
+    "objective": {"$ref": "#/$defs/objective"},
+    "search_methods": {"$ref": "#/$defs/search_methods"},
+    "seed_policy": {"$ref": "#/$defs/seed_policy"},
+    "budget": {"$ref": "#/$defs/budget"},
+    "stop_rule": {"$ref": "#/$defs/stop_rule"},
+    "outcome_vocabulary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "null", "inconclusive", "invalid", "unavailable", "blocked"],
+      "properties": {
+        "result": {"type": "string", "minLength": 1},
+        "null": {"type": "string", "minLength": 1},
+        "inconclusive": {"type": "string", "minLength": 1},
+        "invalid": {"type": "string", "minLength": 1},
+        "unavailable": {"type": "string", "minLength": 1},
+        "blocked": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifact_plan": {"$ref": "#/$defs/artifact_plan"},
+    "compute_ceiling": {"$ref": "#/$defs/compute_ceiling"},
+    "answerability": {"$ref": "#/$defs/answerability"},
+    "compute_authorization": {"$ref": "#/$defs/compute_authorization"},
+    "self_digest": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "role"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "role": {"type": "string", "minLength": 1}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_ref", "base_commit", "inputs", "search_space", "scenario_template", "owners"],
+      "properties": {
+        "base_ref": {"const": "origin/main"},
+        "base_commit": {
+          "const": "c61b0f93683e1f9d2c83125f1d830b3d0162f3d1"
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["search_space", "scenario_template", "map"],
+          "properties": {
+            "search_space": {"$ref": "#/$defs/source_input"},
+            "scenario_template": {"$ref": "#/$defs/source_input"},
+            "map": {"$ref": "#/$defs/source_input"}
+          }
+        },
+        "search_space": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_id", "schema_version", "semantic"],
+          "properties": {
+            "input_id": {"const": "search_space"},
+            "schema_version": {"const": "adversarial-search-space.v1"},
+            "semantic": {"$ref": "#/$defs/search_space_semantic"}
+          }
+        },
+        "scenario_template": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input_id", "scenario_name", "pedestrian_id", "pedestrian_route_mode"],
+          "properties": {
+            "input_id": {"const": "scenario_template"},
+            "scenario_name": {"const": "issue_7340_station_platform_medium"},
+            "pedestrian_id": {"const": "p2"},
+            "pedestrian_route_mode": {"const": "template"}
+          }
+        },
+        "owners": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sha256", "symbols", "role"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "sha256": {"$ref": "#/$defs/sha256"},
+              "symbols": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+              "role": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "search_space_semantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "variables", "constraints", "pedestrian"],
+      "properties": {
+        "schema_version": {"const": "adversarial-search-space.v1"},
+        "variables": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start_x", "start_y", "goal_x", "goal_y", "spawn_time_s", "pedestrian_speed_mps", "pedestrian_delay_s", "scenario_seed"],
+          "properties": {
+            "start_x": {"$ref": "#/$defs/source_bound"},
+            "start_y": {"$ref": "#/$defs/source_bound"},
+            "goal_x": {"$ref": "#/$defs/source_bound"},
+            "goal_y": {"$ref": "#/$defs/source_bound"},
+            "spawn_time_s": {"$ref": "#/$defs/source_bound"},
+            "pedestrian_speed_mps": {"$ref": "#/$defs/source_bound"},
+            "pedestrian_delay_s": {"$ref": "#/$defs/source_bound"},
+            "scenario_seed": {"$ref": "#/$defs/source_bound"}
+          }
+        },
+        "constraints": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min_start_goal_distance_m"],
+          "properties": {
+            "min_start_goal_distance_m": {"type": "number", "minimum": 0}
+          }
+        },
+        "pedestrian": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "route_mode"],
+          "properties": {
+            "id": {"const": "p2"},
+            "route_mode": {"const": "template"}
+          }
+        }
+      }
+    },
+    "source_bound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": {"type": "number"},
+        "max": {"type": "number"}
+      }
+    },
+    "variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor", "field", "unit", "kind", "bounds", "runtime_effective", "binding_status", "source_path", "effectiveness_note"],
+      "properties": {
+        "actor": {"type": "string", "minLength": 1},
+        "field": {"type": "string", "minLength": 1},
+        "unit": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["continuous", "integer"]},
+        "bounds": {"$ref": "#/$defs/source_bound"},
+        "runtime_effective": {"type": "boolean"},
+        "binding_status": {"enum": ["runtime_effective", "provenance_only"]},
+        "source_path": {"type": "string", "minLength": 1},
+        "effectiveness_note": {"type": "string", "minLength": 1}
+      }
+    },
+    "feasibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "contract_version", "predicate_order", "predicates", "rejection_accounting"],
+      "properties": {
+        "owner": {"const": "robot_sf.adversarial.feasibility_first"},
+        "contract_version": {"const": "scenario_feasibility_contract.v1"},
+        "predicate_order": {
+          "const": ["kinematic_reachability", "behavioral_consistency", "geometry_traffic", "simulator_validity"]
+        },
+        "predicates": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            {"$ref": "#/$defs/predicate"},
+            {"$ref": "#/$defs/predicate"},
+            {"$ref": "#/$defs/predicate"},
+            {"$ref": "#/$defs/predicate"}
+          ],
+          "items": false
+        },
+        "rejection_accounting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["owner", "pre_simulation", "rejected_excluded_from_safety_denominator", "unavailable_is_not_pass"],
+          "properties": {
+            "owner": {"const": "robot_sf.adversarial.feasibility_first.build_scenario_feasibility_ledger"},
+            "pre_simulation": {"const": true},
+            "rejected_excluded_from_safety_denominator": {"const": true},
+            "unavailable_is_not_pass": {"const": true}
+          }
+        }
+      }
+    },
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source", "meaning", "unavailable_verdict", "required_for_acceptance"],
+      "properties": {
+        "name": {"enum": ["kinematic_reachability", "behavioral_consistency", "geometry_traffic", "simulator_validity"]},
+        "source": {"type": "string", "minLength": 1},
+        "meaning": {"type": "string", "minLength": 1},
+        "unavailable_verdict": {"const": "missing"},
+        "required_for_acceptance": {"const": true}
+      }
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "ordering", "scalarization", "deterministic_tie_break"],
+      "properties": {
+        "owner": {"const": "robot_sf.adversarial.feasibility_first.rank_feasible_candidates"},
+        "ordering": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "prefixItems": [
+            {"$ref": "#/$defs/objective_component"},
+            {"$ref": "#/$defs/objective_component"},
+            {"$ref": "#/$defs/objective_component"},
+            {"$ref": "#/$defs/objective_component"},
+            {"$ref": "#/$defs/objective_component"},
+            {"$ref": "#/$defs/objective_component"}
+          ],
+          "items": false
+        },
+        "scalarization": {"const": "none"},
+        "deterministic_tie_break": {"const": true}
+      }
+    },
+    "objective_component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rank", "name", "direction", "unit", "source"],
+      "properties": {
+        "rank": {"type": "integer", "minimum": 1, "maximum": 6},
+        "name": {"enum": ["feasibility", "kinematic_criticality", "controllability_risk", "diversity", "normalized_perturbation_cost", "candidate_digest"]},
+        "direction": {"enum": ["maximize", "minimize"]},
+        "unit": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1}
+      }
+    },
+    "search_method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "algorithm", "owner", "role", "budget_per_seed", "seed_group", "execution_status"],
+      "properties": {
+        "id": {"enum": ["cma_es", "random", "halton"]},
+        "algorithm": {"type": "string", "minLength": 1},
+        "owner": {"type": "string", "minLength": 1},
+        "role": {"enum": ["proposal", "equal_budget_control"]},
+        "budget_per_seed": {"type": "integer", "minimum": 1},
+        "seed_group": {"const": "search"},
+        "execution_status": {"const": "declared_not_executed"}
+      }
+    },
+    "search_methods": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "controls", "equal_budget", "control_owner"],
+      "properties": {
+        "primary": {"$ref": "#/$defs/search_method"},
+        "controls": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {"$ref": "#/$defs/search_method"},
+            {"$ref": "#/$defs/search_method"}
+          ],
+          "items": false
+        },
+        "equal_budget": {"const": true},
+        "control_owner": {"const": "robot_sf.adversarial.search_harness"}
+      }
+    },
+    "seed_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["search_seeds", "confirmation_seeds", "candidate_seed_mode", "search_and_confirmation_disjoint", "confirmation_role"],
+      "properties": {
+        "search_seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer", "minimum": 0}, "uniqueItems": true},
+        "confirmation_seeds": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"type": "integer", "minimum": 0}, "uniqueItems": true},
+        "candidate_seed_mode": {"const": "index_derived"},
+        "search_and_confirmation_disjoint": {"const": true},
+        "confirmation_role": {"const": "held_out_confirmation"}
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_budget_per_arm_per_seed", "search_candidate_rows_per_arm", "search_candidate_rows_all_arms", "rollouts_per_candidate", "max_steps_per_rollout", "diagnostic_only"],
+      "properties": {
+        "candidate_budget_per_arm_per_seed": {"const": 64},
+        "search_candidate_rows_per_arm": {"type": "integer", "minimum": 1},
+        "search_candidate_rows_all_arms": {"type": "integer", "minimum": 1},
+        "rollouts_per_candidate": {"const": 1},
+        "max_steps_per_rollout": {"type": "integer", "minimum": 1},
+        "diagnostic_only": {"const": true}
+      }
+    },
+    "stop_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["search", "confirmation", "contract_failure", "replacement_rows_allowed"],
+      "properties": {
+        "search": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "candidates_per_arm_per_seed", "search_seed_count", "no_early_stop_on_objective"],
+          "properties": {
+            "action": {"const": "stop"},
+            "candidates_per_arm_per_seed": {"type": "integer", "minimum": 1},
+            "search_seed_count": {"type": "integer", "minimum": 1},
+            "no_early_stop_on_objective": {"const": true}
+          }
+        },
+        "confirmation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "held_out_seed_count", "execution_status"],
+          "properties": {
+            "action": {"const": "stop"},
+            "held_out_seed_count": {"const": 5},
+            "execution_status": {"const": "not_authorized"}
+          }
+        },
+        "contract_failure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "outcomes"],
+          "properties": {
+            "action": {"const": "stop_before_compute"},
+            "outcomes": {
+              "const": ["invalid", "unavailable", "inconclusive", "blocked"]
+            }
+          }
+        },
+        "replacement_rows_allowed": {"const": false}
+      }
+    },
+    "artifact_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checksum_algorithm", "required", "raw_and_derived_separate", "local_output_boundary", "incomplete_outcome_policy"],
+      "properties": {
+        "checksum_algorithm": {"const": "sha256"},
+        "required": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "format", "path", "checksum", "required_before_claim"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "format": {"type": "string", "minLength": 1},
+              "path": {"type": "string", "minLength": 1},
+              "checksum": {"type": "string", "minLength": 1},
+              "required_before_claim": {"type": "boolean"}
+            }
+          }
+        },
+        "raw_and_derived_separate": {"const": true},
+        "local_output_boundary": {"type": "string", "minLength": 1},
+        "incomplete_outcome_policy": {"type": "string", "minLength": 1}
+      }
+    },
+    "compute_ceiling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_wall_time_seconds", "max_search_candidate_rows", "max_confirmation_seeds", "max_steps_per_rollout", "max_workers", "local_only", "simulator_allowed", "planner_allowed", "optimizer_allowed", "slurm_allowed"],
+      "properties": {
+        "max_wall_time_seconds": {"type": "integer", "minimum": 1, "maximum": 7200},
+        "max_search_candidate_rows": {"type": "integer", "minimum": 1},
+        "max_confirmation_seeds": {"const": 5},
+        "max_steps_per_rollout": {"type": "integer", "minimum": 1},
+        "max_workers": {"const": 1},
+        "local_only": {"const": true},
+        "simulator_allowed": {"const": false},
+        "planner_allowed": {"const": false},
+        "optimizer_allowed": {"const": false},
+        "slurm_allowed": {"const": false}
+      }
+    },
+    "answerability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "question", "estimand", "producers", "analysis", "design", "artifacts"],
+      "properties": {
+        "schema_version": {"const": "research_answerability.v1"},
+        "question": {"$ref": "#/$defs/answerability_question"},
+        "estimand": {"$ref": "#/$defs/answerability_estimand"},
+        "producers": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/answerability_producer"}},
+        "analysis": {"$ref": "#/$defs/answerability_analysis"},
+        "design": {"$ref": "#/$defs/answerability_design"},
+        "artifacts": {"$ref": "#/$defs/answerability_artifacts"}
+      }
+    },
+    "answerability_question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["research_question", "bounded_claim", "decision_vocabulary", "negative_result_meaning"],
+      "properties": {
+        "research_question": {"type": "string", "minLength": 1},
+        "bounded_claim": {"type": "string", "minLength": 1},
+        "decision_vocabulary": {"type": "array", "minItems": 1, "items": {"enum": ["continue", "stop", "inconclusive", "invalid"]}},
+        "negative_result_meaning": {"type": "string", "minLength": 1}
+      }
+    },
+    "answerability_estimand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "reference_or_null", "decision_predicates", "minimally_important_effect"],
+      "properties": {
+        "primary": {"type": "string", "minLength": 1},
+        "reference_or_null": {"type": "string", "minLength": 1},
+        "decision_predicates": {"type": "string", "minLength": 1},
+        "minimally_important_effect": {"type": "string", "minLength": 1}
+      }
+    },
+    "answerability_producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "producer", "source", "unit", "direction", "denominator", "pairing_key", "missingness_rule", "status", "execution_mode", "required"],
+      "properties": {
+        "field": {"type": "string", "minLength": 1},
+        "producer": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1},
+        "unit": {"type": "string", "minLength": 1},
+        "direction": {"type": "string", "minLength": 1},
+        "denominator": {"type": "string", "minLength": 1},
+        "pairing_key": {"type": "string", "minLength": 1},
+        "missingness_rule": {"type": "string", "minLength": 1},
+        "status": {"enum": ["available", "unavailable", "missing", "blocked"]},
+        "execution_mode": {"enum": ["native", "adapter", "fallback", "degraded", "unavailable"]},
+        "required": {"type": "boolean"}
+      }
+    },
+    "answerability_analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analysis_unit", "resampling_unit", "command", "multiplicity", "sensitivity_plan", "dry_run_status", "comparability_status"],
+      "properties": {
+        "analysis_unit": {"type": "string", "minLength": 1},
+        "resampling_unit": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "minLength": 1},
+        "multiplicity": {"type": "string", "minLength": 1},
+        "sensitivity_plan": {"type": "string", "minLength": 1},
+        "dry_run_status": {"enum": ["passed", "not_required", "failed", "blocked", "unknown"]},
+        "comparability_status": {"enum": ["passed", "not_required", "failed", "blocked", "unknown", "mismatched"]}
+      }
+    },
+    "answerability_design": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "power_status", "budget", "sample_size"],
+      "properties": {
+        "mode": {"enum": ["decision_capable", "diagnostic"]},
+        "power_status": {"enum": ["adequate", "not_required", "underpowered", "unknown"]},
+        "budget": {"type": "string", "minLength": 1},
+        "sample_size": {"type": "string", "minLength": 1}
+      }
+    },
+    "answerability_artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_owner", "durable_path", "checksums", "durability_status", "incomplete_policy"],
+      "properties": {
+        "raw_owner": {"type": "string", "minLength": 1},
+        "durable_path": {"type": "string", "minLength": 1},
+        "checksums": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "durability_status": {"enum": ["ready", "planned", "missing", "blocked"]},
+        "incomplete_policy": {"type": "string", "minLength": 1}
+      }
+    },
+    "compute_authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate", "status", "authorized", "evaluated_state", "blocking_reasons", "future_adapter_condition"],
+      "properties": {
+        "gate": {"const": "research_answerability.v1"},
+        "status": {"enum": ["authorized", "blocked"]},
+        "authorized": {"type": "boolean"},
+        "evaluated_state": {"enum": ["answerable", "diagnostic_only", "blocked_missing_producer", "blocked_underpowered", "blocked_analysis_contract", "blocked_noncomparable_rows", "blocked_artifact_plan", "invalid_contract"]},
+        "blocking_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "future_adapter_condition": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

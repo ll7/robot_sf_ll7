@@ -90,6 +90,12 @@ jobs:
       - name: Hydrate result-interpretation provenance
         run: uv run python scripts/dev/ensure_result_interpretation_provenance.py
 
+      - name: Run isolated offline core smoke
+        if: ${{ matrix.shard == 1 }}
+        env:
+          UV_OFFLINE: "1"
+        run: UV_NO_SYNC=1 UV_NO_CONFIG=1 uv run python scripts/dev/run_offline_smoke.py --offline --isolated --json --output-root output/offline-smoke
+
       - name: Cache test results
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -500,7 +506,8 @@ jobs:
 
   xdist-scratch-isolation:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Shared all-extras setup can take ~19 minutes before the guard runs (#8631).
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -522,7 +529,8 @@ jobs:
 
   wheel-smoke-install:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Leave smoke-test headroom after an observed ~18-minute setup (#8631).
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -590,6 +598,11 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          # The examples manifest needs plotting/benchmark/PPO dependencies,
+          # not the unrelated all-extras GPU, Ray, TensorFlow, SocNav, or
+          # browser stacks that can exhaust the setup timeout before tests run.
+          sync-args: "--group examples --frozen"
 
       - name: Example smoke tests
         run: scripts/dev/ci_driver.sh examples-smoke

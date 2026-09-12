@@ -170,13 +170,34 @@ tracked hook and guard; keep that checkout available for the review worktree's l
 cover ordinary Git invocation paths, but are not an operating-system sandbox: a deliberate per-command
 Git configuration override can bypass them. In particular, a remote added after activation with an
 explicit `remote.<name>.pushurl` remains protected by the ordinary hook path, while a deliberate
-`--no-verify` bypass is owned by stronger process isolation in #8343.
+`--no-verify` bypass must use the stronger process boundary described below.
 
 Review setup never edits the shared config to mask `url.*.pushInsteadOf` entries. If an effective
 repository, global, system, or pre-existing worktree alias could outrank the worktree push barrier,
 setup fails closed before enabling review mode; remove or relocate the alias and retry. A
 guard-specific lock would not serialize arbitrary Git processes in other linked worktrees. Read-side
 `url.*.insteadOf` rewrites remain enabled for safe configurations.
-Implementation worktrees keep the default pushable behavior. See
+
+For the stronger adversarial contract, run the complete command as a descendant of the guard:
+
+```bash
+python scripts/dev/review_worktree_guard.py run \
+  --worktree <review-worktree> -- \
+  git -c url.<actual-file-url>.insteadOf=<blocked-file-url> push \
+  --no-verify --receive-pack=git-receive-pack origin HEAD:refs/heads/example
+```
+
+This `run` path installs Linux Landlock application binary interface (ABI) 4+ before `exec`: reads
+and execution remain available, filesystem mutation is allowed only in the review worktree and
+linked Git admin directory, inherited file descriptors are closed, and TCP bind/connect is denied.
+It fails closed when that policy cannot be installed. This is a Linux-only process boundary for
+local filesystem remotes, not a portable all-host guarantee. It does not attach to the directory,
+so commands launched later from another terminal or raw Git invocations outside `run` are outside
+the contract; use `run -- ... bash` for a bounded session. Landlock's policy also deliberately
+excludes remotes inside its writable roots, Unix-domain/existing privileged helper channels, and
+privileged host escapes.
+The creation helper clears copied per-worktree configuration before applying the requested mode, so
+an implementation worktree created from a protected review checkout remains independently
+pushable. Implementation worktrees keep the default pushable behavior. See
 [`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md) for the complete invocation and
 restoration procedure.

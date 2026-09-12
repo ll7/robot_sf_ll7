@@ -39,15 +39,20 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
+
+if __package__ in {None, ""}:
+    # Direct execution must resolve this checkout's transport and write guards,
+    # ahead of any competing checkout or editable installation on sys.path.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.dev._gh_rest import gh_api_delete as _gh_api_delete
 from scripts.dev._gh_rest import gh_api_label_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_post as _gh_api_post
 from scripts.dev._gh_rest import subprocess
 from scripts.dev.github_transport_policy import get_transport_contract
-from scripts.dev.pr_carrier_gate import check_merge_ready_carriers
 from scripts.dev.pr_write_guard import guard_pr_write, pr_write_lock
 
 if TYPE_CHECKING:
@@ -57,6 +62,21 @@ DEFAULT_REPO = "ll7/robot_sf_ll7"
 LABEL_PAGE_SIZE = 100
 LABEL_PAGE_CEILING = 10
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_label_rest.py")
+
+
+def check_merge_ready_carriers(
+    number: int,
+    *,
+    repo: str = DEFAULT_REPO,
+    live_head: str,
+    live_base: str,
+) -> dict[str, Any]:
+    """Load the canonical carrier guard only when needed, failing closed if unavailable."""
+    try:
+        from scripts.dev.pr_carrier_gate import check_merge_ready_carriers as check_carriers
+    except ImportError as exc:
+        return {"status": "error", "error": f"could not load merge-ready carrier checker: {exc}"}
+    return check_carriers(number, repo=repo, live_head=live_head, live_base=live_base)
 
 
 def _label_name_error(raw_name: object, *, context: str) -> str | None:

@@ -15,6 +15,10 @@ from typing import Any
 
 import yaml
 
+if __package__ in {None, ""}:
+    # Direct execution must prefer this checkout over ambient source roots.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.dev import gh_issue_rest, issue_claim, issue_dependency_packet
 from scripts.dev.issue_state_taxonomy import (
     execution_state_labels,
@@ -98,8 +102,10 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "non goals",
         "out of scope",
         "scope",
+        "scope and non goals",
         "scope and ownership",
         "scope boundary",
+        "scope non goals",
     ),
     "inputs": (
         "affected files",
@@ -109,6 +115,12 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "exact source",
         "exact surface",
         "inputs",
+        "inputs affected files",
+        "inputs and affected files",
+        "inputs context",
+        "inputs predecessor",
+        "inputs predecessors",
+        "inputs prerequisites",
         "prerequisites",
         "proposed implementation surface",
         "required changes",
@@ -220,20 +232,96 @@ def preflight_body_text(body: str) -> dict[str, Any]:
     """Run the deterministic zero-write preflight for one issue body.
 
     Returns a stable JSON-ready verdict with ``ready``, the exact ``missing_fields``
-    (objective, scope, inputs, acceptance, verification), and the body digest so a
-    worker can repair the local draft before any GitHub create request. This guard
-    creates no labels, comments, projects, claims, or issues; the live
-    ``goal_issue_admission`` boundary remains responsible for state, claims,
-    blockers, and freshness.
+    (objective, scope, inputs, acceptance, verification), ``heading_suggestions``
+    mapping each unmatched body heading to its closest canonical alias (empty when
+    nothing is missing), and the body digest so a worker can repair the local draft
+    before any GitHub create request. This guard creates no labels, comments,
+    projects, claims, or issues; the live ``goal_issue_admission`` boundary remains
+    responsible for state, claims, blockers, and freshness.
     """
     contract = inspect_contract(body)
     missing_fields = list(contract["missing_fields"])
+    heading_candidates = [heading for heading, _ in _heading_sections(body)]
     return {
         "schema": "issue_body_preflight.v1",
         "ready": not missing_fields,
         "missing_fields": missing_fields,
+        "heading_suggestions": _suggest_heading_aliases(
+            contract,
+            set(missing_fields),
+            heading_candidates=heading_candidates,
+        ),
         "body_sha256": contract["body_sha256"],
     }
+
+
+def _stem_token(token: str) -> str:
+    """Reduce one token to a light stem for heading similarity (plural folding)."""
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
+def _heading_similarity(heading: str, alias: str) -> float:
+    """Deterministic similarity between normalized heading and alias text.
+
+    Exact or leading-token matches score 1.0 so suffixed headings such as
+    ``inputs (formalization appended ...)`` still resolve; otherwise a
+    stemmed-token Dice score is used. A shared token is required so
+    sequence-only overlaps such as ``outputs``/``inputs`` do not become
+    misleading suggestions.
+    """
+    if heading == alias or heading.startswith(alias + " "):
+        return 1.0
+    heading_tokens = {_stem_token(t) for t in heading.split()}
+    alias_tokens = {_stem_token(t) for t in alias.split()}
+    overlap = len(heading_tokens & alias_tokens)
+    if not overlap:
+        return 0.0
+    return 2 * overlap / (len(heading_tokens) + len(alias_tokens))
+
+
+def _suggest_heading_aliases(
+    contract: Mapping[str, Any],
+    missing_fields: set[str],
+    *,
+    threshold: float = 0.6,
+    heading_candidates: list[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Map each unmatched body heading to its closest canonical alias.
+
+    Only headings that matched no contract field are considered, and only aliases
+    of currently missing fields are suggested, so exact-heading bodies always
+    produce an empty map. Similarity is deterministic (see
+    :func:`_heading_similarity`); ties resolve by field then alias ordering.
+    Scores below ``threshold`` are omitted. ``heading_candidates`` may include
+    empty sections for offline repair hints; it is deliberately separate from
+    the populated headings used by admission.
+    """
+    fields = contract.get("fields", {})
+    matched = {
+        heading
+        for field in fields.values()
+        if isinstance(field, Mapping)
+        for heading in field.get("matched_headings", [])
+    }
+    suggestions: dict[str, dict[str, Any]] = {}
+    candidates = contract.get("headings", []) if heading_candidates is None else heading_candidates
+    for heading in sorted(set(candidates) - matched):
+        best: tuple[float, str, str] | None = None
+        for field in sorted(missing_fields):
+            for alias in sorted(FIELD_ALIASES.get(field, ())):
+                score = _heading_similarity(heading, alias)
+                if best is None or score > best[0]:
+                    best = (score, field, alias)
+        if best is not None and best[0] >= threshold:
+            score, field, alias = best
+            suggestions[heading] = {
+                "field": field,
+                "alias": alias,
+                "score": round(score, 4),
+            }
+    return suggestions
 
 
 def preflight_body_file(path: str | Path) -> dict[str, Any]:
@@ -506,7 +594,7 @@ def _has_blocked_prefix(labels: set[str]) -> bool:
 
 
 def _pending_decision_heading(contract: dict[str, Any], labels: set[str]) -> bool:
-    """Detect an unresolved decision heading unless a ruling label is present."""
+    """Detect a populated unresolved decision heading unless ruled."""
     if "ruled" in labels or "domain-approved" in labels:
         return False
     decision_headings = {

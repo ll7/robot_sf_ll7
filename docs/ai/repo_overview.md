@@ -27,7 +27,10 @@ Start here before expanding:
 4. `.specify/memory/constitution.md`
 5. `docs/dev_guide.md`
 6. `docs/code_review.md`
-7. `.agents/PLANS.md` for non-trivial work
+
+Load `.agents/PLANS.md` when the route selects the Coordinated or Evidence-critical profile, or
+when inspection requires escalation; Observe and Local work can use short notes or no persistent
+plan.
 
 Then branch by task type:
 

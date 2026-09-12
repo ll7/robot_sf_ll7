@@ -302,15 +302,99 @@ def _normalize_now(now: datetime | None) -> datetime | None:
     return now.astimezone(UTC)
 
 
-def _claim_parks(claim: ReviewClaim, *, head_sha: str, released: set[str], now: datetime) -> bool:
+def _claim_parks(claim: ReviewClaim, *, head_sha: str, now: datetime) -> bool:
     """Return True when one parsed claim still parks the PR."""
     if not _sha_matches_head(claim.sha, head_sha):
-        return False
-    if claim.sha in released:
         return False
     if claim.expires_at is None or now >= claim.expires_at:
         return False
     return True
+
+
+@dataclass(frozen=True, slots=True)
+class _MarkerPosition:
+    """Publication evidence for one marker, without inventing a total timeline."""
+
+    collection: str
+    entry_index: int
+    offset: int
+    published_at: datetime | None
+    legacy_order: bool
+
+
+def _marker_publication(entry: dict[str, Any]) -> tuple[datetime | None, bool]:
+    """Read publication time; only entirely absent fields permit legacy order.
+
+    Raw reviews may arrive under ``comments`` in carrier-gate callers. Submission
+    is their publication event, not creation or a later body edit. Conflicting,
+    naive, null, and malformed publication values cannot prove chronology.
+    """
+    fields = ("submittedAt", "submitted_at")
+    if not any(field in entry for field in fields):
+        fields = ("createdAt", "created_at")
+    values = [entry[field] for field in fields if field in entry]
+    if not values:
+        return None, True
+    parsed: list[datetime] = []
+    for value in values:
+        if not isinstance(value, str):
+            return None, False
+        try:
+            instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if instant.tzinfo is None:
+                return None, False
+            parsed.append(instant.astimezone(UTC))
+        except (ValueError, OverflowError):
+            return None, False
+    if any(instant != parsed[0] for instant in parsed):
+        return None, False
+    return parsed[0], False
+
+
+def _release_is_later(release: _MarkerPosition, claim: _MarkerPosition) -> bool:
+    """Allow a release only when its relative order is established."""
+    if release.collection == claim.collection:
+        if release.entry_index == claim.entry_index:
+            return release.offset > claim.offset
+        if release.legacy_order and claim.legacy_order:
+            return release.entry_index > claim.entry_index
+    if release.published_at is not None and claim.published_at is not None:
+        return release.published_at > claim.published_at
+    return False
+
+
+def _review_claim_events(
+    pr: dict[str, Any],
+) -> tuple[list[tuple[ReviewClaim, _MarkerPosition]], list[tuple[str, _MarkerPosition]]]:
+    """Extract all trusted claims/releases with their original marker positions."""
+    claims: list[tuple[ReviewClaim, _MarkerPosition]] = []
+    releases: list[tuple[str, _MarkerPosition]] = []
+    for collection in ("comments", "reviews"):
+        entries = _trusted_marker_comments({collection: pr.get(collection)})
+        for index, entry in enumerate(entries):
+            body = entry["body"]
+            published_at, legacy_order = _marker_publication(entry)
+            for match in _REVIEW_CLAIM_RE.finditer(body):
+                claim = _parse_review_claim_marker(match.group(0))
+                if claim is not None and claim.lane != "released":
+                    claims.append(
+                        (
+                            claim,
+                            _MarkerPosition(
+                                collection, index, match.start(), published_at, legacy_order
+                            ),
+                        )
+                    )
+            for match in _REVIEW_CLAIM_RELEASED_RE.finditer(body):
+                releases.append(
+                    (
+                        match.group("sha").lower(),
+                        _MarkerPosition(
+                            collection, index, match.start(), published_at, legacy_order
+                        ),
+                    )
+                )
+    return claims, releases
 
 
 def active_review_claim(
@@ -324,8 +408,7 @@ def active_review_claim(
       - unexpired: ``now < until`` (unparseable timestamps fail closed as
         expired; equality is expiry, matching the ``now >= until`` rule),
       - unreleased: no trusted ``review-claim: released @ <sha>`` marker names
-        the same head SHA after the claim (releases clear regardless of head
-        movement),
+        the same normalized SHA token demonstrably after the claim,
       - head-bound: the marker's SHA matches the live head SHA.
 
     Lane identity is not distinguishable in the compact snapshot, so the
@@ -335,6 +418,12 @@ def active_review_claim(
     ``now`` is an explicit evaluation instant for deterministic tests; ``None``
     falls back to ``datetime.now(UTC)`` for live queue evaluation. A naive
     datetime is interpreted as UTC.
+
+    Publication timestamps order distinct entries; textual positions order
+    markers in one body. Only timestamp-free entries within the same supplied
+    collection use legacy input order. Equal, malformed, or otherwise ambiguous
+    publication times cannot release an unexpired claim. Full and abbreviated
+    SHA tokens retain exact-token release matching, not prefix equivalence.
     """
     if not isinstance(pr, dict) or not head_sha:
         return None
@@ -342,17 +431,11 @@ def active_review_claim(
     if now is None:
         return None
 
-    released: set[str] = set()
-    claims: list[ReviewClaim] = []
-    for entry in _trusted_marker_comments(pr):
-        body = str(entry.get("body", ""))
-        released.update(_review_claim_released_shas(body))
-        claim = _parse_review_claim_marker(body)
-        if claim is not None:
-            claims.append(claim)
-
-    for claim in claims:
-        if _claim_parks(claim, head_sha=head_sha, released=released, now=now):
+    claims, releases = _review_claim_events(pr)
+    for claim, position in claims:
+        if _claim_parks(claim, head_sha=head_sha, now=now) and not any(
+            sha == claim.sha and _release_is_later(release, position) for sha, release in releases
+        ):
             return claim
     return None
 

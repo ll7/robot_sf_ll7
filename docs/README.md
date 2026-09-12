@@ -12,10 +12,14 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 [`configs/benchmarks/route_clearance_certifications_v1.yaml`](../configs/benchmarks/route_clearance_certifications_v1.yaml);
 see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_clearance_certification.md).
 
+**Maintenance note**: Keep this page navigation-oriented. Do not add live counts, dates,
+percentages, completion/status labels, or command totals manually. If a factual snapshot is needed,
+cite an immutable source and add a deterministic documentation check that can detect drift.
+
 ## Documentation layers (start here by audience)
 
-Robot SF docs are split into three audience layers. Pick the one that matches your goal; each has its
-own index so you never fall straight into issue-specific context notes.
+Robot SF docs are organized into audience-oriented layers. Pick the one that matches your goal; each
+has its own index so you never fall straight into issue-specific context notes.
 
 - 👤 **[User Guide](./user-guide.md)** — task-oriented: install, run a demo, load a map, choose a
   planner, run a benchmark, visualize results, troubleshoot. *New here? Start here.*
@@ -38,26 +42,31 @@ one-frame smoke baseline rather than calibrated or benchmark evidence.
 ## Static Docs Site
 
 This repository includes a lightweight Sphinx site over the existing Markdown docs. Build it from
-the repository root with:
+the repository root with the curated strict wrapper:
 
 ```bash
-uv run --group docs sphinx-build -b html docs docs/_build/html
+scripts/dev/sphinx_strict_build.sh
 ```
 
-Open `docs/_build/html/index.html` for the browsable navigation layer. The site is intentionally
-thin: existing Markdown files remain the source of truth, and generated HTML under
-`docs/_build/` is disposable local output.
+Open `output/docs-strict/html/index.html` for the browsable navigation layer. The wrapper builds
+only the `docs/index.rst` toctree closure, promotes warnings to errors, and writes generated HTML
+outside the source tree under the git-ignored `output/` directory.
 
-## 🚀 Social Navigation Benchmark Platform (Complete)
+The curated site intentionally does not build the historical corpus under `docs/context/`,
+`docs/dev/`, and similar trees. A raw full-tree `sphinx-build docs <out>` is unsupported: broad
+warning-class suppressions are not configured, so it reports the historical corpus warnings by
+design. See `CONTRIBUTING.md` for the strict-build contract and the curated source manifest.
 
-**The Social Navigation Benchmark Platform is now fully operational!**
+## 🚀 Social Navigation Benchmark Platform
+
+**The Social Navigation Benchmark Platform**
 
 ### Quick Start
 
 * **[Complete Quickstart Guide](../specs/120-social-navigation-benchmark-plan/quickstart.md)** - Step-by-step experiment execution, visualization, and interpretation
 * **[Public API](public_api.md)** - The supported top-level facade (`make_env`, `load_scenario`, `run_episode`), lifecycle guarantees, and deprecation policy
-* **[CLI Reference](./dev/issues/social-navigation-benchmark/README.md)** - All 15 CLI subcommands with examples
-* **Implementation Status**: All major features complete, 108 tests passing
+* **[Scenarios Catalog & CLI](./SCENARIOS.md)** - Bundled scenario discovery, property inspection, and single-file validation
+* **[CLI Reference](./dev/issues/social-navigation-benchmark/README.md)** - CLI subcommands with examples
 
 ### Core Capabilities
 
@@ -66,7 +75,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **Baseline Interface**: Unified PlannerProtocol for SocialForce, PPO, Random planners
 * **Statistical Analysis**: Bootstrap confidence intervals and robust aggregation
 * **Figure Orchestrator**: Distribution plots, Pareto frontiers, force fields, thumbnails, tables
-* **CLI Tools**: 30 subcommands covering full experiment workflow
+* **CLI Tools**: CLI subcommands covering full experiment workflows
 
 ### Ready-to-Use Workflows
 
@@ -78,7 +87,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 ---
 
-- [🚀 Social Navigation Benchmark Platform (Complete)](#-social-navigation-benchmark-platform-complete)
+- [🚀 Social Navigation Benchmark Platform](#-social-navigation-benchmark-platform)
   - [Quick Start](#quick-start)
   - [Core Capabilities](#core-capabilities)
   - [Ready-to-Use Workflows](#ready-to-use-workflows)
@@ -93,19 +102,19 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
   - [Performance \& CI](#performance--ci)
   - [Hardware \& Environment](#hardware--environment)
   - [Additional Resources (Legacy Structure)](#additional-resources-legacy-structure)
-  - [🏗️ Architecture \& Development](#️-architecture--development)
-  - [🎮 Simulation \& Environment](#-simulation--environment)
-  - [📊 Analysis \& Tools](#-analysis--tools)
+  - [🏗️ Architecture \& Development](#architecture-development)
+  - [🎮 Simulation \& Environment](#simulation-environment)
+  - [📊 Analysis \& Tools](#analysis-tools)
     - [Social Navigation Benchmark (Overview)](#social-navigation-benchmark-overview)
     - [Figures naming and outputs](#figures-naming-and-outputs)
-    - [LaTeX Table Embedding (SNQI / Benchmark Tables)](#latex-table-embedding-snqi--benchmark-tables)
+    - [LaTeX Table Embedding (SNQI / Benchmark Tables)](#latex-table-embedding-snqi-benchmark-tables)
   - [Per-Test Performance Budget](#per-test-performance-budget)
-  - [⚙️ Setup \& Configuration](#️-setup--configuration)
+  - [⚙️ Setup \& Configuration](#setup-configuration)
   - [📈 Pedestrian Metrics](#-pedestrian-metrics)
   - [📁 Media Resources](#-media-resources)
 - [🚀 Quick Start Guides](#-quick-start-guides)
   - [New Environment Architecture (Recommended)](#new-environment-architecture-recommended)
-  - [Legacy Pattern (Still Supported)](#legacy-pattern-still-supported)
+  - [Legacy Class Pattern](#legacy-class-pattern)
     - [Environment Factory Ergonomics Migration (Feature 130)](#environment-factory-ergonomics-migration-feature-130)
 - [🎯 Key Features](#-key-features)
   - [Environment System](#environment-system)
@@ -126,9 +135,10 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, setup, testing, quality gates, and coding standards
 * **[Pinned Scenario-Archetype Validation](./dev/scenario_archetype_validation.md)** - Exact waiver schema and fail-closed CI checks for the four pinned archetypes
-* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
-* **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
+* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, test taxonomy, command matrix, failure classification, and CI rerun rules
+* **[Maintainer Values](./maintainer_values.md)** - Compact source of stable trade-off principles for honest, transparent, reproducible research progress
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
+* **[Doctor Troubleshooting](./troubleshooting/doctor.md)** - Per-check remedies for every `robot-sf doctor` identifier: meaning, minimal fix, and verification command
 * **[Security Triage Guidance](./security_triage.md)** - Vulnerability reporting, dependency scanning, static-analysis triage, and accepted-risk handling for research code
 * **[Dependency License Inventory](./context/dependency_license_inventory.md)** - Frozen profile/source identity, raw license metadata, vendored provenance, freshness checks, and fail-closed release disposition boundaries
 * **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for external datasets including Stanford Drone Dataset, SocNavBench, ETH/UCY, and AMV calibration-source assets
@@ -426,9 +436,9 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Helper Catalog](./dev/helper_catalog.md)** - Reusable render helpers for frame capture, output directories, and video contact sheets
 * **[SVG Map Editor](./SVG_MAP_EDITOR.md)** - SVG-based map creation tools and usage
 * **[OSM Map Generation](./osm_map_workflow.md)** - Programmatic, reproducible maps from OpenStreetMap data (PBF import, zone/route definition, scenario creation)
-  + **Quick Start**: 3 approaches (visual editor, programmatic API, hybrid)
-  + **API Reference**: 6 helper functions (zones, routes, config management, YAML loading)
-  + **Examples**: 4 realistic scenarios (simple navigation, urban intersection, variable density, load/verify)
+  + **Quick Start**: compare visual-editor, programmatic-API, and hybrid approaches
+  + **API Reference**: helper functions for zones, routes, configuration management, and YAML loading
+  + **Examples**: realistic navigation scenarios plus map load and verification workflows
 * **[Map Verification](../specs/001-map-verification/quickstart.md)** - Validate SVG maps for structural integrity and runtime compatibility
 * **[Issue 388 Execution Notes](./context/issue_388_execution.md)** - Self-intersecting obstacle-path repair behavior and validation details
 * **[Francis 2023 Scenario Pack](../maps/svg_maps/francis2023/readme.md)** - SVG maps +
@@ -454,7 +464,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue 483 Execution Notes](./context/issue_483_execution.md)** - Cold/warm regression guard implementation details and workflow wiring
 * **[Issue 495 Execution Notes](./context/issue_495_execution.md)** - Overall trend benchmark matrix, history comparison, and nightly cache-backed tracking
 * **[Warning Hygiene Sweep](./context/warning_hygiene_2026-02-13.md)** - Warning-noise root-cause fixes and dependency mitigation notes
-* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
+* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, absolute floor enforcement, and CI integration
 
 ### Hardware & Environment
@@ -472,7 +482,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 ### 🏗️ Architecture & Development
 
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, testing, and quality standards
-* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
+* **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Configuration Architecture](./architecture/configuration.md)** - Configuration hierarchy, precedence rules, and migration guide
 * **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
 * **[Coverage Guide](./coverage_guide.md)** - Comprehensive guide to code coverage collection, baseline tracking, absolute floor enforcement, and CI integration
@@ -516,7 +526,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * [**Actuator-Feasibility Validation (Issue #6056)**](./actuator_feasibility.md) - Experimental diagnostic for distinguishing geometric clearance from actuator-feasible maneuvers, with provisional-limit and claim-boundary documentation
 * [Regression Notes – Algorithm Aggregation](./dev/issues/142-aggregation-mixes-algorithms/design.md) - Test matrix, warnings, and smoke workflow for Feature 142
 * [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
-* **Full Classic Interaction Benchmark** – Implementation complete (episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics). See detailed guide: [ `benchmark_full_classic.md` ](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/` ).
+* **Full Classic Interaction Benchmark** – Episodes, aggregation, effect sizes, adaptive precision, plots, videos, and scaling metrics. See detailed guide: [ `benchmark_full_classic.md` ](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/` ).
 * **Benchmark Visual Artifacts** – SimulationView & synthetic video pipeline, performance metrics: [ `benchmark_visuals.md` ](./benchmark_visuals.md)
 * **Episode Video Artifacts (MVP)** – Design notes and links: [ `docs/dev/issues/video-artifacts/design.md` ](./dev/issues/video-artifacts/design.md)
 * [**Baselines**](./dev/baselines/README.md) — Overview of available baseline planners
@@ -735,7 +745,7 @@ env = RobotEnv(env_config=EnvSettings(), debug=True)
   + Plan: `specs/149-architectural-coupling-and/plan.md`
   + Quickstart: `specs/149-architectural-coupling-and/quickstart.md`
 
-* **33 files** identified for migration to new pattern
+* Migration inventory identified for the new pattern
 * **Migration script** available for automated updates
 * **Full documentation** provided for smooth migration
 
@@ -770,7 +780,3 @@ When contributing to the project:
 * **Planner selection**: Choose between visibility and classic grid planners in `docs/dev_guide_reference.md#planner-selection-visibility-vs-classic-grid`.
 * **MPC social-navigation spike**: See `docs/context/issue_771_drmpscnav_assessment.md` and `docs/context/issue_771_drmpscnav_implementation_guide.md` for the SICNav / DR-MPC assessment boundary, implementation guardrails, and verified-simple gate plan.
 * **ACMPC learned-MPC feasibility**: See `docs/context/issue_3985_acmpc_feasibility_assessment.md` for the assessment-only boundary for an Actor-Critic Model Predictive Control inspired local planner.
-
----
-
-_Last updated: April 2026 - Paper-matrix extended seed schedule context added_

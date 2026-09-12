@@ -11,6 +11,21 @@ The issue #8068 observation-only goal-posterior baseline is documented in
 [issue_8068_goal_posterior_actor_baseline.md](issue_8068_goal_posterior_actor_baseline.md); its
 tracked smoke receipt is implementation-integrity evidence only.
 
+The issue #8619 constrained-MPC baseline specification is documented in
+[issue_8619_constrained_mpc_baseline_spec.md](issue_8619_constrained_mpc_baseline_spec.md); it is
+lane-2 design-only handoff context and establishes no implementation, safety, comparison,
+benchmark, ranking, or source-paper claim.
+
+The preparation-only typed simulator snapshot continuation contract and its state inventory are
+documented in [simulator_typed_snapshot_contract.md](simulator_typed_snapshot_contract.md) and
+[simulator_state_inventory.v1.json](simulator_state_inventory.v1.json); they define diagnostic
+continuation evidence, not benchmark or paper-facing evidence.
+
+The scenario-window preparation dossier is documented in
+[scenario_window_research_dossier_2026-09-08.md](scenario_window_research_dossier_2026-09-08.md)
+and its machine-readable record; it remains a preparation-only packet with no empirical or
+benchmark claim.
+
 The route-side and homotopy observability contract is documented in
 [issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md); it is an
 analysis-only diagnostic for planner-route observability, not evidence of human preference or
@@ -47,6 +62,7 @@ blocked.
 The SVG geometry-contract boundary (legacy as-run vs corrected authored coordinates) is documented
 in [svg_geometry_contract.md](svg_geometry_contract.md); legacy and corrected rows must never be
 pooled as comparable evidence.
+Issue #8891's outcome-free matched-budget temporal-robustness packet is documented in [issue_8891_temporal_robustness_packet.md](issue_8891_temporal_robustness_packet.md).
 
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
@@ -274,6 +290,10 @@ and high-churn state surface [issue_1358_state.yaml](issue_1358_state.yaml)
   [thursday_development_review_2026-05-21.md](thursday_development_review_2026-05-21.md)
 * Worktree training preservation audit 2026-05-25:
   [worktree_training_preservation_audit_2026-05-25.md](worktree_training_preservation_audit_2026-05-25.md)
+* Artifact retention, preservation, and cleanup guide:
+  [artifact_retention_and_cleanup.md](artifact_retention_and_cleanup.md)
+* Cleanup eligibility guard:
+  [cleanup_eligibility.md](cleanup_eligibility.md)
 * Issue #1240 scenario coverage entropy:
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
 * Issue #1167 predictive obstacle-feature pipeline:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -78,6 +79,8 @@ class TestVerifyGateWorktree:
         assert health.exists is False
         assert health.classification == "missing"
         assert health.cleanup_owner is None
+        assert health.recovery["loss_boundary"] == guard.MISSING_STATE_LOSS_BOUNDARY
+        assert health.recovery["local_state_restored"] is False
 
     def test_missing_with_active_lease_reports_owner(self, mock_git_dirs: Path) -> None:
         """A missing path with a live lease reports the cleanup owner."""
@@ -92,6 +95,15 @@ class TestVerifyGateWorktree:
         assert "owner=auto-smart-routing" in health.cleanup_owner
         assert "pr=#5819" in health.cleanup_owner
         assert health.lease_pr_number == 5819
+        assert health.branch is None
+        assert health.head_sha == "0123456789abcdef"
+        assert health.recovery == {
+            "status": "partial",
+            "branch_checkout": "available_from_lease",
+            "local_state_restored": False,
+            "loss_boundary": guard.MISSING_STATE_LOSS_BOUNDARY,
+            "next_action": "recover_dirty_state_from_backup_or_handoff",
+        }
 
     def test_missing_with_expired_lease_has_no_owner(self, mock_git_dirs: Path) -> None:
         """A missing path whose lease is expired is not attributed to an owner."""
@@ -137,6 +149,8 @@ class TestRecreateGateWorktree:
         assert result.recreated is False
         assert result.error is not None
         assert "no live lease" in result.error
+        assert result.recovery["loss_boundary"] == guard.MISSING_STATE_LOSS_BOUNDARY
+        assert result.recovery["local_state_restored"] is False
 
     def test_recreate_from_lease_calls_worktree_add(self, mock_git_dirs: Path) -> None:
         """A missing path with a live lease recreates the worktree from its branch."""
@@ -160,6 +174,9 @@ class TestRecreateGateWorktree:
 
         assert result.recreated is True
         assert result.branch == "gate/branch"
+        assert result.head_sha == "head-sha"
+        assert result.recovery["loss_boundary"] == guard.MISSING_STATE_LOSS_BOUNDARY
+        assert result.recovery["local_state_restored"] is False
         add_calls = [c for c in calls if c[:3] == ["git", "worktree", "add"]]
         assert add_calls, "expected git worktree add to be invoked"
         assert str(wt) in add_calls[0]
@@ -188,6 +205,36 @@ class TestRecreateGateWorktree:
 
         assert result.recreated is False
         assert "boom" in (result.error or "")
+
+    def test_recreate_serializes_registry_mutation(self, mock_git_dirs: Path) -> None:
+        """Recovery enters the shared lifecycle lock for add and lease refresh."""
+        wt = mock_git_dirs / "gone-wt"
+        _write_active_lease(
+            mock_git_dirs,
+            wt,
+            owner="auto-smart-routing",
+            head_ref="gate/branch",
+            head_sha="head-sha",
+        )
+        lock_events: list[str] = []
+
+        @contextmanager
+        def fake_lock():
+            lock_events.append("enter")
+            yield
+            lock_events.append("exit")
+
+        def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="")
+
+        with (
+            patch.object(guard, "_run_command", side_effect=fake_run),
+            patch("scripts.dev.pr_gate_lease.worktree_lifecycle_lock", fake_lock),
+        ):
+            result = guard.recreate_gate_worktree(wt)
+
+        assert result.recreated is True
+        assert lock_events == ["enter", "exit", "enter", "exit"]
 
 
 class TestEnsureGateWorktree:
@@ -222,6 +269,7 @@ class TestEnsureGateWorktree:
 
         assert health.exists is False
         assert recreate is not None and recreate.recreated is True
+        assert recreate.recovery["loss_boundary"] == guard.MISSING_STATE_LOSS_BOUNDARY
 
     def test_legacy_lease_is_matched_by_worktree_path(self, mock_git_dirs: Path) -> None:
         """A legacy shared lease is used only when it identifies this path."""

@@ -72,6 +72,7 @@ def execute_map_job(
         synthetic_actuation_profile=params.get("synthetic_actuation_profile"),
         latency_stress_profile=params.get("latency_stress_profile"),
         safety_wrapper=params.get("safety_wrapper"),
+        paired_wrapper_off_record=params.get("paired_wrapper_off_record"),
         cbf_safety_filter=params.get("cbf_safety_filter"),
         record_planner_decision_trace=bool(params.get("record_planner_decision_trace", False)),
         record_simulation_step_trace=bool(params.get("record_simulation_step_trace", False)),

@@ -48,6 +48,51 @@ def test_missing_or_malformed_input_returns_cli_error(tmp_path: Path) -> None:
     assert (missing_code, malformed_code, malformed_yaml_code) == (2, 2, 2)
 
 
+def test_invalid_bootstrap_confidence_returns_cli_error_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invalid aggregate CI controls return exit 2 without logging a traceback."""
+    source_path = tmp_path / "episodes.jsonl"
+    source_path.write_text(
+        '{"episode_id":"e1","scenario_id":"s1","seed":1,"algo":"p","metrics":{"success":1.0}}\n',
+        encoding="utf-8",
+    )
+    errors: list[str] = []
+
+    def _record_error(message: str, *args: object, **_kwargs: object) -> None:
+        errors.append(message % args)
+
+    def _record_log(_level: int, message: str, *args: object, **kwargs: object) -> None:
+        _record_error(message, *args, **kwargs)
+
+    monkeypatch.setattr(cli.logging, "log", _record_log)
+    monkeypatch.setattr(
+        cli.logging,
+        "exception",
+        lambda *_args, **_kwargs: pytest.fail("unexpected traceback logging"),
+    )
+
+    exit_code = cli.cli_main(
+        [
+            "aggregate",
+            "--in",
+            str(source_path),
+            "--out",
+            str(tmp_path / "summary.json"),
+            "--bootstrap-samples",
+            "16",
+            "--bootstrap-confidence",
+            "1.5",
+        ]
+    )
+
+    assert exit_code == 2
+    assert errors
+    assert "bootstrap_confidence" in errors[0]
+    assert "Traceback" not in errors[0]
+
+
 def test_progress_optional_dependency_failure_is_best_effort(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

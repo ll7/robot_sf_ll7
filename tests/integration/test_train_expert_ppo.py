@@ -2539,6 +2539,7 @@ def test_issue_6904_frequency_episodes_drop_preserves_resolved_behavior(rel_path
 # that contract and the frozen pre-change resolved-config baseline.
 _ISSUE_6484_BASELINE_PROMOTION_DIR = Path("configs/training/ppo/ablations")
 _ISSUE_6484_BASELINE_PROMOTION_BASE_NAME = "expert_ppo_issue_791_baseline_promotion_base.yaml"
+_ISSUE_8698_PROMOTION_SHARED_BASE_NAME = "expert_ppo_issue_791_promotion_shared_base.yaml"
 _ISSUE_6484_BASELINE_PROMOTION_BASELINE_PATH = Path(
     "tests/integration/_baseline_issue_6484_baseline_promotion_resolved.json"
 )
@@ -2604,8 +2605,8 @@ def test_issue_6484_baseline_promotion_base_inheritance_and_no_launch_identity()
             _ISSUE_6484_BASELINE_PROMOTION_DIR / _ISSUE_6484_BASELINE_PROMOTION_BASE_NAME
         ).resolve()
         base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
-        # A base must not self-inherit and carries no launch identity.
-        assert "base_config" not in base_yaml
+        # The intermediate base inherits the cluster shared root and carries no launch identity.
+        assert base_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
         assert "policy_id" not in base_yaml
         assert "job_type" not in base_yaml.get("tracking", {}).get("wandb", {})
         assert "tags" not in base_yaml.get("tracking", {}).get("wandb", {})
@@ -2711,7 +2712,7 @@ def test_issue_6484_reward_curriculum_base_reuse_and_explicit_launch_identity() 
     ).resolve()
     base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
 
-    assert "base_config" not in base_yaml
+    assert base_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
     assert "policy_id" not in base_yaml
     assert "num_envs" not in base_yaml
     assert "total_timesteps" not in base_yaml
@@ -2914,7 +2915,7 @@ def test_issue_6484_baseline_env22_base_reuse_and_explicit_launch_identity() -> 
     """The env22 variants reuse one base and keep launch identity explicit."""
     base_path = (_ISSUE_6484_BASELINE_ENV22_DIR / _ISSUE_6484_BASELINE_ENV22_BASE_NAME).resolve()
     base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
-    assert "base_config" not in base_yaml
+    assert base_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
     assert "policy_id" not in base_yaml
     assert "total_timesteps" not in base_yaml
     assert "step_schedule" not in base_yaml.get("evaluation", {})
@@ -3007,7 +3008,7 @@ def test_issue_6484_attention_head_env22_base_reuse_and_explicit_launch_identity
         _ISSUE_6484_ATTENTION_HEAD_ENV22_DIR / _ISSUE_6484_ATTENTION_HEAD_ENV22_BASE_NAME
     ).resolve()
     base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
-    assert "base_config" not in base_yaml
+    assert base_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
     assert "policy_id" not in base_yaml
     assert "num_envs" not in base_yaml
     assert "total_timesteps" not in base_yaml
@@ -3352,7 +3353,7 @@ def test_issue_6484_asymmetric_critic_base_inheritance_and_no_launch_identity() 
     ).resolve()
     base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
 
-    assert "base_config" not in base_yaml
+    assert base_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
     assert "policy_id" not in base_yaml
     assert "total_timesteps" not in base_yaml
     assert "step_schedule" not in base_yaml.get("evaluation", {})
@@ -3450,7 +3451,7 @@ def test_issue_6484_asymmetric_env22_base_reuse_and_explicit_launch_identity() -
         _ISSUE_6484_ASYMMETRIC_ENV22_DIR / _ISSUE_6484_ASYMMETRIC_ENV22_BASE_NAME
     ).resolve()
     base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
-    assert "base_config" not in base_yaml
+    assert base_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
     assert "policy_id" not in base_yaml
     assert "total_timesteps" not in base_yaml
     assert "step_schedule" not in base_yaml.get("evaluation", {})
@@ -3671,13 +3672,13 @@ def test_issue_6484_stage1_base_keeps_intervention_identity_explicit() -> None:
     base_path = (_ISSUE_6484_STAGE1_DIR / _ISSUE_6484_STAGE1_BASE_NAME).resolve()
     base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
 
-    assert "base_config" not in base_yaml
+    assert base_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
     assert "policy_id" not in base_yaml
     assert "scenario_config" not in base_yaml
     assert "num_envs" not in base_yaml
     assert "total_timesteps" not in base_yaml
     assert "asymmetric_critic" not in base_yaml["env_factory_kwargs"]
-    assert "use_pedestrian_attention" not in base_yaml["feature_extractor_kwargs"]
+    assert "use_pedestrian_attention" not in base_yaml.get("feature_extractor_kwargs", {})
 
     common_keys = {"base_config", "policy_id", "scenario_config", "num_envs", "total_timesteps"}
     expected_keys = {
@@ -3982,7 +3983,7 @@ def test_issue_6484_resume_promotion_10m_env22_base_keeps_resume_identity_explic
     ).resolve()
     base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
 
-    assert "base_config" not in base_yaml
+    assert base_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
     for identity_key in (
         "policy_id",
         "scenario_config",
@@ -3991,7 +3992,7 @@ def test_issue_6484_resume_promotion_10m_env22_base_keeps_resume_identity_explic
         "resume_from",
     ):
         assert identity_key not in base_yaml
-    assert "step_schedule" not in base_yaml["evaluation"]
+    assert "step_schedule" not in base_yaml.get("evaluation", {})
     assert "job_type" not in base_yaml["tracking"]["wandb"]
     assert "tags" not in base_yaml["tracking"]["wandb"]
 
@@ -5071,7 +5072,7 @@ def test_issue_6484_reward_v2_base_and_variant_ownership_are_explicit() -> None:
         .read_text(encoding="utf-8")
     )
 
-    assert "base_config" not in base_yaml
+    assert base_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
     assert "policy_id" not in base_yaml
     assert base_yaml["env_factory_kwargs"]["reward_curriculum"]["stages"][0] == {
         "until_episodes": 100,
@@ -5128,3 +5129,99 @@ def test_issue_6484_reward_v2_loads_through_standard_ppo_entrypoint(
     assert config.randomize_seeds is randomize_seeds
     assert config.total_timesteps == total_timesteps
     assert config.evaluation.step_schedule == ((None, every_steps),)
+
+
+# Issue #8698: The 9-member issue-791 promotion-base PPO family was deduplicated to
+# inherit common invariant settings from expert_ppo_issue_791_promotion_shared_base.yaml.
+# The constants below pin the shared base contract and the frozen pre-change resolved baseline.
+_ISSUE_8698_PROMOTION_SHARED_BASE_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_8698_PROMOTION_SHARED_BASE_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_8698_promotion_shared_base_resolved.json"
+)
+_ISSUE_8698_MEMBER_BASE_NAMES = [
+    "expert_ppo_issue_791_asymmetric_critic_promotion_base.yaml",
+    "expert_ppo_issue_791_attention_head_promotion_base.yaml",
+    "expert_ppo_issue_791_attention_head_promotion_env22_base.yaml",
+    "expert_ppo_issue_791_baseline_promotion_base.yaml",
+    "expert_ppo_issue_791_baseline_promotion_env22_base.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_base.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_base.yaml",
+    "expert_ppo_issue_791_reward_curriculum_v2_base.yaml",
+    "expert_ppo_issue_791_stage1_base.yaml",
+]
+
+
+def _issue_8698_promotion_shared_base_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change resolved baseline for all 9 bases."""
+    assert _ISSUE_8698_PROMOTION_SHARED_BASE_BASELINE_PATH.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(
+        _ISSUE_8698_PROMOTION_SHARED_BASE_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+def _issue_8698_resolved_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for ``config_path``."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("base_name", _ISSUE_8698_MEMBER_BASE_NAMES)
+def test_issue_8698_promotion_bases_resolve_to_prechange_values(base_name: str) -> None:
+    """Each of the 9 deduplicated base configs matches its pre-refactor resolved mapping.
+
+    The base_config deep-merge must reconstruct the exact pre-change resolved
+    mapping for every member of the cluster.
+    """
+    path = (_ISSUE_8698_PROMOTION_SHARED_BASE_DIR / base_name).resolve()
+    baseline = _issue_8698_promotion_shared_base_baseline()
+
+    actual_fingerprint = _issue_8698_resolved_fingerprint(path)
+    assert actual_fingerprint == baseline["variants"][base_name], (
+        f"Resolved config {base_name} differs from baseline at {baseline['source_revision']}."
+    )
+
+
+def test_issue_8698_promotion_shared_base_contract() -> None:
+    """The shared base is the root config and contains invariant settings."""
+    shared_path = (
+        _ISSUE_8698_PROMOTION_SHARED_BASE_DIR / _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
+    ).resolve()
+    shared_yaml = yaml.safe_load(shared_path.read_text(encoding="utf-8"))
+
+    # Must be a root base without its own base_config
+    assert "base_config" not in shared_yaml
+    assert "policy_id" not in shared_yaml
+
+    # Shared invariants
+    assert shared_yaml["worker_mode"] == "subproc"
+    assert shared_yaml["seeds"] == [123]
+    assert shared_yaml["randomize_seeds"] is True
+    assert shared_yaml["best_checkpoint_metric"] == "success_rate"
+    assert shared_yaml["feature_extractor"] == "grid_socnav"
+    assert shared_yaml["ppo_hyperparams"]["batch_size"] == 256
+    assert shared_yaml["convergence"]["success_rate"] == 0.9
+    assert shared_yaml["tracking"]["tensorboard"] is False
+
+
+def test_issue_8698_member_bases_inherit_and_remain_lean() -> None:
+    """All 9 member bases inherit the shared base and avoid duplicating invariant keys."""
+    for base_name in _ISSUE_8698_MEMBER_BASE_NAMES:
+        path = (_ISSUE_8698_PROMOTION_SHARED_BASE_DIR / base_name).resolve()
+        raw_yaml = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+        assert raw_yaml.get("base_config") == _ISSUE_8698_PROMOTION_SHARED_BASE_NAME
+        assert "policy_id" not in raw_yaml
+        # Invariant keys must not be repeated in member base overlays
+        assert "worker_mode" not in raw_yaml
+        assert "seeds" not in raw_yaml
+        assert "randomize_seeds" not in raw_yaml
+        assert "best_checkpoint_metric" not in raw_yaml
+        assert "feature_extractor" not in raw_yaml
+        assert "ppo_hyperparams" not in raw_yaml
+        assert "convergence" not in raw_yaml
+        assert "scenario_sampling" not in raw_yaml

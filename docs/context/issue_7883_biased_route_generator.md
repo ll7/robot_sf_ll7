@@ -6,6 +6,7 @@ not evidence of human preference, pedestrian intent, comfort, or social complian
 prerequisite contract [#7890](https://github.com/ll7/robot_sf_ll7/issues/7890)).
 **Owner module:** `robot_sf/nav/biased_route_generator.py`.
 **Observability contract:** `robot_sf/benchmark/route_choice_observability.py` (`route_choice_observability.v1`).
+**Source reference:** Kim, T., Gu, C., & Cheong, J. (2026). *Biased Global Path Planning Method using Bubble Chains for Human-friendly Navigation*. *Journal of Intelligent & Robotic Systems* (19 August 2026). DOI: [10.1007/s10846-026-02444-3](https://doi.org/10.1007/s10846-026-02444-3).
 
 Plain-language summary: this module provides pure, typed, deterministic utilities to generate
 route alternatives under explicit side biases (`neutral`, `left`, `right`) across canonical
@@ -13,7 +14,29 @@ multi-homotopy environments (corridor, doorway, crossing). It integrates directl
 `route_choice_observability.v1` diagnostic contract to enable reproducible passing-side and route
 predictability diagnostics without requiring heavy simulation or stochastic sampling.
 
-## 1. Route Bias Modes
+## 1. Source Method and Scope Limits
+
+The route-bias concept is conceptually inspired by the bubble-chain biased global planning described
+by Kim, Gu, and Cheong (*Journal of Intelligent & Robotic Systems*, 19 August 2026,
+DOI: [10.1007/s10846-026-02444-3](https://doi.org/10.1007/s10846-026-02444-3)). This module is a
+diagnostic analogue, not a reimplementation of the paper's bubble-chain construction, learned
+suppression, or open-uniform B-spline interpolation:
+
+- **Structured-indoor environments only in the source:** The source methodology is strictly scoped
+  to structured indoor layouts (such as hallways, rooms, and regular passages) where geometric bubble
+  chains can constrain alternative homotopy channels. It does not establish validity for unstructured,
+  open outdoor spaces, or complex multi-agent urban flows.
+- **Source experiments are not reproduced here:** The cited paper reports simulations and
+  experiments for mobile robots in structured indoor public environments. This repository's
+  synthetic generator has no physical autonomous mobile vehicle (AMV) deployment evidence and
+  does not reproduce or extend those source experiments.
+- **Planner-route observability only — never human predictability:** In this repository, the
+  generated conditions serve exclusively to test whether a robot navigation policy exhibits observable,
+  consistent topological decisions under controlled geometric bias. Synthetic routes and simulator
+  traces do not model or demonstrate general human predictability, pedestrian comfort, or social
+  compliance (consistent with the boundary in [`docs/context/issue_7890_route_choice_observability.md`](issue_7890_route_choice_observability.md)).
+
+## 2. Route Bias Modes
 
 Route generation operates relative to a declared directed reference axis from scenario start to goal:
 
@@ -25,7 +48,7 @@ The lateral displacement profile is smoothly shaped over normalized progress $t 
 using configurable profile shapes (`smooth_sine`, `hann`, `cubic`, `trapezoid`), ensuring continuous
 geometry where the generated path begins exactly at `start` ($t=0$) and terminates exactly at `goal` ($t=1$).
 
-## 2. Canonical Fixture Topologies
+## 3. Canonical Fixture Topologies
 
 The module provides deterministic canonical multi-homotopy environments:
 
@@ -37,7 +60,7 @@ The module provides deterministic canonical multi-homotopy environments:
 Convenience generators `generate_corridor_homotopy_routes` and `generate_doorway_homotopy_routes`
 produce full suites of `(neutral, left, right)` `BiasedRouteResult` instances for comparative evaluation.
 
-## 3. Integration with Observability Contract
+## 4. Integration with Observability Contract
 
 Each `BiasedRouteResult` encapsulates:
 - the sampled 2D path coordinates;
@@ -48,16 +71,27 @@ The helper `evaluate_route_observability_sequence` evaluates temporal consistenc
 of replanned routes or candidate variations, emitting a versioned `route_choice_observability.v1`
 diagnostic record.
 
-## 4. Grid Rasterization
+## 5. Grid Rasterization
 
 `rasterize_route_to_grid` converts continuous 2D trajectories into step-valid 8-connected grid cell
 sequences for occupancy-grid-based planners and topological signature evaluation without non-adjacent
 diagonal jumps.
 
-## 5. Claim Boundaries and Non-Goals
+## 6. Claim Boundaries and Non-Goals
 
+- **Structured-indoor source scope only**: The cited paper studies mobile-robot path planning in
+  structured indoor public environments; its reported evidence does not establish validity for
+  unstructured, open outdoor, or mixed-traffic settings.
+- **No physical AMV evidence in this repository**: This synthetic generator provides no physical
+  AMV field trial or real-world vehicle deployment evidence. The cited source's experiments are
+  not reproduced or extended by this module.
 - **No human preference or intent claims**: Generates deterministic synthetic routes for controlled
-  benchmarking; does not model or assert actual pedestrian choice mechanics.
+  benchmarking; does not model or assert actual pedestrian choice mechanics. Simulator traces and
+  synthetic biased routes in this module evaluate planner observability only.
+- **No general human predictability**: Synthetic route alternatives and simulation traces do not
+  establish general human predictability, pedestrian comfort, or social acceptance (consistent with the
+  "planner-route observability only — never human predictability" boundary in
+  [`docs/context/issue_7890_route_choice_observability.md`](issue_7890_route_choice_observability.md)).
 - **No social compliance score**: Evaluates observability and geometry only; never merges outputs
   into subjective human-likeness ratings.
 - **Diagnostic only**: Designed for reproducible local testing and research validation.

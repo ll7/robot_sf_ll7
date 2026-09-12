@@ -25,23 +25,20 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from robot_sf.benchmark.helper_catalog import load_trained_policy
-from robot_sf.gym_env._stub_robot_model import StubRobotModel
-from robot_sf.gym_env.environment_factory import make_pedestrian_env
-from robot_sf.gym_env.reward import stationary_collision_ped_reward
-from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
-from robot_sf.nav.map_config import MapDefinitionPool
-from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.robot.bicycle_drive import BicycleDriveSettings
-from robot_sf.sensor.range_sensor import LidarScannerSettings
-from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.examples.prerequisites import (
+    add_prerequisite_check_arguments,
+    run_prerequisite_check,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments for the modern pedestrian debug demo."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -76,11 +73,15 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Use deterministic policy actions (recommended for debugging).",
     )
-    return parser.parse_args()
+    add_prerequisite_check_arguments(parser)
+    return parser.parse_args(argv)
 
 
 def _load_robot_model_or_stub(robot_model_path: str) -> Any:
     """Load robot model checkpoint or fall back to a stub model when unavailable."""
+    from robot_sf.benchmark.helper_catalog import load_trained_policy
+    from robot_sf.gym_env._stub_robot_model import StubRobotModel
+
     if Path(robot_model_path).exists():
         return load_trained_policy(robot_model_path)
 
@@ -98,6 +99,15 @@ def _make_env(
     difficulty: int,
 ):
     """Build a pedestrian debug environment using unified factory APIs."""
+    from robot_sf.gym_env.environment_factory import make_pedestrian_env
+    from robot_sf.gym_env.reward import stationary_collision_ped_reward
+    from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
+    from robot_sf.nav.map_config import MapDefinitionPool
+    from robot_sf.nav.svg_map_parser import convert_map
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+    from robot_sf.sensor.range_sensor import LidarScannerSettings
+    from robot_sf.sim.sim_config import SimulationSettings
+
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     map_definition = convert_map(svg_map_path)
     robot_model = _load_robot_model_or_stub(robot_model_path)
@@ -143,6 +153,8 @@ def _extract_episode_info(info: dict[str, Any], episode_reward: float) -> str:
 
 def run_debug_rollout(args: argparse.Namespace) -> None:
     """Execute a rendered pedestrian-policy rollout with episode logging."""
+    from robot_sf.benchmark.helper_catalog import load_trained_policy
+
     if not Path(args.ped_model).exists():
         raise FileNotFoundError(
             "Pedestrian model not found at "
@@ -178,11 +190,14 @@ def run_debug_rollout(args: argparse.Namespace) -> None:
     env.close()
 
 
-def main() -> None:
-    """Run the modern pedestrian policy debug demo."""
-    args = _parse_args()
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run check-only mode or the modern pedestrian policy debug demo."""
+    args = _parse_args(argv)
+    if args.check:
+        return run_prerequisite_check(__file__, output_format=args.format)
     run_debug_rollout(args)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

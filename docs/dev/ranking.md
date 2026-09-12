@@ -37,6 +37,14 @@ print(format_markdown(rows, "collisions"))
 ```
 
 Notes
-- Missing or non-numeric values for the metric are ignored per group.
+- Before grouping, records with the explicit
+  `algorithm_metadata.foresight_prediction.evidence_eligible=false` marker are excluded by the
+  canonical benchmark evidence-admission filter. The ranking rows do not carry an exclusion count;
+  use aggregate output metadata when evidence-custody accounting is required.
+- Missing, non-numeric, non-finite, and float-conversion-overflow values for the metric are ignored
+  per group. Means are calculated with overflow-safe scaling, so finite inputs cannot emit a
+  non-finite ranking mean.
 - Groups with no valid values are omitted.
 - For lower-is-better metrics (e.g., collisions), keep ascending order. For higher-is-better, use --descending.
+- Ranking output is implementation/diagnostic output until downstream domain review authorizes any
+  benchmark or paper-facing interpretation.

@@ -41,7 +41,7 @@ RECOVERY_MANIFEST_PATH = EVIDENCE_DIR / "recovery_manifest.json"
 PREREGISTRATION_PATH = (
     REPO_ROOT / "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml"
 )
-EXPECTED_PACKET_DIGEST = "60e66a342f88bf9e2b66e3cc680729e53ee31304881ed6f5c05a4e44e5f85b67"
+EXPECTED_PACKET_DIGEST = "4c1624c37f6d897a868a9e0bb68b8e25bb642bdb10c3e17535e6bf2e759a7016"
 EXPECTED_ROW_DIGESTS = (
     "c204a1741a2d4bf77a1e757eb9614d77b6f721794bd51182bc34d922c2c48858",
     "35a90600f347363b74cf8c98fe8022a2b5b439cf3aea5e69f6a4c8e11707f85f",
@@ -732,6 +732,8 @@ def test_fixture_receipt_build_declares_durable_source_and_validates_packet(
     assert receipt_source["tracked_commit"]
     assert "--source-receipt <verified-source-receipt.json>" in packet["producer"]["command"]
     assert all("issue_7980_source_receipt" in metric["source_ids"] for metric in packet["metrics"])
+    binding = decode_source_binding(packet["metrics"][0]["sensitivity"][0])
+    assert binding["source_artifact"]["synthesis_sha256"] == synthesis_sha256
     assert loaded.evidence.admission_state == "diagnostic_only"
     assert {decision.outcome for decision in loaded.decisions} == {"inconclusive", "invalid"}
 

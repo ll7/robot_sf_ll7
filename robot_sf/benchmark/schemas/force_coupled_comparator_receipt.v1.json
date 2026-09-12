@@ -131,6 +131,16 @@
           "degradation_reasons": {
             "type": "array",
             "items": {"type": "string"}
+          },
+          "failure_class": {
+            "type": ["string", "null"],
+            "enum": [
+              "path_generation",
+              "tracking",
+              "social_compliance",
+              "simulator",
+              null
+            ]
           }
         }
       }
@@ -161,6 +171,10 @@
           "mean_jerk_metric": {"type": "number", "minimum": 0.0},
           "mean_latency_ms": {"type": "number", "minimum": 0.0},
           "status_counts": {
+            "type": "object",
+            "additionalProperties": {"type": "integer"}
+          },
+          "failure_class_counts": {
             "type": "object",
             "additionalProperties": {"type": "integer"}
           }

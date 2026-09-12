@@ -359,6 +359,33 @@ def test_check_line_budget_discipline_fails_closed_when_diff_unavailable(
     mock_numstat.assert_called_once_with("missing-base")
 
 
+@patch("subprocess.run")
+def test_diff_numstat_falls_back_to_two_dot_without_merge_base(
+    mock_run: MagicMock,
+) -> None:
+    """A shallow checkout without a merge base measures via the two-dot tree diff."""
+    mock_run.side_effect = [
+        MagicMock(returncode=1, stdout=""),
+        MagicMock(returncode=0, stdout="10\t2\tscripts/dev/a.py\n"),
+    ]
+
+    assert pr_contract_check._diff_numstat("origin/main") == "10\t2\tscripts/dev/a.py\n"
+    assert mock_run.call_count == 2
+    assert mock_run.call_args_list[0].args[0][-1] == "origin/main...HEAD"
+    assert mock_run.call_args_list[1].args[0][-1] == "origin/main"
+
+
+@patch("subprocess.run")
+def test_diff_numstat_returns_none_when_both_forms_fail(mock_run: MagicMock) -> None:
+    """Unavailable measurement stays None so budget enforcement fails closed."""
+    mock_run.side_effect = [
+        MagicMock(returncode=1, stdout=""),
+        MagicMock(returncode=1, stdout=""),
+    ]
+
+    assert pr_contract_check._diff_numstat("origin/main") is None
+
+
 def test_build_comment_body_marks_main_ci_closing_guard_failure() -> None:
     """The summary row reports incident-closure blockers as failed."""
     blocker = (

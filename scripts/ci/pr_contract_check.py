@@ -919,21 +919,25 @@ def _diff_added_python_lines(base_ref: str, repo_root: str | None = None) -> dic
 def _diff_numstat(base_ref: str) -> str | None:
     """Return ``git diff --numstat`` output for the PR head against *base_ref*.
 
-    Returns None when the diff cannot be computed. Budget enforcement treats
-    unavailable measurements as a blocker rather than an empty diff.
+    Prefers the merge-base form ``{base_ref}...HEAD``. CI fetches the base ref
+    with ``--depth=1`` (see ``pr-contract-check.yml``), so no merge base exists
+    and ``...`` fails; the two-dot tree diff ``{base_ref} HEAD`` is then used,
+    which is exact for the merge-ref checkout. Returns None when neither form
+    can be computed; budget enforcement treats that as a blocker.
     """
-    try:
-        res = subprocess.run(
-            ["git", "diff", "--numstat", f"{base_ref}...HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if res.returncode != 0:
+    for diff_spec in (f"{base_ref}...HEAD", base_ref):
+        try:
+            res = subprocess.run(
+                ["git", "diff", "--numstat", diff_spec],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except _BEST_EFFORT_ERRORS:
             return None
-        return res.stdout
-    except _BEST_EFFORT_ERRORS:
-        return None
+        if res.returncode == 0:
+            return res.stdout
+    return None
 
 
 def check_line_budget_discipline(body: str, base_ref: str, repo: str) -> list[str]:

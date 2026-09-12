@@ -175,7 +175,10 @@ def test_checked_in_active_role_manifest_is_readable() -> None:
     "reader_body, expected_message",
     [
         ("def read_fixture(path): raise ValueError('reject')\n", "reader rejected"),
-        ("import time\ndef read_fixture(path): time.sleep(3)\n", "reader timed out"),
+        (
+            f"import time\ndef read_fixture(path): time.sleep({inventory.READER_TIMEOUT_SECONDS + 1})\n",
+            "reader timed out",
+        ),
     ],
 )
 def test_reader_hook_fail_closed(tmp_path: Path, reader_body: str, expected_message: str) -> None:

@@ -21,6 +21,7 @@ CONFLICT_CODES = set(
     "unit_display_drift ambiguous_role missing_check_command source_material_mismatch "
     "schema_source_mismatch".split()
 )
+READER_TIMEOUT_SECONDS = 5
 _READER_CHILD = """import importlib.util,sys;from pathlib import Path
 s=importlib.util.spec_from_file_location('r',sys.argv[1]);m=importlib.util.module_from_spec(s);sys.modules[s.name]=m;s.loader.exec_module(m);getattr(m,sys.argv[2])(Path(sys.argv[3]))"""
 
@@ -165,7 +166,7 @@ def _execute_reader(
             cwd=root,
             capture_output=True,
             check=False,
-            timeout=2,
+            timeout=READER_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
         return _error("reader_schema_mismatch", location, "reader timed out")

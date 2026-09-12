@@ -20,6 +20,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Read-only worktree hygiene snapshot | [worktree_hygiene_snapshot.py](../../scripts/dev/worktree_hygiene_snapshot.py) |
 | Preservation-aware retirement | [stale_worktree_reaper.py](../../scripts/dev/stale_worktree_reaper.py) |
 | Active-worktree lease | [pr_gate_lease.py](../../scripts/dev/pr_gate_lease.py) |
+| Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
 
 ## 1. Retention classes in operational terms
 
@@ -150,7 +151,19 @@ projection by artifact ID, version, and digest, and exits non-zero when an activ
 reference has no verified non-institutional custody or a release-facing reference lacks independent
 failure-domain copies. It reads sanitized inputs only and never emits locator values.
 
-### 4.7 Report a blocker
+### 4.7 Gate source-host artifact pruning on verified custody
+
+```bash
+uv run python scripts/tools/check_prune_eligibility.py --check \
+  --source-manifest <SOURCE_MANIFEST> --destination-receipt <DESTINATION_RECEIPT> \
+  --format json
+```
+
+The guard verifies durable destination custody, checksums, consumer coverage, and retention
+dispositions before permitting deletion planning. Check mode performs zero file deletions;
+an explicit `--apply` route enforces compare-and-swap revalidation before removing eligible bytes.
+
+### 4.8 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

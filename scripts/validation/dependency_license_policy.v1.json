@@ -231,15 +231,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): unattributed_shared_apache_hash_match:4."
       ]
     },
     {
@@ -289,8 +293,7 @@
           "https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/LICENSE.txt",
           "https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/css/all.min.css",
           "https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/js/all.min.js",
-          "https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/js/all.min.js.LICENSE.txt",
-          "https://fontawesome.com/license/free"
+          "https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/js/all.min.js.LICENSE.txt"
         ],
         "archive_notice_paths": [
           "alembic-1.18.4/LICENSE",
@@ -322,20 +325,24 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ],
       "evidence_blockers": [
         "The sdist contains generated Font Awesome 6.5.2 assets that are absent from the Alembic source commit 766b5ee98e0aeea85a18f272a1ac813712ee0697; exact generated-asset provenance remains unresolved.",
         "The archive member docs/_static/vendor/fontawesome/6.5.2/js/all.min.js.LICENSE.txt is absent from the Font Awesome 6.5.2 source commit c0f460dca7f7688761120415ff3c9cf7f73119be; exact generated-file provenance remains unresolved.",
-        "fontawesome.com/license/free is a moving page and is retained only as contextual provenance; it is not immutable evidence."
+        "fontawesome.com/license/free is a moving page and is retained only as contextual provenance; it is not immutable evidence.",
+        "Moving or unversioned contextual notice reference removed from reviewed immutable notice_paths and retained as contextual-only evidence: https://fontawesome.com/license/free.",
+        "Retained authority exception (staged external-only scope): bundled_component_exception:3.",
+        "Retained authority exception (staged external-only scope): historical_surface_packet_upstream_blocker_resolved_by_two_row_addendum."
       ]
     },
     {
@@ -411,15 +418,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -495,15 +503,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -577,15 +586,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): source_archive_mapping_exception_inherited."
       ]
     },
     {
@@ -659,15 +672,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -743,15 +757,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -825,15 +840,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -907,15 +923,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -989,15 +1006,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -1071,15 +1089,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -1155,15 +1174,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat."
       ]
     },
     {
@@ -1237,15 +1260,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat."
       ]
     },
     {
@@ -1319,15 +1346,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat."
       ]
     },
     {
@@ -1401,15 +1432,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -1483,15 +1515,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): selected_wheel_record_exception:18."
       ]
     },
     {
@@ -1565,15 +1601,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -1647,15 +1684,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): source_archive_mapping_exception_inherited."
       ]
     },
     {
@@ -1729,15 +1770,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): historical_surface_packet_upstream_blocker_resolved_by_two_row_addendum."
       ]
     },
     {
@@ -1811,15 +1856,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): selected_wheel_record_exception:3."
       ]
     },
     {
@@ -1893,15 +1942,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat."
       ]
     },
     {
@@ -1977,15 +2030,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -2059,15 +2113,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -2141,15 +2196,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -2223,15 +2279,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): partial_sdist:pyparsing-3.3.2/docs/CONTRIBUTING.md."
       ]
     },
     {
@@ -2307,15 +2367,20 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): source_archive_mapping_exception_inherited.",
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat."
       ]
     },
     {
@@ -2391,15 +2456,20 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): source_archive_mapping_exception_inherited.",
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat."
       ]
     },
     {
@@ -2445,8 +2515,7 @@
         "tag": "v0.37.0",
         "notice_paths": [
           "https://github.com/python-jsonschema/referencing/blob/944ed5a20bc5125f2349156cbdc365daac0e67e6/COPYING",
-          "https://github.com/python-jsonschema/referencing/tree/944ed5a20bc5125f2349156cbdc365daac0e67e6",
-          "https://github.com/python-jsonschema/referencing-suite"
+          "https://github.com/python-jsonschema/referencing/tree/944ed5a20bc5125f2349156cbdc365daac0e67e6"
         ],
         "archive_notice_paths": [
           "referencing-0.37.0/COPYING",
@@ -2475,19 +2544,23 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ],
       "evidence_blockers": [
         "The sdist suite/LICENSE comes from the separate referencing-suite submodule; the archive records no submodule commit, so the external source cannot yet be bound to immutable evidence.",
-        "The referencing-suite repository URL is unversioned and retained only as contextual provenance until its exact commit is recorded."
+        "The referencing-suite repository URL is unversioned and retained only as contextual provenance until its exact commit is recorded.",
+        "Moving or unversioned contextual notice reference removed from reviewed immutable notice_paths and retained as contextual-only evidence: https://github.com/python-jsonschema/referencing-suite.",
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat.",
+        "Retained authority exception (staged external-only scope): partial_sdist:referencing-0.37.0/CHANGELOG.rst."
       ]
     },
     {
@@ -2534,9 +2607,7 @@
         "notice_paths": [
           "https://github.com/wasi-master/rich-rst/blob/7a0e1ad49cdff41708831e50f81d016acd1fed1f/LICENSE",
           "https://github.com/wasi-master/rich-rst/blob/7a0e1ad49cdff41708831e50f81d016acd1fed1f/rich_rst/_vendor/LICENSES.txt",
-          "https://github.com/wasi-master/rich-rst/tree/7a0e1ad49cdff41708831e50f81d016acd1fed1f",
-          "https://docutils.sourceforge.io/",
-          "https://docutils.sourceforge.io/COPYING.html"
+          "https://github.com/wasi-master/rich-rst/tree/7a0e1ad49cdff41708831e50f81d016acd1fed1f"
         ],
         "archive_notice_paths": [
           "rich_rst-2.0.1/LICENSE",
@@ -2567,19 +2638,24 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ],
       "evidence_blockers": [
         "The vendored Docutils 0.22.4 subset is referenced only through unversioned docutils.sourceforge.io pages; exact source commit/license bytes remain unresolved.",
-        "The external Docutils URLs are retained only as contextual provenance and are not immutable evidence."
+        "The external Docutils URLs are retained only as contextual provenance and are not immutable evidence.",
+        "Moving or unversioned contextual notice reference removed from reviewed immutable notice_paths and retained as contextual-only evidence: https://docutils.sourceforge.io/.",
+        "Moving or unversioned contextual notice reference removed from reviewed immutable notice_paths and retained as contextual-only evidence: https://docutils.sourceforge.io/COPYING.html.",
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat.",
+        "Retained authority exception (staged external-only scope): bundled_component_exception:84."
       ]
     },
     {
@@ -2653,15 +2729,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -2789,15 +2866,20 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): bundled_component_exception:309.",
+        "Retained authority exception (staged external-only scope): selected_wheel_record_exception:180."
       ]
     },
     {
@@ -2871,15 +2953,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat."
       ]
     },
     {
@@ -2953,15 +3039,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -3035,15 +3122,19 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
+      ],
+      "evidence_blockers": [
+        "Retained authority exception (staged external-only scope): optional_commit_api_403_metadata_caveat."
       ]
     },
     {
@@ -3119,15 +3210,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     },
     {
@@ -3201,15 +3293,16 @@
         "unavailable",
         "conflicting"
       ],
-      "status": "pending_review",
-      "reviewer": null,
-      "reviewed_at": null,
+      "status": "reviewed",
+      "reviewer": "gpt-6-astra/medium verified (AI technical authority; Luna/max independent factual surface review; no human or legal identity claimed)",
+      "reviewed_at": "2026-09-11T08:28:09.073217Z",
       "disposition": "external_dependency_not_redistributed",
       "ruling": "A_surface_specific_disposition",
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
       "evidence_paths": [
         "docs/context/evidence/dependency_license_batch_2026-09-01.md",
-        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json",
+        "docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json"
       ]
     }
   ]

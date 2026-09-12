@@ -64,7 +64,7 @@ def test_jsonschema_is_declared_as_a_core_dependency() -> None:
 
 
 def test_issue_8163_policy_batch_has_exact_scope_and_fail_closed_surfaces() -> None:
-    """The first license batch stays exact, target-scoped, and pending review."""
+    """The first license batch is exact, target-scoped, and marked reviewed in policy."""
     policy = json.loads(
         (REPO_ROOT / "scripts/validation/dependency_license_policy.v1.json").read_text(
             encoding="utf-8"
@@ -102,9 +102,10 @@ def test_issue_8163_policy_batch_has_exact_scope_and_fail_closed_surfaces() -> N
             "unavailable",
             "vendored",
         }
-        assert row["status"] == "pending_review"
-        assert row["reviewer"] is None
-        assert row["reviewed_at"] is None
+        assert row["status"] == "reviewed"
+        assert "gpt-6-astra/medium" in row["reviewer"]
+        assert "Luna/max" in row["reviewer"]
+        assert row["reviewed_at"] == "2026-09-11T08:28:09.073217Z"
         assert re.fullmatch(r"[0-9a-f]{40}", row["upstream"]["commit_sha"])
         assert all(
             re.search(r"/(?:blob|tree)/[0-9a-f]{40}(?:/|$)", url)

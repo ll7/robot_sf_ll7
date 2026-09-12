@@ -650,3 +650,93 @@ def test_reconcile_keeps_unchanged_invalid_v2_body_as_explicit_noop(tmp_path: Pa
 
     assert result["status"] == "unchanged"
     mock_patch.assert_not_called()
+
+
+def test_reconcile_issue_number_error_points_at_linked_pr(tmp_path: Path, capsys) -> None:
+    """Passing an issue number yields an actionable linked-PR diagnostic, not a bare 404."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    timeline = [
+        {"event": "commented"},
+        {
+            "event": "cross-referenced",
+            "source": {"issue": {"number": 9109, "pull_request": {"url": "https://example"}}},
+        },
+    ]
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            _proc(stdout=json.dumps(timeline)),
+        ]
+        exit_code = main(
+            [
+                "9101",
+                "--body-file",
+                str(body_file),
+                "--reconcile",
+                "--title",
+                "final title",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "is an issue, not a pull request" in payload["error"]
+    assert "linked PR is #9109" in payload["error"]
+
+
+def test_reconcile_issue_number_without_linkage_keeps_actionable_error(
+    tmp_path: Path, capsys
+) -> None:
+    """An issue without a linked PR still gets the pass-the-PR-number diagnostic."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(stdout=json.dumps({"number": 9101, "title": "an issue"})),
+            _proc(stdout=json.dumps([{"event": "commented"}])),
+        ]
+        exit_code = main(
+            [
+                "9101",
+                "--body-file",
+                str(body_file),
+                "--reconcile",
+                "--title",
+                "final title",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert payload["error"].endswith("pass the PR number")
+
+
+def test_reconcile_missing_pr_keeps_original_error(tmp_path: Path, capsys) -> None:
+    """A 404 that is not an issue-number mixup is not misattributed."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        mock_get.side_effect = [
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+            _proc(returncode=1, stderr="gh: Not Found (HTTP 404)"),
+        ]
+        exit_code = main(
+            [
+                "999999",
+                "--body-file",
+                str(body_file),
+                "--reconcile",
+                "--title",
+                "final title",
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    payload = json.loads(captured.err)
+    assert "is an issue, not a pull request" not in payload["error"]

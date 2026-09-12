@@ -480,6 +480,8 @@ Treat monitor exit states as follows:
 - `pending timeout` / exit code `2`: keep the PR in `awaiting_ci`, record the pending checks, and
   continue other work.
 - `error`: record stale head, auth, API, or parsing failure; do not trust the waiter for readiness.
+- Do not rerun a full-budget monitor for the same head after a timeout; see
+  `Resume And Ownership Discipline`.
 
 ### Snapshot-First Parent Orientation
 
@@ -620,6 +622,28 @@ plain `gh issue view --comments` fails on some GitHub CLI versions because it re
 deprecated classic-Projects field) or equivalent REST evidence.
 Do not claim or branch from scout text alone; stale state, wrong repo-owner URLs, missing recent
 comments, and duplicate PR coverage are known failure modes.
+
+### Resume And Ownership Discipline
+
+Apply these rules instead of rediscovering the same leaks each cycle:
+
+- **Resolve the worktree root before reading or editing.** Confirm `git rev-parse --show-toplevel`
+  matches the task worktree and use absolute paths under it. The long-lived main checkout may sit
+  on an unrelated user branch with different files; editing a path read from it moves the wrong
+  file and costs a copy/revert cycle.
+- **Trust claim refs over labels.** `agent-claims/issue-<n>` is authoritative; a `state:running`
+  label without a claim ref is stale and should be cleared when claiming.
+- **Do not chase a head owned by another lane.** When `merge-ready` application is refused because
+  an active exact-head review claim covers the live head, park the PR with its head SHA and
+  metadata digest; resume once the label appears instead of re-polling each new head.
+- **Run at most one bounded CI monitor per head.** Use `watch_pr_ci_status.py --once` for state and
+  start a monitor only when the next decision depends on it; on wall-budget expiry record
+  `awaiting_ci` and park rather than rerunning the same budget.
+- **Triage snapshots by label before reading bodies.** From `snapshot_issue_batch --claimable`,
+  skip rows labeled `decision-required` or `state:blocked`, and skip compute, experiment, or
+  campaign lanes unless the user prioritized them; record the exclusion from the snapshot alone.
+- **Recheck merged coverage before claiming.** A queue row can be stale: run the exact merged-fix
+  guard (named symbol, failing test, or file/line against `origin/main`) before claim or branch.
 
 ### Usage Pause Guard
 

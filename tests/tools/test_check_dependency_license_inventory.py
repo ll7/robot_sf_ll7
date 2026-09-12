@@ -796,7 +796,7 @@ def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None
     selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
     expected = selected_policy_pending_package_count(selected_rows)
 
-    assert expected == 119
+    assert expected == 118
     assert inventory["summary"]["policy_pending_package_count"] == expected
     assert inventory["summary"]["policy_pending_package_count"] != 155
 
@@ -822,9 +822,9 @@ def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
             row.get("policy_disposition") == "external_dependency_not_redistributed"
             for row in selected_rows
         )
-        == 37
+        == 38
     )
-    assert selected_policy_pending_package_count(selected_rows) == 119
+    assert selected_policy_pending_package_count(selected_rows) == 118
 
 
 def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:
@@ -1099,6 +1099,108 @@ def test_current_llvmlite_disposition_matches_both_frozen_lock_profiles() -> Non
     assert all(row["policy_disposition"] == "external_dependency_not_redistributed" for row in rows)
     assert not any("llvmlite" in failure for failure in inventory["failures"])
     assert inventory["summary"]["policy_exact_match_count"] == 2
+
+
+def test_current_sb3_contrib_disposition_is_exact_and_surface_specific() -> None:
+    """The reviewed sb3-contrib row admits only its exact all-profile surface."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    policy_row = next(
+        row for row in policy["package_dispositions"] if row["package"] == "sb3-contrib"
+    )
+
+    assert {
+        key: policy_row[key]
+        for key in (
+            "id",
+            "package",
+            "version",
+            "license_expression",
+            "profiles",
+            "allowed_distribution_modes",
+            "blocked_distribution_modes",
+            "blocked_surface_conditions",
+            "status",
+            "disposition",
+            "ruling",
+        )
+    } == {
+        "id": "sb3-contrib-2-9-0-external-install",
+        "package": "sb3-contrib",
+        "version": "2.9.0",
+        "license_expression": "MIT",
+        "profiles": ["all"],
+        "allowed_distribution_modes": ["user_installed", "not_distributed"],
+        "blocked_distribution_modes": ["bundled_source", "built_companion"],
+        "blocked_surface_conditions": [
+            "mirrored",
+            "vendored",
+            "container_bundled",
+            "unknown",
+            "unavailable",
+            "conflicting",
+        ],
+        "status": "reviewed",
+        "disposition": "external_dependency_not_redistributed",
+        "ruling": "A_surface_specific_disposition",
+    }
+    assert policy_row["target"] == {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {"implementation": "CPython", "version": "3.13"},
+    }
+    assert policy_row["source"] == {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/sb3-contrib/2.9.0/json",
+    }
+    assert [
+        {key: artifact[key] for key in ("kind", "filename", "sha256", "size", "platform_tags")}
+        for artifact in policy_row["artifacts"]
+    ] == [
+        {
+            "kind": "sdist",
+            "filename": "sb3_contrib-2.9.0.tar.gz",
+            "sha256": "6e839c669552ecb3deb616a42ea98ed5e6c599eb5ac5f86232415b87a3873699",
+            "size": 90312,
+            "platform_tags": [],
+        },
+        {
+            "kind": "wheel",
+            "filename": "sb3_contrib-2.9.0-py3-none-any.whl",
+            "sha256": "b492b2be792f8f8214ff6b984e94812dc877f809ae82302cbe00626442ae316a",
+            "size": 93042,
+            "platform_tags": ["py3", "none", "any"],
+        },
+    ]
+
+    inventory = build_inventory(
+        root,
+        distributions=[_Distribution("sb3-contrib", "2.9.0", License_Expression="MIT")],
+        selected_profile_ids=["all"],
+    )
+    rows = [row for row in inventory["packages"] if row["normalized_name"] == "sb3-contrib"]
+    assert len(rows) == 1
+    record = rows[0]
+    assert record["package_id"] == "sb3-contrib@2.9.0#d0ac0e722c73f77d"
+    assert record["selected_profiles"] == ["all"]
+    assert record["exact_policy_id"] == policy_row["id"]
+    assert record["exact_policy_status"] == "accepted"
+    assert record["exact_policy_disposition"] == policy_row["disposition"]
+    assert not any("sb3-contrib" in failure for failure in inventory["failures"])
+
+    for blocked_mode in policy_row["blocked_distribution_modes"]:
+        matched, failures = _match_package_disposition(
+            record,
+            {"license_expression": "MIT"},
+            blocked_mode,
+            set(record["profiles"]),
+            inventory["target"],
+            {"sb3-contrib": [policy_row]},
+        )
+        assert matched == policy_row
+        assert failures == [f"distribution mode {blocked_mode} is not allowed by exact policy"]
 
 
 def test_issue_8163_policy_records_retain_metadata_and_archive_evidence() -> None:

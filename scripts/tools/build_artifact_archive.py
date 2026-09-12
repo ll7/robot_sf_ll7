@@ -42,7 +42,13 @@ EXIT_OK, EXIT_BLOCKED, EXIT_MALFORMED = 0, 2, 3
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 ROLE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 ACTIVE_STATES = frozenset({"active", "running", "writing", "partial", "in_progress"})
-ACTIVE_MARKERS = (".active-writer", ".active_writer", ".writer-active", ".writer_active")
+ACTIVE_MARKERS = (
+    ".active-writer",
+    ".active_writer",
+    ".writer-active",
+    ".writer_active",
+    ".gate_lease.json",
+)
 
 
 class ArchiveError(ValueError):
@@ -120,10 +126,25 @@ def _role(value: Any, location: str) -> str:
 
 
 def _active(payload: Mapping[str, Any]) -> bool:
-    if any(payload.get(key) not in (None, False, "", [], {}) for key in ("active_writer", "writer_active", "active_writers", "writer_lock")):
+    if any(
+        payload.get(key) not in (None, False, "", [], {})
+        for key in ("active_writer", "writer_active", "active_writers", "writer_lock")
+    ):
+        return True
+    if payload.get("active_job") is True:
+        return True
+    writers = payload.get("writers")
+    if isinstance(writers, list) and any(
+        isinstance(item, Mapping)
+        and (item.get("active") is True or str(item.get("state", "")).lower() in ACTIVE_STATES)
+        for item in writers
+    ):
         return True
     writer = payload.get("writer")
-    return (isinstance(writer, Mapping) and (writer.get("active") is True or str(writer.get("state", "")).lower() in ACTIVE_STATES)) or any(str(payload.get(key, "")).lower() in ACTIVE_STATES for key in ("state", "status"))
+    return (
+        isinstance(writer, Mapping)
+        and (writer.get("active") is True or str(writer.get("state", "")).lower() in ACTIVE_STATES)
+    ) or any(str(payload.get(key, "")).lower() in ACTIVE_STATES for key in ("state", "status"))
 
 
 def _require_harvest_ready(payload: Mapping[str, Any]) -> None:
@@ -138,6 +159,15 @@ def _require_harvest_ready(payload: Mapping[str, Any]) -> None:
         raise ArchiveError(
             "source_not_ready",
             "terminal job harvest must be ready, complete, terminal, and problem-free",
+        )
+
+
+def _require_bundle_ready(payload: Mapping[str, Any]) -> None:
+    """Reject compute staging bundles that are not explicitly ready and problem-free."""
+    if payload.get("status") != "ready" or payload.get("problems") != []:
+        raise ArchiveError(
+            "source_not_ready",
+            "compute staging bundle must be ready and problem-free",
         )
 
 
@@ -162,6 +192,8 @@ def _source_manifest(path: Path) -> tuple[str, str, tuple[int, int, int, int, in
         raise ArchiveError("unsupported_manifest_schema", f"unsupported source schema: {schema!r}")
     if schema == "terminal_job_harvest.v1":
         _require_harvest_ready(payload)
+    elif schema == "compute_staging_bundle.v1":
+        _require_bundle_ready(payload)
     if _active(payload):
         raise ArchiveError("active_writer", "source manifest reports an active writer")
     problems: list[dict[str, str]] = []
@@ -213,8 +245,15 @@ def _root(root: Path) -> None:
         raise ArchiveError("symlink_root", "source root must not be a symlink")
     if not stat.S_ISDIR(value.st_mode):
         raise ArchiveError("source_invalid", "source root must be a directory")
-    if any(os.path.lexists(root / marker) for marker in ACTIVE_MARKERS):
-        raise ArchiveError("active_writer", "active writer marker is present")
+    for current, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in (*dirnames, *filenames):
+            if name in ACTIVE_MARKERS:
+                located = os.path.relpath(os.path.join(current, name), root)
+                raise ArchiveError(
+                    "active_writer",
+                    "active writer marker is present",
+                    path=located,
+                )
 
 
 def _local(root: Path, relative: str) -> tuple[Path, os.stat_result]:
@@ -258,10 +297,14 @@ def _reject_inside(path: Path, root: Path, label: str) -> None:
 
 def _reject_output_alias(archive: Path, member_manifest: Path) -> None:
     try:
-        aliases = archive.resolve(strict=False) == member_manifest.resolve(strict=False)
+        resolved_archive = archive.resolve(strict=False)
+        resolved_manifest = member_manifest.resolve(strict=False)
     except (OSError, RuntimeError) as exc:
         raise ArchiveError("output_alias", "output paths could not be resolved") from exc
-    if aliases:
+    if (
+        resolved_archive == resolved_manifest
+        or str(resolved_archive).casefold() == str(resolved_manifest).casefold()
+    ):
         raise ArchiveError("output_alias", "archive and member manifest outputs must be distinct")
 
 

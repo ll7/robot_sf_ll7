@@ -9,12 +9,24 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.benchmark.algorithm_metadata import (
+    _KINEMATICS_PROFILE_BY_CANONICAL,
+    canonical_algorithm_name,
+)
 from robot_sf.benchmark.camera_ready._artifacts import _escape_markdown_cell
 from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS, PlannerSpec
 from robot_sf.benchmark.camera_ready._summaries import _extract_amv_taxonomy
+from robot_sf.benchmark.camera_ready._util import _repo_relative
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
+    _DEFAULT_SACADRL_MODEL_ID,
+    _iter_mapping_checkpoint_keys,
+)
 from robot_sf.benchmark.fairness_contract import build_fairness_report
 from robot_sf.benchmark.fallback_policy import (
     classify_planner_row_status,
@@ -26,9 +38,6 @@ from robot_sf.benchmark.synthetic_actuation import (
 )
 from robot_sf.benchmark.utils import episode_metric_value
 from robot_sf.common.artifact_paths import get_repository_root
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 _REPORT_METRICS: tuple[str, ...] = (
     "success",
@@ -490,6 +499,160 @@ def _build_planner_row_metrics(
     }
 
 
+def _resolve_arm_config_path(
+    planner: PlannerSpec,
+    summary: dict[str, Any],
+) -> str:
+    """Resolve the configuration path for a planner arm as a repo-relative POSIX string.
+
+    Returns:
+        Repo-relative path string, or empty string when no configuration path is associated.
+    """
+    raw_path = planner.algo_config_path or summary.get("algo_config_path")
+    if raw_path is None or not str(raw_path).strip():
+        return ""
+    return _repo_relative(Path(raw_path))
+
+
+_MODEL_ID_CONFIG_KEYS = (
+    "model_id",
+    "sacadrl_model_id",
+    "predictive_model_id",
+    "learned_policy_model_id",
+    "checkpoint",
+    "checkpoint_id",
+    "resume_model_id",
+)
+
+
+def _model_id_from_summary(summary: dict[str, Any]) -> str:
+    containers = [
+        summary.get("checkpoint_provenance"),
+        summary.get("algorithm_metadata_contract", {}).get("checkpoint_provenance")
+        if isinstance(summary.get("algorithm_metadata_contract"), dict)
+        else None,
+        summary.get("algorithm_metadata", {})
+        .get("planner_runtime", {})
+        .get("checkpoint_provenance")
+        if isinstance(summary.get("algorithm_metadata"), dict)
+        and isinstance(summary.get("algorithm_metadata", {}).get("planner_runtime"), dict)
+        else None,
+        summary.get("preflight", {}).get("checkpoint_provenance")
+        if isinstance(summary.get("preflight"), dict)
+        else None,
+    ]
+    for container in containers:
+        if isinstance(container, dict):
+            val = container.get("model_id") or container.get("checkpoint")
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+    for key in ("model_id", "checkpoint"):
+        val = summary.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
+
+
+def _model_id_from_config_file(raw_path: Path | str | None) -> str:
+    if raw_path is None or not str(raw_path).strip():
+        return ""
+    path = Path(raw_path)
+    if not path.is_absolute():
+        resolved_candidate = (get_repository_root() / path).resolve()
+        path = resolved_candidate if resolved_candidate.is_file() else path.resolve()
+    if not path.is_file():
+        return ""
+    try:
+        algo_config = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return ""
+    if not isinstance(algo_config, dict):
+        return ""
+    for id_key in _MODEL_ID_CONFIG_KEYS:
+        val = algo_config.get(id_key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    for _, value in _iter_mapping_checkpoint_keys(algo_config):
+        if value:
+            return value
+    return ""
+
+
+def _resolve_arm_model_id(
+    planner: PlannerSpec,
+    summary: dict[str, Any],
+) -> str:
+    """Resolve the model or checkpoint identifier for a planner arm.
+
+    Returns:
+        Checkpoint identifier string, or empty string when the arm does not load a model.
+    """
+    model_id = _model_id_from_summary(summary)
+    if model_id:
+        return model_id
+
+    raw_path = planner.algo_config_path or summary.get("algo_config_path")
+    model_id = _model_id_from_config_file(raw_path)
+    if model_id:
+        return model_id
+
+    canonical = canonical_algorithm_name(planner.algo)
+    if canonical in {"sacadrl", "sa_cadrl"}:
+        return _DEFAULT_SACADRL_MODEL_ID
+
+    return ""
+
+
+def _resolve_arm_action_adapter(
+    planner: PlannerSpec,
+    planner_kinematics: dict[str, Any],
+) -> str:
+    """Resolve the action adapter class or key that converted planner output to commands.
+
+    Returns:
+        Action adapter class/key name, or empty string when running native commands.
+    """
+    adapter = str(planner_kinematics.get("adapter_name") or "").strip()
+    if adapter and adapter.lower() not in {"none", "unknown"}:
+        return adapter
+    canonical = canonical_algorithm_name(planner.algo)
+    profile = _KINEMATICS_PROFILE_BY_CANONICAL.get(canonical, {})
+    default_adapter = str(profile.get("default_adapter_name") or "").strip()
+    if default_adapter and default_adapter.lower() not in {"none", "unknown"}:
+        return default_adapter
+    return ""
+
+
+def _resolve_arm_policy_source(
+    planner: PlannerSpec,
+    model_id: str,
+    summary: dict[str, Any] | None = None,
+) -> str:
+    """Resolve policy provenance: 'trained-here', 'literature-pretrained', or 'rule-based'.
+
+    Returns:
+        Policy source categorization string.
+    """
+    if summary is not None:
+        explicit = str(summary.get("policy_source") or "").strip()
+        if explicit in {"trained-here", "literature-pretrained", "rule-based"}:
+            return explicit
+    if not model_id:
+        return "rule-based"
+    canonical = canonical_algorithm_name(planner.algo)
+    if canonical in {
+        "sacadrl",
+        "sa_cadrl",
+        "sicnav",
+        "dr_mpc",
+        "crowdnav_height",
+        "sonic_crowdnav",
+    }:
+        return "literature-pretrained"
+    return "trained-here"
+
+
 def _build_planner_row_metadata(  # noqa: PLR0913
     planner: PlannerSpec,
     kinematics: str,
@@ -510,6 +673,11 @@ def _build_planner_row_metadata(  # noqa: PLR0913
     Returns:
         Dict of metadata field names to values.
     """
+    config_path = _resolve_arm_config_path(planner, summary)
+    model_id = _resolve_arm_model_id(planner, summary)
+    action_adapter = _resolve_arm_action_adapter(planner, planner_kinematics)
+    policy_source = _resolve_arm_policy_source(planner, model_id, summary)
+
     return {
         "planner_key": planner.key,
         "algo": planner.algo,
@@ -517,6 +685,10 @@ def _build_planner_row_metadata(  # noqa: PLR0913
         "human_model_source": planner.human_model_source or "",
         "planner_group": planner.planner_group,
         "kinematics": kinematics,
+        "config_path": config_path,
+        "model_id": model_id,
+        "action_adapter": action_adapter,
+        "policy_source": policy_source,
         "status": status,
         "episodes": int(episode_count),
         "started_at_utc": str(summary.get("started_at_utc", "unknown")),
@@ -609,6 +781,10 @@ def _build_planner_row_base(  # noqa: PLR0913
         "human_model_source",
         "planner_group",
         "kinematics",
+        "config_path",
+        "model_id",
+        "action_adapter",
+        "policy_source",
         "status",
         "episodes",
         "started_at_utc",

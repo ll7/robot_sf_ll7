@@ -21,7 +21,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
-from scripts.dev.check_pr_ci_status import _latest_check_runs
+from scripts.dev.check_pr_ci_status import (
+    _latest_check_runs,
+    _rollup_conclusion,
+    _rollup_status,
+)
 
 SCHEMA_VERSION = "compact_ci_snapshot.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -119,31 +123,6 @@ def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
             stdout="",
             stderr="gh CLI not found",
         )
-
-
-def _rollup_conclusion(check: dict[str, Any]) -> str:
-    """Normalize check conclusion."""
-    conclusion = check.get("conclusion")
-    if conclusion:
-        return str(conclusion).lower()
-    state = check.get("state")
-    if state:
-        return str(state).lower()
-    return "pending"
-
-
-def _rollup_status(check: dict[str, Any]) -> str:
-    """Normalize check status."""
-    status = check.get("status")
-    if status:
-        return str(status).lower()
-    state = check.get("state")
-    if not state:
-        return "completed"
-    state_str = str(state).lower()
-    if state_str in {"success", "failure", "error"}:
-        return "completed"
-    return state_str
 
 
 def _check_name(check: dict[str, Any]) -> str:

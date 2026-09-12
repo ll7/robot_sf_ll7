@@ -15,14 +15,14 @@ from scripts.tools.check_artifact_root import GuardResult, check_artifact_root
 
 @pytest.fixture(name="repo_root")
 def _repo_root_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """TODO docstring. Document this function.
+    """Build a temporary repository root with a canonical artifact tree.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Temporary directory used as the repository parent.
+        monkeypatch: Fixture used to remove ``ROBOT_SF_ARTIFACT_ROOT``.
 
     Returns:
-        TODO docstring.
+        Path to the synthetic repository root.
     """
     root = tmp_path / "repo"
     root.mkdir()
@@ -36,10 +36,10 @@ def _repo_root_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_check_artifact_root_passes_when_clean(repo_root: Path) -> None:
-    """TODO docstring. Document this function.
+    """Report a clean guard result for a canonical artifact tree.
 
     Args:
-        repo_root: TODO docstring.
+        repo_root: Synthetic repository root with an initialized artifact tree.
     """
     artifact_root = repo_root / "output"
     result = check_artifact_root(source_root=repo_root, artifact_root=artifact_root)
@@ -50,10 +50,10 @@ def test_check_artifact_root_passes_when_clean(repo_root: Path) -> None:
 
 
 def test_check_artifact_root_detects_legacy_paths(repo_root: Path) -> None:
-    """TODO docstring. Document this function.
+    """Flag legacy paths and point remediation at the canonical destination.
 
     Args:
-        repo_root: TODO docstring.
+        repo_root: Synthetic repository root with an initialized artifact tree.
     """
     legacy_path = repo_root / "results"
     legacy_path.mkdir(parents=True)
@@ -72,10 +72,10 @@ def test_check_artifact_root_detects_legacy_paths(repo_root: Path) -> None:
 
 
 def test_check_artifact_root_respects_allowlist(repo_root: Path) -> None:
-    """TODO docstring. Document this function.
+    """Keep allowlisted legacy paths out of the violation list.
 
     Args:
-        repo_root: TODO docstring.
+        repo_root: Synthetic repository root with an initialized artifact tree.
     """
     legacy_file = repo_root / "coverage.json"
     legacy_file.write_text("{}", encoding="utf-8")

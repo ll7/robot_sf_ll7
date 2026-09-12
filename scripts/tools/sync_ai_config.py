@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -169,6 +170,55 @@ def _check_link(spec: LinkSpec, *, fix: bool) -> list[str]:
     return errors
 
 
+SECTION_HEADING_RE = re.compile(r"^##[ \t]+(.+?)[ \t]*#*[ \t]*$")
+
+
+def _section_headings(content: str) -> list[str]:
+    """Return normalized level-two Markdown headings outside fenced code blocks."""
+    headings: list[str] = []
+    fence: str | None = None
+    for line in content.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            marker = stripped[:3]
+            if fence is None:
+                fence = marker
+            elif fence == marker:
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        match = SECTION_HEADING_RE.match(line)
+        if match is not None:
+            headings.append(" ".join(match.group(1).strip().lower().split()))
+    return headings
+
+
+def _pointer_section_errors(spec: PointerSpec, content: str) -> list[str]:
+    """Return duplicated-section and disallowed-section errors for one pointer file."""
+    errors: list[str] = []
+    lowered = content.lower()
+    for section in spec.forbidden_sections:
+        heading = f"## {section.lower()}"
+        # Match the section as an actual heading (`## <name>`). A plain prose
+        # mention that merely points to the canonical location is not a copy.
+        if heading in lowered:
+            errors.append(
+                f"{spec.path}: forbidden duplicated section {section!r}; "
+                f"policy must live in the canonical source only"
+            )
+
+    if spec.allowed_sections:
+        allowed = {section.strip().lower() for section in spec.allowed_sections}
+        for heading in _section_headings(content):
+            if heading not in allowed:
+                errors.append(
+                    f"{spec.path}: section {heading!r} is not an allowed provider-mechanics "
+                    f"section; move policy to the canonical source or name a real provider section"
+                )
+    return errors
+
+
 def _check_pointer_file(spec: PointerSpec) -> list[str]:
     """Return drift errors when a tool-specific instruction pointer stops pointing canonical."""
     path = _repo_path(spec.path)
@@ -191,16 +241,7 @@ def _check_pointer_file(spec: PointerSpec) -> list[str]:
             f"budget {spec.max_nonblank_lines}; move policy back to the canonical source"
         )
 
-    lowered = content.lower()
-    for section in spec.forbidden_sections:
-        heading = f"## {section.lower()}"
-        # Match the section as an actual heading (`## <name>`). A plain prose
-        # mention that merely points to the canonical location is not a copy.
-        if heading in lowered:
-            errors.append(
-                f"{spec.path}: forbidden duplicated section {section!r}; "
-                f"policy must live in the canonical source only"
-            )
+    errors.extend(_pointer_section_errors(spec, content))
     return errors
 
 

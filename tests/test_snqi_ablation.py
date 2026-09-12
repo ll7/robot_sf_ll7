@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for SNQI weight-ablation ranking, cross-track gating, and formatter/summary output."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from robot_sf.benchmark.errors import AggregationMetadataError
 def _episodes_two_groups():
     # Two groups (A, B) with two episodes each; metrics chosen so that
     # base ranking favors B, but removing collisions weight favors A.
-    """TODO docstring. Document this function."""
+    """Build two synthetic two-episode groups whose collision weighting flips the ranking."""
     base = {
         "scenario_id": "sc-1",
         "seed": 0,
@@ -55,7 +55,9 @@ def _episodes_two_groups():
 
 
 def test_compute_snqi_ablation_rank_shifts():
-    """TODO docstring. Document this function."""
+    """Check that ablating the collisions weight flips the B-first base ranking, giving
+    A a rank delta of -1 and B +1.
+    """
     records = _episodes_two_groups()
     weights = {"w_success": 2.0, "w_time": 1.0, "w_collisions": 2.0}
     baseline = {"collisions": {"med": 0.0, "p95": 2.0}}

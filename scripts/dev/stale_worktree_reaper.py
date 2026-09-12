@@ -30,8 +30,91 @@ VERIFIED_MERGE_MODE = "verified_merged_tree"
 DEFAULT_GITHUB_REPO = "ll7/robot_sf_ll7"
 DEFAULT_BASE_BRANCH = "main"
 FULL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+# One listing replaces the per-branch open-PR lookup. A response at the limit is
+# treated as truncated because a missing branch could otherwise look PR-free.
+OPEN_PR_SNAPSHOT_LIMIT = 1000
 
 GitHubTransport = Callable[[list[str]], subprocess.CompletedProcess]
+
+
+@dataclass
+class OpenPrSnapshot:
+    """One batched open-PR listing reused across candidate classifications.
+
+    The per-branch ``gh pr list --head <branch>`` lookup is exact but costs one
+    GitHub round trip per worktree. A single ``gh pr list --state open`` listing
+    keyed by head branch removes that fleet-wide cost while preserving
+    fail-closed semantics: a transport, JSON, payload, or truncation problem
+    makes the open-PR state unreadable for every candidate instead of silently
+    reporting that a branch has no open PR.
+    """
+
+    repo: str = DEFAULT_GITHUB_REPO
+    transport: GitHubTransport | None = None
+    _by_branch: dict[str, list[int]] | None = None
+    _error: str | None = None
+
+    def read(self, branch: str) -> tuple[bool, str | None, list[int]]:
+        """Return open-PR coverage for one exact head branch."""
+        self._ensure_loaded()
+        if self._error is not None:
+            return False, self._error, []
+        assert self._by_branch is not None
+        numbers = self._by_branch.get(branch, [])
+        return bool(numbers), None, list(numbers)
+
+    def _ensure_loaded(self) -> None:
+        if self._by_branch is not None or self._error is not None:
+            return
+        result = _github_read(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--repo",
+                self.repo,
+                "--state",
+                "open",
+                "--limit",
+                str(OPEN_PR_SNAPSHOT_LIMIT),
+                "--json",
+                "number,headRefName",
+            ],
+            transport=self.transport,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic"
+            self._error = f"open-PR snapshot failed: {detail}"
+            return
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            self._error = f"open-PR snapshot returned invalid JSON: {exc}"
+            return
+        if not isinstance(payload, list):
+            self._error = "open-PR snapshot returned a non-list payload"
+            return
+        if len(payload) >= OPEN_PR_SNAPSHOT_LIMIT:
+            self._error = (
+                f"open-PR snapshot truncated at {OPEN_PR_SNAPSHOT_LIMIT} entries; "
+                "missing branches cannot be proven PR-free"
+            )
+            return
+        by_branch: dict[str, list[int]] = {}
+        for row in payload:
+            if not isinstance(row, dict) or isinstance(row.get("number"), bool):
+                self._error = "open-PR snapshot returned an ambiguous row"
+                return
+            number = row.get("number")
+            head_ref = row.get("headRefName")
+            if not isinstance(number, int) or number < 1:
+                self._error = "open-PR snapshot returned a malformed PR number"
+                return
+            if not isinstance(head_ref, str) or not head_ref:
+                self._error = "open-PR snapshot returned a malformed head branch"
+                return
+            by_branch.setdefault(head_ref, []).append(number)
+        self._by_branch = by_branch
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +342,33 @@ def _has_unpushed_commits(path: str, branch: str) -> bool:
     """Check if a worktree has commits not pushed to its upstream branch."""
     risky, _reason = _read_unpushed_state(path, branch)
     return risky
+
+
+#: Local base ref for the offline merged-ancestor triage signal (issue #8773).
+MERGED_BASE_REF = "origin/main"
+
+
+def _read_merged_into_main(
+    path: str, head_sha: str, *, base_ref: str = MERGED_BASE_REF
+) -> tuple[bool | None, str | None]:
+    """Check whether HEAD is contained in the local base ref without any API use.
+
+    Returns ``(True, None)`` when every commit reachable from ``head_sha`` is
+    already contained in ``base_ref``, ``(False, None)`` when it provably is
+    not, and ``(None, reason)`` when the check cannot run (short/empty SHA or
+    a Git error). This is triage evidence only: callers must keep the
+    candidate refused and must never promote it to deletable on this signal
+    alone.
+    """
+    if not head_sha or not FULL_SHA_RE.match(head_sha):
+        return None, "head SHA is not a full 40-hex commit; merged-ancestor check skipped"
+    result = _run_command(["git", "merge-base", "--is-ancestor", head_sha, base_ref], cwd=path)
+    if result.returncode == 0:
+        return True, None
+    if result.returncode == 1:
+        return False, None
+    detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic"
+    return None, f"merged-ancestor check failed: {detail}"
 
 
 def _has_open_pr(branch: str) -> bool:
@@ -598,8 +708,11 @@ def _read_strict_open_pr_state(
     *,
     repo: str,
     transport: GitHubTransport | None,
+    snapshot: OpenPrSnapshot | None = None,
 ) -> tuple[bool, str | None, list[int]]:
     """Read open PR coverage without treating transport failure as no PR."""
+    if snapshot is not None:
+        return snapshot.read(branch)
     result = _github_read(
         [
             "gh",
@@ -853,6 +966,7 @@ def _verified_worktree_state(  # noqa: C901, PLR0912, PLR0915 - ordered fail-clo
     path: str,
     current_path: str,
     transport: GitHubTransport | None,
+    open_pr_snapshot: OpenPrSnapshot | None = None,
 ) -> tuple[dict[str, Any] | None, list[str], list[str]]:
     """Collect all proof inputs for one verified candidate.
 
@@ -927,6 +1041,7 @@ def _verified_worktree_state(  # noqa: C901, PLR0912, PLR0915 - ordered fail-clo
         request.branch,
         repo=request.repo,
         transport=transport,
+        snapshot=open_pr_snapshot,
     )
     if open_pr_error is not None:
         flags.append("unreadable_open_pr_state")
@@ -1101,6 +1216,7 @@ def _classify_verified_worktree(
     current_path: str,
     request: VerifiedMergeRequest,
     github_transport: GitHubTransport | None,
+    open_pr_snapshot: OpenPrSnapshot | None = None,
 ) -> WorktreeCandidate:
     """Classify one row through the strict verified proof path."""
     if branch != request.branch:
@@ -1124,6 +1240,7 @@ def _classify_verified_worktree(
         path=path,
         current_path=current_path,
         transport=github_transport,
+        open_pr_snapshot=open_pr_snapshot,
     )
     if verification is None:
         return _verified_refusal(
@@ -1152,6 +1269,7 @@ def classify_worktree(  # noqa: C901 - preserves the legacy gate order beside ve
     skip_pr_check: bool = False,
     verified_request: VerifiedMergeRequest | None = None,
     github_transport: GitHubTransport | None = None,
+    open_pr_snapshot: OpenPrSnapshot | None = None,
 ) -> WorktreeCandidate:
     """Classify a single worktree as current, clean_stale, or risky."""
     is_current = Path(path).resolve() == Path(current_path).resolve()
@@ -1173,6 +1291,7 @@ def classify_worktree(  # noqa: C901 - preserves the legacy gate order beside ve
             current_path=current_path,
             request=verified_request,
             github_transport=github_transport,
+            open_pr_snapshot=open_pr_snapshot,
         )
 
     risk_flags, reasons = _read_strict_cleanliness(path)
@@ -1183,6 +1302,30 @@ def classify_worktree(  # noqa: C901 - preserves the legacy gate order beside ve
         if unpushed_reason:
             reasons.append(unpushed_reason)
 
+    # Offline triage signal (issue #8773): when push state is unverifiable only
+    # because the upstream is missing (or the worktree is detached), record
+    # whether HEAD is already contained in origin/main. This never clears the
+    # risk flag above; it only distinguishes "provably merged, needs open-PR /
+    # lease / output review" from "genuinely unpushed" in refusal evidence.
+    merged_verification: dict[str, Any] = {}
+    if (
+        unpushed
+        and unpushed_reason
+        and ("upstream could not be verified" in unpushed_reason or "no branch" in unpushed_reason)
+    ):
+        merged, merged_reason = _read_merged_into_main(path, head_sha)
+        merged_verification = {
+            "merged_into_main": merged,
+            "merged_base_ref": MERGED_BASE_REF,
+        }
+        if merged is True:
+            reasons.append(
+                f"head is contained in {MERGED_BASE_REF} (local merge-base check); "
+                "upstream still unverified so push state remains risky"
+            )
+        elif merged_reason:
+            reasons.append(merged_reason)
+
     if skip_pr_check and branch:
         risk_flags.append("pr_check_skipped")
         reasons.append("open-PR state was intentionally skipped")
@@ -1191,6 +1334,7 @@ def classify_worktree(  # noqa: C901 - preserves the legacy gate order beside ve
             branch,
             repo=DEFAULT_GITHUB_REPO,
             transport=github_transport,
+            snapshot=open_pr_snapshot,
         )
         if open_pr_error is not None:
             risk_flags.append("unreadable_open_pr_state")
@@ -1226,6 +1370,7 @@ def classify_worktree(  # noqa: C901 - preserves the legacy gate order beside ve
                 lease_state=lease_state,
                 lease=lease,
             ),
+            verification=merged_verification,
         )
 
     return WorktreeCandidate(
@@ -1307,13 +1452,22 @@ def build_plan(  # noqa: C901, PLR0912, PLR0913, PLR0915 - CLI/planning contract
     repo: str = DEFAULT_GITHUB_REPO,
     base_branch: str = DEFAULT_BASE_BRANCH,
     github_transport: GitHubTransport | None = None,
+    open_pr_snapshot: OpenPrSnapshot | None = None,
 ) -> ReaperPlan:
-    """Build a deletion plan from current repository worktrees."""
+    """Build a deletion plan from current repository worktrees.
+
+    When PR checks are enabled, one :class:`OpenPrSnapshot` is loaded lazily and
+    reused for every candidate so the fleet-wide plan costs a single open-PR
+    listing instead of one lookup per worktree.
+    """
     errors: list[str] = []
     if current_path is None:
         current_path = str(Path.cwd().resolve())
     else:
         current_path = str(Path(current_path).resolve())
+
+    if open_pr_snapshot is None and not skip_pr_check:
+        open_pr_snapshot = OpenPrSnapshot(repo=repo, transport=github_transport)
 
     verified_request, verified_error = _make_verified_merge_request(
         target_path=target_path,
@@ -1400,6 +1554,7 @@ def build_plan(  # noqa: C901, PLR0912, PLR0913, PLR0915 - CLI/planning contract
                 current_path=current_path,
                 verified_request=verified_request,
                 github_transport=github_transport,
+                open_pr_snapshot=open_pr_snapshot,
             )
             candidates.append(candidate)
             audit_log.append(
@@ -1456,6 +1611,7 @@ def build_plan(  # noqa: C901, PLR0912, PLR0913, PLR0915 - CLI/planning contract
             head_sha=head_sha,
             current_path=current_path,
             skip_pr_check=skip_pr_check,
+            open_pr_snapshot=open_pr_snapshot,
         )
         if candidate.is_current:
             current_worktree = wt_path

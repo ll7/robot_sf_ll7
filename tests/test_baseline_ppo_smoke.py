@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Smoke tests for baseline PPO policy execution in benchmark episodes."""
 
 from __future__ import annotations
 
@@ -11,18 +11,17 @@ from robot_sf.benchmark.runner import run_episode
 
 def _default_model_path() -> Path:
     # Must mirror PPOPlannerConfig default
-    """TODO docstring. Document this function.
-
+    """Return the default model file path matching PPOPlannerConfig default.
 
     Returns:
-        TODO docstring.
+        Path pointing to the default retrained PPO model zip archive.
     """
     return Path("model/ppo_model_retrained_10m_2025-02-01.zip")
 
 
 @pytest.mark.timeout(30)
 def test_ppo_baseline_smoke_runs_or_skips():
-    """TODO docstring. Document this function."""
+    """Run a minimal smoke episode with the baseline PPO model, or skip if weights are absent."""
     model_path = _default_model_path()
     algo_cfg_path = None
 

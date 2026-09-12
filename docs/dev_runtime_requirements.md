@@ -143,6 +143,8 @@ failed recovery attempt, remains a terminal setup failure.
 The promoted-planner and nightly performance workflows use the same headless stack, without `jq`
 where it is not needed.
 
+
+See also the [Platform Setup Profiles](./quickstart_platforms.md) for the Linux, macOS, and headless onboarding paths.
 ## Headless Rendering
 
 Use these environment values for local GUI/rendering tests on headless machines:
@@ -186,6 +188,23 @@ It does not replace GitHub CI or:
 ```bash
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
+
+## Platform Receipt And Startup Smoke
+
+`scripts/validation/platform_receipt.py` captures a sanitized `platform_receipt.v1` record for the
+CARLA/Unreal/ROS/bridge platform, validates it against optional expectations, and runs a bounded
+server startup smoke. Missing components stay explicit as `unavailable` with reason codes, and
+nothing is installed or downloaded by the tool.
+
+```bash
+uv run python scripts/validation/platform_receipt.py capture --json --output output/platform_receipt.json
+uv run python scripts/validation/platform_receipt.py check --receipt output/platform_receipt.json --json
+uv run python scripts/validation/platform_receipt.py startup-smoke --server-command "<server argv>" --timeout-sec 120 --json
+```
+`check` fails closed on server/client version mismatch, missing ROS/bridge packages, map digest
+mismatch, and missing display or headless EGL capability; `startup-smoke` fails with
+`carla_unavailable` when no server command is provided, and `capture --comparator-host-out <path>`
+writes a `cross_host_environment.v1` projection for the cross-host comparator.
 
 ## Optional Machine Capabilities
 

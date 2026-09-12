@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for the table CLI subcommand generating formatted benchmark tables."""
 
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _write_matrix(path: Path, repeats: int = 3) -> None:
-    """TODO docstring. Document this function.
+    """Write a minimal scenario matrix YAML file for table CLI tests.
 
     Args:
-        path: TODO docstring.
-        repeats: TODO docstring.
+        path: Destination filesystem path for the matrix YAML.
+        repeats: Number of episode repetitions per scenario.
     """
     scenarios = [
         {

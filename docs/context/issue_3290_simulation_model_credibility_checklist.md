@@ -6,7 +6,7 @@
 
 **Policy sources**:
 
-- [Maintainer Values And Hard Contracts](../maintainer_values.md)
+- [Maintainer Values](../maintainer_values.md)
 - [Artifact Evidence Vocabulary](artifact_evidence_vocabulary.md)
 - [Issue #691 Benchmark Fallback Policy](issue_691_benchmark_fallback_policy.md)
 - [Simulation-Evidence Safety Case Template](../simulation_evidence_safety_case.md)

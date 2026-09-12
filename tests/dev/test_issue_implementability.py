@@ -497,6 +497,17 @@ def test_declared_external_input_is_not_local_claimable_work() -> None:
     assert report["admission_reason"] == "external_input_missing"
 
 
+def test_blocking_label_reason_names_the_label() -> None:
+    """The blocked reason names each blocking workflow label for triage visibility."""
+    report = evaluate_issue(
+        _issue(labels=["type:workflow", "state:ready", "needs-triage"]),
+        _claim(),
+    )
+
+    assert report["classification"] == "blocked"
+    assert report["reasons"][0] == "a blocking workflow label is present: needs-triage"
+
+
 def test_goal_problem_template_heading_is_admitted() -> None:
     """The canonical `Goal / Problem` template heading must satisfy the objective field."""
     body = COMPLETE_BODY.replace("## Objective", "## Goal / Problem")

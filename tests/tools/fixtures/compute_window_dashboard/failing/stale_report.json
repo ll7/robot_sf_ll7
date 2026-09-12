@@ -1,0 +1,5 @@
+{"schema": "robot_sf.compute_window_dashboard_input.v1", "report_id": "canonical-stale-0001", "source_owner": "job-status", "generated_at": "2026-09-01T00:00:00Z",
+  "rows": [
+    {"campaign_id": "c-stale-row", "public_owner": "ll7", "priority": "p1", "tier": "tier_2", "resource_class": "slurm_cpu", "access_urgency": "expiring", "prerequisite_state": "met", "source_status": "ready", "config_status": "ready", "checkpoint_status": "ready", "expected_rows": 32, "observed_rows": 32, "harvest_state": "harvested", "preservation_state": "cluster_only", "independent_copy_count": 1, "environment_state": "captured", "restore_state": "not_applicable", "deadline_fit": "fits", "next_owner": "agent", "states": {"implementation": "complete", "compute": "admission_ready", "scheduler": "succeeded", "artifact": "cluster_only", "evidence": "pending", "review": "not_started", "claim": "none"}}
+  ]
+}

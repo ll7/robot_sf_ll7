@@ -23,6 +23,19 @@ later.
 `output/` is the git-ignored worktree artifact root. It is useful for local runs, smoke checks,
 coverage, temporary exports, videos, and caches, but it is not a durable dependency by itself.
 
+For operational retention classes, preservation proof, and cleanup-eligibility workflows, see the
+[Artifact Retention, Preservation, and Cleanup Guide](artifact_retention_and_cleanup.md).
+For the check-only guard that decides when one artifact or output identity may be deleted, see the
+[Cleanup Eligibility Guard](cleanup_eligibility.md).
+For the complete post-access restore and local-analysis sequence, see the
+[post-access restoration and local-analysis runbook](../post_access_local_analysis_runbook.md).
+
+Tool-specific contracts live in their own `docs/context/<tool>.md` note and are linked from a stable
+location in this file (this section), not as a new top-level section per tool. Keeping the shared
+vocabulary free of appended per-tool sections avoids parallel-merge conflicts and CI restarts when
+several tooling PRs land together; the note-maintenance convention is documented in the
+[Context Notes Workflow](README.md#per-tool-contract-notes).
+
 ## Vocabulary
 
 | Category | Meaning | May cite `output/`? | Acceptable reference |
@@ -53,6 +66,103 @@ coverage, temporary exports, videos, and caches, but it is not a durable depende
   [Agent Run Manifest](../agent_run_manifest.md) (`agent_run_manifest.yaml`) in the evidence bundle
   so the run that produced the evidence is auditable. Start from
   [`docs/templates/agent_run_manifest.yaml`](../templates/agent_run_manifest.yaml).
+
+## Durable Artifact Locality Audit
+
+`scripts/validation/check_durable_artifact_locality.py` joins the public `references`
+inventory in a sanitized locality packet (`durable_artifact_locator_projection.v1`)
+to its locator-class `artifacts` projection by artifact ID, version, and digest.
+`--check` exits non-zero when an active durable-required reference has no verified
+non-institutional locator, or a release-facing reference lacks its configured
+independent failure-domain copies. It reads sanitized inputs only and never emits
+locator values; historical inactive references stay recorded with outcome `inactive`
+and never satisfy an active custody requirement.
+
+Locator classes: `public_release`, `cloud_durable`, `personal_durable`,
+`institutional_durable`, `institutional_cache`, `local_scratch`, `unknown`,
+`unavailable`. Only the first three count as non-institutional custody. Stable
+reason codes include `missing_projection_row`, `version_mismatch`, `digest_mismatch`,
+`stale_verification`, `mutable_alias`, `institutional_only`, `cache_only`,
+`non_durable_custody`, `no_verified_locator`, `same_failure_domain`, and `insufficient_redundancy`.
+
+Validate with `uv run python scripts/validation/check_durable_artifact_locality.py --projection tests/validation/fixtures/durable_artifact_locality/compliant.json --check`.
+
+## Chunk Manifests for Large Result Trees
+
+[`scripts/tools/chunk_manifest.py`](../../scripts/tools/chunk_manifest.py) writes a
+`chunk_manifest.v1` record for result trees too large to re-hash in one transfer window:
+normalized relative paths, full-file digests for small members, fixed-boundary chunk digests for
+large members, an order/worker-invariant `tree_sha256`, and a `manifest_id` semantic digest that
+preservation and transfer receipts reference without rewriting producer manifests. `verify` fails
+closed with exact file/chunk locations on mutation, truncation, sparse/symlink/hardlink/special
+file, path, collision, and partial-manifest conditions.
+
+## Compute-Window Readiness Dashboard
+
+[`scripts/tools/compute_window_readiness_dashboard.py`](../../scripts/tools/compute_window_readiness_dashboard.py)
+renders one deterministic JSON plus Markdown dashboard from versioned canonical input reports
+(`robot_sf.compute_window_dashboard_input.v1`; sanitized fixtures under
+`tests/tools/fixtures/compute_window_dashboard/`). Rows show campaign identity, owner,
+priority/tier, resource class, prerequisite, source/config/checkpoint status, job state,
+expected/observed rows, harvest/preservation/environment/restore state, copies, deadline fit,
+and next owner, with implementation/compute/scheduler/artifact/evidence/review/claim kept
+separate. No scientific score or admission decision is computed; stale, missing, contradictory,
+duplicate, wrong-schema, or unsanitized input masks affected rows as explicit `unavailable`, and
+output carries no private paths, hostnames, accounts, credentials, or signed URLs.
+
+## Compute Staging Bundles
+
+[`scripts/validation/build_compute_staging_bundle.py`](../../scripts/validation/build_compute_staging_bundle.py) binds one authorized workload's source/config/seed/checkpoint/lock identities into a deterministic `compute_staging_bundle.v1` receipt plus `SHA256SUMS`/inventory/transfer instructions; `--help` lists the stable fail-closed reason codes.
+
+## Terminal-Job Harvest Receipts
+
+[`scripts/validation/harvest_terminal_job.py`](../../scripts/validation/harvest_terminal_job.py) consumes one explicit `terminal_job_harvest_request.v1` plus a local artifact root and writes a deterministic `terminal_job_harvest.v1` public receipt, a private detailed receipt, and `SHA256SUMS`. Scheduler state and artifact completeness stay separate; only `completed`, `failed`, `cancelled`, and `timeout` are validated terminal dispositions, while unknown or non-terminal states remain blocked. Every required `manifest`, `rows`, and `environment` inventory role must have a valid non-empty path that resolves to a present member; all environment records must agree on source/config identity. The fail-closed reason codes for these boundaries include `unsupported_scheduler_state`, `job_not_terminal`, `empty_required_role`, and `conflicting_environment_records`. Destination verification follows the exact relative-member rule in [`chunk_manifest.py`](../../scripts/tools/chunk_manifest.py), so missing, mismatched, or extra members (`destination_unexpected_member`) fail closed and cannot authorize the local cleanup gate. This local gate does not replace the canonical [`check_cleanup_eligibility.py`](../../scripts/validation/check_cleanup_eligibility.py) guard. Validate with `uv run python scripts/validation/harvest_terminal_job.py --check --fixture <fixture-root> --format json`.
+
+## Artifact Transfer Custody
+
+[`scripts/validation/verify_artifact_transfer.py`](../../scripts/validation/verify_artifact_transfer.py) consumes one existing `terminal_job_harvest.v1` or `compute_staging_bundle.v1` receipt and copies only its manifest-declared members between explicit local roots. Destination members are re-hashed first (`already_verified` avoids re-copy), conflicts fail closed without overwrite, and interrupted `.transfer-partial` files are cleaned and resumed. `--apply` writes a deterministic `artifact_transfer_custody.v1` receipt (per-file states, byte counts, capacity, independently re-hashed destination bytes); `--check` is read-only and receipts carry normalized relative paths only.
+Validate with `uv run python scripts/validation/verify_artifact_transfer.py --check --manifest <receipt> --source-root <root> --destination-root <root> --format json`; live SSH/private-host transfer stays routed through private operations.
+
+## Checkpoint Compatibility Audit
+
+[`scripts/models/audit_checkpoint_compatibility.py`](../../scripts/models/audit_checkpoint_compatibility.py)
+audits a sanitized overlay, canonical `--registry`/`--config` intake, or both into a deterministic
+JSON plus Markdown inventory with nine terminal states and stable reason codes. An opt-in `--probe`
+runs a bounded-subprocess loader check (hard timeout, no hidden fallback); `--check` exits 1 when an
+active consumer's required model is not recoverable and load-verified and 2 for unknown input (see
+the module docstring).
+
+## Sanitized Lineage Index
+
+[`scripts/tools/lineage_index.py`](../../scripts/tools/lineage_index.py) joins compact sanitized
+records (`sanitized_lineage_input.v1`) into one deterministic `robot_sf.lineage_index.v1` JSON
+plus Markdown index keyed by stable semantic identity (`kind:id`), never filename proximity or
+timestamps. Records are `{"kind", "id", "refs": {"<kind>_ids": [...]}, ...scalars}` over
+`issue`, `pull_request`, `commit`, `campaign`, `config`, `manifest`, `job`, `checkpoint`,
+`model`, `environment`, `artifact`, `analysis`, and `claim`, with scalars `digest`, `owner`,
+`attempt_index`, `relation`, `submission_receipt`, `predecessor_job_id`, `artifact_kind`,
+`locator_class`, `claim_state`, and `not_applicable`; optional `private_projection` lists
+withheld locators as `{"target", "digest", "withheld": true}` only. Each row is rooted at one
+job attempt, or at an unreachable record, so retries and resumed shards stay separate rows
+linked by `predecessor_job_id`, `attempt_index`, and `relation`; missing links classify as
+`not_applicable`, `not_recorded`, `private_unavailable`, `conflict`, or `dangling`, and
+duplicate IDs, contradictory digests, orphaned artifact pointers, projection drift, or absent
+references fail closed. Query with `lineage_index.py query --input <path>` and
+`--issue/--job/--campaign/--artifact-digest/--commit/--config` (exit 0 match, 2 otherwise).
+Validate with `uv run python scripts/tools/lineage_index.py --input
+tests/tools/fixtures/lineage_index/complete.json --check --format json`.
+
+## Expiring-Resource Deadline Feasibility
+
+[`scripts/validation/check_expiring_resource_feasibility.py`](../../scripts/validation/check_expiring_resource_feasibility.py)
+evaluates the optional `expiring_resource` block of a campaign manifest (`expiring_resource_contract.v1`)
+and returns one deterministic verdict: `fits_conservative`, `fits_expected`, `too_late`, or
+`unknown`. It budgets expected/conservative runtime plus retrieval, verification, and preservation
+reserves into a latest safe submission time, never guesses a scheduler start, and requires non-zero
+retrieval/preservation reserves for durable-required outputs. Manifests without the block stay
+non-applicable and non-blocking. See
+[Expiring-Resource Deadline Feasibility](expiring_resource_deadlines.md); the case pack lives under
+`tests/validation/fixtures/expiring_resource_feasibility/`.
 
 ## Learned-Policy Artifact Manifests
 

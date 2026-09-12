@@ -1,0 +1,8 @@
+# Issue #1496 comparison arm: configuration declaration only; no training is run here.
+run_id: issue_1496_bc_warm_start_ppo_v1
+pretrained_policy_id: issue_1496_bc_warm_start_v1
+total_timesteps: 15000000
+learning_rate: 0.0003
+random_seeds: [123, 231, 777, 992, 1337]
+dataset_id: expert_traj_v1
+device: auto

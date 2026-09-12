@@ -3,9 +3,9 @@
 [Back to Documentation Index](./README.md)
 
 Canonical definitions for acronyms and project-specific terms used across Robot SF. This file is the
-single source of truth referenced by the `## Clarity` rule in
-[`maintainer_values.md`](./maintainer_values.md#clarity): when a human-facing surface uses one of these
-terms, expand it on first use or link here.
+single source of truth referenced by the human-facing clarity guidance in
+[`AGENTS.md`](../AGENTS.md): when a human-facing surface uses one of these terms, expand it on first
+use or link here.
 
 If you add a new acronym or domain term to the codebase or docs, add it here in the same change.
 When the repository expands the same acronym several ways, treat the expansion below as canonical and
@@ -43,7 +43,7 @@ converge on it.
 ## Evidence ladder
 
 Robot SF grades every claim by how strong its evidence is. Always label results with one of these
-(weakest to strongest). Full definitions live in [`docs/maintainer_values.md`](./maintainer_values.md).
+(weakest to strongest). Full definitions live in this glossary.
 
 | Tier | Plain-language meaning |
 | --- | --- |
@@ -67,6 +67,10 @@ Robot SF grades every claim by how strong its evidence is. Always label results 
 | Term | Plain-language meaning |
 | --- | --- |
 | **Fast lane** | The quick pull-request feedback path: the repository routes tests by configured directory/path fragments, filename prefixes, or explicit filenames, with slow-file overrides, and its fast-feedback shards run the routed non-slow tests plus lint and type checks. A changed-coverage gate then verifies the exact changed lines. |
+| **Execution profile** | One of four risk classes a task selects — Observe, Local, Coordinated, or Evidence-critical — that decides how much process and evidence ceremony the task inherits. The machine-readable mapping is [`.agents/task_scope_manifest.yaml`](../.agents/task_scope_manifest.yaml). |
+| **Route table** | The single owner of task-to-guidance routing: the route selection table in [`docs/ai/agent_workflow_entrypoints.md`](./ai/agent_workflow_entrypoints.md). Other instruction surfaces link here instead of restating the routes. |
+| **Instruction precedence** | The single ordered authority contract for repository-internal instruction conflicts, owned by [`AGENTS.md`](../AGENTS.md); scoped guidance specializes it but cannot weaken root invariants. |
+| **Instruction graph** | The canonical set of agent instruction surfaces (root router, routing owner, values, plans, scoped and provider files) whose required references are resolved by [`scripts/dev/check_instruction_references.py`](../scripts/dev/check_instruction_references.py). |
 | **Merge-ready** | A pull-request label meaning the guarded admission checks are current: the pull request is non-draft, its exact head and base match the reviewed evidence, its title/body metadata is reconciled, required checks are green, and exact-head review has accepted the linked contract with no unresolved actionable threads or requested reviewers. The label is applied only with fresh evidence; the [guarded merger policy](../.agents/skills/gh-pr-merger/SKILL.md) performs the final merge. |
 | **Residual** | Work a completed change deliberately leaves behind: accepted follow-ups, known limitations, or the next concrete slice — recorded explicitly so nothing silently drops. A residual audit verifies which acceptance bullets remain open and records that slice or any follow-up issues. |
 | **Provenance** | The recorded lineage appropriate to a result or artifact and its claim: for example, the relevant code, config, seed, checkpoint, inputs, runtime, or generation command, pinned so someone else can reproduce or audit it. Required fields depend on the artifact and claim; benchmark and paper-facing claims require complete provenance, and missing required provenance fails closed. |
@@ -79,4 +83,4 @@ Robot SF grades every claim by how strong its evidence is. Always label results 
 
 **Last updated**: 2026-09-09
 **Source of truth for**: acronyms and project-specific terms on human-facing surfaces (see the
-`## Clarity` rule in [`maintainer_values.md`](./maintainer_values.md#clarity)).
+human-facing clarity guidance in [`AGENTS.md`](../AGENTS.md)).

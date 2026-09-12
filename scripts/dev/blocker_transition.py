@@ -337,12 +337,21 @@ def _label_delta(
     labels = set(issue["labels"])
     additions: set[str] = set()
     removals: set[str] = set()
+    # ``state:ready`` already records a completed triage decision. Never stack
+    # ``needs-triage`` on top of it: a bulk sweep must not re-block an issue the
+    # repository has already triaged (issue #8837).
+    ready_recorded = "state:ready" in labels
     if ruling_valid:
         additions.update({"ruled", "parent", "dependency:has-blockers", "state:blocked"})
         removals.update(
-            {"decision-required", "blocked:needs-maintainer", "state:blocked-no-code-slice"}
+            {
+                "decision-required",
+                "blocked:needs-maintainer",
+                "state:blocked-no-code-slice",
+                "state:ready",
+            }
         )
-        if not child_present:
+        if not child_present and not ready_recorded:
             additions.add("needs-triage")
     if (
         blocker_class == "dependency_predicate"
@@ -351,7 +360,7 @@ def _label_delta(
     ):
         additions.add("state:ready")
         removals.update({"state:blocked", "dependency:has-blockers", "needs-triage"})
-    if blocker_class == "invalid_or_conflicting_state":
+    if blocker_class == "invalid_or_conflicting_state" and not ready_recorded:
         additions.add("needs-triage")
     if blocker_class in {"human_decision", "domain_approval", "external_input", "compute_required"}:
         removals.add("state:ready")

@@ -10,6 +10,7 @@ open for six days while main CI was green.
 from __future__ import annotations
 
 import json as _json
+import subprocess
 
 import pytest
 
@@ -18,6 +19,7 @@ from scripts.dev.main_ci_incident_reconcile import (
     build_incident_signal,
     incident_reconcile_status,
 )
+from scripts.dev.main_ci_is_green import MainCiRunWindow, fetch_run_window
 
 
 def _run(rid: int, status: str, conclusion: str | None, created: str) -> dict:
@@ -27,6 +29,50 @@ def _run(rid: int, status: str, conclusion: str | None, created: str) -> dict:
         "conclusion": conclusion,
         "headSha": f"{rid:040x}",
         "createdAt": created,
+    }
+
+
+class _FakeRunREST:
+    """REST fake for the shared paginated reader (workflow + run pages)."""
+
+    def __init__(self, pages: list[list[dict]]) -> None:
+        self.pages = pages
+        self.calls: list[str] = []
+
+    def __call__(
+        self,
+        path: str,
+        payload: object | None = None,
+        *,
+        method: str | None = None,
+        extra_args: list[str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        assert payload is None
+        assert method is None
+        assert extra_args is None
+        self.calls.append(path)
+        if path.endswith("actions/workflows?per_page=100&page=1"):
+            inventory = {
+                "workflows": [{"id": 77, "name": "CI", "path": ".github/workflows/ci.yml"}]
+            }
+            return subprocess.CompletedProcess(["gh"], 0, _json.dumps(inventory), "")
+        prefix = "repos/ll7/robot_sf_ll7/actions/workflows/77/runs?branch=main&per_page=100&page="
+        if path.startswith(prefix):
+            page = int(path.removeprefix(prefix))
+            return subprocess.CompletedProcess(
+                ["gh"], 0, _json.dumps({"workflow_runs": self.pages[page - 1]}), ""
+            )
+        raise AssertionError(f"unexpected REST path: {path}")
+
+
+def _actions_run(run: dict) -> dict:
+    """Convert a classifier-shaped run into an Actions REST row."""
+    return {
+        "id": run["databaseId"],
+        "status": run["status"],
+        "conclusion": run["conclusion"],
+        "head_sha": run["headSha"],
+        "created_at": run["createdAt"],
     }
 
 
@@ -93,6 +139,109 @@ def test_pending_when_latest_decisive_verdict_is_stale_class() -> None:
     assert classify(latest["conclusion"]) == "green"
 
 
+def test_cancelled_flood_then_decisive_green_is_stale() -> None:
+    """A cancelled-run flood must not starve the decisive green behind it (#8810)."""
+    flood = [
+        _run(1000 + index, "completed", "cancelled", f"2026-09-05T12:{index:02d}:00Z")
+        for index in range(30)
+    ]
+    runs = [
+        *flood,
+        _run(300, "completed", "success", "2026-08-25T12:00:00Z"),
+        _run(200, "completed", "failure", "2026-08-22T03:00:00Z"),
+    ]
+
+    status = incident_reconcile_status(200, runs)
+    signal = build_incident_signal(status, 200, runs)
+
+    assert status == "stale"
+    assert signal["status"] == "stale"
+    assert signal["can_auto_close"] is True
+    assert signal["decisive_run_found"] is True
+    assert signal["current_deciding_run"]["databaseId"] == 300
+
+
+def test_paginated_window_reaches_green_past_cancelled_flood() -> None:
+    """The shared paginated reader + classifier resolve stale behind a flood page."""
+    cancelled_page = [
+        _actions_run(_run(1000 + index, "completed", "cancelled", f"2026-09-04T00:{index:02d}:00Z"))
+        for index in range(100)
+    ]
+    decisive_page = [
+        _actions_run(_run(300, "completed", "success", "2026-08-25T12:00:00Z")),
+        _actions_run(_run(200, "completed", "failure", "2026-08-22T03:00:00Z")),
+    ]
+    fake = _FakeRunREST([cancelled_page, decisive_page])
+
+    window = fetch_run_window(max_pages=2, runner=fake)
+    status = incident_reconcile_status(200, window.runs)
+    signal = build_incident_signal(
+        status, 200, window.runs, window_exhausted=window.window_exhausted
+    )
+
+    assert window.window_exhausted is False
+    assert any(call.endswith("page=2") for call in fake.calls)
+    assert status == "stale"
+    assert signal["can_auto_close"] is True
+
+
+def test_window_exhausted_without_decisive_run_is_pending_not_active(
+    monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """An exhausted cancellation-only window is pending with explicit no-verdict fields."""
+    flood = [
+        _run(500 + index, "completed", "cancelled", f"2026-09-04T00:{index:02d}:00Z")
+        for index in range(3)
+    ]
+    monkeypatch.setattr(
+        reconcile,
+        "fetch_run_window",
+        lambda *a, **k: MainCiRunWindow(runs=flood, window_exhausted=True),
+    )
+    monkeypatch.setattr(
+        reconcile.sys, "argv", ["main_ci_incident_reconcile.py", "--deciding-run", "200", "--json"]
+    )
+
+    rc = reconcile.main()
+
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["status"] == "pending"
+    assert payload["status"] != "active"
+    assert payload["can_auto_close"] is False
+    assert payload["decisive_run_found"] is False
+    assert payload["window_exhausted"] is True
+
+
+def test_raw_limit_flag_keeps_legacy_bounded_window(
+    monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """Callers that pass a raw limit still use the bounded gh run list window."""
+    observed: dict = {}
+
+    def fake_fetch(repo: str, workflow: str, limit: int) -> list[dict]:
+        observed.update(repo=repo, workflow=workflow, limit=limit)
+        return [
+            _run(300, "completed", "success", "2026-08-28T12:00:00Z"),
+            _run(200, "completed", "failure", "2026-08-22T03:00:00Z"),
+        ]
+
+    monkeypatch.setattr(reconcile, "fetch_runs", fake_fetch)
+    monkeypatch.setattr(
+        reconcile.sys,
+        "argv",
+        ["main_ci_incident_reconcile.py", "--deciding-run", "200", "--limit", "5", "--json"],
+    )
+
+    rc = reconcile.main()
+
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert observed == {"repo": "ll7/robot_sf_ll7", "workflow": "CI", "limit": 5}
+    assert payload["status"] == "stale"
+    assert payload["window_exhausted"] is False
+
+
 def test_build_incident_signal_stale_schema() -> None:
     """build_incident_signal encodes stale => can_auto_close True."""
     runs = [
@@ -106,6 +255,8 @@ def test_build_incident_signal_stale_schema() -> None:
     assert signal["can_auto_close"] is True
     assert signal["deciding_failure_run_id"] == 200
     assert signal["current_deciding_run"]["databaseId"] == 300
+    assert signal["decisive_run_found"] is True
+    assert signal["window_exhausted"] is False
 
 
 def test_build_incident_signal_active_schema() -> None:
@@ -118,6 +269,7 @@ def test_build_incident_signal_active_schema() -> None:
 
     assert signal["status"] == "active"
     assert signal["can_auto_close"] is False
+    assert signal["decisive_run_found"] is True
 
 
 def test_cli_json_output_and_exit_code(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
@@ -126,7 +278,11 @@ def test_cli_json_output_and_exit_code(monkeypatch: pytest.MonkeyPatch, capsys) 
         _run(300, "completed", "success", "2026-08-28T12:00:00Z"),
         _run(200, "completed", "failure", "2026-08-22T03:00:00Z"),
     ]
-    monkeypatch.setattr(reconcile, "fetch_runs", lambda *a, **k: sample)
+    monkeypatch.setattr(
+        reconcile,
+        "fetch_run_window",
+        lambda *a, **k: MainCiRunWindow(runs=sample, window_exhausted=False),
+    )
     monkeypatch.setattr(
         reconcile.sys, "argv", ["main_ci_incident_reconcile.py", "--deciding-run", "200", "--json"]
     )
@@ -146,7 +302,11 @@ def test_cli_active_exit_code(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
         _run(400, "completed", "failure", "2026-08-28T12:00:00Z"),
         _run(300, "completed", "success", "2026-08-27T12:00:00Z"),
     ]
-    monkeypatch.setattr(reconcile, "fetch_runs", lambda *a, **k: sample)
+    monkeypatch.setattr(
+        reconcile,
+        "fetch_run_window",
+        lambda *a, **k: MainCiRunWindow(runs=sample, window_exhausted=False),
+    )
     monkeypatch.setattr(
         reconcile.sys, "argv", ["main_ci_incident_reconcile.py", "--deciding-run", "300", "--json"]
     )
@@ -164,7 +324,7 @@ def test_cli_fetch_failure_is_pending_and_exit_1(monkeypatch: pytest.MonkeyPatch
     """A fetch failure under --json exits 1 and reports pending (fail closed)."""
     monkeypatch.setattr(
         reconcile,
-        "fetch_runs",
+        "fetch_run_window",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("gh run list failed: boom")),
     )
     monkeypatch.setattr(
@@ -178,4 +338,51 @@ def test_cli_fetch_failure_is_pending_and_exit_1(monkeypatch: pytest.MonkeyPatch
     assert rc == 1
     assert payload["status"] == "pending"
     assert payload["can_auto_close"] is False
+    assert payload["decisive_run_found"] is False
+    assert payload["window_exhausted"] is False
     assert "error" in payload
+
+
+def test_superseded_pending_verdict_when_failure_followed_only_by_cancelled_runs() -> None:
+    """A failure followed only by cancelled newer runs is superseded but unverified (#8998)."""
+    runs = [
+        _run(504, "completed", "cancelled", "2026-09-11T06:32:00Z"),
+        _run(503, "completed", "cancelled", "2026-09-11T06:21:23Z"),
+        _run(502, "completed", "cancelled", "2026-09-11T06:14:04Z"),
+        _run(501, "completed", "failure", "2026-09-11T04:43:08Z"),
+        _run(400, "completed", "success", "2026-09-10T22:00:00Z"),
+    ]
+
+    status = incident_reconcile_status(500, runs)
+
+    assert status == "superseded_pending_verdict"
+    signal = build_incident_signal(status, 500, runs)
+    assert signal["is_green"] is False
+    assert signal["can_auto_close"] is False
+    assert signal["superseded_run_count"] == 3
+    assert signal["current_deciding_run"]["databaseId"] == 501
+
+
+def test_active_when_newer_run_is_only_in_progress() -> None:
+    """A newer in-progress run is not a supersession; the failure verdict stays live."""
+    runs = [
+        _run(601, "in_progress", None, "2026-09-11T08:00:03Z"),
+        _run(501, "completed", "failure", "2026-09-11T04:43:08Z"),
+    ]
+
+    assert incident_reconcile_status(500, runs) == "active"
+
+
+def test_superseded_count_excludes_decisive_and_in_progress_runs() -> None:
+    """Only completed non-decisive runs count toward the supersession evidence."""
+    runs = [
+        _run(703, "in_progress", None, "2026-09-11T08:30:00Z"),
+        _run(702, "completed", "cancelled", "2026-09-11T08:00:00Z"),
+        _run(701, "completed", "failure", "2026-09-11T04:43:08Z"),
+    ]
+
+    status = incident_reconcile_status(500, runs)
+    signal = build_incident_signal(status, 500, runs)
+
+    assert status == "superseded_pending_verdict"
+    assert signal["superseded_run_count"] == 1

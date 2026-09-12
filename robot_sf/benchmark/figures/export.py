@@ -190,7 +190,7 @@ def save_publication_figure(  # noqa: C901 - format validation and transactional
         if fmt == "pdf":
             save_kwargs["metadata"] = _embedded_metadata(provenance, output_base.name, "pdf")
         elif fmt == "png":
-            save_kwargs["dpi"] = 300
+            # Leave DPI to the active rendering profile's ``savefig.dpi``.
             save_kwargs["metadata"] = _embedded_metadata(provenance, output_base.name, "png")
 
         # The caller's figure need not be pyplot's current figure (or pyplot-managed).

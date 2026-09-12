@@ -10,7 +10,9 @@ failure prevalence, planner superiority, causal mechanisms, or deployment safety
 `diagnostic-only`; `source_admission_status` separately records whether the
 input package was `admitted` or `not_admitted`. A generated pack may be derived
 from an admitted source package, but neither a successful export nor a checksum
-promotes the underlying evidence.
+promotes the underlying evidence. Every rendered view is explicitly labeled
+`DIAGNOSTIC ONLY - not benchmark or publication evidence`, including admitted
+mode.
 Missing geometry and telemetry remain explicit; native campaign validation is a
 separate proof obligation.
 
@@ -66,8 +68,10 @@ canonical trace hash and complete coverage validation. Diagnostic mode skips
 **only admission**, never source checksums or structural trace validation; when
 canonical trace provenance is incomplete it records `structural-only` rather
 than emitting an unverified source hash. Every figure visibly says
-`DIAGNOSTIC ONLY - not author admitted`. This feature does not populate the
-source-gate registry or perform admission on the operator's behalf.
+`DIAGNOSTIC ONLY - not benchmark or publication evidence`; admitted mode means
+only that the input package's separate admission checks ran. This feature does
+not populate the source-gate registry or perform admission on the operator's
+behalf.
 
 Pass repeated `--case-id` arguments to restrict the existing portfolio. Its order
 is preserved regardless of argument order. Every excluded case is recorded as
@@ -127,10 +131,19 @@ perception cone, obstacle clearance or control dimension is fabricated.
 
 `README.md` links to every exported view. PDF and SVG preserve vector paths;
 PNG uses the figure profile's requested DPI. Each view has a provenance JSON
-companion and an escaped caption fragment. `manifest.json` inventories every
-artifact by relative path, byte count and SHA-256, and records
-source/config/profile/producer digests, source trace identifiers, the Matplotlib
-version, selection/omission receipts and panel availability. Admitted mode
+companion and an escaped caption fragment. Each view sidecar uses the distinct
+`scenario-figure-pack-provenance.v1` schema. Its `pack_config_path` and
+`pack_config_sha256` identify the generated pack configuration, while
+`source_proposal_path`, `source_proposal_sha256` and
+`source_inventory_sha256` identify the workbench portfolio package. These
+pack-root-relative fields are intentionally used instead of the Issue #4777
+publication-sidecar `scenario_matrix_path`/`scenario_matrix_hash` fields: a
+workbench portfolio is not a scenario matrix. The separate schema prevents a
+consumer from treating this diagnostic pack as a publication-sidecar record.
+`manifest.json` inventories every artifact by relative path, byte count and
+SHA-256, and records source/config/profile/producer digests, source trace
+identifiers, the Matplotlib version, selection/omission receipts and panel
+availability. Admitted mode
 requires canonical trace hash and complete coverage validation; diagnostic mode
 labels incomplete trace provenance `structural-only` and does not emit it as a
 verified source hash. Case IDs are hashed into path-safe filenames; raw traces

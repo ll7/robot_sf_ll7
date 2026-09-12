@@ -9,6 +9,7 @@
     "dependabot_config",
     "ci_workflow",
     "aggregate_job",
+    "ci_only_dependency_groups",
     "classes",
     "transitive_fallback",
     "security_updates",
@@ -30,6 +31,13 @@
     },
     "aggregate_job": {
       "const": "ci"
+    },
+    "ci_only_dependency_groups": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/ciOnlyDependencyGroup"
+      }
     },
     "classes": {
       "type": "array",
@@ -122,6 +130,52 @@
           "items": {"type": "string", "minLength": 1}
         },
         "focused_test_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    },
+    "ciOnlyDependencyGroup": {
+      "type": "object",
+      "required": [
+        "declaration",
+        "lockfile",
+        "root_project",
+        "root_requirement",
+        "allowed_packages",
+        "requirements",
+        "required_jobs"
+      ],
+      "properties": {
+        "declaration": {
+          "const": "pyproject.toml"
+        },
+        "lockfile": {
+          "const": "uv.lock"
+        },
+        "root_project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "root_requirement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowed_packages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "requirements": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"type": "string", "minLength": 1}
+        },
+        "required_jobs": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,

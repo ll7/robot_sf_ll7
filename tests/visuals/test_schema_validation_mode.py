@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class Cfg:
-    """TODO docstring. Document this class."""
+    """Config stub using synthetic rendering with one video and replay capture off."""
 
     smoke = False
     disable_videos = False
@@ -28,21 +28,24 @@ class Cfg:
 
 
 def test_schema_validation_mode_raises(tmp_path: Path, monkeypatch):
-    """TODO docstring. Document this function.
+    """Assert validation failure under ROBOT_SF_VALIDATE_VISUALS aborts generation.
+
+    Sets the env flag and replaces validate_visual_manifests with a stub that
+    raises RuntimeError; generate_visual_artifacts propagates that error.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
+        monkeypatch: Pytest fixture used to set the env flag and patch validation.
     """
     monkeypatch.setenv("ROBOT_SF_VALIDATE_VISUALS", "1")
 
     # Force validation to raise
     def fake_validate(*_a, **_k):
-        """TODO docstring. Document this function.
+        """Raise RuntimeError to simulate a failed manifest validation.
 
         Args:
-            _a: TODO docstring.
-            _k: TODO docstring.
+            _a: Positional arguments accepted and ignored.
+            _k: Keyword arguments accepted and ignored.
         """
         raise RuntimeError("forced-error")
 

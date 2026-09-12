@@ -151,14 +151,15 @@ def _compute_aggregates_payload(
     *,
     expected_algorithms: set[str] | None,
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Compute grouped bootstrap aggregates, optionally validating expected algorithms.
 
     Args:
-        records: TODO docstring.
-        expected_algorithms: TODO docstring.
+        records: Episode metric records read from completed baseline runs.
+        expected_algorithms: Optional algorithm names that must appear in the
+            aggregation; forwarded only when the callee accepts the parameter.
 
     Returns:
-        TODO docstring.
+        The aggregate payload produced by :func:`compute_aggregates_with_ci`.
     """
     aggregate_kwargs: dict[str, Any] = {
         "records": records,
@@ -190,14 +191,14 @@ def _compute_aggregates_payload(
 
 
 def _write_aggregates_file(output_root: str, aggregates: dict[str, Any]) -> Path:
-    """TODO docstring. Document this function.
+    """Write the aggregate payload to ``aggregated_results.json`` under the output root.
 
     Args:
-        output_root: TODO docstring.
-        aggregates: TODO docstring.
+        output_root: Directory containing the benchmark run artifacts.
+        aggregates: Aggregate payload to serialize as indented JSON.
 
     Returns:
-        TODO docstring.
+        Path to the written JSON file.
     """
     aggregates_file = Path(output_root) / "aggregated_results.json"
     with open(aggregates_file, "w", encoding="utf-8") as f:

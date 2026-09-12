@@ -25,6 +25,18 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.evidence.historical_bindings import (
+    HISTORICAL_BINDING_FIELDS,  # noqa: F401 - preserve the checker module surface.
+    HISTORICAL_BINDING_MANIFEST,  # noqa: F401 - compatibility export used by linter fixtures.
+    HISTORICAL_BINDING_REPOSITORY,  # noqa: F401 - preserve the checker module surface.
+    HISTORICAL_BINDING_SCHEMA,  # noqa: F401 - compatibility export used by linter fixtures.
+    HISTORICAL_BINDING_TOP_FIELDS,  # noqa: F401 - preserve the checker module surface.
+    DuplicateJSONKeyError,
+    HistoricalBindingError,
+    _blob_sha1,  # noqa: F401 - compatibility export used by the linter's fixture tests.
+    _load_historical_bindings,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -33,6 +45,8 @@ COMMIT_RE = re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{40}(?![0-9a-fA-F])")
 FULL_SHA1_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 SYNTHETIC_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{40,}[^0-9a-fA-F]")
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+JSON_POINTER_TOKEN_RE = re.compile(r"(?:[^~]|~[01])*\Z")
+JSON_POINTER_ARRAY_INDEX_RE = re.compile(r"(?:0|[1-9][0-9]*)\Z", re.ASCII)
 PROJECTION_SCHEMA = "evidence_registry_projection.v1"
 PROJECTION_MODE = "frozen_squash_base"
 MARKDOWN_CAMPAIGN_RE = re.compile(r"\bcampaign_id\s*[:=]\s*`?([A-Za-z0-9_.-]+)`?")
@@ -260,13 +274,30 @@ def _resolve_repo_path(repo_root: Path, value: str) -> tuple[str, Path] | None:
     return normalized.as_posix(), candidate
 
 
-def _load_document(path: Path, raw: bytes | None = None) -> Any:
+def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON object keys instead of silently keeping the last value."""
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise DuplicateJSONKeyError(f"duplicate JSON object key: {key!r}")
+        value[key] = item
+    return value
+
+
+def _load_document(
+    path: Path,
+    raw: bytes | None = None,
+    *,
+    reject_duplicate_json_keys: bool = False,
+) -> Any:
     """Load supported structured registry files, returning text for Markdown/CSV."""
     if raw is None:
         raw = path.read_bytes()
     decoded = raw.decode("utf-8")
     suffix = path.suffix.lower()
     if suffix == ".json":
+        if reject_duplicate_json_keys:
+            return json.loads(decoded, object_pairs_hook=_reject_duplicate_json_object)
         return json.loads(decoded)
     if suffix in {".yaml", ".yml"}:
         return yaml.safe_load(decoded)
@@ -283,16 +314,17 @@ def _json_pointer_get(value: Any, pointer: str) -> Any:
         raise ValueError(f"invalid JSON pointer {pointer!r}")
     current = value
     for raw_part in pointer.split("/")[1:]:
+        if JSON_POINTER_TOKEN_RE.fullmatch(raw_part) is None:
+            raise ValueError(f"invalid JSON pointer escape in {pointer!r}")
         part = raw_part.replace("~1", "/").replace("~0", "~")
         if isinstance(current, Mapping):
             if part not in current:
                 raise KeyError(pointer)
             current = current[part]
         elif isinstance(current, list):
-            try:
-                index = int(part)
-            except ValueError as exc:
-                raise KeyError(pointer) from exc
+            if JSON_POINTER_ARRAY_INDEX_RE.fullmatch(part) is None:
+                raise KeyError(pointer)
+            index = int(part)
             try:
                 current = current[index]
             except IndexError as exc:
@@ -699,6 +731,8 @@ def _artifact_hash_finding(  # noqa: PLR0913 - candidate-tree inputs stay explic
     content_ref: str | None = None,
     content_cache: Mapping[str, bytes] | None = None,
     tracked_paths: set[str] | None = None,
+    historical_bindings: Mapping[tuple[str, str, str], Mapping[str, str]] | None = None,
+    applied_bindings: list[dict[str, str]] | None = None,
 ) -> dict[str, str] | None:
     """Check one artifact hash declaration, returning its finding when invalid."""
     if not SHA256_RE.fullmatch(declared_hash):
@@ -728,6 +762,12 @@ def _artifact_hash_finding(  # noqa: PLR0913 - candidate-tree inputs stay explic
         )
     actual_hash = hashlib.sha256(artifact_bytes).hexdigest()
     if actual_hash != declared_hash.lower():
+        binding_key = (display_path.as_posix(), resolved[0], declared_hash.lower())
+        binding = historical_bindings.get(binding_key) if historical_bindings else None
+        if binding is not None:
+            if applied_bindings is not None and binding not in applied_bindings:
+                applied_bindings.append(dict(binding))
+            return None
         return _issue(
             display_path,
             "artifact_hash_mismatch",
@@ -744,6 +784,8 @@ def _artifact_findings(
     content_ref: str | None = None,
     content_cache: Mapping[str, bytes] | None = None,
     tracked_paths: set[str] | None = None,
+    historical_bindings: Mapping[tuple[str, str, str], Mapping[str, str]] | None = None,
+    applied_bindings: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     """Validate artifact checksum declarations against tracked artifact paths."""
     if isinstance(value, str):
@@ -765,6 +807,8 @@ def _artifact_findings(
                 content_ref=content_ref,
                 content_cache=content_cache,
                 tracked_paths=tracked_paths,
+                historical_bindings=historical_bindings,
+                applied_bindings=applied_bindings,
             )
             if finding:
                 findings.append(finding)
@@ -878,7 +922,7 @@ def _campaign_metadata_findings(  # noqa: C901, PLR0913 - rule-to-finding mappin
     return findings
 
 
-def _lint_document(
+def _lint_document(  # noqa: PLR0913
     repo_root: Path,
     path: Path,
     *,
@@ -887,6 +931,8 @@ def _lint_document(
     content_ref: str | None = None,
     content_cache: Mapping[str, bytes] | None = None,
     tracked_paths: set[str] | None = None,
+    historical_bindings: Mapping[tuple[str, str, str], Mapping[str, str]] | None = None,
+    applied_bindings: list[dict[str, str]] | None = None,
 ) -> _DocumentRecord:
     """Read one document and retain only document-local integrity findings."""
     display_path = display_path or path.relative_to(repo_root)
@@ -905,6 +951,8 @@ def _lint_document(
         content_ref=content_ref,
         content_cache=content_cache,
         tracked_paths=tracked_paths,
+        historical_bindings=historical_bindings,
+        applied_bindings=applied_bindings,
     )
     local_findings.extend(_synthetic_commit_findings(display_path, value))
     return _DocumentRecord(
@@ -1230,6 +1278,16 @@ def lint_evidence_registry(  # noqa: C901, PLR0912, PLR0915 - ordinary/projected
         content_cache=candidate_content_cache,
         tracked_paths=candidate_tracked_paths,
     )
+    historical_bindings, historical_binding_report = _load_historical_bindings(
+        repo_root,
+        content_ref=projection_identity["candidate_head"] if projection_identity else None,
+        content_cache=candidate_content_cache,
+        tracked_paths=candidate_tracked_paths,
+        authority_ref=(
+            projection_identity["frozen_base"] if projection_identity is not None else "HEAD"
+        ),
+    )
+    applied_historical_bindings: list[dict[str, str]] = []
     campaigns: dict[str, list[_DocumentRecord]] = defaultdict(list)
     findings: list[dict[str, str]] = []
     projection_producer_records: set[tuple[str, str, str]] = set()
@@ -1297,6 +1355,8 @@ def lint_evidence_registry(  # noqa: C901, PLR0912, PLR0915 - ordinary/projected
             content_ref=projection_identity["candidate_head"] if projection_identity else None,
             content_cache=candidate_content_cache,
             tracked_paths=candidate_tracked_paths,
+            historical_bindings=historical_bindings,
+            applied_bindings=applied_historical_bindings,
         )
         findings.extend(document.findings)
         # A row-oriented CSV can repeat one campaign identifier thousands of
@@ -1381,6 +1441,10 @@ def lint_evidence_registry(  # noqa: C901, PLR0912, PLR0915 - ordinary/projected
             )
     findings.sort(key=lambda item: (item["path"], item["code"], item["message"]))
     findings = _apply_companion_resolutions(findings, companion_resolutions)
+    historical_binding_report["applied"] = sorted(
+        applied_historical_bindings,
+        key=lambda item: (item["consumer_path"], item["reference_locator"]),
+    )
     excluded = [item for item in findings if item["code"] in exclude_codes]
     active = [item for item in findings if item["code"] not in exclude_codes]
     by_code = dict(sorted(Counter(item["code"] for item in active).items()))
@@ -1417,6 +1481,7 @@ def lint_evidence_registry(  # noqa: C901, PLR0912, PLR0915 - ordinary/projected
         "campaign_ids": sorted(campaigns),
         "issues": active,
         "summary": {"findings": len(active), "by_code": by_code},
+        "historical_bindings": historical_binding_report,
     }
     if projection_identity is not None and projection_tree is not None:
         campaign_records = [
@@ -1562,7 +1627,12 @@ def main(argv: list[str] | None = None) -> int:
             candidate_head=args.candidate_head,
             frozen_base=args.frozen_base,
         )
-    except (CompanionBindingError, ProjectionValidationError, ShallowRepositoryError) as exc:
+    except (
+        CompanionBindingError,
+        HistoricalBindingError,
+        ProjectionValidationError,
+        ShallowRepositoryError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(report, indent=2, sort_keys=True))

@@ -324,6 +324,40 @@ Submission state rules:
 - Public issue/PR comments may include job id and partition for traceability, but must not include private host
   names, account/QoS details, scratch paths, or private retrieval mechanics.
 
+## Output capacity preflight (check-only)
+
+Before submitting a job whose results must be preserved, estimate the full output and
+post-run transfer budget and compare it with a sanitized storage-capability projection:
+
+```bash
+uv run python scripts/tools/check_output_capacity_preflight.py --check \
+  --packet path/to/capacity_packet.json \
+  --storage-projection path/to/storage_capability_projection.json \
+  --format json
+```
+
+The packet (`robot_sf.output_capacity_preflight_packet.v1`) declares the expected row
+count and scaling, one component per output surface with `storage_class` (`task_output`,
+`scheduler_log`, `temporary_scratch`, `durable_required`, `disposable_post_verification`)
+and `output_kind` (rows, logs, checkpoints, harvest_manifest, checksums,
+compression_workspace, temporary_workspace, other), and lower/expected/conservative-upper
+per-row plus fixed bounds for bytes, files, and peak bytes. Every `empirical` component
+must name a compatible `source_identity`; otherwise use `declared` bounds or an explicit
+`unavailable` token. The projection (`robot_sf.storage_capability_projection.v1`) carries
+sanitized source/destination free bytes, free inodes, and retention classes, the reserved
+byte/inode/time safety margin, the access deadline, and the transfer route's rate bounds
+plus rate uncertainty.
+
+The verdict is fail closed. `capacity_ok` requires conservative upper bounds plus margin
+to fit source and destination and the conservative transfer duration to fit before the
+access deadline. `capacity_exceeded` reports conservative misses. `capacity_unknown` is
+returned when row scaling, any component dimension, temporary workspace, inode use,
+destination capacity, transfer rate, or access deadline is unbounded or unavailable, and
+an unknown verdict never passes. The tool is check-only: it never deletes, compresses, or
+mutates campaign artifacts. Exit codes are 0 `capacity_ok`, 2 `capacity_exceeded` or
+`capacity_unknown`, and 3 malformed input. Fixtures for the passing, exceeded, and
+unknown cases live under `tests/tools/fixtures/output_capacity_preflight/`.
+
 ## Capacity-aware / fill batches
 
 When submitting a batch intended to fill spare cluster capacity (rather than a single prioritized

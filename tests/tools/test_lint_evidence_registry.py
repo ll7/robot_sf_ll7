@@ -570,6 +570,20 @@ def test_historical_binding_digest_validation_matches_schema_for_every_field() -
         uppercase_manifest["bindings"][0][field] = original_value.upper()
         assert list(validator.iter_errors(uppercase_manifest)), field
 
+    uppercase_manifest = json.loads(json.dumps(manifest))
+    uppercase_manifest["reviewed_ancestry_anchor"] = manifest["reviewed_ancestry_anchor"].upper()
+    assert list(validator.iter_errors(uppercase_manifest)), "reviewed_ancestry_anchor"
+    with pytest.raises(historical.HistoricalBindingError, match="reviewed_ancestry_anchor"):
+        historical._load_historical_bindings(
+            ROOT,
+            content_ref="HEAD",
+            content_cache={
+                historical.HISTORICAL_BINDING_MANIFEST.as_posix(): (
+                    json.dumps(uppercase_manifest).encode("utf-8")
+                )
+            },
+        )
+
 
 def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:
     """A campaign with committed config and matching artifact hash passes."""

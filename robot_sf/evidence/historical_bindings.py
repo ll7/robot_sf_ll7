@@ -665,8 +665,10 @@ def _load_historical_bindings(  # noqa: C901
             "manifest repository does not match the repository identity"
         )
     reviewed_ancestry_anchor = value.get("reviewed_ancestry_anchor")
-    if not isinstance(reviewed_ancestry_anchor, str) or not FULL_SHA1_RE.fullmatch(
-        reviewed_ancestry_anchor
+    if (
+        not isinstance(reviewed_ancestry_anchor, str)
+        or not FULL_SHA1_RE.fullmatch(reviewed_ancestry_anchor)
+        or reviewed_ancestry_anchor != reviewed_ancestry_anchor.lower()
     ):
         raise _historical_binding_error("reviewed_ancestry_anchor must be a full commit SHA-1")
     bindings = value.get("bindings")

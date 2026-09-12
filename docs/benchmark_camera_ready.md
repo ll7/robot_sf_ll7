@@ -730,10 +730,20 @@ Additional diagnostics generated per campaign:
 
 * `reports/scenario_breakdown.csv` and `reports/scenario_breakdown.md`
   + per-planner, per-scenario metric means
+  + `archetype` publishes the archetype tag declared by the scenario config
+    (`metadata.archetype`) beside `scenario_family`, so the published campaign
+    declares the grouping instead of leaving downstream consumers to count include
+    files
   + AMV taxonomy columns (`use_case`, `context`, `speed_regime`, `maneuver_type`)
     carry the direct source scenario metadata when present
 * `reports/scenario_family_breakdown.csv` and `reports/scenario_family_breakdown.md`
   + per-planner, per-family (archetype) metric means
+  + `archetype` aggregates the distinct tags of the contributing scenarios, sorted and
+    joined with semicolons. Include files can deliberately share one tag, so the number
+    of distinct archetypes is smaller than the number of include files:
+    `classic_bottleneck.yaml`, `classic_density_tier_index.yaml`, and
+    `classic_realworld_bottleneck.yaml` all declare `archetype: bottleneck`. Count the
+    published column, never the include files
   + AMV taxonomy columns aggregate the distinct non-empty values from contributing
     scenarios per dimension, sorted and joined with semicolons
 

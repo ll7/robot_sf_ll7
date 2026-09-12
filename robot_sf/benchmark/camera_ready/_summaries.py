@@ -241,6 +241,25 @@ def _extract_amv_taxonomy(scenario: dict[str, Any]) -> dict[str, str]:
     return resolved
 
 
+def _extract_archetype(scenario: dict[str, Any]) -> str:
+    """Extract the config-declared scenario archetype tag, if any.
+
+    The published campaign must declare the archetype per scenario instead of
+    leaving downstream consumers to count include files and hope the taxonomy has
+    not moved. The tag lives in ``metadata.archetype``; a top-level ``archetype``
+    key is accepted for flat scenario dictionaries.
+
+    Returns:
+        str: Stripped archetype tag, or ``""`` when the scenario declares none.
+    """
+    for container in (scenario.get("metadata"), scenario):
+        if isinstance(container, dict):
+            value = container.get("archetype")
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
+
+
 def _build_amv_coverage_summary(
     cfg: CampaignConfig,
     scenarios: list[dict[str, Any]],

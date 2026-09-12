@@ -15,7 +15,9 @@ from scripts.dev import check_pr_ci_status as ci_status
 from scripts.dev import merge_queue_gate as merge_queue_gate_module
 from scripts.dev.merge_queue_gate import (
     CI_PATHS_IGNORE_PATTERNS,
+    _core_preflight_reasons,
     _format_summary,
+    _gate_verdict_status,
     _rest_check_rollup,
     _rest_requested_reviewers,
     _rest_reviews,
@@ -2391,3 +2393,103 @@ def test_audit_summary_records_ancestry_state(capsys) -> None:
     summary = _format_summary(audit)
     assert "ancestry state: `stacked`" in summary
     assert "stacked_ancestry_not_independently_mergeable" in summary
+
+
+def test_gate_verdict_status_hold_blocks_admission() -> None:
+    """A trusted later exact-head hold yields the hold status and reason code."""
+    head = "a" * 40
+    pr = {
+        "reviews": [
+            {
+                "author_association": "OWNER",
+                "state": "COMMENTED",
+                "submitted_at": "2026-09-12T10:00:00Z",
+                "body": f"gate-verdict: accepted @ {head}",
+            },
+            {
+                "author_association": "OWNER",
+                "state": "COMMENTED",
+                "submitted_at": "2026-09-12T11:00:00Z",
+                "body": f"gate-verdict: hold @ {head}",
+            },
+        ]
+    }
+
+    status = _gate_verdict_status(pr, head)
+    reasons = _core_preflight_reasons(
+        draft=False,
+        merge_ready=True,
+        ci_overall="success",
+        changed_coverage_status="success",
+        staleness_verdict="fresh",
+        gate_verdict_status=status,
+    )
+
+    assert status == "hold"
+    assert "exact_head_gate_hold" in reasons
+
+
+def test_gate_verdict_status_ambiguous_fails_closed() -> None:
+    """Unorderable accepted/hold carriers cannot admit a merge."""
+    head = "b" * 40
+    pr = {
+        "reviews": [
+            {
+                "author_association": "OWNER",
+                "state": "COMMENTED",
+                "body": f"gate-verdict: hold @ {head}",
+            }
+        ],
+        "comments": [{"author_association": "OWNER", "body": f"gate-verdict: accepted @ {head}"}],
+    }
+
+    status = _gate_verdict_status(pr, head)
+    reasons = _core_preflight_reasons(
+        draft=False,
+        merge_ready=True,
+        ci_overall="success",
+        changed_coverage_status="success",
+        staleness_verdict="fresh",
+        gate_verdict_status=status,
+    )
+
+    assert status == "ambiguous"
+    assert "ambiguous_exact_head_gate_verdict" in reasons
+
+
+def test_evaluate_merge_gate_rejects_held_head() -> None:
+    """A trusted exact-head hold fails full gate evaluation (issue #9124)."""
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "labels": ["merge-ready"],
+            "draft": False,
+            "checks": {"overall": "success"},
+            "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+            "reviewers_requested": False,
+            "metadata_digest": metadata_digest("merge queue hold test", "final body"),
+            "metadata_verdicts": [
+                metadata_trailer(metadata_digest("merge queue hold test", "final body"))
+            ],
+            "reviews": [
+                {
+                    "author_association": "OWNER",
+                    "state": "COMMENTED",
+                    "submitted_at": "2026-09-12T10:00:00Z",
+                    "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                },
+                {
+                    "author_association": "OWNER",
+                    "state": "COMMENTED",
+                    "submitted_at": "2026-09-12T11:00:00Z",
+                    "body": f"gate-verdict: hold @ {FULL_SHA}",
+                },
+            ],
+        },
+        threads_resolved=True,
+    )
+
+    assert audit.passed is False
+    assert "exact_head_gate_hold" in audit.reasons
+    assert audit.gate_verdict_status == "hold"

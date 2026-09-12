@@ -126,6 +126,12 @@ _GATE_VERDICT_RE = re.compile(
     re.IGNORECASE,
 )
 GATE_VERDICT_RE = _GATE_VERDICT_RE
+# Matches either verdict word so ordered precedence can honor a trusted HOLD
+# that postdates an acceptance (issue #9124).
+_ANY_GATE_VERDICT_RE = re.compile(
+    r"gate-verdict\s*:\s*(accepted|hold)\s*@\s*([0-9a-fA-F]{7,40})\b",
+    re.IGNORECASE,
+)
 _BASE_POLICY_RE = re.compile(
     r"base-policy\s*:\s*(ordinary-cas|current-base)\s*@\s*([0-9a-fA-F]{7,40})\b",
     re.IGNORECASE,
@@ -748,6 +754,203 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
         return False
     accepted = _accepted_gate_verdict_shas(pr)
     return any(_sha_matches_head(sha, head_sha) for sha in accepted)
+
+
+def _verdict_order_timestamp(entry: dict[str, Any]) -> str | None:
+    """Return the entry's trusted ordering timestamp when present."""
+    for key in ("submitted_at", "submittedAt", "createdAt", "created_at"):
+        value = entry.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _text_verdict_carriers(
+    text: str, *, collection: str, head_sha: str, sequence: int, timestamp: str = ""
+) -> list[dict[str, str]]:
+    """Return exact-head gate-verdict carriers found in one text blob."""
+    carriers: list[dict[str, str]] = []
+    for match in _ANY_GATE_VERDICT_RE.finditer(text):
+        if _sha_matches_head(match.group(2), head_sha):
+            carriers.append(
+                {
+                    "collection": collection,
+                    "sequence": str(sequence),
+                    "timestamp": timestamp,
+                    "verdict": match.group(1).lower(),
+                }
+            )
+    return carriers
+
+
+def _collection_verdict_carriers(
+    entries: object, *, collection: str, head_sha: str, sequence_start: int
+) -> tuple[list[dict[str, str]], int]:
+    """Return trusted exact-head carriers from one review/comment collection."""
+    carriers: list[dict[str, str]] = []
+    sequence = sequence_start
+    if isinstance(entries, list):
+        for entry in entries:
+            body = authoritative_body_text(entry)
+            if body is not None:
+                timestamp = _verdict_order_timestamp(entry) if isinstance(entry, dict) else None
+                carriers.extend(
+                    _text_verdict_carriers(
+                        body,
+                        collection=collection,
+                        head_sha=head_sha,
+                        sequence=sequence,
+                        timestamp=timestamp or "",
+                    )
+                )
+            sequence += 1
+    return carriers, sequence
+
+
+def _snapshot_verdict_carriers(
+    latest: object, *, collection: str, head_sha: str, sequence_start: int
+) -> tuple[list[dict[str, str]], int]:
+    """Return trusted exact-head carriers from one compact snapshot list."""
+    carriers: list[dict[str, str]] = []
+    sequence = sequence_start
+    if isinstance(latest, list):
+        for entry in latest:
+            if isinstance(entry, dict):
+                body = authoritative_body_text(
+                    {
+                        "author_association": entry.get("author_association")
+                        or entry.get("authorAssociation"),
+                        "body": entry.get("body_excerpt"),
+                        "state": entry.get("state"),
+                    }
+                )
+                if body is not None:
+                    timestamp = (
+                        entry.get("submitted_at")
+                        or entry.get("submittedAt")
+                        or entry.get("createdAt")
+                        or entry.get("created_at")
+                    )
+                    carriers.extend(
+                        _text_verdict_carriers(
+                            body,
+                            collection=collection,
+                            head_sha=head_sha,
+                            sequence=sequence,
+                            timestamp=str(timestamp).strip() if timestamp else "",
+                        )
+                    )
+            sequence += 1
+    return carriers, sequence
+
+
+def _explicit_verdict_carriers(
+    pr: dict[str, Any], head_sha: str, sequence_start: int
+) -> tuple[list[dict[str, str]], int]:
+    """Return exact-head carriers from compact explicit verdict fields."""
+    carriers: list[dict[str, str]] = []
+    sequence = sequence_start
+    for item in pr.get("gate_verdicts") or []:
+        if isinstance(item, str):
+            carriers.extend(
+                _text_verdict_carriers(
+                    item, collection="gate_verdicts", head_sha=head_sha, sequence=sequence
+                )
+            )
+        elif isinstance(item, dict):
+            carriers.extend(
+                _explicit_carrier(
+                    item, collection="gate_verdicts", head_sha=head_sha, sequence=sequence
+                )
+            )
+        sequence += 1
+    explicit = pr.get("gate_verdict")
+    if isinstance(explicit, str):
+        carriers.extend(
+            _text_verdict_carriers(
+                explicit, collection="gate_verdict", head_sha=head_sha, sequence=sequence
+            )
+        )
+    elif isinstance(explicit, dict):
+        carriers.extend(
+            _explicit_carrier(
+                explicit, collection="gate_verdict", head_sha=head_sha, sequence=sequence
+            )
+        )
+    return carriers, sequence
+
+
+def _explicit_carrier(
+    item: dict[str, Any], *, collection: str, head_sha: str, sequence: int
+) -> list[dict[str, str]]:
+    """Return one explicit-field carrier when it carries a valid verdict."""
+    verdict = str(item.get("verdict", "")).lower()
+    if not verdict and item.get("accepted") is True:
+        verdict = "accepted"
+    sha = str(item.get("sha") or item.get("head_sha") or "")
+    if verdict not in {"accepted", "hold"} or not _sha_matches_head(sha, head_sha):
+        return []
+    return [
+        {
+            "collection": collection,
+            "sequence": str(sequence),
+            "timestamp": _verdict_order_timestamp(item) or "",
+            "verdict": verdict,
+        }
+    ]
+
+
+def _ordered_exact_head_verdicts(pr: dict[str, Any], head_sha: str) -> list[dict[str, str]]:
+    """Return trusted exact-head gate-verdict carriers in source order.
+
+    Ordering evidence is the carrier timestamp when present, otherwise the
+    position in its source collection (reviews/comments are chronological in
+    the REST payload; explicit compact fields preserve list order).
+    """
+    carriers: list[dict[str, str]] = []
+    sequence = 0
+    for collection in ("reviews", "comments"):
+        found, sequence = _collection_verdict_carriers(
+            pr.get(collection), collection=collection, head_sha=head_sha, sequence_start=sequence
+        )
+        carriers.extend(found)
+    for snapshot_key in ("review_snapshot", "comment_snapshot"):
+        snapshot = pr.get(snapshot_key)
+        latest = snapshot.get("latest") if isinstance(snapshot, dict) else None
+        found, sequence = _snapshot_verdict_carriers(
+            latest, collection=snapshot_key, head_sha=head_sha, sequence_start=sequence
+        )
+        carriers.extend(found)
+    explicit, _sequence = _explicit_verdict_carriers(pr, head_sha, sequence)
+    carriers.extend(explicit)
+    return carriers
+
+
+def latest_exact_head_gate_verdict(pr: dict[str, Any], head_sha: str) -> tuple[str, str | None]:
+    """Return the governing exact-head gate verdict and an optional reason.
+
+    Returns ``("accepted", None)``, ``("hold", None)``, ``("missing", None)``,
+    or ``("ambiguous", reason)``. A current trusted exact-head hold overrides an
+    older acceptance; only a later, explicitly ordered exact-head acceptance can
+    supersede a hold. When accepted and hold carriers coexist without comparable
+    ordering evidence, the verdict is ambiguous and callers must fail closed
+    (issue #9124).
+    """
+    if not isinstance(pr, dict) or not head_sha:
+        return ("missing", None)
+    carriers = _ordered_exact_head_verdicts(pr, head_sha)
+    if not carriers:
+        return ("missing", None)
+    verdicts = {carrier["verdict"] for carrier in carriers}
+    if len(verdicts) == 1:
+        return (next(iter(verdicts)), None)
+    if all(carrier["timestamp"] for carrier in carriers):
+        ordered = sorted(carriers, key=lambda carrier: carrier["timestamp"])
+        return (ordered[-1]["verdict"], None)
+    if len({carrier["collection"] for carrier in carriers}) == 1:
+        ordered = sorted(carriers, key=lambda carrier: int(carrier["sequence"]))
+        return (ordered[-1]["verdict"], None)
+    return ("ambiguous", "accepted and hold carriers lack comparable ordering")
 
 
 def _explicit_metadata_verdict_texts(pr: dict[str, Any]) -> list[str]:

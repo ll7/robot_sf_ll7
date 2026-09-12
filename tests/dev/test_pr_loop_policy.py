@@ -32,6 +32,7 @@ from scripts.dev.pr_loop_policy import (
     has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
     invalid_sha_carriers,
+    latest_exact_head_gate_verdict,
     load_manifest_artifacts,
     main,
     recommend_action,
@@ -2820,3 +2821,106 @@ def test_evaluate_queue_parks_stacked_ancestry() -> None:
     assert decision["state"] == "stacked_not_independently_mergeable"
     assert decision["action"] == "no_action"
     assert decision["flow_decision"] == "stop"
+
+
+def _trusted_verdict_review(body: str, *, submitted_at: str | None = None) -> dict[str, object]:
+    """Build one trusted review carrier with an optional ordering timestamp."""
+    entry: dict[str, object] = {
+        "author_association": "OWNER",
+        "state": "COMMENTED",
+        "body": body,
+    }
+    if submitted_at is not None:
+        entry["submitted_at"] = submitted_at
+    return entry
+
+
+def test_latest_gate_verdict_hold_after_acceptance_wins() -> None:
+    """A trusted later exact-head HOLD overrides an older acceptance (issue #9124)."""
+    head = "a" * 40
+    pr = {
+        "reviews": [
+            _trusted_verdict_review(
+                f"gate-verdict: accepted @ {head}", submitted_at="2026-09-12T10:00:00Z"
+            ),
+            _trusted_verdict_review(
+                f"gate-verdict: hold @ {head}", submitted_at="2026-09-12T11:00:00Z"
+            ),
+        ]
+    }
+    assert latest_exact_head_gate_verdict(pr, head) == ("hold", None)
+
+
+def test_latest_gate_verdict_acceptance_supersedes_older_hold() -> None:
+    """A later exact-head acceptance explicitly supersedes an older hold."""
+    head = "b" * 40
+    pr = {
+        "reviews": [
+            _trusted_verdict_review(
+                f"gate-verdict: hold @ {head}", submitted_at="2026-09-12T10:00:00Z"
+            ),
+            _trusted_verdict_review(
+                f"gate-verdict: accepted @ {head}", submitted_at="2026-09-12T11:00:00Z"
+            ),
+        ]
+    }
+    assert latest_exact_head_gate_verdict(pr, head) == ("accepted", None)
+
+
+def test_latest_gate_verdict_same_collection_order_without_timestamps() -> None:
+    """Within one chronological collection, the last carrier governs."""
+    head = "c" * 40
+    pr = {
+        "reviews": [
+            _trusted_verdict_review(f"gate-verdict: accepted @ {head}"),
+            _trusted_verdict_review(f"gate-verdict: hold @ {head}"),
+        ]
+    }
+    assert latest_exact_head_gate_verdict(pr, head) == ("hold", None)
+
+
+def test_latest_gate_verdict_ambiguous_across_collections() -> None:
+    """Accepted and hold across collections without timestamps fail closed."""
+    head = "d" * 40
+    pr = {
+        "reviews": [_trusted_verdict_review(f"gate-verdict: hold @ {head}")],
+        "comments": [{"author_association": "OWNER", "body": f"gate-verdict: accepted @ {head}"}],
+    }
+    verdict, reason = latest_exact_head_gate_verdict(pr, head)
+    assert verdict == "ambiguous"
+    assert reason
+
+
+def test_latest_gate_verdict_ignores_untrusted_hold() -> None:
+    """An untrusted hold carrier is not evidence and cannot block."""
+    head = "e" * 40
+    pr = {
+        "reviews": [
+            _trusted_verdict_review(
+                f"gate-verdict: accepted @ {head}", submitted_at="2026-09-12T10:00:00Z"
+            ),
+            {
+                "author_association": "NONE",
+                "state": "COMMENTED",
+                "body": f"gate-verdict: hold @ {head}",
+            },
+        ]
+    }
+    assert latest_exact_head_gate_verdict(pr, head) == ("accepted", None)
+
+
+def test_latest_gate_verdict_ignores_stale_head_hold() -> None:
+    """A hold bound to another head does not govern this head."""
+    head = "f" * 40
+    other = "0" * 40
+    pr = {
+        "reviews": [
+            _trusted_verdict_review(
+                f"gate-verdict: accepted @ {head}", submitted_at="2026-09-12T10:00:00Z"
+            ),
+            _trusted_verdict_review(
+                f"gate-verdict: hold @ {other}", submitted_at="2026-09-12T11:00:00Z"
+            ),
+        ]
+    }
+    assert latest_exact_head_gate_verdict(pr, head) == ("accepted", None)

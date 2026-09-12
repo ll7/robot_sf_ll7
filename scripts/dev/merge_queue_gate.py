@@ -94,8 +94,8 @@ from scripts.dev.github_quota import quota_reset_handoff  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
     active_review_claim,
     has_any_pr_metadata_verdict,
-    has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
+    latest_exact_head_gate_verdict,
 )
 from scripts.dev.pr_metadata import (  # noqa: E402
     extract_metadata_digests,
@@ -237,14 +237,17 @@ def _label_names(pr: dict[str, Any]) -> list[str]:
 def _gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
     """Classify the exact-head gate-verdict trailer state.
 
-    Returns ``accepted`` when a current exact-head ``gate-verdict: accepted``
-    trailer exists, ``missing`` otherwise (including an empty head SHA, a missing
-    trailer, or a trailer whose SHA does not identify the exact head). Mirrors
-    the fail-closed contract in ``pr_loop_policy.has_current_accepted_gate_verdict``.
+    Returns ``accepted`` when the governing exact-head verification is an
+    acceptance, ``hold`` when a trusted exact-head ``gate-verdict: hold``
+    postdates or ties any acceptance, ``ambiguous`` when accepted and hold
+    carriers coexist without comparable ordering evidence, and ``missing``
+    otherwise. All non-accepted values fail closed; the precedence contract is
+    owned by ``pr_loop_policy.latest_exact_head_gate_verdict`` (issue #9124).
     """
     if not head_sha:
         return "missing"
-    return "accepted" if has_current_accepted_gate_verdict(pr, head_sha) else "missing"
+    verdict, _reason = latest_exact_head_gate_verdict(pr, head_sha)
+    return verdict
 
 
 def _metadata_verdict_status(pr: dict[str, Any], digest: str) -> str:
@@ -374,7 +377,12 @@ def _core_preflight_reasons(
     if staleness_verdict == "stale":
         reasons.append("stale_merge_base")
     if gate_verdict_status != "accepted":
-        reasons.append("missing_exact_head_gate_verdict")
+        reasons.append(
+            {
+                "hold": "exact_head_gate_hold",
+                "ambiguous": "ambiguous_exact_head_gate_verdict",
+            }.get(gate_verdict_status, "missing_exact_head_gate_verdict")
+        )
     return reasons
 
 

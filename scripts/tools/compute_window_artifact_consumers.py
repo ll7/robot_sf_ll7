@@ -461,7 +461,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                 )
             edge_row = {"source": consumer_id, "target": logical_id, "type": edge}
             edges.append(edge_row)
-            consumer["refs"].append(logical_id)
+            consumer["refs"] = sorted((*consumer["refs"], logical_id))
             known[logical_id].append(
                 {"consumer": consumer_id, "kind": kind, "state": state, "edge": edge}
             )

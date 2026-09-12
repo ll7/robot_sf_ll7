@@ -17,13 +17,13 @@ from tests.perf_utils.minimal_matrix import write_minimal_matrix
 
 
 class _Cfg:
-    """TODO docstring. Document this class."""
+    """Benchmark configuration helper for simulation view fallback testing."""
 
     def __init__(self, tmp_path: Path):
-        """TODO docstring. Document this function.
+        """Initialize benchmark configuration with output directory and minimal matrix.
 
         Args:
-            tmp_path: TODO docstring.
+            tmp_path: Temporary directory root for benchmark outputs and scenario matrix.
         """
         tmp_path.mkdir(parents=True, exist_ok=True)
         self.output_root = str(tmp_path)
@@ -44,41 +44,41 @@ class _Cfg:
 
 
 def _read_json(path: Path):
-    """TODO docstring. Document this function.
+    """Load and parse JSON artifact content from disk.
 
     Args:
-        path: TODO docstring.
+        path: Path to the JSON artifact file to read.
     """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_simulation_view_empty_list_triggers_fallback(monkeypatch, tmp_path):
-    """TODO docstring. Document this function.
+    """Verify fallback from simulation view to synthetic video renderer when sim-view yields empty artifacts.
 
     Args:
-        monkeypatch: TODO docstring.
-        tmp_path: TODO docstring.
+        monkeypatch: Pytest monkeypatch fixture for replacing renderer functions with stubs.
+        tmp_path: Pytest temporary directory fixture for isolated benchmark outputs.
     """
     visuals_mod = importlib.import_module("robot_sf.benchmark.full_classic.visuals")
     videos_mod = importlib.import_module("robot_sf.benchmark.full_classic.videos")
 
     def _no_videos(*_a, **_k):  # simulate SimulationView returning no artifacts
-        """TODO docstring. Document this function.
+        """Stub renderer callable returning an empty list to simulate failed video creation.
 
         Args:
-            _a: TODO docstring.
-            _k: TODO docstring.
+            _a: Ignored positional arguments.
+            _k: Ignored keyword arguments.
         """
         return []
 
     def _stub_generate(records, out_dir, _cfg):  # fabricate 1 synthetic artifact
-        """TODO docstring. Document this function.
+        """Stub video generator returning a synthetic artifact record.
 
         Args:
-            records: TODO docstring.
-            out_dir: TODO docstring.
-            _cfg: TODO docstring.
+            records: Sequence of episode replay records to render.
+            out_dir: Target output directory for video artifacts.
+            _cfg: Benchmark configuration object.
         """
         rec = records[0] if records else {"episode_id": "ep0", "scenario_id": "sc0"}
         return [

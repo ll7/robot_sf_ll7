@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Contract test for required sections in the multi-extractor summary Markdown."""
 
 from robot_sf.training.multi_extractor_models import (
     ExtractorRunRecord,
@@ -9,10 +9,14 @@ from robot_sf.training.multi_extractor_summary import write_summary_artifacts
 
 
 def test_summary_markdown_contains_required_sections(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify the generated summary Markdown contains all required section fragments.
+
+    Writes artifacts for a run with one failed extractor and asserts the Markdown
+    contains the title, run ID, hardware and extractor tables, the failure reason,
+    aggregate metrics, reproducibility notes, and a summary.json reference.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory receiving the summary artifacts.
     """
     base_dir = tmp_path / "run_outputs"
     base_dir.mkdir()

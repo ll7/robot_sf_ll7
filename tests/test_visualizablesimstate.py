@@ -9,7 +9,7 @@ from robot_sf.render.sim_view import VisualizableSimState
 
 
 class TestVisualizableSimState:
-    """TODO docstring. Document this class."""
+    """Test suite verifying VisualizableSimState dataclass initialization and defaults."""
 
     # Remove the __init__ method entirely
 

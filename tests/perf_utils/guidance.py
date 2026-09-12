@@ -44,12 +44,12 @@ def default_guidance(duration_seconds: float, breach_type: str) -> list[str]:
 
 
 def format_guidance_lines(lines: Iterable[str]) -> str:
-    """TODO docstring. Document this function.
+    """Format guidance suggestion lines into an indented bullet list for report display.
 
     Args:
-        lines: TODO docstring.
+        lines: Iterable of guidance suggestion strings.
 
     Returns:
-        TODO docstring.
+        Newline-separated string with each line prefixed by an indented bullet.
     """
     return "\n".join(f"  - {line}" for line in lines)

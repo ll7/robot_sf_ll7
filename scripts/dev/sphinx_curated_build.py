@@ -23,8 +23,8 @@ Usage::
 
 Exit codes:
     0 - strict curated build passed
-    1 - build reported warnings/errors (or the manifest drifted)
-    2 - usage / environment error
+    1 - build reported warnings/errors, or the Sphinx subprocess failed without diagnostics
+    2 - usage / environment error or manifest drift
 """
 
 from __future__ import annotations
@@ -357,8 +357,15 @@ def strict_build(
         if ("WARNING" in line or "ERROR" in line) and "absl::InitializeLog" not in line
     )
     blocking, allowed = classify_warnings(warnings, docs_dir)
+    if completed.returncode != 0 and not warnings:
+        failure_note = (
+            f"Sphinx subprocess failed with exit code {completed.returncode} "
+            "without emitting diagnostics."
+        )
+        if failure_note not in blocking:
+            blocking = (*blocking, failure_note)
     return CuratedBuildResult(
-        status="pass" if not blocking else "failed",
+        status="failed" if blocking else "pass",
         curated_count=len(curated),
         excluded_count=len(excluded),
         returncode=completed.returncode,

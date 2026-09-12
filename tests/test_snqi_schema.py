@@ -15,7 +15,7 @@ from robot_sf.benchmark.snqi.schema import (
 
 
 def _base_metadata():
-    """TODO docstring. Document this function."""
+    """Return a minimal valid _metadata block for SNQI payload fixtures."""
     return {
         "schema_version": EXPECTED_SCHEMA_VERSION,
         "generated_at": "2025-01-01T00:00:00+00:00",
@@ -26,7 +26,7 @@ def _base_metadata():
 
 
 def test_validate_optimization_success():
-    """TODO docstring. Document this function."""
+    """Verify validate_snqi accepts an optimization payload with recommended weights."""
     obj = {
         "recommended": {"weights": {"w_success": 1.0, "w_time": 2.0}},
         "_metadata": _base_metadata(),
@@ -35,13 +35,13 @@ def test_validate_optimization_success():
 
 
 def test_validate_recompute_success():
-    """TODO docstring. Document this function."""
+    """Verify validate_snqi accepts a recompute payload with recommended_weights."""
     obj = {"recommended_weights": {"w_success": 1.0}, "_metadata": _base_metadata()}
     validate_snqi(obj, "recompute")
 
 
 def test_validate_sensitivity_success():
-    """TODO docstring. Document this function."""
+    """Verify validate_snqi accepts a sensitivity payload with a weight_sweep block."""
     obj = {"weight_sweep": {"dummy": 1}, "_metadata": _base_metadata()}
     validate_snqi(obj, "sensitivity")
 
@@ -55,11 +55,11 @@ def test_validate_sensitivity_success():
     ],
 )
 def test_missing_key_errors(kind, patch):
-    """TODO docstring. Document this function.
+    """Verify removing a kind's required key makes validate_snqi raise ValueError.
 
     Args:
-        kind: TODO docstring.
-        patch: TODO docstring.
+        kind: SNQI output kind under test (optimization, recompute, or sensitivity).
+        patch: Callable that removes the required key from a valid payload.
     """
     base = {
         "optimization": {"recommended": {"weights": {"w_success": 1.0}}},
@@ -74,14 +74,14 @@ def test_missing_key_errors(kind, patch):
 
 
 def test_non_finite_detection():
-    """TODO docstring. Document this function."""
+    """Verify validate_snqi rejects a NaN weight when check_finite is enabled."""
     obj = {"recommended": {"weights": {"w_success": math.nan}}, "_metadata": _base_metadata()}
     with pytest.raises(ValueError):
         validate_snqi(obj, "optimization", check_finite=True)
 
 
 def test_assert_all_finite_list_nested():
-    """TODO docstring. Document this function."""
+    """Verify assert_all_finite accepts nested finite values but rejects infinity."""
     good = {"a": [1.0, 2.0, {"b": 3.0}]}
     assert_all_finite(good)  # Should not raise
     bad = {"a": [1.0, float("inf")]}

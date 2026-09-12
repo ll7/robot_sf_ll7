@@ -22,14 +22,14 @@ from robot_sf.gym_env.environment_factory import (
 
 @contextmanager
 def capture_logs():
-    """TODO docstring. Document this function."""
+    """Collect level-prefixed loguru messages emitted inside the with-block."""
     messages: list[str] = []
 
     def _sink(msg):  # type: ignore[override]
-        """TODO docstring. Document this function.
+        """Append the message as "<LEVEL>:<message>" for later assertions.
 
         Args:
-            msg: TODO docstring.
+            msg: Loguru message record passed to the sink.
         """
         messages.append(f"{msg.record['level'].name}:{msg.record['message']}")
 
@@ -41,31 +41,31 @@ def capture_logs():
 
 
 def test_creation_logs_robot():
-    """TODO docstring. Document this function."""
+    """make_robot_env emits a DEBUG "Creating robot env" creation log."""
     with capture_logs() as logs:
         make_robot_env()
     assert any(entry.startswith("DEBUG:Creating robot env") for entry in logs)
 
 
 def test_creation_logs_image():
-    """TODO docstring. Document this function."""
+    """make_image_robot_env emits an INFO "Creating image robot env" log."""
     with capture_logs() as logs:
         make_image_robot_env()
     assert any(entry.startswith("INFO:Creating image robot env") for entry in logs)
 
 
 def test_creation_logs_pedestrian_with_dummy_model():
-    """TODO docstring. Document this function."""
+    """make_pedestrian_env logs creation and that a robot model was supplied."""
 
     class DummyPolicy:  # minimal stub sufficient for constructor usage paths
-        """TODO docstring. Document this class."""
+        """Minimal policy stub exposing the predict method the env expects."""
 
         def predict(self, *_args, **_kwargs):  # pragma: no cover - simple stub
-            """TODO docstring. Document this function.
+            """Return a trivial (action, info) tuple, ignoring all inputs.
 
             Args:
-                _args: TODO docstring.
-                _kwargs: TODO docstring.
+                _args: Unused positional arguments from the policy interface.
+                _kwargs: Unused keyword arguments from the policy interface.
             """
             return 0, {}
 
@@ -76,10 +76,10 @@ def test_creation_logs_pedestrian_with_dummy_model():
 
 
 def test_precedence_warning_and_creation_log(tmp_path):
-    """TODO docstring. Document this function.
+    """Creation log and precedence warning both appear for conflicting options.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory supplying the video output path.
     """
     rec = RecordingOptions(record=False)
     with capture_logs() as logs:

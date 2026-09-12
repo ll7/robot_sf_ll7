@@ -64,7 +64,7 @@ def test_jsonschema_is_declared_as_a_core_dependency() -> None:
 
 
 def test_issue_8163_policy_batch_has_exact_scope_and_fail_closed_surfaces() -> None:
-    """The first license batch stays exact, target-scoped, and pending review."""
+    """The remaining Issue #8163 rows stay exact, target-scoped, and pending review."""
     policy = json.loads(
         (REPO_ROOT / "scripts/validation/dependency_license_policy.v1.json").read_text(
             encoding="utf-8"

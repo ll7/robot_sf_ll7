@@ -316,6 +316,8 @@ Expected tree:
     campaign_table_core.md
     campaign_table_experimental.csv
     campaign_table_experimental.md
+    arm_identity.csv
+    arm_identity.md
     campaign_report.md
 ```
 
@@ -687,6 +689,7 @@ repository-relative for publication-grade portability).
 
 * planner key and algorithm
 * execution mode and readiness status (`native` / `adapter` / `fallback` / `degraded`)
+* configuration path, resolved model ID, action adapter, and policy source
 * readiness tier and preflight status
 * episode count and failure count
 * success/collision/near-miss means
@@ -728,6 +731,9 @@ Portability guarantee:
 
 Additional diagnostics generated per campaign:
 
+* `reports/arm_identity.csv` and `reports/arm_identity.md`
+  + dedicated flat identity export per benchmark arm (`planner_key`, `algo`, `planner_group`, `kinematics`, `config_path`, `model_id`, `action_adapter`, `policy_source`)
+  + tracks explicit provenance for model checkpoints and control adapters to prevent ambiguity across learned models and non-learned baselines
 * `reports/scenario_breakdown.csv` and `reports/scenario_breakdown.md`
   + per-planner, per-scenario metric means
   + AMV taxonomy columns (`use_case`, `context`, `speed_regime`, `maneuver_type`)
@@ -743,6 +749,15 @@ they do not encode planner success,
 failure, fallback, degraded execution, or availability. Continue to interpret
 benchmark evidence through `availability_status`, `benchmark_success`, and the
 fail-closed fallback policy above.
+
+### Arm Policy Source Categories
+
+Benchmark arms report one of four policy source categories in `campaign_table` and `arm_identity` artifacts:
+
+* `rule-based`: Non-learned algorithmic baselines without model weights (e.g., ORCA, SFM, Goal, Random, Rule-Based, Pure-Pursuit, Straight-Line).
+* `literature-pretrained`: Authoritative reference weights or literature baseline models ported into the benchmark (e.g., SACADRL, SICNav, DR-MPC, CrowdNav, SoNIC).
+* `trained-here`: In-tree trained policies with verified local training provenance (matching a Weights & Biases run path, checkpoint lineage in the model registry, or in-tree training config).
+* `unknown`: Fails closed when learned model weights or a checkpoint path exist but explicit training provenance or registry origin cannot be verified. Arbitrary model IDs never imply local training origin.
 
 Canonical table exporter:
 

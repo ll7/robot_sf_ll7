@@ -6724,6 +6724,33 @@ def test_arm_identity_resolvers_unit() -> None:
     assert _resolve_arm_action_adapter(sacadrl_spec, {}) == "SACADRLPlannerAdapter"
     assert _resolve_arm_policy_source(sacadrl_spec, sacadrl_model) == "literature-pretrained"
 
+    # 7. Issue #9171 regression: SICNav direct checkpoint_path and literature-pretrained provenance
+    sicnav_spec = PlannerSpec(
+        key="sicnav",
+        algo="sicnav",
+        algo_config_path=Path("configs/algos/sicnav_camera_ready.yaml"),
+    )
+    sicnav_model = _resolve_arm_model_id(sicnav_spec, {})
+    assert (
+        sicnav_model == "sicnav_diffusion/JMID/MID/checkpoints/jrdb_bev_0_25_multi_class_epoch16.pt"
+    )
+    assert _resolve_arm_policy_source(sicnav_spec, sicnav_model) == "literature-pretrained"
+
+    # 8. Issue #9171 regression: learned prediction MPC checkpoint_path resolves to unknown provenance
+    mpc_spec = PlannerSpec(
+        key="learned_mpc",
+        algo="learned_prediction_mpc",
+        algo_config_path=Path("configs/algos/learned_prediction_mpc_issue_4013_checkpoint.yaml"),
+    )
+    mpc_model = _resolve_arm_model_id(mpc_spec, {})
+    assert (
+        mpc_model == "output/models/issue_4013/short_horizon_predictor/short_horizon_predictor.pt"
+    )
+    assert _resolve_arm_policy_source(mpc_spec, mpc_model) == "unknown"
+
+    # 9. Issue #9171 regression: arbitrary model ID cannot imply local training origin
+    assert _resolve_arm_policy_source(ppo_spec, "arbitrary_unregistered_model") == "unknown"
+
 
 def test_campaign_table_and_arm_identity_artifacts_published(  # noqa: PLR0915
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

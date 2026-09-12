@@ -38,6 +38,7 @@ from robot_sf.benchmark.synthetic_actuation import (
 )
 from robot_sf.benchmark.utils import episode_metric_value
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.models.registry import get_registry_entry
 
 _REPORT_METRICS: tuple[str, ...] = (
     "success",
@@ -522,7 +523,33 @@ _MODEL_ID_CONFIG_KEYS = (
     "checkpoint",
     "checkpoint_id",
     "resume_model_id",
+    "checkpoint_path",
+    "model_path",
+    "learned_policy_checkpoint",
+    "sacadrl_checkpoint_path",
+    "predictive_checkpoint_path",
 )
+
+
+def _load_arm_algo_config(raw_path: Path | str | None) -> dict[str, Any] | None:
+    """Load and parse an arm's algo config mapping from a relative or absolute path.
+
+    Returns:
+        Parsed configuration dictionary, or None if the file is missing or invalid.
+    """
+    if raw_path is None or not str(raw_path).strip():
+        return None
+    path = Path(raw_path)
+    if not path.is_absolute():
+        resolved_candidate = (get_repository_root() / path).resolve()
+        path = resolved_candidate if resolved_candidate.is_file() else path.resolve()
+    if not path.is_file():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _model_id_from_summary(summary: dict[str, Any]) -> str:
@@ -555,19 +582,8 @@ def _model_id_from_summary(summary: dict[str, Any]) -> str:
 
 
 def _model_id_from_config_file(raw_path: Path | str | None) -> str:
-    if raw_path is None or not str(raw_path).strip():
-        return ""
-    path = Path(raw_path)
-    if not path.is_absolute():
-        resolved_candidate = (get_repository_root() / path).resolve()
-        path = resolved_candidate if resolved_candidate.is_file() else path.resolve()
-    if not path.is_file():
-        return ""
-    try:
-        algo_config = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
-        return ""
-    if not isinstance(algo_config, dict):
+    algo_config = _load_arm_algo_config(raw_path)
+    if algo_config is None:
         return ""
     for id_key in _MODEL_ID_CONFIG_KEYS:
         val = algo_config.get(id_key)
@@ -624,22 +640,91 @@ def _resolve_arm_action_adapter(
     return ""
 
 
+def _source_from_summary(summary: dict[str, Any] | None, valid_sources: set[str]) -> str | None:
+    """Extract explicit policy source from summary fields or checkpoint provenance.
+
+    Returns:
+        Explicit policy source string if present and valid, or None.
+    """
+    if summary is None:
+        return None
+    explicit = str(summary.get("policy_source") or "").strip()
+    if explicit in valid_sources:
+        return explicit
+    containers = (
+        summary.get("checkpoint_provenance"),
+        summary.get("algorithm_metadata_contract", {}).get("checkpoint_provenance")
+        if isinstance(summary.get("algorithm_metadata_contract"), dict)
+        else None,
+        summary.get("algorithm_metadata", {})
+        .get("planner_runtime", {})
+        .get("checkpoint_provenance")
+        if isinstance(summary.get("algorithm_metadata"), dict)
+        and isinstance(summary.get("algorithm_metadata", {}).get("planner_runtime"), dict)
+        else None,
+        summary.get("preflight", {}).get("checkpoint_provenance")
+        if isinstance(summary.get("preflight"), dict)
+        else None,
+    )
+    for container in containers:
+        if isinstance(container, dict):
+            src = str(
+                container.get("policy_source") or container.get("weights_origin") or ""
+            ).strip()
+            if src in valid_sources:
+                return src
+    return None
+
+
+def _source_from_registry(model_id: str, valid_sources: set[str]) -> str | None:
+    """Resolve policy source from model registry metadata when verified.
+
+    Returns:
+        Policy source string derived from registry metadata, or None.
+    """
+    try:
+        entry = get_registry_entry(model_id)
+    except (KeyError, FileNotFoundError, ValueError, TypeError):
+        return None
+    if not isinstance(entry, dict):
+        return None
+    licensing = entry.get("licensing")
+    if isinstance(licensing, dict):
+        weights_origin = str(licensing.get("weights_origin") or "").strip()
+        if weights_origin in valid_sources:
+            return weights_origin
+
+    if entry.get("wandb_run_path") or entry.get("wandb_artifact_path"):
+        return "trained-here"
+
+    config_path = str(entry.get("config_path") or "").strip()
+    if config_path.startswith("configs/training/"):
+        return "trained-here"
+
+    tags = set(entry.get("tags") or ())
+    if tags & {"sacadrl", "ga3c", "cadrl", "literature", "external"}:
+        return "literature-pretrained"
+    return None
+
+
 def _resolve_arm_policy_source(
     planner: PlannerSpec,
     model_id: str,
     summary: dict[str, Any] | None = None,
 ) -> str:
-    """Resolve policy provenance: 'trained-here', 'literature-pretrained', or 'rule-based'.
+    """Resolve policy provenance: 'trained-here', 'literature-pretrained', 'rule-based', or 'unknown'.
 
     Returns:
         Policy source categorization string.
     """
-    if summary is not None:
-        explicit = str(summary.get("policy_source") or "").strip()
-        if explicit in {"trained-here", "literature-pretrained", "rule-based"}:
-            return explicit
+    valid_sources = {"trained-here", "literature-pretrained", "rule-based", "unknown"}
+    from_summary = _source_from_summary(summary, valid_sources)
+    if from_summary is not None:
+        return from_summary
+
     if not model_id:
         return "rule-based"
+
     canonical = canonical_algorithm_name(planner.algo)
     if canonical in {
         "sacadrl",
@@ -650,7 +735,21 @@ def _resolve_arm_policy_source(
         "sonic_crowdnav",
     }:
         return "literature-pretrained"
-    return "trained-here"
+
+    raw_path = planner.algo_config_path or (summary.get("algo_config_path") if summary else None)
+    algo_config = _load_arm_algo_config(raw_path)
+    if algo_config is not None:
+        cfg_source = str(
+            algo_config.get("policy_source") or algo_config.get("weights_origin") or ""
+        ).strip()
+        if cfg_source in valid_sources:
+            return cfg_source
+
+    from_registry = _source_from_registry(model_id, valid_sources)
+    if from_registry is not None:
+        return from_registry
+
+    return "unknown"
 
 
 def _build_planner_row_metadata(  # noqa: PLR0913

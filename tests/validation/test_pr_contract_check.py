@@ -160,6 +160,58 @@ def test_get_issue_metadata_requires_complete_payload(mock_run: MagicMock) -> No
     assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
 
 
+@pytest.mark.parametrize(
+    "stdout, expected",
+    (
+        ('{"head_sha":"' + "a" * 40 + '","base_sha":"' + "b" * 40 + '"}', ("a" * 40, "b" * 40)),
+        ('{"head_sha":"short","base_sha":"' + "b" * 40 + '"}', None),
+        ('{"head_sha":"' + "a" * 40 + '","base_sha":null}', None),
+    ),
+)
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_label_guard_shas_validates_exact_pair(
+    mock_run: MagicMock, stdout: str, expected: tuple[str, str] | None
+) -> None:
+    """PR label callers require a complete full-SHA head/base pair."""
+    mock_run.return_value = MagicMock(returncode=0, stdout=stdout)
+
+    assert pr_contract_check.get_pr_label_guard_shas("8451", "ll7/robot_sf_ll7") == expected
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_label_guard_shas_uses_pull_request_rest_endpoint(mock_run: MagicMock) -> None:
+    """The guard pair comes from the exact PR REST object rather than a branch name."""
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout='{"head_sha":"' + "a" * 40 + '","base_sha":"' + "b" * 40 + '"}',
+    )
+
+    assert pr_contract_check.get_pr_label_guard_shas("8451", "ll7/robot_sf_ll7") == (
+        "a" * 40,
+        "b" * 40,
+    )
+    mock_run.assert_called_once_with(
+        [
+            "gh",
+            "api",
+            "repos/ll7/robot_sf_ll7/pulls/8451",
+            "--jq",
+            "{head_sha: .head.sha, base_sha: .base.sha}",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_label_guard_shas_rejects_non_ascii_number(mock_run: MagicMock) -> None:
+    """Only ASCII decimal PR numbers may reach the REST endpoint."""
+    assert pr_contract_check.get_pr_label_guard_shas("１２３", "ll7/robot_sf_ll7") is None
+    mock_run.assert_not_called()
+
+
 @patch("scripts.ci.pr_contract_check.subprocess.run")
 def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -> None:
     """The commit source is fetched through the paginated PR commits endpoint."""
@@ -892,8 +944,9 @@ def test_successor_discipline_counts_only_confirmed_references(mock_run: MagicMo
     assert "referenced in 2 merged PR(s)" in warnings[0]
 
 
+@patch("scripts.ci.pr_contract_check.get_pr_label_guard_shas")
 @patch("scripts.ci.pr_contract_check.add_label")
-def test_check_worker_lane_provenance(mock_add_label: MagicMock) -> None:
+def test_check_worker_lane_provenance(mock_add_label: MagicMock, mock_get_shas: MagicMock) -> None:
     """Test check_worker_lane_provenance detects cheap lane and labels PR."""
     body_lane = "This PR was produced by the agy/Gemini-3.5-Flash cheap implementation lane"
     body_normal = "Some normal PR"
@@ -905,17 +958,42 @@ def test_check_worker_lane_provenance(mock_add_label: MagicMock) -> None:
         "label": "cheap-lane",
         "action": "add",
     }
+    mock_get_shas.return_value = ("a" * 40, "b" * 40)
     info, labeled = pr_contract_check.check_worker_lane_provenance(
         body_lane, "123", "ll7/robot_sf_ll7"
     )
     assert labeled is True
     assert "Automatically added" in info
-    mock_add_label.assert_called_once_with(123, "cheap-lane", repo="ll7/robot_sf_ll7")
+    mock_get_shas.assert_called_once_with("123", "ll7/robot_sf_ll7")
+    mock_add_label.assert_called_once_with(
+        123,
+        "cheap-lane",
+        repo="ll7/robot_sf_ll7",
+        target="pr",
+        expected_head_sha="a" * 40,
+        expected_base_sha="b" * 40,
+    )
 
     info, labeled = pr_contract_check.check_worker_lane_provenance(
         body_normal, "123", "ll7/robot_sf_ll7"
     )
     assert labeled is False
+
+
+@patch("scripts.ci.pr_contract_check.get_pr_label_guard_shas", return_value=None)
+@patch("scripts.ci.pr_contract_check.add_label")
+def test_check_worker_lane_provenance_skips_label_when_pr_shas_unavailable(
+    mock_add_label: MagicMock, mock_get_shas: MagicMock
+) -> None:
+    """A PR label write is withheld when the exact live head/base pair is unavailable."""
+    info, labeled = pr_contract_check.check_worker_lane_provenance(
+        "cheap implementation lane", "123", "ll7/robot_sf_ll7"
+    )
+
+    assert labeled is True
+    assert "exact PR head/base SHAs" in info
+    mock_get_shas.assert_called_once_with("123", "ll7/robot_sf_ll7")
+    mock_add_label.assert_not_called()
 
 
 def test_regression_last_20_merged_prs() -> None:

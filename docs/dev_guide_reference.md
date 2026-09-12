@@ -1495,10 +1495,14 @@ uv run python scripts/dev/gh_pr_label_rest.py list <number> \
   --repo ll7/robot_sf_ll7
 
 # add/remove a PR label (verify-on-write, pure REST issues-labels endpoint)
+PR_HEAD_SHA=<full-40-character-head-sha>
+PR_BASE_SHA=<full-40-character-base-sha>
 uv run python scripts/dev/gh_pr_label_rest.py add <number> \
-  --label merge-ready --repo ll7/robot_sf_ll7
+  --target pr --label merge-ready --repo ll7/robot_sf_ll7 \
+  --expected-head-sha "$PR_HEAD_SHA" --expected-base-sha "$PR_BASE_SHA"
 uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
-    --label merge-ready --repo ll7/robot_sf_ll7
+  --target pr --label merge-ready --repo ll7/robot_sf_ll7 \
+  --expected-head-sha "$PR_HEAD_SHA" --expected-base-sha "$PR_BASE_SHA"
 
 # PR conversation comments, drop-in for `gh pr view <number> --comments`
 # (pure REST repos/{repo}/issues/{n}/comments; no projectCards field queried)
@@ -1510,9 +1514,11 @@ scripts/dev/gh_comment.sh pr <number> --repo ll7/robot_sf_ll7 --body-file <path>
 scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path>
 ```
 
-The label helper covers paginated reads plus `merge-ready` add/remove (and any
-PR or issue label) through `repos/{repo}/issues/{number}/labels`, which GitHub
-treats as the PR label endpoint. The comment helper reads the conversation thread through
+The label helper covers paginated reads plus guarded PR label mutations and compatibility
+issue-label mutations through `repos/{repo}/issues/{number}/labels`, which GitHub
+treats as the PR label endpoint. PR mutations require `--target pr` and the exact live
+head/base SHA pair; issue mutations retain the compatibility `--target issue` path. The
+comment helper reads the conversation thread through
 `repos/{repo}/issues/{number}/comments` (GitHub treats PR numbers as issue
 numbers), returning the PR header plus the same conversation-level comments
 `gh pr view --comments` would show. Inline review comments

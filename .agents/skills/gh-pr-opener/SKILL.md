@@ -110,12 +110,11 @@ Remote-state check (issues #6916 and #7515):
     handoff. Do not use `gh pr edit --body-file` while it queries retired Projects
     Classic fields.
 
-    For label operations on issues or PRs, use
-    `uv run python scripts/dev/gh_pr_label_rest.py add <number> --label <name> --repo ll7/robot_sf_ll7`
-    or
-    `uv run python scripts/dev/gh_pr_label_rest.py remove <number> --label <name> --repo ll7/robot_sf_ll7`
-    instead of `gh pr edit --add-label` / `gh issue edit --label` which route through the same
-    deprecated Projects Classic GraphQL path.
+    For issue labels, use the REST helper with its default `--target issue` mode. For PR labels,
+    pass `--target pr` plus both exact head/base SHAs:
+    `uv run python scripts/dev/gh_pr_label_rest.py add <number> --target pr --label <name> --expected-head-sha <head_sha> --expected-base-sha <base_sha> --repo ll7/robot_sf_ll7`
+    (or the remove variant). This avoids `gh pr edit --add-label` / `gh issue edit --label`,
+    which route through the deprecated Projects Classic GraphQL path.
 10. Keep parent issue open unless repository policy indicates closure wording in PR description.
 
 ## Proof and Artifact Rules

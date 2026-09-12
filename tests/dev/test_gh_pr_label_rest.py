@@ -16,11 +16,15 @@ from scripts.dev.gh_pr_label_rest import (
     BLOCKED_STATUS,
     LABEL_PAGE_CEILING,
     LABEL_PAGE_SIZE,
+    MAX_RETRY_AFTER_SECONDS,
     RATE_LIMIT_MAX_ATTEMPTS,
     RATE_LIMIT_MAX_WAIT_SECONDS,
     _get_label_names,
     _is_rate_limit_failure,
+    _is_secondary_rate_limit,
     _parse_rate_limit_reset_epoch,
+    _retry_after_seconds,
+    _retry_after_utc,
     add_label,
     check_merge_ready_carriers,
     get_label_names,
@@ -192,6 +196,8 @@ def test_isolated_merge_ready_missing_carrier_dependency_prevents_post(
         [
             "add",
             "5220",
+            "--target",
+            "pr",
             "--label",
             "merge-ready",
             "--expected-head-sha",
@@ -403,6 +409,66 @@ class TestLabelRead:
 class TestAddLabel:
     """Tests for the add_label helper function."""
 
+    def test_pr_label_add_requires_explicit_target_and_complete_cas(self) -> None:
+        """PR label additions cannot fall through to the issue compatibility path."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post:
+            missing_target = add_label(
+                5220,
+                "cheap-lane",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+            missing_base = add_label(
+                5220,
+                "cheap-lane",
+                target="pr",
+                expected_head_sha="a" * 40,
+            )
+
+        assert missing_target == {
+            "status": "error",
+            "error": "expected PR SHAs require target=pr",
+        }
+        assert missing_base == {
+            "status": "error",
+            "error": "PR label writes require both expected_head_sha and expected_base_sha",
+        }
+        mock_post.assert_not_called()
+
+    def test_issue_label_add_retains_compatibility_path(self) -> None:
+        """Issue labels remain writable without PR-only target or CAS arguments."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(stdout=json.dumps({"name": "cheap-lane"})),
+                _proc(stdout=_mock_labels_payload("cheap-lane")),
+            ]
+            result = add_label(5220, "cheap-lane")
+
+        assert result["status"] == "ok"
+        assert mock_run.call_count == 2
+
+    def test_merge_ready_requires_explicit_pr_target(self) -> None:
+        """The PR-only merge-ready label cannot be written as an issue label."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post:
+            result = add_label(
+                5220,
+                "merge-ready",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+
+        assert result == {"status": "error", "error": "expected PR SHAs require target=pr"}
+        mock_post.assert_not_called()
+
+    @pytest.mark.parametrize("target", ["unknown", [], None])
+    def test_label_add_rejects_unknown_target(self, target: object) -> None:
+        """Direct callers cannot bypass the issue/PR target contract."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post:
+            result = add_label(5220, "cheap-lane", target=target)  # type: ignore[arg-type]
+
+        assert result == {"status": "error", "error": f"unsupported label target: {target!r}"}
+        mock_post.assert_not_called()
+
     def test_merge_ready_requires_matching_open_head(self) -> None:
         """The merge-ready write performs the exact-head preflight first."""
         head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
@@ -430,6 +496,7 @@ class TestAddLabel:
                 5220,
                 "merge-ready",
                 repo="ll7/robot_sf_ll7",
+                target="pr",
                 expected_head_sha=head_sha,
                 expected_base_sha=base_sha,
             )
@@ -452,6 +519,7 @@ class TestAddLabel:
     def test_merge_ready_withholds_write_when_carrier_gate_fails(self) -> None:
         """A carrier blocker, including an active review worker, blocks the label write."""
         head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+        base_sha = "b1c2d3e4f5061728394a5b6c7d8e9f0011121314"
         with (
             patch(
                 "scripts.dev.gh_pr_label_rest.guard_pr_write",
@@ -474,7 +542,9 @@ class TestAddLabel:
             result = add_label(
                 5220,
                 "merge-ready",
+                target="pr",
                 expected_head_sha=head_sha,
+                expected_base_sha=base_sha,
             )
 
         assert result["status"] == "error"
@@ -495,7 +565,9 @@ class TestAddLabel:
             result = add_label(
                 5220,
                 "merge-ready",
+                target="pr",
                 expected_head_sha="a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+                expected_base_sha="b1c2d3e4f5061728394a5b6c7d8e9f0011121314",
             )
 
         assert result == stale
@@ -611,6 +683,40 @@ class TestAddLabel:
 
 class TestRemoveLabel:
     """Tests for the remove_label helper function."""
+
+    def test_pr_label_remove_requires_complete_cas(self) -> None:
+        """PR label removals must not issue DELETE with a partial or implicit guard."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete:
+            implicit_target = remove_label(
+                5220,
+                "cheap-lane",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+            missing_base = remove_label(
+                5220,
+                "cheap-lane",
+                target="pr",
+                expected_head_sha="a" * 40,
+            )
+
+        assert implicit_target == {
+            "status": "error",
+            "error": "expected PR SHAs require target=pr",
+        }
+        assert missing_base == {
+            "status": "error",
+            "error": "PR label writes require both expected_head_sha and expected_base_sha",
+        }
+        mock_delete.assert_not_called()
+
+    def test_pr_label_remove_rejects_unknown_target(self) -> None:
+        """Unknown target values fail before the DELETE transport."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete:
+            result = remove_label(5220, "cheap-lane", target="other")  # type: ignore[arg-type]
+
+        assert result == {"status": "error", "error": "unsupported label target: 'other'"}
+        mock_delete.assert_not_called()
 
     def test_removes_label_via_rest_endpoint_and_verifies(self) -> None:
         """The helper must DELETE the label endpoint and verify via re-read."""
@@ -772,17 +878,154 @@ class TestRateLimitRetry:
         assert _parse_rate_limit_reset_epoch("Retry-After: 30", now=1000) == 1030
         assert _parse_rate_limit_reset_epoch("temporary failure", now=1000) is None
 
+    @pytest.mark.parametrize(
+        ("stream", "header"),
+        [
+            ("stderr", "Retry-After: " + "9" * 100),
+            ("stdout", "Retry-After: not-a-number"),
+            ("stderr", "X-RateLimit-Reset: " + "9" * 100),
+            ("stdout", "X-RateLimit-Reset:"),
+        ],
+    )
+    def test_malformed_or_extreme_rate_headers_block_without_retry(
+        self, stream: str, header: str
+    ) -> None:
+        """Unusable headers from either output stream never reach a retry or mutation."""
+        rate_limit_detail = f"HTTP 403: API rate limit exceeded\n{header}"
+        result = _proc(
+            returncode=1,
+            stderr=rate_limit_detail if stream == "stderr" else "",
+        )
+        if stream == "stdout":
+            result.stdout = rate_limit_detail
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest._gh_api_delete", return_value=result
+            ) as mock_delete,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+            patch("scripts.dev.gh_pr_label_rest._fetch_core_rate_limit_reset_at") as mock_reset,
+        ):
+            blocked = remove_label(5220, "cheap-lane")
+
+        assert blocked["status"] == BLOCKED_STATUS
+        assert blocked["reason"] == "rate_limited"
+        assert blocked["reset_at"] is None
+        assert blocked["attempts"] == 1
+        mock_delete.assert_called_once()
+        mock_sleep.assert_not_called()
+        mock_reset.assert_not_called()
+
+    def test_secondary_marker_with_extreme_retry_after_has_safe_receipt(self) -> None:
+        """An explicit secondary marker cannot turn an extreme delay into a retry."""
+        extreme = "9" * 100
+        result = _proc(
+            returncode=1,
+            stderr=f"HTTP 403: secondary rate limit; Retry-After: {extreme}",
+        )
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest._gh_api_delete", return_value=result
+            ) as mock_delete,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+        ):
+            blocked = remove_label(5220, "cheap-lane")
+
+        assert blocked["status"] == BLOCKED_STATUS
+        assert blocked["rate_limit_kind"] == "secondary"
+        assert blocked["retry_after_seconds"] is None
+        assert blocked["retry_after_utc"] is None
+        mock_delete.assert_called_once()
+        mock_sleep.assert_not_called()
+
+    def test_secondary_classifier_requires_explicit_or_structured_evidence(self) -> None:
+        """Core prose mentioning a reset is not secondary-limit evidence."""
+        core_prose = _proc(
+            returncode=1,
+            stderr="HTTP 403: API rate limit exceeded; please retry after the reset",
+        )
+        explicit_secondary = _proc(
+            returncode=1,
+            stderr="HTTP 403: API rate limit exceeded; secondary rate limit",
+        )
+        structured_header = _proc(
+            returncode=1,
+            stdout="HTTP 403: rate limit response\nRetry-After: 30",
+        )
+
+        assert _is_secondary_rate_limit(core_prose) is False
+        assert _is_secondary_rate_limit(explicit_secondary) is True
+        assert _is_secondary_rate_limit(structured_header) is True
+        assert _retry_after_seconds(structured_header) == 30
+
+    def test_retry_after_bounds_and_timestamp_rendering_fail_closed(self) -> None:
+        """Retry-After parsing and UTC rendering reject values that could overflow."""
+        valid = _proc(returncode=1, stderr="Retry-After: 30")
+        extreme = _proc(returncode=1, stderr="Retry-After: " + "9" * 100)
+        padded = _proc(returncode=1, stderr="Retry-After: " + "0" * 100)
+
+        assert _retry_after_seconds(valid) == 30
+        assert _retry_after_seconds(extreme) is None
+        assert _retry_after_seconds(padded) is None
+        assert (
+            _retry_after_seconds(
+                _proc(returncode=1, stderr=f"Retry-After: {MAX_RETRY_AFTER_SECONDS + 1}")
+            )
+            is None
+        )
+        assert _retry_after_utc(30) is not None
+        assert _retry_after_utc(MAX_RETRY_AFTER_SECONDS + 1) is None
+        with patch("scripts.dev.gh_pr_label_rest.time.gmtime", side_effect=OverflowError):
+            assert _retry_after_utc(30) is None
+
+    def test_core_prose_uses_core_reset_fallback(self) -> None:
+        """Generic primary-quota prose keeps the bounded core-reset retry path."""
+        reset_at = int(time.time()) + 3600
+        failure = _proc(
+            returncode=1,
+            stderr="HTTP 403: API rate limit exceeded; please retry after the reset",
+        )
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete", return_value=failure),
+            patch(
+                "scripts.dev.gh_pr_label_rest._fetch_core_rate_limit_reset_at",
+                return_value=reset_at,
+            ) as mock_reset,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+        ):
+            blocked = remove_label(5220, "cheap-lane")
+
+        assert blocked["status"] == BLOCKED_STATUS
+        assert blocked["rate_limit_kind"] == "core"
+        assert blocked["reset_at"] == reset_at
+        mock_reset.assert_called_once()
+        mock_sleep.assert_not_called()
+
     def test_remove_retries_rate_limited_delete_and_verifies_success(self) -> None:
         """A retry inside the bound succeeds only after authoritative re-readback."""
         reset_at = int(time.time()) + 1
         with (
             patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
             patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_get,
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                return_value={
+                    "status": "ok",
+                    "observed_head_sha": "a" * 40,
+                    "observed_base_sha": "b" * 40,
+                },
+            ) as mock_guard,
             patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
         ):
             mock_delete.side_effect = [_rate_limited_403(reset_at=reset_at), _proc(stdout="")]
             mock_get.return_value = _proc(stdout=_mock_labels_payload("bug"))
-            result = remove_label(5220, "merge-ready", repo="ll7/robot_sf_ll7")
+            result = remove_label(
+                5220,
+                "merge-ready",
+                repo="ll7/robot_sf_ll7",
+                target="pr",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
 
         assert result == {
             "status": "ok",
@@ -793,6 +1036,7 @@ class TestRateLimitRetry:
             "attempts": 2,
         }
         assert mock_delete.call_count == 2
+        assert mock_guard.call_count == 2
         assert mock_sleep.call_count == 1
         delay = mock_sleep.call_args.args[0]
         assert 0 < delay <= RATE_LIMIT_MAX_WAIT_SECONDS
@@ -809,6 +1053,14 @@ class TestRateLimitRetry:
         with (
             patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
             patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_get,
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                return_value={
+                    "status": "ok",
+                    "observed_head_sha": "a" * 40,
+                    "observed_base_sha": "b" * 40,
+                },
+            ),
             patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
             patch(
                 "scripts.dev.gh_pr_label_rest._fetch_core_rate_limit_reset_at",
@@ -816,19 +1068,23 @@ class TestRateLimitRetry:
             ),
         ):
             mock_delete.return_value = _rate_limited_403(message=message)
-            result = remove_label(5220, "merge-ready")
+            result = remove_label(
+                5220,
+                "merge-ready",
+                target="pr",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
 
-        assert result == {
-            "status": BLOCKED_STATUS,
-            "reason": "rate_limited",
-            "action": "remove",
-            "number": 5220,
-            "repo": "ll7/robot_sf_ll7",
-            "label": "merge-ready",
-            "attempts": 1,
-            "reset_at": None,
-            "error": f"label remove failed: gh: {message} (HTTP 403)",
-        }
+        assert result["status"] == BLOCKED_STATUS
+        assert result["reason"] == "rate_limited"
+        assert result["action"] == "remove"
+        assert result["number"] == 5220
+        assert result["label"] == "merge-ready"
+        assert result["attempts"] == 1
+        assert result["reset_at"] is None
+        assert result["error"] == f"label remove failed: gh: {message} (HTTP 403)"
+        assert result["rate_limit_kind"] == ("secondary" if "secondary" in message else "core")
         mock_delete.assert_called_once()
         mock_sleep.assert_not_called()
         mock_get.assert_not_called()
@@ -845,7 +1101,7 @@ class TestRateLimitRetry:
             ),
         ):
             mock_delete.return_value = _rate_limited_403()
-            result = remove_label(5220, "merge-ready")
+            result = remove_label(5220, "cheap-lane")
 
         assert result["status"] == BLOCKED_STATUS
         assert result["reason"] == "rate_limited"
@@ -901,6 +1157,7 @@ class TestRateLimitRetry:
                 5220,
                 "merge-ready",
                 repo="ll7/robot_sf_ll7",
+                target="pr",
                 expected_head_sha=head_sha,
                 expected_base_sha=base_sha,
             )
@@ -935,6 +1192,7 @@ class TestRateLimitRetry:
             result = add_label(
                 5220,
                 "merge-ready",
+                target="pr",
                 expected_head_sha=head_sha,
                 expected_base_sha=base_sha,
             )
@@ -947,17 +1205,75 @@ class TestRateLimitRetry:
         assert mock_guard.call_count == RATE_LIMIT_MAX_ATTEMPTS
         assert mock_sleep.call_count == RATE_LIMIT_MAX_ATTEMPTS - 1
 
+    def test_pr_label_retry_rechecks_head_and_base_before_second_post(self) -> None:
+        """Every explicit PR label retry re-runs both live CAS comparisons."""
+        head_sha = "a" * 40
+        base_sha = "b" * 40
+        stale = {
+            "status": "review_skipped_stale_state",
+            "reason": "base_sha_changed",
+            "observed_base_sha": "c" * 40,
+        }
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                side_effect=[
+                    {
+                        "status": "ok",
+                        "observed_head_sha": head_sha,
+                        "observed_base_sha": base_sha,
+                    },
+                    stale,
+                ],
+            ) as mock_guard,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep"),
+        ):
+            mock_post.return_value = _rate_limited_403(reset_at=int(time.time()) + 1)
+            result = add_label(
+                5220,
+                "cheap-lane",
+                target="pr",
+                expected_head_sha=head_sha,
+                expected_base_sha=base_sha,
+            )
+
+        assert result == stale
+        assert mock_guard.call_count == 2
+        mock_post.assert_called_once()
+
     def test_cli_blocked_rate_limit_receipt_exits_nonzero(self, capsys) -> None:
         """A blocked receipt is never printed as a successful mutation."""
         with (
             patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                return_value={
+                    "status": "ok",
+                    "observed_head_sha": "a" * 40,
+                    "observed_base_sha": "b" * 40,
+                },
+            ),
             patch(
                 "scripts.dev.gh_pr_label_rest._fetch_core_rate_limit_reset_at",
                 return_value=None,
             ),
         ):
             mock_delete.return_value = _rate_limited_403()
-            rc = main(["remove", "5220", "--label", "merge-ready"])
+            rc = main(
+                [
+                    "remove",
+                    "5220",
+                    "--label",
+                    "merge-ready",
+                    "--target",
+                    "pr",
+                    "--expected-head-sha",
+                    "a" * 40,
+                    "--expected-base-sha",
+                    "b" * 40,
+                ]
+            )
 
         captured = capsys.readouterr()
         assert rc == 1
@@ -966,6 +1282,42 @@ class TestRateLimitRetry:
         assert payload["status"] == BLOCKED_STATUS
         assert payload["reason"] == "rate_limited"
         assert payload["reset_at"] is None
+
+    def test_cli_pr_write_requires_explicit_target_and_both_shas(self, capsys) -> None:
+        """The CLI rejects implicit or partial PR guards before invoking REST."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post:
+            implicit_target = main(
+                [
+                    "add",
+                    "5220",
+                    "--label",
+                    "cheap-lane",
+                    "--expected-head-sha",
+                    "a" * 40,
+                    "--expected-base-sha",
+                    "b" * 40,
+                ]
+            )
+            captured_implicit = capsys.readouterr()
+            partial_cas = main(
+                [
+                    "add",
+                    "5220",
+                    "--label",
+                    "cheap-lane",
+                    "--target",
+                    "pr",
+                    "--expected-head-sha",
+                    "a" * 40,
+                ]
+            )
+            captured_partial = capsys.readouterr()
+
+        assert implicit_target == 1
+        assert partial_cas == 1
+        assert "target=pr" in captured_implicit.err
+        assert "both expected_head_sha and expected_base_sha" in captured_partial.err
+        mock_post.assert_not_called()
 
 
 class TestCli:

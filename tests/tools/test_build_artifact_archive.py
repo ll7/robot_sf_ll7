@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from robot_sf.benchmark.identity.hash_utils import stable_hash
 from scripts.tools import build_artifact_archive as mod
 
 if TYPE_CHECKING:
@@ -174,3 +175,89 @@ def test_partial_archive_and_checksum_tamper_are_rejected(tmp_path: Path) -> Non
     broken = tmp_path / "broken.tar.gz"
     broken.write_bytes(archive.read_bytes()[:-5])
     assert _code(lambda: mod.verify_archive(broken, member_manifest)) == "archive_checksum_mismatch"
+
+
+def _bundle_fixture(tmp_path: Path, *, status: str = "ready", problems: list | None = None) -> tuple[Path, Path]:
+    """Build a minimal ready compute staging bundle and its source root."""
+    content = b"payload\n"
+    source = tmp_path / "bundle-source"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "payload.bin").write_bytes(content)
+    payload = {
+        "schema_version": "compute_staging_bundle.v1",
+        "bundle_id": "b" * 64,
+        "owner": "ops",
+        "status": status,
+        "problems": [] if problems is None else problems,
+        "members": [{"relative_path": "payload.bin", "sha256": hashlib.sha256(content).hexdigest(), "byte_size": len(content), "roles": ["durable_required"]}],
+    }
+    _resign_bundle(payload)
+    manifest = tmp_path / "bundle-manifest.json"
+    manifest.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    return source, manifest
+
+
+def _resign_bundle(payload: dict) -> None:
+    """Recompute the bundle identity after a fixture mutation."""
+    payload.pop("manifest_sha256", None)
+    payload["manifest_sha256"] = stable_hash(payload)
+
+
+def test_ready_staging_bundle_is_archived(tmp_path: Path) -> None:
+    source, manifest = _bundle_fixture(tmp_path)
+    archive, member_manifest = _paths(tmp_path)
+    report = mod.build_archive(manifest, source, archive, member_manifest=member_manifest)
+    assert report["status"] == "verified"
+
+
+@pytest.mark.parametrize(
+    ("status", "problems"),
+    [("blocked", [{"code": "blocked", "location": "members[0]", "message": "blocked"}]), ("running", []), ("ready", [{"code": "x", "location": "y", "message": "z"}]), ("", [])],
+)
+def test_non_ready_staging_bundle_is_rejected(tmp_path: Path, status: str, problems: list) -> None:
+    source, manifest = _bundle_fixture(tmp_path, status=status, problems=problems)
+    archive, member_manifest = _paths(tmp_path)
+    assert _code(lambda: mod.build_archive(manifest, source, archive, member_manifest=member_manifest)) == "source_not_ready"
+
+
+@pytest.mark.parametrize("mutation", ["writers", "active_job"])
+def test_staging_bundle_active_writer_fields_are_rejected(tmp_path: Path, mutation: str) -> None:
+    source, manifest = _bundle_fixture(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    if mutation == "writers":
+        payload["writers"] = [{"writer_id": "w1", "state": "active"}]
+    else:
+        payload["active_job"] = True
+    _resign_bundle(payload)
+    manifest.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    archive, member_manifest = _paths(tmp_path)
+    assert _code(lambda: mod.build_archive(manifest, source, archive, member_manifest=member_manifest)) == "active_writer"
+
+
+@pytest.mark.parametrize(("relative", "nested"), [(".gate_lease.json", False), (".active-writer", True), (".writer_active", True)])
+def test_active_writer_markers_are_rejected_at_any_depth(tmp_path: Path, relative: str, nested: bool) -> None:
+    source, manifest = _bundle_fixture(tmp_path)
+    marker = source / ("nested/deeper" if nested else "") / relative
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("{}", encoding="utf-8")
+    archive, member_manifest = _paths(tmp_path)
+    assert _code(lambda: mod.build_archive(manifest, source, archive, member_manifest=member_manifest)) == "active_writer"
+
+
+def test_case_fold_output_alias_is_rejected(tmp_path: Path) -> None:
+    source, manifest = _bundle_fixture(tmp_path)
+    archive = tmp_path / "bundle.tar.gz"
+    assert _code(lambda: mod.build_archive(manifest, source, archive, member_manifest=tmp_path / "BUNDLE.TAR.GZ")) == "output_alias"
+
+
+def test_case_fold_duplicate_members_are_rejected(tmp_path: Path) -> None:
+    source, manifest = _bundle_fixture(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    duplicate = dict(payload["members"][0])
+    duplicate["relative_path"] = "Payload.bin"
+    payload["members"].append(duplicate)
+    _resign_bundle(payload)
+    manifest.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    archive, member_manifest = _paths(tmp_path)
+    code = _code(lambda: mod.build_archive(manifest, source, archive, member_manifest=member_manifest))
+    assert code in {"ambiguous_manifest", "duplicate_normalized_path"}

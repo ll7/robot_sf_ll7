@@ -557,8 +557,8 @@ def _render_view(
         values = prepared["series"][view]
         status.update(_series_status(view, values))
         ax.set(
-            xlabel=style.metric_label("recorded_time"),
-            ylabel=style.metric_label(metric_keys[view]),
+            xlabel=style.metric_label("recorded_time", language=profile.language, strict=True),
+            ylabel=style.metric_label(metric_keys[view], language=profile.language, strict=True),
         )
         if any(math.isfinite(v) for v in values):
             ax.plot(
@@ -619,6 +619,9 @@ def build_pack(
     profile = profile or FigureProfile.builtin(config.size)
     config_json = _json({"schema_version": SCHEMA, **asdict(config)})
     profile_json = profile.canonical_json()
+    semantics = importlib.import_module("robot_sf.benchmark.figures.semantics")
+    semantics_registry = semantics.default_registry()
+    semantics_json = semantics_registry.canonical_json()
     before = _inventory(package)
     _verify_source(package, config.mode)
     proposal = _object(package / "proposal.json")
@@ -655,8 +658,9 @@ def build_pack(
 
         producer_files = {
             module.__name__: _sha(Path(inspect.getfile(module)))
-            for module in (_owner(), style, exporter, provenance, profile_module)
+            for module in (_owner(), style, exporter, provenance, profile_module, semantics)
         }
+        producer_files["figure_semantics.v1.json"] = _sha(semantics.DEFAULT_REGISTRY)
         width, height = profile.figure_size()
         receipt: dict[str, Any] = {
             "schema_version": SCHEMA,
@@ -677,6 +681,12 @@ def build_pack(
                 "requested_font_family": list(profile.font_family),
                 "resolved_font_family": None,
             },
+            "figure_semantics": {
+                "schema_version": semantics.SCHEMA,
+                "sha256": semantics_registry.sha256(),
+                "metric_count": len(semantics_registry.metrics),
+                "planner_count": len(semantics_registry.planners),
+            },
             "recorded_world_points": point_count,
             "producer_sha256": _sha(Path(__file__)),
             "producer_dependencies": producer_files,
@@ -685,6 +695,7 @@ def build_pack(
                 "module": "robot_sf.benchmark.figures.scenario_pack",
                 "config": "config.json",
                 "figure_profile": "figure_profile.json",
+                "figure_semantics": "figure_semantics.json",
                 "case_ids": list(case_ids),
                 "source": "restore the exact source_inventory_sha256 package separately",
                 "output": "choose a new, non-existing directory",
@@ -701,6 +712,7 @@ def build_pack(
         }
         (stage / "config.json").write_text(config_json, encoding="utf-8")
         (stage / "figure_profile.json").write_text(profile_json, encoding="utf-8")
+        (stage / "figure_semantics.json").write_text(semantics_json, encoding="utf-8")
         with (
             style.publication_style(size=config.size),
             matplotlib.rc_context(
@@ -747,6 +759,7 @@ def build_pack(
                         "figure_formats": list(config.formats),
                         "figure_profile_id": profile.profile_id,
                         "figure_profile_sha256": profile.sha256(),
+                        "figure_semantics_sha256": semantics_registry.sha256(),
                         "resolved_font_family": receipt["figure_profile"]["resolved_font_family"],
                         "claim_boundary": BOUNDARY,
                         "evidence_status": EVIDENCE_STATUS,
@@ -784,6 +797,7 @@ def build_pack(
             f"Evidence status: **{EVIDENCE_STATUS}**",
             f"Source admission status: **{receipt['source_admission_status']}**",
             f"Figure profile: **{profile.profile_id}** (`{profile.sha256()}`)",
+            f"Figure semantics: `{semantics_registry.sha256()}`",
             "",
             BOUNDARY,
             "",

@@ -22,6 +22,7 @@ provided by ``review_worktree_guard.py run`` and are not covered by this helper.
 from __future__ import annotations
 
 import errno
+import math
 import os
 import signal
 import subprocess
@@ -162,10 +163,12 @@ def _parse_timeout_option(args: list[str]) -> tuple[float, int] | int:
         raw = args[1]
         consumed = 2
     else:
-        return 0.0, 0
+        print(f"worktree_creation_lock: unrecognized timeout option: {arg}", file=sys.stderr)
+        print(_usage(), file=sys.stderr)
+        return 2
     try:
         val = float(raw)
-        if val < 0:
+        if not math.isfinite(val) or val < 0:
             raise ValueError
         return val, consumed
     except ValueError:

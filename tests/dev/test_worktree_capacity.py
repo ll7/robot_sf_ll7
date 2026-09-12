@@ -2037,15 +2037,39 @@ def test_worktree_creation_lock_timeout_expires_with_contention_code(tmp_path: P
 
 
 def test_worktree_creation_lock_invalid_timeout_reports_usage(tmp_path: Path) -> None:
-    """Invalid --timeout argument reports error and exits 2."""
+    """Invalid or non-finite --timeout arguments report an error and exit 2."""
     lock_path = tmp_path / "test-invalid-timeout.lock"
+    for invalid_timeout in ("invalid", "nan", "inf", "-inf"):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                "--timeout",
+                invalid_timeout,
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "pass",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        assert result.returncode == 2
+        assert "invalid timeout" in result.stderr
+
+
+def test_worktree_creation_lock_unknown_timeout_option_does_not_hang(tmp_path: Path) -> None:
+    """Unknown timeout-like options fail with usage instead of looping forever."""
     result = subprocess.run(
         [
             sys.executable,
             str(WORKTREE_CREATION_LOCK),
-            "--timeout",
-            "invalid",
-            str(lock_path),
+            "--timeoutx",
+            str(tmp_path / "test-unknown-timeout.lock"),
             "--",
             sys.executable,
             "-c",
@@ -2054,11 +2078,12 @@ def test_worktree_creation_lock_invalid_timeout_reports_usage(tmp_path: Path) ->
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        timeout=15,
+        timeout=5,
         check=False,
     )
+
     assert result.returncode == 2
-    assert "invalid timeout" in result.stderr
+    assert "usage" in result.stderr
 
 
 def test_worktree_creation_lock_survives_detached_descendant_with_descriptor(

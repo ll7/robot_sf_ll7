@@ -18,7 +18,8 @@ local barriers.
 ``run --worktree <path> -- <command>`` is the explicit stronger boundary for
 commands that must withstand those overrides.  On Linux it installs a
 descendant-inherited Landlock policy that allows filesystem mutation only in
-the review worktree and its linked administrative directory, denies TCP
+the review worktree, its linked administrative directory, and the null device
+(a data-less log sink that pytest and other tools open), denies TCP
 connect/bind, and fails closed when the required kernel capability is absent.
 Commands launched outside ``run`` are not covered by that process boundary.
 
@@ -202,9 +203,14 @@ def _add_landlock_path_rule(
     ruleset_fd: int,
     path: Path,
     allowed_access: int,
+    *,
+    directory: bool = True,
 ) -> None:
+    flags = os.O_PATH | os.O_CLOEXEC
+    if directory:
+        flags |= os.O_DIRECTORY
     try:
-        path_fd = os.open(path, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
+        path_fd = os.open(path, flags)
     except (AttributeError, OSError) as exc:
         raise GuardError(f"review process isolation cannot open policy path {path}: {exc}") from exc
     try:
@@ -225,10 +231,12 @@ def _add_landlock_path_rule(
 def _install_os_isolation(identity: dict[str, Path]) -> None:
     """Install a descendant-inherited Landlock policy before an untrusted command runs.
 
-    The policy permits read/execute access throughout the host, permits all filesystem
-    mutation rights only below the review worktree and its linked administrative directory,
-    and handles TCP bind/connect without adding any network rule (deny by default).  The
-    policy is intentionally Linux-specific and requires Landlock ABI 4 or newer.
+    The policy permits read/execute access throughout the host and full filesystem mutation
+    rights only below the review worktree and its linked administrative directory.  The
+    null device is separately granted read/write access because tools such as pytest open
+    ``/dev/null`` as a log sink; the rule is keyed to that single inode and stores no data.
+    The policy handles TCP bind/connect without adding any network rule (deny by default).
+    It is intentionally Linux-specific and requires Landlock ABI 4 or newer.
     """
     libc = _isolation_libc()
     _landlock_abi(libc)
@@ -249,6 +257,13 @@ def _install_os_isolation(identity: dict[str, Path]) -> None:
 
     try:
         _add_landlock_path_rule(libc, int(ruleset_fd), Path("/"), LANDLOCK_ACCESS_FS_READ_EXECUTE)
+        _add_landlock_path_rule(
+            libc,
+            int(ruleset_fd),
+            Path("/dev/null"),
+            LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_WRITE_FILE,
+            directory=False,
+        )
         for writable_path in (identity["path"], identity["git_dir"]):
             _add_landlock_path_rule(
                 libc,

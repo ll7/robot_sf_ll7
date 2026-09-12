@@ -575,6 +575,46 @@ def test_review_process_boundary_rejects_network_and_requires_review_mode(tmp_pa
         _remove_worktree(repo, implementation, implementation_branch)
 
 
+def test_review_process_boundary_allows_dev_null_for_pytest(tmp_path: Path) -> None:
+    """pytest's default /dev/null log sink must work under the process boundary (issue #9156)."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review-devnull"
+    branch = "review/devnull"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        configured = _configure(worktree, "review")
+        assert configured.returncode == 0, configured.stderr
+        _require_isolation(worktree)
+        (worktree / "test_devnull_smoke.py").write_text(
+            "from pathlib import Path\n"
+            "\n"
+            "import pytest\n"
+            "\n"
+            "\n"
+            "def test_dev_null_round_trip() -> None:\n"
+            "    null_device = Path('/dev/null')\n"
+            "    with null_device.open('r+') as handle:\n"
+            "        handle.write('discard')\n"
+            "\n"
+            "\n"
+            "def test_other_device_writes_remain_denied() -> None:\n"
+            "    with pytest.raises(PermissionError):\n"
+            "        Path('/dev/full').write_text('denied')\n",
+            encoding="utf-8",
+        )
+        result = _run_isolated(
+            worktree,
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            str(worktree / "test_devnull_smoke.py"),
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
 def test_review_process_boundary_fails_closed_on_an_old_landlock_abi() -> None:
     """An OS capability below the declared contract must not launch a child command."""
     import importlib.util

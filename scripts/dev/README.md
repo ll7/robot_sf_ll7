@@ -258,8 +258,9 @@ python scripts/dev/review_worktree_guard.py run \
 ```
 
 This `run` path installs Linux Landlock application binary interface (ABI) 4+ before `exec`: reads
-and execution remain available, filesystem mutation is allowed only in the review worktree and
-linked Git admin directory, inherited file descriptors are closed, and TCP bind/connect is denied.
+and execution remain available, filesystem mutation is allowed only in the review worktree, the
+linked Git admin directory, and the data-less null device (which pytest opens as its default log
+sink), inherited file descriptors are closed, and TCP bind/connect is denied.
 It fails closed when that policy cannot be installed. This is a Linux-only process boundary for
 local filesystem remotes, not a portable all-host guarantee. It does not attach to the directory,
 so commands launched later from another terminal or raw Git invocations outside `run` are outside

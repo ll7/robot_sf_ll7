@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
+from scripts.dev.agent_content_gate import CLASS_UNTRUSTED, classify_row, thread_flags
 from scripts.dev.check_pr_ci_status import (
     FAILURE_CONCLUSIONS,
     PENDING_STATUSES,
@@ -114,27 +115,70 @@ def _reviews(pr: dict[str, Any]) -> dict[str, int]:
     return states
 
 
+def _pr_label_names(pr: dict[str, Any]) -> list[str]:
+    """Return label names from REST or GraphQL PR label shapes."""
+    labels = pr.get("labels")
+    nodes: list[Any] = []
+    if isinstance(labels, dict):
+        nodes = list(labels.get("nodes") or [])
+    elif isinstance(labels, list):
+        nodes = labels
+    names: list[str] = []
+    for node in nodes:
+        if isinstance(node, dict):
+            name = node.get("name")
+            if isinstance(name, str) and name.strip():
+                names.append(name.strip())
+        elif isinstance(node, str) and node.strip():
+            names.append(node.strip())
+    return names
+
+
 def _review_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
-    """Return a bounded review snapshot with author/time/body excerpts."""
+    """Return a bounded review snapshot with author/time/body excerpts.
+
+    Body excerpts are gated by the canonical author-trust policy: only own-user
+    or own-user-flagged reviews expose text; untrusted authors keep metadata but
+    an empty excerpt.
+    """
     reviews = [review for review in pr.get("reviews", []) or [] if isinstance(review, dict)]
     by_state: dict[str, int] = {}
     for review in reviews:
         state = str(review.get("state", "UNKNOWN"))
         by_state[state] = by_state.get(state, 0) + 1
-    latest = [
+    selected = sorted(
+        reviews,
+        key=lambda review: str(review.get("submittedAt", review.get("createdAt", ""))),
+        reverse=True,
+    )[:REVIEW_SUMMARY_LIMIT]
+    gate_rows = [
         {
-            "state": str(review.get("state", "UNKNOWN")),
+            "kind": "review_comment",
+            "id": str(review.get("id") or review.get("submittedAt", "")),
             "author": _author_login(review.get("author")),
-            "author_association": str(review.get("authorAssociation", "")),
-            "submitted_at": str(review.get("submittedAt", "")),
-            "body_excerpt": _shorten_text(review.get("body"), limit=COMMENT_BODY_LIMIT),
+            "body": review.get("body"),
+            "url": str(review.get("url") or ""),
+            "created_at": str(review.get("submittedAt", review.get("createdAt", ""))),
         }
-        for review in sorted(
-            reviews,
-            key=lambda review: str(review.get("submittedAt", review.get("createdAt", ""))),
-            reverse=True,
-        )[:REVIEW_SUMMARY_LIMIT]
+        for review in selected
     ]
+    flags = thread_flags(gate_rows, labels=_pr_label_names(pr))
+    latest = []
+    for review, gate_row in zip(selected, gate_rows, strict=True):
+        receipt = classify_row(gate_row, flags=flags)
+        excerpt = _shorten_text(review.get("body"), limit=COMMENT_BODY_LIMIT)
+        if receipt["classification"] == CLASS_UNTRUSTED:
+            excerpt = ""
+        latest.append(
+            {
+                "state": str(review.get("state", "UNKNOWN")),
+                "author": _author_login(review.get("author")),
+                "author_association": str(review.get("authorAssociation", "")),
+                "submitted_at": str(review.get("submittedAt", "")),
+                "body_excerpt": excerpt,
+                "author_trust": receipt["classification"],
+            }
+        )
     return {
         "total": len(reviews),
         "by_state": by_state,
@@ -144,21 +188,45 @@ def _review_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
 
 
 def _comment_snapshot(pr: dict[str, Any]) -> dict[str, Any]:
-    """Return a compact comment snapshot with bounded excerpts."""
+    """Return a compact comment snapshot with bounded excerpts.
+
+    Body excerpts are gated by the canonical author-trust policy: only own-user
+    or own-user-flagged comments expose text; untrusted authors keep metadata but
+    an empty excerpt.
+    """
     comments = [comment for comment in pr.get("comments", []) or [] if isinstance(comment, dict)]
-    latest = [
+    selected = sorted(
+        comments,
+        key=lambda comment: str(comment.get("createdAt", comment.get("updatedAt", ""))),
+        reverse=True,
+    )[:COMMENT_SUMMARY_LIMIT]
+    gate_rows = [
         {
+            "kind": "pr_comment",
+            "id": str(comment.get("id") or comment.get("createdAt", "")),
             "author": _author_login(comment.get("author")),
-            "author_association": str(comment.get("authorAssociation", "")),
-            "created_at": str(comment.get("createdAt", "")),
-            "body_excerpt": _shorten_text(comment.get("body"), limit=COMMENT_BODY_LIMIT),
+            "body": comment.get("body"),
+            "url": str(comment.get("url") or ""),
+            "created_at": str(comment.get("createdAt", comment.get("updatedAt", ""))),
         }
-        for comment in sorted(
-            comments,
-            key=lambda comment: str(comment.get("createdAt", comment.get("updatedAt", ""))),
-            reverse=True,
-        )[:COMMENT_SUMMARY_LIMIT]
+        for comment in selected
     ]
+    flags = thread_flags(gate_rows, labels=_pr_label_names(pr))
+    latest = []
+    for comment, gate_row in zip(selected, gate_rows, strict=True):
+        receipt = classify_row(gate_row, flags=flags)
+        excerpt = _shorten_text(comment.get("body"), limit=COMMENT_BODY_LIMIT)
+        if receipt["classification"] == CLASS_UNTRUSTED:
+            excerpt = ""
+        latest.append(
+            {
+                "author": _author_login(comment.get("author")),
+                "author_association": str(comment.get("authorAssociation", "")),
+                "created_at": str(comment.get("createdAt", "")),
+                "body_excerpt": excerpt,
+                "author_trust": receipt["classification"],
+            }
+        )
     return {
         "total": len(comments),
         "latest": latest,

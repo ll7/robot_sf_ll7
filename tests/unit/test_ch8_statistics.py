@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from robot_sf.research.ch8_statistics import (
@@ -207,6 +209,118 @@ def test_finite_sequence_validation_rejects_non_finite_values() -> None:
 
     with pytest.raises(ValueError, match="non-finite"):
         spearman_rho([1.0, float("nan")], [1.0, 2.0])
+
+
+def test_row_statistics_exclude_non_finite_values() -> None:
+    """Row-based statistics must exclude non-finite cells to avoid invalid evidence."""
+    from robot_sf.research.ch8_statistics import (
+        _parse_float,
+        _rank_stability_bootstrap_ch8,
+        _spearman_ch8,
+    )
+
+    assert _parse_float("inf") is None
+    assert _parse_float("-inf") is None
+    assert _parse_float("1e309") is None
+
+    eta_result = evaluate_statistic(
+        {
+            "id": "eta_rows",
+            "statistic_kind": "partial_eta_squared",
+            "data": {
+                "rows": [
+                    {"planner_key": "p1", "scenario_family": "f1", "metric": "Infinity"},
+                    {"planner_key": "p1", "scenario_family": "f2", "metric": "1.0"},
+                    {"planner_key": "p2", "scenario_family": "f1", "metric": "2.0"},
+                    {"planner_key": "p2", "scenario_family": "f2", "metric": "3.0"},
+                ],
+                "metric": "metric",
+            },
+        }
+    )
+    assert eta_result.status == "computed_expected_value_missing"
+    assert all(math.isfinite(value) for value in eta_result.computed.values())
+
+    with pytest.raises(ValueError, match="less than 3 pairs"):
+        _spearman_ch8(
+            [
+                {"x": "1.0", "y": "1.0"},
+                {"x": "2.0", "y": "2.0"},
+                {"x": "inf", "y": "3.0"},
+            ],
+            "x",
+            "y",
+        )
+
+    filtered_family = _rank_stability_bootstrap_ch8(
+        [
+            {"planner_key": "p1", "scenario_family": "f1", "metric": "1.0"},
+            {"planner_key": "p2", "scenario_family": "f1", "metric": "2.0"},
+            {"planner_key": "p1", "scenario_family": "f2", "metric": "inf"},
+            {"planner_key": "p2", "scenario_family": "f2", "metric": "-inf"},
+        ],
+        "metric",
+        n_boot=8,
+        seed=3,
+    )
+    assert filtered_family == {
+        "p1": {"observed": 2, "ci_lo": 2, "ci_hi": 2},
+        "p2": {"observed": 1, "ci_lo": 1, "ci_hi": 1},
+    }
+
+    bootstrap_result = evaluate_statistic(
+        {
+            "id": "bootstrap_rows",
+            "statistic_kind": "bootstrap_mean_ci",
+            "expected": {"samples": 8, "seed": 3, "observed_rank": 1, "rank_ci": [1, 1]},
+            "data": {
+                "rows": [
+                    {"planner_key": "p1", "scenario_family": "f1", "metric": "inf"},
+                    {"planner_key": "p2", "scenario_family": "f1", "metric": "-inf"},
+                ],
+                "metric": "metric",
+                "samples": 8,
+                "seed": 3,
+                "planner": "p1",
+            },
+        }
+    )
+    assert bootstrap_result.status == "blocked_invalid_source_data"
+    assert "no finite metric values" in bootstrap_result.blockers[0]
+
+
+def test_partial_non_finite_bootstrap_draws_fail_closed_at_evaluator_boundary() -> None:
+    """A draw with no finite value for a retained planner cannot become a zero rank."""
+    from robot_sf.research.ch8_statistics import _rank_stability_bootstrap_ch8
+
+    rows = [
+        {"planner_key": "p1", "scenario_family": "f1", "metric": "-3.0"},
+        {"planner_key": "p1", "scenario_family": "f2", "metric": "-inf"},
+        {"planner_key": "p1", "scenario_family": "f3", "metric": "-inf"},
+        {"planner_key": "p2", "scenario_family": "f1", "metric": "-2.0"},
+        {"planner_key": "p2", "scenario_family": "f2", "metric": "-2.0"},
+        {"planner_key": "p2", "scenario_family": "f3", "metric": "-2.0"},
+    ]
+
+    with pytest.raises(ValueError, match="p1.*bootstrap draw"):
+        _rank_stability_bootstrap_ch8(rows, "metric", n_boot=100, seed=3)
+
+    result = evaluate_statistic(
+        {
+            "id": "partial_non_finite_bootstrap",
+            "statistic_kind": "bootstrap_mean_ci",
+            "data": {
+                "rows": rows,
+                "metric": "metric",
+                "samples": 100,
+                "seed": 3,
+                "planner": "p1",
+            },
+        }
+    )
+    assert result.status == "blocked_invalid_source_data"
+    assert "p1" in result.blockers[0]
+    assert "bootstrap draw" in result.blockers[0]
 
 
 def test_evaluate_statistic_fails_closed_on_malformed_expected_block() -> None:

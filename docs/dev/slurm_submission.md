@@ -53,6 +53,174 @@ until a retrievable durable artifact URI is recorded with `--durable-uri`; local
 are not durable evidence. Keep the issue/PR traceability checklist below in the public handoff,
 and keep private host, account, QoS, and scratch details out of public comments.
 
+## Failure classification (check-only)
+
+Before deciding whether to resubmit, classify an operational failure from a sanitized
+scheduler/launcher receipt and optional bounded log excerpt:
+
+```bash
+uv run python scripts/tools/classify_scheduler_failure.py \
+  --check --receipt <sanitized-receipt.json> \
+  [--log-excerpt <bounded-stderr-tail.log>] --format json
+```
+
+The classifier is versioned (`robot_sf.scheduler_failure_vocabulary.v1`) and always
+read-only: it never submits, retries, cancels, or interprets scientific outcomes. Structured
+scheduler, launcher, artifact, and job-manifest fields take precedence; log fingerprints are
+secondary evidence at lower confidence. Every report records the class, evidence source,
+confidence, retryability under the existing policy, owner, required remediation, and whether
+outputs may still require harvest. Contradictory evidence stays `multiple_causes`; missing
+evidence stays `unknown`; an application nonzero exit is never auto-retried as
+infrastructure, and a completed scheduler state is never scientific success. Exit code 2
+means the receipt was unreadable or malformed, not that the job failed.
+
+## Array-index mapping verification (check-only)
+
+Before launching array-based SLURM jobs or retries, verify that array task IDs map
+bijectively and without bounds errors to campaign matrix rows:
+
+```bash
+uv run python scripts/validation/verify_slurm_array_mapping.py \
+  --manifest path/to/campaign_manifest.json \
+  --array-spec 0-99%10 \
+  --step-chunk 1 \
+  --output-dir output/benchmarks/campaign_1/
+```
+
+The verifier is read-only and fail-closed: it checks for gaps, duplicate row mappings,
+off-by-one bounds, zero- vs one-based index mismatches, chunk tail truncations, shard
+reorderings, resume/retry collisions, and invalid array concurrency specs. It exits with code
+0 on success, 1 on mapping errors (or warnings under `--strict`), and 2 on invalid invocation.
+
+## Receipt public projection (check-only)
+
+Before a private scheduler, harvest, or custody receipt is quoted publicly, validate the proposed
+sanitized projection against `scripts/tools/receipt_projection_policies.json`:
+
+```bash
+uv run python scripts/tools/validate_receipt_projection.py \
+  --check --private <private-receipt.json> --public <proposed-public-receipt.json> --format json
+```
+
+Policies are explicit per field path (`keep`, alias transforms, `digest`, `omit`, `reject`).
+Unknown or credential-named fields, private paths, hostnames, IPs, signed URLs, accounts, and
+queue topology fail closed. Approved stable aliases replace private IDs and artifact roots, and
+the public receipt binds `source_binding.receipt_sha256` to the canonical SHA-256 of the full
+private receipt without publishing private bytes; repeated projection is byte-stable. Required
+identity (source/config digests, environment class, row counts, terminal status, artifact
+checksums, claim boundary) must survive, and over-redaction that erases it fails. Unsupported
+classes are reported `unsupported_receipt_class`, never partially projected. Exit codes: 0 valid,
+2 invalid or unsupported, 3 malformed input; the tool is check-only and changes no state.
+
+## Scheduler-job reconciliation (check-only)
+
+Before access ends, join a sanitized scheduler inventory projection with public issue/PR states,
+immutable launch-manifest packet digests, expected row counts, and artifact owner/harvest metadata
+so unbound, duplicate, stale, or ownerless jobs stay visible without exposing private infrastructure:
+
+```bash
+uv run python scripts/tools/reconcile_scheduler_jobs.py \
+  --check --projection <sanitized-projection.json> [--public <public-snapshot.json>] --format json
+```
+
+Each output row binds one sanitized job alias (plus optional array index and parent lineage) to its
+exact public owner, immutable input packet digest, artifact root, owner, harvest state, transfer
+state, and next action. Rows classify as `owned_active`, `owned_terminal_unharvested`,
+`owned_harvested`, `duplicate_candidate`, `orphan_unknown`, `stale_input`, `missing_output_owner`,
+or `projection_unavailable`. Ownership is never inferred from mutable job names: missing or
+unsanitized identity fails closed, equivalent active duplicates and conflicting owner bindings are
+reported, and `scheduler_state == completed` never implies artifact completeness or result
+validity. The report is byte-stable after documented volatile-field normalization (`generated_at`,
+`snapshot_at`, `observed_at`, and peers are dropped). Exit codes: 0 every row active or harvested,
+1 actionable rows, 2 malformed input. The tool is check-only: it never submits, cancels, relabels,
+claims, comments, or deletes scheduler, GitHub, or artifact state.
+
+## Staged source isolation verification
+
+Before submitting compute-window or cluster jobs, verify that staged commands run
+strictly from the immutable staged source without leakage from ambient `PYTHONPATH`,
+user-site packages, sibling worktree checkouts, stale editable installations, or `.pth`
+injections:
+
+```bash
+uv run python scripts/validation/verify_staged_source_isolation.py \
+  --packet <staging-packet-or-bundle.json> \
+  --format json
+```
+
+The verifier executes bounded import and startup probes in an isolated subprocess,
+validates that all first-party imports resolve inside the staged source or an explicitly
+declared companion (`--companion NAME=PATH`), checks git tree cleanliness, and emits a
+sanitized `staged_source_isolation_receipt.v1` artifact without revealing private host paths.
+Exit codes: `0` passed, `1` blocked, `2` malformed.
+
+## Running-job monitor (check-only)
+
+While a job is pending or running, reduce explicit sanitized observations without cancelling,
+retrying, or harvesting anything:
+
+```bash
+uv run python scripts/tools/monitor_running_jobs.py \
+  --check --projection <sanitized-projection.json> --once --format json
+```
+
+The projection lists only the intended job identities plus expected artifacts/rows and the
+harvest request/artifact-root packet. The monitor verifies job, source, and immutable
+submission-receipt identity before every state reduction, records transitions, observation
+timestamps, evidence digests, and array summaries, and emits `running_job_harvest_handoff.v1`
+naming the canonical `scripts/validation/harvest_terminal_job.py --check` command when a
+terminal state is observed. For live polling, pass `--state-query "<read-only command with
+{job_id}>"` with `--interval` and a hard `--max-wall-seconds`; expiry emits
+`monitor_window_expired` with the current state instead of classifying the job terminal. The
+query subprocess timeout is clamped to the remaining wall-clock budget. The monitor never
+cancels, retries, submits, or harvests, and scheduler completion is never artifact or scientific
+success.
+
+## Urgent-packet batch preflight (check-only)
+
+Before touching scarce compute, run one bounded readiness matrix over the explicitly registered
+urgent campaign packets:
+
+```bash
+uv run python scripts/tools/run_urgent_packet_preflight.py --check \
+  --registry scripts/tools/urgent_packet_registry.v1.json --format json
+```
+
+Registry entries declare the public issue, a canonical side-effect-free local preflight argv, a
+positive timeout, and an output contract (`json_object`, `json_tail_object`, or `text`), plus the
+preflight script SHA-256 that must still match on disk. Entries that lack a canonical preflight,
+or that would require external services or substantive workload execution, are declared with an
+`unsupported_reason` instead of an invented command. Optional `expires_at`,
+`resource_projection`, `packet_sha256`, and `shared_check` fields bind registration expiry, a
+required sanitized resource projection, the source/config packet digest, and cheap shared checks
+that run once when their exact identities match while each packet row keeps its own evidence.
+
+Commands run as argument vectors without `shell=True`, under a minimal sanitized environment, with
+a per-command timeout and a captured-output cap. Rows classify as
+`ready_for_private_submission_check`, `local_preflight_failed`, `blocked_prerequisite`,
+`stale_input`, `duplicate_active`, `resource_projection_unavailable`, or `unsupported`; every row
+records the command, source/config digests, exit status, duration, normalized output digest, first
+blocker, and expiry. Timeouts, malformed output, path escapes, source drift, command mismatch,
+conflicting shared checks, and missing validators fail closed. A local pass is never compute
+authority or scheduler admission. Exit codes: 0 every packet ready, 1 actionable rows, 2 malformed
+registry. Focused fixture tests live in `tests/tools/test_run_urgent_packet_preflight.py`.
+
+## SLURM launcher static audit (check-only)
+
+Before submitting or handing off SLURM scripts and wrappers, audit them for stale partitions,
+missing job names, missing timeouts, unsafe log paths, hardcoded host/user paths, unbounded
+arrays, conflicting GPU requests, stale module commands, missing preflight, and non-portable resume:
+
+```bash
+uv run python scripts/validation/audit_slurm_launchers.py \
+  [<launcher-files>...] --check --format json
+```
+
+The audit tool is static, credential-safe, and read-only. It parses `#SBATCH` directives and
+wrapper flags, compares them against sanitized capability classes, and reports violations
+with exit code 0 (clean) or 1 (errors found).
+
+
 ## Training submission queue
 
 Use `experiments/submission_queue.yaml` for reviewable planned training submissions that should be
@@ -184,6 +352,40 @@ Submission state rules:
 - If either route traceability step is missing, use `partial_traceable` and keep status explicitly blocked.
 - Public issue/PR comments may include job id and partition for traceability, but must not include private host
   names, account/QoS details, scratch paths, or private retrieval mechanics.
+
+## Output capacity preflight (check-only)
+
+Before submitting a job whose results must be preserved, estimate the full output and
+post-run transfer budget and compare it with a sanitized storage-capability projection:
+
+```bash
+uv run python scripts/tools/check_output_capacity_preflight.py --check \
+  --packet path/to/capacity_packet.json \
+  --storage-projection path/to/storage_capability_projection.json \
+  --format json
+```
+
+The packet (`robot_sf.output_capacity_preflight_packet.v1`) declares the expected row
+count and scaling, one component per output surface with `storage_class` (`task_output`,
+`scheduler_log`, `temporary_scratch`, `durable_required`, `disposable_post_verification`)
+and `output_kind` (rows, logs, checkpoints, harvest_manifest, checksums,
+compression_workspace, temporary_workspace, other), and lower/expected/conservative-upper
+per-row plus fixed bounds for bytes, files, and peak bytes. Every `empirical` component
+must name a compatible `source_identity`; otherwise use `declared` bounds or an explicit
+`unavailable` token. The projection (`robot_sf.storage_capability_projection.v1`) carries
+sanitized source/destination free bytes, free inodes, and retention classes, the reserved
+byte/inode/time safety margin, the access deadline, and the transfer route's rate bounds
+plus rate uncertainty.
+
+The verdict is fail closed. `capacity_ok` requires conservative upper bounds plus margin
+to fit source and destination and the conservative transfer duration to fit before the
+access deadline. `capacity_exceeded` reports conservative misses. `capacity_unknown` is
+returned when row scaling, any component dimension, temporary workspace, inode use,
+destination capacity, transfer rate, or access deadline is unbounded or unavailable, and
+an unknown verdict never passes. The tool is check-only: it never deletes, compresses, or
+mutates campaign artifacts. Exit codes are 0 `capacity_ok`, 2 `capacity_exceeded` or
+`capacity_unknown`, and 3 malformed input. Fixtures for the passing, exceeded, and
+unknown cases live under `tests/tools/fixtures/output_capacity_preflight/`.
 
 ## Capacity-aware / fill batches
 
@@ -341,3 +543,101 @@ explicit config and either `CAMERA_READY_BENCHMARK_LABEL` or `CAMERA_READY_BENCH
 so queued jobs have a reviewable identity before they consume cluster time. Slurm logs stay under
 `output/slurm/`; campaign outputs should stay under `output/benchmarks/...` unless a small
 manifest, summary, or durable artifact pointer is intentionally promoted.
+
+## Campaign input drift verification (check-only)
+
+Before mutating the scheduler or submitting scarce compute-window jobs, verify that the live
+submission packet has not drifted from the preflight receipt using the compare-and-swap binding
+validator:
+
+```bash
+uv run python scripts/validation/validate_campaign_submission_binding.py --check \
+  --preflight path/to/preflight_receipt.json \
+  --submission path/to/live_submission_packet.json \
+  --format json
+```
+
+The validator operates in check-only mode and fails closed: it recomputes and compares all
+authority-bearing identities (Git commit SHA, working tree dirty state, config content SHA-256,
+seed ordering, model checkpoint hash, Python/lock environment, expected row count, resource
+allocations, output root, command tokens, admission claim, and duplicate execution state).
+Permitted volatile fields (`observed_at_utc`, `submission_nonce`, `pid`, `hostname`, `host`,
+`process_id`, `job_id_pending`) are tracked and reported in `volatile_fields_observed` without
+causing false drift failures, while any unpermitted or unknown field divergence blocks submission
+and exits with code 1.
+
+## Expected-row ledger generation and verification (fail-closed)
+
+Expand campaign packets into canonical byte-stable expected-row ledgers before launch:
+
+```bash
+uv run python scripts/validation/generate_campaign_row_ledger.py \
+  --packet path/to/campaign_packet.json \
+  --output path/to/campaign_expected_row_ledger.json \
+  --check
+```
+
+The tool enforces schema `campaign_expected_row_ledger.v1.schema.json` across Cartesian grids, paired
+arms, array tasks, and excluded-cells pruning. Every row receives a unique key
+(`campaign_id::arm::scenario_id::seed::replicate`). Staging fails closed (`--check` exits with 1) on
+duplicate identities, underspecified dimensions, unresolved aliases, mutable paths, or count mismatches.
+Observed rows (`--observed path/to/rows.jsonl`) verify completion across 9 row states (`present`, `missing`,
+`duplicate`, `unexpected`, `conflict`, `fallback`, `degraded`, `failed`, `provenance_invalid`).
+
+## Campaign recovery and retry verification (check-only)
+
+Before resuming an interrupted campaign or resubmitting uncompleted cells, verify recovery and retry
+behavior under fail-closed contracts:
+
+```bash
+uv run python scripts/validation/verify_campaign_recovery.py \
+  --fixture path/to/campaign_recovery_packet.json \
+  --output path/to/campaign_recovery_receipt.json \
+  --format json \
+  --check
+```
+
+The verifier enforces schema `campaign_recovery_receipt.v1.schema.json` and evaluates:
+- **Preservation of valid completed identities**: completed rows are never rerun or overwritten.
+- **Fail-closed retry admission**: outcome-driven failures (collisions, task failure) cannot be retried
+  away under infrastructure labels; retries are admitted only for documented infrastructure interruptions.
+- **Authority input drift**: commit, config SHA-256, and model digest must match across attempts.
+- **Degraded/fallback protection**: fallback executions cannot become clean successes through resume.
+- **Lineage tracking**: scheduler job IDs and attempt indices are recorded across executions.
+- **Supported runners**: canonical runners (`benchmark_matrix`, `slurm_array`) are verified; unknown runners
+  report `status: "unsupported"`.
+- **Ledger reconciliation**: final reconciled rows must match the expected-row ledger 1-to-1.
+
+## Host-independent campaign analysis capsules (packaging and verification)
+
+Package source-independent inputs, schemas, analysis code, dependencies, and compact fixtures into portable
+capsules so campaign validation and reports can be regenerated on surviving machines after compute-host loss:
+
+```bash
+# Verify an analysis capsule (fail-closed check)
+uv run python scripts/tools/package_campaign_analysis_capsule.py --check \
+  --capsule path/to/campaign_capsule \
+  --format json
+
+# Regenerate deterministic reports into a fresh output root
+uv run python scripts/tools/package_campaign_analysis_capsule.py --check \
+  --capsule path/to/campaign_capsule \
+  --regenerate-reports \
+  --output-dir path/to/fresh_output_root
+
+# Build a capsule into an explicit temporary root from a build specification
+uv run python scripts/tools/package_campaign_analysis_capsule.py --build \
+  --spec path/to/capsule_spec.json \
+  --output-dir path/to/temporary_capsule_root
+```
+
+The tool enforces schema `campaign_analysis_capsule.v1.schema.json` and `SHA256SUMS` integrity, rejecting:
+- **Hidden absolute paths**: paths referencing `/home/`, `/tmp/`, `/var/`, or drive letters.
+- **Source-host dependencies and scheduler state**: `SLURM_*` variables, scheduler logs, or cluster domain names.
+- **Editable sibling imports**: `sys.path.insert`, `site-packages`, or `../` parent traversals in analysis scripts.
+- **Missing or invalid schemas**: referenced schemas must be present and validate as Draft 2020-12 JSON schemas.
+- **Mutable artifact aliases**: durable references with mutable tags (`:latest`, `master`, `main`) without content hashes.
+- **Unbound or stale analysis code**: script digest must match `analysis_code_digest`.
+- **Missing or duplicate data rows**: row IDs must be unique, and row counts must reconcile with expected ledgers.
+- **Output overwrite**: report regeneration refuses to overwrite existing files in the destination root.
+- **Explicit unavailable/unsupported analyses**: non-runnable optional analyses must state an explicit justification.

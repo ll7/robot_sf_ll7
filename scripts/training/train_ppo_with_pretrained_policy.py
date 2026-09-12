@@ -74,18 +74,17 @@ class TimestepTracker(BaseCallback):
     """Callback to track timesteps for convergence measurement."""
 
     def __init__(self):
-        """TODO docstring. Document this function."""
+        """Initialize the tracker before convergence has been observed."""
         super().__init__()
         self.timesteps_to_convergence = None
         self.converged = False
 
     def _on_step(self) -> bool:
         # Simplified convergence check - production would use proper metrics
-        """TODO docstring. Document this function.
-
+        """Record the first step past 1000 timesteps as the convergence point.
 
         Returns:
-            TODO docstring.
+            ``True`` to keep training running.
         """
         if not self.converged and self.num_timesteps > 1000:
             self.timesteps_to_convergence = self.num_timesteps
@@ -577,13 +576,13 @@ def run_ppo_finetuning(
     )
 
     def _metric(values: list[float]) -> common.MetricAggregate:
-        """TODO docstring. Document this function.
+        """Summarize metric samples into mean, median, p95, and a confidence interval.
 
         Args:
-            values: TODO docstring.
+            values: Metric samples; an empty list yields all-zero aggregates.
 
         Returns:
-            TODO docstring.
+            Aggregate statistics for the supplied samples.
         """
         if not values:
             return common.MetricAggregate(mean=0.0, median=0.0, p95=0.0, ci95=(0.0, 0.0))

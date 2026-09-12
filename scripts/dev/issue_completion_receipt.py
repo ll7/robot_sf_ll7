@@ -53,6 +53,7 @@ CRITERION_DISPOSITIONS = frozenset(
 )
 VERIFIER_STATUSES = frozenset({"verified", "pending", "unavailable", "not_applicable"})
 REQUIRED_DRIFT_KEYS = frozenset({"head", "contract", "artifacts", "validation_inputs", "review"})
+DEFAULT_SUBPROCESS_TIMEOUT_SECONDS = 30
 
 GitRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
 GhRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
@@ -591,14 +592,37 @@ def load_receipt(path: str | Path) -> dict[str, Any]:
     return payload
 
 
+def _run_default_command(
+    command: list[str], *, executable: str
+) -> subprocess.CompletedProcess[str]:
+    """Run one receipt-verification command with deterministic bounded failures."""
+    try:
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=DEFAULT_SUBPROCESS_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            command,
+            returncode=124,
+            stdout="",
+            stderr=(
+                f"{executable} command timed out after {DEFAULT_SUBPROCESS_TIMEOUT_SECONDS} seconds"
+            ),
+        )
+
+
 def _default_git_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
     """Run one bounded Git command."""
-    return subprocess.run(command, capture_output=True, text=True, check=False)
+    return _run_default_command(command, executable="git")
 
 
 def _default_gh_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
     """Run one bounded GitHub CLI command."""
-    return subprocess.run(command, capture_output=True, text=True, check=False)
+    return _run_default_command(command, executable="gh")
 
 
 def _git_text(

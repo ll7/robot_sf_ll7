@@ -17,7 +17,7 @@ from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
 class _Cfg:  # minimal config stub
-    """TODO docstring. Document this class."""
+    """Minimal config stub with smoke aggregation and a low-density reference."""
 
     bootstrap_samples = 300
     bootstrap_confidence = 0.95
@@ -27,7 +27,7 @@ class _Cfg:  # minimal config stub
 
 
 def test_wilson_zero_collision_upper_bound_nonzero():
-    """TODO docstring. Document this function."""
+    """Verify zero observed collisions still yield a positive Wilson upper bound."""
     records = []
     # Create 50 episodes with zero collisions (collision_rate metric = 0 for each sample, interpreted as Bernoulli mean 0)
     for i in range(50):
@@ -54,7 +54,7 @@ def test_wilson_zero_collision_upper_bound_nonzero():
 def test_glass_delta_zero_when_ci_missing():
     # Construct two groups manually bypassing CI to force missing mean_ci scenario
     # We simulate by aggregating with a single value (mean_ci collapses to identical bounds)
-    """TODO docstring. Document this function."""
+    """Verify identical distributions yield zero diff and zero standardized effect."""
     records = [
         {
             "episode_id": "ep1",

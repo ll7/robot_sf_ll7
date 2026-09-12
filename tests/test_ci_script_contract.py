@@ -26,10 +26,14 @@ Excluded (no usage/help support at all):
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import shlex
 import shutil
+import signal
 import subprocess
+import time
 import tomllib
 from pathlib import Path
 
@@ -769,10 +773,13 @@ def test_run_tests_parallel_fails_before_worker_resolution_on_incomplete_profile
     assert not uv_called.exists()
 
 
+@pytest.mark.parametrize("stage_temproot_helper", [True, False], ids=["complete", "missing-helper"])
 def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(  # noqa: PLR0915
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage_temproot_helper: bool
 ) -> None:
     """New top-level core tests must reach PR-readiness pytest collection (issue #5108)."""
+    # Explicit --basetemp bypasses conftest's environment setup (issue #8672).
+    monkeypatch.delenv("PYTEST_DEBUG_TEMPROOT", raising=False)
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -780,6 +787,12 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(  # 
     script_dir.mkdir(parents=True)
     fake_bin.mkdir()
     optional_allowlist.parent.mkdir(parents=True)
+
+    if stage_temproot_helper:
+        shutil.copyfile(
+            ROOT / "tests/support/pytest_temproot.py",
+            optional_allowlist.parent / "pytest_temproot.py",
+        )
 
     for script_name in ("run_tests_parallel.sh", "common_setup.sh"):
         source = ROOT / "scripts" / "dev" / script_name
@@ -868,6 +881,13 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(  # 
         check=False,
     )
 
+    if not stage_temproot_helper:
+        assert result.returncode == 2
+        assert "can't open file" in result.stderr
+        assert "tests/support/pytest_temproot.py" in result.stderr
+        assert "No such file or directory" in result.stderr
+        return
+
     assert result.returncode == 0, result.stderr
     pytest_args = captured_args.read_text(encoding="utf-8")
     padded_pytest_args = f" {pytest_args} "
@@ -909,9 +929,10 @@ def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:
 
 
 def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Coverage-finalization fallback must be true no-xdist and fail closed (#6526)."""
+    monkeypatch.delenv("PYTEST_DEBUG_TEMPROOT", raising=False)
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -919,6 +940,9 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     script_dir.mkdir(parents=True)
     fake_bin.mkdir()
     (repo / "tests" / "support").mkdir(parents=True)
+    shutil.copyfile(
+        ROOT / "tests/support/pytest_temproot.py", repo / "tests/support/pytest_temproot.py"
+    )
     (repo / "tests" / "support" / "optional_test_allowlist.txt").write_text(
         "tests/optional\n", encoding="utf-8"
     )
@@ -1029,9 +1053,186 @@ def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
     assert '"$SCRIPT_DIR/run_tests_parallel.sh" "${pytest_args[@]}"' in script_text
     assert "diagnose_xdist_crash.py" in script_text
     assert "--pytest-exit-code" in script_text
-    assert "--execution-mode xdist" in script_text
+    assert '--execution-mode "$execution_mode"' in script_text
+    assert 'payload.get("timed_out") is True' in script_text
     assert "check_xdist_race_artifacts.py" in script_text
     assert "--baseline-json" in script_text
+
+
+@pytest.mark.parametrize(
+    ("compact_timed_out", "log_mode", "expected_execution_mode"),
+    [
+        (True, "serial", "no-xdist"),
+        (True, "xdist", "xdist"),
+        (True, "missing", None),
+        (True, "missing-path", None),
+        (True, "both", None),
+        (True, "duplicate", None),
+        (True, "spoofed", None),
+        (True, "truncated-prefix", None),
+        (True, "truncated-suffix", None),
+        (True, "empty-dist", None),
+        (True, "serial-then-truncated", None),
+        (True, "truncated-then-serial", None),
+        (True, "xdist-then-truncated", None),
+        (True, "truncated-then-xdist", None),
+        (True, "prefix-only", None),
+        (True, "whitespace-dist", None),
+        (True, "malformed-serial", None),
+        (True, "duplicate-serial", None),
+        (True, "both-reversed", None),
+        (True, "serial-then-prefix", None),
+        (True, "prefix-then-serial", None),
+        (True, "xdist-then-prefix", None),
+        (True, "prefix-then-xdist", None),
+        (True, "serial-then-empty", None),
+        (True, "empty-then-serial", None),
+        (True, "xdist-then-empty", None),
+        (True, "empty-then-xdist", None),
+        (True, "serial-then-malformed", None),
+        (True, "malformed-then-xdist", None),
+        (True, "serial-with-noise", "no-xdist"),
+        (True, "xdist-with-noise", "xdist"),
+        (True, "serial-crlf", "no-xdist"),
+        (True, "xdist-crlf", "xdist"),
+        (True, "serial-no-final-newline", "no-xdist"),
+        (True, "xdist-no-final-newline", "xdist"),
+        (True, "custom-dist", "xdist"),
+        (False, "serial", None),
+    ],
+)
+def test_xdist_race_validation_uses_compact_timeout_and_execution_mode(
+    tmp_path: Path,
+    compact_timed_out: bool,
+    log_mode: str,
+    expected_execution_mode: str | None,
+) -> None:
+    """Outer diagnosis follows compact truth and unique recorded pytest mode."""
+
+    fake_uv = tmp_path / "uv"
+    diagnostic_args = tmp_path / "diagnostic-args.txt"
+    artifact_dir = tmp_path / "artifacts"
+    serial = "Resolved pytest execution mode: in-process serial (pytest-xdist disabled)."
+    xdist = "Resolved pytest execution mode: pytest-xdist (dist=worksteal)."
+    truncated = "Resolved pytest execution mode: pytest-xdist (dist="
+    prefix = "Resolved pytest execution mode:"
+    empty = "Resolved pytest execution mode: pytest-xdist (dist=)."
+    malformed = f"{prefix} unrecognized mode"
+    noise = f"unrelated output\ntest output: {xdist}\n {serial}\nResolved pytest execution mode"
+    logs = {
+        "serial": f"{serial}\n",
+        "xdist": f"{xdist}\n",
+        "both": f"{serial}\n{xdist}",
+        "duplicate": f"{xdist}\n{xdist}",
+        "spoofed": f"test output: {xdist}",
+        "truncated-prefix": truncated,
+        "truncated-suffix": xdist[:-1],
+        "empty-dist": empty,
+        "serial-then-truncated": f"{serial}\n{truncated}",
+        "truncated-then-serial": f"{truncated}\n{serial}",
+        "xdist-then-truncated": f"{xdist}\n{truncated}",
+        "truncated-then-xdist": f"{truncated}\n{xdist}",
+        "prefix-only": prefix,
+        "whitespace-dist": "Resolved pytest execution mode: pytest-xdist (dist= \t ).",
+        "malformed-serial": serial[:-1],
+        "duplicate-serial": f"{serial}\n{serial}",
+        "both-reversed": f"{xdist}\n{serial}",
+        "serial-then-prefix": f"{serial}\n{prefix}",
+        "prefix-then-serial": f"{prefix}\n{serial}",
+        "xdist-then-prefix": f"{xdist}\n{prefix}",
+        "prefix-then-xdist": f"{prefix}\n{xdist}",
+        "serial-then-empty": f"{serial}\n{empty}",
+        "empty-then-serial": f"{empty}\n{serial}",
+        "xdist-then-empty": f"{xdist}\n{empty}",
+        "empty-then-xdist": f"{empty}\n{xdist}",
+        "serial-then-malformed": f"{serial}\n{malformed}",
+        "malformed-then-xdist": f"{malformed}\n{xdist}",
+        "serial-with-noise": f"{noise}\n{serial}\n{noise}\n",
+        "xdist-with-noise": f"{noise}\n{xdist}\n{noise}\n",
+        "serial-crlf": f"{serial}\r\n",
+        "xdist-crlf": f"{xdist}\r\n",
+        "serial-no-final-newline": serial,
+        "xdist-no-final-newline": xdist,
+        "custom-dist": "Resolved pytest execution mode: pytest-xdist (dist= custom-value ).",
+    }
+    if log_mode not in {"missing", "missing-path"}:
+        artifact_dir.mkdir()
+        (artifact_dir / "compact.log").write_bytes(logs[log_mode].encode("utf-8"))
+    fake_uv.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+
+case "$*" in
+  *check_xdist_race_artifacts.py*)
+    exit 0
+    ;;
+  *run_compact_validation.py*)
+    mkdir -p "$UV_ARTIFACT_DIR"
+    log_path="$UV_ARTIFACT_DIR/compact.log"
+    summary_log_path="$log_path"
+    if [[ "$UV_LOG_MODE" == "missing-path" ]]; then
+      summary_log_path=""
+    fi
+    printf '{"schema":"compact_validation_summary.v2","exit_code":124,"timed_out":%s,"log_path":"%s"}\\n' "$UV_COMPACT_TIMED_OUT" "$summary_log_path"
+    exit 124
+    ;;
+  *diagnose_xdist_crash.py*)
+    printf '%s\\n' "$*" > "$UV_DIAGNOSTIC_ARGS"
+    exit 0
+    ;;
+  *)
+    echo "unexpected uv invocation: $*" >&2
+    exit 99
+    ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            str(RUN_XDIST_RACE_VALIDATION),
+            "--workers",
+            "auto",
+            "--timeout-seconds",
+            "1",
+            "--artifact-dir",
+            str(artifact_dir),
+        ],
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+            "UV_ARTIFACT_DIR": str(artifact_dir),
+            "UV_COMPACT_TIMED_OUT": json.dumps(compact_timed_out).lower(),
+            "UV_DIAGNOSTIC_ARGS": str(diagnostic_args),
+            "UV_LOG_MODE": log_mode,
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 124
+    if expected_execution_mode is not None:
+        diagnostic_call = diagnostic_args.read_text(encoding="utf-8")
+        assert f"--execution-mode {expected_execution_mode}" in diagnostic_call
+        assert "--requested-workers auto" in diagnostic_call
+        assert "--dist-mode worksteal" in diagnostic_call
+        assert "--pytest-exit-code 124" in diagnostic_call
+    else:
+        assert not diagnostic_args.exists()
+        if compact_timed_out:
+            assert "diagnostic unavailable" in result.stderr
+            if log_mode not in {"missing", "missing-path"}:
+                assert (
+                    "xdist race timeout diagnostic unavailable: "
+                    "pytest execution mode was not uniquely recorded."
+                ) in result.stderr
+        else:
+            assert "did not report timed_out=true" in result.stderr
 
 
 def test_xdist_race_validation_rejects_invalid_worker_value() -> None:
@@ -1091,7 +1292,10 @@ def test_ci_driver_test_phase_runs_benchmark_reconciliation_guard() -> None:
     assert '[[ "$shard_index" != "1" ]]' in script_text
     assert "$SCRIPT_DIR/check_event_ledger_reconciliation_guard.sh" in script_text
     assert "run_fast_feedback_benchmark_reconciliation_guard" in script_text
-    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples' in script_text
+    assert (
+        '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples/test_examples_run.py'
+        in script_text
+    )
 
 
 def test_run_ci_local_loads_default_phases_from_ci_driver() -> None:
@@ -1259,6 +1463,20 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
     assert "recording interim PR readiness from a dirty non-ignored worktree" in script_text
     assert "--require-clean-tree" in script_text
     assert "pr_ready_freshness.py" in script_text
+
+
+def test_pr_ready_check_fails_with_explicit_format_signal_before_clean_tree_tests() -> None:
+    """A scoped format fix must fail with an explicit signal before clean-tree tests (issue #8971)."""
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    assert "Ruff formatting changed tracked files in the working tree" in script_text
+    assert "Commit the formatting changes, then rerun this readiness command" in script_text
+
+    format_signal_index = script_text.find(
+        "Ruff formatting changed tracked files in the working tree"
+    )
+    test_lane_index = script_text.find('"$SCRIPT_DIR/run_tests_parallel.sh" --lane core')
+    assert 0 < format_signal_index < test_lane_index
 
 
 def test_pr_ready_check_final_mode_runs_evidence_hygiene_contract() -> None:
@@ -1730,6 +1948,7 @@ def _make_freshness_fixture_repo(
     fake_uv.write_text(
         '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\n'
         'printf "venv=%s\\n" "${UV_PROJECT_ENVIRONMENT-}" >&2\n'
+        'printf "virtual_env=%s\\n" "${VIRTUAL_ENV-}" >&2\n'
         'printf "pythonpath=%s\\n" "${PYTHONPATH-}" >&2\nexit 7\n',
         encoding="utf-8",
     )
@@ -1752,6 +1971,163 @@ def _make_freshness_fixture_repo(
     }
     env.pop("PYTHONPATH", None)
     return repo, venv, env
+
+
+def _make_incomplete_profile_worktree(
+    tmp_path: Path,
+    *,
+    recovery_heals: bool,
+) -> tuple[Path, Path, Path, dict[str, str]]:
+    """Build a linked worktree whose local .venv fails the core profile preflight.
+
+    A stub recovery helper records every invocation and either repairs the local
+    interpreter stub (``recovery_heals``) or leaves the profile incomplete while
+    reporting success, so the wrapper's re-check decides the outcome.
+    """
+    matching_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
+    repo, _main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=matching_scene)
+    recovery_log = tmp_path / "profile-completion.log"
+    recovery_script = repo / "scripts" / "dev" / "recover_fast_pysf_worktree.sh"
+    heal_step = ""
+    if recovery_heals:
+        heal_step = (
+            "cat > .venv/bin/python <<'PY'\n"
+            "#!/usr/bin/env bash\n"
+            "exit 0\n"
+            "PY\n"
+            "chmod +x .venv/bin/python\n"
+        )
+    recovery_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f'printf "%s\\n" "$*" >> {shlex.quote(str(recovery_log))}\n'
+        f"{heal_step}",
+        encoding="utf-8",
+    )
+    recovery_script.chmod(0o755)
+    subprocess.run(
+        ["git", "add", str(recovery_script.relative_to(repo))],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture profile-completion helper"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    local_python = worktree / ".venv" / "bin" / "python"
+    local_python.parent.mkdir(parents=True)
+    local_python.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "${1:-}" == *check_worktree_optional_deps.py ]]; then\n'
+        '  printf "Missing optional imports: yaml\\n" >&2\n'
+        "  exit 2\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    local_python.chmod(0o755)
+    env = {**env, "ROBOT_SF_CI_MIN_FREE_BYTES": "0"}
+    env.pop("ROBOT_SF_VENV_SELECTION_GATE_HELD", None)
+    return worktree, recovery_log, local_python, env
+
+
+def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
+    tmp_path: Path,
+) -> None:
+    """Issue #8811: a profile-incomplete worktree env gets exactly one completion sync."""
+    worktree, recovery_log, local_python, env = _make_incomplete_profile_worktree(
+        tmp_path, recovery_heals=True
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7, result.stderr
+    assert "Attempting one bounded completion sync" in result.stderr
+    assert "Shared-venv dependency profile 'core' completed" in result.stderr
+    assert "uv-reached" in result.stderr
+    recovery_calls = recovery_log.read_text(encoding="utf-8").splitlines()
+    assert len(recovery_calls) == 1
+    assert "--profile core" in recovery_calls[0]
+    assert local_python.read_text(encoding="utf-8") == "#!/usr/bin/env bash\nexit 0\n"
+
+
+def test_worktree_shared_venv_fails_closed_when_completion_sync_cannot_repair(
+    tmp_path: Path,
+) -> None:
+    """Issue #8811: a completion sync that leaves the profile incomplete stays fail-closed."""
+    worktree, recovery_log, _local_python, env = _make_incomplete_profile_worktree(
+        tmp_path, recovery_heals=False
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "shared-venv dependency profile 'core' is incomplete" in result.stderr
+    assert "Missing optional imports: yaml" in result.stderr
+    assert "bootstrap_worktree.sh" in result.stderr
+    assert "uv-reached" not in result.stderr
+    assert len(recovery_log.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_worktree_shared_venv_does_not_completion_sync_explicit_venv(
+    tmp_path: Path,
+) -> None:
+    """Issue #8811: an explicit --venv stays authoritative and is never completion-synced."""
+    worktree, recovery_log, _local_python, env = _make_incomplete_profile_worktree(
+        tmp_path, recovery_heals=True
+    )
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(worktree / ".venv"),
+            "--",
+            "python",
+            "-V",
+        ],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "shared-venv dependency profile 'core' is incomplete" in result.stderr
+    assert "bootstrap_worktree.sh" in result.stderr
+    assert not recovery_log.exists()
 
 
 def test_worktree_shared_venv_rejects_stale_installed_copy(
@@ -2025,6 +2401,79 @@ def test_worktree_shared_venv_marks_explicit_override_for_nested_helpers() -> No
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
 
     assert 'export ROBOT_SF_EXPLICIT_VENV_OVERRIDE="$venv_path"' in script_text
+    assert 'export VIRTUAL_ENV="$venv_path"' in script_text
+
+
+def test_worktree_shared_venv_updates_interpreter_after_automatic_recovery(
+    tmp_path: Path,
+) -> None:
+    """Automatic stale-package recovery must replace an inherited owning env (issue #8772)."""
+    stale_scene = "# stale install without normalize_integration_scheme\n"
+    repo, main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=stale_scene)
+
+    recovery_script = repo / "scripts" / "dev" / "recover_fast_pysf_worktree.sh"
+    recovery_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "mkdir -p .venv/bin\n"
+        "cat > .venv/bin/python <<'PY'\n"
+        "#!/usr/bin/env bash\n"
+        "exit 0\n"
+        "PY\n"
+        "chmod +x .venv/bin/python\n",
+        encoding="utf-8",
+    )
+    recovery_script.chmod(0o755)
+    subprocess.run(
+        ["git", "add", str(recovery_script.relative_to(repo))],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture recovery helper"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    env = {
+        **env,
+        "VIRTUAL_ENV": str(main_venv),
+        "UV_PROJECT_ENVIRONMENT": str(main_venv),
+    }
+    # A nested wrapper run must not inherit an outer gate marker; the gate is
+    # per-invocation selection state, not an environment capability.
+    env.pop("ROBOT_SF_VENV_SELECTION_GATE_HELD", None)
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    local_venv = worktree / ".venv"
+    assert result.returncode == 7
+    assert f"Automatic fast-pysf recovery selected worktree environment: {local_venv}" in (
+        result.stderr
+    )
+    assert f"venv={local_venv}" in result.stderr
+    assert f"virtual_env={local_venv}" in result.stderr
+    assert f"virtual_env={main_venv}" not in result.stderr
 
 
 def test_worktree_shared_venv_falls_back_to_main_env_without_local_env(tmp_path: Path) -> None:
@@ -2222,6 +2671,345 @@ def _make_pinned_tool_fixture_repo(
     return repo, venv, env
 
 
+@pytest.mark.parametrize("quote", ['"', "'"])
+@pytest.mark.parametrize("multiline", [False, True])
+@pytest.mark.parametrize("standalone", [False, True])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("resolved", ["0.16.4", "0.16.5"])
+def test_worktree_shared_venv_pin_layout_equivalence(
+    tmp_path: Path, quote: str, multiline: bool, standalone: bool, nested: bool, resolved: str
+) -> None:
+    """Valid TOML layout cannot bypass stale-tool refusal or reject a matching tool."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version=resolved)
+    entry = f"{quote}ruff==0.16.5{quote}"
+    array = f"[\n    {entry}, # exact development pin\n]" if multiline else f"[{entry}]"
+    manifest = repo / "pyproject.toml"
+    manifest.write_text(f"[dependency-groups]\ndev = {array}\n", encoding="utf-8")
+    before = {path: path.read_bytes() for path in venv.rglob("*") if path.is_file()}
+    manifest_before = manifest.read_bytes()
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            *(["--standalone"] if standalone else []),
+            "--",
+            *(["uv", "run"] if nested else []),
+            "ruff",
+            "check",
+            "path with spaces.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    if resolved == "0.16.4":
+        assert result.returncode == 2, result.stderr
+        assert "uv-reached" not in result.stderr
+        assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+    else:
+        assert result.returncode == 7, result.stderr
+        assert "uv-reached" in result.stderr
+        assert "preflight passed: tool=ruff resolved=0.16.5 pin==0.16.5" in result.stderr
+    assert manifest.read_bytes() == manifest_before
+    assert {path: path.read_bytes() for path in venv.rglob("*") if path.is_file()} == before
+
+
+@pytest.mark.parametrize(
+    ("manifest", "disposition"),
+    [
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff==0.16.4"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff==0.16.5"]', "passed"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff>=0.16"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff==0.16.*"]', "error"),
+        (
+            '[dependency-groups]\ndev = ["ruff==0.16.5", "ruff==0.16.4; os_name == \'nt\'"]',
+            "error",
+        ),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff @ https://invalid/ruff"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5", "ruff[extra]==0.16.5"]', "error"),
+        ("[dependency-groups]\ndev = [\"ruff==0.16.5; os_name == 'nt'\"]", "error"),
+        ('[dependency-groups]\ndev = ["ruff[extra]==0.16.5"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff == 0.16.5"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff=="]', "error"),
+        ('[dependency-groups]\ndev = ["ruff===0.16.5"]', "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5!"]', "error"),
+        (
+            '[dependency-groups]\ndev = ["ruff[extra]==0.16.5", "ruff[extra]==0.16.4"]',
+            "error",
+        ),
+        ('[dependency-groups]\ndev = [{include-group = "other"}]', "error"),
+        ("[dependency-groups]\ndev = [123]", "error"),
+        ('[dependency-groups]\ndev = "ruff==0.16.5"', "error"),
+        ("dependency-groups = []", "error"),
+        ('[dependency-groups]\ndev = ["ruff==0.16.5"', "error"),
+        ("", "unpinned"),
+        ("[dependency-groups]\nother = ['ruff==0.16.4']", "unpinned"),
+        ("[dependency-groups]\ndev = ['ruff>=0.16']", "unpinned"),
+        ("[dependency-groups]\ndev = [\"ruff>=0.16; python_version == '3.13'\"]", "unpinned"),
+        ('[dependency-groups]\ndev = ["ruff @ https://invalid/ruff?version==0.16.5"]', "unpinned"),
+        ("[dependency-groups]\ndev = [\"ruff==0.16.*; python_version == '3.13'\"]", "unpinned"),
+        ("[dependency-groups]\ndev = ['ruff==0.16.*']", "unpinned"),
+        (
+            '# "ruff==0.16.4"\n[project]\ndescription = """\n"ruff==0.16.4"\n"""\n'
+            '[dependency-groups]\ndev = ["ruff-extra==0.16.4"]\nother = ["ruff==0.16.4"]',
+            "unpinned",
+        ),
+        (
+            '[project]\ndependencies = ["ruff==0.16.4"]\n'
+            '[dependency-groups]\ndev = ["ruff==0.16.5"]\nother = ["ruff==0.16.4"]',
+            "passed",
+        ),
+    ],
+)
+def test_worktree_shared_venv_pin_manifest_policy(
+    tmp_path: Path, manifest: str, disposition: str
+) -> None:
+    """Only actual dev declarations select a pin; ambiguous or malformed input fails closed."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path)
+    (repo / "pyproject.toml").write_text(manifest, encoding="utf-8")
+    before = {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()}
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "ruff", "check", "."],
+        cwd=repo,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    if disposition == "error":
+        assert result.returncode == 2, result.stderr
+        assert "reason=pin-parser-error" in result.stderr
+        assert "reason=unpinned" not in result.stderr
+        assert "uv-reached" not in result.stderr
+    else:
+        assert result.returncode == 7, result.stderr
+        assert "uv-reached" in result.stderr
+        expected = "reason=unpinned" if disposition == "unpinned" else "pin==0.16.5"
+        assert expected in result.stderr
+    assert {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()} == before
+
+
+@pytest.mark.parametrize("failure", ["encoding", "permission"])
+def test_worktree_shared_venv_pin_manifest_read_error(tmp_path: Path, failure: str) -> None:
+    """Unreadable/undecodable manifests are parser errors, not compatibility skips."""
+    if failure == "permission" and os.geteuid() == 0:
+        pytest.skip("root bypasses the fixture's file permissions")
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path)
+    manifest = repo / "pyproject.toml"
+    if failure == "encoding":
+        manifest.write_bytes(b"\xff")
+    else:
+        manifest.chmod(0)
+    try:
+        result = subprocess.run(
+            [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "ruff", "check", "."],
+            cwd=repo,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    finally:
+        manifest.chmod(0o644)
+    assert result.returncode == 2, result.stderr
+    assert "Shared-venv pin parser failed:" in result.stderr
+    assert "reason=pin-parser-error" in result.stderr
+    assert "reason=unpinned" not in result.stderr
+    assert "uv-reached" not in result.stderr
+
+
+def test_worktree_shared_venv_pin_parser_ignores_hostile_imports(tmp_path: Path) -> None:
+    """A generic dotted tool pin is parsed by host stdlib, never checkout/site or fake venv Python."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(
+        tmp_path, tool="my.tool", pin="my.tool==1.2.3", resolved_version="1.2.3"
+    )
+    for module in ("tomllib.py", "sitecustomize.py", "usercustomize.py"):
+        (repo / module).write_text('raise RuntimeError("untrusted import executed")\n')
+    for executable in ("python", "python3"):
+        path = repo / "fake-bin" / executable
+        path.write_text("#!/bin/sh\necho untrusted-python >&2\nexit 99\n")
+        path.chmod(0o755)
+    env.update(PYTHONPATH=str(repo), PYTHONHOME=str(repo), PYTHONUSERBASE=str(repo))
+    before = {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()}
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "my.tool", "check", "."],
+        cwd=repo,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 7, result.stderr
+    assert "preflight passed: tool=my.tool resolved=1.2.3 pin==1.2.3" in result.stderr
+    assert "untrusted" not in result.stderr
+    assert {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()} == before
+
+
+@pytest.mark.parametrize("failure", ["unavailable", "runtime"])
+@pytest.mark.parametrize("command", ["ruff", "python", "./ruff", "no-manifest"])
+def test_worktree_shared_venv_pin_parser_runtime_failure_is_lazy_and_closed(
+    tmp_path: Path, failure: str, command: str
+) -> None:
+    """Inject only host availability: required parsing fails closed, existing skips stay lazy."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(
+        tmp_path, with_pyproject=command != "no-manifest"
+    )
+    checker = repo / "scripts" / "dev" / "check_fast_pysf_runtime.py"
+    checker.parent.mkdir(parents=True)
+    checker.write_text("# The fixture interpreter supplies the successful package probe.\n")
+    host = tmp_path / "host-python"
+    log = tmp_path / "host-called"
+    host.write_text(
+        f'#!/bin/sh\necho called >> "{log}"\n'
+        + ('if [ "$4" = -c ]; then exit 0; fi\n' if failure == "runtime" else "")
+        + "exit 17\n"
+    )
+    host.chmod(0o755)
+    script = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
+    prefix, default = script.split("read_default_dev_tool_pin() {", 1)
+    selector = "for candidate in /usr/bin/python3 /usr/local/bin/python3; do"
+    assert default.count(selector) == 1
+    # Immutable in-memory wrapper probe; do not change system Python or add a product override.
+    script = (
+        prefix
+        + "read_default_dev_tool_pin() {"
+        + default.replace(selector, f'for candidate in "{host}"; do', 1)
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            script,
+            "wrapper-probe",
+            "--venv",
+            str(venv),
+            "--",
+            "ruff" if command == "no-manifest" else command,
+            "check",
+            ".",
+        ],
+        cwd=repo,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    if command == "ruff":
+        assert result.returncode == 2, result.stderr
+        assert "reason=pin-parser-error" in result.stderr
+        assert "reason=unpinned" not in result.stderr
+        assert "uv-reached" not in result.stderr
+        assert log.exists()
+    else:
+        assert result.returncode == 7, result.stderr
+        assert "uv-reached" in result.stderr
+        assert not log.exists()
+
+
+def _make_isolated_ruff_worktree(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+    """Model an older owning manifest/environment and a newer real linked checkout."""
+    owner, _, env = _make_pinned_tool_fixture_repo(tmp_path)
+    worktree = tmp_path / "new worker"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=owner,
+        check=True,
+        capture_output=True,
+    )
+    shutil.rmtree(worktree / ".venv")
+    (worktree / "pyproject.toml").write_text(
+        '[dependency-groups]\ndev = [\n    "ruff==0.16.6",\n]\n'
+        '[tool.ruff]\nrequired-version = "==0.16.6"\n',
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["git", "commit", "-am", "newer worktree pin"],
+        cwd=worktree,
+        check=True,
+        capture_output=True,
+    )
+    log = tmp_path / "uv calls.jsonl"
+    uv = owner / "fake-bin" / "uv"
+    uv.write_text(
+        "#!/usr/bin/python3\n"
+        "import json, os, signal, subprocess, sys, time\n"
+        "args = sys.argv[1:]\n"
+        "assert args[:2] == ['tool', 'run'], args\n"
+        "assert args[args.index('--from') + 1] == 'ruff==0.16.6', args\n"
+        "with open(os.environ['FAKE_RUFF_LOG'], 'a') as stream:\n"
+        "    stream.write(json.dumps({'argv': args, 'cwd': os.getcwd(), 'pid': os.getpid(), "
+        "'cache': os.environ.get('UV_CACHE_DIR'), 'tmp': os.environ.get('TMPDIR'), "
+        "'env': {k: v for k, v in os.environ.items() if k.startswith(('UV_', 'PYTHON', "
+        "'RUFF_', 'VIRTUAL_ENV'))}}) + '\\n')\n"
+        "if args[-1] == '--version':\n"
+        "    print('ruff ' + os.environ.get('FAKE_RUFF_VERSION', '0.16.6'))\n"
+        "    sys.exit(int(os.environ.get('FAKE_RUFF_PROVISION_STATUS', '0')))\n"
+        "if os.environ.get('FAKE_RUFF_BLOCK'):\n"
+        "    signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+        "    subprocess.Popen(['/bin/sleep', '60'])\n"
+        "    print('validation waiting', flush=True)\n"
+        "    time.sleep(60)\n"
+        "sys.exit(int(os.environ.get('FAKE_RUFF_STATUS', '0')))\n",
+        encoding="utf-8",
+    )
+    uv.chmod(0o755)
+    env = {**env, "FAKE_RUFF_LOG": str(log)}
+    return owner, worktree, env
+
+
+def test_worktree_isolated_ruff_uses_new_pin_without_changing_project_env(tmp_path: Path) -> None:
+    """Explicit recovery validates the active pin without rewriting the older owner's env."""
+    owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    caller = worktree / "sub directory"
+    caller.mkdir()
+    before = {path: path.read_bytes() for path in (owner / ".venv").rglob("*") if path.is_file()}
+    manifests = {root: (root / "pyproject.toml").read_bytes() for root in (owner, worktree)}
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--isolated-ruff",
+            "--",
+            "ruff",
+            "check",
+            "--select",
+            "F",
+            "file with spaces.py",
+            "--",
+            "-leading.py",
+        ],
+        cwd=caller,
+        env={**env, "FAKE_RUFF_STATUS": "1"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 1, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    assert len(calls) == 2
+    assert calls[0]["argv"][-1] == "--version"
+    assert calls[1]["argv"][-5:] == ["--select", "F", "file with spaces.py", "--", "-leading.py"]
+    assert all(call["cwd"] == str(caller) for call in calls)
+    assert all(not Path(call["tmp"]).exists() for call in calls)
+    assert {
+        path: path.read_bytes() for path in (owner / ".venv").rglob("*") if path.is_file()
+    } == before
+    assert not (worktree / ".venv").exists()
+    assert all(
+        (root / "pyproject.toml").read_bytes() == content for root, content in manifests.items()
+    )
+
+
 def test_worktree_shared_venv_fails_closed_on_stale_pinned_tool(
     tmp_path: Path,
 ) -> None:
@@ -2242,7 +3030,394 @@ def test_worktree_shared_venv_fails_closed_on_stale_pinned_tool(
     assert "uv-reached" not in result.stderr
     assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
     assert "Remedy:" in result.stderr
-    assert "--no-freshness-check" in result.stderr
+    assert "--isolated-ruff" in result.stderr
+    assert "selected installation is stale" in result.stderr
+
+
+@pytest.mark.parametrize("prefix", [[], ["--standalone"]])
+@pytest.mark.parametrize("command", [["ruff", "check", "."], ["uv", "run", "ruff", "check", "."]])
+def test_worktree_isolated_ruff_default_explains_older_owner(
+    tmp_path: Path, prefix: list[str], command: list[str]
+) -> None:
+    """An older owning manifest cannot recover a newer active pin through owner sync alone."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), *prefix, "--", *command],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "owner re-sync alone" in result.stderr
+    assert "ruff==0.16.5" in result.stderr
+    assert "ruff==0.16.6" in result.stderr
+    assert "--isolated-ruff" in result.stderr
+    assert "--no-freshness-check" not in result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP])
+def test_worktree_isolated_ruff_interruption_cleans_task_cache(tmp_path: Path, signum: int) -> None:
+    """Termination must stop even a stubborn tool group before removing task-owned state."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    process = subprocess.Popen(
+        [str(RUN_WORKTREE_SHARED_VENV), "--isolated-ruff", "--", "ruff", "check", "."],
+        cwd=worktree,
+        env={**env, "FAKE_RUFF_BLOCK": "1"},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    calls = []
+    timed_out = False
+    try:
+        assert process.stdout is not None
+        assert process.stdout.readline().strip() == "validation waiting"
+        calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+        process.send_signal(signum)
+        try:
+            process.communicate(timeout=6)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+    finally:
+        if process.poll() is None:
+            for call in calls:
+                try:
+                    os.killpg(call["pid"], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            process.communicate(timeout=5)
+    assert not timed_out, "wrapper failed to bound interruption cleanup"
+    assert process.returncode == 128 + signum
+    assert calls and all(not Path(call["tmp"]).exists() for call in calls)
+
+
+@pytest.mark.parametrize("phase", ["during-cleanup", "return-boundary"])
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP])
+def test_worktree_isolated_ruff_signal_during_successful_cleanup_preserves_status(
+    tmp_path: Path, phase: str, signum: int
+) -> None:
+    """Inject signals at deterministic cleanup/return boundaries in the real embedded program."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    match = re.search(
+        r"exec \"\$host_python\"[^\n]*<<'PY'\n(.*?)\nPY\nfi",
+        RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8"),
+        re.DOTALL,
+    )
+    assert match is not None, "isolated runner must remain an inspectable host-Python program"
+    if phase == "during-cleanup":
+        probe = (
+            "import os, shutil, signal\n"
+            "original_rmtree = shutil.rmtree\n"
+            "def interrupt_cleanup(path):\n"
+            "    original_rmtree(path)\n"
+            f"    os.kill(os.getpid(), {signum})\n"
+            "shutil.rmtree = interrupt_cleanup\n"
+        )
+    else:
+        probe = (
+            "import os, signal, sys\n"
+            "def interrupt_return(frame, event, arg):\n"
+            "    if (event == 'return' and frame.f_code.co_name == 'run'\n"
+            "            and frame.f_code.co_filename == '<stdin>'):\n"
+            "        sys.settrace(None)\n"
+            f"        os.kill(os.getpid(), {signum})\n"
+            "    return interrupt_return\n"
+            "sys.settrace(interrupt_return)\n"
+        )
+    result = subprocess.run(
+        ["/usr/bin/python3", "-I", "-S", "-B", "-", str(worktree), "ruff", "check", "."],
+        input=probe + match.group(1),
+        cwd=worktree,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 128 + signum, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    assert len(calls) == 2
+    assert all(not Path(call["tmp"]).exists() for call in calls)
+
+
+def _run_isolated_ruff(
+    worktree: Path,
+    env: dict[str, str],
+    args: list[str] | None = None,
+    prefix: list[str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Exercise the public opt-in subprocess boundary with deterministic fake provisioning."""
+    return subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--isolated-ruff",
+            *(prefix or []),
+            "--",
+            *(args if args is not None else ["ruff", "check", "."]),
+        ],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "dev",
+    [
+        [],
+        ["ruff>=0.16.6"],
+        ["ruff==0.16.6", "ruff==0.16.6"],
+        ["ruff==0.16.6; python_version >= '3.11'"],
+        ["ruff @ https://example.invalid/ruff.whl"],
+        ["ruff==0.16.*"],
+        ["ruff[extra]==0.16.6"],
+        [{"include-group": "lint"}],
+    ],
+)
+def test_worktree_isolated_ruff_rejects_ambiguous_pin(tmp_path: Path, dev: list) -> None:
+    """Unsupported dependency forms fail closed before uv is invoked."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    # JSON scalars/arrays also form TOML values; the group-table case uses native inline TOML.
+    value = '[{include-group = "lint"}]' if dev and isinstance(dev[0], dict) else json.dumps(dev)
+    (worktree / "pyproject.toml").write_text(
+        f'[dependency-groups]\ndev = {value}\n[tool.ruff]\nrequired-version = "==0.16.6"\n',
+        encoding="utf-8",
+    )
+    result = _run_isolated_ruff(worktree, env)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        "",
+        'required-version = "==0.16.5"',
+        'required-version = ">=0.16.6"',
+        'required-version = "==0.16.6"\nfix = true',
+        'required-version = "==0.16.6"\nfix-only = true',
+        'required-version = "==0.16.6"\nextend = "other.toml"',
+        'required-version = "==0.16.6"\ncache-dir = ".venv/cache"',
+        'required-version = "==0.16.6"\noutput-file = ".venv/report"',
+        'required-version = "==0.16.6"\nrequired-version = "==0.16.6"',
+    ],
+)
+def test_worktree_isolated_ruff_rejects_unsafe_root_configuration(
+    tmp_path: Path, config: str
+) -> None:
+    """Root configuration must match the pin and cannot fix files or redirect writes."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    (worktree / "pyproject.toml").write_text(
+        '[dependency-groups]\ndev = ["ruff==0.16.6"]\n[tool.ruff]\n' + config,
+        encoding="utf-8",
+    )
+    result = _run_isolated_ruff(worktree, env)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["uv", "run", "ruff", "check", "."],
+        ["/usr/bin/ruff", "check", "."],
+        ["pytest", "tests"],
+        ["ruff", "format", "."],
+        ["ruff", "format", "--", "--check"],
+        ["ruff", "check", "--fix"],
+        ["ruff", "check", "--fix=true"],
+        ["ruff", "check", "--fix-only"],
+        ["ruff", "check", "--unsafe-fixes"],
+        ["ruff", "check", "--add-noqa"],
+        ["ruff", "check", "--watch"],
+        ["ruff", "check", "--output-file", "report"],
+        ["ruff", "check", "--output-file=report"],
+        ["ruff", "check", "--cache-dir", "cache"],
+        ["ruff", "check", "--cache-dir=cache"],
+        ["ruff", "check", "--config", "fix=true"],
+        ["ruff", "check", "--config=fix=true"],
+        ["ruff", "check", "--isolated"],
+        ["ruff", "check", "-"],
+        ["ruff", "check", "--select"],
+        ["ruff", "check", "--select="],
+        ["ruff", "format", "--check", "--output-file=report"],
+    ],
+)
+def test_worktree_isolated_ruff_rejects_unsupported_commands(
+    tmp_path: Path, args: list[str]
+) -> None:
+    """Mutation and redirect options, including equals forms, never reach provisioning."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = _run_isolated_ruff(worktree, env, args)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        ["--venv", "unused"],
+        ["--profile", "core"],
+        ["--scratch-dir", "unused"],
+        ["--standalone"],
+        ["--no-freshness-check"],
+        ["--recover-stale-fast-pysf"],
+    ],
+)
+def test_worktree_isolated_ruff_rejects_conflicting_wrapper_options(
+    tmp_path: Path, prefix: list[str]
+) -> None:
+    """Explicit wrapper conflicts fail before cache creation or uv execution."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = _run_isolated_ruff(worktree, env, prefix=prefix)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"FAKE_RUFF_VERSION": "0.16.5"},
+        {"FAKE_RUFF_VERSION": "unknown"},
+        {"FAKE_RUFF_PROVISION_STATUS": "1"},
+    ],
+)
+def test_worktree_isolated_ruff_provision_failure_stops_validation(
+    tmp_path: Path, overrides: dict[str, str]
+) -> None:
+    """Version/provisioning failure cannot fall back to another tool or leak task cache."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = _run_isolated_ruff(worktree, {**env, **overrides})
+    assert result.returncode == 2, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    assert len(calls) == 1
+    assert not Path(calls[0]["tmp"]).exists()
+
+
+@pytest.mark.parametrize("mode", [["check"], ["format", "--check"]])
+@pytest.mark.parametrize("status", [0, 1, 2])
+def test_worktree_isolated_ruff_preserves_status_and_root_config(
+    tmp_path: Path, mode: list[str], status: int
+) -> None:
+    """Both validation commands preserve Ruff's status and explicitly bind the root config."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    result = _run_isolated_ruff(
+        worktree, {**env, "FAKE_RUFF_STATUS": str(status)}, ["ruff", *mode, "."]
+    )
+    assert result.returncode == status, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    args = calls[-1]["argv"]
+    assert args[args.index("--config") + 1] == str(worktree / "pyproject.toml")
+    assert "--no-cache" in args
+    assert not Path(calls[-1]["tmp"]).exists()
+
+
+def test_worktree_isolated_ruff_sanitizes_environment_and_host_imports(tmp_path: Path) -> None:
+    """Host parsing and tool provisioning ignore inherited project/site/config redirection."""
+    owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    shared_cache = tmp_path / "user cache"
+    shared_cache.mkdir()
+    sentinel = shared_cache / "preserve"
+    sentinel.write_text("user-managed", encoding="utf-8")
+    for module in ("tomllib.py", "sitecustomize.py", "usercustomize.py"):
+        (worktree / module).write_text(
+            'raise RuntimeError("untrusted import executed")\n', encoding="utf-8"
+        )
+    redirected = owner / ".venv" / "must-not-create"
+    overrides = dict.fromkeys(
+        [
+            "UV_PROJECT_ENVIRONMENT",
+            "UV_PROJECT",
+            "UV_WORKING_DIR",
+            "UV_CONFIG_FILE",
+            "UV_ENV_FILE",
+            "UV_CONSTRAINT",
+            "UV_OVERRIDE",
+            "UV_PYTHON",
+            "RUFF_OUTPUT_FILE",
+            "VIRTUAL_ENV",
+        ],
+        str(redirected),
+    )
+    overrides.update(
+        PYTHONPATH=str(worktree),
+        PYTHONHOME=str(worktree),
+        PYTHONUSERBASE=str(worktree),
+        UV_CACHE_DIR=str(shared_cache),
+        RUFF_CACHE_DIR=str(shared_cache),
+        UV_TOOL_DIR=str(shared_cache),
+        XDG_CACHE_HOME=str(shared_cache),
+        UV_OFFLINE="1",
+    )
+    result = _run_isolated_ruff(worktree, {**env, **overrides})
+    assert result.returncode == 0, result.stderr
+    calls = [json.loads(line) for line in Path(env["FAKE_RUFF_LOG"]).read_text().splitlines()]
+    for call in calls:
+        assert set(call["env"]) == {"UV_CACHE_DIR", "UV_TOOL_DIR", "UV_OFFLINE"}
+        assert call["env"]["UV_OFFLINE"] == "1"
+        assert "--no-config" in call["argv"]
+        assert "--no-env-file" in call["argv"]
+        assert "--no-python-downloads" in call["argv"]
+        assert not Path(call["tmp"]).exists()
+    assert not redirected.exists()
+    assert list(shared_cache.iterdir()) == [sentinel]
+    assert not list(worktree.rglob("__pycache__"))
+
+
+@pytest.mark.parametrize("variable", ["UV_CACHE_DIR", "UV_TOOL_DIR", "TMPDIR", "RUFF_CACHE_DIR"])
+def test_worktree_isolated_ruff_rejects_symlinked_cache_overlap(
+    tmp_path: Path, variable: str
+) -> None:
+    """A cache/temp alias into a project environment is rejected without changing it."""
+    owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    alias = tmp_path / "cache alias"
+    alias.symlink_to(owner / ".venv", target_is_directory=True)
+    result = _run_isolated_ruff(worktree, {**env, variable: str(alias)})
+    assert result.returncode == 2, result.stderr
+    assert "including symlinks" in result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
+
+
+def test_worktree_isolated_ruff_missing_uv_fails_closed(tmp_path: Path) -> None:
+    """No uv executable means no fallback or project bootstrap."""
+    owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    (owner / "fake-bin" / "uv").unlink()
+    result = _run_isolated_ruff(worktree, {**env, "PATH": "/usr/bin:/bin"})
+    assert result.returncode == 2, result.stderr
+    assert "uv executable is unavailable" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        None,
+        "not valid TOML!",
+        "dependency-groups = []",
+        "tool = []\n[dependency-groups]\ndev = ['ruff==0.16.6']",
+        "[dependency-groups]\ndev = ['ruff==0.16.6']\n[tool]\nruff = []",
+    ],
+)
+def test_worktree_isolated_ruff_rejects_malformed_manifest(
+    tmp_path: Path, manifest: str | None
+) -> None:
+    """Missing manifests and malformed table shapes consistently refuse before provisioning."""
+    _owner, worktree, env = _make_isolated_ruff_worktree(tmp_path)
+    path = worktree / "pyproject.toml"
+    if manifest is None:
+        path.unlink()
+    else:
+        path.write_text(manifest, encoding="utf-8")
+    result = _run_isolated_ruff(worktree, env)
+    assert result.returncode == 2, result.stderr
+    assert not Path(env["FAKE_RUFF_LOG"]).exists()
 
 
 def test_worktree_shared_venv_standalone_fails_closed_on_stale_pinned_tool(
@@ -2887,6 +4062,86 @@ def test_gh_comment_invalid_target_exits_2() -> None:
     assert result.returncode == 2
     assert "target must be 'pr' or 'issue'" in result.stderr
     assert "Usage:" in result.stdout
+
+
+def test_gh_comment_fails_closed_on_gh_timeout(tmp_path: Path) -> None:
+    """A stalled GitHub CLI must produce a bounded, classified failure."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_gh = fake_bin / "gh"
+    # Replace the fake executable with the sleeper so the timeout test does not
+    # leave a descendant behind when the pre-fix helper is interrupted.
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\nexec sleep 10\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("timeout must fail closed\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["GH_COMMENT_TIMEOUT_SECONDS"] = "0.1"
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "8560",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=2,
+        check=False,
+    )
+
+    assert result.returncode == 124
+    assert "GitHub CLI command timed out after 0.1 seconds" in result.stderr
+
+
+def test_gh_comment_rejects_invalid_timeout_before_gh_call(tmp_path: Path) -> None:
+    """A non-positive timeout must not silently disable the transport bound."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    marker = tmp_path / "gh-called"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        f"#!/usr/bin/env bash\ntouch {shlex.quote(str(marker))}\nexit 0\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("invalid timeout must fail closed\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["GH_COMMENT_TIMEOUT_SECONDS"] = "0"
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "8560",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=2,
+        check=False,
+    )
+
+    assert result.returncode == 125
+    assert "GH_COMMENT_TIMEOUT_SECONDS must be a finite positive number" in result.stderr
+    assert not marker.exists()
 
 
 def test_gh_comment_pr_uses_rest_api(tmp_path: Path) -> None:
@@ -4366,4 +5621,118 @@ def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> No
     )[0]
     assert "PYTEST_XDIST_DIST" not in core_invocation, (
         "core lane must not change its distribution default"
+    )
+
+
+def test_worktree_shared_venv_selection_gate_contract() -> None:
+    """Issue #8798: selection and freshness checks must run inside one serialized gate."""
+    script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
+
+    assert 'worktree_selection_key="$(printf' in script_text, (
+        "the gate must be keyed per linked worktree"
+    )
+    assert "robot-sf-venv-selection-${worktree_selection_key}.lockdir" in script_text
+    assert script_text.index("acquire_venv_selection_gate") < script_text.index(
+        'venv_path="$repo_root/.venv"'
+    ), "the gate must be acquired before the environment is selected"
+    assert script_text.index("release_venv_selection_gate") < script_text.index(
+        'export UV_PROJECT_ENVIRONMENT="$venv_path"'
+    ), "the gate must be released before the wrapped command starts"
+    assert "trap release_venv_selection_gate EXIT" in script_text, (
+        "early fail-closed exits must release the gate"
+    )
+    assert "timed out waiting for the shared-venv selection gate" in script_text, (
+        "a hung gate holder must fail closed instead of waiting forever"
+    )
+
+
+def test_worktree_shared_venv_concurrent_recovery_serializes(
+    tmp_path: Path,
+) -> None:
+    """Issue #8798: a concurrent invocation waits for recovery instead of racing it."""
+    stale_scene = "# stale install without normalize_integration_scheme\n"
+    repo, main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=stale_scene)
+    recovery_log = tmp_path / "recovery-runs.log"
+    recovery_script = repo / "scripts" / "dev" / "recover_fast_pysf_worktree.sh"
+    recovery_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f'echo "start" >> "{recovery_log}"\n'
+        "sleep 3\n"
+        "mkdir -p .venv/bin\n"
+        "cat > .venv/bin/python <<'PY'\n"
+        "#!/usr/bin/env bash\n"
+        "exit 0\n"
+        "PY\n"
+        "chmod +x .venv/bin/python\n"
+        f'echo "done" >> "{recovery_log}"\n',
+        encoding="utf-8",
+    )
+    recovery_script.chmod(0o755)
+    subprocess.run(
+        ["git", "add", str(recovery_script.relative_to(repo))],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture slow recovery helper"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    env = {
+        **env,
+        "VIRTUAL_ENV": str(main_venv),
+        "UV_PROJECT_ENVIRONMENT": str(main_venv),
+    }
+
+    first = subprocess.Popen(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    deadline = time.monotonic() + 20
+    while not recovery_log.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert recovery_log.exists(), "fixture recovery never started"
+
+    second = subprocess.Popen(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    _, second_stderr = second.communicate(timeout=60)
+    _, first_stderr = first.communicate(timeout=60)
+
+    local_venv = worktree / ".venv"
+    assert first.returncode == 7, first_stderr
+    assert second.returncode == 7, second_stderr
+    assert f"venv={local_venv}" in first_stderr
+    assert f"venv={local_venv}" in second_stderr
+    assert "Shared-venv selection gate acquired" in second_stderr, (
+        "the concurrent invocation must wait on the per-worktree selection gate"
+    )
+    assert "Recovering stale fast-pysf" not in second_stderr, (
+        "the waiting invocation must reuse the recovered environment, not recover again"
+    )
+    assert recovery_log.read_text(encoding="utf-8").split().count("start") == 1, (
+        "concurrent invocations must not race duplicate recovery runs"
     )

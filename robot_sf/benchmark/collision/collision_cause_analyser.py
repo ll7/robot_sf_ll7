@@ -225,6 +225,7 @@ def _derive_replay_config(scenario: KinematicScenario) -> ReplayConfig:
         feasibility_filter="all_admissible_decel",
         collision_predicate="euclidean_distance<=collision_radius",
         pedestrian_response=scenario.pedestrian_response,
+        source_kind="synthetic_fixture",
     )
 
 

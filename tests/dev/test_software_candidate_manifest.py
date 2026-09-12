@@ -18,6 +18,8 @@ from pathlib import Path
 import jsonschema
 import pytest
 
+from scripts.tools.check_dependency_license_inventory import _candidate_provenance_contract
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HELPER = REPO_ROOT / "scripts" / "dev" / "software_candidate_manifest.py"
 VALIDATORS = (
@@ -220,6 +222,149 @@ def test_assemble_is_deterministic_and_offline_verify_reuses_exact_bytes(tmp_pat
         "1",
     )
     assert "PASS" in result.stdout
+
+
+def test_dispatch_source_identity_is_bound_in_provenance_and_verified(tmp_path: Path) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    dist = _distributions(tmp_path / "dist")
+    raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
+    bundle = tmp_path / "bundle"
+    _run(
+        *_assemble_args(source, source_sha, dist, raw_sbom, bundle),
+        "--requested-source-sha",
+        source_sha,
+    )
+
+    provenance = json.loads((bundle / "candidate-provenance.json").read_text(encoding="utf-8"))
+    assert provenance["source_identity"] == {
+        "observed_source_sha": source_sha,
+        "requested_source_sha": source_sha,
+    }
+    _run(
+        "verify",
+        "--bundle-dir",
+        str(bundle),
+        "--expected-source-sha",
+        source_sha,
+        "--expected-workflow-run-id",
+        "123456",
+        "--expected-workflow-run-attempt",
+        "1",
+    )
+
+
+def test_dispatch_source_identity_is_accepted_by_dependency_validator(tmp_path: Path) -> None:
+    """The dependency validator accepts provenance emitted by the real assembler."""
+    source, source_sha = _source_repo(tmp_path / "source")
+    dist = _distributions(tmp_path / "dist")
+    raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
+    bundle = tmp_path / "bundle"
+    _run(
+        *_assemble_args(source, source_sha, dist, raw_sbom, bundle),
+        "--requested-source-sha",
+        source_sha,
+    )
+
+    manifest = json.loads((bundle / "candidate-manifest.json").read_text(encoding="utf-8"))
+    provenance_path = bundle / "candidate-provenance.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    assert provenance["source_identity"] == {
+        "observed_source_sha": source_sha,
+        "requested_source_sha": source_sha,
+    }
+    _candidate_provenance_contract(provenance_path, manifest)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_error"),
+    (
+        (
+            "observed_mismatch",
+            "candidate provenance observed source SHA differs from manifest",
+        ),
+        (
+            "requested_mismatch",
+            "candidate provenance requested source SHA differs from manifest",
+        ),
+        (
+            "manifest_mismatch",
+            "candidate provenance observed source SHA differs from manifest",
+        ),
+        ("malformed", "candidate provenance source identity is invalid"),
+        (
+            "invalid_observed",
+            "candidate provenance observed source SHA is invalid",
+        ),
+        (
+            "invalid_requested",
+            "candidate provenance requested source SHA is invalid",
+        ),
+        ("unknown_nested", "candidate provenance source identity is invalid"),
+        ("unknown_top_level", "candidate provenance does not exactly bind the manifest subjects"),
+        ("subject_drift", "candidate provenance does not exactly bind the manifest subjects"),
+    ),
+)
+def test_dependency_validator_rejects_source_identity_drift_and_unknown_fields(
+    tmp_path: Path,
+    mutation: str,
+    expected_error: str,
+) -> None:
+    """Source identity and subject drift remain fail-closed at the consumer."""
+    source, source_sha = _source_repo(tmp_path / "source")
+    dist = _distributions(tmp_path / "dist")
+    raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
+    bundle = tmp_path / "bundle"
+    _run(
+        *_assemble_args(source, source_sha, dist, raw_sbom, bundle),
+        "--requested-source-sha",
+        source_sha,
+    )
+
+    manifest = json.loads((bundle / "candidate-manifest.json").read_text(encoding="utf-8"))
+    provenance_path = bundle / "candidate-provenance.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    other_source_sha = "0" * 40 if source_sha != "0" * 40 else "1" * 40
+    if mutation == "observed_mismatch":
+        provenance["source_identity"]["observed_source_sha"] = other_source_sha
+    elif mutation == "requested_mismatch":
+        provenance["source_identity"]["requested_source_sha"] = other_source_sha
+    elif mutation == "manifest_mismatch":
+        manifest["source_sha"] = other_source_sha
+    elif mutation == "malformed":
+        provenance["source_identity"] = None
+    elif mutation == "invalid_observed":
+        provenance["source_identity"]["observed_source_sha"] = "invalid"
+    elif mutation == "invalid_requested":
+        provenance["source_identity"]["requested_source_sha"] = "invalid"
+    elif mutation == "unknown_nested":
+        provenance["source_identity"]["unexpected"] = "refuse"
+    elif mutation == "unknown_top_level":
+        provenance["unexpected"] = "refuse"
+    elif mutation == "subject_drift":
+        provenance["subjects"][0]["sha256"] = "0" * 64
+    else:
+        raise AssertionError(f"unhandled mutation: {mutation}")
+    provenance_path.write_text(
+        json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError) as error:
+        _candidate_provenance_contract(provenance_path, manifest)
+    assert str(error.value) == expected_error
+
+
+def test_assemble_rejects_requested_source_drift(tmp_path: Path) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    dist = _distributions(tmp_path / "dist")
+    raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
+    result = _run(
+        *_assemble_args(source, source_sha, dist, raw_sbom, tmp_path / "bundle"),
+        "--requested-source-sha",
+        "b" * 40,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "requested source SHA does not match" in result.stderr
 
 
 def test_sbom_volatile_identity_is_removed_deterministically(tmp_path: Path) -> None:

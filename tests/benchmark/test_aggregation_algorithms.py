@@ -6,7 +6,7 @@ import pytest
 from loguru import logger
 
 from robot_sf.benchmark.aggregate import compute_aggregates_with_ci
-from robot_sf.benchmark.errors import AggregationMetadataError
+from robot_sf.benchmark.errors import AggregationInputError, AggregationMetadataError
 
 
 def _make_record(
@@ -16,16 +16,18 @@ def _make_record(
     scenario_id: str = "scenario-1",
     success_rate: float = 1.0,
 ) -> dict[str, object]:
-    """TODO docstring. Document this function.
+    """Build a minimal episode record for algorithm-aware aggregation tests.
 
     Args:
-        algo: TODO docstring.
-        include_nested: TODO docstring.
-        scenario_id: TODO docstring.
-        success_rate: TODO docstring.
+        algo: Algorithm identifier stored in ``scenario_params``; when None the
+            record intentionally omits algorithm metadata.
+        include_nested: When True keep ``algo`` in ``scenario_params``; when False
+            leave the nested mapping empty to exercise top-level fallback.
+        scenario_id: Scenario identifier used for grouping and the episode id.
+        success_rate: Success-rate metric value stored under ``metrics``.
 
     Returns:
-        TODO docstring.
+        Episode record dictionary consumed by ``compute_aggregates_with_ci``.
     """
     record: dict[str, object] = {
         "episode_id": f"{scenario_id}-{algo or 'none'}",
@@ -92,3 +94,42 @@ def test_missing_algo_fields_raise():
 
     with pytest.raises(AggregationMetadataError):
         compute_aggregates_with_ci(records, return_ci=False)
+
+
+@pytest.mark.parametrize(
+    "confidence",
+    [0.0, 1.0, -0.5, 1.5, float("nan"), float("inf"), float("-inf")],
+)
+def test_invalid_bootstrap_confidence_fails_closed_when_ci_enabled(confidence: float) -> None:
+    """Bootstrap CI controls must be finite probabilities in the open unit interval."""
+    records = [_make_record("sf", scenario_id="scenario-sf")]
+
+    with pytest.raises(AggregationInputError, match="bootstrap_confidence"):
+        compute_aggregates_with_ci(
+            records,
+            bootstrap_samples=16,
+            bootstrap_confidence=confidence,
+        )
+
+
+@pytest.mark.parametrize(
+    ("return_ci", "bootstrap_samples", "confidence"),
+    [(True, 0, 0.0), (False, 16, 1.5)],
+)
+def test_invalid_bootstrap_confidence_is_ignored_when_ci_disabled(
+    return_ci: bool,
+    bootstrap_samples: int,
+    confidence: float,
+) -> None:
+    """Explicit no-CI modes preserve aggregation without validating unused controls."""
+    records = [_make_record("sf", scenario_id="scenario-sf")]
+
+    result = compute_aggregates_with_ci(
+        records,
+        return_ci=return_ci,
+        bootstrap_samples=bootstrap_samples,
+        bootstrap_confidence=confidence,
+    )
+
+    assert result["sf"]["success_rate"]["mean"] == pytest.approx(1.0)
+    assert "mean_ci" not in result["sf"]["success_rate"]

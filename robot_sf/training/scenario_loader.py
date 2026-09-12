@@ -7,46 +7,25 @@ import math
 import os
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from loguru import logger
 
-from robot_sf.gym_env.unified_config import (
-    ObservationVisibilitySettings,
-    RobotSimulationConfig,
-)
-from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import (
-    MapDefinition,
-    MapDefinitionPool,
-    PedestrianWaitRule,
-    SinglePedestrianDefinition,
-    parse_social_group_definitions,
-    serialize_map,
-)
-from robot_sf.nav.nav_types import GEOMETRY_CONTRACT_LEGACY, SUPPORTED_GEOMETRY_CONTRACTS
-from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
-from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig
-from robot_sf.robot.bicycle_drive import BicycleDriveSettings
-from robot_sf.robot.differential_drive import DifferentialDriveSettings
-from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
-from robot_sf.sim.pedestrian_model_variants import (
-    HSFM_ALIGNMENT_TORQUE_V1,
-    HSFM_ANISOTROPIC_FOV_V1,
-    HSFM_TTC_PREDICTIVE_V1,
-    HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
-)
-from robot_sf.sim.sim_config import (
-    AlignmentTorqueConfig,
-    AnisotropicFovConfig,
-    TtcPredictiveForceConfig,
-    ZanlungoCollisionPredictionConfig,
-)
+if TYPE_CHECKING:
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    from robot_sf.nav.global_route import GlobalRoute
+    from robot_sf.nav.map_config import (
+        MapDefinition,
+        PedestrianWaitRule,
+        SinglePedestrianDefinition,
+    )
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+    from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 
 _MAP_REGISTRY_ENV = "ROBOT_SF_MAP_REGISTRY"
 _MAP_REGISTRY_PATH = Path("maps/registry.yaml")
@@ -77,6 +56,59 @@ class _MapRegistryEntry:
     profile: str | None = None
     limitations: tuple[str, ...] = ()
     validation_status: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioManifestSource:
+    """One manifest read while expanding a scenario definition."""
+
+    path: Path
+    data: Any
+
+
+@dataclass(frozen=True)
+class ScenarioEntryIssue:
+    """A row or included-manifest issue found during tolerant validation."""
+
+    source: Path
+    index: int | None
+    message: str
+    entry: Any = None
+
+
+@dataclass(frozen=True)
+class ScenarioValidationReport:
+    """Provenance-preserving result from tolerant canonical scenario loading."""
+
+    scenarios: list[Mapping[str, Any]]
+    manifest_sources: list[ScenarioManifestSource]
+    entry_issues: list[ScenarioEntryIssue]
+    load_issues: list[ScenarioEntryIssue]
+    load_error: str | None
+    raw_entry_count: int
+
+
+class _ScenarioValidationMapping(dict[str, Any]):
+    """Expanded scenario mapping carrying its manifest source internally."""
+
+    def __init__(self, scenario: Mapping[str, Any], *, source_file: Path) -> None:
+        super().__init__(scenario)
+        self._scenario_source_file = source_file
+
+
+@dataclass
+class _ScenarioValidationCollector:
+    """Mutable collector shared by one recursive validation load."""
+
+    manifest_sources: list[ScenarioManifestSource] = field(default_factory=list)
+    entry_issues: list[ScenarioEntryIssue] = field(default_factory=list)
+    load_issues: list[ScenarioEntryIssue] = field(default_factory=list)
+    raw_entry_count: int = 0
+
+    @property
+    def issue_count(self) -> int:
+        """Return the number of issues collected so far."""
+        return len(self.entry_issues) + len(self.load_issues)
 
 
 def _load_yaml_documents(path: Path) -> Any:
@@ -129,6 +161,54 @@ def _load_scenario_manifest(
     return scenarios, includes, local_map_search_paths
 
 
+_SCENARIO_MANIFEST_KEYS = frozenset(
+    {
+        "scenarios",
+        "includes",
+        "include",
+        "scenario_files",
+        "map_search_paths",
+        "select_scenarios",
+        "scenario_overrides",
+        "scenario_overrides_by_name",
+    }
+)
+
+
+def load_scenarios_for_discovery(
+    path: str | Path,
+    *,
+    base_dir: Path | None = None,
+) -> list[Mapping[str, Any]] | None:
+    """Load a YAML candidate through the canonical scenario loader.
+
+    YAML files under ``configs/scenarios`` also include auxiliary metadata. A
+    mapping without scenario-manifest keys is therefore ignored by discovery,
+    while an empty, malformed, or structurally invalid manifest fails closed.
+    Scenario includes, selection, overrides, path rebasing, and map registry
+    resolution remain owned by :func:`load_scenarios`.
+
+    Returns:
+        list[Mapping[str, Any]] | None: Loaded scenarios, or ``None`` for a
+        valid auxiliary YAML mapping that is not a scenario manifest.
+
+    Raises:
+        OSError: If the candidate cannot be read.
+        ValueError: If the candidate is empty or is a malformed manifest.
+        yaml.YAMLError: If the candidate contains malformed YAML syntax.
+    """
+    resolved = Path(path).resolve()
+    data = _load_yaml_documents(resolved)
+    if data is None:
+        raise ValueError(f"Scenario discovery candidate is empty: {resolved}")
+    if isinstance(data, Mapping):
+        if not _SCENARIO_MANIFEST_KEYS.intersection(data):
+            return None
+    elif not isinstance(data, list):
+        raise ValueError(f"Scenario discovery candidate must contain a manifest: {resolved}")
+    return load_scenarios(resolved, base_dir=base_dir)
+
+
 def load_scenarios(path: str | Path, *, base_dir: Path | None = None) -> list[Mapping[str, Any]]:
     """Load scenario definitions from a YAML file.
 
@@ -163,12 +243,81 @@ def load_scenarios(path: str | Path, *, base_dir: Path | None = None) -> list[Ma
     return _load_scenarios_recursive(resolved, visited=set(), root=root)
 
 
+def load_scenarios_for_validation(
+    path: str | Path,
+    *,
+    base_dir: Path | None = None,
+) -> ScenarioValidationReport:
+    """Expand scenarios with provenance while retaining row-level failures.
+
+    This uses the same recursive loader, path rebasing, selection, override,
+    and registry logic as :func:`load_scenarios`. Unlike the strict runtime
+    entry point, malformed rows and broken includes are recorded so a caller
+    can report them alongside valid neighboring rows.
+
+    Returns:
+        ScenarioValidationReport: Expanded rows, all manifests read, and
+        tolerant-load diagnostics.
+    """
+    from robot_sf.training.task_bundles import (  # noqa: PLC0415
+        is_task_bundle_reference,
+        load_task_bundle_scenarios,
+    )
+
+    collector = _ScenarioValidationCollector()
+    try:
+        if is_task_bundle_reference(path):
+            scenarios = list(load_task_bundle_scenarios(path))
+            collector.raw_entry_count = len(scenarios)
+            return ScenarioValidationReport(
+                scenarios=scenarios,
+                manifest_sources=[],
+                entry_issues=[],
+                load_issues=[],
+                load_error=None,
+                raw_entry_count=collector.raw_entry_count,
+            )
+
+        resolved = Path(path).resolve()
+        if base_dir is None:
+            root = resolved
+        else:
+            root = base_dir.resolve()
+            if not root.exists():
+                raise ValueError(f"Scenario base_dir does not exist: {root}")
+        scenarios = _load_scenarios_recursive(
+            resolved,
+            visited=set(),
+            root=root,
+            collector=collector,
+        )
+    except (OSError, ValueError, RuntimeError, TypeError, yaml.YAMLError) as exc:
+        return ScenarioValidationReport(
+            scenarios=[],
+            manifest_sources=collector.manifest_sources,
+            entry_issues=collector.entry_issues,
+            load_issues=collector.load_issues,
+            load_error=str(exc),
+            raw_entry_count=collector.raw_entry_count,
+        )
+
+    return ScenarioValidationReport(
+        scenarios=scenarios,
+        manifest_sources=collector.manifest_sources,
+        entry_issues=collector.entry_issues,
+        load_issues=collector.load_issues,
+        load_error=None,
+        raw_entry_count=collector.raw_entry_count,
+    )
+
+
 def _load_scenarios_recursive(
     path: Path,
     *,
     visited: set[Path],
     root: Path,
     map_search_paths: list[Path] | None = None,
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Load scenarios from path, expanding any include references.
 
@@ -176,15 +325,20 @@ def _load_scenarios_recursive(
         list[Mapping[str, Any]]: Combined scenario entries.
     """
     resolved = path.resolve()
+    issues_before = collector.issue_count if collector is not None else 0
     if resolved in visited:
         raise ValueError(f"Scenario include cycle detected at '{resolved}'.")
     visited.add(resolved)
     try:
         data = _load_yaml_documents(resolved)
+        if collector is not None:
+            collector.manifest_sources.append(ScenarioManifestSource(resolved, data))
         scenarios, includes, local_map_search_paths = _load_scenario_manifest(
             data,
             source=resolved,
         )
+        if collector is not None:
+            collector.raw_entry_count += len(scenarios)
         combined: list[Mapping[str, Any]] = []
         inherited_search_paths = map_search_paths or []
         effective_search_paths = _merge_map_search_paths(
@@ -192,30 +346,49 @@ def _load_scenarios_recursive(
             local_map_search_paths,
         )
         for include_path in includes:
-            combined.extend(
-                _load_scenarios_recursive(
-                    include_path,
-                    visited=visited,
-                    root=root,
-                    map_search_paths=effective_search_paths,
+            try:
+                combined.extend(
+                    _load_scenarios_recursive(
+                        include_path,
+                        visited=visited,
+                        root=root,
+                        map_search_paths=effective_search_paths,
+                        collector=collector,
+                    )
                 )
-            )
+            except (OSError, ValueError, RuntimeError, TypeError, yaml.YAMLError) as exc:
+                if collector is None:
+                    raise
+                collector.load_issues.append(
+                    ScenarioEntryIssue(
+                        source=include_path.resolve(),
+                        index=None,
+                        message=str(exc),
+                    )
+                )
         combined.extend(
             _normalize_scenarios(
                 scenarios,
                 source=resolved,
                 root=root,
                 map_search_paths=effective_search_paths,
+                collector=collector,
             )
         )
         if isinstance(data, Mapping):
-            combined = _apply_scenario_selection(combined, data=data, source=resolved)
+            combined = _apply_scenario_selection(
+                combined,
+                data=data,
+                source=resolved,
+                collector=collector,
+            )
             combined = _apply_scenario_overrides(
                 combined,
                 data=data,
                 source=resolved,
                 root=root,
                 map_search_paths=effective_search_paths,
+                collector=collector,
             )
             combined = _apply_scenario_overrides_by_name(
                 combined,
@@ -223,8 +396,11 @@ def _load_scenarios_recursive(
                 source=resolved,
                 root=root,
                 map_search_paths=effective_search_paths,
+                collector=collector,
             )
         if not combined:
+            if collector is not None and collector.issue_count > issues_before:
+                return []
             raise ValueError(f"Scenario config missing scenarios: {resolved}")
         return combined
     finally:
@@ -300,6 +476,7 @@ def _apply_scenario_selection(
     *,
     data: Mapping[str, Any],
     source: Path,
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Apply explicit scenario selection after manifest expansion.
 
@@ -312,7 +489,15 @@ def _apply_scenario_selection(
 
     scenario_map: dict[str, Mapping[str, Any]] = {}
     for idx, scenario in enumerate(scenarios):
-        name = _scenario_identifier(scenario, source=source, index=idx)
+        try:
+            name = _scenario_identifier(scenario, source=source, index=idx)
+        except (TypeError, ValueError) as exc:
+            if collector is None:
+                raise
+            collector.entry_issues.append(
+                ScenarioEntryIssue(source=source, index=idx, message=str(exc), entry=scenario)
+            )
+            continue
         key = name.lower()
         if key in scenario_map:
             raise ValueError(
@@ -373,6 +558,12 @@ def _deep_merge_mapping(base: Mapping[str, Any], overrides: Mapping[str, Any]) -
     return merged
 
 
+def _scenario_validation_source(scenario: Mapping[str, Any], fallback: Path) -> Path:
+    """Return an expanded row's source manifest, or the current manifest."""
+    source_file = getattr(scenario, "_scenario_source_file", fallback)
+    return source_file if isinstance(source_file, Path) else fallback
+
+
 def _apply_scenario_overrides(
     scenarios: list[Mapping[str, Any]],
     *,
@@ -380,6 +571,7 @@ def _apply_scenario_overrides(
     source: Path,
     root: Path,
     map_search_paths: list[Path],
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Apply manifest-wide nested overrides after include expansion.
 
@@ -390,11 +582,21 @@ def _apply_scenario_overrides(
     overrides = _resolve_scenario_overrides(data, source=source)
     if not overrides:
         return scenarios
+    merged = [_deep_merge_mapping(scenario, overrides) for scenario in scenarios]
+    if collector is not None:
+        merged = [
+            _ScenarioValidationMapping(
+                scenario,
+                source_file=_scenario_validation_source(original, source),
+            )
+            for original, scenario in zip(scenarios, merged, strict=True)
+        ]
     return _normalize_scenarios(
-        [_deep_merge_mapping(scenario, overrides) for scenario in scenarios],
+        merged,
         source=source,
         root=root,
         map_search_paths=map_search_paths,
+        collector=collector,
     )
 
 
@@ -445,6 +647,7 @@ def _apply_scenario_overrides_by_name(
     source: Path,
     root: Path,
     map_search_paths: list[Path],
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Apply nested overrides to specific scenario names after expansion.
 
@@ -461,7 +664,16 @@ def _apply_scenario_overrides_by_name(
     merged: list[Mapping[str, Any]] = []
     applied_targets: set[str] = set()
     for index, scenario in enumerate(scenarios):
-        name = _scenario_identifier(scenario, source=source, index=index)
+        try:
+            name = _scenario_identifier(scenario, source=source, index=index)
+        except (TypeError, ValueError) as exc:
+            if collector is None:
+                raise
+            collector.entry_issues.append(
+                ScenarioEntryIssue(source=source, index=index, message=str(exc), entry=scenario)
+            )
+            merged.append(scenario)
+            continue
         key = name.lower()
         if key in target_keys and key in applied_targets:
             raise ValueError(
@@ -474,7 +686,13 @@ def _apply_scenario_overrides_by_name(
         if override_name is None:
             merged.append(scenario)
             continue
-        merged.append(_deep_merge_mapping(scenario, overrides_by_name[override_name]))
+        merged_scenario = _deep_merge_mapping(scenario, overrides_by_name[override_name])
+        if collector is not None:
+            merged_scenario = _ScenarioValidationMapping(
+                merged_scenario,
+                source_file=_scenario_validation_source(scenario, source),
+            )
+        merged.append(merged_scenario)
 
     if unused:
         unknown = ", ".join(sorted(unused.values()))
@@ -488,6 +706,7 @@ def _apply_scenario_overrides_by_name(
         source=source,
         root=root,
         map_search_paths=map_search_paths,
+        collector=collector,
     )
 
 
@@ -762,6 +981,30 @@ def _resolve_map_id(
     return entry.path
 
 
+def resolve_map_id(
+    map_id: str,
+    *,
+    source: str | Path,
+    required_profile: str = _DEFAULT_MAP_PROFILE,
+) -> Path:
+    """Resolve a scenario ``map_id`` through the canonical map registry.
+
+    Args:
+        map_id: Registry identifier to resolve.
+        source: Scenario or manifest path used in error messages.
+        required_profile: Capability profile required by the scenario.
+
+    Returns:
+        Path: Existing map path registered for ``map_id``.
+    """
+    return _resolve_map_id(
+        map_id.strip(),
+        map_registry=_load_map_registry(),
+        source=Path(source),
+        required_profile=required_profile,
+    )
+
+
 def _validate_map_catalog_entry(
     entry: _MapRegistryEntry,
     *,
@@ -799,6 +1042,7 @@ def _normalize_scenarios(
     source: Path,
     root: Path,
     map_search_paths: list[Path],
+    collector: _ScenarioValidationCollector | None = None,
 ) -> list[Mapping[str, Any]]:
     """Filter and validate scenario mappings while preserving order.
 
@@ -810,19 +1054,56 @@ def _normalize_scenarios(
         map_registry = _load_map_registry()
     normalized: list[Mapping[str, Any]] = []
     for idx, scenario in enumerate(scenarios):
+        scenario_source = _scenario_validation_source(scenario, source)
         if not isinstance(scenario, Mapping):
-            logger.warning("Scenario entry {} in '{}' is not a mapping; skipping.", idx, source)
+            error_message = (
+                f"Scenario entry {idx} in '{source}' must be a mapping; "
+                f"got {type(scenario).__name__}."
+            )
+            if collector is None:
+                raise ValueError(error_message)
+            collector.entry_issues.append(
+                ScenarioEntryIssue(
+                    source=source,
+                    index=idx,
+                    message=error_message,
+                    entry=scenario,
+                )
+            )
             continue
-        _validate_scenario_entry(scenario, source=source, index=idx)
-        normalized.append(
-            _rebase_scenario_paths(
+        try:
+            _validate_scenario_entry(scenario, source=source, index=idx)
+            normalized_scenario = _rebase_scenario_paths(
                 scenario,
                 source=source,
                 root=root,
                 map_search_paths=map_search_paths,
                 map_registry=map_registry,
             )
-        )
+            normalized.append(
+                _ScenarioValidationMapping(normalized_scenario, source_file=scenario_source)
+                if collector is not None
+                else normalized_scenario
+            )
+        except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as exc:
+            if collector is None:
+                raise
+            collector.entry_issues.append(
+                ScenarioEntryIssue(
+                    source=source,
+                    index=idx,
+                    message=str(exc),
+                    entry=scenario,
+                )
+            )
+            # Keep malformed mappings available for the validator and asset
+            # classifier; only non-mapping rows are omitted from the expanded
+            # mapping list because they cannot produce a scenario summary.
+            normalized.append(
+                _ScenarioValidationMapping(dict(scenario), source_file=scenario_source)
+                if collector is not None
+                else dict(scenario)
+            )
     return normalized
 
 
@@ -1197,6 +1478,13 @@ def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> Ma
         MapDefinition | None: Parsed map definition for SVG maps, else ``None``.
     """
 
+    from robot_sf.nav.map_config import serialize_map  # noqa: PLC0415
+    from robot_sf.nav.nav_types import (  # noqa: PLC0415
+        GEOMETRY_CONTRACT_LEGACY,
+        SUPPORTED_GEOMETRY_CONTRACTS,
+    )
+    from robot_sf.nav.svg_map_parser import convert_map  # noqa: PLC0415
+
     if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
         raise ValueError(
             f"Unknown geometry_contract {geometry_contract!r} for map {map_path!r}. "
@@ -1241,6 +1529,8 @@ def build_robot_config_from_scenario(
     Returns:
         RobotSimulationConfig: Config populated with overrides and map pool.
     """
+
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: PLC0415
 
     _reject_required_platform_semantic_consumers(scenario)
 
@@ -1424,6 +1714,8 @@ def _apply_observation_visibility_overrides(
     tracking_config = overrides.get("tracking_config")
     if tracking_config is not None and not isinstance(tracking_config, Mapping):
         raise ValueError("observation_visibility.tracking_config must be a mapping.")
+    from robot_sf.gym_env.unified_config import ObservationVisibilitySettings  # noqa: PLC0415
+
     config.observation_visibility = ObservationVisibilitySettings(
         enabled=enabled,
         fov_degrees=fov_degrees,
@@ -1458,6 +1750,8 @@ def _differential_robot_settings(overrides: Mapping[str, Any]) -> DifferentialDr
     Returns:
         DifferentialDriveSettings: Parsed settings object.
     """
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings  # noqa: PLC0415
+
     kwargs: dict[str, Any] = {}
     if "radius" in overrides:
         kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
@@ -1503,6 +1797,8 @@ def _bicycle_robot_settings(overrides: Mapping[str, Any]) -> BicycleDriveSetting
     Returns:
         BicycleDriveSettings: Parsed settings object.
     """
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings  # noqa: PLC0415
+
     kwargs: dict[str, Any] = {}
     if "radius" in overrides:
         kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
@@ -1532,6 +1828,8 @@ def _holonomic_robot_settings(overrides: Mapping[str, Any]) -> HolonomicDriveSet
     Returns:
         HolonomicDriveSettings: Parsed settings object.
     """
+    from robot_sf.robot.holonomic_drive import HolonomicDriveSettings  # noqa: PLC0415
+
     kwargs: dict[str, Any] = {}
     if "radius" in overrides:
         kwargs["radius"] = _coerce_non_negative_float(overrides["radius"], field_name="radius")
@@ -1669,6 +1967,11 @@ def _apply_social_group_overrides(
         return
     if config.map_pool is None:
         raise ValueError("social_groups overrides provided but config has no map pool")
+
+    from robot_sf.nav.map_config import (  # noqa: PLC0415
+        MapDefinitionPool,
+        parse_social_group_definitions,
+    )
 
     cloned_maps = dict(config.map_pool.map_defs)
     for map_id, map_def in cloned_maps.items():
@@ -1852,6 +2155,8 @@ def _parse_wait_overrides(
         raise ValueError("wait_at requires a trajectory to be set")
     if not isinstance(wait_entries, list):
         raise ValueError("wait_at must be a list of wait rules")
+
+    from robot_sf.nav.map_config import PedestrianWaitRule  # noqa: PLC0415
 
     rules: list[PedestrianWaitRule] = []
     for idx, entry in enumerate(wait_entries):
@@ -2166,6 +2471,8 @@ def _apply_single_pedestrian_override(
     )
     metadata = _resolve_metadata_override(ped, entry)
 
+    from robot_sf.nav.map_config import SinglePedestrianDefinition  # noqa: PLC0415
+
     return SinglePedestrianDefinition(
         id=ped.id,
         start=start,
@@ -2185,17 +2492,17 @@ def _apply_single_pedestrian_override(
     )
 
 
-# Opt-in pedestrian-model config attribute -> (config dataclass, activating model selector).
+# Opt-in pedestrian-model config attribute -> (config dataclass name, activating model selector).
 # Each entry drives both the nested-mapping override path and the ``pedestrian_model``
 # selector path below, so adding a new opt-in force model is a single-line change here.
-_OPT_IN_PEDESTRIAN_MODEL_CONFIGS: dict[str, tuple[type, str]] = {
-    "ttc_predictive_force": (TtcPredictiveForceConfig, HSFM_TTC_PREDICTIVE_V1),
+_OPT_IN_PEDESTRIAN_MODEL_CONFIGS: dict[str, tuple[str, str]] = {
+    "ttc_predictive_force": ("TtcPredictiveForceConfig", "hsfm_ttc_predictive_v1"),
     "zanlungo_collision_prediction": (
-        ZanlungoCollisionPredictionConfig,
-        HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
+        "ZanlungoCollisionPredictionConfig",
+        "hsfm_zanlungo_collision_prediction_v1",
     ),
-    "anisotropic_fov": (AnisotropicFovConfig, HSFM_ANISOTROPIC_FOV_V1),
-    "alignment_torque": (AlignmentTorqueConfig, HSFM_ALIGNMENT_TORQUE_V1),
+    "anisotropic_fov": ("AnisotropicFovConfig", "hsfm_anisotropic_fov_v1"),
+    "alignment_torque": ("AlignmentTorqueConfig", "hsfm_alignment_torque_v1"),
 }
 # Reverse lookup: activating model selector -> its opt-in config attribute name.
 _PEDESTRIAN_MODEL_ENABLE_ATTR: dict[str, str] = {
@@ -2212,7 +2519,10 @@ def _set_simulation_override_attr(
     config_spec = _OPT_IN_PEDESTRIAN_MODEL_CONFIGS.get(attr)
     if config_spec is not None and isinstance(overrides[attr], Mapping):
         # Nested opt-in force config given directly; auto-enable when its selector is active.
-        config_cls, selector_model = config_spec
+        config_cls_name, selector_model = config_spec
+        from robot_sf.sim import sim_config  # noqa: PLC0415
+
+        config_cls = getattr(sim_config, config_cls_name)
         sub_overrides = dict(overrides[attr])
         # Auto-enable when the selector model is active either via this scenario's overrides or
         # via the already-applied base config; checking only the overrides would silently reset
@@ -2302,6 +2612,8 @@ def _apply_prf_config_override(
         kwargs["force_multiplier"] = _coerce_finite_float(
             overrides["force_multiplier"], field_name="prf_config.force_multiplier"
         )
+    from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig  # noqa: PLC0415
+
     config.sim_config.prf_config = PedRobotForceConfig(**kwargs)
 
 
@@ -2317,6 +2629,8 @@ def _apply_residual_adversary_override(
     """
     if not isinstance(overrides, Mapping):
         raise ValueError("simulation_config.residual_adversary must be a mapping.")
+    from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig  # noqa: PLC0415
+
     config.sim_config.residual_adversary = ResidualAdversaryConfig(**dict(overrides))
 
 
@@ -2395,6 +2709,12 @@ def _apply_map_pool(
             ``"Map pool is empty!"`` error much later during the first scenario
             reset (the original issue #830 failure mode on long SLURM runs).
     """
+    from robot_sf.nav.map_config import MapDefinitionPool  # noqa: PLC0415
+    from robot_sf.nav.nav_types import (  # noqa: PLC0415
+        GEOMETRY_CONTRACT_LEGACY,
+        SUPPORTED_GEOMETRY_CONTRACTS,
+    )
+
     map_file = scenario.get("map_file")
     geometry_contract = scenario.get("map_geometry_contract", "legacy")
     if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
@@ -2495,6 +2815,8 @@ def _coerce_route_payload(
     Returns:
         list[GlobalRoute]: Parsed route objects for the selected entity class.
     """
+    from robot_sf.nav.global_route import GlobalRoute  # noqa: PLC0415
+
     coerced: list[GlobalRoute] = []
     entity_name = "robot_routes" if is_robot else "ped_routes"
     for idx, entry in enumerate(route_entries):
@@ -2616,12 +2938,18 @@ def map_cache_info() -> dict[str, int]:
 
 
 __all__ = [
+    "ScenarioEntryIssue",
+    "ScenarioManifestSource",
+    "ScenarioValidationReport",
     "_apply_social_group_overrides",
     "apply_route_overrides",
     "apply_single_pedestrian_overrides",
     "build_robot_config_from_scenario",
     "load_scenarios",
+    "load_scenarios_for_discovery",
+    "load_scenarios_for_validation",
     "map_cache_info",
     "resolve_map_definition",
+    "resolve_map_id",
     "select_scenario",
 ]

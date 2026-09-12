@@ -325,7 +325,7 @@ def test_render_cli(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
 # --- Verify ------------------------------------------------------------------
 
 
-def _body_with_marker(body: str, number: int, *, separator: str = "\n\n") -> str:
+def _body_with_marker(body: str, number: int, *, separator: str = "\n") -> str:
     item = {
         "number": number,
         "classification": "ready",
@@ -336,7 +336,7 @@ def _body_with_marker(body: str, number: int, *, separator: str = "\n\n") -> str
         "body_sha256": prep._sha256_text(body),
     }
     block = prep._render_marker_block(item, audit_digest="d1", batch_id="b1")
-    return body + separator + block
+    return body + separator + block.rstrip("\n")
 
 
 def test_verify_ok_on_single_marker() -> None:
@@ -380,6 +380,35 @@ def test_verify_accepts_body_without_trailing_newline() -> None:
     fixture["items"][0]["body_sha256"] = prep._sha256_text(original)
     plan = prep.build_plan(fixture, batch_id="b1")
     findings = prep._verify_batch(plan, {"1001": body})
+    assert all(f["ok"] for f in findings)
+
+
+def test_verify_accepts_refresh_of_existing_marker() -> None:
+    """Refreshing a marker verifies against its exact outside-marker source bytes."""
+    original = "# Title\n\nbody text\n"
+    existing = _body_with_marker(original, 1001)
+    item = {
+        "number": 1001,
+        "classification": "ready",
+        "next_action": "claim",
+        "authority": "goal_issue_admission",
+        "dispatch_eligible": True,
+        "labels": [],
+        "body_sha256": prep._sha256_text(existing),
+    }
+    replacement = prep._render_marker_block(
+        item,
+        audit_digest="d2",
+        batch_id="b2",
+        source_body=existing,
+    )
+    refreshed = prep._compose_body(existing, replacement)
+    fixture = _audit_fixture()
+    fixture["items"][0]["body_sha256"] = prep._sha256_text(existing)
+    plan = prep.build_plan(fixture, batch_id="b2")
+
+    findings = prep._verify_batch(plan, {"1001": refreshed})
+
     assert all(f["ok"] for f in findings)
 
 

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for the extract-failures CLI subcommand exporting failure episode IDs or records."""
 
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _write_matrix(path: Path, repeats: int = 4) -> None:
-    """TODO docstring. Document this function.
+    """Write a minimal scenario matrix YAML file for failure extraction tests.
 
     Args:
-        path: TODO docstring.
-        repeats: TODO docstring.
+        path: Destination filesystem path for the matrix YAML.
+        repeats: Number of episode repetitions per scenario.
     """
     scenarios = [
         {
@@ -40,12 +40,7 @@ def _write_matrix(path: Path, repeats: int = 4) -> None:
 
 
 def test_cli_extract_failures_ids_only(tmp_path: Path, capsys):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify extract-failures CLI in ids-only mode produces a JSON list of episode IDs."""
     matrix_path = tmp_path / "matrix.yaml"
     _write_matrix(matrix_path, repeats=4)
     episodes = tmp_path / "episodes.jsonl"
@@ -95,12 +90,7 @@ def test_cli_extract_failures_ids_only(tmp_path: Path, capsys):
 
 
 def test_cli_extract_failures_jsonl(tmp_path: Path, capsys):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify extract-failures CLI outputs failure episode records in JSONL format."""
     matrix_path = tmp_path / "matrix.yaml"
     _write_matrix(matrix_path, repeats=3)
     episodes = tmp_path / "episodes.jsonl"

@@ -43,6 +43,17 @@ rather than only a global test pass signal.
      The helper owns the no-commit merge, abort, and remote-ref comparison. For a review worktree
      whose base predates the guard files, `<guard-source-root>` is the invoking checkout that
      supplied the fallback hook/helper; the target worktree itself does not contain the script yet.
+   - For deliberate Git override or alternate receive-pack probes, run the complete command as a
+     descendant of the Linux process boundary:
+
+     ```bash
+     python <guard-source-root>/scripts/dev/review_worktree_guard.py run \
+       --worktree <path> -- <command> [args...]
+     ```
+
+     This requires Landlock ABI 4+ and fails closed when the OS policy cannot be installed. It is a
+     Linux-only local-filesystem boundary; raw commands launched outside `run` remain outside its
+     threat model and must not be described as adversarially isolated.
 5. Include benchmark safety checks when relevant:
    - explicitly classify fallback/degraded execution as a limitation, never as success.
 6. Record residual gaps where no direct proof path exists.

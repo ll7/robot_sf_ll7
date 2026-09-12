@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.dev.check_pr_followups import (
     DOMAIN_VALIDITY_LABELS,
@@ -22,6 +24,221 @@ from scripts.dev.check_pr_followups import (
 from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_pr_followups.py"
+
+
+@pytest.fixture
+def standalone_python(tmp_path: Path) -> tuple[str, dict[str, str]]:
+    """Use host Python without site hooks and stage only the declared YAML dependency."""
+    python = shutil.which("python3", path=os.defpath)
+    if python is None:
+        pytest.skip("a system python3 is required for standalone entrypoint proof")
+    dependencies = tmp_path / "dependencies"
+    shutil.copytree(Path(yaml.__file__).parent, dependencies / "yaml")
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    for name in ("gh", "uv", "pip", "pip3"):
+        command = commands / name
+        command.write_text('#!/bin/sh\nprintf "%s\\n" "$0" >> "$STANDALONE_CALLS"\nexit 99\n')
+        command.chmod(0o755)
+    env = {"PATH": str(commands), "STANDALONE_CALLS": str(tmp_path / "external-calls")}
+    # No repository path or editable-install hook is available to the child.
+    env["PYTHONPATH"] = str(dependencies)
+    return python, env
+
+
+def test_standalone_direct_help_from_repository_root(
+    standalone_python: tuple[str, dict[str, str]],
+) -> None:
+    """Direct startup must find its checkout without inherited source import paths."""
+    python, env = standalone_python
+    result = subprocess.run(
+        [python, "-S", "-B", str(SCRIPT), "--help"],
+        cwd=SCRIPT.parents[2],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--body-file" in result.stdout
+    assert not Path(env["STANDALONE_CALLS"]).exists()
+
+
+@pytest.fixture
+def standalone_checkout(tmp_path: Path) -> Path:
+    """Copy real entrypoint dependencies into an actual checkout-shaped path with spaces."""
+    root = tmp_path / "active checkout"
+    for name in (
+        "check_pr_followups.py",
+        "pr_contract_v2.py",
+        "pr_loop_policy.py",
+        "pr_metadata.py",
+        "route_efficiency_report.py",
+    ):
+        target = root / "scripts" / "dev" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(SCRIPT.parent / name, target)
+    shutil.copy2(SCRIPT.parents[1] / "__init__.py", root / "scripts" / "__init__.py")
+    return root
+
+
+@pytest.mark.parametrize("symlink", [False, True])
+def test_standalone_direct_help_from_foreign_directory(
+    tmp_path: Path,
+    standalone_python: tuple[str, dict[str, str]],
+    standalone_checkout: Path,
+    symlink: bool,
+) -> None:
+    """An absolute script or symlink resolves the actual source root, including spaces."""
+    python, env = standalone_python
+    script = standalone_checkout / "scripts/dev/check_pr_followups.py"
+    if symlink:
+        alias = tmp_path / "entrypoint alias.py"
+        alias.symlink_to(script)
+        script = alias
+    result = subprocess.run(
+        [python, "-S", "-B", str(script), "--help"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--body-file" in result.stdout
+    assert not Path(env["STANDALONE_CALLS"]).exists()
+
+
+@pytest.mark.parametrize("safe_flag", [True, False])
+def test_standalone_safe_path_prefers_active_checkout(
+    tmp_path: Path,
+    standalone_python: tuple[str, dict[str, str]],
+    standalone_checkout: Path,
+    safe_flag: bool,
+) -> None:
+    """Even an already-present later source root must outrank a competing checkout."""
+    python, env = standalone_python
+    hostile = tmp_path / "competing checkout"
+    (hostile / "scripts").mkdir(parents=True)
+    (hostile / "scripts/__init__.py").write_text('raise RuntimeError("wrong checkout")\n')
+    env["PYTHONPATH"] = os.pathsep.join([str(hostile), str(standalone_checkout), env["PYTHONPATH"]])
+    if not safe_flag:
+        env["PYTHONSAFEPATH"] = "1"
+    probe = """import json, runpy, sys
+from pathlib import Path
+script = sys.argv[1]
+sys.argv = [script, '--help']
+try:
+    runpy.run_path(script, run_name='__main__')
+except SystemExit as exc:
+    assert exc.code == 0
+print(json.dumps({name: str(Path(sys.modules['scripts.dev.' + name].__file__).resolve())
+                  for name in ['pr_contract_v2', 'pr_loop_policy', 'pr_metadata',
+                               'route_efficiency_report']}))
+"""
+    result = subprocess.run(
+        [
+            python,
+            "-S",
+            "-B",
+            *(["-P"] if safe_flag else []),
+            "-c",
+            probe,
+            str(standalone_checkout / "scripts/dev/check_pr_followups.py"),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    identities = json.loads(result.stdout.splitlines()[-1])
+    assert identities == {
+        name: str(standalone_checkout / "scripts/dev" / f"{name}.py") for name in identities
+    }
+    assert not Path(env["STANDALONE_CALLS"]).exists()
+
+
+def test_standalone_module_import_keeps_search_path(
+    standalone_python: tuple[str, dict[str, str]], standalone_checkout: Path
+) -> None:
+    """Ordinary package import must not mutate the caller's module search path."""
+    python, env = standalone_python
+    probe = """import json, sys
+before = list(sys.path)
+import scripts.dev.check_pr_followups as helper
+assert sys.path == before
+print(json.dumps(helper.__file__))
+"""
+    result = subprocess.run(
+        [python, "-S", "-B", "-c", probe],
+        cwd=standalone_checkout,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == str(
+        standalone_checkout / "scripts/dev/check_pr_followups.py"
+    )
+
+
+@pytest.mark.parametrize("json_output", [False, True])
+@pytest.mark.parametrize(
+    "case", ["v1-valid", "v1-invalid", "v2-valid", "v2-invalid", "head-invalid"]
+)
+def test_standalone_direct_and_module_body_outcomes_match(
+    tmp_path: Path,
+    standalone_python: tuple[str, dict[str, str]],
+    standalone_checkout: Path,
+    case: str,
+    json_output: bool,
+) -> None:
+    """Local valid/invalid contracts preserve text, JSON and failure statuses offline."""
+    python, env = standalone_python
+    if case.startswith("v1"):
+        body = _body(deferred="none" if case == "v1-valid" else "yes")
+    else:
+        payload = V2_TOOLING_PAYLOAD
+        if case == "v2-invalid":
+            payload = payload.replace("change_class: tooling", "change_class: unsupported")
+        if case == "head-invalid":
+            payload += "\nexact_head: " + "b" * 40
+        body = _v2_body(payload)
+    body_file = tmp_path / "local body.md"
+    body_file.write_text(body)
+    args = ["--body-file", str(body_file), "--require-body", "--head-sha", "a" * 40]
+    if json_output:
+        args.append("--json")
+    results = []
+    for invocation, cwd in (
+        ([str(standalone_checkout / "scripts/dev/check_pr_followups.py")], tmp_path),
+        (["-m", "scripts.dev.check_pr_followups"], standalone_checkout),
+    ):
+        results.append(
+            subprocess.run(
+                [python, "-S", "-B", *invocation, *args],
+                cwd=cwd,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20,
+            )
+        )
+    direct, module = results
+    assert direct.returncode == module.returncode == (0 if case.endswith("-valid") else 2)
+    assert direct.stdout == module.stdout
+    assert direct.stderr == module.stderr
+    if json_output:
+        assert isinstance(json.loads(direct.stdout), dict)
+    assert not Path(env["STANDALONE_CALLS"]).exists()
 
 
 def _body(*, deferred: str, issues: str = "") -> str:

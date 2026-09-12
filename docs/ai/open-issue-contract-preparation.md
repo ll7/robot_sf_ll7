@@ -117,7 +117,9 @@ uv run python -m scripts.dev.prepare_open_issue_contracts \
 ```
 
 Checks exactly one marker per prepared issue and byte preservation outside the
-marker region (with the documented boundary-newline normalization).
+marker region. The only accepted newline adjustment is the single separator
+newline inserted by the marker composer when the source body already ends in a
+newline.
 
 ### 6. Apply (bounded, after review)
 

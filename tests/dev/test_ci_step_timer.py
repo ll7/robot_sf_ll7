@@ -9,9 +9,17 @@ import subprocess
 import sys
 import textwrap
 import time
+from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+from unittest.mock import Mock
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _HAS_TIMEOUT = shutil.which("timeout") is not None
 _SIGNAL_CONTRACT_TIMEOUT_SECONDS = 12
@@ -74,6 +82,265 @@ def _signal_contract_timeout_seconds() -> int:
     if os.environ.get("PYTEST_XDIST_WORKER"):
         return _SIGNAL_CONTRACT_XDIST_TIMEOUT_SECONDS
     return _SIGNAL_CONTRACT_TIMEOUT_SECONDS
+
+
+@contextmanager
+def _timer_cleanup_attempt(label: str, errors: list[str]) -> Iterator[None]:
+    """Collect one teardown error while permitting cleanup of all other owned targets."""
+    try:
+        yield
+    except ProcessLookupError:
+        pass  # A process that already exited needs no further signal.
+    except Exception as exc:  # Teardown must collect failures and attempt all other targets.
+        errors.append(f"{label}: {type(exc).__name__}: {exc}")
+
+
+def _positive_process_id(value: object) -> int:
+    """Reject unsafe signal identities, including bools and process-group wildcards."""
+    if isinstance(value, str) and value.isascii() and value.isdecimal():
+        value = int(value)
+    if type(value) is not int or value <= 0:
+        raise ValueError(f"invalid positive process identity: {value!r}")
+    return value
+
+
+def _cleanup_timer_wrapper(wrapper: subprocess.Popen[str] | None, errors: list[str]) -> None:
+    """Independently poll, signal and boundedly reap the fixture's own session leader."""
+    if wrapper is None:
+        return
+    running = True
+    with _timer_cleanup_attempt("wrapper poll", errors):
+        running = wrapper.poll() is None
+    if running:
+        with _timer_cleanup_attempt("wrapper group", errors):
+            _kill_process_group(_positive_process_id(wrapper.pid))
+        with _timer_cleanup_attempt("wrapper reap", errors):
+            wrapper.wait(timeout=5)
+
+
+def _cleanup_wrapper_signal_tree(
+    *,
+    wrapper: subprocess.Popen[str] | None,
+    command_pid: int | None,
+    backend_pid: int | None,
+    descendant_pid: int | None,
+    command_info_path: Path,
+    descendant_pid_path: Path,
+) -> None:
+    """Attempt independent owned-tree cleanup without replacing an active test failure."""
+    original = sys.exception()
+    errors: list[str] = []
+    pids = {"command": command_pid, "backend": backend_pid, "descendant": descendant_pid}
+    for label, path, index, count in (
+        ("command", command_info_path, 0, 2),
+        ("backend", command_info_path, 1, 2),
+        ("descendant", descendant_pid_path, 0, 1),
+    ):
+        if pids[label] is None:
+            with _timer_cleanup_attempt(f"{label} receipt", errors):
+                fields = path.read_text(encoding="utf-8").split()
+                if len(fields) != count:
+                    raise ValueError(f"{label} receipt must contain {count} PIDs")
+                pids[label] = _positive_process_id(fields[index])
+
+    _cleanup_timer_wrapper(wrapper, errors)
+    if pids["command"] is not None:
+        with _timer_cleanup_attempt("command group", errors):
+            _kill_process_group(_positive_process_id(pids["command"]))
+    if pids["descendant"] is not None and pids["command"] is None:
+        with _timer_cleanup_attempt("descendant group", errors):
+            _kill_process_group(
+                _positive_process_id(os.getpgid(_positive_process_id(pids["descendant"])))
+            )
+    for label in ("descendant", "backend"):
+        if pids[label] is not None:
+            with _timer_cleanup_attempt(label, errors):
+                os.kill(_positive_process_id(pids[label]), signal.SIGKILL)
+    if errors:
+        detail = "timer fixture cleanup failed:\n" + "\n".join(errors)
+        if original is not None:
+            original.add_note(detail)
+        else:
+            raise AssertionError(detail)
+
+
+@pytest.fixture
+def mocked_timer_tree(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
+    """Replace every process boundary so teardown regressions cannot launch or signal anything."""
+    wrapper = Mock(pid=910001)
+    wrapper.poll.return_value = None
+    wrapper.wait.return_value = 143
+    tree = SimpleNamespace(
+        wrapper=wrapper, kill=Mock(), killpg=Mock(), getpgid=Mock(return_value=910002)
+    )
+    monkeypatch.setattr(subprocess, "Popen", Mock(return_value=wrapper))
+    monkeypatch.setattr(os, "kill", tree.kill)
+    monkeypatch.setattr(os, "killpg", tree.killpg)
+    monkeypatch.setattr(os, "getpgid", tree.getpgid)
+    tree.cleanup = partial(
+        _cleanup_wrapper_signal_tree,
+        wrapper=wrapper,
+        command_pid=910002,
+        descendant_pid=910003,
+        backend_pid=910004,
+        command_info_path=tmp_path / "command.info",
+        descendant_pid_path=tmp_path / "descendant.pid",
+    )
+    return tree
+
+
+@pytest.mark.parametrize("receipt", ["malformed", "", "910002", "910002 910004 extra"])
+def test_wrapper_cleanup_receipt_failure_preserves_primary_and_cleans_known_descendant(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mocked_timer_tree: SimpleNamespace,
+    receipt: str,
+) -> None:
+    """A malformed command receipt cannot mask the body failure or skip other owned targets."""
+    (tmp_path / "command.info").write_text(receipt, encoding="utf-8")
+    (tmp_path / "descendant.pid").write_text("910003", encoding="utf-8")
+    original = AssertionError("original readiness failure")
+    monkeypatch.setattr(
+        sys.modules[__name__], "_wait_for_nonempty_file", Mock(side_effect=original)
+    )
+    with pytest.raises(AssertionError, match="original readiness failure") as caught:
+        test_ci_step_timer_python_fallback_forwards_wrapper_signal_and_reaps_tree(
+            tmp_path, signal.SIGTERM, 143
+        )
+    assert caught.value is original
+    assert any("receipt" in note for note in original.__notes__)
+    mocked_timer_tree.killpg.assert_any_call(910001, signal.SIGKILL)
+    mocked_timer_tree.kill.assert_any_call(910003, signal.SIGKILL)
+    mocked_timer_tree.wrapper.wait.assert_called_once_with(timeout=5)
+
+
+def test_wrapper_cleanup_reap_failure_still_cleans_command_descendant_and_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocked_timer_tree: SimpleNamespace
+) -> None:
+    """A bounded wrapper wait failing cannot mask the body failure or strand a separate session."""
+    original = AssertionError("original wrapper failure")
+    mocked_timer_tree.wrapper.wait.side_effect = [
+        original,
+        subprocess.TimeoutExpired("fixture wrapper", 5),
+    ]
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "_wait_for_nonempty_file",
+        Mock(side_effect=["910002 910004", "910003"]),
+    )
+    with pytest.raises(AssertionError, match="original wrapper failure") as caught:
+        test_ci_step_timer_python_fallback_forwards_wrapper_signal_and_reaps_tree(
+            tmp_path, signal.SIGTERM, 143
+        )
+    assert caught.value is original
+    assert any("TimeoutExpired" in note for note in original.__notes__)
+    mocked_timer_tree.killpg.assert_any_call(910002, signal.SIGKILL)
+    mocked_timer_tree.kill.assert_any_call(910003, signal.SIGKILL)
+    mocked_timer_tree.kill.assert_any_call(910004, signal.SIGKILL)
+    assert mocked_timer_tree.wrapper.wait.call_args.kwargs == {"timeout": 5}
+
+
+@pytest.mark.parametrize("error", [FileNotFoundError("disappeared"), PermissionError("unreadable")])
+@pytest.mark.parametrize("target", ["command", "descendant"])
+def test_wrapper_cleanup_unreadable_receipt_fails_after_other_targets_are_attempted(
+    mocked_timer_tree: SimpleNamespace, error: OSError, target: str
+) -> None:
+    """Receipt read errors fail an otherwise successful test only after independent cleanup."""
+    receipt = Mock(spec=Path)
+    receipt.read_text.side_effect = error
+    options = {f"{target}_pid": None}
+    options["command_info_path" if target == "command" else "descendant_pid_path"] = receipt
+    with pytest.raises(AssertionError, match=f"{target} receipt"):
+        mocked_timer_tree.cleanup(**options)
+    mocked_timer_tree.killpg.assert_any_call(910001, signal.SIGKILL)
+    mocked_timer_tree.kill.assert_any_call(910004, signal.SIGKILL)
+    if target == "command":
+        mocked_timer_tree.kill.assert_any_call(910003, signal.SIGKILL)
+    else:
+        mocked_timer_tree.killpg.assert_any_call(910002, signal.SIGKILL)
+
+
+@pytest.mark.parametrize("target", [910001, 910002, 910003, 910004])
+def test_wrapper_cleanup_signal_error_does_not_skip_other_known_targets(
+    mocked_timer_tree: SimpleNamespace, target: int
+) -> None:
+    """A signal failure remains visible without preventing another owned cleanup attempt."""
+
+    def signal_error(pid: int, _signum: int) -> None:
+        if pid == target:
+            raise PermissionError("injected signal failure")
+
+    mocked_timer_tree.kill.side_effect = signal_error
+    mocked_timer_tree.killpg.side_effect = signal_error
+    with pytest.raises(AssertionError, match="injected signal failure"):
+        mocked_timer_tree.cleanup()
+    for pid in (910001, 910002):
+        mocked_timer_tree.killpg.assert_any_call(pid, signal.SIGKILL)
+    for pid in (910003, 910004):
+        mocked_timer_tree.kill.assert_any_call(pid, signal.SIGKILL)
+    mocked_timer_tree.wrapper.wait.assert_called_once_with(timeout=5)
+
+
+def test_wrapper_cleanup_poll_failure_still_signals_and_reaps(
+    mocked_timer_tree: SimpleNamespace,
+) -> None:
+    """A poll error cannot suppress signaling and a separately bounded wait."""
+    mocked_timer_tree.wrapper.poll.side_effect = OSError("poll failure")
+    with pytest.raises(AssertionError, match="wrapper poll"):
+        mocked_timer_tree.cleanup()
+    mocked_timer_tree.killpg.assert_any_call(910001, signal.SIGKILL)
+    mocked_timer_tree.wrapper.wait.assert_called_once_with(timeout=5)
+    mocked_timer_tree.kill.assert_any_call(910004, signal.SIGKILL)
+
+
+@pytest.mark.parametrize("invalid", [0, -1, True, "malformed", "1 2"])
+def test_wrapper_cleanup_invalid_identities_never_reach_signal_calls(
+    mocked_timer_tree: SimpleNamespace, invalid: object
+) -> None:
+    """Invalid known identifiers must never become kill(0), kill(-1), or group wildcards."""
+    mocked_timer_tree.wrapper.pid = invalid
+    with pytest.raises(AssertionError, match="invalid positive process identity"):
+        mocked_timer_tree.cleanup(command_pid=invalid, descendant_pid=invalid, backend_pid=invalid)
+    mocked_timer_tree.kill.assert_not_called()
+    mocked_timer_tree.killpg.assert_not_called()
+    mocked_timer_tree.getpgid.assert_not_called()
+    mocked_timer_tree.wrapper.wait.assert_called_once_with(timeout=5)
+
+
+def test_wrapper_cleanup_invalid_receipt_field_retains_independent_valid_backend(
+    tmp_path: Path, mocked_timer_tree: SimpleNamespace
+) -> None:
+    """One invalid receipt field must not discard its independently valid sibling."""
+    (tmp_path / "command.info").write_text("0 910004", encoding="utf-8")
+    with pytest.raises(AssertionError, match="command receipt"):
+        mocked_timer_tree.cleanup(command_pid=None, backend_pid=None)
+    mocked_timer_tree.killpg.assert_any_call(910001, signal.SIGKILL)
+    mocked_timer_tree.kill.assert_any_call(910004, signal.SIGKILL)
+    assert all(call.args[0] > 0 for call in mocked_timer_tree.killpg.call_args_list)
+
+
+def test_wrapper_cleanup_rejects_invalid_derived_group_but_attempts_known_pids(
+    tmp_path: Path, mocked_timer_tree: SimpleNamespace
+) -> None:
+    """An invalid descendant group cannot prevent direct cleanup of known positive PIDs."""
+    (tmp_path / "command.info").write_text("invalid 910004", encoding="utf-8")
+    mocked_timer_tree.getpgid.return_value = 0
+    with pytest.raises(AssertionError, match="descendant group"):
+        mocked_timer_tree.cleanup(command_pid=None)
+    mocked_timer_tree.kill.assert_any_call(910003, signal.SIGKILL)
+    mocked_timer_tree.kill.assert_any_call(910004, signal.SIGKILL)
+    mocked_timer_tree.killpg.assert_called_once_with(910001, signal.SIGKILL)
+
+
+def test_wrapper_cleanup_already_exited_processes_are_benign(
+    mocked_timer_tree: SimpleNamespace,
+) -> None:
+    """An already exited owned process is not a teardown failure."""
+    mocked_timer_tree.wrapper.poll.return_value = 143
+    mocked_timer_tree.kill.side_effect = ProcessLookupError
+    mocked_timer_tree.killpg.side_effect = ProcessLookupError
+    mocked_timer_tree.cleanup()
+    mocked_timer_tree.wrapper.wait.assert_not_called()
 
 
 def test_signal_contract_timeout_budget_expands_under_xdist(
@@ -594,27 +861,14 @@ def test_ci_step_timer_python_fallback_forwards_wrapper_signal_and_reaps_tree(
         )
         assert "::endgroup::" in stdout
     finally:
-        if command_pid is None and command_info_path.exists():
-            command_pid, backend_pid = (
-                int(value) for value in command_info_path.read_text(encoding="utf-8").split()
-            )
-        if descendant_pid is None and descendant_pid_path.exists():
-            descendant_pid = int(descendant_pid_path.read_text(encoding="utf-8"))
-        if wrapper is not None and wrapper.poll() is None:
-            _kill_process_group(wrapper.pid)
-            wrapper.wait(timeout=5)
-        if command_pid is not None:
-            _kill_process_group(command_pid)
-        elif descendant_pid is not None and _process_exists(descendant_pid):
-            try:
-                _kill_process_group(os.getpgid(descendant_pid))
-            except ProcessLookupError:
-                pass
-        if backend_pid is not None and _process_exists(backend_pid):
-            try:
-                os.kill(backend_pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        _cleanup_wrapper_signal_tree(
+            wrapper=wrapper,
+            command_pid=command_pid,
+            backend_pid=backend_pid,
+            descendant_pid=descendant_pid,
+            command_info_path=command_info_path,
+            descendant_pid_path=descendant_pid_path,
+        )
 
 
 def test_ci_step_timer_python_fallback_replays_early_wrapper_sigint_after_backend_ready(

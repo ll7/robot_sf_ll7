@@ -55,7 +55,8 @@ PENDING → RUNNING → COMPLETED
 - `variant_id` (str | None): Ablation variant identifier (e.g., `"bc10_ds200"`) or None
 - `success_rate` (float): [0.0, 1.0] - episode success fraction
 - `collision_rate` (float): [0.0, 1.0] - episode collision fraction
-- `timesteps_to_convergence` (int | None): PPO timesteps until threshold met, or None if unconverged
+- `timesteps_to_convergence` (int | None): PPO timesteps until threshold met; `0` is valid for
+  instantaneous or diagnostic convergence, and `None` means no usable convergence value is available
 - `final_reward_mean` (float): Average episode reward post-convergence
 - `run_duration_seconds` (float): Wall-clock time for this seed's training
 
@@ -65,9 +66,16 @@ PENDING → RUNNING → COMPLETED
 
 **Validation Rules**:
 - `success_rate`, `collision_rate` ∈ [0.0, 1.0]
-- `timesteps_to_convergence` > 0 if present
+- `timesteps_to_convergence` >= 0 if present; zero is valid for instantaneous or diagnostic
+  convergence
 - `policy_type` must be `"baseline"` or `"pretrained"`
 - `variant_id` format: `^[a-z]+\d+(_[a-z]+\d+)*$` if present
+
+Tracker manifests normalize timestep aliases to `timesteps_to_convergence` in this priority order:
+`timesteps_to_convergence`, `avg_timesteps`, then `total_timesteps`. Numeric zero is a present
+value and retains that priority. A `null` or malformed falsy value in an earlier alias falls
+through to the next alias; a final `null` remains missing, while a malformed value that reaches
+numeric coercion is rejected.
 
 **Derived Metrics**:
 - Sample efficiency improvement computed from baseline vs pretrained `timesteps_to_convergence`

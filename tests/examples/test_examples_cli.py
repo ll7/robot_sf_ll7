@@ -12,6 +12,7 @@ criteria from the issue:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from textwrap import dedent
 
@@ -367,3 +368,48 @@ def test_examples_table_handles_entries_without_runtime(tmp_path: Path) -> None:
     table = format_examples_table(manifest)
     assert "RUNTIME" in table
     assert "-" in table
+
+
+def test_list_format_json_emits_stable_filtered_catalog(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``examples list --format json`` emits the filtered catalog as stable JSON."""
+
+    exit_code = examples_cli_main(["list", "--tag", "ppo", "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert isinstance(payload, list) and payload
+    for entry in payload:
+        assert "ppo" in {tag.lower() for tag in entry["tags"]}
+        assert set(entry) == {
+            "id",
+            "path",
+            "name",
+            "summary",
+            "category",
+            "tags",
+            "expected_runtime",
+            "ci_enabled",
+            "ci_reason",
+            "prerequisites",
+        }
+    expected_ids = [
+        example_id(example)
+        for example in _MANIFEST.examples
+        if "ppo" in {tag.lower() for tag in example.tags}
+    ]
+    assert [entry["id"] for entry in payload] == expected_ids
+
+
+def test_check_format_json_matches_script_status(capsys: pytest.CaptureFixture[str]) -> None:
+    """``examples check --format json`` reports the stable prerequisite schema."""
+
+    exit_code = examples_cli_main(["check", "advanced/09_defensive_policy", "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["schema"] == "example_prerequisites.v1"
+    assert payload["example_id"] == "advanced/09_defensive_policy"
+    assert payload["ready"] is (payload["status"] == "ready")
+    assert exit_code == (0 if payload["ready"] else 1)
+    assert payload["checks"]

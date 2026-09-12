@@ -153,8 +153,17 @@ scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path
 # Exact-head review publication; re-reads PR state/head while holding the local writer lock.
 # The merge-ready carrier gate reads this COMMENTED review directly from the PR reviews API.
 uv run python scripts/dev/gh_pr_review_rest.py <number> --event COMMENT \
-    --body-file <path> --expected-head-sha <head_sha> --repo ll7/robot_sf_ll7
+    --body-file <path> --expected-head-sha <head_sha> \
+    --expected-metadata-digest <metadata_digest> --repo ll7/robot_sf_ll7
 ```
+
+`--expected-metadata-digest` is optional; when present, it must be the exact
+`pr_metadata` SHA-256 digest for the final title/body pair. The helper re-reads
+the live PR metadata immediately before publication and returns a stale-state
+skip without posting if the title/body changed. An uncertain metadata read, or
+a present `pr-metadata` trailer in the review body that disagrees with the
+expected digest, fails closed with an error (exit code 1); a live metadata
+mismatch is the stale-state skip (exit code 2).
 
 Use the label helper whenever the review loop applies, reapplies, or removes
 `merge-ready` (including the remove-and-reapply gate refresh in step 8 below).
@@ -345,7 +354,9 @@ helper is route evidence only and does not perform GitHub-visible writes.
    Review-only worktrees are not writable publication lanes: create them with
    `scripts/dev/create_worktree.sh --mode review`, and use the guarded
    `review_worktree_guard.py integrate` command for any synthetic merge. Do not push an explicit
-   refspec from a review worktree.
+   refspec from a review worktree. Deliberate `-c`, alternate `--receive-pack`, or `--no-verify`
+   probes must run as descendants of `review_worktree_guard.py run`; raw Git commands outside that
+   Linux Landlock process boundary are not adversarially isolated.
 5. Validate per required tier, including the PR title/body contract after reconciliation.
    For any PR whose declared base is older than current `main`, run
    `uv run python scripts/dev/check_base_sensitive_gates.py --pr <number> --json` against the exact

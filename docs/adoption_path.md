@@ -12,6 +12,8 @@ worktree-local convenience artifacts unless they are separately promoted through
 provenance workflow. A single run or an estimated runtime must not be used to rank planners or
 support a paper-facing claim.
 
+
+> Platform notes (Linux, macOS, headless): [Platform Setup Profiles](./quickstart_platforms.md).
 ## 1. Install and check the host
 
 From the repository root, install the standard development dependencies and ask the readiness
@@ -24,12 +26,23 @@ uv run robot-sf doctor
 
 For a quick host-only check that does not execute the environment or manifest quickstarts, use:
 
-```bash
-uv run robot-sf doctor --skip-env-smoke --skip-quickstart-smoke
+```bash exec-doc-root
+uv run --offline --no-sync robot-sf doctor --skip-env-smoke --skip-quickstart-smoke
+```
+
+Check the installed entry point first:
+
+```bash exec-doc-root
+uv run --offline --no-sync robot-sf --help
 ```
 
 The doctor report is the first fail-closed boundary: fix reported missing tools, imports, model
-artifacts, or quickstart failures before interpreting later output.
+artifacts, or quickstart failures before interpreting later output. Every check identifier is
+mapped to a remedy in [doctor troubleshooting](./troubleshooting/doctor.md).
+
+The machine-checkable examples above deliberately use `uv` in offline, no-sync mode and require a
+prepared environment. The documentation runner constrains command and environment resolution, but
+it is not a sandbox: commands still have the invoking user's operating-system permissions.
 
 ## 2. Run one visible episode
 
@@ -57,14 +70,21 @@ These artifacts answer “does the install run and produce something visible?”
 Use the manifest-backed example catalog when you want source-level examples, and the curated recipe
 catalog when you want a copy-pasteable workflow without learning repository paths first:
 
-```bash
-uv run robot-sf examples list
-uv run robot-sf examples run quickstart/01_basic_robot --fast
+```bash exec-doc-root
+uv run --offline --no-sync robot-sf examples list
+uv run --offline --no-sync robot-sf recipe list
+uv run --offline --no-sync robot-sf recipe explain first-demo
+```
 
-uv run robot-sf recipe list
-uv run robot-sf recipe explain first-demo
+```bash
+uv run robot-sf examples check quickstart/01_basic_robot --format json
+uv run robot-sf examples run quickstart/01_basic_robot --fast
 uv run robot-sf recipe run first-demo
 ```
+
+Use `robot-sf examples check <id>` (or `--check` on a maintained example script) to validate
+declared prerequisites without starting a simulation: it reports one stable status such as `ready`,
+`missing_model`, or `missing_map`, plus safe acquisition instructions for registry-backed models.
 
 `examples` is the source-of-truth inventory for example scripts. Recipes are thin mappings to
 existing scripts and configs; they do not add simulation or training logic. Use
@@ -89,6 +109,7 @@ and its declared matrix, seeds, metrics, and artifact-provenance requirements.
 
 ## 5. Continue by task
 
+- Continue after a host or access window ends: [post-access restoration and local analysis](post_access_local_analysis_runbook.md).
 - Compare or visualize teaching runs: [beginner notebooks](../notebooks/README.md).
 - Check local model availability: `uv run robot-sf models list` and
   `uv run robot-sf models verify`.
@@ -96,6 +117,8 @@ and its declared matrix, seeds, metrics, and artifact-provenance requirements.
   `uv run robot-sf datasets prepare <id>`.
 - Discover the supported environment catalog: `uv run robot-sf envs list` and
   `uv run robot-sf envs describe <env-id>`.
+- Discover registered planners and baselines: `uv run robot-sf planners list` and
+  `uv run robot-sf planners describe <planner-key>`.
 - Move to reproducible evaluation: [Research & Benchmark Guide](research-guide.md).
 
 All generated files in this path belong under the git-ignored `output/` directory. Keep raw runs,

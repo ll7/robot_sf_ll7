@@ -40,10 +40,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+if __package__ in {None, ""}:
+    # Direct execution must resolve this checkout's transport and write guards,
+    # ahead of any competing checkout or editable installation on sys.path.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.dev._gh_rest import gh_api_metadata_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_patch as _gh_api_patch
 from scripts.dev._gh_rest import subprocess
 from scripts.dev.github_transport_policy import get_transport_contract
+from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 from scripts.dev.pr_loop_policy import (
     extract_sha_carriers,
     invalid_sha_carriers,
@@ -212,6 +218,21 @@ def _guard_reconcile_body(body: str, current: dict[str, Any]) -> str | None:
     return _validate_sha_carriers(body, head["sha"])
 
 
+def _guard_contract_v2(body: str) -> str | None:
+    """Fail closed when a body carries a present-but-invalid pr-contract:v2 block.
+
+    The v1 compatibility path (no v2 marker) is unchanged. This runs before any
+    remote write so the later readiness preflight cannot reject a defect the
+    writer could have detected locally (issue #8962); duplicate references across
+    ``linked_issues`` and ``deferred_work`` are reported with their exact paths.
+    """
+    result = parse_pr_contract_v2(body, source="body")
+    if result.status in {"ok", "absent"}:
+        return None
+    detail = "; ".join(result.errors) or result.message
+    return f"pr-contract:v2 validation failed ({result.status}): {detail}"
+
+
 def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
     """Update PR *number* from *body_file* and verify the REST response.
 
@@ -224,6 +245,10 @@ def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) ->
     if body_error:
         return {"status": "error", "error": body_error}
     assert body is not None
+
+    contract_error = _guard_contract_v2(body)
+    if contract_error:
+        return {"status": "error", "error": contract_error}
 
     try:
         with _metadata_write_lock(repo, number):
@@ -323,6 +348,10 @@ def reconcile_pr_metadata(  # noqa: C901
             }
             if not changed_fields:
                 return {"status": "unchanged", **base_result, "changed": False}
+
+            contract_error = _guard_contract_v2(body)
+            if contract_error:
+                return {"status": "error", "error": contract_error}
 
             patch_result = _gh_api_patch(
                 f"repos/{repo}/pulls/{number}",

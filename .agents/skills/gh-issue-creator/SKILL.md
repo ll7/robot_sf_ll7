@@ -47,10 +47,11 @@ execution.
    specifics, asset identifiers, or per-step unblock conditions.
 6. Create issue:
    - before any create request, run the deterministic zero-write body preflight:
-     `uv run python scripts/dev/issue_implementability.py --preflight-body <body.md>`
-     It rejects an incomplete body (missing objective, scope, inputs, acceptance, or
-     verification) with the exact missing field names and the body digest; repair the
-     local draft and re-run until it reports ready. Every supported body source
+     `uv run python -m scripts.dev.issue_readiness_gate preflight --body-file <body.md>`
+     It combines the structural body check with the canonical archetype metadata audit,
+     reporting exact missing fields, metadata findings, and the body digest as JSON.
+     Repair the local draft until it exits 0 with `ready: true`; this offline result
+     grants neither live readiness nor a claim. Every supported body source
      (canonical templates, rendered preparation packets, custom `--body-file`
      content) must pass this same preflight.
    - use GitHub REST API or `gh` for deterministic issue creation:

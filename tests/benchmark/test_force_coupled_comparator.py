@@ -12,8 +12,16 @@ import pytest
 
 from robot_sf.benchmark.force_coupled_comparator import (
     CLAIM_BOUNDARY,
+    FAILURE_CLASS_PATH_GENERATION,
+    FAILURE_CLASS_SIMULATOR,
+    FAILURE_CLASS_SOCIAL_COMPLIANCE,
+    FAILURE_CLASS_TRACKING,
     SCHEMA_VERSION,
+    VALID_FAILURE_CLASSES,
+    ComparatorRunResult,
     PurePursuitGoalPlanner,
+    classify_failure,
+    compute_summary_table,
     execute_rollout,
     get_canonical_comparison_scenarios,
     run_force_coupled_comparator,
@@ -60,6 +68,29 @@ def test_comparator_receipt_schema_conformance() -> None:
     assert len(receipt["scenarios"]) == 4
     assert len(receipt["results"]) == 16  # 4 scenarios x 4 planners
     assert len(receipt["summary_table"]) == 4  # 4 distinct planners
+
+
+def test_first_step_planner_exception_is_classified_without_diagnostics() -> None:
+    """A planner failure before diagnostics still emits a structured path-generation result."""
+
+    class FirstStepFailurePlanner:
+        def reset(self, seed: int) -> None:
+            del seed
+
+        def plan(self, obs: dict[str, object]) -> tuple[float, float]:
+            del obs
+            raise ValueError("fixture planner failure")
+
+        def diagnostics(self) -> dict[str, object]:
+            return {"planner_type": "first_step_failure"}
+
+    result = execute_rollout(FirstStepFailurePlanner(), get_canonical_comparison_scenarios()[0])
+
+    assert result.planner_id == "FirstStepFailurePlanner"
+    assert result.status == "error"
+    assert result.degraded is True
+    assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
+    assert result.degradation_reasons == ("plan_exception: fixture planner failure",)
 
 
 def test_deterministic_receipt_invariant() -> None:
@@ -133,3 +164,215 @@ def test_cli_runner_smoke_mode(tmp_path: Path) -> None:
     assert out_file.exists()
     saved_receipt = json.loads(out_file.read_text(encoding="utf-8"))
     assert saved_receipt["schema_version"] == SCHEMA_VERSION
+
+
+def test_classify_failure_deterministic_mapping_per_class() -> None:
+    """Mapping rules deterministically assign each of the four explicit failure classes."""
+    # 1. Ok rollout produces None
+    ok_class = classify_failure(
+        status="ok",
+        degraded=False,
+        completed=True,
+        collision_obstacle=False,
+        collision_pedestrian=False,
+    )
+    assert ok_class is None
+
+    # 2. Simulator failure: simulator_error flag or simulation degradation reason
+    sim_class_1 = classify_failure(status="error", simulator_error=True)
+    assert sim_class_1 == FAILURE_CLASS_SIMULATOR
+
+    sim_class_2 = classify_failure(
+        status="degraded",
+        degradation_reasons=["simulator_step_failure"],
+    )
+    assert sim_class_2 == FAILURE_CLASS_SIMULATOR
+
+    # 3. Social compliance failure: pedestrian collision or proximity violation
+    social_class_1 = classify_failure(
+        status="degraded",
+        collision_pedestrian=True,
+    )
+    assert social_class_1 == FAILURE_CLASS_SOCIAL_COMPLIANCE
+
+    social_class_2 = classify_failure(
+        status="degraded",
+        degradation_reasons=["pedestrian_comfort_violation"],
+    )
+    assert social_class_2 == FAILURE_CLASS_SOCIAL_COMPLIANCE
+
+    # 4. Tracking failure: obstacle collision or kinematic/steering/actuation saturation
+    tracking_class_1 = classify_failure(
+        status="degraded",
+        collision_obstacle=True,
+    )
+    assert tracking_class_1 == FAILURE_CLASS_TRACKING
+
+    tracking_class_2 = classify_failure(
+        status="degraded",
+        degradation_reasons=["steering_rate_saturation_limit"],
+    )
+    assert tracking_class_2 == FAILURE_CLASS_TRACKING
+
+    # 5. Path generation failure: plan exception, solver infeasibility, or goal timeout
+    path_class_1 = classify_failure(
+        status="error",
+        plan_exception=True,
+        degradation_reasons=["plan_exception: ValueError"],
+    )
+    assert path_class_1 == FAILURE_CLASS_PATH_GENERATION
+
+    path_class_2 = classify_failure(
+        status="degraded",
+        degradation_reasons=["solver_infeasible_no_path"],
+    )
+    assert path_class_2 == FAILURE_CLASS_PATH_GENERATION
+
+    path_class_3 = classify_failure(
+        status="degraded",
+        completed=False,
+        degradation_reasons=["max_steps_exceeded"],
+    )
+    assert path_class_3 == FAILURE_CLASS_PATH_GENERATION
+
+
+def test_every_non_ok_rollout_carries_failure_class() -> None:
+    """Every non-ok rollout carries exactly one of the four failure classes; ok rollouts carry None."""
+    receipt = run_force_coupled_comparator()
+    assert len(receipt["results"]) > 0
+
+    non_ok_count = 0
+    ok_count = 0
+    for r in receipt["results"]:
+        if r["status"] != "ok":
+            non_ok_count += 1
+            assert r["failure_class"] in VALID_FAILURE_CLASSES
+        else:
+            ok_count += 1
+            assert r["failure_class"] is None
+
+    assert non_ok_count > 0, "Suite must contain non-ok rollouts (e.g. from reference baselines)"
+    assert ok_count > 0, "Suite must contain ok rollouts"
+
+
+def test_summary_table_reports_failure_class_counts() -> None:
+    """Summary table reports per-class counts for every planner without promoting a ranking."""
+    receipt = run_force_coupled_comparator()
+    summary = receipt["summary_table"]
+    assert len(summary) == 4
+
+    for row in summary:
+        assert "failure_class_counts" in row
+        counts = row["failure_class_counts"]
+        for cls in VALID_FAILURE_CLASSES:
+            assert cls in counts
+            assert isinstance(counts[cls], int)
+            assert counts[cls] >= 0
+
+        # Sum of failure class counts must match the non-ok runs count
+        non_ok_runs = sum(count for st, count in row["status_counts"].items() if st != "ok")
+        total_failures = sum(counts.values())
+        assert total_failures == non_ok_runs
+
+    # force_coupled_potential_field has 0 failures across all canonical analytic scenarios
+    fcpf_row = next(r for r in summary if r["planner_id"] == "force_coupled_potential_field")
+    assert all(c == 0 for c in fcpf_row["failure_class_counts"].values())
+
+    # pure_pursuit_goal collides with obstacle and pedestrian, producing tracking and social_compliance counts
+    pp_row = next(r for r in summary if r["planner_id"] == "pure_pursuit_goal")
+    assert pp_row["failure_class_counts"][FAILURE_CLASS_TRACKING] >= 1
+    assert pp_row["failure_class_counts"][FAILURE_CLASS_SOCIAL_COMPLIANCE] >= 1
+
+
+def test_summary_table_rejects_unknown_failure_class() -> None:
+    """Summary output cannot silently introduce a non-canonical taxonomy value."""
+    result = ComparatorRunResult(
+        planner_id="test_planner",
+        scenario_id="test_scenario",
+        seed=42,
+        steps=0,
+        completed=False,
+        collision=False,
+        near_miss=False,
+        min_clearance_obstacle_m=None,
+        min_clearance_pedestrian_m=None,
+        path_length_m=0.0,
+        mean_linear_speed_mps=0.0,
+        max_linear_speed_mps=0.0,
+        mean_angular_rate_radps=0.0,
+        max_angular_rate_radps=0.0,
+        jerk_metric=0.0,
+        mean_latency_ms=0.0,
+        status="error",
+        degraded=True,
+        degradation_reasons=("fixture",),
+        failure_class="not_canonical",
+    )
+
+    with pytest.raises(ValueError, match="unknown failure class"):
+        compute_summary_table([result])
+
+
+def test_v1_schema_accepts_receipts_without_optional_taxonomy_fields() -> None:
+    """The additive taxonomy fields do not invalidate existing v1 receipts."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    for result in receipt["results"]:
+        result.pop("failure_class", None)
+    for row in receipt["summary_table"]:
+        row.pop("failure_class_counts", None)
+
+    jsonschema.validate(instance=receipt, schema=schema)
+
+
+def test_v1_schema_rejects_noncanonical_taxonomy_alias() -> None:
+    """Schema validation rejects hyphenated aliases that runtime classification cannot emit."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    receipt["results"][0]["failure_class"] = "path-generation"
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
+
+
+def test_comparator_run_result_serialization_with_failure_class() -> None:
+    """ComparatorRunResult dataclass serializes failure_class to dictionary."""
+    res = ComparatorRunResult(
+        planner_id="test_planner",
+        scenario_id="test_scenario",
+        seed=42,
+        steps=10,
+        completed=False,
+        collision=True,
+        near_miss=False,
+        min_clearance_obstacle_m=0.0,
+        min_clearance_pedestrian_m=None,
+        path_length_m=2.5,
+        mean_linear_speed_mps=0.5,
+        max_linear_speed_mps=1.0,
+        mean_angular_rate_radps=0.1,
+        max_angular_rate_radps=0.3,
+        jerk_metric=0.2,
+        mean_latency_ms=1.5,
+        status="degraded",
+        degraded=True,
+        degradation_reasons=("obstacle_collision",),
+        failure_class=FAILURE_CLASS_TRACKING,
+    )
+    serialized = res.to_dict()
+    assert serialized["failure_class"] == FAILURE_CLASS_TRACKING
+    assert serialized["status"] == "degraded"

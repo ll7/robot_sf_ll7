@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import sys
@@ -17,6 +16,7 @@ from jsonschema import Draft202012Validator
 
 from robot_sf.common.json_pointer import json_pointer
 from robot_sf.errors import RobotSfError
+from robot_sf.evidence.writers import sha256_file as _sha256_file
 
 ARTIFACT_CATALOG_SCHEMA_V1 = "artifact_catalog.v1"
 ARTIFACT_CATALOG_SCHEMA_V2 = "artifact_catalog.v2"
@@ -432,13 +432,14 @@ def _validate_file_ref(  # noqa: C901
 
 
 def sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest for a file."""
+    """Return the SHA-256 digest for a file.
 
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    Delegates to the canonical :func:`robot_sf.evidence.writers.sha256_file`;
+    missing paths raise ``FileNotFoundError`` and directories raise
+    ``IsADirectoryError``.
+    """
+
+    return _sha256_file(path)
 
 
 def _resolve_catalog_path(

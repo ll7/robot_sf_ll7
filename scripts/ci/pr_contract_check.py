@@ -42,6 +42,10 @@ from robot_sf.evidence.distance_convention import (  # noqa: E402
 from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
     check_changed_files as check_evidence_writer_usage,
 )
+from scripts.dev.check_issue_line_budget import (  # noqa: E402
+    evaluate_budget,
+    has_declared_cap,
+)
 from scripts.dev.gh_pr_label_rest import add_label  # noqa: E402
 
 # Match GitHub closing keywords followed by a local/cross-repository issue reference or URL.
@@ -738,6 +742,24 @@ def _check_distance_convention_for_file(path: str, content: str) -> str | None:
     )
 
 
+def _canonical_issue_reference(text: str, issue: int, repo: str) -> bool:
+    """Return whether text canonically references one repository issue.
+
+    A broad ``gh pr list --search`` can return unrelated PRs whose text merely
+    contains the number, so the successor warning must confirm a real reference:
+    ``#123``, ``owner/repo#123``, or the canonical issue URL. Plain numbers,
+    decimals, hash fragments, and other-repository references do not count.
+    """
+    number = str(issue)
+    repo_pattern = re.escape(repo)
+    patterns = (
+        rf"(?<![\w/#])#{number}(?!\w)(?!\.\d)",
+        rf"(?<![\w/#]){repo_pattern}#{number}(?!\w)(?!\.\d)",
+        rf"https?://github\.com/{repo_pattern}/issues/{number}(?!\d)",
+    )
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+
 def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
     """Rule 5: Successor statement warning for issues with merged PRs."""
     issues = find_title_issues(title)
@@ -756,7 +778,7 @@ def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
                         "--search",
                         f"is:merged {issue}",
                         "--json",
-                        "number",
+                        "number,title,body",
                         "--repo",
                         repo,
                     ],
@@ -767,9 +789,16 @@ def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
                 )
                 if res.returncode == 0:
                     prs = json.loads(res.stdout)
-                    if len(prs) >= 1:
+                    confirmed = [
+                        pr
+                        for pr in prs
+                        if _canonical_issue_reference(
+                            f"{pr.get('title') or ''}\n{pr.get('body') or ''}", issue, repo
+                        )
+                    ]
+                    if confirmed:
                         warnings.append(
-                            f"WARN: Issue #{issue} has already been referenced in {len(prs)} merged PR(s), "
+                            f"WARN: Issue #{issue} has already been referenced in {len(confirmed)} merged PR(s), "
                             f"but the PR body does not contain a successor statement ('successor slice' "
                             f"or 'does not duplicate')."
                         )
@@ -912,6 +941,67 @@ def _diff_added_python_lines(base_ref: str, repo_root: str | None = None) -> dic
     return added
 
 
+def _diff_numstat(base_ref: str) -> str | None:
+    """Return ``git diff --numstat`` output for the PR head against *base_ref*.
+
+    Prefers the merge-base form ``{base_ref}...HEAD``. CI fetches the base ref
+    with ``--depth=1`` (see ``pr-contract-check.yml``), so no merge base exists
+    and ``...`` fails; the two-dot tree diff ``{base_ref}..HEAD`` is then used,
+    which is exact for the merge-ref checkout. Returns None when neither form
+    can be computed; budget enforcement treats that as a blocker.
+    """
+    for diff_spec in (f"{base_ref}...HEAD", f"{base_ref}..HEAD"):
+        try:
+            res = subprocess.run(
+                ["git", "diff", "--numstat", diff_spec],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except _BEST_EFFORT_ERRORS:
+            return None
+        if res.returncode == 0:
+            return res.stdout
+    return None
+
+
+def check_line_budget_discipline(body: str, base_ref: str, repo: str) -> list[str]:
+    """Fail when the linked issue's declared line/file budget is exceeded (issue #9094).
+
+    The issue body declares the cap; the PR body may carry an explicit
+    ``budget-override: <reason>`` line to record a reasoned exception. Issues
+    without a declared cap are inert, so the check only binds where the author
+    opted into a budget.
+    """
+    blockers: list[str] = []
+    numstat_text: str | None = None
+    for issue in find_closed_issues(body):
+        metadata = get_issue_metadata(issue, repo)
+        if metadata is None:
+            continue
+        _labels, issue_body = metadata
+        if not has_declared_cap(issue_body):
+            continue
+        if numstat_text is None:
+            numstat_text = _diff_numstat(base_ref)
+            if numstat_text is None:
+                blockers.append(
+                    f"BLOCKER: cannot measure the PR diff against base ref {base_ref!r}; "
+                    f"budget enforcement for issue #{issue} is unavailable and remains "
+                    "fail-closed (issue #9094)."
+                )
+                break
+        result = evaluate_budget(issue_body=issue_body, pr_body=body, numstat_text=numstat_text)
+        if not result.get("ok", True):
+            blockers.append(
+                f"BLOCKER: PR exceeds the budget declared in issue #{issue} "
+                f"({result['message']}). Split the change or add "
+                f"'budget-override: <reason>' to the PR body to record an explicit "
+                f"exception (issue #9094)."
+            )
+    return blockers
+
+
 def _parse_added_line_span(hunk_header: str) -> tuple[int, int] | None:
     """Parse the ``+c,d`` part of a ``git diff --unified=0`` hunk header.
 
@@ -988,7 +1078,7 @@ def run_all_checks(
     pr_number: str | None,
     added_files: set[str] | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Run all 7 contract checks."""
+    """Run all 9 contract checks."""
     blockers = []
     warnings = []
     infos = []
@@ -1033,6 +1123,10 @@ def run_all_checks(
     # 8. Placeholder docstring ratchet (issue #5856): reject NEW placeholder docstrings.
     blockers.extend(check_placeholder_docstrings(base_ref))
 
+    # 9. Issue line/file budget (issue #9094): enforce declared caps unless a
+    # reasoned `budget-override:` line records an explicit exception.
+    blockers.extend(check_line_budget_discipline(body, base_ref, repo))
+
     return blockers, warnings, infos
 
 
@@ -1074,6 +1168,11 @@ def build_comment_body(
         f"| 8. Placeholder docstring ratchet | "
         f"{get_status_str(any('placeholder docstring' in b.lower() for b in blockers))} | "
         f"Reject NEW TODO/empty docstrings in added diff lines |"
+    )
+    rows.append(
+        f"| 9. Issue line/file budget | "
+        f"{get_status_str(any('exceeds the budget declared' in b.lower() for b in blockers))} | "
+        f"Enforce declared caps unless 'budget-override: <reason>' is present |"
     )
 
     comment = [

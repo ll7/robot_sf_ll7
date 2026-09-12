@@ -14,19 +14,20 @@ if TYPE_CHECKING:
 
 import pytest
 
+from robot_sf.research.exceptions import ValidationError
 from robot_sf.research.orchestrator import ReportOrchestrator
 from robot_sf.research.schema_loader import load_schema, validate_data
 
 
 @pytest.fixture(name="report_dir")
 def report_artifacts_dir(tmp_path: Path) -> Path:
-    """TODO docstring. Document this function.
+    """Generate a report bundle with hypothesis, metrics, and metadata.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory used as the report parent.
 
     Returns:
-        TODO docstring.
+        Path to the generated report directory.
     """
     out_dir = tmp_path / "report"
     orchestrator = ReportOrchestrator(out_dir)
@@ -55,23 +56,23 @@ def report_artifacts_dir(tmp_path: Path) -> Path:
 
 
 def _load(path: Path) -> dict:
-    """TODO docstring. Document this function.
+    """Load a JSON artifact from disk.
 
     Args:
-        path: TODO docstring.
+        path: Path to the JSON artifact.
 
     Returns:
-        TODO docstring.
+        Parsed JSON payload.
     """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def test_hypothesis_schema(report_dir: Path):
-    """TODO docstring. Document this function.
+    """Validate the generated hypothesis artifact against its schema.
 
     Args:
-        report_dir: TODO docstring.
+        report_dir: Generated report directory containing ``data/hypothesis.json``.
     """
     hypothesis_path = report_dir / "data" / "hypothesis.json"
     assert hypothesis_path.exists(), "hypothesis.json missing"
@@ -82,10 +83,10 @@ def test_hypothesis_schema(report_dir: Path):
 
 
 def test_metrics_schema(report_dir: Path):
-    """TODO docstring. Document this function.
+    """Validate the generated aggregate metrics artifact against its schema.
 
     Args:
-        report_dir: TODO docstring.
+        report_dir: Generated report directory containing ``data/metrics.json``.
     """
     metrics_path = report_dir / "data" / "metrics.json"
     assert metrics_path.exists(), "metrics.json missing"
@@ -95,11 +96,64 @@ def test_metrics_schema(report_dir: Path):
     assert data["metrics"], "metrics list empty"
 
 
+def test_metrics_schema_accepts_zero_convergence_summary() -> None:
+    """The aggregate schema admits zero-valued convergence summaries."""
+    schema = load_schema("aggregated_metrics.schema.json")
+    validate_data(
+        {
+            "schema_version": "1.0.0",
+            "metrics": [
+                {
+                    "metric_name": "timesteps_to_convergence",
+                    "condition": "baseline",
+                    "mean": 0,
+                    "median": 0,
+                    "p95": 0,
+                    "std": 0,
+                    "ci_low": None,
+                    "ci_high": None,
+                    "ci_confidence": 0.95,
+                    "sample_size": 1,
+                    "effect_size": None,
+                }
+            ],
+        },
+        schema,
+    )
+
+
+def test_metrics_schema_rejects_negative_convergence_summary() -> None:
+    """The aggregate schema rejects negative convergence summaries."""
+    schema = load_schema("aggregated_metrics.schema.json")
+    with pytest.raises(ValidationError, match="less than the minimum of 0"):
+        validate_data(
+            {
+                "schema_version": "1.0.0",
+                "metrics": [
+                    {
+                        "metric_name": "timesteps_to_convergence",
+                        "condition": "baseline",
+                        "mean": -1,
+                        "median": 0,
+                        "p95": 0,
+                        "std": 0,
+                        "ci_low": None,
+                        "ci_high": None,
+                        "ci_confidence": 0.95,
+                        "sample_size": 1,
+                        "effect_size": None,
+                    }
+                ],
+            },
+            schema,
+        )
+
+
 def test_metadata_schema(report_dir: Path):
-    """TODO docstring. Document this function.
+    """Validate the generated report metadata and artifact manifest.
 
     Args:
-        report_dir: TODO docstring.
+        report_dir: Generated report directory containing ``metadata.json``.
     """
     metadata_path = report_dir / "metadata.json"
     assert metadata_path.exists(), "metadata.json missing"

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://robot-sf.dev/specs/270-imitation-report/aggregated-metrics.schema.v1.json",
   "title": "AggregatedMetrics",
-  "description": "Statistical summaries with bootstrap confidence intervals for multi-seed metrics",
+  "description": "Statistical summaries with bootstrap confidence intervals for multi-seed metrics. A timesteps_to_convergence summary may be zero for instantaneous or diagnostic convergence.",
   "type": "object",
   "required": [
     "schema_version",
@@ -73,7 +73,40 @@
           "type": ["number", "null"],
           "description": "Cohen's d when comparing two conditions"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "metric_name": {
+                "const": "timesteps_to_convergence"
+              }
+            },
+            "required": ["metric_name"]
+          },
+          "then": {
+            "properties": {
+              "mean": {
+                "minimum": 0
+              },
+              "median": {
+                "minimum": 0
+              },
+              "p95": {
+                "minimum": 0
+              },
+              "ci_low": {
+                "type": ["number", "null"],
+                "minimum": 0
+              },
+              "ci_high": {
+                "type": ["number", "null"],
+                "minimum": 0
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

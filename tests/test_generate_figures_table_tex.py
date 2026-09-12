@@ -15,11 +15,7 @@ if TYPE_CHECKING:
 
 
 def test_generate_figures_table_tex(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify generate_figures with --table-tex creates a baseline_table.tex file."""
     episodes = tmp_path / "eps.jsonl"
     rec = {
         "episode_id": "e0",

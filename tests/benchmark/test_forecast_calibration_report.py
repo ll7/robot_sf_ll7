@@ -281,6 +281,27 @@ def test_calibration_report_rejects_malformed_rows() -> None:
         build_forecast_calibration_report([report], report_id="bad")
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        ("value", float("nan"), r"aggregate_rows\[0\]\.value must be finite"),
+        ("value", float("inf"), r"aggregate_rows\[0\]\.value must be finite"),
+        ("value", float("-inf"), r"aggregate_rows\[0\]\.value must be finite"),
+        ("horizon_s", float("nan"), r"aggregate_rows\[0\]\.horizon_s must be finite"),
+        ("value", "not-a-number", r"aggregate_rows\[0\]\.value must be numeric"),
+    ],
+)
+def test_calibration_report_rejects_invalid_aggregate_numbers(
+    field: str, value: object, error: str
+) -> None:
+    """Invalid aggregate values and horizons must not influence calibration decisions."""
+    report = _metric_report()
+    report["aggregate_rows"][0][field] = value
+
+    with pytest.raises(ValueError, match=error):
+        build_forecast_calibration_report([report], report_id="invalid-number")
+
+
 def test_calibration_cli_writes_json_and_markdown(tmp_path: Path) -> None:
     """CLI should write reviewable JSON and Markdown artifacts."""
     metric_path = tmp_path / "metrics.json"

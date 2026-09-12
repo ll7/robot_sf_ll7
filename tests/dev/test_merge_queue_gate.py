@@ -127,6 +127,30 @@ def _exact_changed_coverage_response(
     )
 
 
+def _exact_evidence_registry_response(
+    *, head_sha: str = FULL_SHA, status: str = "completed", conclusion: str | None = "success"
+) -> MagicMock:
+    """Build the exact-head REST evidence proof used by live gate fixtures."""
+    return _gh_response(
+        stdout=json.dumps(
+            {
+                "total_count": 1,
+                "check_runs": [
+                    {
+                        "id": 7002,
+                        "name": "evidence-registry-ratchet",
+                        "head_sha": head_sha,
+                        "status": status,
+                        "conclusion": conclusion,
+                        "started_at": "2026-08-18T01:00:00Z",
+                        "completed_at": "2026-08-18T01:01:00Z" if status == "completed" else None,
+                    }
+                ],
+            }
+        )
+    )
+
+
 def _changed_files_response(*filenames: str) -> MagicMock:
     """Build a REST pull-files response for missing-proof scope tests."""
     return _gh_response(stdout=json.dumps([{"filename": filename} for filename in filenames]))
@@ -230,6 +254,36 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert "baseRefOid" not in fields
     assert "reviewRequests" in fields
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
+
+
+def test_fetch_pr_snapshot_refreshes_graphql_evidence_status_by_exact_head() -> None:
+    """GraphQL rollup evidence is rebound through REST before gate consumption."""
+    raw_pr = _raw_pr()
+    raw_pr["statusCheckRollup"] = [
+        *raw_pr["statusCheckRollup"],
+        {
+            "name": "evidence-registry-ratchet",
+            "workflowName": "Evidence-registry ratchet",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+    ]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["evidence_registry"]["status"] == "success"
+    assert snapshot["evidence_registry"]["head_sha"] == FULL_SHA
+    assert mock_gh.call_args_list[3].args[0] == [
+        "api",
+        f"repos/owner/repo/commits/{FULL_SHA}/check-runs?per_page=100",
+    ]
 
 
 def test_fetch_pr_snapshot_records_active_exact_head_review_claim() -> None:
@@ -986,6 +1040,7 @@ def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
     )
     assert "--advisory" not in merge_group_step
     assert "--from-event" in merge_group_step
+    assert '--merge-group-evidence-head "$GITHUB_SHA"' in merge_group_step
     assert "--advisory" in source_pr_step
     assert "exit 0" in workflow  # Bootstrap skip remains advisory before the gate exists on main.
     assert "MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}" in workflow
@@ -1689,6 +1744,51 @@ def test_evaluate_live_carries_current_closing_discipline_result() -> None:
     )
 
 
+def test_evaluate_live_binds_native_evidence_to_synthetic_merge_group_head() -> None:
+    """Native evidence status is checked against the synthetic queue commit."""
+    source_head = FULL_SHA
+    synthetic_head = "9" * 40
+    queue_base = "b" * 40
+    snapshot = _gate_ready_pr()
+    snapshot["reviewers_requested"] = False
+    with (
+        patch.object(merge_queue_gate_module, "fetch_pr_snapshot", return_value=(snapshot, None)),
+        patch.object(
+            merge_queue_gate_module,
+            "_fetch_exact_head_evidence_registry",
+            return_value=(
+                {
+                    "status": "success",
+                    "head_sha": synthetic_head,
+                    "name": "evidence-registry-ratchet",
+                },
+                None,
+            ),
+        ) as mock_evidence,
+        patch.object(
+            merge_queue_gate_module, "fetch_merge_queue_strategy", return_value=("ALLGREEN", None)
+        ),
+        patch.object(merge_queue_gate_module, "fetch_threads_resolved", return_value=(True, None)),
+        patch.object(
+            merge_queue_gate_module, "get_pr_commit_messages", return_value="repair commit"
+        ),
+        patch.object(merge_queue_gate_module, "check_closes_discipline", return_value=[]),
+    ):
+        audit, error = merge_queue_gate_module._evaluate_live(
+            42,
+            repo="owner/repo",
+            merge_group_base_sha=queue_base,
+            merge_group_head_sha=source_head,
+            merge_group_evidence_head_sha=synthetic_head,
+        )
+
+    assert error is None
+    assert audit.passed is True
+    assert audit.evidence_registry_head_sha == synthetic_head
+    assert audit.evidence_registry_expected_head_sha == synthetic_head
+    mock_evidence.assert_called_once_with(synthetic_head, repo="owner/repo")
+
+
 def test_outstanding_requested_reviewer_fails_closed() -> None:
     """An explicit reviewer request receives the same fail-closed merger-preflight treatment."""
     gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
@@ -1774,6 +1874,7 @@ def test_evaluate_merge_gate_fails_closed_when_runtime_dimensions_are_missing() 
 
 def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> None:
     """The live merge_group path uses its encoded PR and matching source SHA."""
+    synthetic_head = "9" * 40
     event_path = tmp_path / "merge_group.json"
     event_path.write_text(
         json.dumps(
@@ -1802,10 +1903,20 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
             _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(head_sha=synthetic_head),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
-        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
 
     assert exit_code == 0
     calls = [call.args[0] for call in mock_gh.call_args_list]
@@ -1815,6 +1926,7 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
 
 def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
     """The event payload's branch-name queue ref resolves like its full ref form."""
+    synthetic_head = "9" * 40
     event_path = tmp_path / "merge_group.json"
     event_path.write_text(
         json.dumps(
@@ -1842,10 +1954,20 @@ def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
             _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(head_sha=synthetic_head),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
-        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
 
     assert exit_code == 0
 
@@ -1856,11 +1978,21 @@ def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
 )
 def test_from_event_rejects_malformed_event_payload(tmp_path, capsys, event) -> None:
     """Malformed or non-queue payloads fail closed before any GitHub query."""
+    synthetic_head = "9" * 40
     event_path = tmp_path / "merge_group.json"
     event_path.write_text(json.dumps(event), encoding="utf-8")
 
     with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
-        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
 
     assert exit_code == 1
     assert mock_gh.call_count == 0
@@ -1870,6 +2002,7 @@ def test_from_event_rejects_malformed_event_payload(tmp_path, capsys, event) -> 
 def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, capsys) -> None:
     """A queue ref cannot be rebound to a newer or unrelated PR head."""
     encoded_sha = "deadbeefcafe"
+    synthetic_head = "9" * 40
     event_path = tmp_path / "merge_group.json"
     event_path.write_text(
         json.dumps(
@@ -1890,16 +2023,44 @@ def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, cap
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
             _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(head_sha=synthetic_head),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
-        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
 
     audit = json.loads(capsys.readouterr().out)
     assert exit_code == 1
     assert audit["merge_group_head_sha"] == encoded_sha
     assert audit["merge_group_head_binding"] == "mismatch"
     assert "merge_group_head_sha_mismatch" in audit["reasons"]
+
+
+@pytest.mark.parametrize("value", ["", "not-a-sha", "a" * 39, "a" * 41])
+def test_from_event_requires_full_synthetic_evidence_head(tmp_path, capsys, value) -> None:
+    """Native queue evaluation rejects absent or malformed synthetic evidence identities."""
+    event_path = tmp_path / "merge_group.json"
+    event_path.write_text("{}", encoding="utf-8")
+
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        args = ["--from-event", str(event_path), "--repo", "owner/repo"]
+        if value:
+            args.extend(["--merge-group-evidence-head", value])
+        with pytest.raises(SystemExit) as excinfo:
+            main(args)
+
+    assert excinfo.value.code == 2
+    assert mock_gh.call_count == 0
+    assert "merge-group-evidence-head" in capsys.readouterr().err
 
 
 def test_pr_mode_fails_closed_when_current_main_sha_is_unavailable(capsys) -> None:
@@ -2145,6 +2306,64 @@ def test_clean_ancestry_passes_gate() -> None:
     assert audit.passed is True
     assert audit.ancestry_state == "clean"
     assert "stacked_ancestry_not_independently_mergeable" not in audit.reasons
+
+
+@pytest.mark.parametrize(
+    ("evidence_status", "evidence_head", "expected_reason"),
+    [
+        ("missing", FULL_SHA, "evidence_registry_proof_missing"),
+        ("pending", FULL_SHA, "evidence_registry_proof_pending"),
+        ("failure", FULL_SHA, "evidence_registry_proof_failed"),
+        ("success", "c" * 40, "evidence_registry_proof_stale"),
+    ],
+)
+def test_evidence_registry_status_is_fail_closed_for_gate_consumers(
+    evidence_status: str, evidence_head: str, expected_reason: str
+) -> None:
+    """Native/direct status consumers reject missing, stale, or failed proof."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(evidence_registry={"status": evidence_status, "head_sha": evidence_head}),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.evidence_registry_status == (
+        "stale" if evidence_status == "success" else evidence_status
+    )
+    assert expected_reason in audit.reasons
+
+
+def test_evidence_registry_success_status_binds_to_exact_head() -> None:
+    """A successful canonical check is consumable only when its head matches."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(evidence_registry={"status": "success", "head_sha": FULL_SHA}),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.evidence_registry_status == "success"
+    assert audit.evidence_registry_head_sha == FULL_SHA
+
+
+def test_evidence_registry_status_classifier_requires_reported_head() -> None:
+    """A named successful check without its own head identity is malformed."""
+    status = merge_queue_gate_module._classify_evidence_registry_checks(
+        [
+            {
+                "name": "evidence-registry-ratchet",
+                "workflowName": "Evidence-registry ratchet",
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
+        head_sha=FULL_SHA,
+    )
+
+    assert status["status"] == "malformed"
 
 
 def test_missing_ancestry_block_is_not_evaluated() -> None:

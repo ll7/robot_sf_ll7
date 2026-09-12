@@ -49,6 +49,10 @@ agent-assisted work, use [`AGENTS.md`](AGENTS.md).
 2. Verify examples run correctly
 3. Submit PR with clear explanation
 
+For work continuing after an expiring host or access window, follow the
+[post-access restoration and local-analysis runbook](docs/post_access_local_analysis_runbook.md).
+Keep private pointers, credentials, and restricted paths out of commits and issue reports.
+
 ### 5. Research and Benchmarking
 - **New benchmark configurations**: Additional scenario families
 - **Comparison studies**: Comparing planners on different metrics
@@ -85,8 +89,8 @@ Worked examples (re-check the labels on GitHub before acting):
 
 | Labels on the issue | Dispatchable? |
 |---|---|
-| `state:ready` and no contradictory `state:*` label | Yes. As of writing, #6095 is the single open `resource:slurm` issue that satisfies this. |
-| `state:running` | No — already in progress (e.g. #6127). |
+| `state:ready` and no contradictory `state:*` label | Yes. For example, an open `resource:slurm` issue carrying `state:ready` with no contradictory state label is dispatchable — verify current labels with the live issue query before acting. |
+| `state:running` | No — already in progress. |
 | `state:blocked`, `parked`, or any single non-`ready` state label | No. |
 | no `state:*` label at all | No — undispatchable, not free work. |
 
@@ -194,6 +198,10 @@ uv run pytest tests/test_your_feature.py -v
 uv run pytest --cov=robot_sf tests/test_your_feature.py
 ```
 
+For the test-tree map, suite categories, and failure/rerun policy, see
+[`tests/README.md`](tests/README.md) and the canonical
+[`docs/qa_test_strategy.md`](docs/qa_test_strategy.md).
+
 New features should include:
 - Unit tests for core logic
 - Integration tests if relevant
@@ -208,6 +216,42 @@ scripts/dev/ruff_fix_format.sh
 # Final PR readiness check
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 ```
+
+### Documentation site build
+
+The canonical documentation build is the curated strict build:
+
+```bash
+scripts/dev/sphinx_strict_build.sh                 # HTML into output/docs-strict/html
+scripts/dev/sphinx_strict_build.sh --builder dummy --json
+```
+
+It builds only the `docs/index.rst` toctree closure, promotes warnings to errors, and allows
+exactly one non-blocking case: cross-references that resolve to an existing repository document
+outside the curated set (the curated site intentionally does not build the historical corpus).
+Every other warning, including broken links to nonexistent targets, fails the build. The curated
+source set is pinned in `docs/sphinx_curated_sources.json`; after an intentional toctree change,
+rerun with `--write-manifest` and review the manifest diff. A raw full-tree
+`sphinx-build docs <out>` is unsupported: `docs/conf.py` no longer suppresses broad warning
+classes, so it reports the historical corpus warnings by design.
+
+### Quickstart notebooks
+
+The three beginner notebooks under `notebooks/` are generated, not hand-edited:
+
+```bash
+scripts/dev/generate_quickstart_notebooks.py
+scripts/dev/generate_quickstart_notebooks.py --check --json
+scripts/validation/run_notebooks_smoke.py
+```
+
+`--check` rebuilds each notebook in memory, strips execution counts, outputs, transient cell ids,
+widget state, and environment-specific metadata, and compares canonical JSON to the committed file.
+It fails closed on source drift, stable-metadata drift, missing committed notebooks, and any
+committed executed output or execution count; the JSON report names exact mismatch paths and stable
+reason codes. The smoke owner runs the same parity check before executing the notebooks, so CI
+rejects manually edited or executed notebooks without running them. Do not hand-edit `.ipynb`
+files; change the generator and regenerate.
 
 ### External review routing
 
@@ -260,7 +304,7 @@ Then open a PR on GitHub with:
 - [ ] Pre-commit checks pass: `scripts/dev/ruff_fix_format.sh`
 - [ ] PR readiness verified: `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`
 - [ ] Docstrings and comments are clear
-- [ ] Acronyms and project terms are expanded on first use or linked to [`glossary.md`](docs/glossary.md); user-facing changes lead with a plain-language summary (see the `## Clarity` rule in [`maintainer_values.md`](docs/maintainer_values.md#clarity))
+- [ ] Acronyms and project terms are expanded on first use or linked to [`glossary.md`](docs/glossary.md); user-facing changes lead with a plain-language summary (see the human-facing clarity guidance in [`AGENTS.md`](AGENTS.md))
 - [ ] Examples work (if relevant)
 
 ### In the PR Description
@@ -331,10 +375,14 @@ If you use robot_sf_ll7 for research:
 
 Examples go in `examples/` and are referenced in [`examples/README.md`](examples/README.md).
 
+> `examples/README.md` is generated from [`examples/examples_manifest.yaml`](examples/examples_manifest.yaml)
+> by `scripts/validation/render_examples_readme.py`. Never hand-edit the generated file: add or
+> edit the manifest entry, then regenerate.
+
 When adding an example:
 1. Make it runnable: `uv run python examples/your_example.py`
 2. Add comments explaining key steps
-3. Document in `examples/README.md`
+3. Add a manifest entry in `examples/examples_manifest.yaml` and regenerate with `uv run python scripts/validation/render_examples_readme.py`
 4. Test that it runs without errors
 
 ### Improving Docstrings

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+
 from robot_sf.research.lane_formation_parameter_screen import (
     PARAMETER_BOUNDS,
     build_space_filling_profiles,
     run_parameter_screen,
+    summarize_parameter_screen_rows,
 )
 from robot_sf.research.lane_formation_reference import ReferenceProtocol
 
@@ -49,3 +52,53 @@ def test_parameter_screen_smoke_is_native_and_non_ranking():
         summary["selection_policy"] == "no_response_dependent_selection_in_stage_a"
         for summary in payload["summary"]
     )
+
+
+_MISSING = object()
+
+
+def _parameter_screen_row(*, metrics, sampling_metrics=_MISSING):
+    return {
+        "profile": {"profile_id": "lhs_01"},
+        "seed": 7,
+        "metrics": metrics,
+        "sampling_metrics": {"1": metrics} if sampling_metrics is _MISSING else sampling_metrics,
+        "threshold_evaluations": {"lane_segregation_index>=0.5": {"meets_threshold": False}},
+    }
+
+
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), float("-inf")])
+def test_parameter_screen_summary_rejects_nonfinite_metrics(bad_value):
+    """Non-finite metrics cannot become Stage A diagnostic aggregates."""
+
+    with pytest.raises(ValueError, match="finite numeric metrics"):
+        summarize_parameter_screen_rows(
+            [
+                _parameter_screen_row(
+                    metrics={"lane_segregation_index": bad_value, "lane_purity": 0.4}
+                )
+            ]
+        )
+
+
+@pytest.mark.parametrize(
+    ("metrics", "sampling_metrics"),
+    [
+        (None, {"1": {"lane_segregation_index": 0.4, "lane_purity": 0.4}}),
+        (
+            {"lane_segregation_index": 0.4, "lane_purity": 0.4},
+            None,
+        ),
+        (
+            {"lane_segregation_index": 0.4, "lane_purity": 0.4},
+            {"1": {"lane_segregation_index": float("nan"), "lane_purity": 0.4}},
+        ),
+    ],
+)
+def test_parameter_screen_summary_rejects_malformed_metric_payloads(metrics, sampling_metrics):
+    """Missing or malformed metric mappings fail closed before summary materialization."""
+
+    with pytest.raises(ValueError):
+        summarize_parameter_screen_rows(
+            [_parameter_screen_row(metrics=metrics, sampling_metrics=sampling_metrics)]
+        )

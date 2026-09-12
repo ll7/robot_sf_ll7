@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for benchmark aggregate computation, formatting, and export helpers."""
 
 from __future__ import annotations
 
@@ -14,7 +14,11 @@ from robot_sf.benchmark.aggregate import (
     read_jsonl,
     write_episode_csv,
 )
-from robot_sf.benchmark.errors import AggregationMetadataError, EpisodeRecordInputError
+from robot_sf.benchmark.errors import (
+    AggregationInputError,
+    AggregationMetadataError,
+    EpisodeRecordInputError,
+)
 from robot_sf.benchmark.runner import run_batch
 
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
@@ -22,13 +26,13 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 def _make_sample_jsonl(tmp_path: Path) -> Path:
     # Use run_batch to generate 3 episodes across 2 algos (via scenario_params.algo)
-    """TODO docstring. Document this function.
+    """Generate sample batch episode records in JSONL format for aggregation tests.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory used to write the sample episodes file.
 
     Returns:
-        TODO docstring.
+        Path to the generated episodes JSONL file.
     """
     scenarios = [
         {
@@ -72,11 +76,7 @@ def _make_sample_jsonl(tmp_path: Path) -> Path:
 
 
 def test_read_and_flatten_and_write_csv(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify reading JSONL episodes, flattening metrics, and exporting to CSV."""
     jsonl_path = _make_sample_jsonl(tmp_path)
     recs = read_jsonl(jsonl_path)
     assert len(recs) == 3
@@ -173,11 +173,7 @@ def test_aggregation_metadata_error_to_dict_includes_optional_context() -> None:
 
 
 def test_compute_aggregates_group_by_algo(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify computing summary statistics grouped by algorithm identifier."""
     jsonl_path = _make_sample_jsonl(tmp_path)
     recs = read_jsonl(jsonl_path)
     # We stored algo at the top-level of scenario params; group path is scenario_params.algo
@@ -196,11 +192,7 @@ def test_compute_aggregates_group_by_algo(tmp_path: Path):
 
 
 def test_compute_aggregates_with_ci_shape_and_determinism(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify bootstrap confidence intervals shape, bounds, and deterministic output."""
     jsonl_path = _make_sample_jsonl(tmp_path)
     recs = read_jsonl(jsonl_path)
     # Compute with CIs
@@ -759,6 +751,18 @@ def test_compute_aggregates_with_ci_pairwise_contrasts_are_seed_deterministic() 
         bootstrap_seed=456,
     )
     assert first["pairwise_contrasts"] == second["pairwise_contrasts"]
+
+
+def test_compute_aggregates_with_ci_rejects_invalid_pairwise_confidence() -> None:
+    """Paired bootstrap contrasts must use the same validated confidence contract."""
+    with pytest.raises(AggregationInputError, match="bootstrap_confidence"):
+        compute_aggregates_with_ci(
+            _paired_contrast_records(),
+            group_by="scenario_params.algo",
+            bootstrap_samples=50,
+            bootstrap_confidence=1.5,
+            bootstrap_seed=123,
+        )
 
 
 def _observation_track_records() -> list[dict]:

@@ -1,0 +1,230 @@
+{
+  "schema_version": "issue_8567_native_counterfactual_fields_receipt.v1",
+  "issue": 8567,
+  "status": "diagnostic_implementation_smoke",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "claim_boundary": "This receipt proves native trace and pair-evaluator wiring for one fixed diagnostic pair only. It is not benchmark evidence, a safety result, a paper claim, or authorization to launch the frozen campaign.",
+  "research_claim": null,
+  "benchmark_evidence": false,
+  "campaign_submission_authorized": false,
+  "source_revisions": {
+    "base_commit": "dbaf802001540db0e35faf880d84b1c60a7a471d",
+    "implementation_head_commit": "d28db0e06caf34a3a963be330e6ccfe845cbc090",
+    "smoke_rows_commit": "d28db0e06caf34a3a963be330e6ccfe845cbc090",
+    "smoke_worktree": ".",
+    "head_scope": "The implementation_head_commit is the exact clean source commit recorded by every smoke row. This receipt is a subsequent documentation commit; the PR exact-head gate binds the final documentation tip separately."
+  },
+  "frozen_inputs": [
+    {
+      "path": "configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml",
+      "config_sha256": "1f4c958c5c1d97f37127f1925041cec3ca0ff0267233c6bc572e7302592011d6",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "configs/research/safety_wrapper_ablation_v1.yaml",
+      "config_sha256": "635262978e20bf1427b4545dff7d1e6e9f315b2d19cc5b0c9b38cdb90836fef3",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "configs/benchmarks/paired_effect_metric_contract_v1.yaml",
+      "config_sha256": "cc423c03fac128f21681504fdda85f18606eb66ea292f5c145181ec3c63dc309",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml",
+      "config_sha256": "42d04db0da0e35f1aca9e98c00239936b765f9b94f6928098a72d2e50da5379c",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "config_sha256": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "configs/benchmarks/seed_sets_v1.yaml",
+      "config_sha256": "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6",
+      "unchanged_from_base": true
+    }
+  ],
+  "new_contract_and_smoke_inputs": [
+    {
+      "path": "configs/benchmarks/paired_effect_metric_contract_v1_clarification.yaml",
+      "config_sha256": "a62d08169bfd2c0f16eb7b5e825ea390a4ab9ef5e83b35e490436fcbfb9546a1"
+    },
+    {
+      "path": "configs/benchmarks/paired_effect_native_smoke_v1.yaml",
+      "config_sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b"
+    },
+    {
+      "path": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
+      "config_sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8"
+    }
+  ],
+  "smoke": {
+    "config": "configs/benchmarks/paired_effect_native_smoke_v1.yaml",
+    "config_sha256": "1795c5528d9a41afc76abad59d7d99abe40d3bf3cc6163fc7e07770ff4ea684b",
+    "campaign_id": "paired_effect_native_smoke_v1_20260909_020652",
+    "campaign_root": "output/validation/paired_effect_native_smoke/paired_effect_native_smoke_v1_20260909_020652",
+    "scenario_matrix": "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
+    "scenario_matrix_sha256": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
+    "scenario_matrix_internal_hash": "fbed5c9e0876",
+    "scenario_candidates": ["classic_head_on_corridor_medium"],
+    "seed": 111,
+    "planner": "social_force",
+    "kinematics": "differential_drive",
+    "horizon_steps": 100,
+    "dt_s": 0.1,
+    "arm_isolation": "subprocess",
+    "workers": 1,
+    "native_producer_trace": true,
+    "campaign_arm_execution_mode": "adapter",
+    "fallback_or_degraded_rows": 0,
+    "total_arms": 2,
+    "total_episodes": 2,
+    "runtime_s": 25.9920053021051,
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/paired_effect_native_smoke_v1.yaml --output-root output/validation/paired_effect_native_smoke --mode run --arm-isolation subprocess --skip-publication-bundle"
+  },
+  "arms": {
+    "wrapper_off": {
+      "row_jsonl_sha256": "3e40f62c9f1fe79d12baa4357d96c9dc03e1cef6de7976d8cd8289b34e4ccbc1",
+      "pair_config_hash": "fba9cf7b51b248a5",
+      "source_commit": "d28db0e06caf34a3a963be330e6ccfe845cbc090",
+      "wrapper_trace_sha256": "9d70a670cb5ca68780825254dbe20e423994a1bf88c1e5cdfd407408b1e71443",
+      "simulation_trace_sha256": "0389e037539c4a7d5a6f74152aecc984a513efcff91b0b69e309e48229cf4bca",
+      "trace_steps": 100,
+      "native_goal_position": [14.254944, 8.2798287],
+      "initial_goal_distance_m": 4.298295303768982,
+      "termination_reason": "max_steps",
+      "producer_fields": {
+        "false_positive_stop_rate": {"status": "unavailable", "reason": "wrapper_on_arm_required"},
+        "stop_yield_latency_s": {"status": "unavailable", "reason": "wrapper_on_arm_required"},
+        "progress_at_timeout": {"status": "invalid", "reason": "timeout_progress_out_of_bounds", "value": -0.6401319708419119}
+      }
+    },
+    "wrapper_on": {
+      "row_jsonl_sha256": "25c462b4edae8f80eaf0f7d57e6651431faab078effbfbd6cbe0250f0eb919ad",
+      "pair_config_hash": "fba9cf7b51b248a5",
+      "source_commit": "d28db0e06caf34a3a963be330e6ccfe845cbc090",
+      "wrapper_trace_sha256": "c4f833fac60b0932699546f46942752a274337f8290c9d3c639a2f94c4d39325",
+      "simulation_trace_sha256": "86d856ff0eaa7c046b3c252f689b5abda1747fcc1659981e20ea8541d50b0cfc",
+      "trace_steps": 100,
+      "native_goal_position": [14.254944, 8.2798287],
+      "initial_goal_distance_m": 4.298295303768982,
+      "termination_reason": "max_steps",
+      "producer_fields": {
+        "false_positive_stop_rate": {"status": "unavailable", "reason": "unpaired_counterfactual"},
+        "stop_yield_latency_s": {"status": "available", "value": 9.5, "event_count": 1},
+        "progress_at_timeout": {"status": "available", "value": 0.028965180092118233}
+      }
+    }
+  },
+  "pair_evaluation": {
+    "status": "available",
+    "source": "post_hoc_evaluate_paired_effect_metric_fields(wrapper_on, paired_wrapper_off_record=wrapper_off)",
+    "pair_key": {
+      "planner": "social_force",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 111
+    },
+    "pair_config_hash": "fba9cf7b51b248a5",
+    "source_commit": "d28db0e06caf34a3a963be330e6ccfe845cbc090",
+    "values": {
+      "false_positive_stop_rate": 1.0,
+      "stop_yield_latency_s": 9.5,
+      "progress_at_timeout": 0.028965180092118233
+    },
+    "trace_checks": {
+      "false_positive_window_s": 2.0,
+      "false_positive_window_steps": 20,
+      "event_count": 1,
+      "event_onset_step": 0,
+      "window_end_step": 20,
+      "counterfactual_collision": false,
+      "counterfactual_near_miss": false,
+      "counterfactual_final_forward_progress_valid": true,
+      "latency_event_count": 1,
+      "latency_event_values_s": [9.5],
+      "timeout_horizon_steps": 100,
+      "timeout_termination_reason": "max_steps",
+      "timeout_initial_goal_distance_m": 4.298295303768982,
+      "timeout_final_goal_distance_m": 4.173794406206207
+    }
+  },
+  "retained_row_gate": {
+    "validator": "configs/benchmarks/paired_effect_metric_contract_v1.yaml",
+    "input_shape": "each full episode envelope exposes the producer-owned mapping at root metric_values; the historical nested metrics.metric_values copy remains for compatibility",
+    "wrapper_off": {
+      "status": "blocked",
+      "complete": false,
+      "missing_fields": [
+        "metric_values.false_positive_stop_rate",
+        "metric_values.progress_at_timeout",
+        "metric_values.stop_yield_latency_s"
+      ]
+    },
+    "wrapper_on": {
+      "status": "blocked",
+      "complete": false,
+      "missing_fields": ["metric_values.false_positive_stop_rate"]
+    },
+    "interpretation": "The root mapping is now available to the existing gate. The per-arm state remains fail-closed because wrapper-off has no wrapper-on counterpart and wrapper-on has no paired false-positive value; the pair evaluator does not rewrite either row or bypass this gate."
+  },
+  "campaign_report": {
+    "execution_status": "completed",
+    "mechanical_campaign_status": "benchmark_success",
+    "mechanical_campaign_status_is_evidence": false,
+    "campaign_integrity": "valid",
+    "snqi_contract_status": "fail",
+    "claim_boundary": "The smoke config is diagnostic-only; no planner or safety conclusion is drawn."
+  },
+  "validation": [
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q tests/benchmark/test_paired_effect_metric_contract.py tests/benchmark/test_safety_wrapper_runtime.py tests/validation/test_issue_6971_safety_wrapper_preregistration.py tests/benchmark/test_map_runner_utils.py",
+      "result": "257 passed in 10.60s"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q tests/benchmark/test_paired_effect_metric_contract.py tests/benchmark/test_safety_wrapper_runtime.py tests/validation/test_issue_6971_safety_wrapper_preregistration.py",
+      "result": "95 passed in 6.26s"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/check_issue_6971_safety_wrapper_preregistration.py --json",
+      "result": "status=ok; benchmark_evidence=false; compute_submit_authorized=false; planned_episode_count=5760"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark/check_paired_effect_metric_contract.py --contract configs/benchmarks/paired_effect_metric_contract_v1.yaml --audit-configs --json",
+      "result": "status=ok; covered_configs=5; missing_reference=0; invalid_reference=0; invalid_contract=0"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check <changed Python files>",
+      "result": "All checks passed"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check <changed Python files>",
+      "result": "7 files already formatted"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --exit-code dbaf802001540db0e35faf880d84b1c60a7a471d -- configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml configs/research/safety_wrapper_ablation_v1.yaml configs/benchmarks/paired_effect_metric_contract_v1.yaml configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml configs/scenarios/classic_interactions_francis2023.yaml configs/benchmarks/seed_sets_v1.yaml",
+      "result": "passed; frozen input bytes unchanged"
+    }
+  ],
+  "artifact_provenance": {
+    "durable_receipt": "docs/context/evidence/issue_8567_native_counterfactual_fields_2026-09-08/receipt.json",
+    "raw_output": "worktree-local output/validation/paired_effect_native_smoke is ignored and temporary; raw JSONL/traces are not promoted to Git",
+    "promotion_status": "compact receipt only; no raw benchmark artifact promotion"
+  },
+  "limitations": [
+    "Only one fixed scenario/seed pair was acquired, so no scientific effect estimate or generalization claim is supported.",
+    "The wrapper-off policy moved away from the reset-time goal, so its progress_at_timeout observation is explicitly invalid and omitted rather than clamped or imputed.",
+    "The wrapper-on row is unpaired in the per-arm producer output; false_positive_stop_rate becomes available only in the explicit post-hoc counterpart evaluation. Both full episode envelopes now expose the retained mapping at the root contract path.",
+    "The smoke reports campaign benchmark_success mechanically, but its diagnostic claim boundary, blocked retained-row gate, and failed SNQI contract exclude benchmark or paper interpretation.",
+    "The campaign arm execution reports adapter mode; the native claim here is limited to the producer-owned trace instrumentation and fail-closed evaluator, not an independent planner-native claim."
+  ],
+  "downstream": {
+    "issue_7684": "unadmitted; no downstream campaign or evidence state was changed",
+    "paper_or_dissertation_claim": false
+  }
+}

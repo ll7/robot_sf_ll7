@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for manifest-based run resumption and stale-manifest fallback scanning."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _scenarios(repeats: int = 2):
-    """TODO docstring. Document this function.
+    """Generate minimal test scenario dictionary list for manifest resume tests.
 
     Args:
-        repeats: TODO docstring.
+        repeats: Number of repetitions to configure for the test scenario.
     """
     return [
         {
@@ -36,10 +36,10 @@ def _scenarios(repeats: int = 2):
 
 
 def test_manifest_created_and_used_for_resume(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that batch execution creates a sidecar manifest and subsequent resume runs skip completed jobs.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for batch output and manifest storage.
     """
     out_file = tmp_path / "episodes.jsonl"
     sc = _scenarios(repeats=2)
@@ -79,10 +79,10 @@ def test_manifest_created_and_used_for_resume(tmp_path: Path):
 
 
 def test_manifest_stale_fallbacks_to_scan(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that a corrupted or stale manifest triggers fallback to linear file scanning.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for batch output and manifest storage.
     """
     out_file = tmp_path / "episodes.jsonl"
     sc = _scenarios(repeats=1)
@@ -125,10 +125,10 @@ def test_manifest_stale_fallbacks_to_scan(tmp_path: Path):
 
 
 def test_manifest_identity_hash_mismatch_forces_scan(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that an identity hash mismatch forces resume to scan existing episode records.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for batch output and manifest storage.
     """
     out_file = tmp_path / "episodes.jsonl"
     sc = _scenarios(repeats=1)

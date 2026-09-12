@@ -9,8 +9,10 @@ a slow-marked test here also executes them end-to-end for local confidence.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import nbformat
@@ -53,7 +55,7 @@ def test_notebooks_write_to_gitignored_output() -> None:
 @pytest.mark.parametrize(
     "name,needle",
     [
-        ("01_run_first_episode.ipynb", "make_robot_env"),
+        ("01_run_first_episode.ipynb", "from robot_sf import make_env"),
         ("02_compare_two_planners.ipynb", "run_episode"),
         ("03_visualize_trace.ipynb", "export_threejs_viewer"),
     ],
@@ -69,8 +71,8 @@ def test_notebook_01_seeds_action_space_explicitly() -> None:
     """Notebook 01 must seed the factory, reset, and action space so the trace is reproducible."""
     nb = _load("01_run_first_episode.ipynb")
     joined = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
-    assert "make_robot_env(debug=False, seed=SEED)" in joined, (
-        "notebook 01 should seed the factory via make_robot_env(seed=SEED)"
+    assert "make_env(debug=False, seed=SEED)" in joined, (
+        "notebook 01 should seed the factory via the public facade make_env(seed=SEED)"
     )
     assert "env.reset(seed=SEED)" in joined, "notebook 01 should seed reset explicitly"
     assert "env.action_space.seed(SEED)" in joined, (
@@ -189,6 +191,43 @@ def test_generator_is_byte_reproducible_in_fresh_directories(tmp_path: Path) -> 
     assert outputs[0] == outputs[1]
 
 
+_FACADE_OWNED_INTERNAL_MODULES = (
+    "robot_sf.gym_env.environment_factory",
+    "robot_sf.gym_env.robot_env",
+    "robot_sf.training.scenario_loader",
+)
+_INTERNAL_IMPORT_MARKER = "# internal-import-exception:"
+
+
+def _code_source(name: str) -> str:
+    """Return the joined code-cell source of one committed notebook."""
+    nb = _load(name)
+    return "\n".join(c.source for c in nb.cells if c.cell_type == "code")
+
+
+@pytest.mark.parametrize("name", EXPECTED_NOTEBOOKS)
+def test_notebooks_use_public_facade_for_owned_operations(name: str) -> None:
+    """Internal modules owned by the public facade must not appear in notebooks."""
+    joined = _code_source(name)
+    for module in _FACADE_OWNED_INTERNAL_MODULES:
+        assert f"from {module} import" not in joined, (
+            f"{name} must use the public facade instead of {module}"
+        )
+    assert "from robot_sf import" in joined, f"{name} should import the supported facade"
+
+
+@pytest.mark.parametrize("name", EXPECTED_NOTEBOOKS)
+def test_notebook_internal_imports_are_documented_exceptions(name: str) -> None:
+    """Every remaining internal import must name why no facade equivalent exists."""
+    for lineno, line in enumerate(_code_source(name).splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped.startswith("from robot_sf."):
+            continue
+        assert _INTERNAL_IMPORT_MARKER in stripped, (
+            f"{name}:{lineno} internal import lacks {_INTERNAL_IMPORT_MARKER!r}: {stripped}"
+        )
+
+
 @pytest.mark.slow
 def test_all_notebooks_execute_headless() -> None:
     """Slow: execute every notebook headless via nbconvert (the CI smoke path)."""
@@ -297,3 +336,219 @@ def test_notebook_03_locates_fresh_recording_with_stale_present(tmp_path: Path) 
         )
     finally:
         env.close()
+
+
+def _load_notebook_generator():
+    """Load the notebook generator module from the repository scripts tree."""
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "gen_setup_cleanup", REPO_ROOT / "scripts" / "dev" / "generate_quickstart_notebooks.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _generated_cell_source(nb, needle: str) -> str:
+    """Return the first generated code cell containing ``needle``."""
+
+    for cell in nb.cells:
+        if cell.cell_type == "code" and needle in cell.source:
+            return cell.source
+    raise AssertionError(f"no generated code cell contains {needle!r}")
+
+
+class _FakeRaisingEnv:
+    """Environment whose setup reset always fails, recording close calls."""
+
+    def __init__(self) -> None:
+        self.close_calls = 0
+        self.action_space = types.SimpleNamespace(seed=lambda *args, **kwargs: None)
+
+    def reset(self, **kwargs):
+        """Fail during setup to exercise the cleanup path."""
+        raise RuntimeError("setup boom")
+
+    def close(self) -> None:
+        """Record the cleanup call."""
+        self.close_calls += 1
+
+
+def test_notebook_01_setup_failure_closes_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #8745 review: a failed reset in notebook 01 must close the environment."""
+
+    gen = _load_notebook_generator()
+    nb = gen.build_notebook_01()
+    setup_source = _generated_cell_source(nb, "os.environ.setdefault")
+    env_source = _generated_cell_source(nb, "env.reset(seed=SEED)")
+    fake_env = _FakeRaisingEnv()
+
+    import robot_sf
+
+    monkeypatch.setattr(robot_sf, "make_env", lambda **kwargs: fake_env)
+    namespace: dict = {}
+    exec(compile(setup_source, "<notebook-01-setup>", "exec"), namespace)  # noqa: S102
+
+    with pytest.raises(RuntimeError, match="setup boom"):
+        exec(compile(env_source, "<notebook-01-env>", "exec"), namespace)  # noqa: S102
+
+    assert fake_env.close_calls == 1, "failed reset must close the created environment"
+
+
+def test_notebook_03_setup_failure_closes_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #8745 review: failed setup in notebook 03 must close the environment."""
+
+    gen = _load_notebook_generator()
+    nb = gen.build_notebook_03()
+    setup_source = _generated_cell_source(nb, "os.environ.setdefault")
+    env_source = _generated_cell_source(nb, "env = make_env(")
+    fake_env = _FakeRaisingEnv()
+
+    import robot_sf
+    from robot_sf.baselines import random_policy
+
+    class _FakePlanner:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def reset(self, **kwargs) -> None:
+            pass
+
+    monkeypatch.setattr(robot_sf, "make_env", lambda **kwargs: fake_env)
+    monkeypatch.setattr(robot_sf, "load_scenario", lambda name: {"name": name})
+    monkeypatch.setattr(random_policy, "RandomPlanner", _FakePlanner)
+    namespace: dict = {}
+    exec(compile(setup_source, "<notebook-03-setup>", "exec"), namespace)  # noqa: S102
+
+    with pytest.raises(RuntimeError, match="setup boom"):
+        exec(compile(env_source, "<notebook-03-env>", "exec"), namespace)  # noqa: S102
+
+    assert fake_env.close_calls == 1, "failed setup must close the created environment"
+
+
+def test_canonical_notebook_strips_transient_state() -> None:
+    """Canonicalization removes ids, outputs, execution counts, and env metadata."""
+    gen = _load_notebook_generator()
+    nb = gen.build_notebook_01()
+    nb.cells[0].id = "abc123"
+    nb.cells[0].metadata["kernelspec"] = {"display_name": "Local Python"}
+    nb.metadata["kernelspec"] = {
+        "display_name": "Local Python",
+        "language": "python",
+        "name": "python3",
+    }
+    code_cells = [cell for cell in nb.cells if cell.cell_type == "code"]
+    code_cells[0]["execution_count"] = 7
+    code_cells[0]["outputs"] = [{"output_type": "stream", "name": "stdout", "text": "leak"}]
+
+    code_index = next(index for index, cell in enumerate(nb.cells) if cell.cell_type == "code")
+    canonical = gen._canonical_notebook(nb)
+    payload = json.dumps(canonical)
+
+    assert "abc123" not in payload
+    assert "execution_count" not in json.dumps(canonical["cells"][code_index])
+    assert "output_type" not in payload
+    assert canonical["metadata"]["kernelspec"] == {"language": "python", "name": "python3"}
+    assert gen._transient_state_issues(nb) == [
+        f"cells[{code_index}].outputs",
+        f"cells[{code_index}].execution_count",
+    ]
+
+
+def test_parity_report_matches_committed_notebooks() -> None:
+    """The committed notebooks are canonical generator output."""
+    gen = _load_notebook_generator()
+
+    report = gen.notebook_parity_report()
+
+    assert report["schema"] == "quickstart_notebook_parity.v1"
+    assert report["status"] == "match"
+    assert report["mismatch_count"] == 0
+    assert len(report["notebooks"]) == 3
+
+
+def test_parity_detects_cell_source_drift(tmp_path: Path) -> None:
+    """A manual source edit is reported with the exact mismatch path."""
+    gen = _load_notebook_generator()
+    gen.OUT_DIR = tmp_path
+    gen.main()
+    target = tmp_path / "01_run_first_episode.ipynb"
+    nb = nbformat.read(target, as_version=4)
+    code_cell = next(cell for cell in nb.cells if cell.cell_type == "code")
+    code_cell.source = code_cell.source + "\n# manual edit\n"
+    nbformat.write(nb, target)
+
+    report = gen.notebook_parity_report(out_dir=tmp_path)
+
+    entry = next(item for item in report["notebooks"] if item["notebook"] == target.name)
+    assert entry["status"] == "drift"
+    assert "cell_source_changed" in entry["reason_codes"]
+    assert any(path.endswith(".source") for path in entry["mismatch_paths"])
+
+
+def test_parity_detects_committed_execution_state(tmp_path: Path) -> None:
+    """Committed outputs or execution counts fail the parity check."""
+    gen = _load_notebook_generator()
+    gen.OUT_DIR = tmp_path
+    gen.main()
+    target = tmp_path / "01_run_first_episode.ipynb"
+    nb = nbformat.read(target, as_version=4)
+    code_cell = next(cell for cell in nb.cells if cell.cell_type == "code")
+    code_cell.execution_count = 1
+    code_cell.outputs = [nbformat.v4.new_output("stream", name="stdout", text="executed")]
+    nbformat.write(nb, target)
+
+    report = gen.notebook_parity_report(out_dir=tmp_path)
+
+    entry = next(item for item in report["notebooks"] if item["notebook"] == target.name)
+    assert entry["status"] == "drift"
+    assert "transient_state_present" in entry["reason_codes"]
+    assert entry["transient_state_issues"]
+
+
+def test_parity_detects_missing_notebook(tmp_path: Path) -> None:
+    """A missing committed notebook fails closed."""
+    gen = _load_notebook_generator()
+
+    report = gen.notebook_parity_report(("01_run_first_episode.ipynb",), out_dir=tmp_path)
+
+    assert report["status"] == "drift"
+    entry = report["notebooks"][0]
+    assert entry["status"] == "missing"
+    assert entry["reason_codes"] == ["missing_committed_notebook"]
+
+
+def test_parity_ignores_transient_ids_and_display_names(tmp_path: Path) -> None:
+    """Transient ids and environment-specific kernelspec names do not drift."""
+    gen = _load_notebook_generator()
+    gen.OUT_DIR = tmp_path
+    gen.main()
+    target = tmp_path / "02_compare_two_planners.ipynb"
+    nb = nbformat.read(target, as_version=4)
+    for index, cell in enumerate(nb.cells):
+        cell.id = f"transient-{index}"
+    nb.metadata["kernelspec"] = {
+        "display_name": "Different local kernel",
+        "language": "python",
+        "name": "python3",
+    }
+    nbformat.write(nb, target)
+
+    report = gen.notebook_parity_report(out_dir=tmp_path)
+
+    assert report["status"] == "match"
+    assert all(entry["status"] == "match" for entry in report["notebooks"])
+
+
+def test_parity_report_is_deterministic(tmp_path: Path) -> None:
+    """Repeated parity reports are equal."""
+    gen = _load_notebook_generator()
+    gen.OUT_DIR = tmp_path
+    gen.main()
+
+    assert gen.notebook_parity_report(out_dir=tmp_path) == gen.notebook_parity_report(
+        out_dir=tmp_path
+    )

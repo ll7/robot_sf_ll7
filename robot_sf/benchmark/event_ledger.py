@@ -7,6 +7,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from robot_sf.common.validation import finite_float as _finite_float
+
 EPISODE_EVENT_LEDGER_SCHEMA_VERSION = "EpisodeEventLedger.v2"
 SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS = frozenset(
     {
@@ -109,15 +111,6 @@ def _safe_int(value: Any, *, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
-
-
-def _finite_float(value: Any) -> float | None:
-    """Return a finite float value when available."""
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return None
-    return result if math.isfinite(result) else None
 
 
 def _metric_value(metrics: Mapping[str, Any], *keys: str) -> tuple[float | None, str | None]:

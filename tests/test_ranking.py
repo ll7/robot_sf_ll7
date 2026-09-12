@@ -1,19 +1,25 @@
-"""TODO docstring. Document this module."""
+"""Tests for benchmark algorithm ranking and report formatting functions."""
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
+from robot_sf.benchmark import ranking as ranking_module
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.ranking import compute_ranking, format_csv, format_markdown
 
 
 def _rec(g, **m):
-    """TODO docstring. Document this function.
+    """Build a mock scenario record for ranking tests.
 
     Args:
-        g: TODO docstring.
-        m: TODO docstring.
+        g: Algorithm/group name.
+        **m: Keyword arguments mapping metric names to values.
+
+    Returns:
+        Dictionary representing an episode record.
     """
     return {
         "scenario_params": {"algo": g},
@@ -24,7 +30,7 @@ def _rec(g, **m):
 
 
 def test_compute_ranking_basic():
-    """TODO docstring. Document this function."""
+    """Verify basic ascending ranking computation by metric mean across groups."""
     records = [
         _rec("a", collisions=1),
         _rec("a", collisions=3),
@@ -39,7 +45,7 @@ def test_compute_ranking_basic():
 
 
 def test_compute_ranking_top_and_desc():
-    """TODO docstring. Document this function."""
+    """Verify descending ranking computation and top-k slicing."""
     records = [
         _rec("a", comfort_exposure=0.1),
         _rec("a", comfort_exposure=0.4),
@@ -56,7 +62,7 @@ def test_compute_ranking_top_and_desc():
 
 
 def test_formatters_return_strings():
-    """TODO docstring. Document this function."""
+    """Verify Markdown and CSV ranking formatters produce expected formatted strings."""
     records = [_rec("a", collisions=1), _rec("a", collisions=3)]
     rows = compute_ranking(records, metric="collisions")
     md = format_markdown(rows, "collisions")
@@ -91,3 +97,74 @@ def test_compute_ranking_requires_explicit_cross_track_mode() -> None:
         observation_track_mode="diagnostic-cross-track",
     )
     assert [row.group for row in rows] == ["grid_socnav_v1 :: a", "lidar_2d_v1 :: a"]
+
+
+def test_compute_ranking_excludes_explicitly_ineligible_records() -> None:
+    """Ranking must share aggregate evidence admission and omit marked-out rows."""
+    ineligible = _rec("a", collisions=100)
+    ineligible["algorithm_metadata"] = {
+        "foresight_prediction": {"evidence_eligible": False},
+    }
+    records = [_rec("a", collisions=0), ineligible, _rec("b", collisions=2)]
+
+    rows = compute_ranking(records, metric="collisions")
+
+    assert [(row.group, row.mean, row.count) for row in rows] == [
+        ("a", 0.0, 1),
+        ("b", 2.0, 1),
+    ]
+
+
+def test_compute_ranking_ignores_non_finite_metric_values() -> None:
+    """Ranking must not emit non-finite means from NaN or infinite input metrics."""
+    records = [
+        _rec("a", collisions=float("nan")),
+        _rec("a", collisions=2),
+        _rec("b", collisions=float("inf")),
+        _rec("b", collisions=1),
+    ]
+
+    rows = compute_ranking(records, metric="collisions")
+
+    assert [(row.group, row.mean, row.count) for row in rows] == [
+        ("b", 1.0, 1),
+        ("a", 2.0, 1),
+    ]
+
+
+def test_compute_ranking_ignores_metric_conversion_overflow() -> None:
+    """Integer-to-float overflow must be treated like any other unavailable metric."""
+    rows = compute_ranking(
+        [_rec("a", collisions=10**1000), _rec("a", collisions=2)],
+        metric="collisions",
+    )
+
+    assert [(row.group, row.mean, row.count) for row in rows] == [("a", 2.0, 1)]
+
+
+def test_compute_ranking_keeps_large_finite_means_finite() -> None:
+    """Finite inputs must not overflow the aggregate mean calculation."""
+    rows = compute_ranking(
+        [_rec("a", collisions=1e308), _rec("a", collisions=1e308)],
+        metric="collisions",
+    )
+
+    assert len(rows) == 1
+    assert math.isfinite(rows[0].mean)
+    assert rows[0].mean == pytest.approx(1e308)
+
+
+def test_finite_mean_returns_none_for_empty_values() -> None:
+    """Empty groups have no finite mean available for ranking."""
+    assert ranking_module._finite_mean([]) is None
+
+
+def test_compute_ranking_omits_group_when_mean_calculation_overflows(monkeypatch) -> None:
+    """A defensive mean-calculation failure must omit the affected group."""
+
+    def raise_overflow(_values):
+        raise OverflowError("synthetic fsum overflow")
+
+    monkeypatch.setattr(ranking_module.math, "fsum", raise_overflow)
+
+    assert compute_ranking([_rec("a", collisions=1)], metric="collisions") == []

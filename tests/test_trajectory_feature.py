@@ -14,16 +14,16 @@ from dataclasses import dataclass
 # Mock the dependencies for testing
 @dataclass
 class MockPose:
-    """TODO docstring. Document this class."""
+    """Minimal pose stand-in exposing position and orientation with index access."""
 
     position: tuple[float, float]
     orientation: float
 
     def __getitem__(self, index):
-        """TODO docstring. Document this function.
+        """Return position for index 0 and orientation for index 1.
 
         Args:
-            index: TODO docstring.
+            index: Index selecting position (0) or orientation (1).
         """
         if index == 0:
             return self.position
@@ -35,7 +35,7 @@ class MockPose:
 
 @dataclass
 class MockVisualizableSimState:
-    """TODO docstring. Document this class."""
+    """Minimal state stand-in with timestep, robot pose, pedestrian and optional ego poses."""
 
     timestep: int
     robot_pose: MockPose
@@ -45,7 +45,7 @@ class MockVisualizableSimState:
 
 @dataclass
 class MockMapDefinition:
-    """TODO docstring. Document this class."""
+    """Minimal map definition stand-in carrying only a map name."""
 
     name: str = "test_map"
 
@@ -54,7 +54,7 @@ class TrajectoryVisualizationTest:
     """Test class for trajectory visualization functionality."""
 
     def __init__(self):
-        """TODO docstring. Document this function."""
+        """Initialize trajectory histories with a maximum length of 10."""
         self.show_trajectories = True
         self.max_trajectory_length = 10
         self.robot_trajectory = deque(maxlen=self.max_trajectory_length)

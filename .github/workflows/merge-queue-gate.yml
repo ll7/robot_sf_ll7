@@ -160,6 +160,7 @@ jobs:
           set -euo pipefail
           python scripts/dev/merge_queue_gate.py \
             --from-event "$GITHUB_EVENT_PATH" \
+            --merge-group-evidence-head "$GITHUB_SHA" \
             --repo "${{ github.repository }}" \
             --json
 

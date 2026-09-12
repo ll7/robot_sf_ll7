@@ -24,6 +24,7 @@ from robot_sf.benchmark.aggregate import (
     normalize_observation_track_mode,
     observation_track_group_label,
 )
+from robot_sf.benchmark.errors import DistributionInputError
 from robot_sf.benchmark.grouping import resolve_report_group_key
 from robot_sf.benchmark.plotting_style import apply_latex_style
 
@@ -106,6 +107,34 @@ class DistPlotMeta:
 
     wrote: list[str]
     pdfs: list[str]
+
+
+def _validate_plot_controls(
+    *,
+    bins: int,
+    ci: bool,
+    ci_samples: int,
+    ci_confidence: float,
+) -> None:
+    """Validate histogram and optional confidence-interval controls."""
+    if bins < 1:
+        raise DistributionInputError(f"bins must be >= 1 (got {bins})")
+    if not ci:
+        return
+    if ci_samples < 1:
+        raise DistributionInputError(
+            f"ci_samples must be >= 1 when CI is enabled (got {ci_samples})"
+        )
+    try:
+        confidence = float(ci_confidence)
+    except (TypeError, ValueError) as exc:
+        raise DistributionInputError(
+            f"ci_confidence must be finite and in (0, 1) when CI is enabled (got {ci_confidence!r})"
+        ) from exc
+    if not np.isfinite(confidence) or not 0.0 < confidence < 1.0:
+        raise DistributionInputError(
+            f"ci_confidence must be finite and in (0, 1) when CI is enabled (got {ci_confidence!r})"
+        )
 
 
 def _apply_rcparams() -> None:
@@ -248,7 +277,8 @@ def _save_one_metric(  # noqa: PLR0913
     ci_seed: int | None,
     palette: Sequence[str],
     out_pdf: bool,
-) -> tuple[str, str | None]:
+    out_svg: bool,
+) -> tuple[str, str | None, str | None]:
     """Render and save a single metric to PNG and optionally PDF; returns paths.
 
     Returns:
@@ -300,7 +330,30 @@ def _save_one_metric(  # noqa: PLR0913
         fig2.savefig(pdf_path)
         plt.close(fig2)
 
-    return png_path, pdf_path
+    svg_path: str | None = None
+    if out_svg:
+        fig3, ax3 = plt.subplots(figsize=(6, 4))
+        _render_metric(
+            ax3,
+            grouped,
+            metric=metric,
+            bins=bins,
+            kde=kde,
+            ci=ci,
+            ci_samples=ci_samples,
+            ci_confidence=ci_confidence,
+            ci_seed=ci_seed,
+            palette=palette,
+            legend_with_n=False,
+        )
+        ax3.set_xlabel(metric)
+        ax3.set_ylabel("count")
+        ax3.legend(loc="best", fontsize=8)
+        svg_path = str(Path(out_dir) / f"dist_{metric}.svg")
+        fig3.savefig(svg_path, format="svg")
+        plt.close(fig3)
+
+    return png_path, pdf_path, svg_path
 
 
 def save_distributions(  # noqa: PLR0913
@@ -310,6 +363,7 @@ def save_distributions(  # noqa: PLR0913
     bins: int = 30,
     kde: bool = False,
     out_pdf: bool = False,
+    out_svg: bool = False,
     ci: bool = False,
     ci_samples: int = 1000,
     ci_confidence: float = 0.95,
@@ -322,6 +376,12 @@ def save_distributions(  # noqa: PLR0913
     Returns:
         DistPlotMeta containing lists of written PNG and PDF paths.
     """
+    _validate_plot_controls(
+        bins=bins,
+        ci=ci,
+        ci_samples=ci_samples,
+        ci_confidence=ci_confidence,
+    )
     _apply_rcparams()
     out_dir = str(out_dir)
     Path(out_dir).mkdir(parents=True, exist_ok=True)
@@ -330,7 +390,7 @@ def save_distributions(  # noqa: PLR0913
     palette = ["#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2", "#EECA3B"]
 
     for metric in _metrics_in_grouped(grouped):
-        png_path, pdf_path = _save_one_metric(
+        png_path, pdf_path, _svg_path = _save_one_metric(
             out_dir,
             metric,
             grouped,
@@ -342,6 +402,7 @@ def save_distributions(  # noqa: PLR0913
             ci_seed=ci_seed,
             palette=palette,
             out_pdf=out_pdf,
+            out_svg=out_svg,
         )
         wrote.append(png_path)
         if pdf_path is not None:

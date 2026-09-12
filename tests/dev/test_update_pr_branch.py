@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.dev.gate_worktree_guard import GateWorktreeHealth, GateWorktreeRecreate
 from scripts.dev.update_pr_branch import main, update_pr_branch
 
@@ -162,6 +164,12 @@ def test_gate_worktree_recreated_then_updates(capsys) -> None:  # type: ignore[n
         path="/abs/recreated-wt",
         recreated=True,
         branch="feature",
+        head_sha="a" * 40,
+        recovery={
+            "status": "partial",
+            "local_state_restored": False,
+            "loss_boundary": "dirty_untracked_ignored_state_not_recoverable",
+        },
     )
     with (
         patch(
@@ -194,6 +202,114 @@ def test_gate_worktree_recreated_then_updates(capsys) -> None:  # type: ignore[n
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "update_requested"
     assert payload["updated"] is True
+    health = payload["gate_worktree_health"]
+    assert health["branch"] == "feature"
+    assert health["head_sha"] == "a" * 40
+    assert health["recovery"]["local_state_restored"] is False
+    assert health["recovery"]["loss_boundary"] == ("dirty_untracked_ignored_state_not_recoverable")
+
+
+def test_gate_worktree_recovery_metadata_survives_missing_guard(capsys) -> None:  # type: ignore[no-untyped-def]
+    """A failed recreation keeps the dirty-state loss boundary in caller output."""
+    recovery = {
+        "status": "partial",
+        "local_state_restored": False,
+        "loss_boundary": "dirty_untracked_ignored_state_not_recoverable",
+    }
+    with patch(
+        "scripts.dev.update_pr_branch._ensure_gate_worktree",
+        return_value={
+            "exists": False,
+            "classification": "missing",
+            "branch": "feature",
+            "head_sha": "b" * 40,
+            "cleanup_owner": None,
+            "lease_owner": None,
+            "lease_pr_number": None,
+            "lease_gate_id": None,
+            "recovery": recovery,
+            "recreated": False,
+            "recreate_error": "worktree missing and no live lease on record; cannot recreate safely",
+        },
+    ):
+        rc = main(
+            [
+                "5819",
+                "--repo",
+                "owner/repo",
+                "--expected-head-sha",
+                "head_sha",
+                "--gate-worktree-path",
+                "/abs/missing-wt",
+                "--json",
+            ]
+        )
+
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out)
+    health = payload["gate_worktree_health"]
+    assert health["branch"] == "feature"
+    assert health["head_sha"] == "b" * 40
+    assert health["recovery"]["local_state_restored"] is False
+    assert health["recovery"]["loss_boundary"] == ("dirty_untracked_ignored_state_not_recoverable")
+
+
+@pytest.mark.parametrize("failure", ["fetch", "head_mismatch", "update", "parse"])
+def test_gate_worktree_recovery_metadata_survives_later_update_errors(failure: str) -> None:
+    """Every guarded update error preserves the recovery boundary for its caller."""
+    recovery = {
+        "status": "partial",
+        "local_state_restored": False,
+        "loss_boundary": "dirty_untracked_ignored_state_not_recoverable",
+    }
+    health = {
+        "exists": True,
+        "classification": "healthy",
+        "branch": "feature",
+        "head_sha": "a" * 40,
+        "cleanup_owner": None,
+        "lease_owner": None,
+        "lease_pr_number": None,
+        "lease_gate_id": None,
+        "recovery": recovery,
+    }
+    if failure == "fetch":
+        gh_responses = [_gh_response(returncode=1, stderr="fetch failed")]
+    elif failure == "head_mismatch":
+        gh_responses = [_gh_response(stdout=json.dumps({"head": {"sha": "new_head"}}))]
+    elif failure == "update":
+        gh_responses = [
+            _gh_response(stdout=json.dumps({"head": {"sha": "head_sha"}})),
+            _gh_response(returncode=1, stderr="update failed"),
+        ]
+    else:
+        gh_responses = [
+            _gh_response(stdout=json.dumps({"head": {"sha": "head_sha"}})),
+            _gh_response(stdout="not json"),
+        ]
+
+    with (
+        patch("scripts.dev.update_pr_branch._ensure_gate_worktree", return_value=health),
+        patch("scripts.dev.update_pr_branch._gh", side_effect=gh_responses),
+    ):
+        result = update_pr_branch(
+            "5819",
+            repo="owner/repo",
+            expected_head_sha="head_sha",
+            gate_worktree_path="/abs/present-wt",
+        )
+
+    assert (
+        result["status"]
+        == {
+            "fetch": "error",
+            "head_mismatch": "head_mismatch",
+            "update": "error",
+            "parse": "error",
+        }[failure]
+    )
+    assert result["updated"] is False
+    assert result["gate_worktree_health"] == health
 
 
 def test_gate_worktree_present_allows_update(capsys) -> None:  # type: ignore[no-untyped-def]

@@ -23,11 +23,40 @@ When quoting readiness counts, use the named selectors in
 [`docs/dev/local_ci.md`](../../docs/dev/local_ci.md#readiness-count-selectors),
 including `--collect-only -q` when only the collected count is needed.
 
+[`check_base_drift.py`](check_base_drift.py) backs the readiness gate's base-drift recheck (issue
+#5782). The gate captures the concrete base SHA before the expensive lanes and invokes this check
+immediately before recording the stamp, so it can tell whether `origin/main` moved during the run.
+Drift that touches none of the PR's changed files recommends reuse; drift that intersects them
+requires revalidation. One regenerable exception exists: when the intersection is exactly
+`scripts/validation/docstring_todo_baseline.json`, the gate re-runs the targeted docstring baseline
+and ratchet gates and, only on success, revalidates through that narrow path with a recorded
+`baseline_revalidation` receipt; mixed drift stays fail-closed. The checker exits `0` when the base
+is current or the drift is reusable, `1` when revalidation is required, and `2` when the base ref
+or drift cannot be resolved.
+
 The native merge queue enforcement path is
 [`merge_queue_gate.py`](merge_queue_gate.py), invoked by
 [`.github/workflows/merge-queue-gate.yml`](../../.github/workflows/merge-queue-gate.yml)
 on `merge_group`. The standalone protection audit below does not replace that
 workflow or change branch protection.
+
+## Agent instruction and skill checks
+
+- [`check_instruction_references.py`](check_instruction_references.py) validates the agent
+  instruction graph: the single task-route owner, the `Instruction Precedence` block, the
+  execution-profile manifest, the maintainer-values drift rule, and repository-local reference
+  resolution. Run `uv run python scripts/dev/check_instruction_references.py [--json]`.
+- [`check_skills.py`](check_skills.py) validates the repo-local skill registry and runs a skill
+  preflight; use `--preflight <skill>` before relying on a skill's declared requirements.
+- `scripts/tools/sync_ai_config.py --check` keeps provider adapters thin, scoped, and linked to
+  canonical sources (see [`.agents/README.md`](../../.agents/README.md)).
+- [`check_agent_instructions.sh`](check_agent_instructions.sh) composes the three checks above into
+  one entry point for instruction-contract changes; run
+  `scripts/dev/check_agent_instructions.sh` (optional `--json`). It is also available as the VS Code
+  task `Agent Instruction Checks`.
+
+These are contract checks for repository instructions, not PR merge gates;
+`pr_ready_check.sh` remains the required readiness entry point.
 
 ## Explicit issue-scoped verification
 
@@ -69,6 +98,26 @@ it probes the live `ALLGREEN` strategy. The audit fails closed when a required
 dimension is unsatisfied or unverifiable. It performs no ruleset, branch,
 queue, PR, issue, or workflow mutation, and it cannot claim that a real
 `merge_group` run exists unless GitHub provides that evidence.
+
+[`prune_stale_remote_branches.py`](prune_stale_remote_branches.py) is the
+dry-run-first sweep for stale remote heads (issue #9087). It deletes only two
+safe classes: `merged_code_branch` (tip already an ancestor of `origin/main`
+with no open PR) and `claim_ref_closed_issue` (`agent-claims/issue-<n>` whose
+issue is closed). Everything else is kept, including protected refs, open-PR
+heads, claims whose issue is open or unresolved, and any ref whose state cannot
+be determined. Run a scan (no deletion) at a cadence of roughly once a month or
+after a large campaign:
+
+```bash
+uv run python scripts/dev/prune_stale_remote_branches.py --report /tmp/prune.json
+```
+
+Apply is explicit and bounded; rerunning is idempotent because deleted refs no
+longer classify:
+
+```bash
+uv run python scripts/dev/prune_stale_remote_branches.py --apply --limit 25 --report /tmp/prune.json
+```
 
 ## CI inline-logic helpers
 
@@ -121,6 +170,20 @@ See [`docs/ai/open-issue-contract-preparation.md`](../../docs/ai/open-issue-cont
 for the operator contract. Focused offline tests live in
 `tests/dev/test_prepare_open_issue_contracts.py`.
 
+[`ready_triage_reconcile.py`](ready_triage_reconcile.py) repairs the contradictory
+`state:ready` + `needs-triage` pair on open issues (issue #9012): report mode
+derives one evidence-backed action per issue from its classification with the triage
+label ignored, and apply mode performs only the planned label removal with a
+per-issue drift check. It never closes issues, merges pull requests, or edits
+Project #5 state.
+
+```bash
+uv run python scripts/dev/ready_triage_reconcile.py --json
+uv run python scripts/dev/ready_triage_reconcile.py --apply --json
+```
+
+Focused offline tests live in `tests/dev/test_ready_triage_reconcile.py`.
+
 ## Parent goal-autopilot arbitration
 
 [`goal_autopilot_controller.py`](goal_autopilot_controller.py) is the
@@ -170,13 +233,34 @@ tracked hook and guard; keep that checkout available for the review worktree's l
 cover ordinary Git invocation paths, but are not an operating-system sandbox: a deliberate per-command
 Git configuration override can bypass them. In particular, a remote added after activation with an
 explicit `remote.<name>.pushurl` remains protected by the ordinary hook path, while a deliberate
-`--no-verify` bypass is owned by stronger process isolation in #8343.
+`--no-verify` bypass must use the stronger process boundary described below.
 
 Review setup never edits the shared config to mask `url.*.pushInsteadOf` entries. If an effective
 repository, global, system, or pre-existing worktree alias could outrank the worktree push barrier,
 setup fails closed before enabling review mode; remove or relocate the alias and retry. A
 guard-specific lock would not serialize arbitrary Git processes in other linked worktrees. Read-side
 `url.*.insteadOf` rewrites remain enabled for safe configurations.
-Implementation worktrees keep the default pushable behavior. See
+
+For the stronger adversarial contract, run the complete command as a descendant of the guard:
+
+```bash
+python scripts/dev/review_worktree_guard.py run \
+  --worktree <review-worktree> -- \
+  git -c url.<actual-file-url>.insteadOf=<blocked-file-url> push \
+  --no-verify --receive-pack=git-receive-pack origin HEAD:refs/heads/example
+```
+
+This `run` path installs Linux Landlock application binary interface (ABI) 4+ before `exec`: reads
+and execution remain available, filesystem mutation is allowed only in the review worktree and
+linked Git admin directory, inherited file descriptors are closed, and TCP bind/connect is denied.
+It fails closed when that policy cannot be installed. This is a Linux-only process boundary for
+local filesystem remotes, not a portable all-host guarantee. It does not attach to the directory,
+so commands launched later from another terminal or raw Git invocations outside `run` are outside
+the contract; use `run -- ... bash` for a bounded session. Landlock's policy also deliberately
+excludes remotes inside its writable roots, Unix-domain/existing privileged helper channels, and
+privileged host escapes.
+The creation helper clears copied per-worktree configuration before applying the requested mode, so
+an implementation worktree created from a protected review checkout remains independently
+pushable. Implementation worktrees keep the default pushable behavior. See
 [`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md) for the complete invocation and
 restoration procedure.

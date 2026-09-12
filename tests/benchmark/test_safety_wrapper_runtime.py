@@ -451,6 +451,227 @@ def test_run_map_episode_records_wrapper_metadata_when_enabled(monkeypatch) -> N
     assert ledger["provenance"]["safety_wrapper"] == summary
 
 
+def test_run_map_episode_records_native_pairing_trace_for_wrapper_off(monkeypatch) -> None:
+    """The off arm retains native command and post-step state for later pairing."""
+
+    record = _run_episode_with_policy(
+        monkeypatch,
+        _policy_builder,
+        safety_wrapper={"enabled": False, "arm_key": "wrapper_off", "record_step_trace": True},
+    )
+
+    summary = record["algorithm_metadata"]["safety_wrapper"]
+    native = record["algorithm_metadata"]["paired_effect_native_trace"]
+    step_record = summary["step_trace"][0]
+    assert summary["enabled"] is False
+    assert summary["arm_key"] == "wrapper_off"
+    assert record["metrics"]["wrapper_intervention_rate"] == 0.0
+    assert native["schema_version"] == "paired_effect_native_trace.v1"
+    assert native["arm_key"] == "wrapper_off"
+    assert native["declared_timeout"] is False
+    assert step_record["time_s"] == pytest.approx(0.1)
+    assert step_record["forward_progress_command"]["status"] == "valid"
+    assert step_record["post_step_outcome"]["status"] == "available"
+    assert (
+        record["algorithm_metadata"]["paired_effect_metric_producer"]["fields"][
+            "false_positive_stop_rate"
+        ]["reason"]
+        == "wrapper_on_arm_required"
+    )
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_status", "expected_reason"),
+    [
+        ((1.0, 0.0), "valid", None),
+        ((0.0, 0.0), "not_forward_progress", None),
+        ((True, 0.0), "unavailable", "non_numeric_forward_progress_command"),
+        (("not-a-number", 0.0), "unavailable", "non_numeric_forward_progress_command"),
+        ((float("nan"), 0.0), "unavailable", "nonfinite_forward_progress_command"),
+    ],
+)
+def test_native_wrapper_command_annotation_is_fail_closed(
+    command, expected_status: str, expected_reason: str | None
+) -> None:
+    """Native trace command fields distinguish valid, stopped, and malformed commands."""
+
+    record = {"eligible_for_wrapper": True}
+
+    map_runner_episode._annotate_native_safety_wrapper_command(
+        record,
+        command,
+        step_idx=2,
+        time_per_step_s=0.1,
+    )
+
+    assert record["time_s"] == pytest.approx(0.3)
+    assert record["forward_progress_command"]["status"] == expected_status
+    assert record["forward_progress_command"]["reason"] == expected_reason
+
+
+def test_native_wrapper_command_annotation_records_ineligible_reason() -> None:
+    """An ineligible wrapper step never infers a command state from the raw action."""
+
+    record = {"eligible_for_wrapper": False, "ineligible_reason": "native_action"}
+
+    map_runner_episode._annotate_native_safety_wrapper_command(
+        record,
+        (1.0, 0.0),
+        step_idx=0,
+        time_per_step_s=0.2,
+    )
+
+    assert record["forward_progress_command"] == {
+        "status": "unavailable",
+        "reason": "native_action",
+        "linear_velocity_m_s": None,
+        "source": "map_runner_native_final_command",
+    }
+
+
+def _post_step_state() -> SimpleNamespace:
+    return SimpleNamespace(safety_wrapper_trace=[{"step": 3}])
+
+
+@pytest.mark.parametrize(
+    ("robot_pos", "ped_pos", "robot_radius", "ped_radius", "expected"),
+    [
+        (["bad"], [[0.2, 0.0]], 0.1, 0.1, ("invalid", "invalid_post_step_geometry")),
+        ([0.0], [[0.2, 0.0]], 0.1, 0.1, ("invalid", "invalid_robot_position")),
+        ([0.0, 0.0], np.empty((0, 2)), 0.1, 0.1, ("available", None)),
+        ([0.0, 0.0], np.array([0.2]), 0.1, 0.1, ("invalid", "invalid_pedestrian_positions")),
+        ([0.0, 0.0], np.ones((1, 1)), 0.1, 0.1, ("invalid", "invalid_pedestrian_positions")),
+        (
+            [float("nan"), 0.0],
+            [[0.2, 0.0]],
+            0.1,
+            0.1,
+            ("invalid", "nonfinite_post_step_geometry"),
+        ),
+        ([0.0, 0.0], [[0.2, 0.0]], -0.1, 0.1, ("invalid", "invalid_actor_radii")),
+        ([0.0, 0.0], np.array([0.5, 0.0]), 0.1, 0.1, ("available", None)),
+    ],
+)
+def test_post_step_outcome_handles_native_geometry_states(
+    robot_pos,
+    ped_pos,
+    robot_radius: float,
+    ped_radius: float,
+    expected: tuple[str, str | None],
+) -> None:
+    """Post-step native geometry is recorded or rejected without fabricated values."""
+
+    state = _post_step_state()
+    slc = SimpleNamespace(
+        collision_event_context=SimpleNamespace(
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
+        )
+    )
+    sim = SimpleNamespace(robot_pos=robot_pos, peds=ped_pos)
+
+    map_runner_episode._annotate_safety_wrapper_post_step_outcome(
+        state,
+        slc,
+        step_idx=3,
+        sim=sim,
+        step_collision=False,
+    )
+
+    outcome = state.safety_wrapper_trace[-1]["post_step_outcome"]
+    assert outcome["status"] == expected[0]
+    if expected[1] is not None:
+        assert outcome["reason"] == expected[1]
+    else:
+        assert outcome.get("reason") is None
+    if expected == ("available", None) and np.asarray(ped_pos).size:
+        assert outcome["near_miss"] is True
+
+
+def test_post_step_outcome_ignores_missing_or_stale_wrapper_trace() -> None:
+    """A missing or stale wrapper trace cannot be annotated by another step."""
+
+    slc = SimpleNamespace(collision_event_context=SimpleNamespace(robot_radius=0.1, ped_radius=0.1))
+    sim = SimpleNamespace(robot_pos=[0.0, 0.0], peds=[[0.2, 0.0]])
+
+    for trace in ([], [{"step": 2}]):
+        state = SimpleNamespace(safety_wrapper_trace=trace)
+        map_runner_episode._annotate_safety_wrapper_post_step_outcome(
+            state,
+            slc,
+            step_idx=3,
+            sim=sim,
+            step_collision=False,
+        )
+        if not trace:
+            assert trace == []
+        else:
+            assert trace == [{"step": 2}]
+
+
+def test_native_pairing_trace_uses_reset_time_goal_after_route_advances() -> None:
+    """Timeout progress must use the goal paired with its initial denominator."""
+
+    context = SimpleNamespace(
+        config=SimpleNamespace(sim_config=SimpleNamespace(time_per_step_in_secs=0.1)),
+        horizon_val=2,
+        safety_wrapper_runtime=SimpleNamespace(arm_key="wrapper_on"),
+    )
+    loop_result = SimpleNamespace(
+        collision_seen=False,
+        goal_vec=np.array([9.0, 0.0], dtype=float),
+        initial_goal_vec=np.array([1.0, 0.0], dtype=float),
+        initial_goal_distance=1.0,
+        reached_goal_step=None,
+        safety_wrapper_trace=[{"step": 0}],
+        simulation_step_trace=[{"step": 0}],
+        termination_reason="max_steps",
+        timeout_seen=True,
+    )
+    algo_meta: dict[str, object] = {}
+
+    map_runner_episode._attach_paired_effect_native_trace_metadata(
+        algo_meta,
+        ctx=context,
+        loop_result=loop_result,
+    )
+
+    native = algo_meta["paired_effect_native_trace"]
+    assert native["goal_position"] == [1.0, 0.0]
+
+
+def test_native_pairing_trace_marks_nonfinite_goal_provenance_unavailable() -> None:
+    """Malformed reset geometry is represented as unavailable native provenance."""
+
+    context = SimpleNamespace(
+        config=SimpleNamespace(sim_config=SimpleNamespace(time_per_step_in_secs=0.1)),
+        horizon_val=2,
+        safety_wrapper_runtime=SimpleNamespace(arm_key="wrapper_on"),
+    )
+    loop_result = SimpleNamespace(
+        collision_seen=False,
+        goal_vec=np.array([9.0, 0.0], dtype=float),
+        initial_goal_vec=np.array([float("nan")], dtype=float),
+        initial_goal_distance=float("nan"),
+        reached_goal_step=None,
+        safety_wrapper_trace=[{"step": 0}],
+        simulation_step_trace=[],
+        termination_reason="max_steps",
+        timeout_seen=True,
+    )
+    algo_meta: dict[str, object] = {}
+
+    map_runner_episode._attach_paired_effect_native_trace_metadata(
+        algo_meta,
+        ctx=context,
+        loop_result=loop_result,
+    )
+
+    native = algo_meta["paired_effect_native_trace"]
+    assert native["goal_position"] is None
+    assert native["initial_goal_distance_m"] is None
+
+
 def test_run_map_episode_fails_closed_for_native_action_when_wrapper_enabled(
     monkeypatch,
 ) -> None:

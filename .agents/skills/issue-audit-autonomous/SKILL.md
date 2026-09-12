@@ -93,7 +93,12 @@ issue_audit_plan.v1.
   required external-input evidence proves the gate and the issue body or
   complete comment inventory records a `blocked-triage-v1` reason block or a
   `Blocked-by: #<number>` reference. Otherwise, decline the dispatch-suppressing
-  label and route to the existing `needs-triage` label when available.
+  label and route to the existing `needs-triage` label when available. Never add
+  `needs-triage` to an issue that carries `state:ready`: readiness already
+  records a completed triage decision, and adding triage on top silently
+  re-blocks an admitted issue (issue #8837). If the readiness label itself is
+  stale, remove or re-evaluate it through the normal readiness-evidence path
+  before triage can block the issue again.
 - Add state:ready only with concrete acceptance or validation evidence and no
   active or unresolved gate.
 - Close only with a merged issue-linked PR plus the documented completion

@@ -1,0 +1,64 @@
+# Outcome-free launch and evaluation packet for issue #1496.
+# This file is a declaration consumed by check_oracle_imitation_comparison.py. It does not
+# collect data, access the private dataset, train a policy, submit compute, or assert a result.
+schema_version: oracle-imitation-comparison.v1
+experiment_id: issue_1496_oracle_imitation_bc_vs_rl_only_v1
+
+dataset_launch_packet: configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
+trace_uri_registry: configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1496_collection.yaml
+dataset_consumer_manifest: configs/training/ppo_imitation/oracle_imitation_consumer_manifest_issue_1496.yaml
+split_contract: docs/context/policy_search/contracts/oracle_imitation_dataset_split.md
+
+budget:
+  environment_steps: 15000000
+  comparison_scope: post_initialization_environment_steps
+  initialization_cost_separate: true
+
+arms:
+  rl_only:
+    algorithm: ppo
+    initialization: random_policy
+    config: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml
+    seeds: [123, 231, 777, 992, 1337]
+    environment_steps: 15000000
+    evaluation_seeds: [111, 112, 113]
+    evaluation_scenario_config: configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml
+  bc_warm_start:
+    algorithm: bc_then_ppo
+    initialization: behavior_cloning_then_ppo
+    config: configs/training/ppo_imitation/ppo_finetune_issue_1496_comparison.yaml
+    bc_config: configs/training/ppo_imitation/bc_pretrain_issue_1496_comparison.yaml
+    ppo_config: configs/training/ppo_imitation/ppo_finetune_issue_1496_comparison.yaml
+    seeds: [123, 231, 777, 992, 1337]
+    environment_steps: 15000000
+    evaluation_seeds: [111, 112, 113]
+    evaluation_scenario_config: configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml
+
+evaluation:
+  seeds: [111, 112, 113]
+  scenario_config: configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml
+  cadence_steps: [0, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 8000000, 9000000, 10000000, 11000000, 12000000, 13000000, 14000000, 15000000]
+  checkpoint_selection:
+    validation_split: validation
+    metric: success_rate
+    direction: maximize
+    retained: [best_validation, final]
+
+estimands:
+  sample_efficiency:
+    definition: validation_metric_trajectory_as_a_function_of_environment_steps
+    result_status: pending
+    aggregation: per_seed_then_arm_summary
+    missingness: report_missing_evaluations_without_imputation
+  final_performance:
+    definition: held_out_evaluation_metrics_at_the_predeclared_selected_checkpoint
+    result_status: pending
+    aggregation: per_seed_then_arm_summary
+    missingness: report_missing_evaluations_without_imputation
+
+out_of_scope_actions:
+  data_collection: false
+  dagger_refinement: false
+  training_execution: false
+  benchmark_execution: false
+  publication_claim: false

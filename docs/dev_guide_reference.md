@@ -52,8 +52,9 @@ Host tools and optional machine capabilities that are not installed by `uv` are 
 
 Use the maintainer hierarchy and readiness matrix in `AGENTS.md` before older workflow prose or
 tool-specific compatibility pointers. In short: active maintainer direction wins over stale
-instructions, `docs/maintainer_values.md` defines the hard contracts, and Project #5 scores are
-advisory when fresh evidence or maintainer direction conflicts with them.
+instructions, `AGENTS.md` owns the hard contracts, `docs/maintainer_values.md` records stable
+principles, and Project #5 scores are advisory when fresh evidence or maintainer direction
+conflicts with them.
 
 Routine workflow cleanup can proceed without extra confirmation when it is bounded and the PR or
 handoff clearly labels assumptions, uncertainty, evidence grade, and any deferred follow-up issue.
@@ -297,16 +298,24 @@ For a compact first pass, run
 `uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retirement-plan --json`.
 The retirement projection is a read-only review aid: it can classify rows as `preserve`, `review`,
 or `removable`, but it never deletes worktrees and does not replace human approval before any later
-`git worktree remove` command.
+cleanup action. Automatic or agent-driven cleanup must use the guarded repository reaper so
+protected worktrees are refused and the refusal is recorded:
+
+```bash
+scripts/dev/stale_worktree_reaper.py --apply --json
+```
+
+Treat a direct `git worktree remove <path>` as an operator-only final action for a separately
+verified clean, pushed, closed-PR candidate; it is not an automation integration point and must not
+replace the guarded reaper.
 
 Only remove a worktree after preserving relevant tracked, untracked, and ignored-but-important
 changes through a commit, stash, patch, durable artifact promotion, or explicit handoff note. Do not
 delete dirty or unpushed worktrees unless the cleanup record states what was preserved or why nothing
 needed preservation. Classify large ignored directories such as `output/` before removal as
 disposable, ignored cache, tracked manifest/evidence, durable-required, or handoff-needed; do not let
-worktree-local `output/` become durable artifact storage. Use `git worktree remove <path>` for clean
-worktrees; reserve `git worktree prune` for stale administrative entries after local state is
-checked.
+worktree-local `output/` become durable artifact storage. Use the guarded reaper for supported
+cleanup; reserve `git worktree prune` for stale administrative entries after local state is checked.
 
 ### Targeted shared-venv worktree validation
 
@@ -647,6 +656,16 @@ was running. Use `scripts/dev/check_prepublication_state.py` around expensive pu
 3. Treat `superseded` and `blocked` as fail-closed stops. Treat `refresh-required` as stale
    evidence; run `sync --integrate` only from a clean worktree, resolve conflicts if needed, then
    rerun readiness and capture a new baseline.
+4. A `blocked` result with reason `undeclared_stack` is a distinct ancestry failure, not a
+   `sync --integrate` case. It means the branch's merge base is older than the live `origin/main`
+   tip, usually because `main` advanced after an earlier merge of `main` into the branch
+   (issue #8864). Reconstruct only the intended commits on current `origin/main`
+   (`git rebase --onto origin/main <merge-base> <branch>`, or recreate the branch from
+   `origin/main` and re-apply the intended changes), then regenerate generated files such as
+   `scripts/validation/docstring_todo_baseline.json`. A rebase or re-creation moves the head, so
+   the local readiness stamp must be refreshed before publication. A canonical
+   `## Stack Declaration` is the alternative only for a genuine stack over a declared parent PR;
+   an ordinary stale-`main` branch must be rebased.
 
 The gate records the exact before/after SHAs, any newly opened covering PR, and any merged PR that
 explicitly closes the issue. An open PR is matched only when its title or body contains an explicit
@@ -817,11 +836,13 @@ Use the three explicit modes as follows:
   it performs no remote mutation.
 - `--mode validate --receipt-file <path>` rereads live state and compares it with the immutable
   receipt; a changed head, base, metadata, check, review, thread, requested reviewer, hold, or
-  ordinary-CAS proof blocks.
+  ordinary-CAS proof blocks. If `--output <path>` is also supplied, it must resolve to a different
+  file so the source receipt cannot be replaced by the validation payload.
 - `--mode apply --receipt-file <path>` repeats validation, rereads the live PR body/head and
   rechecks paginated commit metadata plus current issue metadata immediately before letting the
   receipt owner issue exactly one expected-head squash merge, then rereads the closed/merged PR
-  and records the returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack
+  and records the returned SHA. When `--output` is supplied, it must resolve to a different file
+  than `--receipt-file`. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack
   coordinator and delegates its root merge to the same owner; its stack receipt must carry the
   same explicit closing-discipline result.
 
@@ -1069,15 +1090,22 @@ timestamp source, run/job IDs, and exact-head matching. When a job is actively r
 in environment setup (such as Python runtime or dependency provisioning) beyond
 `--actions-stale-after-seconds`, the payload emits `checks.setup_starvation: true`,
 `checks.pending_reason: "setup_starvation"`, and `checks.diagnostic: "actions_gate_setup_starvation"`.
-Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`. Cancellation
-or rerun requires explicit operator authorization, and merge admission stays strictly blocked until
-a fresh exact-head run succeeds. `checks.age_warnings` marks gates that exceed the configured
+Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`.
+`scripts/dev/recover_stale_ci_run.py` is the repository-owned, exact-head-guarded operator recovery
+path: it is report-only by default, and `--apply` requires an explicit `--reason`, re-reads the live
+PR CI state under the host-local PR write lock, then requests exactly one `gh run rerun` only after
+every fail-closed guard passes. Cancellation or rerun still requires explicit operator
+authorization, and merge admission stays strictly blocked until a fresh exact-head run succeeds.
+A requested rerun is route evidence only and is never implementation proof.
+`checks.age_warnings` marks gates that exceed the configured
 threshold without changing the fail-closed `checks.overall: "pending"` result.
 `checks.superseded_runs` names an older exact-head run and its newer same-workflow replacement
 rather than hiding the replacement relationship behind a count. When a stale run has an
-independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
-monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
-and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
+independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, guarded recovery,
+and bounded monitor commands. These are explicit suggestions only: the monitor itself does not
+cancel or rerun Actions, and it never authorizes a merge. The `guarded_recovery_command` names the
+repository-owned exact-head-guarded path (`scripts/dev/recover_stale_ci_run.py`), whose `--apply`
+remains explicit operator authorization. Missing REST metadata or a mismatching run head suppresses
 mutation commands and leaves the route evidence incomplete.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
@@ -1100,8 +1128,35 @@ the job from the log archive), recover its retained check-run annotations with:
 uv run python scripts/dev/diagnose_actions_job.py <job-id>
 ```
 
-The helper prints normal logs when they are available and otherwise prints the annotations linked
-from the job metadata. It exits nonzero if neither source provides diagnostics.
+The helper verifies the requested job's metadata and prints its exact REST job logs when available;
+otherwise it prints the linked check-run annotations. It never substitutes a later run attempt's
+logs through `gh run view`. Missing or mismatched job identity, unusable evidence, and incomplete
+annotation pagination fail closed.
+
+For machine-readable classification without changing the job or rerunning anything:
+
+```bash
+uv run python scripts/dev/diagnose_actions_job.py <job-id> --repo ll7/robot_sf_ll7 --json
+```
+
+The `actions_job_diagnostic.v1` envelope preserves repository, job ID, run ID, run attempt, head SHA
+(commit identifier), and the original `job_status` / `job_conclusion`. Its separate
+`diagnostic_status` is `matched`, `unmatched`, or `unavailable`. Only the observed
+`Failed to FinalizeArtifact: ... (403) Forbidden: Error from intermediary ...` error signature within
+one log line or annotation message line yields `artifact_finalization_403`; separate records are
+never joined. Other failures remain unmatched, and the external cause remains unknown.
+
+`evidence` identifies the source endpoint, one-based log-line or annotation record number, and an
+excerpt capped at 2,000 characters with a truncation flag. Annotation requests are limited to 100
+pages and must remain on the same check run. `artifact_publication` is always `unconfirmed`:
+neither successful tests nor this error proves an artifact is present or absent. No classification
+makes a retry decision, changes required checks, or establishes that other work passed.
+
+Without `--json`, output remains log text or an annotation JSON array. In either mode, exit 0 means
+diagnostic evidence was retrieved, **not that continuous integration (CI) passed**; exit 1 means
+diagnostics are unavailable, and invalid CLI syntax retains argparse's exit 2. JSON-mode failures
+include an explicit `reason`; additional retrieval details go to stderr. Logs and excerpts can
+contain repository-sensitive material: sanitize them before sharing publicly.
 
 For routine goal-autopilot orientation, prefer the compact state snapshot helper before broad parent
 thread reads:
@@ -2616,6 +2671,12 @@ distinctly so the gate can hold for a *fresh run* rather than treat it as a main
 regression. The `--quiet` flag suppresses the human line; the existing
 exit-code contract is unchanged.
 
+The gate's default fetch is deliberately one bounded `gh run list --limit`
+window (default 5 runs, 30s timeout) so merge-hold evaluation stays fast; when
+cancellation churn fills that window it fails closed to `stale` instead of
+reading further back. Callers that need the decisive verdict behind a
+cancelled-run flood use the paginated reader below.
+
 ### Scheduled main-CI incident reconciliation
 
 Open issues carrying the canonical `ll7-main-red-incident:v1` body marker (or
@@ -2635,13 +2696,23 @@ incidents instead of GitHub's semantic closing keywords (`Closes`, `Fixes`, or
 the canonical body marker or its compatibility label, leaving the scheduled
 reconciler as the sole closer after the two-green criterion is met.
 
-The Actions run evidence window is paginated. The reconciler reads full
-workflow-run pages and stops only after two decisive completed green/red runs
-are visible, so a cancellation-saturated newest page cannot hide the decisive
-history. The default page budget is ten; `--max-run-pages N` changes it, and
-the legacy `--run-limit N` option is retained as an alias for that page budget.
-If the budget is exhausted before two decisive runs are found, the helper
-fails closed instead of classifying an incomplete window.
+The Actions run evidence window is paginated in both consumers through the
+shared reader `main_ci_is_green.fetch_run_window`, so a cancellation-saturated
+newest page cannot hide the decisive history. The classifier behind
+`main_ci_incident_reconcile.py` stops after one decisive completed green/red
+run and defaults to a ten-page budget (`--max-pages N` changes it); passing a
+raw `--limit N` keeps the legacy single `gh run list` window instead. When the
+page budget is exhausted without a decisive run, the classifier stays
+fail-closed `pending` and reports `window_exhausted: true` with
+`decisive_run_found: false`, which cannot be confused with a genuine red
+(`active`).
+
+The scheduled reconciler requires two decisive runs and stops only after two
+completed green/red runs are visible. Its default page budget is ten;
+`--max-run-pages N` changes it, and the legacy `--run-limit N` option is
+retained as an alias for that page budget. If the budget is exhausted before
+two decisive runs are found, the helper fails closed instead of classifying an
+incomplete window.
 
 The helper is report-only unless `--apply` is supplied, so an offline or local
 inspection can use:
@@ -3053,7 +3124,8 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 - Advisory typecheck reviewed. Fix practical findings in touched files and stable contracts, and
   document any meaningful remaining findings in the PR when they affect the change.
 - Docs updated (README in feature folder, diagrams if changed).
-- Validation matched to risk per [maintainer_values.md](./maintainer_values.md): runtime, benchmark, metric, schema,
+- Validation matched to risk per the [AGENTS.md](../AGENTS.md) readiness matrix and
+  [maintainer_values.md](./maintainer_values.md) principles: runtime, benchmark, metric, schema,
   model-provenance, and paper-facing changes need executable proof; low-risk docs/instruction
   changes use diff review, referenced path/link checks, and lightweight automated checks when
   available. State explicitly in the PR which heavier gates were skipped and why.
@@ -3126,8 +3198,9 @@ phase exits zero.
 
 ### Proportional validation
 
-Validation depth follows [`docs/maintainer_values.md`](./maintainer_values.md): apply proof in
-proportion to risk. Do not treat the heaviest path as the default for every change.
+Validation depth follows the readiness matrix in [`AGENTS.md`](../AGENTS.md), informed by the
+proportional-process principle in [`docs/maintainer_values.md`](./maintainer_values.md): apply proof
+in proportion to risk. Do not treat the heaviest path as the default for every change.
 
 - **Low-risk docs/instruction changes** use the cheap path by default: inspect the diff, verify
   changed links or referenced paths, and run lightweight automated checks when they exist
@@ -3139,14 +3212,15 @@ proportion to risk. Do not treat the heaviest path as the default for every chan
   change that makes a benchmark, metric, schema, model-provenance, or paper-facing claim still
   needs the corresponding strength of evidence.
 
-If this section conflicts with current maintainer direction or [maintainer_values.md](./maintainer_values.md),
-follow the higher-precedence source and make the smallest doc update needed to remove the drift.
+If this section conflicts with current maintainer direction or [`AGENTS.md`](../AGENTS.md), follow
+the higher-precedence source and make the smallest doc update needed to remove the drift; use
+[`maintainer_values.md`](./maintainer_values.md) for stable rationale and tie-breakers.
 
 ### TL;DR workflow checklist
 
 1) Clarify requirements and pick the validation path by change type (see
-   [Proportional validation](#proportional-validation) above; `docs/maintainer_values.md` is the
-   higher-precedence source).
+   [Proportional validation](#proportional-validation) above and the readiness matrix in
+   `AGENTS.md`).
 2) For non-trivial runtime/benchmark/metric/schema/paper-facing changes, draft a design doc under
    `docs/` and link the issue; for low-risk docs/instruction changes, skip the design doc unless
    it clarifies scope.

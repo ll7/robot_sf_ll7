@@ -16,6 +16,7 @@ from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.check_pr_ci_status import (
     FAILURE_CONCLUSIONS,
     PENDING_STATUSES,
+    _is_graphql_quota_error,
     _latest_check_runs,
     _rollup_conclusion,
     _rollup_name,
@@ -171,14 +172,6 @@ def _repo_owner_name(repo: str) -> tuple[str, str]:
         return "", repo
     owner, name = repo.split("/", 1)
     return owner, name
-
-
-def _is_graphql_quota_error(message: str) -> bool:
-    """Return whether a gh error message indicates GraphQL API rate-limit/quota exhaustion."""
-    text = (message or "").lower()
-    if "rate limit" not in text:
-        return False
-    return "graphql" in text or "api rate limit" in text or "too many requests" in text
 
 
 def _rest_api_get(path: str, *, repo: str, timeout: int = 45) -> Any:

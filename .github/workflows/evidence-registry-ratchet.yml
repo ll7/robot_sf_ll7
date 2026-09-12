@@ -1,6 +1,9 @@
 name: Evidence-registry ratchet
 
 # Downward ratchet over committed evidence-registry integrity findings (issue #5275).
+# Pull-request runs use an explicit candidate head plus the pull request's frozen
+# target base, so squash-only producer ancestry is evaluated before admission.
+# Native merge-group runs apply the same projection to GitHub's synthetic head.
 # Re-runs `scripts/tools/lint_evidence_registry.py` in report mode, diffs the per-file,
 # per-code finding counts against the committed baseline at
 # `scripts/validation/evidence_registry_baseline.json`, and fails on net-new integrity
@@ -40,6 +43,7 @@ on:
       - "tests/dev/test_evidence_registry_ratchet.py"
       - "tests/dev/test_evidence_registry_ratchet_workflow.py"
       - ".github/workflows/evidence-registry-ratchet.yml"
+  merge_group:
   schedule:
     - cron: "17 5 * * 3"
   workflow_dispatch:
@@ -59,6 +63,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -75,10 +80,20 @@ jobs:
       # follow-up steps run via `if: always()`, so a failure here still uploads the log.
       - name: Run evidence-registry ratchet
         id: ratchet
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CANDIDATE_HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || (github.event_name == 'merge_group' && github.sha || '') }}
+          FROZEN_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || (github.event_name == 'merge_group' && github.event.merge_group.base_sha || '') }}
         run: |
           mkdir -p output/evidence
           set -o pipefail
-          uv run python scripts/dev/evidence_registry_ratchet.py --check 2>&1 | tee output/evidence/ratchet.log
+          projection_args=()
+          if [[ "$EVENT_NAME" == "pull_request" || "$EVENT_NAME" == "merge_group" ]]; then
+            [[ "$CANDIDATE_HEAD" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "missing exact candidate head" >&2; exit 2; }
+            [[ "$FROZEN_BASE" =~ ^[0-9a-fA-F]{40}$ ]] || { echo "missing exact frozen base" >&2; exit 2; }
+            projection_args=(--candidate-head "$CANDIDATE_HEAD" --frozen-base "$FROZEN_BASE")
+          fi
+          uv run python scripts/dev/evidence_registry_ratchet.py --check "${projection_args[@]}" --report-output output/evidence/ratchet-report.json 2>&1 | tee output/evidence/ratchet.log
 
       - name: Summarize ratchet outcome
         if: always()
@@ -92,5 +107,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: evidence-registry-ratchet-log
-          path: output/evidence/ratchet.log
+          path: |
+            output/evidence/ratchet.log
+            output/evidence/ratchet-report.json
           if-no-files-found: warn

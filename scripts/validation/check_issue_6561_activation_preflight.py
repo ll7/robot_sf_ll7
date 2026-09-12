@@ -820,7 +820,10 @@ def _row_classification(
         diagnostics["acceleration_transient_steps"],
         "acceleration_transient_steps",
     )
-    transient = transient_steps * dt_seconds
+    try:
+        transient = transient_steps * dt_seconds
+    except OverflowError as exc:
+        raise PreflightError(str(exc)) from exc
     if transient > _finite_float(
         rule["maximum_spawn_transient_seconds"],
         "maximum_spawn_transient_seconds",

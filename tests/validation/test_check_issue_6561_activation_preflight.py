@@ -507,3 +507,13 @@ def test_cli_rejects_oversized_transient_steps_as_structured_failure(
     assert result["canonical_native_diagnostics_status"] == "blocked"
     assert result["registered_seed_overlap"] is None
     assert "int too large to convert to float" in result["reason"]
+
+
+def test_classify_rejects_oversized_transient_steps_as_preflight_error() -> None:
+    """Direct classifier callers receive the structured contract error."""
+    payload, protocol = preflight.load_preflight()
+    diagnostics = _diagnostics(payload, protocol)
+    diagnostics["rows"][0]["diagnostics"]["acceleration_transient_steps"] = 10**1000
+
+    with pytest.raises(preflight.PreflightError, match="int too large to convert to float"):
+        preflight.classify_activation(payload, protocol, diagnostics)

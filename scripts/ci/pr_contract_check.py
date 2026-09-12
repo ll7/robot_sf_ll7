@@ -742,6 +742,24 @@ def _check_distance_convention_for_file(path: str, content: str) -> str | None:
     )
 
 
+def _canonical_issue_reference(text: str, issue: int, repo: str) -> bool:
+    """Return whether text canonically references one repository issue.
+
+    A broad ``gh pr list --search`` can return unrelated PRs whose text merely
+    contains the number, so the successor warning must confirm a real reference:
+    ``#123``, ``owner/repo#123``, or the canonical issue URL. Plain numbers,
+    decimals, hash fragments, and other-repository references do not count.
+    """
+    number = str(issue)
+    repo_pattern = re.escape(repo)
+    patterns = (
+        rf"(?<![\w/#])#{number}(?!\w)(?!\.\d)",
+        rf"(?<![\w/#]){repo_pattern}#{number}(?!\w)(?!\.\d)",
+        rf"https?://github\.com/{repo_pattern}/issues/{number}(?!\d)",
+    )
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+
 def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
     """Rule 5: Successor statement warning for issues with merged PRs."""
     issues = find_title_issues(title)
@@ -760,7 +778,7 @@ def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
                         "--search",
                         f"is:merged {issue}",
                         "--json",
-                        "number",
+                        "number,title,body",
                         "--repo",
                         repo,
                     ],
@@ -771,9 +789,16 @@ def check_successor_discipline(title: str, body: str, repo: str) -> list[str]:
                 )
                 if res.returncode == 0:
                     prs = json.loads(res.stdout)
-                    if len(prs) >= 1:
+                    confirmed = [
+                        pr
+                        for pr in prs
+                        if _canonical_issue_reference(
+                            f"{pr.get('title') or ''}\n{pr.get('body') or ''}", issue, repo
+                        )
+                    ]
+                    if confirmed:
                         warnings.append(
-                            f"WARN: Issue #{issue} has already been referenced in {len(prs)} merged PR(s), "
+                            f"WARN: Issue #{issue} has already been referenced in {len(confirmed)} merged PR(s), "
                             f"but the PR body does not contain a successor statement ('successor slice' "
                             f"or 'does not duplicate')."
                         )

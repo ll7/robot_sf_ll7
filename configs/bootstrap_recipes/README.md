@@ -25,9 +25,14 @@ The checker is report-only by default; `--execute-safe-checks` runs only `probe`
 `safe_check: true` inside an isolated temporary root and never mutates the host. Safe checks
 are restricted to repository-owned bounded discovery probes (`python/uv --version`, `nvidia-smi`
 query flags, `docker image inspect`), run within sanitized environments that strip host credentials
-and canaries, and enforce strict workdir containment within `$RECIPE_ROOT`. Arbitrary scripts
-(such as `python -c` or shell strings), mutating commands, and escaping directories are blocked
-as `unsafe_safe_check`. Skipped probes record `host_mutation: null` rather than asserting zero mutation.
+and canaries, and enforce strict workdir containment within `$RECIPE_ROOT` by verifying all parent
+components before directory creation so missing descendants under symlinked parents never create outside
+the recipe root. Safe probes invoke only approved base program names resolved via trusted host PATH;
+arbitrary scripts (such as `python -c` or shell strings), mutating commands, paths with directory
+separators, escaping directories, and protected environment overrides (`PATH`, `HOME`, `PYTHON*`,
+`LD_*`, `DYLD_*`) are blocked as `unsafe_safe_check` and rejected at runtime. Skipped, unisolated,
+or uncertain probes propagate `host_mutation: null` to the enclosing report rather than asserting
+zero mutation; the report claims `host_mutation: false` only when all executed probes run in verified isolation.
 In executed mode (`--execute-safe-checks`), verification cannot be satisfied by skipped probes
 or absent executables: missing probe executables, unresolved required private substitutions, or zero
 executed required probes yield `status: unavailable` with explicit reason tags rather than retaining

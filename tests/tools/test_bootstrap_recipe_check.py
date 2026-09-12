@@ -654,3 +654,220 @@ def test_unavailable_fixture_preserves_unavailable_status(tmp_path: Path) -> Non
     )
     assert report_req["verdict"] == "fail"
     assert "gpu_training" in report_req["missing_verified_classes"]
+
+
+def test_safe_check_symlinked_parent_missing_descendant_cannot_create_outside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.tools.bootstrap_recipe_check import _run_safe_checks
+
+    outside = tmp_path / "outside_dir"
+    outside.mkdir(parents=True, exist_ok=True)
+    probe_root = tmp_path / "probe_root"
+    probe_root.mkdir(parents=True, exist_ok=True)
+
+    symlink_parent = probe_root / "symlink_parent"
+    symlink_parent.symlink_to(outside)
+
+    recipe = _base_recipe()
+    recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "escape-descendant",
+            "phase": "probe",
+            "argv": ["python3", "-V"],
+            "workdir": "$RECIPE_ROOT/symlink_parent/missing_descendant",
+            "safe_check": True,
+        },
+    ]
+
+    # Direct runner execution: missing descendant must not be created outside recipe root
+    results = _run_safe_checks(recipe, temp_root=probe_root, project_root=tmp_path, timeout=5)
+    assert len(results) == 1
+    assert results[0]["status"] == "error"
+    assert results[0]["isolated"] is False
+    assert results[0]["host_mutation"] is None
+    assert "workdir escapes isolated root" in results[0]["error"]
+    assert not (outside / "missing_descendant").exists()
+
+    import tempfile
+
+    recipes_dir = _write_recipe(tmp_path / "symlink_recipe_dir", recipe)
+    orig_tempdir = tempfile.TemporaryDirectory
+
+    class _PatchedTempDir:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.temp_dir = orig_tempdir(*args, **kwargs)
+
+        def __enter__(self) -> str:
+            path_str = self.temp_dir.__enter__()
+            p = Path(path_str)
+            (p / "symlink_parent").symlink_to(outside)
+            return path_str
+
+        def __exit__(self, *args: object) -> None:
+            self.temp_dir.__exit__(*args)
+
+    monkeypatch.setattr(tempfile, "TemporaryDirectory", _PatchedTempDir)
+    report = check_recipes(recipes_path=recipes_dir, execute_safe_checks=True)
+    assert not (outside / "missing_descendant").exists()
+    assert report["recipes"][0]["safe_checks"][0]["status"] == "error"
+    assert report["recipes"][0]["safe_checks"][0]["isolated"] is False
+    assert report["host_mutation"] is None
+
+
+def test_safe_check_rejects_path_in_program_name(tmp_path: Path) -> None:
+    from scripts.tools.bootstrap_recipe_check import _run_safe_checks
+
+    for prog_candidate in ["/usr/bin/python3", "./python3", "../python3"]:
+        recipe = _base_recipe()
+        recipe["steps"] = [
+            {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+            {
+                "id": "path-probe",
+                "phase": "probe",
+                "argv": [prog_candidate, "-V"],
+                "safe_check": True,
+            },
+        ]
+        entry = _check_case(tmp_path / f"path_{abs(hash(prog_candidate))}", recipe)
+        assert entry["status"] == "blocked"
+        assert "unsafe_safe_check" in entry["reasons"]
+
+        results = _run_safe_checks(
+            recipe, temp_root=tmp_path / "probe_root", project_root=tmp_path, timeout=5
+        )
+        assert len(results) == 1
+        assert results[0]["status"] == "error"
+        assert results[0]["isolated"] is False
+        assert "path_in_safe_check_program" in results[0]["error"]
+
+
+def test_safe_check_rejects_protected_env_overrides(tmp_path: Path) -> None:
+    import os
+
+    from scripts.tools.bootstrap_recipe_check import _run_safe_checks
+
+    protected_keys = ["PATH", "LD_PRELOAD", "PYTHONHOME", "PYTHONPATH"]
+    for key in protected_keys:
+        recipe = _base_recipe()
+        recipe["steps"] = [
+            {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+            {
+                "id": f"env-{key}",
+                "phase": "probe",
+                "argv": ["python3", "-V"],
+                "env": {key: "/tmp/custom_location"},
+                "safe_check": True,
+            },
+        ]
+        entry = _check_case(tmp_path / f"env_{key}", recipe)
+        assert entry["status"] == "blocked"
+        assert "unsafe_safe_check" in entry["reasons"]
+
+        results = _run_safe_checks(
+            recipe, temp_root=tmp_path / "probe_env_root", project_root=tmp_path, timeout=5
+        )
+        assert len(results) == 1
+        assert results[0]["status"] == "error"
+        assert results[0]["isolated"] is False
+        assert f"protected_env_override: {key}" in results[0]["error"]
+
+    # Verify that a recipe cannot substitute an untrusted binary via PATH
+    custom_bin = tmp_path / "custom_bin"
+    custom_bin.mkdir(parents=True, exist_ok=True)
+    fake_python = custom_bin / "python3"
+    marker_file = tmp_path / "pwned.txt"
+    fake_python.write_text(f"#!/bin/sh\necho PWNED > {marker_file}\nexit 0\n")
+    import stat
+
+    fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
+
+    hijack_recipe = {
+        "steps": [
+            {
+                "id": "hijack-probe",
+                "phase": "probe",
+                "argv": ["python3", "-V"],
+                "env": {"PATH": f"{custom_bin}:{os.environ.get('PATH', '')}"},
+                "safe_check": True,
+            }
+        ]
+    }
+    results = _run_safe_checks(
+        hijack_recipe, temp_root=tmp_path / "probe_hijack", project_root=tmp_path, timeout=5
+    )
+    assert results[0]["status"] == "error"
+    assert results[0]["isolated"] is False
+    assert not marker_file.exists()
+
+
+def test_skipped_or_uncertain_probe_propagates_null_host_mutation_to_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    # 1. Probe skipped due to missing program propagates host_mutation: null to report
+    gpu_recipe = _base_recipe()
+    gpu_recipe["execution_class"] = "gpu_training"
+    gpu_recipe["recipe_id"] = "gpu-training-skipped"
+    gpu_recipe["verification_status"] = "unavailable"
+    gpu_recipe["unavailable_reason"] = "no GPU hardware available in CI"
+    gpu_recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {"id": "driver", "phase": "probe", "argv": ["nvidia-smi"], "safe_check": True},
+    ]
+    orig_which = shutil.which
+    try:
+        shutil.which = lambda prog: None if prog == "nvidia-smi" else orig_which(prog)
+        report_skipped = check_recipes(
+            recipes_path=_write_recipe(tmp_path / "skipped_prog", gpu_recipe),
+            execute_safe_checks=True,
+        )
+        assert report_skipped["recipes"][0]["safe_checks"][0]["status"] == "skipped_missing_program"
+        assert report_skipped["recipes"][0]["safe_checks"][0]["host_mutation"] is None
+        assert report_skipped["host_mutation"] is None
+    finally:
+        shutil.which = orig_which
+
+    # 2. Probe skipped due to private substitution propagates host_mutation: null to report
+    sub_recipe = _base_recipe()
+    sub_recipe["recipe_id"] = "private-sub-skipped"
+    sub_recipe["private_substitutions"] = [
+        {"placeholder": "$CUSTOM_IMAGE", "capability_class": "container"}
+    ]
+    sub_recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "inspect-custom",
+            "phase": "probe",
+            "argv": ["docker", "image", "inspect", "$CUSTOM_IMAGE"],
+            "safe_check": True,
+        },
+    ]
+    report_sub = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "skipped_sub", sub_recipe),
+        execute_safe_checks=True,
+    )
+    assert report_sub["recipes"][0]["safe_checks"][0]["status"] == "skipped_private_substitution"
+    assert report_sub["recipes"][0]["safe_checks"][0]["host_mutation"] is None
+    assert report_sub["host_mutation"] is None
+
+    # 3. Report with zero safe checks executed in execute_safe_checks=True mode emits host_mutation: null
+    no_probe_recipe = _base_recipe()
+    no_probe_recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {"id": "probe", "phase": "probe", "argv": ["python3", "-V"], "safe_check": False},
+    ]
+    report_zero = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "zero_safe", no_probe_recipe),
+        execute_safe_checks=True,
+    )
+    assert report_zero["host_mutation"] is None
+
+    # 4. Structural mode emits host_mutation: False
+    report_structural = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "struct_mode", no_probe_recipe),
+        execute_safe_checks=False,
+    )
+    assert report_structural["host_mutation"] is False

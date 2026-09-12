@@ -146,3 +146,83 @@ def test_create_worktree_exec_checks_opt_in_receipt(tmp_path: Path) -> None:
             check=False,
         )
         subprocess.run(["git", "branch", "-D", branch], cwd=repo, capture_output=True, check=False)
+
+
+def test_receipt_scope_flags_cross_scope_commit_and_state(tmp_path: Path, monkeypatch) -> None:
+    """A declared scope rejects cross-scope commits, staged files, and untracked files."""
+    _repo, assigned, _wrong = _fixture_repo(tmp_path)
+    receipt = worktree_receipt.create_receipt(
+        assigned,
+        task_id="issue-9115",
+        base_ref="HEAD",
+        allowed_paths=["scripts/dev/**"],
+    )
+    receipt_path = tmp_path / "receipt-scope.json"
+    worktree_receipt._write_atomic(receipt_path, receipt)
+
+    (assigned / "unrelated.txt").write_text("contamination\n", encoding="utf-8")
+    _git(assigned, "add", "unrelated.txt")
+    _git(assigned, "commit", "-m", "contamination")
+    (assigned / "staged.py").write_text("staged\n", encoding="utf-8")
+    _git(assigned, "add", "staged.py")
+    (assigned / "untracked.md").write_text("untracked\n", encoding="utf-8")
+
+    monkeypatch.chdir(assigned)
+    result = worktree_receipt.check_receipt(receipt_path)
+
+    assert not result.ok
+    assert result.failure and "scope violations" in result.failure
+    codes = {finding.split(":", 1)[0] for finding in result.scope_findings}
+    assert codes == {"cross_scope_commit", "staged_out_of_scope", "untracked_out_of_scope"}
+    assert receipt["allowed_paths"] == ["scripts/dev/**"]
+
+
+def test_receipt_scope_allows_in_scope_commits_and_main_merges(tmp_path: Path, monkeypatch) -> None:
+    """In-scope work and an intentional current-main merge stay valid."""
+    repo, assigned, _wrong = _fixture_repo(tmp_path)
+    receipt = worktree_receipt.create_receipt(
+        assigned,
+        task_id="issue-9115",
+        base_ref="HEAD",
+        allowed_paths=["scripts/dev/**", "tests/dev/**"],
+    )
+    receipt_path = tmp_path / "receipt-scope-ok.json"
+    worktree_receipt._write_atomic(receipt_path, receipt)
+
+    feature = assigned / "scripts" / "dev" / "feature.py"
+    feature.parent.mkdir(parents=True, exist_ok=True)
+    feature.write_text("feature\n", encoding="utf-8")
+    _git(assigned, "add", "scripts/dev/feature.py")
+    _git(assigned, "commit", "-m", "in-scope feature")
+
+    incoming = repo / "robot_sf" / "incoming.py"
+    incoming.parent.mkdir(parents=True, exist_ok=True)
+    incoming.write_text("incoming\n", encoding="utf-8")
+    _git(repo, "add", "robot_sf/incoming.py")
+    _git(repo, "commit", "-m", "main advance")
+    _git(assigned, "merge", "--no-ff", "main", "-m", "Merge main")
+
+    monkeypatch.chdir(assigned)
+    result = worktree_receipt.check_receipt(receipt_path)
+
+    assert result.ok, result.failure
+    assert result.scope_findings == ()
+    assert result.allowed_paths == ("scripts/dev/**", "tests/dev/**")
+
+
+def test_receipt_scope_absent_keeps_identity_only_behavior(tmp_path: Path, monkeypatch) -> None:
+    """A receipt without scope does not inspect commits, staged, or untracked paths."""
+    _repo, assigned, _wrong = _fixture_repo(tmp_path)
+    receipt = worktree_receipt.create_receipt(assigned, task_id="issue-9115", base_ref="HEAD")
+    receipt_path = tmp_path / "receipt-no-scope.json"
+    worktree_receipt._write_atomic(receipt_path, receipt)
+
+    (assigned / "unrelated.txt").write_text("allowed without scope\n", encoding="utf-8")
+    _git(assigned, "add", "unrelated.txt")
+    _git(assigned, "commit", "-m", "unrelated")
+
+    monkeypatch.chdir(assigned)
+    result = worktree_receipt.check_receipt(receipt_path)
+
+    assert result.ok, result.failure
+    assert result.scope_findings == ()

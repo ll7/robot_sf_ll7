@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ll7.github.io/robot_sf_ll7/schemas/campaign_expected_row_ledger.v1.schema.json",
+  "title": "Campaign expected-row ledger v1",
+  "description": "Deterministic expected-row ledger and observation verification contract for staged campaigns.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "campaign_id", "packet_class", "expected_count", "identity_digest", "ledger_sha256", "rows"],
+  "properties": {
+    "schema": { "const": "campaign_expected_row_ledger.v1" },
+    "campaign_id": { "type": "string", "minLength": 1 },
+    "issue_id": { "type": ["integer", "string", "null"] },
+    "packet_class": { "enum": ["benchmark", "bounded_training", "replay", "compatibility", "platform_smoke"] },
+    "packet_path": { "type": ["string", "null"] },
+    "packet_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$" },
+    "expected_count": { "type": "integer", "minimum": 0 },
+    "identity_digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "ledger_sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["row_id", "campaign_id", "arm", "scenario_id", "seed", "replicate", "expected_execution_mode"],
+        "properties": {
+          "row_id": { "type": "string", "minLength": 1 },
+          "campaign_id": { "type": "string", "minLength": 1 },
+          "arm": { "type": "string", "minLength": 1 },
+          "scenario_id": { "type": "string", "minLength": 1 },
+          "seed": { "type": ["integer", "string"] },
+          "replicate": { "type": "integer", "minimum": 0 },
+          "expected_execution_mode": { "type": "string" },
+          "horizon": { "type": ["integer", "null"] },
+          "config_digest": { "type": ["string", "null"] },
+          "model_digest": { "type": ["string", "null"] },
+          "metadata": { "type": ["object", "null"] }
+        }
+      }
+    },
+    "observed_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "observed_count", "summary", "details"],
+      "properties": {
+        "status": { "enum": ["pass", "fail"] },
+        "observed_count": { "type": "integer", "minimum": 0 },
+        "summary": { "type": "object" },
+        "details": { "type": "object" }
+      }
+    }
+  }
+}

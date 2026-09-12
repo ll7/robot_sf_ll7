@@ -1,0 +1,21 @@
+# Declared public surfaces for the durable-artifact reference inventory (issue #8929).
+#
+# Every source is an exact repository-relative surface with a declared consumer
+# status and retention class. The inventory command resolves artifact identity
+# (ID, version, digest) from the surface itself and never infers identity from
+# URLs. Add new surfaces here only with a canonical parser kind; unreadable or
+# malformed surfaces fail closed with stable reason codes.
+schema_version: public_reference_inventory_sources.v1
+sources:
+  - id: release_0_0_5_checksum_manifest
+    kind: release_checksum_manifest
+    path: configs/releases/release_0_0_5_checksum_manifest.yaml
+    consumer_path: configs/releases/release_0_0_5_checksum_manifest.yaml
+    consumer_status: active
+    retention_class: release_facing
+  - id: release_0_0_2_checksum_manifest
+    kind: release_checksum_manifest
+    path: configs/releases/release_0_0_2_checksum_manifest.yaml
+    consumer_path: configs/releases/release_0_0_2_checksum_manifest.yaml
+    consumer_status: inactive
+    retention_class: historical

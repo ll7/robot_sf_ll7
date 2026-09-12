@@ -176,6 +176,35 @@ query subprocess timeout is clamped to the remaining wall-clock budget. The moni
 cancels, retries, submits, or harvests, and scheduler completion is never artifact or scientific
 success.
 
+## Urgent-packet batch preflight (check-only)
+
+Before touching scarce compute, run one bounded readiness matrix over the explicitly registered
+urgent campaign packets:
+
+```bash
+uv run python scripts/tools/run_urgent_packet_preflight.py --check \
+  --registry scripts/tools/urgent_packet_registry.v1.json --format json
+```
+
+Registry entries declare the public issue, a canonical side-effect-free local preflight argv, a
+positive timeout, and an output contract (`json_object`, `json_tail_object`, or `text`), plus the
+preflight script SHA-256 that must still match on disk. Entries that lack a canonical preflight,
+or that would require external services or substantive workload execution, are declared with an
+`unsupported_reason` instead of an invented command. Optional `expires_at`,
+`resource_projection`, `packet_sha256`, and `shared_check` fields bind registration expiry, a
+required sanitized resource projection, the source/config packet digest, and cheap shared checks
+that run once when their exact identities match while each packet row keeps its own evidence.
+
+Commands run as argument vectors without `shell=True`, under a minimal sanitized environment, with
+a per-command timeout and a captured-output cap. Rows classify as
+`ready_for_private_submission_check`, `local_preflight_failed`, `blocked_prerequisite`,
+`stale_input`, `duplicate_active`, `resource_projection_unavailable`, or `unsupported`; every row
+records the command, source/config digests, exit status, duration, normalized output digest, first
+blocker, and expiry. Timeouts, malformed output, path escapes, source drift, command mismatch,
+conflicting shared checks, and missing validators fail closed. A local pass is never compute
+authority or scheduler admission. Exit codes: 0 every packet ready, 1 actionable rows, 2 malformed
+registry. Focused fixture tests live in `tests/tools/test_run_urgent_packet_preflight.py`.
+
 ## SLURM launcher static audit (check-only)
 
 Before submitting or handing off SLURM scripts and wrappers, audit them for stale partitions,
@@ -323,6 +352,40 @@ Submission state rules:
 - If either route traceability step is missing, use `partial_traceable` and keep status explicitly blocked.
 - Public issue/PR comments may include job id and partition for traceability, but must not include private host
   names, account/QoS details, scratch paths, or private retrieval mechanics.
+
+## Output capacity preflight (check-only)
+
+Before submitting a job whose results must be preserved, estimate the full output and
+post-run transfer budget and compare it with a sanitized storage-capability projection:
+
+```bash
+uv run python scripts/tools/check_output_capacity_preflight.py --check \
+  --packet path/to/capacity_packet.json \
+  --storage-projection path/to/storage_capability_projection.json \
+  --format json
+```
+
+The packet (`robot_sf.output_capacity_preflight_packet.v1`) declares the expected row
+count and scaling, one component per output surface with `storage_class` (`task_output`,
+`scheduler_log`, `temporary_scratch`, `durable_required`, `disposable_post_verification`)
+and `output_kind` (rows, logs, checkpoints, harvest_manifest, checksums,
+compression_workspace, temporary_workspace, other), and lower/expected/conservative-upper
+per-row plus fixed bounds for bytes, files, and peak bytes. Every `empirical` component
+must name a compatible `source_identity`; otherwise use `declared` bounds or an explicit
+`unavailable` token. The projection (`robot_sf.storage_capability_projection.v1`) carries
+sanitized source/destination free bytes, free inodes, and retention classes, the reserved
+byte/inode/time safety margin, the access deadline, and the transfer route's rate bounds
+plus rate uncertainty.
+
+The verdict is fail closed. `capacity_ok` requires conservative upper bounds plus margin
+to fit source and destination and the conservative transfer duration to fit before the
+access deadline. `capacity_exceeded` reports conservative misses. `capacity_unknown` is
+returned when row scaling, any component dimension, temporary workspace, inode use,
+destination capacity, transfer rate, or access deadline is unbounded or unavailable, and
+an unknown verdict never passes. The tool is check-only: it never deletes, compresses, or
+mutates campaign artifacts. Exit codes are 0 `capacity_ok`, 2 `capacity_exceeded` or
+`capacity_unknown`, and 3 malformed input. Fixtures for the passing, exceeded, and
+unknown cases live under `tests/tools/fixtures/output_capacity_preflight/`.
 
 ## Capacity-aware / fill batches
 
@@ -502,3 +565,79 @@ Permitted volatile fields (`observed_at_utc`, `submission_nonce`, `pid`, `hostna
 `process_id`, `job_id_pending`) are tracked and reported in `volatile_fields_observed` without
 causing false drift failures, while any unpermitted or unknown field divergence blocks submission
 and exits with code 1.
+
+## Expected-row ledger generation and verification (fail-closed)
+
+Expand campaign packets into canonical byte-stable expected-row ledgers before launch:
+
+```bash
+uv run python scripts/validation/generate_campaign_row_ledger.py \
+  --packet path/to/campaign_packet.json \
+  --output path/to/campaign_expected_row_ledger.json \
+  --check
+```
+
+The tool enforces schema `campaign_expected_row_ledger.v1.schema.json` across Cartesian grids, paired
+arms, array tasks, and excluded-cells pruning. Every row receives a unique key
+(`campaign_id::arm::scenario_id::seed::replicate`). Staging fails closed (`--check` exits with 1) on
+duplicate identities, underspecified dimensions, unresolved aliases, mutable paths, or count mismatches.
+Observed rows (`--observed path/to/rows.jsonl`) verify completion across 9 row states (`present`, `missing`,
+`duplicate`, `unexpected`, `conflict`, `fallback`, `degraded`, `failed`, `provenance_invalid`).
+
+## Campaign recovery and retry verification (check-only)
+
+Before resuming an interrupted campaign or resubmitting uncompleted cells, verify recovery and retry
+behavior under fail-closed contracts:
+
+```bash
+uv run python scripts/validation/verify_campaign_recovery.py \
+  --fixture path/to/campaign_recovery_packet.json \
+  --output path/to/campaign_recovery_receipt.json \
+  --format json \
+  --check
+```
+
+The verifier enforces schema `campaign_recovery_receipt.v1.schema.json` and evaluates:
+- **Preservation of valid completed identities**: completed rows are never rerun or overwritten.
+- **Fail-closed retry admission**: outcome-driven failures (collisions, task failure) cannot be retried
+  away under infrastructure labels; retries are admitted only for documented infrastructure interruptions.
+- **Authority input drift**: commit, config SHA-256, and model digest must match across attempts.
+- **Degraded/fallback protection**: fallback executions cannot become clean successes through resume.
+- **Lineage tracking**: scheduler job IDs and attempt indices are recorded across executions.
+- **Supported runners**: canonical runners (`benchmark_matrix`, `slurm_array`) are verified; unknown runners
+  report `status: "unsupported"`.
+- **Ledger reconciliation**: final reconciled rows must match the expected-row ledger 1-to-1.
+
+## Host-independent campaign analysis capsules (packaging and verification)
+
+Package source-independent inputs, schemas, analysis code, dependencies, and compact fixtures into portable
+capsules so campaign validation and reports can be regenerated on surviving machines after compute-host loss:
+
+```bash
+# Verify an analysis capsule (fail-closed check)
+uv run python scripts/tools/package_campaign_analysis_capsule.py --check \
+  --capsule path/to/campaign_capsule \
+  --format json
+
+# Regenerate deterministic reports into a fresh output root
+uv run python scripts/tools/package_campaign_analysis_capsule.py --check \
+  --capsule path/to/campaign_capsule \
+  --regenerate-reports \
+  --output-dir path/to/fresh_output_root
+
+# Build a capsule into an explicit temporary root from a build specification
+uv run python scripts/tools/package_campaign_analysis_capsule.py --build \
+  --spec path/to/capsule_spec.json \
+  --output-dir path/to/temporary_capsule_root
+```
+
+The tool enforces schema `campaign_analysis_capsule.v1.schema.json` and `SHA256SUMS` integrity, rejecting:
+- **Hidden absolute paths**: paths referencing `/home/`, `/tmp/`, `/var/`, or drive letters.
+- **Source-host dependencies and scheduler state**: `SLURM_*` variables, scheduler logs, or cluster domain names.
+- **Editable sibling imports**: `sys.path.insert`, `site-packages`, or `../` parent traversals in analysis scripts.
+- **Missing or invalid schemas**: referenced schemas must be present and validate as Draft 2020-12 JSON schemas.
+- **Mutable artifact aliases**: durable references with mutable tags (`:latest`, `master`, `main`) without content hashes.
+- **Unbound or stale analysis code**: script digest must match `analysis_code_digest`.
+- **Missing or duplicate data rows**: row IDs must be unique, and row counts must reconcile with expected ledgers.
+- **Output overwrite**: report regeneration refuses to overwrite existing files in the destination root.
+- **Explicit unavailable/unsupported analyses**: non-runnable optional analyses must state an explicit justification.

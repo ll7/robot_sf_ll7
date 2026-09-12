@@ -106,6 +106,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from scripts.dev.git_common import resolve_repo_root
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -126,19 +128,6 @@ REVIEW_TEMPLATE_SCHEMA = "evidence_registry_baseline_review_delta.v1"
 PROJECTION_SCHEMA = "evidence_registry_projection.v1"
 RATCHET_REPORT_SCHEMA = "evidence_registry_ratchet_report.v1"
 FULL_SHA1_RE = re.compile(r"^[0-9a-fA-F]{40}$")
-
-
-def _repo_root() -> Path:
-    """Return the current Git repository root."""
-    proc = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError("Could not determine git repository root.")
-    return Path(proc.stdout.strip())
 
 
 def _validate_projection_report(  # noqa: C901, PLR0912 - schema gate
@@ -1546,7 +1535,7 @@ def _write_baseline(
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     """Run the ratchet gate, baseline refresh, aggregate report, or companion-delta."""
     args = parse_args(list(sys.argv[1:] if argv is None else argv))
-    repo_root = args.root.resolve() if args.root is not None else _repo_root()
+    repo_root = args.root.resolve() if args.root is not None else resolve_repo_root()
     baseline_path = args.baseline if args.baseline.is_absolute() else repo_root / args.baseline
 
     if (args.candidate_head is None) != (args.frozen_base is None):

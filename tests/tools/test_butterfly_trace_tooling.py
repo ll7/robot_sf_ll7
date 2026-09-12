@@ -516,3 +516,27 @@ def test_contrast_layout_labels_use_exposure_steps() -> None:
     assert "4 exposure steps" in headline
     assert "7 exposure steps" in headline
     assert "near-miss steps" not in headline
+
+
+def test_minimap_panel_labels_name_centre_to_centre_distance() -> None:
+    """The plotted distance series is labelled as a distance, not clearance (#9101)."""
+    metrics = {
+        "time_s": np.array([0.0, 1.0, 2.0]),
+        "speed_mps": np.array([1.0, 1.5, 1.0]),
+        "clearance_m": np.array([4.0, 2.0, 1.0]),
+    }
+
+    fig, ax_speed, ax_distance = video.build_minimap_figure(
+        metrics,
+        near_miss_threshold_m=0.5,
+        collision_threshold_m=0.2,
+        width=640,
+        height=320,
+    )
+    try:
+        assert ax_distance.get_ylabel() == "centre-to-centre distance (m)"
+        assert "centre-to-centre distance" in ax_speed.get_title()
+        assert "clearance" not in ax_distance.get_ylabel().lower()
+        assert "clearance" not in ax_speed.get_title().lower()
+    finally:
+        plt.close(fig)

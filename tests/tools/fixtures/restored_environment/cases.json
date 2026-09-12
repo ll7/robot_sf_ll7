@@ -1,0 +1,10 @@
+{
+  "complete_restore": {"verdict": "pass", "reasons": []},
+  "missing_file": {"verdict": "fail", "reasons": ["missing_file"]},
+  "changed_digest": {"verdict": "fail", "reasons": ["checksum_mismatch"]},
+  "stale_source_path": {"verdict": "fail", "reasons": ["stale_source_path"]},
+  "unavailable_optional_dependency": {"verdict": "pass", "reasons": []},
+  "unsupported_schema": {"verdict": "fail", "reasons": ["unsupported_schema"]},
+  "private_path_leak": {"verdict": "blocked", "reasons": ["private_path_leak"]},
+  "source_host_access_attempt": {"verdict": "blocked", "reasons": ["source_host_access_attempt"]}
+}

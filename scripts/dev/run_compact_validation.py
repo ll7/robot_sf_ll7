@@ -14,7 +14,10 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 from scripts.dev.git_common import resolve_agent_artifact_dir
 
@@ -154,8 +157,13 @@ def run_compact_validation(
     excerpt_width: int = DEFAULT_EXCERPT_WIDTH,
     cwd: Path | None = None,
     timeout_seconds: float | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Run *command*, save full output, and return a compact summary payload."""
+    """Run *command*, save full output, and return a compact summary payload.
+
+    When *env* is provided it replaces the inherited environment for the child,
+    which lets callers pass a minimal sanitized environment.
+    """
     if not command:
         raise ValueError("command must not be empty")
     cwd = cwd or Path.cwd()
@@ -175,6 +183,7 @@ def run_compact_validation(
             process = subprocess.Popen(
                 command,
                 cwd=cwd,
+                env=env,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,

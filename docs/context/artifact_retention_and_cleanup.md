@@ -21,6 +21,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Preservation-aware retirement | [stale_worktree_reaper.py](../../scripts/dev/stale_worktree_reaper.py) |
 | Active-worktree lease | [pr_gate_lease.py](../../scripts/dev/pr_gate_lease.py) |
 | Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
+| Log retention and diagnostic excerpts | [check_log_retention.py](../../scripts/tools/check_log_retention.py) |
 | Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
 | Checkpoint preservation custody check | [check_checkpoint_preservation.py](../../scripts/validation/check_checkpoint_preservation.py) |
 | Bootstrap recipe freeze and check | [bootstrap_recipe_check.py](../../scripts/tools/bootstrap_recipe_check.py) |
@@ -231,7 +232,17 @@ tracked-file inventory, and verifies by cloning into a fresh repository and repr
 identities. Dirty or untracked state is rejected unless an explicit patch is admitted and
 checksum-bound; private or credentialed remotes are never written into the public status.
 
-### 4.12 Report a blocker
+### 4.12 Check log retention and bounded diagnostic excerpts
+
+```bash
+uv run python scripts/tools/check_log_retention.py --check --manifest <LOG_MANIFEST> --root <LOG_ROOT> --format json
+```
+
+The check-only helper requires per-log role, job/task identity, byte/line counts, encoding, completion,
+digest, and retention class; it emits deterministic bounded excerpts with private values redacted.
+Active, truncated, binary, secret-like, duplicate, unidentified, mismatched, or uncustodied logs remain blocked; failed/unknown jobs retain full logs until verified custody. It never deletes files or changes runtime logging.
+
+### 4.13 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

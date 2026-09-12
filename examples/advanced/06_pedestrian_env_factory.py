@@ -6,7 +6,7 @@ Usage:
 Prerequisites:
     - maps/svg_maps/debug_06.svg
     - model/pedestrian/ppo_ped_02.zip (required)
-    - model/run_043.zip (optional; falls back to StubRobotModel if missing)
+    - output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip (optional; falls back to StubRobotModel if missing)
 
 Expected Output:
     - Console logs showing factory and legacy environment runs for the same assets.
@@ -37,17 +37,25 @@ if TYPE_CHECKING:
 logger = loguru.logger
 
 
-def _load_robot_model_or_stub(robot_model_path: str):
+def _load_robot_model_or_stub(robot_model_path: str | Path | None):
     """Load a robot model or fall back to the stub when missing."""
     from robot_sf.benchmark.helper_catalog import load_trained_policy
     from robot_sf.gym_env._stub_robot_model import StubRobotModel
 
-    if not Path(robot_model_path).exists():
-        logger.warning(
-            f"Robot model not found at {robot_model_path}; using StubRobotModel for demo."
-        )
-        return StubRobotModel()
-    return load_trained_policy(robot_model_path)
+    if robot_model_path is not None and Path(robot_model_path).exists():
+        return load_trained_policy(str(robot_model_path))
+
+    try:
+        from robot_sf.models.registry import resolve_model_path
+
+        resolved = resolve_model_path("legacy_ppo_run_043", allow_download=True)
+        if resolved.exists():
+            return load_trained_policy(str(resolved))
+    except Exception:
+        pass
+
+    logger.warning(f"Robot model not found at {robot_model_path}; using StubRobotModel for demo.")
+    return StubRobotModel()
 
 
 def make_env_new(map_name: str, robot_model_path: str):
@@ -152,8 +160,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_prerequisite_check(__file__, output_format=args.format)
 
     svg_map = "maps/svg_maps/debug_06.svg"
-    ped_model = "./model/pedestrian/ppo_ped_02.zip"
-    robot_model = "./model/run_043.zip"
+    ped_model = "model/pedestrian/ppo_ped_02.zip"
+    try:
+        from robot_sf.models.registry import resolve_model_path
+
+        robot_model = str(resolve_model_path("legacy_ppo_run_043", allow_download=True))
+    except Exception as exc:
+        logger.warning(
+            f"Could not resolve robot model 'legacy_ppo_run_043': {exc}; using StubRobotModel."
+        )
+        robot_model = None
 
     # Demonstrate both new and old patterns work
     logger.info("=== Testing New Factory Pattern ===")

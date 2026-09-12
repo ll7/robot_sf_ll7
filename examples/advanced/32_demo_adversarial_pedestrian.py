@@ -8,7 +8,7 @@ Usage:
 
 Prerequisites:
     - maps/svg_maps/masterthesis/intersection.svg (default)
-    - model/run_043.zip (default robot policy)
+    - output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip (default robot policy)
     - model/pedestrian/ppo_intersection.zip (default pedestrian policy)
 
 Expected Output:
@@ -48,7 +48,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--robot-model",
-        default="model/run_043.zip",
+        default="output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip",
         help="Path to the trained robot policy (falls back to a stub if missing).",
     )
     parser.add_argument(
@@ -77,13 +77,22 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _load_robot_model_or_stub(robot_model_path: str) -> Any:
+def _load_robot_model_or_stub(robot_model_path: str | Path | None) -> Any:
     """Load robot model checkpoint or fall back to a stub model when unavailable."""
     from robot_sf.benchmark.helper_catalog import load_trained_policy
     from robot_sf.gym_env._stub_robot_model import StubRobotModel
 
-    if Path(robot_model_path).exists():
-        return load_trained_policy(robot_model_path)
+    if robot_model_path is not None and Path(robot_model_path).exists():
+        return load_trained_policy(str(robot_model_path))
+
+    try:
+        from robot_sf.models.registry import resolve_model_path
+
+        resolved = resolve_model_path("legacy_ppo_run_043", allow_download=True)
+        if resolved.exists():
+            return load_trained_policy(str(resolved))
+    except Exception:
+        pass
 
     logger.warning(
         "Robot model not found at {}. Using StubRobotModel for debug run.",
@@ -155,7 +164,20 @@ def run_debug_rollout(args: argparse.Namespace) -> None:
     """Execute a rendered pedestrian-policy rollout with episode logging."""
     from robot_sf.benchmark.helper_catalog import load_trained_policy
 
-    if not Path(args.ped_model).exists():
+    ped_model_path = Path(args.ped_model)
+    if not ped_model_path.exists():
+        try:
+            from robot_sf.models.registry import resolve_model_path
+
+            resolved_ped = resolve_model_path(
+                "legacy_ppo_pedestrian_intersection", allow_download=True
+            )
+            if resolved_ped.exists():
+                ped_model_path = resolved_ped
+        except Exception:
+            pass
+
+    if not ped_model_path.exists():
         raise FileNotFoundError(
             "Pedestrian model not found at "
             f"{args.ped_model}. Provide --ped-model with a valid PPO checkpoint."
@@ -166,8 +188,8 @@ def run_debug_rollout(args: argparse.Namespace) -> None:
         robot_model_path=args.robot_model,
         difficulty=args.difficulty,
     )
-    logger.info("Loading pedestrian model from {}", args.ped_model)
-    model = load_trained_policy(args.ped_model)
+    logger.info("Loading pedestrian model from {}", ped_model_path)
+    model = load_trained_policy(str(ped_model_path))
 
     reset_out = env.reset()
     obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out

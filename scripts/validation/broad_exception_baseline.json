@@ -5,10 +5,11 @@
       "robot_sf/benchmark/camera_ready/resource_lifecycle.py": 2,
       "robot_sf/benchmark/candidate_trace_resolution.py": 1,
       "robot_sf/benchmark/doctor.py": 2,
+      "robot_sf/benchmark/force_coupled_comparator.py": 7,
       "robot_sf/benchmark/forecast/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/issue_6412_real_reexport.py": 2,
-      "robot_sf/benchmark/last_avoidable_replay.py": 6,
+      "robot_sf/benchmark/last_avoidable_replay.py": 2,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
       "robot_sf/benchmark/map_runner/map_runner.py": 2,
       "robot_sf/benchmark/map_runner/map_runner_batch_runner.py": 3,
@@ -111,7 +112,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 199
+    "total": 202
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -171,6 +172,69 @@
     },
     {
       "col_offset": 4,
+      "context": "execute_rollout",
+      "fingerprint": "5f7446a8127dffa9",
+      "handler": "Exception",
+      "lineno": 514,
+      "path": "robot_sf/benchmark/force_coupled_comparator.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - planner lifecycle failures are path-generation results"
+    },
+    {
+      "col_offset": 8,
+      "context": "execute_rollout",
+      "fingerprint": "feead7c81a4257a4",
+      "handler": "Exception",
+      "lineno": 528,
+      "path": "robot_sf/benchmark/force_coupled_comparator.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - analytic simulator state failures are structured"
+    },
+    {
+      "col_offset": 8,
+      "context": "execute_rollout",
+      "fingerprint": "0fce21e7f5fcd536",
+      "handler": "Exception",
+      "lineno": 560,
+      "path": "robot_sf/benchmark/force_coupled_comparator.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - analytic clearance failures are structured"
+    },
+    {
+      "col_offset": 8,
+      "context": "execute_rollout",
+      "fingerprint": "65473528714d33b2",
+      "handler": "Exception",
+      "lineno": 575,
+      "path": "robot_sf/benchmark/force_coupled_comparator.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - analytic simulator-state failures are structured"
+    },
+    {
+      "col_offset": 8,
+      "context": "execute_rollout",
+      "fingerprint": "2f7d5941627f4b0a",
+      "handler": "Exception",
+      "lineno": 584,
+      "path": "robot_sf/benchmark/force_coupled_comparator.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - planner failures become structured diagnostics"
+    },
+    {
+      "col_offset": 8,
+      "context": "execute_rollout",
+      "fingerprint": "f84506689cdcd3dc",
+      "handler": "Exception",
+      "lineno": 622,
+      "path": "robot_sf/benchmark/force_coupled_comparator.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - planner output-boundary failures are path-generation results"
+    },
+    {
+      "col_offset": 8,
+      "context": "execute_rollout",
+      "fingerprint": "096d584c7efe6758",
+      "handler": "Exception",
+      "lineno": 643,
+      "path": "robot_sf/benchmark/force_coupled_comparator.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - analytic kinematic integration failures are structured"
+    },
+    {
+      "col_offset": 4,
       "context": "_probe_capability",
       "fingerprint": "146ea919441269ab",
       "handler": "Exception",
@@ -222,42 +286,6 @@
       "lineno": 693,
       "path": "robot_sf/benchmark/last_avoidable_replay.py",
       "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_model_metadata",
-      "fingerprint": "33da90e8b20b01c4",
-      "handler": "Exception",
-      "lineno": 693,
-      "path": "robot_sf/benchmark/last_avoidable_replay.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_model_metadata",
-      "fingerprint": "33da90e8b20b01c4",
-      "handler": "Exception",
-      "lineno": 693,
-      "path": "robot_sf/benchmark/last_avoidable_replay.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_snapshot_state_is_complete",
-      "fingerprint": "1d3761ff964b79fb",
-      "handler": "Exception",
-      "lineno": 718,
-      "path": "robot_sf/benchmark/last_avoidable_replay.py",
-      "source": "except Exception:  # noqa: BLE001 - completeness failure must fail closed."
-    },
-    {
-      "col_offset": 4,
-      "context": "_snapshot_state_is_complete",
-      "fingerprint": "1d3761ff964b79fb",
-      "handler": "Exception",
-      "lineno": 718,
-      "path": "robot_sf/benchmark/last_avoidable_replay.py",
-      "source": "except Exception:  # noqa: BLE001 - completeness failure must fail closed."
     },
     {
       "col_offset": 4,
@@ -768,7 +796,7 @@
       "context": "_child_parser_info",
       "fingerprint": "75845c09ff34289e",
       "handler": "Exception",
-      "lineno": 869,
+      "lineno": 886,
       "path": "scripts/dev/generate_cli_reference.py",
       "source": "except Exception:  # noqa: BLE001 - arbitrary parser factories stay child-bounded"
     },
@@ -777,7 +805,7 @@
       "context": "_child_import_target",
       "fingerprint": "613aca5b680219b1",
       "handler": "Exception",
-      "lineno": 948,
+      "lineno": 965,
       "path": "scripts/dev/generate_cli_reference.py",
       "source": "except Exception as exc:  # noqa: BLE001 - arbitrary import failures stay child-bounded"
     },
@@ -786,7 +814,7 @@
       "context": "_child_takes_argv",
       "fingerprint": "7871babfdccd4684",
       "handler": "Exception",
-      "lineno": 958,
+      "lineno": 975,
       "path": "scripts/dev/generate_cli_reference.py",
       "source": "except Exception:  # noqa: BLE001 - custom signatures stay child-bounded"
     },
@@ -795,7 +823,7 @@
       "context": "_child_invoke",
       "fingerprint": "65bedcaa1dada86c",
       "handler": "Exception",
-      "lineno": 974,
+      "lineno": 991,
       "path": "scripts/dev/generate_cli_reference.py",
       "source": "except Exception as exc:  # noqa: BLE001 - arbitrary help failures stay fail-closed"
     },
@@ -813,7 +841,7 @@
       "context": "main",
       "fingerprint": "49eef50940c10a67",
       "handler": "Exception",
-      "lineno": 2068,
+      "lineno": 2172,
       "path": "scripts/dev/stale_worktree_reaper.py",
       "source": "except Exception as exc:"
     },
@@ -831,7 +859,7 @@
       "context": "main",
       "fingerprint": "bd0954b161462b79",
       "handler": "Exception",
-      "lineno": 1760,
+      "lineno": 1815,
       "path": "scripts/dev/worktree_hygiene_snapshot.py",
       "source": "except Exception as exc:"
     },
@@ -957,7 +985,7 @@
       "context": "aggregate_all_results",
       "fingerprint": "eebb4a691873a945",
       "handler": "Exception",
-      "lineno": 229,
+      "lineno": 230,
       "path": "scripts/run_social_navigation_benchmark.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive"
     },
@@ -966,7 +994,7 @@
       "context": "log_manual_visualization_steps",
       "fingerprint": "da94b5d8b07b674b",
       "handler": "Exception",
-      "lineno": 304,
+      "lineno": 305,
       "path": "scripts/run_social_navigation_benchmark.py",
       "source": "except Exception as e:"
     },

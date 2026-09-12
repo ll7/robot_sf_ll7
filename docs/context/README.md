@@ -74,6 +74,10 @@ in [svg_geometry_contract.md](svg_geometry_contract.md); legacy and corrected ro
 pooled as comparable evidence.
 Issue #8891's outcome-free matched-budget temporal-robustness packet is documented in [issue_8891_temporal_robustness_packet.md](issue_8891_temporal_robustness_packet.md).
 
+The issue #8693 simulator-error and diagnostic-success contract is documented in
+[issue_8693_simulator_error_taxonomy.md](issue_8693_simulator_error_taxonomy.md); it is
+implementation-integrity evidence only and does not claim benchmark improvement.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 

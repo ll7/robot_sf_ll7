@@ -5,11 +5,17 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import jsonschema
 import pytest
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+import robot_sf.benchmark.force_coupled_comparator as comparator
 from robot_sf.benchmark.force_coupled_comparator import (
     CLAIM_BOUNDARY,
     FAILURE_CLASS_PATH_GENERATION,
@@ -30,6 +36,76 @@ from robot_sf.planner.force_coupled_potential_field import (
     ForceCoupledPotentialFieldConfig,
     ForceCoupledPotentialFieldPlanner,
 )
+from scripts.benchmark import check_force_coupled_comparator as checker
+
+
+class _SimulatorBoundaryFailurePlanner:
+    """Protocol fixture that fails at one canonical rollout boundary."""
+
+    def __init__(self, failure_phase: str) -> None:
+        self.failure_phase = failure_phase
+
+    def reset(self, *, seed: int | None = None) -> None:
+        del seed
+        if self.failure_phase == "reset":
+            raise RuntimeError("fixture reset failure")
+
+    def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        del observation
+        if self.failure_phase == "planner_simulator_text":
+            raise RuntimeError("simulator backend unavailable")
+        if self.failure_phase == "command":
+            return (float("nan"), 0.0)
+        if self.failure_phase == "degraded_without_reason":
+            return (1.0, 0.0)
+        return (0.1, 0.0)
+
+    def diagnostics(self) -> dict[str, object]:
+        if self.failure_phase == "diagnostics":
+            raise RuntimeError("fixture diagnostics failure")
+        if self.failure_phase == "diagnostic_status":
+            return {"planner_type": "simulator_boundary_fixture", "status": "unknown"}
+        if self.failure_phase == "degraded_diagnostics":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "degraded",
+                "degradation_reasons": ["fixture_degraded"],
+            }
+        if self.failure_phase == "degraded_without_reason":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "degraded",
+            }
+        if self.failure_phase == "degraded_simulator_text":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "degraded",
+                "degradation_reasons": ["simulator backend unavailable"],
+            }
+        if self.failure_phase == "ok_simulator_text":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "ok",
+                "degradation_reasons": "simulator backend unavailable",
+            }
+        if self.failure_phase == "invalid_planner_type":
+            return {"planner_type": "", "status": "ok"}
+        if self.failure_phase == "invalid_reason_payload":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "degraded",
+                "degradation_reasons": ["simulator backend unavailable", 7],
+            }
+        if self.failure_phase == "fallback_diagnostics":
+            return {
+                "planner_type": "simulator_boundary_fixture",
+                "status": "ok",
+                "fallback": True,
+            }
+        return {"planner_type": "simulator_boundary_fixture", "status": "ok"}
+
+    def close(self) -> None:
+        """Release no resources; this fixture only exercises rollout boundaries."""
 
 
 def test_pure_pursuit_planner_lifecycle() -> None:
@@ -47,6 +123,14 @@ def test_pure_pursuit_planner_lifecycle() -> None:
     planner.close()
     with pytest.raises(ValueError, match="planner is closed"):
         planner.plan(obs)
+
+
+def test_pure_pursuit_stops_at_goal() -> None:
+    """The reference planner emits a stationary command at the goal."""
+    planner = PurePursuitGoalPlanner()
+    planner.reset(seed=1)
+
+    assert planner.plan({"robot": [0.0, 0.0, 0.0], "goal": [0.0, 0.0]}) == (0.0, 0.0)
 
 
 def test_comparator_receipt_schema_conformance() -> None:
@@ -91,6 +175,305 @@ def test_first_step_planner_exception_is_classified_without_diagnostics() -> Non
     assert result.degraded is True
     assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
     assert result.degradation_reasons == ("plan_exception: fixture planner failure",)
+
+
+@pytest.mark.parametrize(
+    "failure_phase, expected_failure_class, expected_simulator_error",
+    [
+        ("reset", FAILURE_CLASS_PATH_GENERATION, False),
+        ("diagnostics", FAILURE_CLASS_PATH_GENERATION, False),
+        ("diagnostic_status", FAILURE_CLASS_PATH_GENERATION, False),
+        ("command", FAILURE_CLASS_PATH_GENERATION, False),
+        ("planner_simulator_text", FAILURE_CLASS_SIMULATOR, False),
+        ("integration", FAILURE_CLASS_SIMULATOR, True),
+    ],
+)
+def test_execute_rollout_classifies_planner_boundaries_and_simulator_integration(
+    failure_phase: str,
+    expected_failure_class: str,
+    expected_simulator_error: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Boundary failures use base taxonomy precedence; analytic integration sets the flag."""
+    scenario = get_canonical_comparison_scenarios()[0]
+    planner: comparator.LocalPlannerProtocol = _SimulatorBoundaryFailurePlanner(failure_phase)
+    if failure_phase == "integration":
+        scenario = replace(scenario, control_dt=0.0, max_steps=1)
+        planner = PurePursuitGoalPlanner()
+
+    observed_flags: list[bool] = []
+    original_classify_failure = comparator.classify_failure
+
+    def classify_failure_spy(**kwargs: object) -> str | None:
+        observed_flags.append(bool(kwargs["simulator_error"]))
+        return original_classify_failure(**kwargs)
+
+    monkeypatch.setattr(comparator, "classify_failure", classify_failure_spy)
+    result = execute_rollout(planner, scenario)
+
+    assert observed_flags == [expected_simulator_error]
+    assert result.status == "error"
+    assert result.degraded is True
+    assert result.failure_class == expected_failure_class
+    if expected_simulator_error:
+        assert result.degradation_reasons[0].startswith("simulator_integration_failure")
+    else:
+        assert result.degradation_reasons[0].startswith("plan_exception:")
+
+
+@pytest.mark.parametrize(
+    ("failure_phase", "expected_reason", "expected_failure_class"),
+    [
+        ("degraded_diagnostics", "fixture_degraded", FAILURE_CLASS_PATH_GENERATION),
+        ("degraded_simulator_text", "simulator backend unavailable", FAILURE_CLASS_SIMULATOR),
+        ("fallback_diagnostics", "fallback_execution", FAILURE_CLASS_PATH_GENERATION),
+    ],
+)
+def test_execute_rollout_records_diagnostic_degradation(
+    failure_phase: str,
+    expected_reason: str,
+    expected_failure_class: str,
+) -> None:
+    """Diagnostic degradation remains visible under base combined-signal precedence."""
+    scenario = get_canonical_comparison_scenarios()[0]
+    result = execute_rollout(_SimulatorBoundaryFailurePlanner(failure_phase), scenario)
+
+    assert result.status == "degraded"
+    assert result.degraded is True
+    assert result.failure_class == expected_failure_class
+    assert f"planner_diagnostic: {expected_reason}" in result.degradation_reasons
+
+
+def test_execute_rollout_preserves_single_legacy_simulator_reason() -> None:
+    """A string diagnostic reason remains one simulator signal even with a conflicting ok status."""
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner("ok_simulator_text"),
+        get_canonical_comparison_scenarios()[0],
+    )
+
+    assert result.status == "degraded"
+    assert result.failure_class == FAILURE_CLASS_SIMULATOR
+    assert result.degradation_reasons[0] == "planner_diagnostic: simulator backend unavailable"
+
+
+def test_execute_rollout_falls_back_from_invalid_diagnostic_planner_type() -> None:
+    """An invalid diagnostic planner type cannot create an empty public planner identity."""
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner("invalid_planner_type"),
+        get_canonical_comparison_scenarios()[0],
+    )
+
+    assert result.planner_id == "_SimulatorBoundaryFailurePlanner"
+
+
+def test_execute_rollout_rejects_non_string_diagnostic_reasons() -> None:
+    """Malformed diagnostic reason collections become fail-closed planner errors."""
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner("invalid_reason_payload"),
+        get_canonical_comparison_scenarios()[0],
+    )
+
+    assert result.status == "error"
+    assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
+    assert result.degradation_reasons[0].startswith(
+        "plan_exception: planner diagnostic degradation_reasons"
+    )
+
+
+def test_execute_rollout_emits_reason_for_degraded_diagnostic_without_reason() -> None:
+    """A bare degraded diagnostic gets a schema-compatible reason instead of an empty list."""
+    scenario = replace(
+        get_canonical_comparison_scenarios()[0],
+        goal=(0.3, 0.0),
+        max_steps=2,
+    )
+
+    result = execute_rollout(_SimulatorBoundaryFailurePlanner("degraded_without_reason"), scenario)
+
+    assert result.status == "degraded"
+    assert result.degraded is True
+    assert result.completed is True
+    assert result.degradation_reasons == ("planner_diagnostic: degraded_without_reason",)
+    assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
+    assert len(result.to_dict()["degradation_reasons"]) == 1
+
+
+def test_execute_rollout_captures_simulator_state_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Analytic simulator-state exceptions become structured simulator failures."""
+
+    def fail_hypot(*args: object) -> float:
+        del args
+        raise RuntimeError("fixture state failure")
+
+    monkeypatch.setattr(comparator.math, "hypot", fail_hypot)
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner("normal"), get_canonical_comparison_scenarios()[0]
+    )
+
+    assert result.status == "error"
+    assert result.degraded is True
+    assert result.failure_class == FAILURE_CLASS_SIMULATOR
+    assert result.degradation_reasons == (
+        "simulator_state_failure: RuntimeError: fixture state failure",
+    )
+
+
+def test_registry_planner_id_survives_simulator_failure_before_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Simulator failures before diagnostics retain the canonical registry planner ID."""
+    planner = _SimulatorBoundaryFailurePlanner("normal")
+
+    def fail_hypot(*args: object) -> float:
+        del args
+        raise RuntimeError("fixture state failure")
+
+    monkeypatch.setattr(
+        comparator,
+        "build_planner_registry",
+        lambda _config: {"canonical_fixture": planner},
+    )
+    monkeypatch.setattr(comparator.math, "hypot", fail_hypot)
+
+    receipt = run_force_coupled_comparator()
+
+    assert {row["planner_id"] for row in receipt["results"]} == {"canonical_fixture"}
+    assert {row["failure_class"] for row in receipt["results"]} == {FAILURE_CLASS_SIMULATOR}
+
+
+def test_canonical_planner_id_survives_untrusted_diagnostic_on_integration_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An untrusted diagnostic ID cannot replace a canonical ID on simulator failure."""
+    scenario = replace(get_canonical_comparison_scenarios()[0], max_steps=1)
+    monkeypatch.setattr(comparator, "wrap_angle_pi", lambda _angle: float("nan"))
+
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner("normal"),
+        scenario,
+        planner_id="canonical_fixture",
+    )
+
+    assert result.planner_id == "canonical_fixture"
+    assert result.failure_class == FAILURE_CLASS_SIMULATOR
+    assert result.degradation_reasons[0].startswith("simulator_integration_failure")
+
+
+def test_execute_rollout_captures_simulator_clearance_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Analytic clearance exceptions become structured simulator failures."""
+    scenario = replace(get_canonical_comparison_scenarios()[0], obstacles=((1.0, 0.0),))
+
+    def fail_clearance(*args: object) -> tuple[None, bool, bool]:
+        del args
+        raise RuntimeError("fixture clearance failure")
+
+    monkeypatch.setattr(comparator, "_update_clearance", fail_clearance)
+    result = execute_rollout(_SimulatorBoundaryFailurePlanner("normal"), scenario)
+
+    assert result.failure_class == FAILURE_CLASS_SIMULATOR
+    assert result.degradation_reasons == (
+        "simulator_clearance_failure: RuntimeError: fixture clearance failure",
+    )
+
+
+def test_execute_rollout_captures_simulator_observation_state_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Observation-state construction exceptions become simulator failures."""
+
+    class BrokenPoint:
+        def __iter__(self) -> Iterator[float]:
+            raise RuntimeError("fixture observation-state failure")
+
+    scenario = replace(get_canonical_comparison_scenarios()[0], obstacles=(BrokenPoint(),))  # type: ignore[arg-type]
+    monkeypatch.setattr(comparator, "_update_clearance", lambda *args: (None, False, False))
+    result = execute_rollout(_SimulatorBoundaryFailurePlanner("normal"), scenario)
+
+    assert result.failure_class == FAILURE_CLASS_SIMULATOR
+    assert result.degradation_reasons == (
+        "simulator_state_failure: RuntimeError: fixture observation-state failure",
+    )
+
+
+def test_execute_rollout_captures_nonfinite_simulator_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-finite analytic state after integration is classified as a simulator failure."""
+    monkeypatch.setattr(comparator, "wrap_angle_pi", lambda angle: float("nan"))
+    scenario = replace(get_canonical_comparison_scenarios()[0], max_steps=1)
+    result = execute_rollout(_SimulatorBoundaryFailurePlanner("normal"), scenario)
+
+    assert result.failure_class == FAILURE_CLASS_SIMULATOR
+    assert result.degradation_reasons == (
+        "simulator_integration_failure: ValueError: non-finite simulator state",
+    )
+
+
+def test_classify_failure_rejects_unknown_status_and_preserves_base_precedence() -> None:
+    """Unknown statuses fail closed while base mixed-signal precedence remains stable."""
+    with pytest.raises(ValueError, match="unknown rollout status"):
+        classify_failure(status="unknown")
+
+    assert classify_failure(status="degraded", degraded=True) == FAILURE_CLASS_PATH_GENERATION
+    assert (
+        classify_failure(
+            status="degraded",
+            degradation_reasons=("plan_exception: simulator backend unavailable",),
+        )
+        == FAILURE_CLASS_SIMULATOR
+    )
+
+
+@pytest.mark.parametrize(
+    ("signals", "expected"),
+    [
+        (
+            {
+                "status": "error",
+                "plan_exception": True,
+                "collision_pedestrian": True,
+            },
+            FAILURE_CLASS_SOCIAL_COMPLIANCE,
+        ),
+        (
+            {
+                "status": "degraded",
+                "collision_pedestrian": True,
+                "degradation_reasons": ("planner_diagnostic: simulator backend unavailable",),
+            },
+            FAILURE_CLASS_SIMULATOR,
+        ),
+        (
+            {
+                "status": "error",
+                "collision_pedestrian": True,
+                "degradation_reasons": ("simulator backend unavailable",),
+            },
+            FAILURE_CLASS_SIMULATOR,
+        ),
+        (
+            {
+                "status": "error",
+                "degradation_reasons": ("simulator_step_failure: plan_exception text",),
+            },
+            FAILURE_CLASS_SIMULATOR,
+        ),
+        (
+            {
+                "status": "error",
+                "degradation_reasons": ("simulator_step_failure", "plan_exception"),
+            },
+            FAILURE_CLASS_SIMULATOR,
+        ),
+    ],
+)
+def test_classify_failure_preserves_base_mixed_signal_precedence(
+    signals: dict[str, object], expected: str
+) -> None:
+    """Base simulator-first, social-before-path precedence wins for combined signals."""
+    assert classify_failure(**signals) == expected  # type: ignore[arg-type]
 
 
 def test_deterministic_receipt_invariant() -> None:
@@ -164,6 +547,121 @@ def test_cli_runner_smoke_mode(tmp_path: Path) -> None:
     assert out_file.exists()
     saved_receipt = json.loads(out_file.read_text(encoding="utf-8"))
     assert saved_receipt["schema_version"] == SCHEMA_VERSION
+
+
+def test_comparator_receipt_fails_closed_on_simulator_error_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A handled simulator error cannot leave the receipt root status at ``ok``."""
+
+    def fail_clearance(*args: object) -> tuple[float | None, bool, bool]:
+        del args
+        raise RuntimeError("fixture clearance failure")
+
+    monkeypatch.setattr(comparator, "_update_clearance", fail_clearance)
+    receipt = run_force_coupled_comparator()
+
+    assert receipt["status"] == "failed"
+    assert any(
+        row["status"] == "error" and row["failure_class"] == FAILURE_CLASS_SIMULATOR
+        for row in receipt["results"]
+    )
+
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    jsonschema.validate(
+        instance=receipt, schema=json.loads(schema_path.read_text(encoding="utf-8"))
+    )
+
+
+def test_comparator_receipt_fails_on_simulator_diagnostic_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A simulator reason remains a root receipt failure despite a conflicting diagnostic status."""
+    planner = _SimulatorBoundaryFailurePlanner("ok_simulator_text")
+    monkeypatch.setattr(
+        comparator,
+        "build_planner_registry",
+        lambda _config: {"canonical_fixture": planner},
+    )
+
+    receipt = run_force_coupled_comparator()
+
+    assert receipt["status"] == "failed"
+    assert all(row["planner_id"] == "canonical_fixture" for row in receipt["results"])
+    assert all(row["failure_class"] == FAILURE_CLASS_SIMULATOR for row in receipt["results"])
+
+
+def test_cli_smoke_rejects_simulator_error_rows(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Smoke mode cannot pass a receipt containing an actual simulator-error row."""
+    receipt = {
+        "status": "ok",
+        "receipt_digest": "a" * 64,
+        "results": [
+            {
+                "planner_id": "fixture_planner",
+                "scenario_id": "simulator_failure",
+                "failure_class": FAILURE_CLASS_SIMULATOR,
+            }
+        ],
+    }
+    monkeypatch.setattr(checker, "run_force_coupled_comparator", lambda **_: receipt)
+
+    assert checker.main(["--smoke"]) == 1
+    captured = capsys.readouterr()
+    assert "simulator-error rows" in captured.err
+    assert "PASS" not in captured.out
+
+
+@pytest.mark.parametrize(
+    ("failure_class", "degradation_reasons"),
+    [
+        (
+            FAILURE_CLASS_PATH_GENERATION,
+            ["simulator_integration_failure: fixture integration failure"],
+        ),
+        (
+            None,
+            [
+                "planner_diagnostic: legacy degraded status",
+                "simulator_integration_failure: fixture integration failure",
+            ],
+        ),
+    ],
+)
+def test_cli_smoke_is_simulator_first_for_conflicting_legacy_rows(
+    failure_class: str | None,
+    degradation_reasons: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Smoke rejects schema-compatible simulator signals despite conflicting legacy metadata."""
+    receipt = run_force_coupled_comparator()
+    row = receipt["results"][0]
+    row.update(
+        {
+            "status": "degraded",
+            "degraded": True,
+            "degradation_reasons": degradation_reasons,
+        }
+    )
+    if failure_class is None:
+        row.pop("failure_class", None)
+    else:
+        row["failure_class"] = failure_class
+    monkeypatch.setattr(checker, "run_force_coupled_comparator", lambda **_: receipt)
+
+    assert checker.main(["--smoke"]) == 1
+    captured = capsys.readouterr()
+    assert "simulator-error rows" in captured.err
+    assert "PASS" not in captured.out
 
 
 def test_classify_failure_deterministic_mapping_per_class() -> None:
@@ -313,6 +811,124 @@ def test_summary_table_rejects_unknown_failure_class() -> None:
         compute_summary_table([result])
 
 
+def test_summary_table_rejects_missing_failure_class() -> None:
+    """A non-ok row without a taxonomy class cannot disappear from aggregation."""
+    result = ComparatorRunResult(
+        planner_id="test_planner",
+        scenario_id="test_scenario",
+        seed=42,
+        steps=0,
+        completed=True,
+        collision=False,
+        near_miss=False,
+        min_clearance_obstacle_m=None,
+        min_clearance_pedestrian_m=None,
+        path_length_m=0.0,
+        mean_linear_speed_mps=0.0,
+        max_linear_speed_mps=0.0,
+        mean_angular_rate_radps=0.0,
+        max_angular_rate_radps=0.0,
+        jerk_metric=0.0,
+        mean_latency_ms=0.0,
+        status="degraded",
+        degraded=True,
+        degradation_reasons=("fixture_degraded",),
+        failure_class=None,
+    )
+
+    with pytest.raises(ValueError, match="missing failure class"):
+        compute_summary_table([result])
+
+
+@pytest.mark.parametrize("status", ["error", "degraded"])
+def test_summary_table_rejects_non_ok_rows_without_degradation_reason(status: str) -> None:
+    """Summary aggregation rejects non-ok rows that violate the v1 reason invariant."""
+    healthy = execute_rollout(PurePursuitGoalPlanner(), get_canonical_comparison_scenarios()[-1])
+    result = replace(
+        healthy,
+        status=status,
+        degraded=True,
+        degradation_reasons=(),
+        failure_class=FAILURE_CLASS_PATH_GENERATION,
+    )
+
+    with pytest.raises(ValueError, match="missing degradation reason"):
+        compute_summary_table([result])
+
+
+@pytest.mark.parametrize("status", ["error", "degraded"])
+def test_summary_table_rejects_non_ok_rows_without_degraded_flag(status: str) -> None:
+    """Non-ok rows must carry the emitted degraded invariant before aggregation."""
+    result = ComparatorRunResult(
+        planner_id="test_planner",
+        scenario_id="test_scenario",
+        seed=42,
+        steps=0,
+        completed=True,
+        collision=False,
+        near_miss=False,
+        min_clearance_obstacle_m=None,
+        min_clearance_pedestrian_m=None,
+        path_length_m=0.0,
+        mean_linear_speed_mps=0.0,
+        max_linear_speed_mps=0.0,
+        mean_angular_rate_radps=0.0,
+        max_angular_rate_radps=0.0,
+        jerk_metric=0.0,
+        mean_latency_ms=0.0,
+        status=status,
+        degraded=False,
+        degradation_reasons=("fixture",),
+        failure_class=FAILURE_CLASS_PATH_GENERATION,
+    )
+
+    with pytest.raises(ValueError, match="not marked degraded"):
+        compute_summary_table([result])
+
+
+def test_summary_table_rejects_unknown_status() -> None:
+    """Summary aggregation rejects statuses outside the versioned rollout vocabulary."""
+    healthy = execute_rollout(PurePursuitGoalPlanner(), get_canonical_comparison_scenarios()[-1])
+    with pytest.raises(ValueError, match="unknown rollout status"):
+        compute_summary_table([replace(healthy, status="unknown")])  # type: ignore[arg-type]
+
+
+def test_summary_table_rejects_inconsistent_ok_row() -> None:
+    """An ok row cannot carry degradation reasons or a failure class."""
+    healthy = execute_rollout(PurePursuitGoalPlanner(), get_canonical_comparison_scenarios()[-1])
+    with pytest.raises(ValueError, match="inconsistent failure"):
+        compute_summary_table([replace(healthy, degradation_reasons=("fixture",))])
+
+
+def test_summary_table_preserves_established_success_rate_semantics() -> None:
+    """Success rate remains completed and collision-free; caveats stay separately visible."""
+    healthy = execute_rollout(PurePursuitGoalPlanner(), get_canonical_comparison_scenarios()[-1])
+    near_miss = replace(healthy, scenario_id="near_miss_fixture", near_miss=True)
+    degraded = replace(
+        healthy,
+        scenario_id="degraded_fixture",
+        status="degraded",
+        degraded=True,
+        degradation_reasons=("steering_rate_saturation",),
+        failure_class=FAILURE_CLASS_TRACKING,
+    )
+
+    [summary] = compute_summary_table([near_miss, degraded])
+
+    assert summary["success_rate"] == 1.0
+    assert summary["near_miss_rate"] == 0.5
+    assert summary["status_counts"] == {"ok": 1, "degraded": 1}
+    assert summary["failure_class_counts"][FAILURE_CLASS_TRACKING] == 1
+
+
+def test_comparator_uses_empty_digest_for_missing_explicit_config(tmp_path: Path) -> None:
+    """An explicitly missing config uses the documented empty-config fallback."""
+    receipt = run_force_coupled_comparator(config_path=tmp_path / "missing.yaml")
+
+    assert len(receipt["config_sha256"]) == 64
+    assert receipt["status"] == "ok"
+
+
 def test_v1_schema_accepts_receipts_without_optional_taxonomy_fields() -> None:
     """The additive taxonomy fields do not invalidate existing v1 receipts."""
     schema_path = (
@@ -344,6 +960,140 @@ def test_v1_schema_rejects_noncanonical_taxonomy_alias() -> None:
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     receipt = run_force_coupled_comparator()
     receipt["results"][0]["failure_class"] = "path-generation"
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
+
+
+def test_v1_schema_enforces_new_taxonomy_invariants_when_present() -> None:
+    """New taxonomy-bearing rows are schema-checked while legacy rows remain optional."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+    unknown_status = run_force_coupled_comparator()
+    unknown_status["results"][0]["status"] = "unknown"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=unknown_status, schema=schema)
+
+    inconsistent_degraded = run_force_coupled_comparator()
+    inconsistent_degraded["results"][0]["status"] = "degraded"
+    inconsistent_degraded["results"][0]["degraded"] = False
+    inconsistent_degraded["results"][0]["failure_class"] = FAILURE_CLASS_PATH_GENERATION
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=inconsistent_degraded, schema=schema)
+
+
+def test_v1_schema_rejects_explicit_null_failure_class_on_non_ok_row() -> None:
+    """Legacy omission stays compatible, but an explicit non-ok null is malformed."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    row = receipt["results"][0]
+    row.update(
+        {
+            "status": "degraded",
+            "degraded": True,
+            "degradation_reasons": ["fixture_degraded"],
+            "failure_class": None,
+        }
+    )
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
+
+
+@pytest.mark.parametrize("status", ["error", "degraded"])
+def test_v1_schema_rejects_empty_degradation_reasons_on_non_ok_row(status: str) -> None:
+    """The v1 schema requires at least one reason for every non-ok row."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    receipt["results"][0].update(
+        {
+            "status": status,
+            "degraded": True,
+            "degradation_reasons": [],
+            "failure_class": FAILURE_CLASS_PATH_GENERATION,
+        }
+    )
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("collision", True),
+        ("completed", False),
+        ("degradation_reasons", ["fixture_degraded"]),
+    ],
+)
+def test_v1_schema_rejects_inconsistent_ok_rollout(field: str, value: object) -> None:
+    """The receipt schema rejects ok rows carrying failure-state signals."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    row = receipt["results"][0]
+    row.update(
+        {
+            "status": "ok",
+            "completed": True,
+            "collision": False,
+            "degraded": False,
+            "degradation_reasons": [],
+            "failure_class": None,
+        }
+    )
+    row[field] = value
+
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(instance=receipt, schema=schema)
+
+
+@pytest.mark.parametrize("malformation", ["unknown", "negative", "missing"])
+def test_v1_schema_rejects_malformed_summary_taxonomy_counts(malformation: str) -> None:
+    """Present summary taxonomy counts must be complete, canonical, and non-negative."""
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    receipt = run_force_coupled_comparator()
+    counts = receipt["summary_table"][0]["failure_class_counts"]
+    if malformation == "unknown":
+        counts["bogus"] = 1
+    elif malformation == "negative":
+        counts[FAILURE_CLASS_SIMULATOR] = -1
+    else:
+        counts.pop(FAILURE_CLASS_SIMULATOR)
 
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(instance=receipt, schema=schema)

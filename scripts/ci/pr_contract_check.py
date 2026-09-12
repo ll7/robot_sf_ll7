@@ -67,6 +67,7 @@ EVIDENCE_PATH_PREFIX = "docs/context/evidence/"
 EVIDENCE_REVIEW_SIDECAR_SUFFIX = ".review.json"
 EVIDENCE_REVIEW_SCHEMA_VERSION = "evidence-review-marker.v1"
 LOWERCASE_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+FULL_SHA_PATTERN = re.compile(r"[0-9a-fA-F]{40}")
 
 # Issue #5856: ratchet against NEW placeholder docstrings introduced in a PR diff.
 # Only ADDED lines count (pre-existing stubs are grandfathered), so unrelated PRs
@@ -184,6 +185,42 @@ def get_issue_labels(issue: str, repo: str) -> list[str]:
     """Query GitHub API to get labels for a specific issue."""
     metadata = get_issue_metadata(issue, repo)
     return metadata[0] if metadata is not None else []
+
+
+def get_pr_label_guard_shas(pr_number: str, repo: str) -> tuple[str, str] | None:
+    """Return the live PR head/base pair required for a guarded label write."""
+    if not isinstance(pr_number, str) or re.fullmatch(r"[0-9]+", pr_number) is None:
+        return None
+    try:
+        if int(pr_number) < 1:
+            return None
+        result = subprocess.run(
+            [
+                "gh",
+                "api",
+                f"repos/{repo}/pulls/{pr_number}",
+                "--jq",
+                "{head_sha: .head.sha, base_sha: .base.sha}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        payload = json.loads(result.stdout)
+        if not isinstance(payload, dict):
+            return None
+        head_sha = payload.get("head_sha")
+        base_sha = payload.get("base_sha")
+        if not isinstance(head_sha, str) or not FULL_SHA_PATTERN.fullmatch(head_sha):
+            return None
+        if not isinstance(base_sha, str) or not FULL_SHA_PATTERN.fullmatch(base_sha):
+            return None
+        return head_sha, base_sha
+    except _BEST_EFFORT_ERRORS:
+        return None
 
 
 def get_pr_commit_messages(pr_number: str, repo: str) -> str | None:
@@ -812,7 +849,21 @@ def check_worker_lane_provenance(body: str, pr_number: str | None, repo: str) ->
     if "cheap implementation lane" in body.lower():
         if pr_number:
             try:
-                result = add_label(int(pr_number), "cheap-lane", repo=repo)
+                shas = get_pr_label_guard_shas(pr_number, repo)
+                if shas is None:
+                    return (
+                        "INFO: Detected cheap-lane provenance, but exact PR head/base SHAs "
+                        "could not be read; label not added.",
+                        True,
+                    )
+                result = add_label(
+                    int(pr_number),
+                    "cheap-lane",
+                    repo=repo,
+                    target="pr",
+                    expected_head_sha=shas[0],
+                    expected_base_sha=shas[1],
+                )
                 if result["status"] == "ok":
                     return "INFO: Automatically added 'cheap-lane' label to the PR.", True
                 else:

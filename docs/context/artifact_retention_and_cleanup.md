@@ -197,6 +197,35 @@ publication. Load status is reported separately (`verified_metadata`, `loadabili
 `loadability_failed`, `not_checked`) and is never preservation, performance, or benchmark evidence.
 The tool is read-only and emits no private paths.
 
+The durable destination custody proof has this exact required shape:
+
+```json
+{
+  "receipt_id": "opaque-safe-identifier",
+  "sha256": "<64 hexadecimal characters>",
+  "byte_size": 0,
+  "status": "verified"
+}
+```
+
+`status` must be `verified`, `transferred`, or `complete`. The checker accepts the legacy
+field aliases `receipt`, `artifact_sha256`/`digest`, `size`, and
+`transfer_status`/`verification` for `receipt_id`, `sha256`, `byte_size`, and `status`.
+One proof source is allowed: a mapping in `destination.custody_proof`, a mapping in
+`destination.receipt`, or flat proof fields on `destination`. A scalar top-level `receipt` is
+accepted as the flat `receipt_id` alias only when no nested proof mapping is present; a mapping
+in that field is the nested proof source. Supplied aliases must each be
+valid and normalize to the same value; falsey canonical fields paired with fallback aliases,
+contradictory aliases, and multiple or non-mapping proof sources fail closed with
+`destination_custody_incomplete`.
+Single-field failures retain the stable codes `destination_custody_missing`,
+`destination_digest_mismatch`, `destination_size_mismatch`, and
+`destination_transfer_incomplete`. The receipt ID is opaque: this check validates only the
+local receipt ID, digest, size, and status fields. It does not dereference the receipt or prove
+that the ID is cryptographically bound to the destination URI or storage class. Mutable and
+undeclared destinations retain their existing `mutable_destination` and
+`undeclared_destination` behavior.
+
 ### Generate complete post-access handoff
 
 ```bash

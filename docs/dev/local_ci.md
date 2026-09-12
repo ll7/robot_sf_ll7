@@ -42,7 +42,11 @@ recovery helper before the wrapper fails closed with the bootstrap remedy. Envir
 checks reject nested links that would redirect package writes outside the worktree, while allowing
 valid standard `bin/python*` links to the host interpreter and rejecting broken aliases or links
 into the owning checkout. The recursive scan also fails closed if any environment subtree cannot be
-inspected. Capacity or lock contention fails closed without starting the wrapped command.
+inspected. Concurrent worktree recoveries wait boundedly for the repository-scoped recovery
+lock (120s budget by default via `ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS` or `--recovery-timeout` /
+`--wait-timeout`) with structured diagnostics (owner PID, started timestamp, worktree location,
+and alive/stale status) before failing closed with exit code 75. Capacity exhaustion also fails
+closed without starting the wrapped command.
 
 Do not combine recovery with `--venv`, `--standalone`, or a freshness bypass. Repair an explicitly
 owned environment manually with `uv sync --all-extras --reinstall-package robot-sf` in that

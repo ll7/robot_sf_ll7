@@ -865,6 +865,226 @@ def test_shared_venv_recovery_serializes_same_repository(tmp_path: Path) -> None
         _remove_linked_recovery_fixture(repo, worktree)
 
 
+def test_shared_venv_recovery_waits_for_lock_and_succeeds_concurrently(tmp_path: Path) -> None:
+    """A concurrent recovery waits boundedly for the lock and succeeds once free."""
+    repo, worktree1, _, capture, sync_started, env = _linked_recovery_fixture(tmp_path)
+    worktree2 = tmp_path / "linked-worktree-2"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree2)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    first_env = {**env, "UV_SYNC_STARTED": str(sync_started), "UV_SYNC_SLEEP": "1.0"}
+    first = subprocess.Popen(
+        [str(worktree1 / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+        cwd=worktree1,
+        env=first_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not sync_started.exists() and first.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert sync_started.exists(), "first recovery did not reach the bounded sync window"
+
+        second = subprocess.run(
+            [
+                str(worktree2 / "scripts" / "dev" / RECOVER_FAST_PYSF.name),
+                "--wait-timeout",
+                "10",
+            ],
+            cwd=worktree2,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert second.returncode == 0, second.stderr
+        assert "waiting up to 10s for lock" in second.stderr
+        assert "Lock owner metadata:" in second.stderr
+        assert "PID:" in second.stderr
+        assert "Status: alive" in second.stderr
+
+        first_stdout, first_stderr = first.communicate(timeout=30)
+        assert first.returncode == 0, first_stdout + first_stderr
+        calls = capture.read_text(encoding="utf-8").splitlines()
+        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 2
+    finally:
+        if first.poll() is None:
+            first.kill()
+            first.wait(timeout=30)
+        _remove_linked_recovery_fixture(repo, worktree2)
+        _remove_linked_recovery_fixture(repo, worktree1)
+
+
+def test_shared_venv_recovery_wait_times_out_and_fails_closed(tmp_path: Path) -> None:
+    """Lock wait timeout fails closed with exit code 75 and owner diagnostics."""
+    repo, worktree, _, capture, sync_started, env = _linked_recovery_fixture(tmp_path)
+    first_env = {**env, "UV_SYNC_STARTED": str(sync_started), "UV_SYNC_SLEEP": "5.0"}
+    first = subprocess.Popen(
+        [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+        cwd=worktree,
+        env=first_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not sync_started.exists() and first.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert sync_started.exists(), "first recovery did not reach the bounded sync window"
+
+        second = subprocess.run(
+            [
+                str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name),
+                "--wait-timeout",
+                "1",
+            ],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert second.returncode == 75, second.stderr
+        assert "timed out waiting for repository fast-pysf recovery lock after 1s" in second.stderr
+        assert "another fast-pysf recovery is active" in second.stderr
+        assert "Lock owner metadata:" in second.stderr
+        assert "PID:" in second.stderr
+        assert "Started:" in second.stderr
+        assert "Worktree:" in second.stderr
+        assert "Status: alive" in second.stderr
+
+        first_stdout, first_stderr = first.communicate(timeout=30)
+        assert first.returncode == 0, first_stdout + first_stderr
+        calls = capture.read_text(encoding="utf-8").splitlines()
+        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 1
+    finally:
+        if first.poll() is None:
+            first.kill()
+            first.wait(timeout=30)
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_portable_lock_wait_timeout(tmp_path: Path) -> None:
+    """Portable flock-less lock contender times out and exits 75 with diagnostics."""
+    repo, worktree, fake_bin, _capture, sync_started, env = _linked_recovery_fixture(tmp_path)
+    first_env = {**env, "UV_SYNC_STARTED": str(sync_started), "UV_SYNC_SLEEP": "5.0"}
+    first = subprocess.Popen(
+        [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+        cwd=worktree,
+        env=first_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not sync_started.exists() and first.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert sync_started.exists(), "first recovery did not reach the bounded sync window"
+
+        stub_bin = tmp_path / "stub-bin"
+        contender_env = {**env, "PATH": _flockless_path(stub_bin, fake_bin)}
+        second = subprocess.run(
+            [
+                str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name),
+                "--wait-timeout",
+                "1",
+            ],
+            cwd=worktree,
+            env=contender_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert second.returncode == 75, second.stderr
+        assert "timed out waiting for repository fast-pysf recovery lock after 1s" in second.stderr
+        assert "another fast-pysf recovery is active" in second.stderr
+        assert "Lock owner metadata:" in second.stderr
+
+        first_stdout, first_stderr = first.communicate(timeout=30)
+        assert first.returncode == 0, first_stdout + first_stderr
+    finally:
+        if first.poll() is None:
+            first.kill()
+            first.wait(timeout=30)
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_run_worktree_shared_venv_concurrent_recovery_waits_safely(tmp_path: Path) -> None:
+    """Concurrent run_worktree_shared_venv invocations wait for recovery lock safely."""
+    repo, worktree1, _, capture, sync_started, env = _linked_recovery_fixture(tmp_path)
+    worktree2 = tmp_path / "linked-worktree-2"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree2)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    first_env = {**env, "UV_SYNC_STARTED": str(sync_started), "UV_SYNC_SLEEP": "1.0"}
+    first = subprocess.Popen(
+        [
+            str(worktree1 / "scripts" / "dev" / RUN_SHARED_VENV.name),
+            "--recover-stale-fast-pysf",
+            "--recovery-timeout",
+            "10",
+            "--",
+            "python",
+            "-V",
+        ],
+        cwd=worktree1,
+        env=first_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not sync_started.exists() and first.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert sync_started.exists(), "first recovery did not reach the bounded sync window"
+
+        second = subprocess.run(
+            [
+                str(worktree2 / "scripts" / "dev" / RUN_SHARED_VENV.name),
+                "--recover-stale-fast-pysf",
+                "--recovery-timeout",
+                "10",
+                "--",
+                "python",
+                "-V",
+            ],
+            cwd=worktree2,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert second.returncode == 0, second.stderr
+
+        first_stdout, first_stderr = first.communicate(timeout=30)
+        assert first.returncode == 0, first_stdout + first_stderr
+        calls = capture.read_text(encoding="utf-8").splitlines()
+        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 2
+    finally:
+        if first.poll() is None:
+            first.kill()
+            first.wait(timeout=30)
+        _remove_linked_recovery_fixture(repo, worktree2)
+        _remove_linked_recovery_fixture(repo, worktree1)
+
+
 def _flockless_path(stub_bin: Path, fake_bin: Path) -> str:
     """Build a PATH without the flock CLI (e.g. macOS) keeping all other tools."""
     stub_bin.mkdir(exist_ok=True)

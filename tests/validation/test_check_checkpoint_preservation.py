@@ -413,6 +413,72 @@ def test_destination_custody_equal_aliases_are_accepted(tmp_path: Path) -> None:
     assert row["reason_codes"] == []
 
 
+@pytest.mark.parametrize("duplicate_kind", ["field", "container"])
+def test_duplicate_json_custody_keys_fail_closed(tmp_path: Path, duplicate_kind: str) -> None:
+    """Raw duplicate custody keys are malformed, even when the surviving value is valid."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    serialized = json.dumps(complete)
+    proof = complete["artifacts"][0]["destination"]["custody_proof"]
+    proof_json = json.dumps(proof)
+    proof_token = f'"custody_proof": {proof_json}'
+    if duplicate_kind == "field":
+        duplicate_proof = proof_json.replace(
+            f'"sha256": "{proof["sha256"]}"',
+            f'"sha256": "{"0" * 64}", "sha256": "{proof["sha256"]}"',
+            1,
+        )
+        replacement = f'"custody_proof": {duplicate_proof}'
+    else:
+        replacement = f'"custody_proof": {proof_json}, "custody_proof": {proof_json}'
+    assert serialized.count(proof_token) == 1
+    (root / "complete.json").write_text(
+        serialized.replace(proof_token, replacement, 1), encoding="utf-8"
+    )
+
+    report = tool.build_report(root / "complete.json")
+
+    assert report["status"] == "unknown"
+    assert report["findings"] == [
+        {"code": "fixture_unreadable", "artifact_id": None, "detail": "complete.json"}
+    ]
+
+
+def test_destination_custody_scalar_receipt_alias_is_accepted(tmp_path: Path) -> None:
+    """The documented scalar receipt alias remains valid for a flat proof."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    destination = complete["artifacts"][0]["destination"]
+    proof = destination.pop("custody_proof")
+    destination.update(proof)
+    destination["receipt"] = destination.pop("receipt_id")
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+
+    assert report["status"] == "ready"
+    assert row["destination"]["custody_proof"]["receipt_id"] == "receipt-checkpoint-complete-v1"
+
+
+def test_destination_custody_scalar_receipt_mixed_with_nested_proof_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """A scalar receipt alias cannot silently select alongside a nested proof."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    destination = complete["artifacts"][0]["destination"]
+    destination["receipt"] = "receipt-checkpoint-complete-v1"
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+
+    assert report["status"] == "blocked"
+    assert row["state"] == tool.STATE_DESTINATION
+    assert "destination_custody_incomplete" in row["reason_codes"]
+
+
 @pytest.mark.parametrize("status", ["transferred", "complete"])
 def test_destination_custody_completed_statuses_are_accepted(tmp_path: Path, status: str) -> None:
     """Completed transfer status aliases remain valid custody proof."""

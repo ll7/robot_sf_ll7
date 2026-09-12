@@ -212,7 +212,9 @@ The durable destination custody proof has this exact required shape:
 field aliases `receipt`, `artifact_sha256`/`digest`, `size`, and
 `transfer_status`/`verification` for `receipt_id`, `sha256`, `byte_size`, and `status`.
 One proof source is allowed: a mapping in `destination.custody_proof`, a mapping in
-`destination.receipt`, or flat proof fields on `destination`. Supplied aliases must each be
+`destination.receipt`, or flat proof fields on `destination`. A scalar top-level `receipt` is
+accepted as the flat `receipt_id` alias only when no nested proof mapping is present; a mapping
+in that field is the nested proof source. Supplied aliases must each be
 valid and normalize to the same value; falsey canonical fields paired with fallback aliases,
 contradictory aliases, and multiple or non-mapping proof sources fail closed with
 `destination_custody_incomplete`.

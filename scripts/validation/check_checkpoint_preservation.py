@@ -22,10 +22,12 @@ For a durable destination, the custody proof is one mapping with the required fi
 ``receipt_id`` (a safe non-empty identifier), ``sha256`` (a 64-character hexadecimal
 digest), ``byte_size`` (a non-negative integer), and ``status``.  The accepted completed
 statuses are ``verified``, ``transferred``, and ``complete``.  The checker also accepts
-the legacy field aliases ``receipt``, ``artifact_sha256``/``digest``, ``size``, and
+the legacy field aliases ``receipt`` (scalar in a flat proof), ``artifact_sha256``/``digest``, ``size``, and
 ``transfer_status``/``verification`` respectively.  At most one proof source may be
 present: ``destination.custody_proof``, a mapping in ``destination.receipt``, or flat
-proof fields on ``destination``.  Every supplied alias must be valid and normalize to
+proof fields on ``destination``.  A mapping in ``destination.receipt`` is the nested
+source; its scalar form is the flat ``receipt_id`` alias and cannot be mixed with a
+nested source.  Every supplied alias must be valid and normalize to
 the same value; falsey canonical values paired with fallback aliases, conflicting aliases,
 and mixed or non-mapping containers emit ``destination_custody_incomplete`` instead of
 selecting a first-truthy value.  Existing ``destination_custody_missing``,
@@ -317,8 +319,17 @@ def _read_declared(
 
 
 def _read_json(path: Path) -> Any:
-    """Return parsed JSON from *path*, raising ``ValueError`` on malformed content."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    """Return parsed JSON, rejecting duplicate object keys before validation."""
+
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in payload:
+                raise ValueError(f"duplicate JSON object key: {key}")
+            payload[key] = value
+        return payload
+
+    payload = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_keys)
     if not isinstance(payload, Mapping):
         raise ValueError("JSON document must be a mapping")
     return payload
@@ -745,9 +756,17 @@ def _custody_proof_source(
         value = destination[key]
         if isinstance(value, Mapping):
             nested.append(value)
+        elif key == "receipt" and not isinstance(value, (list, tuple, set)):
+            # ``receipt`` is both a legacy scalar receipt_id alias and the
+            # mapping container used by newer fixtures.  Treat only the
+            # scalar form as a flat source; mixing it with a nested source
+            # remains an ambiguity and is rejected below.
+            continue
         else:
             invalid_container = True
-    flat = any(key in destination for key in _CUSTODY_FLAT_KEYS)
+    flat = any(key in destination for key in _CUSTODY_FLAT_KEYS) or (
+        "receipt" in destination and not isinstance(destination["receipt"], Mapping)
+    )
     if invalid_container or len(nested) > 1 or (nested and flat):
         return {}, ["destination_custody_incomplete"]
     if nested:

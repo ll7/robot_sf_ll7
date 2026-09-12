@@ -10,39 +10,15 @@ from robot_sf.benchmark.cli import cli_main
 if TYPE_CHECKING:
     from pathlib import Path
 
+from tests._cli_fixtures import write_scenario_matrix
+
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
-
-
-def _write_matrix(path: Path, repeats: int = 3) -> None:
-    """Write a minimal scenario matrix YAML file for seed-variance CLI tests.
-
-    Args:
-        path: Destination filesystem path for the matrix YAML.
-        repeats: Number of episode repetitions per scenario.
-    """
-    scenarios = [
-        {
-            "id": "sv-smoke",
-            "density": "low",
-            "flow": "uni",
-            "obstacle": "open",
-            "groups": 0.0,
-            "speed_var": "low",
-            "goal_topology": "point",
-            "robot_context": "embedded",
-            "repeats": repeats,
-        },
-    ]
-    import yaml  # type: ignore
-
-    with path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(scenarios, f)
 
 
 def test_cli_seed_variance(tmp_path: Path, capsys):
     """Verify seed-variance CLI calculates mean, standard deviation, and coefficient of variation."""
     matrix_path = tmp_path / "matrix.yaml"
-    _write_matrix(matrix_path, repeats=4)
+    write_scenario_matrix(matrix_path, "sv-smoke", repeats=4)
     episodes = tmp_path / "episodes.jsonl"
 
     rc_run = cli_main(

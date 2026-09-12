@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build a bounded, public-safe, check-only log retention report (issue #8856).
+"""Build a bounded, public-safe, check-only log retention report (#8856).
 
-The explicit manifest records per-log provenance and the helper never deletes or changes runtime
-logging. Failed or unknown jobs retain full logs until diagnosis and durable transfer are proven.
+The manifest records provenance; this helper never deletes or changes logging. Failed or unknown
+jobs retain full logs until diagnosis and durable transfer are proven.
 """
 
 from __future__ import annotations
@@ -23,20 +23,15 @@ INPUT_SCHEMA = "log_retention_manifest.v1"
 REPORT_SCHEMA = "log_retention_report.v1"
 POLICY_VERSION = "log_excerpt.v1"
 CLAIM_BOUNDARY = (
-    "Operational log retention diagnostics only: this check records source provenance, bounded "
-    "sanitized excerpts, custody gates, and storage estimates. It does not delete, compress, "
-    "change runtime logging, retry jobs, or establish scientific evidence."
+    "Operational log retention diagnostics only: this records provenance, bounded sanitized "
+    "excerpts, custody gates, and storage estimates. It never deletes, compresses, changes "
+    "logging, job retries, or establishes scientific evidence."
 )
-LOG_ROLES = tuple(
-    "submission environment_preflight scheduler task_stdout task_stderr application_structured "
-    "failure_excerpt summary harvest_transfer".split()
-)
+LOG_ROLES = tuple("submission environment_preflight scheduler task_stdout task_stderr application_structured failure_excerpt summary harvest_transfer".split())  # fmt: skip
 TASK_ROLES = frozenset("task_stdout task_stderr application_structured failure_excerpt".split())
 COMPLETIONS = frozenset("complete active truncated unknown".split())
 JOB_STATES = frozenset("completed failed unknown active cancelled timeout".split())
-RETENTION_CLASSES = frozenset(
-    "durable_required release_facing historical diagnostic superseded disposable".split()
-)
+RETENTION_CLASSES = frozenset("durable_required release_facing historical diagnostic superseded disposable".split())  # fmt: skip
 VERIFIED_MEMBER_STATES = frozenset("already_verified copied verified".split())
 EXIT_OK, EXIT_BLOCKED, EXIT_MALFORMED = 0, 2, 3
 MAX_LOGS = 256
@@ -53,8 +48,10 @@ SECRET_ASSIGN_RE = re.compile(
     r"(?i)\b(password|passwd|token|secret|api[_-]?key|authorization|bearer|private[_-]?key)\b\s*[:=]\s*\S+"
 )
 PRIVATE_PATH_RE = re.compile(
-    r"(?i)(?:/home|/users|/scratch|/work|/mnt|/tmp)/[^\s,;]+|~[/\\][^\s,;]+"
+    r"(?i)(?<![\w])(?:/[^\s,;]+|[a-z]:[\\/][^\s,;]+|\\\\[^\s,;]+|~[/\\][^\s,;]+)"
 )
+STRUCTURED_SECRET_RE = re.compile(r"""(?ix)(["'](?:password|passwd|token|secret|api[_-]?key|authorization|bearer|private[_-]?key)["']\s*:\s*)(?:"[^"\n]*"|'[^'\n]*'|[^,}\s]+)""")  # fmt: skip
+STRUCTURED_IDENTITY_RE = re.compile(r"""(?ix)(["'](?:user|username|account)["']\s*:\s*)(?:"[^"\n]*"|'[^'\n]*'|[^,}\s]+)""")  # fmt: skip
 IDENTITY_RE = re.compile(r"(?i)\b(?:user|username|account)\s*[:=]\s*\S+")
 TOPOLOGY_RE = re.compile(
     r"(?i)\b(?:host|hostname|node|partition|topology|gpu|cpu|rank|world_size)\s*[:=]\s*\S+"
@@ -78,6 +75,10 @@ def _member(value: Any, allowed: frozenset[str] | tuple[str, ...]) -> str | None
 
 def _digest(value: Any) -> str | None:
     return value if isinstance(value, str) and SHA256_RE.fullmatch(value) else None
+
+
+def _size(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _load(path: Path) -> Mapping[str, Any]:
@@ -170,8 +171,10 @@ def _scan_file(path: Path, encoding: str | None) -> dict[str, Any]:
 def _sanitize(value: str) -> str:
     value = URL_RE.sub("<redacted-url>", value)
     value = SECRET_ASSIGN_RE.sub(lambda match: f"{match.group(1)}=<redacted-secret>", value)
+    value = STRUCTURED_SECRET_RE.sub(r"\1<redacted-secret>", value)
     value = PRIVATE_PATH_RE.sub("<redacted-path>", value)
     value = IDENTITY_RE.sub("<redacted-identity>", value)
+    value = STRUCTURED_IDENTITY_RE.sub(r"\1<redacted-identity>", value)
     value = TOPOLOGY_RE.sub("<redacted-topology>", value)
     value = HOST_RE.sub("<redacted-host>", value)
     clean = "".join(char if char >= " " else " " for char in value)
@@ -245,6 +248,13 @@ def _custody(  # noqa: C901
         if not isinstance(path, str):
             problems.append(_problem("durable_custody_incomplete", f"custody.files[{index}]"))
             continue
+        path = _relative(path, f"custody.files[{index}].path", problems)
+        if path is None:
+            verified = False
+            continue
+        if _digest(item.get("sha256")) is None or not _size(item.get("byte_size")):
+            problems.append(_problem("durable_custody_invalid_member", f"custody.files[{index}]"))
+            verified = False
         if path in by_path:
             problems.append(_problem("duplicate_custody_member", f"custody.files[{index}]"))
         by_path[path] = item
@@ -252,6 +262,9 @@ def _custody(  # noqa: C901
         path = entry["path"]
         item = by_path.get(path) if path else None
         location = f"logs[{index}]"
+        if _digest(entry.get("sha256")) is None or not _size(entry.get("size_bytes")):
+            problems.append(_problem("custody_source_metadata_missing", location))
+            verified = False
         if item is None:
             problems.append(_problem("durable_custody_missing_log", location))
             verified = False
@@ -348,6 +361,13 @@ def build_report(  # noqa: C901, PLR0912, PLR0915
             problems.append(_problem("completion_missing", f"{location}.completion"))
             entry_reasons.append("completion_missing")
             completion = "unknown"
+        elif completion == "unknown":
+            problems.append(_problem("completion_unknown", f"{location}.completion"))
+            entry_reasons.append("unknown_completion")
+        for flag in ("active_writer", "truncated"):
+            if flag in raw and not isinstance(raw[flag], bool):
+                problems.append(_problem("flag_invalid", f"{location}.{flag}"))
+                entry_reasons.append(f"{flag}_invalid")
         encoding = _member(raw.get("encoding"), ("utf-8", "utf-8-sig", "ascii"))
         if encoding is None:
             problems.append(_problem("encoding_missing", f"{location}.encoding"))
@@ -362,7 +382,7 @@ def build_report(  # noqa: C901, PLR0912, PLR0915
         declared_lines = raw.get("line_count")
         declared_digest = _digest(raw.get("sha256"))
         for value, name in ((declared_size, "size_bytes"), (declared_lines, "line_count")):
-            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            if not _size(value):
                 problems.append(_problem("metadata_missing", f"{location}.{name}"))
                 entry_reasons.append("metadata_missing")
         if declared_digest is None:
@@ -423,7 +443,7 @@ def build_report(  # noqa: C901, PLR0912, PLR0915
                     problems.append(_problem("truncated_log", location))
                     entry["reasons"].append("truncated_log")
                 if scan["text"] is not None:
-                    if SECRET_RE.search(scan["text"]):
+                    if SECRET_RE.search(scan["text"]) or STRUCTURED_SECRET_RE.search(scan["text"]):
                         problems.append(_problem("secret_like_log", location))
                         entry["reasons"].append("secret_like_log")
                     elif not entry["reasons"] and policy:

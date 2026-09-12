@@ -190,17 +190,12 @@ orphan records, and enforces actionable next commands for incomplete runs.
 ### 4.9 Check log retention and bounded diagnostic excerpts
 
 ```bash
-uv run python scripts/tools/check_log_retention.py --check \
-  --manifest <LOG_MANIFEST> --root <LOG_ROOT> --format json
+uv run python scripts/tools/check_log_retention.py --check --manifest <LOG_MANIFEST> --root <LOG_ROOT> --format json
 ```
 
-The check-only helper requires explicit per-log role, job/task identity, size, line count, text
-encoding, completion state, SHA-256, and retention class. It emits deterministic first/last/error
-context excerpts with private values redacted, while retaining the source digest and root-relative
-location. Active, truncated, binary, secret-like, duplicate, unidentified, or mismatched logs stay
-blocked. Failed and unknown jobs retain full logs until diagnosis and verified durable custody; the
-storage estimate exposes zero prune-eligible bytes until custody covers every log. The helper never
-deletes files or changes runtime logging.
+The check-only helper requires per-log role, job/task identity, byte/line counts, encoding, completion,
+digest, and retention class; it emits deterministic bounded excerpts with private values redacted.
+Active, truncated, binary, secret-like, duplicate, unidentified, mismatched, or uncustodied logs remain blocked; failed/unknown jobs retain full logs until verified custody. It never deletes files or changes runtime logging.
 
 ### 4.10 Report a blocker
 

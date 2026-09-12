@@ -50,6 +50,7 @@ from robot_sf.benchmark.camera_ready._crosswalk_producer import (
 from robot_sf.benchmark.camera_ready._reporting import (
     _build_breakdown_rows,
     _build_scenario_amv_lookup,
+    _build_scenario_archetype_lookup,
     _planner_report_row,
     build_campaign_credibility_scorecard,
     write_campaign_report,
@@ -189,6 +190,7 @@ _SCENARIO_BREAKDOWN_HEADERS = (
     "planner_key",
     "algo",
     "scenario_family",
+    "archetype",
     "scenario_id",
     "use_case",
     "context",
@@ -212,6 +214,7 @@ _FAMILY_BREAKDOWN_HEADERS = (
     "planner_key",
     "algo",
     "scenario_family",
+    "archetype",
     "use_case",
     "context",
     "speed_regime",
@@ -1913,9 +1916,11 @@ def _write_breakdown_and_parity_artifacts(
         parity_csv, parity_md, skipped_csv, skipped_md).
     """
     scenario_amv_lookup = _build_scenario_amv_lookup(scenarios)
+    scenario_archetype_lookup = _build_scenario_archetype_lookup(scenarios)
     scenario_rows, family_rows = _build_breakdown_rows(
         run_entries,
         scenario_amv_lookup=scenario_amv_lookup,
+        scenario_archetype_lookup=scenario_archetype_lookup,
     )
     scenario_csv_path, scenario_md_path = _write_table_artifacts(
         reports_dir,

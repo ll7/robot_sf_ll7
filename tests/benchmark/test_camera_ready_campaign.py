@@ -48,8 +48,10 @@ from robot_sf.benchmark.camera_ready_campaign import (
     _build_actuation_envelope_summary,
     _build_breakdown_rows,
     _build_scenario_amv_lookup,
+    _build_scenario_archetype_lookup,
     _campaign_success_counters,
     _extract_amv_taxonomy,
+    _extract_archetype,
     _jsonable_repo_relative,
     _load_campaign_scenarios,
     _load_route_clearance_certifications,
@@ -6431,6 +6433,167 @@ class TestBuildScenarioAmvLookup:
         assert fam["context"] == "low_density"
         assert fam["speed_regime"] == ""
         assert fam["maneuver_type"] == ""
+
+    def test_extract_archetype_reads_metadata_then_top_level(self) -> None:
+        """The archetype tag comes from ``metadata.archetype`` with a flat fallback."""
+        assert _extract_archetype({"metadata": {"archetype": " bottleneck "}}) == "bottleneck"
+        assert _extract_archetype({"archetype": "crossing"}) == "crossing"
+        assert _extract_archetype({"metadata": {"archetype": "  "}}) == ""
+        assert _extract_archetype({}) == ""
+
+    def test_build_scenario_archetype_lookup_from_configs(self) -> None:
+        """The lookup maps scenario identities to their declared archetype."""
+        lookup = _build_scenario_archetype_lookup(
+            [
+                {"name": "classic_bottleneck", "metadata": {"archetype": "bottleneck"}},
+                {"name": "classic_crossing", "metadata": {"archetype": "crossing"}},
+                {"name": "no_tag"},
+            ]
+        )
+        assert lookup == {"classic_bottleneck": "bottleneck", "classic_crossing": "crossing"}
+
+    def test_breakdown_headers_place_archetype_beside_scenario_family(self) -> None:
+        """The published tables expose ``archetype`` immediately after ``scenario_family``."""
+        from robot_sf.benchmark.camera_ready.campaign import (
+            _FAMILY_BREAKDOWN_HEADERS,
+            _SCENARIO_BREAKDOWN_HEADERS,
+        )
+
+        for headers in (_FAMILY_BREAKDOWN_HEADERS, _SCENARIO_BREAKDOWN_HEADERS):
+            assert headers.index("archetype") == headers.index("scenario_family") + 1
+
+    def _write_episodes(self, tmp_path: Path, name: str, scenario_id: str) -> str:
+        """Write a one-record episode jsonl and return its repo-relative path."""
+        path = tmp_path / name
+        path.write_text(
+            json.dumps({"scenario_id": scenario_id, "ped_collision_count": 0}) + "\n",
+            encoding="utf-8",
+        )
+        return str(path)
+
+    def test_build_breakdown_rows_emits_config_archetype(self, tmp_path: Path) -> None:
+        """Scenario and family rows carry the archetype declared by the scenario config."""
+        episodes_path = self._write_episodes(tmp_path, "ep.jsonl", "classic_bottleneck")
+        run_entries = [
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": episodes_path,
+            }
+        ]
+        scenario_rows, family_rows = _build_breakdown_rows(
+            run_entries,
+            scenario_archetype_lookup={"classic_bottleneck": "bottleneck"},
+        )
+        assert scenario_rows[0]["archetype"] == "bottleneck"
+        assert family_rows[0]["archetype"] == "bottleneck"
+
+    def test_build_breakdown_rows_emits_empty_archetype_without_declaration(
+        self, tmp_path: Path
+    ) -> None:
+        """Absence stays explicit: the column exists with an empty placeholder."""
+        episodes_path = self._write_episodes(tmp_path, "ep.jsonl", "corridor_low")
+        run_entries = [
+            {
+                "planner": {"key": "orca", "algo": "orca"},
+                "status": "ok",
+                "episodes_path": episodes_path,
+            }
+        ]
+        scenario_rows, family_rows = _build_breakdown_rows(run_entries)
+        assert scenario_rows[0]["archetype"] == ""
+        assert family_rows[0]["archetype"] == ""
+
+    def test_build_breakdown_rows_family_collapses_shared_archetype(self, tmp_path: Path) -> None:
+        """Two include files sharing one tag publish one distinct archetype value."""
+        ep1 = self._write_episodes(tmp_path, "ep1.jsonl", "classic_bottleneck")
+        ep2 = self._write_episodes(tmp_path, "ep2.jsonl", "classic_realworld_bottleneck")
+        run_entries = [
+            {"planner": {"key": "orca", "algo": "orca"}, "status": "ok", "episodes_path": ep1},
+            {"planner": {"key": "orca", "algo": "orca"}, "status": "ok", "episodes_path": ep2},
+        ]
+        scenario_rows, family_rows = _build_breakdown_rows(
+            run_entries,
+            scenario_archetype_lookup={
+                "classic_bottleneck": "bottleneck",
+                "classic_realworld_bottleneck": "bottleneck",
+            },
+        )
+        assert len(scenario_rows) == 2
+        assert {row["archetype"] for row in scenario_rows} == {"bottleneck"}
+        assert len(family_rows) == 1
+        assert family_rows[0]["archetype"] == "bottleneck"
+
+    def test_build_breakdown_rows_family_aggregates_distinct_archetypes(
+        self, tmp_path: Path
+    ) -> None:
+        """A family spanning distinct tags joins them deterministically."""
+        ep1 = self._write_episodes(tmp_path, "ep1.jsonl", "classic_a")
+        ep2 = self._write_episodes(tmp_path, "ep2.jsonl", "classic_b")
+        run_entries = [
+            {"planner": {"key": "orca", "algo": "orca"}, "status": "ok", "episodes_path": ep1},
+            {"planner": {"key": "orca", "algo": "orca"}, "status": "ok", "episodes_path": ep2},
+        ]
+        _, family_rows = _build_breakdown_rows(
+            run_entries,
+            scenario_archetype_lookup={"classic_a": "crossing", "classic_b": "bottleneck"},
+        )
+        assert family_rows[0]["archetype"] == "bottleneck;crossing"
+
+    def test_write_breakdown_artifacts_publish_archetype_column(self, tmp_path: Path) -> None:
+        """The published CSVs carry the archetype column with config-derived values."""
+        from robot_sf.benchmark.camera_ready.campaign import _write_breakdown_and_parity_artifacts
+
+        episodes_path = self._write_episodes(tmp_path, "ep.jsonl", "classic_bottleneck")
+        reports_dir = tmp_path / "reports"
+        _write_breakdown_and_parity_artifacts(
+            reports_dir,
+            scenarios=[{"name": "classic_bottleneck", "metadata": {"archetype": "bottleneck"}}],
+            run_entries=[
+                {
+                    "planner": {"key": "orca", "algo": "orca"},
+                    "status": "ok",
+                    "episodes_path": episodes_path,
+                }
+            ],
+            planner_rows=[],
+        )
+        family_csv = reports_dir / "scenario_family_breakdown.csv"
+        scenario_csv = reports_dir / "scenario_breakdown.csv"
+        assert family_csv.is_file() and scenario_csv.is_file()
+        assert family_csv.read_text(encoding="utf-8").splitlines()[0].split(",")[:4] == [
+            "planner_key",
+            "algo",
+            "scenario_family",
+            "archetype",
+        ]
+        assert scenario_csv.read_text(encoding="utf-8").splitlines()[0].split(",")[:4] == [
+            "planner_key",
+            "algo",
+            "scenario_family",
+            "archetype",
+        ]
+        assert "bottleneck" in family_csv.read_text(encoding="utf-8")
+
+    def test_build_breakdown_rows_falls_back_to_record_metadata(self, tmp_path: Path) -> None:
+        """Without a config lookup the record's embedded scenario metadata still resolves."""
+        path = tmp_path / "ep.jsonl"
+        path.write_text(
+            json.dumps(
+                {
+                    "scenario_id": "classic_bottleneck",
+                    "scenario_params": {"metadata": {"archetype": "bottleneck"}},
+                    "ped_collision_count": 0,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        run_entries = [
+            {"planner": {"key": "orca", "algo": "orca"}, "status": "ok", "episodes_path": str(path)}
+        ]
+        scenario_rows, _ = _build_breakdown_rows(run_entries)
+        assert scenario_rows[0]["archetype"] == "bottleneck"
 
     def test_build_breakdown_rows_family_aggregates_multiple_amv_values(
         self, tmp_path: Path

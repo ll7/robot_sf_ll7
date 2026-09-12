@@ -22,6 +22,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Active-worktree lease | [pr_gate_lease.py](../../scripts/dev/pr_gate_lease.py) |
 | Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
 | Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
+| Bootstrap recipe freeze and check | [bootstrap_recipe_check.py](../../scripts/tools/bootstrap_recipe_check.py) |
 | Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
 ## 1. Retention classes in operational terms
@@ -186,7 +187,15 @@ summarizing workloads, scheduler receipts, artifact custody, and environment rec
 It redacts private paths, internal hosts, and credentials, rejects contradictory statuses and
 orphan records, and enforces actionable next commands for incomplete runs.
 
-### 4.9 Report a blocker
+### 4.9 Freeze and rehearse a bootstrap recipe
+
+Each recipe in [configs/bootstrap_recipes/README.md](../../configs/bootstrap_recipes/README.md)
+freezes an execution class's setup, probe, and cleanup sequence with its source/lock and immutable
+identities. `scripts/tools/bootstrap_recipe_check.py --check --recipes configs/bootstrap_recipes`
+reports structurally; `--execute-safe-checks` runs `safe_check` probes in an isolated temporary root.
+A class without a verified recipe needs an explicit `verification_status: unavailable` reason.
+
+### 4.10 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

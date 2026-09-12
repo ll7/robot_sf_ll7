@@ -1,9 +1,23 @@
 #!/usr/bin/env python3
-"""Create and verify credential-free delegated-worker worktree receipts."""
+"""Create and verify credential-free delegated-worker worktree receipts.
+
+Receipts bind an assigned worktree, branch/ref, common Git directory, and base
+commit, and may declare the issue's path scope (repeated ``--allowed-path``
+globs). When a scope is declared, ``check`` also rejects cross-scope changes
+before commit/push or at the handoff boundary:
+
+- non-merge commits in ``base_commit..HEAD`` touching paths outside the scope
+  (intentional current-main merge commits are exempt);
+- staged and untracked paths outside the scope.
+
+Without a declared scope the check keeps its original identity-only behavior,
+so existing receipts and human callers are unaffected (issue #9115).
+"""
 
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
 import subprocess
@@ -11,7 +25,10 @@ import sys
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 SCHEMA_VERSION = "delegated_worktree_receipt.v1"
 
@@ -32,6 +49,8 @@ class CheckResult:
     expected_base_commit: str | None
     current_commit: str | None
     failure: str | None
+    allowed_paths: tuple[str, ...] = ()
+    scope_findings: tuple[str, ...] = ()
 
 
 def _git(path: Path, *args: str) -> str:
@@ -128,15 +147,31 @@ def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
                 pass
 
 
-def create_receipt(worktree: str | Path, *, task_id: str, base_ref: str) -> dict[str, str]:
-    """Create one immutable receipt for an assigned worktree."""
+def create_receipt(
+    worktree: str | Path,
+    *,
+    task_id: str,
+    base_ref: str,
+    allowed_paths: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Create one immutable receipt for an assigned worktree.
+
+    ``allowed_paths`` is optional; when provided it records the issue's path
+    scope (glob patterns relative to the worktree) that ``check_receipt``
+    enforces against commits, staged changes, and untracked files.
+    """
     if not task_id or any(char in task_id for char in "\r\n"):
         raise ValueError("task_id must be a non-empty single-line value")
+    for glob in allowed_paths:
+        if not glob or any(char in glob for char in "\r\n"):
+            raise ValueError("allowed_path must be a non-empty single-line value")
     assigned = _absolute_directory(worktree)
     identity = _identity(assigned)
     identity["base_commit"] = _resolve_base(assigned, base_ref)
     identity["task_id"] = task_id
     identity["schema"] = SCHEMA_VERSION
+    if allowed_paths:
+        identity["allowed_paths"] = list(allowed_paths)
     return identity
 
 
@@ -153,7 +188,53 @@ def _load_receipt(path: str | Path) -> dict[str, Any]:
     required = ("task_id", "worktree", "common_git_dir", "ref", "base_commit")
     if any(not isinstance(payload.get(key), str) or not payload[key] for key in required):
         raise ValueError("receipt has missing or malformed identity fields")
+    allowed = payload.get("allowed_paths")
+    if allowed is not None and (
+        not isinstance(allowed, list)
+        or any(not isinstance(glob, str) or not glob for glob in allowed)
+    ):
+        raise ValueError("receipt allowed_paths must be a list of non-empty strings")
     return payload
+
+
+def _scope_findings(
+    worktree: Path, *, base_commit: str, allowed_paths: Sequence[str]
+) -> tuple[str, ...]:
+    """Return cross-scope findings for commits, staged changes, and untracked files.
+
+    Only the branch's own commits are inspected: the first-parent line excluding
+    merge commits. An intentional current-main refresh is therefore valid even
+    when the incoming history touches paths outside the scope.
+    """
+
+    def in_scope(path: str) -> bool:
+        return any(fnmatch.fnmatch(path, glob) for glob in allowed_paths)
+
+    findings: list[str] = []
+    commits = _git(
+        worktree,
+        "log",
+        "--first-parent",
+        "--no-merges",
+        "--format=%H",
+        f"{base_commit}..HEAD",
+    )
+    for sha in commits.splitlines():
+        if not sha.strip():
+            continue
+        changed = _git(worktree, "show", "--name-only", "--format=", "--no-renames", sha)
+        for path in sorted({line.strip() for line in changed.splitlines() if line.strip()}):
+            if not in_scope(path):
+                findings.append(f"cross_scope_commit:{path} ({sha[:12]})")
+    staged = _git(worktree, "diff", "--cached", "--name-only")
+    for path in sorted({line.strip() for line in staged.splitlines() if line.strip()}):
+        if not in_scope(path):
+            findings.append(f"staged_out_of_scope:{path}")
+    untracked = _git(worktree, "ls-files", "--others", "--exclude-standard")
+    for path in sorted({line.strip() for line in untracked.splitlines() if line.strip()}):
+        if not in_scope(path):
+            findings.append(f"untracked_out_of_scope:{path}")
+    return tuple(findings)
 
 
 def check_receipt(receipt: str | Path, worktree: str | Path = ".") -> CheckResult:
@@ -211,6 +292,20 @@ def check_receipt(receipt: str | Path, worktree: str | Path = ".") -> CheckResul
             expected["base_commit"],
             "HEAD",
         )
+        allowed_paths = tuple(expected.get("allowed_paths", ()))
+        values["allowed_paths"] = allowed_paths
+        if allowed_paths:
+            findings = _scope_findings(
+                Path(current["worktree"]),
+                base_commit=expected["base_commit"],
+                allowed_paths=allowed_paths,
+            )
+            values["scope_findings"] = findings
+            if findings:
+                detail = "; ".join(findings[:3])
+                if len(findings) > 3:
+                    detail += f" (+{len(findings) - 3} more)"
+                raise ValueError(f"scope violations: {detail}")
         values["ok"] = True
     except (OSError, ValueError) as exc:
         values["failure"] = str(exc)
@@ -224,6 +319,12 @@ def _parser() -> argparse.ArgumentParser:
     create.add_argument("--worktree", required=True)
     create.add_argument("--task-id", required=True)
     create.add_argument("--base-ref", default="origin/main")
+    create.add_argument(
+        "--allowed-path",
+        action="append",
+        default=[],
+        help="Issue path-scope glob to enforce at check time (repeatable).",
+    )
     create.add_argument("--output", required=True)
     check = subparsers.add_parser("check")
     check.add_argument("--receipt", required=True)
@@ -237,7 +338,12 @@ def main() -> int:
     args = _parser().parse_args()
     try:
         if args.command == "create":
-            receipt = create_receipt(args.worktree, task_id=args.task_id, base_ref=args.base_ref)
+            receipt = create_receipt(
+                args.worktree,
+                task_id=args.task_id,
+                base_ref=args.base_ref,
+                allowed_paths=args.allowed_path,
+            )
             _write_atomic(Path(args.output), receipt)
             print(json.dumps(receipt, sort_keys=True, separators=(",", ":")))
             return 0

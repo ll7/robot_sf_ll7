@@ -28,9 +28,15 @@ query flags, `docker image inspect`), run within sanitized environments that str
 and canaries, and enforce strict workdir containment within `$RECIPE_ROOT`. Arbitrary scripts
 (such as `python -c` or shell strings), mutating commands, and escaping directories are blocked
 as `unsafe_safe_check`. Skipped probes record `host_mutation: null` rather than asserting zero mutation.
-Output is deterministic (recipes sorted by `recipe_id`, JSON keys sorted). Blocking findings include
-credential or private-path leaks, source-host access, stale absolute paths, unresolved placeholders,
-mutable container tags without a digest, unpinned module or package aliases, destructive cleanup
-targets, unsafe safe-check definitions, and shell-string steps that hide ordering. Recipes with
-`verification_status: unavailable` are valid but must name an `unavailable_reason`;
+In executed mode (`--execute-safe-checks`), verification cannot be satisfied by skipped probes
+or absent executables: missing probe executables, unresolved required private substitutions, or zero
+executed required probes yield `status: unavailable` with explicit reason tags rather than retaining
+unproven verification. Recipes with `verification_status: unavailable` preserve their unavailable state
+during execution and never imply native availability. Declared lockfiles in `source_identity` require
+valid 64-character SHA-256 digests and verify presence, readability, and checksum matching when
+`--project-root` is supplied. Output is deterministic (recipes sorted by `recipe_id`, JSON keys sorted).
+Blocking findings include credential or private-path leaks, source-host access, stale absolute paths,
+unresolved placeholders, mutable container tags without a digest, unpinned module or package aliases,
+destructive cleanup targets, unsafe safe-check definitions, and shell-string steps that hide ordering.
+Recipes with `verification_status: unavailable` are valid but must name an `unavailable_reason`;
 `--require-verified` fails when an execution class has no verified recipe.

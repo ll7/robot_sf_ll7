@@ -14,6 +14,7 @@ from scripts.tools.bootstrap_recipe_check import check_recipes, main, render_mar
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_RECIPES = REPO_ROOT / "configs" / "bootstrap_recipes"
 DIGEST = "sha256:" + "a" * 64
+LOCKFILE_SHA256 = "d01cbbf7fb7215d140b3c78f66202e0c48e449601f809036f5e02e9a9bfb79c7"
 
 
 def _base_recipe() -> dict:
@@ -23,7 +24,11 @@ def _base_recipe() -> dict:
         "execution_class": "cpu_batch",
         "title": "Fixture CPU environment",
         "verification_status": "verified",
-        "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock"},
+        "source_identity": {
+            "repository": "ll7/robot_sf_ll7",
+            "lockfile": "uv.lock",
+            "lockfile_sha256": LOCKFILE_SHA256,
+        },
         "prerequisites": [{"id": "uv", "kind": "binary", "identity": "uv>=0.11"}],
         "identity_bindings": [{"kind": "python-package", "name": "numpy", "version": "2.4.6"}],
         "steps": [
@@ -76,6 +81,24 @@ def test_uv_environment_module_stack_and_container_digest(tmp_path: Path) -> Non
     entry = _check_case(tmp_path, mutable)
     assert entry["status"] == "blocked"
     assert "mutable_container_alias" in entry["reasons"]
+
+
+def test_malformed_identity_bindings(tmp_path: Path) -> None:
+    non_list = _base_recipe()
+    non_list["identity_bindings"] = "not-a-list"
+    assert "malformed_identity_bindings" in _check_case(tmp_path / "t1", non_list)["reasons"]
+
+    non_dict = _base_recipe()
+    non_dict["identity_bindings"] = ["not-a-dict"]
+    assert "malformed_identity_binding" in _check_case(tmp_path / "t2", non_dict)["reasons"]
+
+    missing_kind = _base_recipe()
+    missing_kind["identity_bindings"] = [{"name": "numpy"}]
+    assert "malformed_identity_binding" in _check_case(tmp_path / "t3", missing_kind)["reasons"]
+
+    missing_name = _base_recipe()
+    missing_name["identity_bindings"] = [{"kind": "python-package"}]
+    assert "malformed_identity_binding" in _check_case(tmp_path / "t4", missing_name)["reasons"]
 
 
 def test_gpu_driver_prerequisite(tmp_path: Path) -> None:
@@ -394,6 +417,7 @@ def test_shipped_recipes_cover_all_execution_classes() -> None:
     report = check_recipes(
         recipes_path=SHIPPED_RECIPES,
         overlay_path=SHIPPED_RECIPES / "private_overlay.example.json",
+        project_root=REPO_ROOT,
         require_verified=True,
     )
     assert report["verdict"] == "pass"
@@ -412,3 +436,221 @@ def test_cli_is_deterministic(tmp_path: Path, capsys: pytest.CaptureFixture[str]
     assert capsys.readouterr().out == first
     assert render_markdown(json.loads(first)) == render_markdown(copy.deepcopy(json.loads(first)))
     assert main(["--check", "--recipes", str(tmp_path / "missing"), "--format", "json"]) == 2
+
+
+def test_missing_and_unreadable_lockfile_checks(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir(parents=True, exist_ok=True)
+
+    # 1. Missing declared lockfile under project_root
+    recipe_missing = _base_recipe()
+    recipe_missing["source_identity"]["lockfile"] = "missing.lock"
+    recipe_missing["source_identity"]["lockfile_sha256"] = LOCKFILE_SHA256
+    report_missing = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "r1", recipe_missing),
+        project_root=project_root,
+    )
+    assert report_missing["recipes"][0]["status"] == "invalid"
+    assert "missing_lockfile" in report_missing["recipes"][0]["reasons"]
+
+    # 2. Unreadable lockfile (e.g. directory instead of regular file)
+    unreadable_lock = project_root / "directory.lock"
+    unreadable_lock.mkdir(parents=True, exist_ok=True)
+    recipe_dir = _base_recipe()
+    recipe_dir["source_identity"]["lockfile"] = "directory.lock"
+    recipe_dir["source_identity"]["lockfile_sha256"] = LOCKFILE_SHA256
+    report_dir = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "r2", recipe_dir),
+        project_root=project_root,
+    )
+    assert report_dir["recipes"][0]["status"] == "invalid"
+    assert "unreadable_lockfile" in report_dir["recipes"][0]["reasons"]
+
+    # 3. Missing lockfile checksum
+    recipe_no_checksum = _base_recipe()
+    del recipe_no_checksum["source_identity"]["lockfile_sha256"]
+    report_no_sum = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "r3", recipe_no_checksum),
+        project_root=project_root,
+    )
+    assert report_no_sum["recipes"][0]["status"] == "invalid"
+    assert "missing_lockfile_checksum" in report_no_sum["recipes"][0]["reasons"]
+
+    # 4. Malformed lockfile checksum
+    recipe_bad_checksum = _base_recipe()
+    recipe_bad_checksum["source_identity"]["lockfile_sha256"] = "short-or-invalid"
+    report_bad_sum = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "r4", recipe_bad_checksum),
+        project_root=project_root,
+    )
+    assert report_bad_sum["recipes"][0]["status"] == "invalid"
+    assert "malformed_lockfile_checksum" in report_bad_sum["recipes"][0]["reasons"]
+
+    # 5. Malformed source_identity object
+    recipe_bad_source = _base_recipe()
+    recipe_bad_source["source_identity"] = "not-a-dict"
+    report_bad_source = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "r5", recipe_bad_source),
+        project_root=project_root,
+    )
+    assert report_bad_source["recipes"][0]["status"] == "invalid"
+    assert "malformed_source_identity" in report_bad_source["recipes"][0]["reasons"]
+
+
+def test_lockfile_drift_and_present_lock_passes(tmp_path: Path) -> None:
+    import hashlib
+
+    project_root = tmp_path / "project"
+    project_root.mkdir(parents=True, exist_ok=True)
+    lock_path = project_root / "uv.lock"
+    lock_content = b"fake lockfile content for testing\n"
+    lock_path.write_bytes(lock_content)
+    correct_hash = hashlib.sha256(lock_content).hexdigest()
+
+    # Matching lockfile passes
+    matching_recipe = _base_recipe()
+    matching_recipe["source_identity"]["lockfile"] = "uv.lock"
+    matching_recipe["source_identity"]["lockfile_sha256"] = correct_hash
+    report_ok = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "ok", matching_recipe),
+        project_root=project_root,
+    )
+    assert report_ok["verdict"] == "pass"
+    assert report_ok["recipes"][0]["status"] == "verified"
+    assert "lockfile_drift" not in report_ok["recipes"][0]["reasons"]
+
+    # Changed/drifted lockfile fails
+    drift_recipe = _base_recipe()
+    drift_recipe["source_identity"]["lockfile"] = "uv.lock"
+    drift_recipe["source_identity"]["lockfile_sha256"] = "0" * 64
+    report_drift = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "drift", drift_recipe),
+        project_root=project_root,
+    )
+    assert report_drift["verdict"] == "fail"
+    assert report_drift["recipes"][0]["status"] == "invalid"
+    assert "lockfile_drift" in report_drift["recipes"][0]["reasons"]
+
+
+def test_missing_executable_and_require_verified_fails(tmp_path: Path) -> None:
+    import shutil
+
+    gpu_recipe = _base_recipe()
+    gpu_recipe["execution_class"] = "gpu_training"
+    gpu_recipe["recipe_id"] = "gpu-training-fixture-v1"
+    gpu_recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["uv", "sync"]},
+        {"id": "driver", "phase": "probe", "argv": ["nvidia-smi"], "safe_check": True},
+    ]
+
+    # Structural mode passes without certifying runtime availability
+    report_structural = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "struct", gpu_recipe),
+        execute_safe_checks=False,
+    )
+    assert report_structural["verdict"] == "pass"
+    assert report_structural["mode"] == "structural"
+    assert report_structural["recipes"][0]["status"] == "verified"
+
+    # Executed mode with missing program marks status as unavailable and records reason
+    orig_which = shutil.which
+    try:
+        shutil.which = lambda prog: None if prog == "nvidia-smi" else orig_which(prog)
+        report_exec = check_recipes(
+            recipes_path=_write_recipe(tmp_path / "exec", gpu_recipe),
+            execute_safe_checks=True,
+            require_verified=False,
+        )
+        assert report_exec["verdict"] == "pass"
+        assert report_exec["mode"] == "structural+safe_checks"
+        assert report_exec["recipes"][0]["status"] == "unavailable"
+        assert "probe_program_unavailable" in report_exec["recipes"][0]["reasons"]
+        assert report_exec["execution_classes"]["gpu_training"] == "unavailable"
+
+        # --require-verified cannot be satisfied by skipped required checks
+        report_req = check_recipes(
+            recipes_path=_write_recipe(tmp_path / "req", gpu_recipe),
+            execute_safe_checks=True,
+            require_verified=True,
+        )
+        assert report_req["verdict"] == "fail"
+        assert "gpu_training" in report_req["missing_verified_classes"]
+    finally:
+        shutil.which = orig_which
+
+
+def test_unresolved_required_substitution_and_zero_required_probes(tmp_path: Path) -> None:
+    # 1. Unresolved required private substitution in safe check probe
+    sub_recipe = _base_recipe()
+    sub_recipe["private_substitutions"] = [
+        {"placeholder": "PRIVATE_CONTAINER_TAG", "capability_class": "container-image"}
+    ]
+    sub_recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["uv", "sync"]},
+        {
+            "id": "probe-sub",
+            "phase": "probe",
+            "argv": [
+                "docker",
+                "image",
+                "inspect",
+                "$PRIVATE_CONTAINER_TAG",
+                "--format",
+                "{{.Id}}",
+            ],
+            "safe_check": True,
+        },
+    ]
+    report_sub = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "sub", sub_recipe),
+        execute_safe_checks=True,
+        require_verified=True,
+    )
+    assert report_sub["verdict"] == "fail"
+    assert report_sub["recipes"][0]["status"] == "unavailable"
+    assert "unresolved_required_substitution" in report_sub["recipes"][0]["reasons"]
+
+    # 2. Zero executed required probes for verified recipe
+    zero_recipe = _base_recipe()
+    zero_recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["uv", "sync"]},
+        {"id": "unsafeprobe", "phase": "probe", "argv": ["python3", "-c", "import os"]},
+    ]
+    report_zero = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "zero", zero_recipe),
+        execute_safe_checks=True,
+        require_verified=True,
+    )
+    assert report_zero["verdict"] == "fail"
+    assert report_zero["recipes"][0]["status"] == "unavailable"
+    assert "zero_executed_required_probes" in report_zero["recipes"][0]["reasons"]
+
+
+def test_unavailable_fixture_preserves_unavailable_status(tmp_path: Path) -> None:
+    unavailable_gpu = _base_recipe()
+    unavailable_gpu["execution_class"] = "gpu_training"
+    unavailable_gpu["verification_status"] = "unavailable"
+    unavailable_gpu["unavailable_reason"] = "no GPU hardware available in CI"
+    unavailable_gpu["steps"] = [
+        {"id": "driver", "phase": "probe", "argv": ["python3", "-V"], "safe_check": True}
+    ]
+
+    report = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "unavail", unavailable_gpu),
+        execute_safe_checks=True,
+        require_verified=False,
+    )
+    assert report["verdict"] == "pass"
+    # Status must be preserved as unavailable even when safe check passes
+    assert report["recipes"][0]["status"] == "unavailable"
+    assert report["recipes"][0]["safe_checks"][0]["status"] == "passed"
+    assert report["execution_classes"]["gpu_training"] == "unavailable"
+
+    # With require_verified=True, missing verified class gpu_training causes fail
+    report_req = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "unavail_req", unavailable_gpu),
+        execute_safe_checks=True,
+        require_verified=True,
+    )
+    assert report_req["verdict"] == "fail"
+    assert "gpu_training" in report_req["missing_verified_classes"]

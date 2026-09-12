@@ -163,6 +163,62 @@ def test_broad_exception_ratchet_fails_on_unapproved_replacement(tmp_path: Path)
     assert "scripts/demo/tool.py:4: except Exception:" in result.stderr
 
 
+def test_broad_exception_ratchet_preserves_duplicate_fingerprint_multiplicity(
+    tmp_path: Path,
+) -> None:
+    """Removing one occurrence of a duplicate fingerprint fails the ratchet."""
+    repo = _make_repo(tmp_path)
+    baseline = Path("scripts/validation/broad_exception_baseline.json")
+    (repo / baseline.parent).mkdir(parents=True, exist_ok=True)
+    script = repo / "scripts" / "demo" / "tool.py"
+    script.write_text(
+        "def main() -> None:\n"
+        "    try:\n"
+        "        raise RuntimeError('demo')\n"
+        "    except Exception:\n"
+        "        pass\n"
+        "    try:\n"
+        "        raise RuntimeError('demo')\n"
+        "    except Exception:\n"
+        "        pass\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--root",
+            str(repo),
+            "--baseline",
+            str(baseline),
+            "--write-baseline",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    script.write_text(
+        "def main() -> None:\n"
+        "    try:\n"
+        "        raise RuntimeError('demo')\n"
+        "    except Exception:\n"
+        "        pass\n",
+        encoding="utf-8",
+    )
+    _git(repo, "add", ".")
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--root", str(repo), "--baseline", str(baseline)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "Broad exception count increased" not in result.stderr
+    assert "Broad exception handlers were removed" in result.stderr
+
+
 def test_broad_exception_ratchet_rejects_stale_summary_counts(tmp_path: Path) -> None:
     """A stale counts summary must fail even when entry fingerprints are unchanged."""
     repo = _make_repo(tmp_path)

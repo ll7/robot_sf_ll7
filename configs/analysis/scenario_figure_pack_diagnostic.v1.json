@@ -1,0 +1,21 @@
+{
+  "schema_version": "scenario-figure-pack.v1",
+  "mode": "diagnostic",
+  "formats": [
+    "pdf",
+    "svg",
+    "png"
+  ],
+  "views": [
+    "trajectory",
+    "snapshot",
+    "clearance",
+    "speed",
+    "turn"
+  ],
+  "max_cases": 12,
+  "max_frames": 50000,
+  "max_actors": 100,
+  "max_points": 250000,
+  "size": "double"
+}

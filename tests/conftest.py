@@ -607,6 +607,11 @@ _FAST_FILES = {
     # The trace-dossier contract tests exercise lightweight, diagnostic-only
     # export/render paths required by the exact-head changed-coverage gate.
     "test_export_trace_dossier.py",
+    # Scenario figure-pack contracts use synthetic traces and cover the
+    # diagnostic export/render paths required by the exact-head changed-
+    # coverage gate.
+    "test_figure_profile.py",
+    "test_scenario_figure_pack.py",
     # Release admission, staging, doctor, and publisher suites are deterministic
     # provenance/schema contracts for the benchmark-data release lane.
     # The direct source/test pairs are required by the changed-coverage router

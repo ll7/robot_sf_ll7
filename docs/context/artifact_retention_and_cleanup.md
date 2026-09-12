@@ -21,6 +21,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Preservation-aware retirement | [stale_worktree_reaper.py](../../scripts/dev/stale_worktree_reaper.py) |
 | Active-worktree lease | [pr_gate_lease.py](../../scripts/dev/pr_gate_lease.py) |
 | Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
+| Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
 
 ## 1. Retention classes in operational terms
 
@@ -115,6 +116,15 @@ hardlink/special-file, path, collision, and partial-manifest conditions.
 
 Hydrate the artifact from the durable copy into a scratch path and rerun the owning verification
 command. A successful restore test is required before claiming preservation or cleanup eligibility.
+
+```bash
+uv run python scripts/tools/verify_restored_environment.py --check \
+  --manifest <TRANSFERRED_MANIFEST> --root "$SCRATCH_ROOT" --format json
+```
+
+The verifier reconstructs the declared environment in a clean temporary root without source-host
+dependencies, validates all checksums, row/config/checkpoint identities, and executes safe
+read-only smoke assertions. The outcome is labelled restoration smoke, not scientific reproduction.
 
 ### 4.5 Check cleanup eligibility
 

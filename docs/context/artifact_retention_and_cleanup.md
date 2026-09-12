@@ -25,6 +25,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Checkpoint preservation custody check | [check_checkpoint_preservation.py](../../scripts/validation/check_checkpoint_preservation.py) |
 | Bootstrap recipe freeze and check | [bootstrap_recipe_check.py](../../scripts/tools/bootstrap_recipe_check.py) |
 | Dependency cache manifest and reconstruction status | [dependency_cache_manifest.py](../../scripts/tools/dependency_cache_manifest.py) |
+| Source bundle export and verification | [source_bundle_export.py](../../scripts/tools/source_bundle_export.py) |
 | Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
 ## 1. Retention classes in operational terms
@@ -215,7 +216,22 @@ identities. `scripts/tools/bootstrap_recipe_check.py --check --recipes configs/b
 reports structurally; `--execute-safe-checks` runs `safe_check` probes in an isolated temporary root.
 A class without a verified recipe needs an explicit `verification_status: unavailable` reason.
 
-### 4.11 Report a blocker
+### 4.11 Export a restorable source bundle
+
+```bash
+uv run python scripts/tools/source_bundle_export.py --export \
+  --repo "$SOURCE_REPO" --out "$BUNDLE_DIR" --workload-id <id> --format json
+uv run python scripts/tools/source_bundle_export.py --verify \
+  --bundle "$BUNDLE_DIR" --workdir "$SCRATCH_RESTORE" --format json
+```
+
+The bundle records repository URL classification, commit, tree, parents, ref context, vendored
+subproject revisions, generated-source provenance, admitted patch identity, and a compact
+tracked-file inventory, and verifies by cloning into a fresh repository and reproducing those
+identities. Dirty or untracked state is rejected unless an explicit patch is admitted and
+checksum-bound; private or credentialed remotes are never written into the public status.
+
+### 4.12 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

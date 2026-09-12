@@ -94,10 +94,14 @@ def _path(raw: Any, location: str) -> str:
     if not isinstance(raw, str) or not raw or any(ord(char) < 32 or ord(char) == 127 for char in raw):
         raise ArchiveError("path_invalid", f"invalid path at {location}")
     try:
+        raw.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ArchiveError("path_invalid", f"path is not valid UTF-8 at {location}") from exc
+    try:
         normalized = normalize_relative_path(raw)
     except ChunkManifestError as exc:
         raise ArchiveError("path_traversal", str(exc), path=raw) from exc
-    if raw != normalized or ":" in PurePosixPath(normalized).parts[0]:
+    if raw != normalized or ":" in normalized:
         raise ArchiveError("path_invalid", f"path is not canonically portable: {raw}", path=raw)
     return normalized
 
@@ -122,6 +126,21 @@ def _active(payload: Mapping[str, Any]) -> bool:
     return (isinstance(writer, Mapping) and (writer.get("active") is True or str(writer.get("state", "")).lower() in ACTIVE_STATES)) or any(str(payload.get(key, "")).lower() in ACTIVE_STATES for key in ("state", "status"))
 
 
+def _require_harvest_ready(payload: Mapping[str, Any]) -> None:
+    scheduler = payload.get("scheduler")
+    if (
+        payload.get("status") != "ready"
+        or payload.get("artifact_status") != "complete"
+        or not isinstance(scheduler, Mapping)
+        or scheduler.get("terminal") is not True
+        or payload.get("problems") != []
+    ):
+        raise ArchiveError(
+            "source_not_ready",
+            "terminal job harvest must be ready, complete, terminal, and problem-free",
+        )
+
+
 def _read(path: Path) -> tuple[Mapping[str, Any], str, tuple[int, int, int, int, int, int]]:
     before = _regular(path, "source manifest")
     try:
@@ -138,11 +157,13 @@ def _read(path: Path) -> tuple[Mapping[str, Any], str, tuple[int, int, int, int,
 
 def _source_manifest(path: Path) -> tuple[str, str, tuple[int, int, int, int, int, int], tuple[_Source, ...]]:  # noqa: C901 - one bounded manifest pass
     payload, digest, identity = _read(path)
-    if _active(payload):
-        raise ArchiveError("active_writer", "source manifest reports an active writer")
     schema = payload.get("schema_version")
     if schema not in {"terminal_job_harvest.v1", "compute_staging_bundle.v1"}:
         raise ArchiveError("unsupported_manifest_schema", f"unsupported source schema: {schema!r}")
+    if schema == "terminal_job_harvest.v1":
+        _require_harvest_ready(payload)
+    if _active(payload):
+        raise ArchiveError("active_writer", "source manifest reports an active writer")
     problems: list[dict[str, str]] = []
     _schema, parsed = _manifest_members(payload, problems)
     if problems:
@@ -153,6 +174,8 @@ def _source_manifest(path: Path) -> tuple[str, str, tuple[int, int, int, int, in
         raise ArchiveError("manifest_invalid", "source manifest needs non-empty members")
     by_path = {item.relative_path: item for item in parsed}
     members: list[_Source] = []
+    seen: set[str] = set()
+    folded_seen: set[str] = set()
     for index, raw in enumerate(raw_members):
         if not isinstance(raw, Mapping):
             raise ArchiveError("manifest_invalid", f"member {index} is not an object")
@@ -164,13 +187,19 @@ def _source_manifest(path: Path) -> tuple[str, str, tuple[int, int, int, int, in
         size_value = raw.get("byte_size", raw.get("size_bytes", raw.get("size")))
         if (digest_value, size_value) != (member.sha256, member.byte_size) or not isinstance(size_value, int) or isinstance(size_value, bool) or size_value < 0:
             raise ArchiveError("manifest_invalid", f"member identity differs: {normalized}")
-        role = _role(raw.get("content_role", raw.get("role", raw.get("retention_class"))), f"members[{index}].content_role")
+        role_value = raw.get("content_role", raw.get("role", raw.get("retention_class")))
+        if schema == "compute_staging_bundle.v1" and role_value in (None, ""):
+            roles = raw.get("roles")
+            if not isinstance(roles, list) or len(roles) != 1:
+                raise ArchiveError("manifest_role_invalid", f"one compute-staging role required at members[{index}]")
+            role_value = roles[0]
+        role = _role(role_value, f"members[{index}].content_role")
+        folded = normalized.casefold()
+        if normalized in seen or folded in folded_seen:
+            raise ArchiveError("duplicate_normalized_path", f"duplicate member: {normalized}", path=normalized)
+        seen.add(normalized)
+        folded_seen.add(folded)
         members.append(_Source(normalized, digest_value, size_value, role))
-    seen: set[str] = set()
-    for member in members:
-        if member.path in seen or member.path.casefold() in {value.casefold() for value in seen}:
-            raise ArchiveError("duplicate_normalized_path", f"duplicate member: {member.path}", path=member.path)
-        seen.add(member.path)
     members.sort(key=lambda item: item.path.encode("utf-8"))
     return str(schema), digest, identity, tuple(members)
 
@@ -225,6 +254,15 @@ def _reject_inside(path: Path, root: Path, label: str) -> None:
     except (OSError, ValueError):
         return
     raise ArchiveError("output_inside_source", f"{label} must not be inside source root")
+
+
+def _reject_output_alias(archive: Path, member_manifest: Path) -> None:
+    try:
+        aliases = archive.resolve(strict=False) == member_manifest.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise ArchiveError("output_alias", "output paths could not be resolved") from exc
+    if aliases:
+        raise ArchiveError("output_alias", "archive and member manifest outputs must be distinct")
 
 
 def _partials(path: Path) -> None:
@@ -327,6 +365,7 @@ def build_archive(source_manifest: Path, source_root: Path, archive: Path, *, me
     """Build an archive and its deterministic member manifest."""
     source_manifest, source_root, archive = map(Path, (source_manifest, source_root, archive))
     member_manifest = Path(member_manifest or f"{archive}.manifest.json")
+    _reject_output_alias(archive, member_manifest)
     _root(source_root)
     for path, label in ((source_manifest, "source manifest"), (archive, "archive"), (member_manifest, "member manifest")):
         _reject_inside(path, source_root, label)
@@ -339,7 +378,7 @@ def build_archive(source_manifest: Path, source_root: Path, archive: Path, *, me
     schema, source_digest, identity, members = _source_manifest(source_manifest)
     sources = tuple(_snapshot(source_root, member) for member in members)
     required = _required(sources)
-    free = _capacity(archive.parent, required, capacity_bytes)
+    free = min(_capacity(parent, required, capacity_bytes) for parent in (archive.parent, member_manifest.parent))
     _root(source_root)
     archive_temp = manifest_temp = None
     committed = False
@@ -403,13 +442,16 @@ def _load_member_manifest(path: Path) -> dict[str, Any]:  # noqa: C901 - compact
         raise ArchiveError("manifest_invalid", "member manifest needs non-empty members")
     paths: list[str] = []
     seen: set[str] = set()
+    folded_seen: set[str] = set()
     for index, item in enumerate(members):
         if not isinstance(item, Mapping):
             raise ArchiveError("manifest_invalid", f"member {index} is not an object")
         path_value = _path(item.get("path"), f"members[{index}].path")
-        if path_value in seen or path_value.casefold() in {value.casefold() for value in seen}:
+        folded = path_value.casefold()
+        if path_value in seen or folded in folded_seen:
             raise ArchiveError("duplicate_normalized_path", f"duplicate member: {path_value}", path=path_value)
         seen.add(path_value)
+        folded_seen.add(folded)
         size = item.get("size_bytes")
         if not isinstance(size, int) or isinstance(size, bool) or size < 0:
             raise ArchiveError("manifest_invalid", f"invalid size for {path_value}", path=path_value)
@@ -496,7 +538,10 @@ def verify_archive(archive: Path, member_manifest: Path, *, extraction_root: Pat
                     finally:
                         stream.close()
                         if destination:
-                            destination.close()
+                            try:
+                                os.fchmod(destination.fileno(), expected_mode)
+                            finally:
+                                destination.close()
                     if written != wanted["size_bytes"]:
                         raise ArchiveError("partial_archive", f"archive member truncated: {name}", path=name)
                     if digest.hexdigest() != wanted["source_sha256"]:

@@ -1,0 +1,12 @@
+{"schema": "sanitized_lineage_input.v1",
+  "records": [
+    {"kind": "issue", "id": "8897"}, {"kind": "pull_request", "id": "9012", "refs": {"issue_ids": ["8897"], "commit_ids": ["c0ffee1"]}},
+    {"kind": "commit", "id": "c0ffee1"}, {"kind": "campaign", "id": "camp-newline", "owner": "benchmark", "refs": {"issue_ids": ["8897"], "pull_request_ids": ["9012"], "config_ids": ["cfg-newline"], "manifest_ids": ["manifest-a"]}},
+    {"kind": "config", "id": "cfg-newline", "digest": "1111111111111111111111111111111111111111111111111111111111111111", "owner": "benchmark"}, {"kind": "manifest", "id": "manifest-a", "digest": "2222222222222222222222222222222222222222222222222222222222222222", "refs": {"campaign_ids": ["camp-newline"], "config_ids": ["cfg-newline"], "commit_ids": ["c0ffee1"]}},
+    {"kind": "job", "id": "job-1", "attempt_index": 1, "relation": "initial", "submission_receipt": "recorded", "refs": {"campaign_ids": ["camp-newline"], "config_ids": ["cfg-newline"], "manifest_ids": ["manifest-a"], "commit_ids": ["c0ffee1"], "checkpoint_ids": ["ckpt-1"], "environment_ids": ["env-1"], "artifact_ids": ["art-raw-1", "art-compact-1"]}},
+    {"kind": "checkpoint", "id": "ckpt-1", "digest": "3333333333333333333333333333333333333333333333333333333333333333", "refs": {"job_ids": ["job-1"], "model_ids": ["model-1"]}}, {"kind": "model", "id": "model-1", "digest": "4444444444444444444444444444444444444444444444444444444444444444", "refs": {"checkpoint_ids": ["ckpt-1"]}},
+    {"kind": "environment", "id": "env-1", "digest": "5555555555555555555555555555555555555555555555555555555555555555", "refs": {"job_ids": ["job-1"]}}, {"kind": "artifact", "id": "art-raw-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "artifact_kind": "raw", "locator_class": "public_release", "owner": "benchmark", "refs": {"job_ids": ["job-1"], "analysis_ids": ["analysis-1"]}},
+    {"kind": "artifact", "id": "art-compact-1", "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "artifact_kind": "compact", "locator_class": "tracked_path", "owner": "benchmark", "refs": {"job_ids": ["job-1"]}}, {"kind": "analysis", "id": "analysis-1", "owner": "analysis", "refs": {"artifact_ids": ["art-raw-1"], "claim_ids": ["claim-1"]}},
+    {"kind": "claim", "id": "claim-1", "owner": "paper", "claim_state": "bounded", "refs": {"analysis_ids": ["analysis-1"], "issue_ids": ["8897"]}}
+  ], "private_projection": []
+}

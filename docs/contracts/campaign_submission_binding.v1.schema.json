@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ll7.github.io/robot_sf_ll7/schemas/campaign_submission_binding.v1.schema.json",
+  "title": "Campaign submission binding v1",
+  "description": "Exact-input compare-and-swap binding receipt comparing campaign preflight and live submission identities.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "verdict",
+    "first_differing_field",
+    "preflight_digest",
+    "submission_digest",
+    "differing_fields",
+    "volatile_fields_allowed",
+    "volatile_fields_observed",
+    "authority_fields_checked",
+    "recomputed_at_utc"
+  ],
+  "properties": {
+    "schema": { "const": "campaign_submission_binding.v1" },
+    "status": { "enum": ["matched", "drift_detected", "error"] },
+    "verdict": { "enum": ["pass", "fail"] },
+    "first_differing_field": { "type": ["string", "null"] },
+    "preflight_digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "submission_digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+    "differing_fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "expected", "observed", "diagnostic"],
+        "properties": {
+          "field": { "type": "string" },
+          "expected": {},
+          "observed": {},
+          "diagnostic": { "type": "string" }
+        }
+      }
+    },
+    "volatile_fields_allowed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "volatile_fields_observed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "authority_fields_checked": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recomputed_at_utc": { "type": "string" }
+  }
+}

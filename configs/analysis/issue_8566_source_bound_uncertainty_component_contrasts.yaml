@@ -1,0 +1,134 @@
+# Fixture-only source-binding packet for issue #8566.
+# This config describes a deterministic diagnostic adapter; it does not launch or authorize a
+# campaign and it never treats unavailable, inactive, fallback, or degraded input as zero.
+schema_version: issue_8566_source_bound_component_contrasts.v1.config
+issue: 8566
+status: diagnostic_only
+base_commit: 0a60f9c225599be21581d9b44e2f02bb4eee31bf
+
+execution:
+  campaign_execution: false
+  compute_submit_authorized: false
+  paper_facing_claim: false
+  fallback_or_degraded_success_allowed: false
+
+generator:
+  path: robot_sf/benchmark/source_bound_component_contrasts.py
+  version: issue_8566_source_bound_component_contrasts.v1
+
+analysis:
+  estimand: comparison_minus_reference_mean
+  pairing_key: [corpus_id, release_id, contrast_id, scenario_id, seed]
+  clustering_key: scenario_id
+  uncertainty:
+    method: paired_scenario_block_percentile_bootstrap
+    confidence: 0.95
+    replicates: 2000
+    seed: 8566001
+  multiplicity:
+    method: holm_step_down
+    family: fixture_component_contrasts
+    alpha: 0.05
+
+components:
+  - id: terminal_outcome
+    family: terminal_outcome
+    unit: probability
+    metric_owner: result_interpretation_packet.v1
+    activation_rule: not_applicable
+  - id: safety_wrapper
+    family: safety_wrapper
+    unit: rate
+    metric_owner: paired_effect_metric_contract.v1
+    activation_rule: source_declared_opportunity_only
+  - id: snqi
+    family: snqi
+    unit: score
+    metric_owner: result_interpretation_packet.v1
+    activation_rule: advisory_no_ranking
+
+source_bindings:
+  - source_id: issue_8566_fixture_rows
+    path: tests/fixtures/issue_8566_source_bound_component_contrasts/paired_rows.json
+    kind: synthetic_fixture
+    sha256: 49824d8a10e4865917de6ca501be8b00d1fe09bb34ce71ec3865b6bed797434b
+    source_commit: null
+    tracked_commit: null
+  - source_id: august_b1d5_release_metadata
+    path: configs/publication/dissertation_coverage_v1.yaml
+    kind: release_metadata
+    sha256: 4e6cc0ea1c1cf5da0db1607d1bdfa5779a40ac051f8b7d43d8b21cf16cd01f4c
+    source_commit: b1d5ab6de708385c0828c99501a9d1c29727ec11
+    tracked_commit: 0a60f9c225599be21581d9b44e2f02bb4eee31bf
+    release_id: paper-matrix-v2-h600-s30-2026-08-cd831d7582c1
+  - source_id: september_59577_erratum_metadata
+    path: configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json
+    kind: release_metadata
+    sha256: 94a572c4e61174b952501c6ea836c3b41b18425f29f2c693fe43a6a711402bfc
+    source_commit: 59577bad289dd692ba3580e1600c4a649ae27880
+    tracked_commit: 0a60f9c225599be21581d9b44e2f02bb4eee31bf
+    release_id: paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1
+  - source_id: september_59577_recovery_metadata
+    path: configs/benchmarks/releases/recovery/job_15180_59577bad_recovery_v1.json
+    kind: release_metadata
+    sha256: 00d046f727a587a3541e91ace136b4c20cf9e238937de7ba2ec8c47474128693
+    source_commit: 59577bad289dd692ba3580e1600c4a649ae27880
+    tracked_commit: 0a60f9c225599be21581d9b44e2f02bb4eee31bf
+    release_id: paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880
+
+fixture:
+  source_id: issue_8566_fixture_rows
+  path: tests/fixtures/issue_8566_source_bound_component_contrasts/paired_rows.json
+  corpus_id: issue_8566_synthetic_fixture
+  release_id: issue_8566_synthetic_fixture_v1
+  contrast_id: fixture_reference_vs_component_probe
+  reference_arm: baseline
+  comparison_arm: component_probe
+  scenarios: [fixture_corridor, fixture_doorway, fixture_crossing]
+  seeds: [111, 112]
+
+external_targets:
+  - target_id: issue_7980_exact_24_contrasts
+    owner_issue: 7980
+    status: unavailable_in_fixture_slice
+    release_id: issue_5578_native_speed_tier_job_13828_v0
+    source_commit: 481164b08d861e4af9777fe35734f88bda2754e9
+    source_uri: wandb-artifact://ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0
+    expected_contrast_count: 24
+    expected_source_rows: 2160
+    component_ids: [terminal_outcome, safety_wrapper, snqi]
+    reason: >-
+      The authenticated immutable #7980 source packet is intentionally not hydrated by this
+      fixture-only slice; no external artifact bytes were consumed.
+  - target_id: september_s30_h600_source_rows
+    owner_issue: 6102
+    status: unavailable_in_fixture_slice
+    release_id: paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1
+    source_commit: 59577bad289dd692ba3580e1600c4a649ae27880
+    source_uri: recorded_source_campaign_root_not_hydrated
+    expected_contrast_count: null
+    expected_source_rows: 20160
+    component_ids: [terminal_outcome, safety_wrapper, snqi]
+    reason: >-
+      September release metadata is tracked, but source-complete episode rows are not a tracked
+      input here; component contrast coverage remains unavailable until independently supplied.
+
+lineage_guard:
+  status: enforced
+  retained_lineages:
+    - id: august_b1d5
+      release_id: paper-matrix-v2-h600-s30-2026-08-cd831d7582c1
+      source_commit: b1d5ab6de708385c0828c99501a9d1c29727ec11
+      source_ids: [august_b1d5_release_metadata]
+    - id: september_59577
+      release_id: paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1
+      source_commit: 59577bad289dd692ba3580e1600c4a649ae27880
+      source_ids: [september_59577_erratum_metadata, september_59577_recovery_metadata]
+  prohibited_pooling:
+    - august_b1d5
+    - september_59577
+  rule: Keep release lineages separate; no cross-release pooled estimate is emitted.
+
+artifact:
+  report_path: docs/context/evidence/issue_8566_source_bound_component_contrasts_2026-09-10/report.json
+  receipt_path: docs/context/evidence/issue_8566_source_bound_component_contrasts_2026-09-10/SHA256SUMS

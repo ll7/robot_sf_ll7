@@ -25,6 +25,7 @@ Read these first when working in this workflow:
 - [docs/README.md](../README.md)
 - [docs/ai/repo_overview.md](repo_overview.md)
 - [docs/ai/agent_workflow_entrypoints.md](agent_workflow_entrypoints.md)
+- [docs/ai/author_trust_gate.md](author_trust_gate.md)
 - [docs/ai/label-taxonomy.md](label-taxonomy.md)
 - [docs/ai/issue_dependency_packets.md](issue_dependency_packets.md)
 - [docs/context/README.md](../context/README.md)
@@ -367,8 +368,11 @@ refreshes `origin/main`, records the exact base, remote-branch, and local-HEAD S
 that the claimed issue remains open and has not gained a new explicit same-repository covering PR
 or merged closing PR. A `ready` result is the only publication-permitting result; `superseded` and
 `blocked` stop the route, while `refresh-required` requires `sync --integrate` (or an explicit
-manual merge), a fresh readiness run, and a new snapshot. The integration path uses ordinary Git
-merges and never resets or deletes the worktree. Under exhausted GraphQL quota, the gate may record
+manual merge), a fresh readiness run, and a new snapshot. A `blocked` result whose reason is
+`undeclared_stack` instead requires rebasing the intended commits onto the live `origin/main` tip
+(or a genuine declared stack) before a fresh readiness run and snapshot; `sync --integrate` does
+not clear it. The integration path uses ordinary Git merges and never resets or deletes the
+worktree. Under exhausted GraphQL quota, the gate may record
 an auditable REST source for issue state, open-covering-PR, or closing-PR discovery in
 `remote_state_sources`; auth, malformed-response, and truncated-inventory failures still block
 publication. The shared REST fallback currently reads up to 50 pages of 100 pull requests; a cap

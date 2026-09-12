@@ -11,10 +11,10 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
 
 def test_recording_creates_simulation_view(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify that enabling video recording configures SimulationView frame capture on the environment.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated video recording destination.
     """
     vid_path = tmp_path / "episode.mp4"
     env = make_robot_env(

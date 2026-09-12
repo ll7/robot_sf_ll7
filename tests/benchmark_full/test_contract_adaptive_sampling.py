@@ -12,13 +12,13 @@ from robot_sf.benchmark.full_classic.orchestrator import adaptive_sampling_itera
 
 
 def test_adaptive_sampling_iteration():
-    """TODO docstring. Document this function."""
+    """Verify adaptive_sampling_iteration schedules a batch and stays not done below the cap."""
 
     class _Scenario:
-        """TODO docstring. Document this class."""
+        """Minimal scenario descriptor with an id, archetype, density, and planned seeds."""
 
         def __init__(self):
-            """TODO docstring. Document this function."""
+            """Initialize a scenario stub with fixed metadata and two planned seeds."""
             self.scenario_id = "scenario_a"
             self.archetype = "crossing"
             self.density = "low"
@@ -27,7 +27,7 @@ def test_adaptive_sampling_iteration():
     scenarios = [_Scenario()]
 
     class _Cfg:
-        """TODO docstring. Document this class."""
+        """Minimal config stub exposing the episode cap, batch size, and smoke flag."""
 
         max_episodes = 10
         batch_size = 5

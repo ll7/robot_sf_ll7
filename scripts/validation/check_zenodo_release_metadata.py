@@ -198,9 +198,26 @@ def _project_author_names(project: Mapping[str, Any], errors: list[str]) -> list
 def _source_author_names(
     citation: Mapping[str, Any], project: Mapping[str, Any], errors: list[str]
 ) -> list[str]:
-    """Read creator names from both authoritative repository metadata surfaces."""
+    """Read the authoritative creator union, preserving within-source duplicates as errors."""
 
-    return _citation_author_names(citation, errors) + _project_author_names(project, errors)
+    source_names = (
+        ("CITATION.cff", _citation_author_names(citation, errors)),
+        ("pyproject.toml", _project_author_names(project, errors)),
+    )
+    unique_names: list[str] = []
+    seen_signatures: set[tuple[str, ...]] = set()
+    for source_label, names in source_names:
+        signatures = [_name_signature(name) for name in names]
+        if len(signatures) != len(set(signatures)):
+            errors.append(
+                f"authoritative metadata contains duplicate creator names within {source_label}"
+            )
+        for name, signature in zip(names, signatures, strict=True):
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            unique_names.append(name)
+    return unique_names
 
 
 def _citation_text(citation: Mapping[str, Any], field: str, errors: list[str]) -> str | None:

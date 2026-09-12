@@ -245,6 +245,21 @@ print(common_dir / f".pr-gate-lease-{digest}.json")
 PY
 }
 
+remove_file() {
+  # The portable lock fallback deliberately supports a minimal PATH without
+  # the ``rm`` utility. Keep file cleanup on the Python runtime already needed
+  # by the fallback, while preserving ``rm -f``'s missing-file behavior.
+  python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+
+try:
+    Path(sys.argv[1]).unlink()
+except FileNotFoundError:
+    pass
+PY
+}
+
 release_task_lease() {
   if [[ -z "$task_id" ]]; then
     return 0
@@ -261,7 +276,7 @@ release_task_lease() {
   if ! lease_file="$(lease_file_for_worktree)"; then
     return 1
   fi
-  rm -f -- "$lease_file"
+  remove_file "$lease_file"
 }
 
 cleanup_failed_creation() {
@@ -329,7 +344,7 @@ clear_inherited_worktree_config() {
     return 1
   fi
   if [[ -e "$target_config" ]]; then
-    rm -f -- "$target_config"
+    remove_file "$target_config"
   fi
 }
 
@@ -389,28 +404,10 @@ run_locked_transaction() {
     fi
     return "$worktree_add_rc"
   fi
-  if [[ "$worktree_mode" == "review" ]]; then
-    review_guard_args=(--worktree "$worktree_path" --mode review)
-    # A review candidate may be created from a base that predates this guard.
-    # Keep the target clean by using the invoking checkout's tracked helper and
-    # hook until the guard itself is present in the selected base.
-    if [[ ! -f "$worktree_path/scripts/dev/review_worktree_guard.py" ||
-          ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
-      review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
-    fi
-    if python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"; then
-      :
-    else
-      local review_guard_rc=$?
-      if ! cleanup_failed_creation "$review_guard_rc"; then
-        :
-      fi
-      return "$review_guard_rc"
-    fi
-  fi
   if [[ -n "$task_id" ]]; then
     # The lease helper reuses the inherited repository lock. Creating the lease
-    # before this transaction releases the lock closes the add->claim cleanup gap.
+    # before this transaction releases the lock closes the add->claim cleanup gap,
+    # and it must exist before review mode so the guard can verify task ownership.
     if python3 "$SCRIPT_DIR/pr_gate_lease.py" create \
       --worktree "$worktree_path" --gate-id "$task_id" --owner "$task_id"; then
       :
@@ -431,6 +428,30 @@ run_locked_transaction() {
         :
       fi
       return "$lease_observation_rc"
+    fi
+  fi
+  if [[ "$worktree_mode" == "review" ]]; then
+    review_guard_args=(--worktree "$worktree_path" --mode review)
+    # A review candidate may be created from a base that predates this guard.
+    # Keep the target clean by using the invoking checkout's tracked helper and
+    # hook until the guard itself is present in the selected base.
+    if [[ ! -f "$worktree_path/scripts/dev/review_worktree_guard.py" ||
+          ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
+      review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
+    fi
+    # Forward the task identity so the guard refuses to capture a worktree that
+    # a different live task already owns (issue #8950).
+    if [[ -n "$task_id" ]]; then
+      review_guard_args+=(--task-id "$task_id")
+    fi
+    if python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"; then
+      :
+    else
+      local review_guard_rc=$?
+      if ! cleanup_failed_creation "$review_guard_rc"; then
+        :
+      fi
+      return "$review_guard_rc"
     fi
   fi
   if [[ -n "$receipt_path" ]]; then

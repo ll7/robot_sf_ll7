@@ -7,6 +7,16 @@ For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-f
 current entry points, status rules, and curated context-pack scopes. This README remains the note
 maintenance workflow and full discoverability surface.
 
+## Per-tool contract notes
+
+Each tool-specific contract lives in its own `docs/context/<tool>.md` note (for example
+[cleanup_eligibility.md](cleanup_eligibility.md) or
+[expiring_resource_deadlines.md](expiring_resource_deadlines.md)). The shared
+[artifact evidence vocabulary](artifact_evidence_vocabulary.md) links per-tool notes from a stable
+list near its top; do not append a new top-level section to that file for every new tool, because
+parallel tooling PRs then conflict on every merge and restart full CI. Add the note, add one stable
+link, and keep the shared vocabulary as the cross-cutting category contract.
+
 The issue #8068 observation-only goal-posterior baseline is documented in
 [issue_8068_goal_posterior_actor_baseline.md](issue_8068_goal_posterior_actor_baseline.md); its
 tracked smoke receipt is implementation-integrity evidence only.
@@ -62,6 +72,11 @@ blocked.
 The SVG geometry-contract boundary (legacy as-run vs corrected authored coordinates) is documented
 in [svg_geometry_contract.md](svg_geometry_contract.md); legacy and corrected rows must never be
 pooled as comparable evidence.
+Issue #8891's outcome-free matched-budget temporal-robustness packet is documented in [issue_8891_temporal_robustness_packet.md](issue_8891_temporal_robustness_packet.md).
+
+The issue #8829 compute-window capacity planner is documented in
+[issue_8829_compute_window_capacity_planner.md](issue_8829_compute_window_capacity_planner.md);
+it is operational planning context only, not benchmark or research evidence.
 
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
@@ -291,6 +306,8 @@ and high-churn state surface [issue_1358_state.yaml](issue_1358_state.yaml)
   [worktree_training_preservation_audit_2026-05-25.md](worktree_training_preservation_audit_2026-05-25.md)
 * Artifact retention, preservation, and cleanup guide:
   [artifact_retention_and_cleanup.md](artifact_retention_and_cleanup.md)
+* Cleanup eligibility guard:
+  [cleanup_eligibility.md](cleanup_eligibility.md)
 * Issue #1240 scenario coverage entropy:
   [issue_1240_scenario_coverage_entropy.md](issue_1240_scenario_coverage_entropy.md)
 * Issue #1167 predictive obstacle-feature pipeline:

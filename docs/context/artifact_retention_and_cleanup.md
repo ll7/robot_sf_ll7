@@ -15,10 +15,14 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Worktree lifecycle, leases, retirement | [../dev/worktree_lifecycle.md](../dev/worktree_lifecycle.md) |
 | Worktree teardown and artifact preservation rules | [AGENTS.md](../../AGENTS.md) "Worktree Teardown And Artifacts" |
 | Large result-tree manifests and verification | [chunk_manifest.py](../../scripts/tools/chunk_manifest.py) |
+| Durable locality and failure-domain audit | [check_durable_artifact_locality.py](../../scripts/validation/check_durable_artifact_locality.py) |
 | Read-only reclaim inventory | [check_worktree_capacity.py](../../scripts/dev/check_worktree_capacity.py) |
 | Read-only worktree hygiene snapshot | [worktree_hygiene_snapshot.py](../../scripts/dev/worktree_hygiene_snapshot.py) |
 | Preservation-aware retirement | [stale_worktree_reaper.py](../../scripts/dev/stale_worktree_reaper.py) |
 | Active-worktree lease | [pr_gate_lease.py](../../scripts/dev/pr_gate_lease.py) |
+| Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
+| Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
+| Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
 ## 1. Retention classes in operational terms
 
@@ -71,7 +75,7 @@ State each gate explicitly before using either word.
 | Active writer / lease | Does an active task still own the branch, worktree, or artifact? | `pr_gate_lease.py status`; `docs/dev/worktree_lifecycle.md` |
 | Consumer / dependency | Does a benchmark, report, manuscript, or launcher still consume it? | Search the manifest, registry, or context note that references it. |
 | Supersession | Is there an exact, repository-resolvable replacement pointer? | The replacement path or artifact URI must resolve; remove ambiguity first. |
-| Failure domain | Are the surviving copies in genuinely different failure domains? | Record host, account, or backend for each copy. |
+| Failure domain | Are the surviving copies in genuinely different failure domains? | `check_durable_artifact_locality.py --check` reports `same_failure_domain` and `insufficient_redundancy`. |
 | Rights / license | Are redistribution and retention permitted? | Asset-rights inventory and the evidence bundle policy. |
 | Restore test | Can the artifact be hydrated and re-checked from the durable copy? | Hydrate into a scratch path and run the owning verification command. |
 | Retention role | Is the intended lifecycle recorded? | `chunk_manifest.py manifest --retention-role {keep-latest,long-lived,short-lived,disposable,unspecified}` |
@@ -114,6 +118,15 @@ hardlink/special-file, path, collision, and partial-manifest conditions.
 Hydrate the artifact from the durable copy into a scratch path and rerun the owning verification
 command. A successful restore test is required before claiming preservation or cleanup eligibility.
 
+```bash
+uv run python scripts/tools/verify_restored_environment.py --check \
+  --manifest <TRANSFERRED_MANIFEST> --root "$SCRATCH_ROOT" --format json
+```
+
+The verifier reconstructs the declared environment in a clean temporary root without source-host
+dependencies, validates all checksums, row/config/checkpoint identities, and executes safe
+read-only smoke assertions. The outcome is labelled restoration smoke, not scientific reproduction.
+
 ### 4.5 Check cleanup eligibility
 
 ```bash
@@ -137,7 +150,43 @@ Any deletion, symlink/path alias, identity drift, new content, lease, lookup err
 refuses removal. Normal worktree removal preserves the local branch and its commits; artifact
 preservation remains the owner's responsibility before retirement.
 
-### 4.6 Report a blocker
+### 4.6 Audit durable locality and failure domains
+
+```bash
+uv run python scripts/validation/check_durable_artifact_locality.py \
+  --projection tests/validation/fixtures/durable_artifact_locality/compliant.json --check
+```
+
+The audit is fail-closed: it joins a sanitized locality packet to its locator-class artifacts
+projection by artifact ID, version, and digest, and exits non-zero when an active durable-required
+reference has no verified non-institutional custody or a release-facing reference lacks independent
+failure-domain copies. It reads sanitized inputs only and never emits locator values.
+
+### 4.7 Gate source-host artifact pruning on verified custody
+
+```bash
+uv run python scripts/tools/check_prune_eligibility.py --check \
+  --source-manifest <SOURCE_MANIFEST> --destination-receipt <DESTINATION_RECEIPT> \
+  --format json
+```
+
+The guard verifies durable destination custody, checksums, consumer coverage, and retention
+dispositions before permitting deletion planning. Check mode performs zero file deletions;
+an explicit `--apply` route enforces compare-and-swap revalidation before removing eligible bytes.
+
+### 4.8 Generate complete post-access handoff
+
+```bash
+uv run python scripts/tools/generate_post_access_handoff.py --check \
+  --inventory <COMPUTE_INVENTORY_JSON> --format json
+```
+
+The generator produces a deterministic, sanitized post-access handoff report in JSON or Markdown
+summarizing workloads, scheduler receipts, artifact custody, and environment recreation states.
+It redacts private paths, internal hosts, and credentials, rejects contradictory statuses and
+orphan records, and enforces actionable next commands for incomplete runs.
+
+### 4.9 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

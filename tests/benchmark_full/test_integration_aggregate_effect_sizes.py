@@ -16,7 +16,7 @@ from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
 class _Cfg:
-    """TODO docstring. Document this class."""
+    """Minimal config stub with bootstrap and low-density reference settings."""
 
     bootstrap_samples = 50
     bootstrap_confidence = 0.95
@@ -27,7 +27,7 @@ class _Cfg:
 
 @pytest.fixture
 def records():
-    """TODO docstring. Document this function."""
+    """Return low/high-density episode records for one crossing archetype."""
     return [
         {
             "episode_id": "low1",
@@ -85,10 +85,10 @@ def records():
 
 
 def test_aggregate_then_effect_sizes(records):
-    """TODO docstring. Document this function.
+    """Verify aggregation output produces finite per-metric effect sizes.
 
     Args:
-        records: TODO docstring.
+        records: Fixture with low/high density samples for the crossing archetype.
     """
     groups = aggregate_metrics(records, _Cfg())
     reports = compute_effect_sizes(groups, _Cfg())

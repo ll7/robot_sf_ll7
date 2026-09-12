@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class DummyCfg:
-    """TODO docstring. Document this class."""
+    """Config stub enabling replay capture so a single-step replay reaches validation."""
 
     output_root = ".tmp_test_visuals_insufficient"
     smoke = False
@@ -34,10 +34,14 @@ class DummyCfg:
 
 
 def test_insufficient_replay_skip(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Assert a single-step replay is skipped as insufficient replay state.
+
+    Skips at runtime when robot_sf.render.sim_view is unavailable; otherwise the
+    record's one-step replay fails the minimum-length check and produces one
+    SimulationView-classified skipped artifact with the insufficient-replay note.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
     """
     # Skip dynamically only when SimulationView is genuinely unavailable.
     # Narrow guard (importorskip) instead of a blanket `except Exception` so a

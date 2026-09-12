@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class Cfg:
-    """TODO docstring. Document this class."""
+    """Config stub selecting SimulationView rendering with one video at fps 5."""
 
     smoke = False
     disable_videos = False
@@ -36,11 +36,16 @@ class Cfg:
 
 def test_simulation_view_success_stub(tmp_path: Path, monkeypatch):
     # Force SimulationView + moviepy readiness
-    """TODO docstring. Document this function.
+    """Assert the stubbed SimulationView success path reports expected metadata.
+
+    SimulationView and moviepy readiness are forced true and the attempt hook
+    returns a prebuilt successful SimulationView artifact; the manifest reports
+    that renderer and success status with a positive encode time, and performance
+    exposes the first-video timing keys.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Directory receiving the generated visual artifacts.
+        monkeypatch: Pytest fixture used to force readiness and stub the attempt.
     """
     visuals_mod._SIM_VIEW_AVAILABLE = True  # type: ignore[attr-defined]
     monkeypatch.setattr(visuals_mod, "simulation_view_ready", lambda: True)
@@ -74,13 +79,13 @@ def test_simulation_view_success_stub(tmp_path: Path, monkeypatch):
 
     def _stub_attempt(records, out_dir, cfg, replay_map):
         # Return list with our success artifact
-        """TODO docstring. Document this function.
+        """Return the prebuilt successful SimulationView artifact.
 
         Args:
-            records: TODO docstring.
-            out_dir: TODO docstring.
-            cfg: TODO docstring.
-            replay_map: TODO docstring.
+            records: Records accepted and ignored.
+            out_dir: Output directory accepted and ignored.
+            cfg: Config accepted and ignored.
+            replay_map: Replay map accepted and ignored.
         """
         return [stub_artifact]
 
@@ -111,7 +116,7 @@ def test_simulation_view_encode_path(tmp_path: Path, monkeypatch):
     """Exercise real sim-view encode path (adapter -> frames -> encode)."""
 
     class AutoCfg(Cfg):
-        """TODO docstring. Document this class."""
+        """Config subclass selecting auto renderer selection for the encode path."""
 
         video_renderer = "auto"
 
@@ -129,35 +134,35 @@ def test_simulation_view_encode_path(tmp_path: Path, monkeypatch):
     frames = [np.zeros((4, 4, 3), dtype=np.uint8) for _ in range(3)]
 
     def fake_generate_frames(ep, *, fps: int = 10, max_frames=None):
-        """TODO docstring. Document this function.
+        """Assert the adapter passes the expected replay episode, then yield three frames.
 
         Args:
-            ep: TODO docstring.
-            fps: TODO docstring.
-            max_frames: TODO docstring.
+            ep: Replay episode; asserted to be the map entry handed to the adapter.
+            fps: Frames-per-second option accepted.
+            max_frames: Optional frame cap accepted.
         """
         assert ep is replay_ep
         yield from frames
 
     class DummyEncodeResult:
-        """TODO docstring. Document this class."""
+        """Encode-result stand-in reporting success with fixed timing metrics."""
 
         def __init__(self):
-            """TODO docstring. Document this function."""
+            """Set success status, no note, and small positive timing and memory metrics."""
             self.status = "success"
             self.note = None
             self.encode_time_s = 0.0123
             self.peak_rss_mb = 5.0
 
     def fake_encode_frames(frame_iter, path, *, fps: int = 10, sample_memory: bool = False, **_kw):
-        """TODO docstring. Document this function.
+        """Drain the frame iterator, write b"ok" to path, and return a success result.
 
         Args:
-            frame_iter: TODO docstring.
-            path: TODO docstring.
-            fps: TODO docstring.
-            sample_memory: TODO docstring.
-            _kw: TODO docstring.
+            frame_iter: Frame iterator consumed to run the generator.
+            path: Output file path; parent directories are created before writing.
+            fps: Frames-per-second option accepted.
+            sample_memory: Memory-sampling flag accepted.
+            _kw: Additional keyword arguments accepted and ignored.
         """
         list(frame_iter)
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -1465,6 +1465,20 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
     assert "pr_ready_freshness.py" in script_text
 
 
+def test_pr_ready_check_fails_with_explicit_format_signal_before_clean_tree_tests() -> None:
+    """A scoped format fix must fail with an explicit signal before clean-tree tests (issue #8971)."""
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    assert "Ruff formatting changed tracked files in the working tree" in script_text
+    assert "Commit the formatting changes, then rerun this readiness command" in script_text
+
+    format_signal_index = script_text.find(
+        "Ruff formatting changed tracked files in the working tree"
+    )
+    test_lane_index = script_text.find('"$SCRIPT_DIR/run_tests_parallel.sh" --lane core')
+    assert 0 < format_signal_index < test_lane_index
+
+
 def test_pr_ready_check_final_mode_runs_evidence_hygiene_contract() -> None:
     """Final local readiness must invoke the hosted evidence-hygiene contract (issue #7812)."""
     script_text = PR_READY_CHECK.read_text(encoding="utf-8")
@@ -1957,6 +1971,163 @@ def _make_freshness_fixture_repo(
     }
     env.pop("PYTHONPATH", None)
     return repo, venv, env
+
+
+def _make_incomplete_profile_worktree(
+    tmp_path: Path,
+    *,
+    recovery_heals: bool,
+) -> tuple[Path, Path, Path, dict[str, str]]:
+    """Build a linked worktree whose local .venv fails the core profile preflight.
+
+    A stub recovery helper records every invocation and either repairs the local
+    interpreter stub (``recovery_heals``) or leaves the profile incomplete while
+    reporting success, so the wrapper's re-check decides the outcome.
+    """
+    matching_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
+    repo, _main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=matching_scene)
+    recovery_log = tmp_path / "profile-completion.log"
+    recovery_script = repo / "scripts" / "dev" / "recover_fast_pysf_worktree.sh"
+    heal_step = ""
+    if recovery_heals:
+        heal_step = (
+            "cat > .venv/bin/python <<'PY'\n"
+            "#!/usr/bin/env bash\n"
+            "exit 0\n"
+            "PY\n"
+            "chmod +x .venv/bin/python\n"
+        )
+    recovery_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f'printf "%s\\n" "$*" >> {shlex.quote(str(recovery_log))}\n'
+        f"{heal_step}",
+        encoding="utf-8",
+    )
+    recovery_script.chmod(0o755)
+    subprocess.run(
+        ["git", "add", str(recovery_script.relative_to(repo))],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture profile-completion helper"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    local_python = worktree / ".venv" / "bin" / "python"
+    local_python.parent.mkdir(parents=True)
+    local_python.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "${1:-}" == *check_worktree_optional_deps.py ]]; then\n'
+        '  printf "Missing optional imports: yaml\\n" >&2\n'
+        "  exit 2\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    local_python.chmod(0o755)
+    env = {**env, "ROBOT_SF_CI_MIN_FREE_BYTES": "0"}
+    env.pop("ROBOT_SF_VENV_SELECTION_GATE_HELD", None)
+    return worktree, recovery_log, local_python, env
+
+
+def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
+    tmp_path: Path,
+) -> None:
+    """Issue #8811: a profile-incomplete worktree env gets exactly one completion sync."""
+    worktree, recovery_log, local_python, env = _make_incomplete_profile_worktree(
+        tmp_path, recovery_heals=True
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7, result.stderr
+    assert "Attempting one bounded completion sync" in result.stderr
+    assert "Shared-venv dependency profile 'core' completed" in result.stderr
+    assert "uv-reached" in result.stderr
+    recovery_calls = recovery_log.read_text(encoding="utf-8").splitlines()
+    assert len(recovery_calls) == 1
+    assert "--profile core" in recovery_calls[0]
+    assert local_python.read_text(encoding="utf-8") == "#!/usr/bin/env bash\nexit 0\n"
+
+
+def test_worktree_shared_venv_fails_closed_when_completion_sync_cannot_repair(
+    tmp_path: Path,
+) -> None:
+    """Issue #8811: a completion sync that leaves the profile incomplete stays fail-closed."""
+    worktree, recovery_log, _local_python, env = _make_incomplete_profile_worktree(
+        tmp_path, recovery_heals=False
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "shared-venv dependency profile 'core' is incomplete" in result.stderr
+    assert "Missing optional imports: yaml" in result.stderr
+    assert "bootstrap_worktree.sh" in result.stderr
+    assert "uv-reached" not in result.stderr
+    assert len(recovery_log.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_worktree_shared_venv_does_not_completion_sync_explicit_venv(
+    tmp_path: Path,
+) -> None:
+    """Issue #8811: an explicit --venv stays authoritative and is never completion-synced."""
+    worktree, recovery_log, _local_python, env = _make_incomplete_profile_worktree(
+        tmp_path, recovery_heals=True
+    )
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(worktree / ".venv"),
+            "--",
+            "python",
+            "-V",
+        ],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "shared-venv dependency profile 'core' is incomplete" in result.stderr
+    assert "bootstrap_worktree.sh" in result.stderr
+    assert not recovery_log.exists()
 
 
 def test_worktree_shared_venv_rejects_stale_installed_copy(

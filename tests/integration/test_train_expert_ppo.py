@@ -49,11 +49,11 @@ from scripts.training.train_recurrent_ppo import load_recurrent_ppo_config
 
 
 def test_expert_training_dry_run(tmp_path, monkeypatch):
-    """TODO docstring. Document this function.
+    """A dry run emits expert and training-run manifests plus report artifacts.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Temporary artifact root set via ROBOT_SF_ARTIFACT_ROOT.
+        monkeypatch: Pytest fixture used to set the artifact-root environment.
     """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     config_path = Path("configs/training/ppo_imitation/expert_ppo.yaml").resolve()

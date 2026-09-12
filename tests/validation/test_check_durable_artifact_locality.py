@@ -129,6 +129,10 @@ def test_cli_check_exit_codes_and_markdown(
     ("overrides", "expected"),
     [
         *(({"locators": [locator]}, code) for code, locator in LOCATOR_CASES.items()),
+        (
+            {"locators": [_locator(), _locator(locator_class="cloud_durable")]},
+            "same_failure_domain",
+        ),
         ({"version": "9.9.9"}, "version_mismatch"),
         ({"digest": DIGEST_B}, "digest_mismatch"),
         ({"locators": []}, "empty_locator_set"),

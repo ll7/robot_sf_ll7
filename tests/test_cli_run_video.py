@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for the benchmark run CLI subcommand with video recording enabled."""
 
 from __future__ import annotations
 
@@ -19,12 +19,7 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 )
 def test_cli_run_with_synthetic_video(tmp_path: Path, capsys):
     # Minimal scenario matrix YAML (single episode)
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify running a benchmark scenario with synthetic video renderer creates an MP4 file."""
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [
         {

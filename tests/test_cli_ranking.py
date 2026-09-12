@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for the ranking CLI subcommand outputting formatted algorithm rankings."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _write_matrix(path: Path, repeats: int = 3) -> None:
-    """TODO docstring. Document this function.
+    """Write a minimal scenario matrix YAML file for ranking CLI tests.
 
     Args:
-        path: TODO docstring.
-        repeats: TODO docstring.
+        path: Destination filesystem path for the matrix YAML.
+        repeats: Number of episode repetitions per scenario.
     """
     scenarios = [
         {
@@ -39,12 +39,7 @@ def _write_matrix(path: Path, repeats: int = 3) -> None:
 
 
 def test_cli_rank_md(tmp_path: Path, capsys):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify rank CLI generates a valid Markdown table ranking algorithms by metric."""
     matrix_path = tmp_path / "matrix.yaml"
     _write_matrix(matrix_path, repeats=3)
     episodes = tmp_path / "episodes.jsonl"

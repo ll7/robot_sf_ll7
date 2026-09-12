@@ -30,5 +30,6 @@ guides remain in their existing Markdown locations.
 - [AI Coding Workflow](ai/ai-workflow.md) describes the issue-to-PR workflow used by agents.
 - [Agent Index](AGENT_INDEX.md) collects agent-facing training, benchmarking, observation, and
   artifact entry points.
-- [Maintainer Values](maintainer_values.md) is the compact source of truth for validation depth and
-  research-progress priorities.
+- [Maintainer Values](maintainer_values.md) records compact trade-off principles for honest,
+  reproducible research progress; validation depth lives in the [Development Guide](dev_guide.md)
+  and `AGENTS.md` readiness matrix.

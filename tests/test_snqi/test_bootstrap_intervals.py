@@ -24,14 +24,14 @@ BIN = ["uv", "run", "robot_sf_bench"]
 
 
 def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
-    """TODO docstring. Document this function.
+    """Write synthetic episodes JSONL and baseline JSON under tmp_path.
 
     Args:
-        tmp_path: TODO docstring.
-        n: TODO docstring.
+        tmp_path: Temporary directory where the input files are written.
+        n: Number of synthetic episodes to generate.
 
     Returns:
-        TODO docstring.
+        Tuple of (episodes path, baseline path) for the CLI invocation.
     """
     episodes = tmp_path / "episodes.jsonl"
     baseline = tmp_path / "baseline.json"
@@ -65,13 +65,13 @@ def _write_synthetic_inputs(tmp_path: Path, n: int = 6) -> tuple[Path, Path]:
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
-    """TODO docstring. Document this function.
+    """Run a command with captured output and the SNQI light-test fast path disabled.
 
     Args:
-        args: TODO docstring.
+        args: Command argument vector to execute.
 
     Returns:
-        TODO docstring.
+        Completed process with captured stdout/stderr and unchecked exit status.
     """
     env = os.environ.copy()
     # Ensure we do not trip any LIGHT_TEST fast path (want real code paths)
@@ -81,11 +81,15 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
 
 @pytest.mark.parametrize("cmd", ["optimize", "recompute"])  # keep runtime tiny
 def test_bootstrap_ci_interval_contains_mean(tmp_path: Path, cmd: str):
-    """TODO docstring. Document this function.
+    """Verify the bootstrap CI contains the mean of the bootstrap means.
+
+    Invokes `snqi <cmd>` with 7 bootstrap samples and 0.90 confidence, then
+    checks the reported CI bounds are finite and ordered, std_mean is
+    non-negative and finite, and mean_mean lies within the interval (1e-12 slack).
 
     Args:
-        tmp_path: TODO docstring.
-        cmd: TODO docstring.
+        tmp_path: Temporary directory for synthetic inputs and CLI output.
+        cmd: SNQI subcommand under test, either "optimize" or "recompute".
     """
     episodes, baseline = _write_synthetic_inputs(tmp_path)
     out = tmp_path / f"out_{cmd}.json"

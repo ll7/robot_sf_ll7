@@ -18,6 +18,7 @@ pedestrian-filled environments.
 | I want to... | Go to |
 | --- | --- |
 | **Install and use Robot SF (newcomer path)** | [`docs/user-guide.md`](docs/user-guide.md) — task-oriented: install, run a demo, load a map, choose a planner, run a benchmark, visualize results, troubleshoot |
+| Continue after a host or access window ends | [`docs/post_access_local_analysis_runbook.md`](docs/post_access_local_analysis_runbook.md) — restore public-safe inputs, verify them locally, and label unavailable capabilities |
 | Understand the project quickly | [Why Robot SF?](#why-robot-sf) |
 | Decode an acronym or project term | [`docs/glossary.md`](docs/glossary.md) |
 | Install dependencies and run the first demos | [Quickstart](#quickstart) |
@@ -138,6 +139,22 @@ uv sync --extra all
 CARLA is not installed by `uv sync --all-extras`. On CARLA-capable Linux x86_64 hosts, opt into
 the pinned host-side client with `uv sync --all-extras --group carla` and check the Docker runtime
 with `scripts/dev/check_carla_runtime.sh`.
+
+### Prepared software release metadata
+
+This untagged tree carries non-authorizing preparation metadata for the planned software release
+`v0.0.6`. It is awaiting maintainer approval; no package upload, GitHub Release, Zenodo deposit,
+DOI, or tag is created by this preparation.
+
+The planned sanitized package surface includes the `all` extra and these twelve supported extras:
+`viz`, `maps`, `benchmark`, `training`, `gpu`, `recurrent`, `progress`, `analytics`, `browser`,
+`sacadrl`, `socnav`, and `criticality`. `rllib` remains development-only and is omitted from the
+sanitized candidate metadata. ORCA and `pyrvo2` remain external optional infrastructure.
+
+The sanitized candidate source excludes repository-level `examples/`, `model/`, and `maps/` payloads.
+The quickstart commands above that read those paths require a development checkout; they are not
+candidate-package runtime proof. A clean wheel-install check and exact candidate source/archive
+proof remain release gates.
 
 These three scripts provide the fastest first-touch path:
 

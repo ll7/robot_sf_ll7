@@ -109,6 +109,7 @@ and its declared matrix, seeds, metrics, and artifact-provenance requirements.
 
 ## 5. Continue by task
 
+- Continue after a host or access window ends: [post-access restoration and local analysis](post_access_local_analysis_runbook.md).
 - Compare or visualize teaching runs: [beginner notebooks](../notebooks/README.md).
 - Check local model availability: `uv run robot-sf models list` and
   `uv run robot-sf models verify`.

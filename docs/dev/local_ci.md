@@ -33,13 +33,16 @@ scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- \
 This route creates or refreshes only the current linked worktree's ignored `.venv`. It refuses the
 main checkout and dirty dependency inputs, checks `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` (2 GiB by
 default) with `check_worktree_capacity.py`, serializes recovery per repository with a kernel-backed
-lock, and verifies `fast-pysf` before starting the command. It runs the frozen, auditable operation
-`uv sync --all-extras --reinstall-package robot-sf --frozen`; an existing coherent local environment
-skips the sync. Environment ownership checks reject nested links that would redirect package writes
-outside the worktree, while allowing valid standard `bin/python*` links to the host interpreter and
-rejecting broken aliases or links into the owning checkout. The recursive scan also fails closed if
-any environment subtree cannot be inspected. Capacity or lock contention fails closed without
-starting the wrapped command.
+lock, and verifies `fast-pysf` plus the requested dependency import profile (default `core`,
+selectable with `--profile`) before starting the command. It runs the frozen, auditable operation
+`uv sync --all-extras --reinstall-package robot-sf --frozen`; an existing local environment that is
+both fast-pysf coherent and profile-complete skips the sync. A selected worktree-local `.venv` that
+fails the wrapper's profile preflight gets exactly one automatic completion sync through this same
+recovery helper before the wrapper fails closed with the bootstrap remedy. Environment ownership
+checks reject nested links that would redirect package writes outside the worktree, while allowing
+valid standard `bin/python*` links to the host interpreter and rejecting broken aliases or links
+into the owning checkout. The recursive scan also fails closed if any environment subtree cannot be
+inspected. Capacity or lock contention fails closed without starting the wrapped command.
 
 Do not combine recovery with `--venv`, `--standalone`, or a freshness bypass. Repair an explicitly
 owned environment manually with `uv sync --all-extras --reinstall-package robot-sf` in that
@@ -163,6 +166,7 @@ the tests. Do not label a partial or historical count as the readiness suite wit
 ```bash
 # Docs and links
 uv run python scripts/dev/check_docs_evidence_integrity.py --full
+uv run python scripts/dev/check_curated_doc_links.py --check --format text
 bash scripts/dev/check_context_notes.sh
 
 # Focused workflow/runtime proof

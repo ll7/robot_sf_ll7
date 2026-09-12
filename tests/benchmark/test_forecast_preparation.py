@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark.forecast import forecast_preparation as forecast_module
 from robot_sf.benchmark.forecast.forecast_preparation import (
     ForecastPreparationSourceSpec,
     _actor_for_frame,
@@ -60,6 +61,33 @@ def _validate(payload: dict) -> None:
         repo_root=REPO_ROOT,
         verify_checksums=False,
     )
+
+
+def _patch_pr8958_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Model the exact dependency inventory digest introduced by PR8958."""
+    inventory_path = REPO_ROOT / "docs/context/dependency_license_inventory.md"
+    current_builder = forecast_module._build_evidence_references
+    current_sha256_file = forecast_module.sha256_file
+
+    def _references_with_updated_inventory(root: Path) -> list[dict[str, str]]:
+        references = current_builder(root)
+        references[1] = {
+            "path": "docs/context/dependency_license_inventory.md",
+            "sha256": "8f94a50e13716652f07128f951645245ee426baf34bb2b338b231215bc7d53d5",
+        }
+        return references
+
+    def _sha256_file(path: Path) -> str:
+        if path.resolve() == inventory_path:
+            return "8f94a50e13716652f07128f951645245ee426baf34bb2b338b231215bc7d53d5"
+        return current_sha256_file(path)
+
+    monkeypatch.setattr(
+        forecast_module,
+        "_build_evidence_references",
+        _references_with_updated_inventory,
+    )
+    monkeypatch.setattr(forecast_module, "sha256_file", _sha256_file)
 
 
 def test_packet_emits_matched_rows_and_explicit_ego_unavailability() -> None:
@@ -120,6 +148,66 @@ def test_tracked_packet_checksum_manifest_is_valid() -> None:
     summary = validate_forecast_preparation_packet(payload, repo_root=REPO_ROOT)
 
     assert summary["status"] == "passed"
+
+
+def test_tracked_packet_accepts_exact_historical_reference(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The frozen packet may retain one exact reference after its source inventory moves."""
+    packet_path = (
+        REPO_ROOT
+        / "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json"
+    )
+    payload = json.loads(packet_path.read_text(encoding="utf-8"))
+    _patch_pr8958_inventory(monkeypatch)
+
+    summary = validate_forecast_preparation_packet(payload, repo_root=REPO_ROOT)
+
+    assert summary["status"] == "passed"
+
+
+def test_historical_reference_requires_the_frozen_packet(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A changed packet cannot borrow the historical producer occurrence."""
+    packet_path = (
+        REPO_ROOT
+        / "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json"
+    )
+    payload = json.loads(packet_path.read_text(encoding="utf-8"))
+    payload["claim_boundary"] = "tampered"
+    _patch_pr8958_inventory(monkeypatch)
+
+    with pytest.raises(ValueError, match="exact frozen packet bytes"):
+        forecast_module._validate_evidence_references(
+            payload["evidence_references"],
+            REPO_ROOT,
+            payload=payload,
+        )
+
+
+def test_historical_reference_fails_closed_when_history_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The historical exception cannot proceed when its Git evidence is unavailable."""
+    packet_path = (
+        REPO_ROOT
+        / "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json"
+    )
+    payload = json.loads(packet_path.read_text(encoding="utf-8"))
+    _patch_pr8958_inventory(monkeypatch)
+
+    def _missing_history(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("missing Git object")
+
+    monkeypatch.setattr(
+        forecast_module,
+        "load_historical_bindings",
+        _missing_history,
+    )
+
+    with pytest.raises(ValueError, match="historical evidence binding validation failed"):
+        forecast_module._validate_evidence_references(
+            payload["evidence_references"],
+            REPO_ROOT,
+            payload=payload,
+        )
 
 
 @pytest.mark.parametrize(

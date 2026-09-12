@@ -21,6 +21,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Preservation-aware retirement | [stale_worktree_reaper.py](../../scripts/dev/stale_worktree_reaper.py) |
 | Active-worktree lease | [pr_gate_lease.py](../../scripts/dev/pr_gate_lease.py) |
 | Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
+| Log retention and diagnostic excerpts | [check_log_retention.py](../../scripts/tools/check_log_retention.py) |
 | Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
 | Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
@@ -186,7 +187,22 @@ summarizing workloads, scheduler receipts, artifact custody, and environment rec
 It redacts private paths, internal hosts, and credentials, rejects contradictory statuses and
 orphan records, and enforces actionable next commands for incomplete runs.
 
-### 4.9 Report a blocker
+### 4.9 Check log retention and bounded diagnostic excerpts
+
+```bash
+uv run python scripts/tools/check_log_retention.py --check \
+  --manifest <LOG_MANIFEST> --root <LOG_ROOT> --format json
+```
+
+The check-only helper requires explicit per-log role, job/task identity, size, line count, text
+encoding, completion state, SHA-256, and retention class. It emits deterministic first/last/error
+context excerpts with private values redacted, while retaining the source digest and root-relative
+location. Active, truncated, binary, secret-like, duplicate, unidentified, or mismatched logs stay
+blocked. Failed and unknown jobs retain full logs until diagnosis and verified durable custody; the
+storage estimate exposes zero prune-eligible bytes until custody covers every log. The helper never
+deletes files or changes runtime logging.
+
+### 4.10 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

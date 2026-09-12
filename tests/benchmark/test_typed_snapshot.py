@@ -645,3 +645,157 @@ def test_state_inventory_writer_emits_deterministic_json(tmp_path: Path) -> None
     target = write_state_inventory(tmp_path / "inventory.json")
     assert target.is_file()
     assert json.loads(target.read_text(encoding="utf-8")) == state_inventory_payload()
+
+
+def test_interleaved_snapshot_writers_reject_mixed_generation(tmp_path: Path) -> None:
+    """Interleaved same-path writers cannot produce an accepted mixed generation."""
+    snap_a = TypedSimulatorSnapshot(
+        compatibility=_synthetic_compatibility(),
+        boundary=SnapshotBoundary(1, 0.1, 10),
+        state={"scalar": 1.0},
+        arrays={"values": np.asarray([1.0, 2.0, 3.0])},
+    )
+    snap_b = TypedSimulatorSnapshot(
+        compatibility=_synthetic_compatibility(),
+        boundary=SnapshotBoundary(2, 0.2, 9),
+        state={"scalar": 2.0},
+        arrays={"values": np.asarray([4.0, 5.0, 6.0])},
+    )
+    target = tmp_path / "target.json"
+
+    original_replace = Path.replace
+    injected = False
+
+    def replace_hook(self: Path, destination: Path) -> Path:
+        nonlocal injected
+        result = original_replace(self, destination)
+        if (
+            not injected
+            and destination == target.with_suffix(target.suffix + ".npz")
+            and "npz.tmp" in self.name
+        ):
+            injected = True
+            write_typed_snapshot(snap_b, target)
+        return result
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(Path, "replace", replace_hook)
+        write_typed_snapshot(snap_a, target)
+
+    metadata = json.loads(target.read_text(encoding="utf-8"))
+    assert metadata["boundary"]["step_index"] == 1
+    with np.load(target.with_suffix(target.suffix + ".npz")) as npz:
+        np.testing.assert_array_equal(npz["values"], np.asarray([4.0, 5.0, 6.0]))
+
+    with pytest.raises(SnapshotPayloadError, match="snapshot numeric payload digest mismatch"):
+        read_typed_snapshot(target)
+
+
+def test_concurrent_same_path_writers_isolate_temporary_files(tmp_path: Path) -> None:
+    """Concurrent writers to the same destination use distinct non-interfering temporary files."""
+    snap_a = TypedSimulatorSnapshot(
+        compatibility=_synthetic_compatibility(),
+        boundary=SnapshotBoundary(1, 0.1, 10),
+        state={"scalar": 1.0},
+        arrays={"values": np.asarray([1.0, 2.0, 3.0])},
+    )
+    snap_b = TypedSimulatorSnapshot(
+        compatibility=_synthetic_compatibility(),
+        boundary=SnapshotBoundary(2, 0.2, 9),
+        state={"scalar": 2.0},
+        arrays={"values": np.asarray([4.0, 5.0, 6.0])},
+    )
+    target = tmp_path / "isolated.json"
+
+    original_replace = Path.replace
+    observed_meta_tmps: list[Path] = []
+    triggered = False
+
+    def replace_hook(self: Path, destination: Path) -> Path:
+        nonlocal triggered
+        if "json.tmp" in self.name:
+            observed_meta_tmps.append(self)
+            if not triggered:
+                triggered = True
+                write_typed_snapshot(snap_b, target)
+                assert self.is_file()
+        return original_replace(self, destination)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(Path, "replace", replace_hook)
+        write_typed_snapshot(snap_a, target)
+
+    assert len(observed_meta_tmps) == 2
+    assert observed_meta_tmps[0] != observed_meta_tmps[1]
+
+
+def test_interrupted_snapshot_publication_fails_closed(tmp_path: Path) -> None:
+    """Interrupted publication after payload replacement rejects on next read."""
+    snap_a = TypedSimulatorSnapshot(
+        compatibility=_synthetic_compatibility(),
+        boundary=SnapshotBoundary(1, 0.1, 10),
+        state={"scalar": 1.0},
+        arrays={"values": np.asarray([1.0, 2.0, 3.0])},
+    )
+    snap_b = TypedSimulatorSnapshot(
+        compatibility=_synthetic_compatibility(),
+        boundary=SnapshotBoundary(2, 0.2, 9),
+        state={"scalar": 2.0},
+        arrays={"values": np.asarray([4.0, 5.0, 6.0])},
+    )
+    target = tmp_path / "interrupted.json"
+
+    write_typed_snapshot(snap_a, target)
+    assert read_typed_snapshot(target).boundary.step_index == 1
+
+    original_replace = Path.replace
+
+    def failing_replace(self: Path, destination: Path) -> Path:
+        result = original_replace(self, destination)
+        if destination == target.with_suffix(target.suffix + ".npz"):
+            raise RuntimeError("simulated crash during publication")
+        return result
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(Path, "replace", failing_replace)
+        with pytest.raises(RuntimeError, match="simulated crash during publication"):
+            write_typed_snapshot(snap_b, target)
+
+    with pytest.raises(SnapshotPayloadError, match="snapshot numeric payload digest mismatch"):
+        read_typed_snapshot(target)
+
+
+def test_concurrent_competing_writers_produce_coherent_generation_or_rejection(
+    tmp_path: Path,
+) -> None:
+    """Concurrent multi-threaded writes yield a coherent generation or explicit rejection."""
+    import concurrent.futures
+
+    target = tmp_path / "threaded.json"
+    snapshots = [
+        TypedSimulatorSnapshot(
+            compatibility=_synthetic_compatibility(),
+            boundary=SnapshotBoundary(i, float(i) * 0.1, 10 - i),
+            state={"scalar": float(i)},
+            arrays={"values": np.asarray([float(i), float(i) * 2.0])},
+        )
+        for i in range(1, 11)
+    ]
+
+    def run_write(snap: TypedSimulatorSnapshot) -> None:
+        write_typed_snapshot(snap, target)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(run_write, s) for s in snapshots]
+        for f in concurrent.futures.as_completed(futures):
+            f.result()
+
+    try:
+        loaded = read_typed_snapshot(target)
+        step = loaded.boundary.step_index
+        assert loaded.state["scalar"] == float(step)
+        np.testing.assert_array_equal(
+            loaded.arrays["values"], np.asarray([float(step), float(step) * 2.0])
+        )
+    except SnapshotPayloadError as exc:
+        assert "payload digest mismatch" in str(exc) or "payload changed" in str(exc)

@@ -35,8 +35,11 @@ truthiness coercion.
 
 The durable pair is a JSON metadata file and a compressed `.npz` numeric payload.
 Each file is replaced atomically, but replacing the two-file pair is not one filesystem
-transaction; the reader's digest and size checks reject a mixed-generation pair,
-including a payload replacement observed after array decoding. This post-load check
+transaction. The writer binds metadata to its own completed temporary payload before
+exposing that payload under the shared destination pathname, and uses writer-unique
+metadata temporary files to avoid cross-writer temporary clobbering or premature unlinking.
+The reader's digest and size checks reject a mixed-generation pair, including an
+interleaved write or a payload replacement observed after array decoding. This post-load check
 cannot distinguish a replacement with byte-identical contents, so a future
 transactional generation marker remains outside this prototype's scope.
 Loading uses `allow_pickle=False`. JSON values carry typed tuple and array references;

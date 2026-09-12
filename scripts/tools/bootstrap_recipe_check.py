@@ -51,6 +51,7 @@ HIDDEN_ENV_RE = re.compile(
 SHELL_METACHAR_RE = re.compile(r"&&|\|\||;|\||>|<|`|\$\(")
 PLACEHOLDER_RE = re.compile(r"\$\{?([A-Z][A-Z0-9_]*)\}?")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+HEX_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 DESTRUCTIVE_PROGRAMS = frozenset({"dd", "mkfs", "shred", "wipefs", "fdisk", "parted"})
 SENSITIVE_ROOTS = frozenset({"/", "/home", "/root", "/etc", "/usr", "/var", "/boot", "/opt"})
@@ -130,21 +131,30 @@ def _check_identity_bindings(recipe: dict[str, Any], disc: list[str], reasons: l
             disc.append(f"{reason}: {name}")
             reasons.append(reason)
 
-    for binding in recipe.get("identity_bindings", []):
+    raw_bindings = recipe.get("identity_bindings", [])
+    if not isinstance(raw_bindings, list):
+        flag("malformed_identity_bindings", "identity_bindings must be a list")
+        return
+    for binding in raw_bindings:
         if not isinstance(binding, dict):
+            flag("malformed_identity_binding", str(binding))
             continue
         kind = binding.get("kind")
+        name = binding.get("name")
+        if not kind or not name:
+            flag("malformed_identity_binding", str(binding))
+            continue
         identity = str(binding.get("identity", ""))
         if kind == "container" and not DIGEST_RE.fullmatch(str(binding.get("digest", ""))):
-            flag("mutable_container_alias", binding.get("name"))
+            flag("mutable_container_alias", name)
         elif kind == "module" and (
             not identity
             or identity.lower() in {"latest", "default", "unversioned"}
             or not re.search(r"\d", identity)
         ):
-            flag("unpinned_module_alias", binding.get("name"))
+            flag("unpinned_module_alias", name)
         elif kind == "python-package" and not binding.get("version"):
-            flag("unpinned_package", binding.get("name"))
+            flag("unpinned_package", name)
 
 
 def _check_step_shape(
@@ -318,23 +328,60 @@ def _check_recipe_header(recipe: dict[str, Any], disc: list[str], reasons: list[
             reasons.append("missing_field")
 
 
+def _check_lockfile_on_disk(
+    lockfile: str, checksum: str, project_root: Path, disc: list[str], reasons: list[str]
+) -> None:
+    lock = project_root / lockfile
+    if not lock.exists():
+        disc.append(f"missing_lockfile: {lockfile}")
+        reasons.append("missing_lockfile")
+        return
+    if not lock.is_file():
+        disc.append(f"unreadable_lockfile: {lockfile}")
+        reasons.append("unreadable_lockfile")
+        return
+    try:
+        actual = hashlib.sha256(lock.read_bytes()).hexdigest()
+    except OSError as exc:
+        disc.append(f"unreadable_lockfile: {lockfile} ({exc})")
+        reasons.append("unreadable_lockfile")
+        return
+    if checksum and HEX_SHA256_RE.fullmatch(checksum) and actual.lower() != checksum.lower():
+        disc.append(f"lockfile_drift: {lockfile}")
+        reasons.append("lockfile_drift")
+
+
 def _check_source_identity(
     recipe: dict[str, Any], project_root: Path | None, disc: list[str], reasons: list[str]
 ) -> None:
-    source = recipe.get("source_identity", {})
+    source = recipe.get("source_identity")
     if not isinstance(source, dict):
+        disc.append("malformed_source_identity")
+        reasons.append("malformed_source_identity")
         return
     commit = str(source.get("recorded_from_commit", ""))
     if commit and not COMMIT_RE.fullmatch(commit):
         disc.append(f"invalid_source_commit: {commit}")
         reasons.append("invalid_source_commit")
-    lockfile = str(source.get("lockfile", ""))
-    checksum = str(source.get("lockfile_sha256", ""))
-    lock = project_root / lockfile if project_root is not None and lockfile else None
-    if lock is not None and lock.is_file() and checksum:
-        if hashlib.sha256(lock.read_bytes()).hexdigest() != checksum:
-            disc.append(f"lockfile_drift: {lockfile}")
-            reasons.append("lockfile_drift")
+    lockfile = source.get("lockfile")
+    checksum = source.get("lockfile_sha256")
+    if recipe.get("verification_status") == "verified" and not lockfile:
+        disc.append("missing_lockfile")
+        reasons.append("missing_lockfile")
+        return
+    if lockfile is not None:
+        if not isinstance(lockfile, str) or not lockfile:
+            disc.append("malformed_lockfile_declaration")
+            reasons.append("malformed_source_identity")
+            return
+        if not checksum:
+            disc.append(f"missing_lockfile_checksum: {lockfile}")
+            reasons.append("missing_lockfile_checksum")
+        elif not isinstance(checksum, str) or not HEX_SHA256_RE.fullmatch(checksum):
+            disc.append(f"malformed_lockfile_checksum: {checksum}")
+            reasons.append("malformed_lockfile_checksum")
+        if project_root is not None:
+            _check_lockfile_on_disk(lockfile, str(checksum or ""), project_root, disc, reasons)
 
 
 def _check_verification_status(recipe: dict[str, Any], disc: list[str], reasons: list[str]) -> None:
@@ -542,10 +589,42 @@ def _run_safe_checks(
     resolved_temp_root = temp_root.resolve()
     for step in recipe.get("steps", []):
         if isinstance(step, dict) and step.get("phase") == "probe" and step.get("safe_check"):
-            results.append(
-                _execute_single_safe_step(step, temp_root, resolved_temp_root, values, timeout)
-            )
+            res = _execute_single_safe_step(step, temp_root, resolved_temp_root, values, timeout)
+            res["required"] = bool(step.get("required", True))
+            results.append(res)
     return results
+
+
+def _evaluate_safe_checks_status(entry: dict[str, Any], safe_checks: list[dict[str, Any]]) -> None:
+    entry["safe_checks"] = safe_checks
+    failed = [c for c in safe_checks if c.get("status") in {"failed", "error"}]
+    if failed:
+        entry["status"] = "invalid"
+        entry["reasons"] = sorted({*entry["reasons"], "safe_check_failed"})
+        return
+    if entry["verification_status"] == "unavailable":
+        entry["status"] = "unavailable"
+        return
+    if entry["verification_status"] == "verified":
+        required = [c for c in safe_checks if c.get("required", True)]
+        if not required:
+            entry["status"] = "unavailable"
+            entry["reasons"] = sorted({*entry["reasons"], "zero_executed_required_probes"})
+            return
+        missing_progs = [c for c in required if c.get("status") == "skipped_missing_program"]
+        skipped_subs = [c for c in required if c.get("status") == "skipped_private_substitution"]
+        if missing_progs or skipped_subs:
+            entry["status"] = "unavailable"
+            if missing_progs:
+                entry["reasons"] = sorted({*entry["reasons"], "probe_program_unavailable"})
+            if skipped_subs:
+                entry["reasons"] = sorted({*entry["reasons"], "unresolved_required_substitution"})
+            return
+        if all(c.get("status") == "passed" for c in required):
+            entry["status"] = "verified"
+            return
+        entry["status"] = "unavailable"
+        entry["reasons"] = sorted({*entry["reasons"], "safe_check_unverified"})
 
 
 def _load_recipes(path: Path) -> tuple[list[tuple[Path, dict[str, Any]]], list[str]]:
@@ -599,12 +678,10 @@ def check_recipes(
             entry = _check_recipe(recipe, project_root)
             entry["path"] = file.name
             if execute_safe_checks and entry["status"] in {"verified", "unavailable"}:
-                entry["safe_checks"] = _run_safe_checks(
+                checks = _run_safe_checks(
                     recipe, Path(tmp), project_root or Path.cwd(), safe_check_timeout
                 )
-                if any(c.get("status") in {"failed", "error"} for c in entry["safe_checks"]):
-                    entry["status"] = "invalid"
-                    entry["reasons"] = sorted({*entry["reasons"], "safe_check_failed"})
+                _evaluate_safe_checks_status(entry, checks)
             entries.append(entry)
     entries.sort(key=lambda item: (str(item.get("recipe_id")), str(item.get("path"))))
     class_status: dict[str, str] = {}

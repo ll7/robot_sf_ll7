@@ -48,6 +48,10 @@ Options:
                          Requires a linked worktree; cannot be combined with --venv, --standalone,
                          or a freshness bypass. Default linked-worktree runs recover automatically
                          after a stale fast-pysf detection.
+  --recovery-timeout SECONDS
+                         Maximum seconds to wait for the repository fast-pysf recovery lock
+                         when another worktree recovery is active (default: 120, or
+                         ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS).
   --standalone           Run a command that is verified not to import project packages. This skips
                          the dependency-profile and project-source checks, but still applies the
                          pinned-tool freshness gate; it does not prepend the worktree root to
@@ -72,6 +76,9 @@ Environment:
   ROBOT_SF_CI_MIN_FREE_BYTES
                          Minimum free bytes required for the effective temporary directory
                          (default: 1073741824).
+  ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS
+                         Maximum seconds to wait for the repository fast-pysf recovery lock
+                         when multiple worktrees attempt recovery concurrently (default: 120).
 
 Examples:
   scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
@@ -165,6 +172,7 @@ isolated_ruff=""
 isolated_conflict=""
 command_separator=""
 scratch_dir="${ROBOT_SF_CI_SCRATCH_DIR:-}"
+recovery_lock_timeout="${ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS:-120}"
 cmd=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -200,6 +208,29 @@ while [[ $# -gt 0 ]]; do
       recover_stale_fast_pysf=1
       shift
       ;;
+    --recovery-timeout|--recovery-lock-timeout)
+      isolated_conflict=1
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "$1 requires a non-negative integer timeout in seconds." >&2
+        exit 2
+      fi
+      if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+        echo "$1 requires a non-negative integer timeout in seconds: $2" >&2
+        exit 2
+      fi
+      recovery_lock_timeout="$2"
+      shift 2
+      ;;
+    --recovery-timeout=*|--recovery-lock-timeout=*)
+      isolated_conflict=1
+      val="${1#*=}"
+      if ! [[ "$val" =~ ^[0-9]+$ ]]; then
+        echo "recovery timeout requires a non-negative integer in seconds: $val" >&2
+        exit 2
+      fi
+      recovery_lock_timeout="$val"
+      shift
+      ;;
     --standalone)
       isolated_conflict=1
       standalone=1
@@ -230,6 +261,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if ! [[ "$recovery_lock_timeout" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS must be a non-negative integer (got '$recovery_lock_timeout')." >&2
+  exit 2
+fi
 
 if [[ ${#cmd[@]} -eq 0 ]]; then
   show_help >&2
@@ -584,7 +620,7 @@ if [[ -n "$recover_stale_fast_pysf" ]]; then
   fi
   # The recovery postcondition certifies the same dependency profile the
   # wrapper checks below (issue #8811).
-  if "$recovery_script" --profile "$dependency_profile"; then
+  if "$recovery_script" --wait-timeout "$recovery_lock_timeout" --profile "$dependency_profile"; then
     :
   else
     recovery_rc=$?
@@ -661,9 +697,9 @@ complete_worktree_dependency_profile() {
   fi
   echo "ERROR: shared-venv dependency profile '$dependency_profile' is incomplete in $venv_path." >&2
   printf '%s\n' "$dependency_profile_report" >&2
-  echo "Attempting one bounded completion sync: $recovery_script --profile $dependency_profile" >&2
+  echo "Attempting one bounded completion sync: $recovery_script --wait-timeout $recovery_lock_timeout --profile $dependency_profile" >&2
   local recovery_rc=0
-  "$recovery_script" --profile "$dependency_profile" || recovery_rc=$?
+  "$recovery_script" --wait-timeout "$recovery_lock_timeout" --profile "$dependency_profile" || recovery_rc=$?
   if [[ "$recovery_rc" -ne 0 ]]; then
     echo "ERROR: dependency-profile completion sync failed (recovery exit $recovery_rc)." >&2
     return 1
@@ -739,7 +775,7 @@ recover_stale_fast_pysf_automatically() {
   echo "Recovering stale fast-pysf in the linked worktree: $repo_root/.venv" >&2
   # The recovery postcondition certifies the same dependency profile the
   # wrapper checks below (issue #8811).
-  "$recovery_script" --profile "$dependency_profile" || return $?
+  "$recovery_script" --wait-timeout "$recovery_lock_timeout" --profile "$dependency_profile" || return $?
   dependency_profile_recovery_attempted=1
   venv_path="$repo_root/.venv"
   if [[ ! -x "$venv_path/bin/python" ]]; then

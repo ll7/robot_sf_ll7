@@ -198,13 +198,196 @@ def test_safe_check_execution_is_isolated_and_nonzero_fails(tmp_path: Path) -> N
         {
             "id": "fails",
             "phase": "probe",
-            "argv": ["python3", "-c", "raise SystemExit(3)"],
+            "argv": ["false"],
             "safe_check": True,
         },
     ]
     report = check_recipes(recipes_path=_write_recipe(tmp_path, failing), execute_safe_checks=True)
     assert report["verdict"] == "fail"
     assert "safe_check_failed" in report["recipes"][0]["reasons"]
+    assert report["recipes"][0]["safe_checks"][0]["host_mutation"] is False
+
+
+def test_safe_check_blocks_arbitrary_python_and_shell(tmp_path: Path) -> None:
+    # Python -c arbitrary script execution
+    recipe = _base_recipe()
+    outside_marker = tmp_path / "outside_marker.txt"
+    recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "escape-probe",
+            "phase": "probe",
+            "argv": [
+                "python3",
+                "-c",
+                f"from pathlib import Path; Path('{outside_marker}').write_text('probe')",
+            ],
+            "safe_check": True,
+        },
+    ]
+    entry = _check_case(tmp_path, recipe)
+    assert entry["status"] == "blocked"
+    assert "unsafe_safe_check" in entry["reasons"]
+    assert not outside_marker.exists()
+
+    # Shell execution in safe_check
+    shell_recipe = _base_recipe()
+    shell_recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "shell-probe",
+            "phase": "probe",
+            "argv": ["bash", "-c", "echo hello"],
+            "safe_check": True,
+        },
+    ]
+    entry_shell = _check_case(tmp_path, shell_recipe)
+    assert entry_shell["status"] == "blocked"
+    assert "unsafe_safe_check" in entry_shell["reasons"]
+
+    # Script file execution in safe_check
+    script_recipe = _base_recipe()
+    script_recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "script-probe",
+            "phase": "probe",
+            "argv": ["python3", "external_probe.py"],
+            "safe_check": True,
+        },
+    ]
+    entry_script = _check_case(tmp_path, script_recipe)
+    assert entry_script["status"] == "blocked"
+    assert "unsafe_safe_check" in entry_script["reasons"]
+
+
+def test_safe_check_workdir_escape_is_blocked_and_cannot_escape(tmp_path: Path) -> None:
+    parent_dir = tmp_path / "parent_outside"
+    parent_dir.mkdir(parents=True, exist_ok=True)
+    probe_root = tmp_path / "probe_root"
+    probe_root.mkdir(parents=True, exist_ok=True)
+
+    # Static rejection of parent-relative workdir
+    recipe_parent = _base_recipe()
+    recipe_parent["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "escape-workdir",
+            "phase": "probe",
+            "argv": ["python3", "-V"],
+            "workdir": "$RECIPE_ROOT/../outside",
+            "safe_check": True,
+        },
+    ]
+    entry = _check_case(tmp_path, recipe_parent)
+    assert entry["status"] == "blocked"
+    assert "unsafe_safe_check" in entry["reasons"]
+
+    # Direct runner execution containment validation: parent traversal cannot mkdir outside
+    escaped_marker_dir = probe_root / ".." / "outside"
+    from scripts.tools.bootstrap_recipe_check import _run_safe_checks
+
+    escape_step_recipe = {
+        "steps": [
+            {
+                "id": "escape-runner",
+                "phase": "probe",
+                "argv": ["python3", "-V"],
+                "workdir": "$RECIPE_ROOT/../outside",
+                "safe_check": True,
+            }
+        ]
+    }
+    results = _run_safe_checks(
+        escape_step_recipe, temp_root=probe_root, project_root=tmp_path, timeout=5
+    )
+    assert len(results) == 1
+    assert results[0]["status"] == "error"
+    assert results[0]["isolated"] is False
+    assert not escaped_marker_dir.exists()
+
+    # Direct runner execution containment validation: symlink escaping temp_root cannot be used
+    symlink_dir = probe_root / "symlink_outside"
+    symlink_dir.symlink_to(parent_dir)
+    symlink_step_recipe = {
+        "steps": [
+            {
+                "id": "symlink-runner",
+                "phase": "probe",
+                "argv": ["python3", "-V"],
+                "workdir": "$RECIPE_ROOT/symlink_outside",
+                "safe_check": True,
+            }
+        ]
+    }
+    symlink_results = _run_safe_checks(
+        symlink_step_recipe, temp_root=probe_root, project_root=tmp_path, timeout=5
+    )
+    assert len(symlink_results) == 1
+    assert symlink_results[0]["status"] == "error"
+    assert symlink_results[0]["isolated"] is False
+
+
+def test_safe_check_environment_canary_not_inherited(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.tools.bootstrap_recipe_check import _run_safe_checks
+
+    monkeypatch.setenv("CANARY_SECRET_TOKEN", "super-secret-canary-value")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-secret-access-key-12345")
+
+    probe_root = tmp_path / "probe_env_root"
+    probe_root.mkdir(parents=True, exist_ok=True)
+
+    # Run bounded probe that succeeds
+    recipe = {
+        "steps": [
+            {
+                "id": "check-env",
+                "phase": "probe",
+                "argv": ["python3", "-V"],
+                "workdir": "$RECIPE_ROOT",
+                "safe_check": True,
+            }
+        ]
+    }
+    results = _run_safe_checks(recipe, temp_root=probe_root, project_root=tmp_path, timeout=5)
+    assert len(results) == 1
+    assert results[0]["status"] == "passed"
+    assert results[0]["isolated"] is True
+    assert results[0]["host_mutation"] is False
+
+
+def test_skipped_probe_does_not_claim_host_mutation_zero(tmp_path: Path) -> None:
+    from scripts.tools.bootstrap_recipe_check import _run_safe_checks
+
+    probe_root = tmp_path / "probe_root"
+    probe_root.mkdir(parents=True, exist_ok=True)
+
+    recipe = {
+        "steps": [
+            {
+                "id": "missing-tool",
+                "phase": "probe",
+                "argv": ["nvidia-smi"],
+                "workdir": "$RECIPE_ROOT",
+                "safe_check": True,
+            }
+        ]
+    }
+    # Simulate missing program
+    import shutil
+
+    original_which = shutil.which
+    try:
+        shutil.which = lambda prog: None if prog == "nvidia-smi" else original_which(prog)
+        results = _run_safe_checks(recipe, temp_root=probe_root, project_root=tmp_path, timeout=5)
+        assert len(results) == 1
+        assert results[0]["status"] == "skipped_missing_program"
+        assert results[0]["isolated"] is True
+        assert results[0]["host_mutation"] is None
+    finally:
+        shutil.which = original_which
 
 
 def test_shipped_recipes_cover_all_execution_classes() -> None:

@@ -54,6 +54,26 @@ DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 DESTRUCTIVE_PROGRAMS = frozenset({"dd", "mkfs", "shred", "wipefs", "fdisk", "parted"})
 SENSITIVE_ROOTS = frozenset({"/", "/home", "/root", "/etc", "/usr", "/var", "/boot", "/opt"})
+SAFE_PROBE_PROGRAMS = frozenset(
+    {"python", "python3", "uv", "nvidia-smi", "docker", "false", "true"}
+)
+SAFE_VERSION_FLAGS = frozenset({"--version", "-V", "-VV", "-v", "--help", "-h"})
+SAFE_ENV_KEYS = frozenset(
+    {
+        "PATH",
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "WINDIR",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "VIRTUAL_ENV",
+        "PYTHONHOME",
+    }
+)
 BLOCKING_REASONS = frozenset(
     "credential_leak private_path_leak source_host_access_attempt stale_source_path "
     "unresolved_placeholder mutable_container_alias unpinned_module_alias "
@@ -142,12 +162,104 @@ def _check_step_shape(
     return argv
 
 
+def _check_safe_workdir(workdir: str) -> tuple[bool, str]:
+    if not workdir or workdir == "$RECIPE_ROOT":
+        return True, ""
+    norm = workdir.replace("\\", "/")
+    parts = norm.split("/")
+    if ".." in parts or any(p == ".." for p in Path(norm).parts):
+        return False, "parent_traversal_in_safe_workdir"
+    if norm.startswith("/"):
+        return False, "absolute_workdir_outside_recipe_root"
+    if len(norm) >= 2 and norm[1] == ":" and norm[0].isalpha():
+        return False, "drive_workdir_outside_recipe_root"
+    if norm.startswith("$") and not (norm == "$RECIPE_ROOT" or norm.startswith("$RECIPE_ROOT/")):
+        return False, f"unsupported_workdir_root_in_safe_check: {norm}"
+    return True, ""
+
+
+def _check_python_probe(argv: list[str]) -> tuple[bool, str]:
+    if len(argv) < 2:
+        return False, "python_interactive_mode_forbidden_in_safe_check"
+    for arg in argv[1:]:
+        if arg not in SAFE_VERSION_FLAGS:
+            return False, f"unsupported_python_argument_in_safe_check: {arg}"
+    return True, ""
+
+
+def _check_uv_probe(argv: list[str]) -> tuple[bool, str]:
+    if len(argv) < 2:
+        return False, "uv_interactive_mode_forbidden_in_safe_check"
+    for arg in argv[1:]:
+        if arg not in SAFE_VERSION_FLAGS:
+            return False, f"unsupported_uv_argument_in_safe_check: {arg}"
+    return True, ""
+
+
+def _check_nvidia_smi_probe(argv: list[str]) -> tuple[bool, str]:
+    safe_flags = {"-L", "--list-gpus", "-q", "--version", "-V", "-h", "--help"}
+    for arg in argv[1:]:
+        if arg.startswith(("--query-gpu=", "--format=")) or arg in safe_flags:
+            continue
+        return False, f"unsupported_nvidia_smi_flag_in_safe_check: {arg}"
+    return True, ""
+
+
+def _check_docker_probe(argv: list[str]) -> tuple[bool, str]:
+    if len(argv) < 2:
+        return False, "docker_missing_subcommand_in_safe_check"
+    sub = argv[1].lower()
+    if sub in {"version", "--version", "-v", "info"}:
+        return True, ""
+    if sub == "image" and len(argv) >= 4 and argv[2].lower() == "inspect":
+        for arg in argv[3:]:
+            if arg.startswith("-") and not (arg == "--format" or arg.startswith("--format=")):
+                return False, f"unsupported_docker_image_inspect_flag: {arg}"
+        return True, ""
+    if sub == "inspect" and len(argv) >= 3:
+        for arg in argv[2:]:
+            if arg.startswith("-") and not (arg == "--format" or arg.startswith("--format=")):
+                return False, f"unsupported_docker_inspect_flag: {arg}"
+        return True, ""
+    return False, f"unsupported_docker_subcommand_in_safe_check: {sub}"
+
+
+def _check_bounded_safe_probe(argv: list[str]) -> tuple[bool, str]:
+    if not argv:
+        return False, "empty_argv"
+    prog = Path(argv[0]).name.lower()
+    if prog in {"bash", "sh", "zsh", "dash", "ksh", "csh", "tcsh"}:
+        return False, "shell_not_permitted_in_safe_check"
+    if any(arg in {"-c", "--command", "-e"} for arg in argv):
+        return False, "arbitrary_inline_code_forbidden_in_safe_check"
+    if prog in {"python", "python3"} or (prog.startswith("python3.") and prog[8:].isdigit()):
+        return _check_python_probe(argv)
+    if prog == "uv":
+        return _check_uv_probe(argv)
+    if prog == "nvidia-smi":
+        return _check_nvidia_smi_probe(argv)
+    if prog == "docker":
+        return _check_docker_probe(argv)
+    if prog in {"false", "true"}:
+        return True, ""
+    return False, f"unrecognized_safe_check_program: {prog}"
+
+
 def _check_step_safety(
     step: dict[str, Any], phase: str, argv: list[str], disc: list[str], reasons: list[str]
 ) -> None:
-    if step.get("safe_check") and (phase != "probe" or step.get("expect_exit_code", 0) != 0):
-        if "unsafe_safe_check" not in reasons:
-            disc.append(f"unsafe_safe_check: {step.get('id', '?')} (phase {phase})")
+    if step.get("safe_check"):
+        if phase != "probe" or step.get("expect_exit_code", 0) != 0:
+            if "unsafe_safe_check" not in reasons:
+                disc.append(f"unsafe_safe_check: {step.get('id', '?')} (phase {phase})")
+                reasons.append("unsafe_safe_check")
+        workdir_ok, workdir_err = _check_safe_workdir(step.get("workdir", "$RECIPE_ROOT"))
+        if not workdir_ok and "unsafe_safe_check" not in reasons:
+            disc.append(f"unsafe_safe_check: {step.get('id', '?')} ({workdir_err})")
+            reasons.append("unsafe_safe_check")
+        probe_ok, probe_err = _check_bounded_safe_probe(argv)
+        if not probe_ok and "unsafe_safe_check" not in reasons:
+            disc.append(f"unsafe_safe_check: {step.get('id', '?')} ({probe_err})")
             reasons.append("unsafe_safe_check")
     text = " ".join(argv) + " " + " ".join(_strings(step.get("env", {})))
     if HIDDEN_ENV_RE.search(text) and "hidden_environment_dependence" not in reasons:
@@ -316,47 +428,123 @@ def _substitution_values(
     return values
 
 
+def _resolve_safe_workdir(
+    raw_workdir: str, temp_root: Path, resolved_temp_root: Path, values: dict[str, str]
+) -> tuple[Path | None, str | None]:
+    workdir_ok, workdir_err = _check_safe_workdir(raw_workdir)
+    if not workdir_ok:
+        return None, workdir_err
+
+    substituted = raw_workdir.replace("$RECIPE_ROOT", str(temp_root))
+    for name, value in values.items():
+        substituted = substituted.replace(f"${{{name}}}", value).replace(f"${name}", value)
+
+    target_cwd = Path(substituted)
+    if not target_cwd.is_absolute():
+        target_cwd = temp_root / target_cwd
+
+    try:
+        target_resolved = (
+            target_cwd.resolve() if target_cwd.exists() else Path(os.path.abspath(target_cwd))
+        )
+        target_resolved.relative_to(resolved_temp_root)
+        target_cwd.mkdir(parents=True, exist_ok=True)
+        target_cwd.resolve().relative_to(resolved_temp_root)
+    except (ValueError, OSError) as exc:
+        return None, f"workdir escapes isolated root: {exc}"
+    return target_cwd, None
+
+
+def _execute_single_safe_step(
+    step: dict[str, Any],
+    temp_root: Path,
+    resolved_temp_root: Path,
+    values: dict[str, str],
+    timeout: int,
+) -> dict[str, Any]:
+    tokens = _strings(step.get("argv", []))
+    unresolved = [n for token in tokens for n in PLACEHOLDER_RE.findall(token) if not values.get(n)]
+    if unresolved:
+        return {
+            "step_id": step.get("id"),
+            "status": "skipped_private_substitution",
+            "isolated": True,
+            "host_mutation": None,
+        }
+    for name, value in values.items():
+        tokens = [t.replace(f"${{{name}}}", value).replace(f"${name}", value) for t in tokens]
+
+    probe_ok, probe_err = _check_bounded_safe_probe(tokens)
+    if not probe_ok:
+        return {
+            "step_id": step.get("id"),
+            "status": "error",
+            "error": probe_err,
+            "isolated": False,
+            "host_mutation": None,
+        }
+
+    if not shutil.which(tokens[0]):
+        return {
+            "step_id": step.get("id"),
+            "status": "skipped_missing_program",
+            "isolated": True,
+            "host_mutation": None,
+        }
+
+    target_cwd, workdir_err = _resolve_safe_workdir(
+        str(step.get("workdir", "$RECIPE_ROOT")), temp_root, resolved_temp_root, values
+    )
+    if target_cwd is None:
+        return {
+            "step_id": step.get("id"),
+            "status": "error",
+            "error": workdir_err or "workdir escapes isolated root",
+            "isolated": False,
+            "host_mutation": None,
+        }
+
+    env: dict[str, str] = {k: os.environ[k] for k in SAFE_ENV_KEYS if k in os.environ}
+    env["HOME"] = str(resolved_temp_root)
+    env.update(values)
+    env.update({k: str(v) for k, v in step.get("env", {}).items()})
+
+    expected = step.get("expect_exit_code", 0)
+    try:
+        completed = subprocess.run(
+            tokens, cwd=target_cwd, env=env, capture_output=True, timeout=timeout, check=False
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return {
+            "step_id": step.get("id"),
+            "status": "error",
+            "error": str(exc)[:120],
+            "isolated": True,
+            "host_mutation": None,
+        }
+
+    passed = completed.returncode == expected
+    return {
+        "step_id": step.get("id"),
+        "status": "passed" if passed else "failed",
+        "exit_code": completed.returncode,
+        "expected_exit_code": expected,
+        "isolated": True,
+        "host_mutation": False,
+    }
+
+
 def _run_safe_checks(
     recipe: dict[str, Any], temp_root: Path, project_root: Path, timeout: int
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     values = _substitution_values(recipe, temp_root, project_root)
+    resolved_temp_root = temp_root.resolve()
     for step in recipe.get("steps", []):
-        if not (isinstance(step, dict) and step.get("phase") == "probe" and step.get("safe_check")):
-            continue
-        tokens = _strings(step.get("argv", []))
-        unresolved = [
-            n for token in tokens for n in PLACEHOLDER_RE.findall(token) if not values.get(n)
-        ]
-        if unresolved:
-            results.append({"step_id": step.get("id"), "status": "skipped_private_substitution"})
-            continue
-        for name, value in values.items():
-            tokens = [t.replace(f"${{{name}}}", value).replace(f"${name}", value) for t in tokens]
-        if not shutil.which(tokens[0]):
-            results.append({"step_id": step.get("id"), "status": "skipped_missing_program"})
-            continue
-        env = os.environ.copy()
-        env.update(values)
-        env.update(step.get("env", {}))
-        cwd = Path(step.get("workdir", "$RECIPE_ROOT").replace("$RECIPE_ROOT", str(temp_root)))
-        cwd.mkdir(parents=True, exist_ok=True)
-        expected = step.get("expect_exit_code", 0)
-        try:
-            completed = subprocess.run(
-                tokens, cwd=cwd, env=env, capture_output=True, timeout=timeout, check=False
+        if isinstance(step, dict) and step.get("phase") == "probe" and step.get("safe_check"):
+            results.append(
+                _execute_single_safe_step(step, temp_root, resolved_temp_root, values, timeout)
             )
-        except (subprocess.TimeoutExpired, OSError) as exc:
-            results.append({"step_id": step.get("id"), "status": "error", "error": str(exc)[:120]})
-            continue
-        results.append(
-            {
-                "step_id": step.get("id"),
-                "status": "passed" if completed.returncode == expected else "failed",
-                "exit_code": completed.returncode,
-                "expected_exit_code": expected,
-            }
-        )
     return results
 
 
@@ -430,6 +618,9 @@ def check_recipes(
     verdict = "blocked" if blocked else ("fail" if invalid else "pass")
     if verdict == "pass" and require_verified and missing:
         verdict = "fail"
+    has_unisolated = any(
+        c.get("isolated") is False for entry in entries for c in entry.get("safe_checks", [])
+    )
     return {
         "schema": REPORT_SCHEMA,
         "verdict": verdict,
@@ -441,7 +632,7 @@ def check_recipes(
         "recipes": entries,
         "load_errors": load_errors,
         "private_overlay": _check_overlay(overlay_path) if overlay_path else None,
-        "host_mutation": False,
+        "host_mutation": None if has_unisolated else False,
     }
 
 

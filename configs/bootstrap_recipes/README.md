@@ -22,10 +22,15 @@ declares a `private_substitutions` placeholder with a capability class;
 [private_overlay.example.json](private_overlay.example.json) shows the overlay shape.
 
 The checker is report-only by default; `--execute-safe-checks` runs only `probe` steps marked
-`safe_check: true` inside an isolated temporary root and never mutates the host. Output is
-deterministic (recipes sorted by `recipe_id`, JSON keys sorted). Blocking findings include
+`safe_check: true` inside an isolated temporary root and never mutates the host. Safe checks
+are restricted to repository-owned bounded discovery probes (`python/uv --version`, `nvidia-smi`
+query flags, `docker image inspect`), run within sanitized environments that strip host credentials
+and canaries, and enforce strict workdir containment within `$RECIPE_ROOT`. Arbitrary scripts
+(such as `python -c` or shell strings), mutating commands, and escaping directories are blocked
+as `unsafe_safe_check`. Skipped probes record `host_mutation: null` rather than asserting zero mutation.
+Output is deterministic (recipes sorted by `recipe_id`, JSON keys sorted). Blocking findings include
 credential or private-path leaks, source-host access, stale absolute paths, unresolved placeholders,
 mutable container tags without a digest, unpinned module or package aliases, destructive cleanup
-targets, and shell-string steps that hide ordering. Recipes with `verification_status: unavailable`
-are valid but must name an `unavailable_reason`; `--require-verified` fails when an execution class
-has no verified recipe.
+targets, unsafe safe-check definitions, and shell-string steps that hide ordering. Recipes with
+`verification_status: unavailable` are valid but must name an `unavailable_reason`;
+`--require-verified` fails when an execution class has no verified recipe.

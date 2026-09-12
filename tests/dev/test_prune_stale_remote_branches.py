@@ -317,14 +317,18 @@ def test_git_gh_probe_atomic_lease_with_local_bare_repo(tmp_path: Path) -> None:
     sha_a = subprocess.check_output(
         ["git", "-C", str(work), "rev-parse", "HEAD"], text=True
     ).strip()
+    fixture_branch = subprocess.check_output(
+        ["git", "-C", str(work), "branch", "--show-current"], text=True
+    ).strip()
+    assert fixture_branch
     subprocess.run(["git", "-C", str(work), "remote", "add", "origin", str(bare)], check=True)
     subprocess.run(
-        ["git", "-C", str(work), "push", "origin", "master:refs/heads/topic"],
+        ["git", "-C", str(work), "push", "origin", f"{fixture_branch}:refs/heads/topic"],
         check=True,
         capture_output=True,
     )
 
-    probe = GitGhProbe(repo="ll7/robot_sf_ll7", remote=str(bare), main_ref="master")
+    probe = GitGhProbe(repo="ll7/robot_sf_ll7", remote=str(bare), main_ref=fixture_branch)
 
     # Mismatched expected_sha fails and leaves ref intact
     ok, error = probe.delete_head(

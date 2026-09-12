@@ -43,10 +43,11 @@ CONSUMER_GROUPS = tuple(
     "consumers configs registries manifests scripts reports releases papers active_tasks".split()
 )
 PUBLIC_REF_RE = re.compile(
-    r"(?m)^[ \t]*(?:#\s*)?robot_sf-artifact-ref:\s*([A-Za-z0-9][A-Za-z0-9._:/-]{0,127})\s*$"
+    r"(?m)^[ \t]*(?:#[ \t]*)?robot_sf-artifact-ref:[ \t]*([A-Za-z0-9][A-Za-z0-9._:/-]{0,127})[ \t]*$"
 )
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+KNOWN_CONSUMER_STATES = frozenset("active running open queued historical published closed".split())
 PRIVATE_RE = re.compile(
     r"(?i)(?:://|api[_-]?key|secret|password|token|credential|bearer|^[/~\\]|@[A-Za-z]|(?:[a-z0-9][a-z0-9-]{0,61}\.){2,}[a-z]{2,24})"
 )
@@ -181,13 +182,13 @@ def _refs(  # noqa: C901
     return result
 
 
-def _record_id(item: Mapping[str, Any], fallback: str) -> str:
-    return _key(item.get("consumer_id", item.get("id", item.get("name", fallback))))
+def _record_id(item: Mapping[str, Any]) -> Any:
+    return item.get("consumer_id", item.get("id", item.get("name")))
 
 
 def _record_entries(
     value: Any, group: str, findings: list[dict[str, Any]]
-) -> list[tuple[int, Mapping[str, Any]]]:
+) -> list[Mapping[str, Any]]:
     """Validate one explicit consumer collection without echoing malformed input."""
     private = group == "private_projection"
     invalid_code = "invalid_private_projection" if private else "invalid_records"
@@ -196,31 +197,38 @@ def _record_entries(
         if private
         else ("consumer collection must be a list or mapping", "consumer entry must be a mapping")
     )
-    if isinstance(value, Mapping) and not private:
-        value = list(value.values())
+    value = list(value.values()) if isinstance(value, Mapping) and not private else value
     if not isinstance(value, list):
         findings.append(_finding(invalid_code, f"/{group}", None, details[0]))
         return []
-    entries = []
-    for index, item in enumerate(value):
-        if isinstance(item, Mapping):
-            entries.append((index, item))
-        else:
-            findings.append(_finding(invalid_code, f"/{group}[{index}]", None, details[1]))
-    return entries
+    if any(not isinstance(item, Mapping) for item in value):
+        findings.append(_finding(invalid_code, f"/{group}", None, details[1]))
+    return [item for item in value if isinstance(item, Mapping)]
 
 
-def _tracked_refs(root: Path) -> list[dict[str, Any]]:
+def _tracked_failure(findings: list[dict[str, Any]], code: str) -> None:
+    findings.append(_finding(code, "/tracked", None, "tracked reference collection failed"))
+
+
+def _tracked_refs(root: Path, findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Derive only safe whole-line public markers from tracked text."""
     try:
         names = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
-    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError):
+    except UnicodeError:
+        _tracked_failure(findings, "tracked_decode_failed")
+        return []
+    except (OSError, subprocess.SubprocessError):
+        _tracked_failure(findings, "tracked_scan_failed")
         return []
     found = []
     for name in sorted(n for n in names if n and not n.startswith("output/")):
         try:
             text = (root / name).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        except (OSError, UnicodeError) as exc:
+            _tracked_failure(
+                findings,
+                "tracked_decode_failed" if isinstance(exc, UnicodeError) else "tracked_read_failed",
+            )
             continue
         hits = sorted(set(PUBLIC_REF_RE.findall(text)))
         hits = [hit for hit in hits if not _private(hit)]
@@ -244,6 +252,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
     if payload.get("schema") not in {SCHEMA, "compute-window-artifact-consumers.v1"}:
         findings.append(_finding("invalid_schema", "/schema", None, "unexpected schema"))
     artifacts: dict[str, dict[str, Any]] = {}
+    invalid_artifact_ids: set[str] = set()
     identities: dict[str, set[str]] = {}
     paths: dict[str, set[str]] = {}
     raw_artifacts = payload.get("artifacts", [])
@@ -261,6 +270,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
         raw_ident = raw.get("logical_id", raw.get("id"))
         ident = _safe_id(raw_ident, f"redacted-artifact-{index}")
         if ident != raw_ident:
+            invalid_artifact_ids.add(ident)
             findings.append(
                 _finding(
                     "invalid_artifact_id",
@@ -348,23 +358,25 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                 )
             )
     records: list[tuple[str, Mapping[str, Any]]] = []
+    consumer_identity_failure = False
     for group in (*CONSUMER_GROUPS, "private_projection"):
         if group not in payload:
             continue
-        label = "private" if group == "private_projection" else group
-        for index, item in _record_entries(payload[group], group, findings):
-            records.append(
-                (
-                    _safe_id(
-                        _record_id(item, f"{label}:{index}"), f"redacted-consumer-{label}-{index}"
-                    ),
-                    item,
+        for item in _record_entries(payload[group], group, findings):
+            raw_consumer_id = _record_id(item)
+            if not _valid_id(raw_consumer_id) or _private(raw_consumer_id):
+                code = "missing_consumer_id" if raw_consumer_id is None else "invalid_consumer_id"
+                findings.append(
+                    _finding(code, f"/{group}", None, "consumer ID is required and public")
                 )
-            )
+                consumer_identity_failure = True
+                continue
+            records.append((raw_consumer_id, item))
     if root is not None:
+        tracked_records = _tracked_refs(root, findings)
         records.extend(
-            (_safe_id(_record_id(item, "tracked"), "redacted-consumer-tracked"), item)
-            for item in _tracked_refs(root)
+            (_safe_id(_record_id(item), "redacted-consumer-tracked"), item)
+            for item in tracked_records
         )
     nodes = [
         {"id": ident, "kind": item["kind"], "sha256": item["sha256"], "path": item["path"]}
@@ -525,8 +537,17 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
             or r["kind"] in {"paper", "dissertation", "release", "report", "tracked_file"}
             for r in refs
         )
-        conflict = any(f["target"] == ident or f["source"] == ident for f in findings)
-        conflict = conflict or ident in cycle_nodes or ident in ambiguous_targets
+        unknown_state = any(r["state"] not in KNOWN_CONSUMER_STATES for r in refs)
+        conflict = any(
+            f["target"] == ident or f["source"] == ident or f["code"].startswith("tracked_")
+            for f in findings
+        )
+        conflict = (
+            conflict
+            or ident in cycle_nodes
+            or ident in ambiguous_targets
+            or ident in invalid_artifact_ids
+        )
         if conflict:
             classification = "unresolved_conflict"
         elif active:
@@ -545,7 +566,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
             and artifact["replacement_for"] in artifacts
         ):
             classification = "replacement_verified"
-        elif artifact["orphan_candidate"]:
+        elif artifact["orphan_candidate"] and not unknown_state and not consumer_identity_failure:
             classification = "orphan_candidate"
         else:
             classification = "consumer_unknown"

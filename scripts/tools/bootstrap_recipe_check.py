@@ -50,9 +50,17 @@ HIDDEN_ENV_RE = re.compile(
 )
 SHELL_METACHAR_RE = re.compile(r"&&|\|\||;|\||>|<|`|\$\(")
 PLACEHOLDER_RE = re.compile(r"\$\{?([A-Z][A-Z0-9_]*)\}?")
+VALID_PLACEHOLDER_SYNTAX_RE = re.compile(r"\$\{[A-Z][A-Z0-9_]*\}|\$[A-Z][A-Z0-9_]*(?![A-Za-z0-9_])")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 HEX_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+
+
+def _has_malformed_placeholder(text: str) -> bool:
+    """Return True if text contains a '$' that does not match valid placeholder syntax."""
+    return "$" in VALID_PLACEHOLDER_SYNTAX_RE.sub("", text)
+
+
 DESTRUCTIVE_PROGRAMS = frozenset({"dd", "mkfs", "shred", "wipefs", "fdisk", "parted"})
 SENSITIVE_ROOTS = frozenset({"/", "/home", "/root", "/etc", "/usr", "/var", "/boot", "/opt"})
 SAFE_PROBE_PROGRAMS = frozenset(
@@ -203,6 +211,8 @@ def _check_safe_workdir(workdir: str) -> tuple[bool, str]:
         return False, "drive_workdir_outside_recipe_root"
     if norm.startswith("$") and not (norm == "$RECIPE_ROOT" or norm.startswith("$RECIPE_ROOT/")):
         return False, f"unsupported_workdir_root_in_safe_check: {norm}"
+    if _has_malformed_placeholder(norm):
+        return False, f"malformed_placeholder_in_safe_workdir: {workdir}"
     return True, ""
 
 
@@ -276,29 +286,41 @@ def _check_bounded_safe_probe(argv: list[str]) -> tuple[bool, str]:
     return False, f"unrecognized_safe_check_program: {prog}"
 
 
+def _check_safe_step_env(step_env: Any, step_id: str, disc: list[str], reasons: list[str]) -> None:
+    if not isinstance(step_env, dict):
+        return
+    bad_keys = [k for k in step_env if str(k).upper() in PROTECTED_SAFE_CHECK_ENV_KEYS]
+    if bad_keys and "unsafe_safe_check" not in reasons:
+        disc.append(f"unsafe_safe_check: {step_id} (protected_env_override: {bad_keys[0]})")
+        reasons.append("unsafe_safe_check")
+    for k, v in step_env.items():
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(k)):
+            if "unsafe_safe_check" not in reasons:
+                disc.append(f"unsafe_safe_check: {step_id} (invalid_env_key: {k})")
+                reasons.append("unsafe_safe_check")
+        if _has_malformed_placeholder(str(v)):
+            if "unsafe_safe_check" not in reasons:
+                disc.append(f"unsafe_safe_check: {step_id} (malformed_placeholder_in_env: {v})")
+                reasons.append("unsafe_safe_check")
+
+
 def _check_step_safe_check(
     step: dict[str, Any], phase: str, argv: list[str], disc: list[str], reasons: list[str]
 ) -> None:
+    step_id = str(step.get("id", "?"))
     if phase != "probe" or step.get("expect_exit_code", 0) != 0:
         if "unsafe_safe_check" not in reasons:
-            disc.append(f"unsafe_safe_check: {step.get('id', '?')} (phase {phase})")
+            disc.append(f"unsafe_safe_check: {step_id} (phase {phase})")
             reasons.append("unsafe_safe_check")
     workdir_ok, workdir_err = _check_safe_workdir(step.get("workdir", "$RECIPE_ROOT"))
     if not workdir_ok and "unsafe_safe_check" not in reasons:
-        disc.append(f"unsafe_safe_check: {step.get('id', '?')} ({workdir_err})")
+        disc.append(f"unsafe_safe_check: {step_id} ({workdir_err})")
         reasons.append("unsafe_safe_check")
     probe_ok, probe_err = _check_bounded_safe_probe(argv)
     if not probe_ok and "unsafe_safe_check" not in reasons:
-        disc.append(f"unsafe_safe_check: {step.get('id', '?')} ({probe_err})")
+        disc.append(f"unsafe_safe_check: {step_id} ({probe_err})")
         reasons.append("unsafe_safe_check")
-    step_env = step.get("env", {})
-    if isinstance(step_env, dict):
-        bad_keys = [k for k in step_env if str(k).upper() in PROTECTED_SAFE_CHECK_ENV_KEYS]
-        if bad_keys and "unsafe_safe_check" not in reasons:
-            disc.append(
-                f"unsafe_safe_check: {step.get('id', '?')} (protected_env_override: {bad_keys[0]})"
-            )
-            reasons.append("unsafe_safe_check")
+    _check_safe_step_env(step.get("env", {}), step_id, disc, reasons)
 
 
 def _check_step_safety(
@@ -366,21 +388,46 @@ def _check_recipe_header(recipe: dict[str, Any], disc: list[str], reasons: list[
 def _check_lockfile_on_disk(
     lockfile: str, checksum: str, project_root: Path, disc: list[str], reasons: list[str]
 ) -> None:
-    lock = project_root / lockfile
-    if not lock.exists():
+    norm = lockfile.replace("\\", "/")
+    parts = Path(norm).parts
+    is_abs = (
+        Path(lockfile).is_absolute()
+        or norm.startswith("/")
+        or (len(norm) >= 2 and norm[1] == ":" and norm[0].isalpha())
+    )
+    has_traversal = ".." in parts or any(p == ".." for p in parts)
+    if is_abs or has_traversal:
+        disc.append(f"lockfile_escape: {lockfile}")
+        reasons.append("lockfile_escape")
+        return
+
+    resolved_root = project_root.resolve()
+    candidate = project_root / lockfile
+    if not candidate.exists() and not candidate.is_symlink():
         disc.append(f"missing_lockfile: {lockfile}")
         reasons.append("missing_lockfile")
         return
-    if not lock.is_file():
+
+    try:
+        resolved_lock = candidate.resolve()
+        resolved_lock.relative_to(resolved_root)
+    except (ValueError, OSError) as exc:
+        disc.append(f"lockfile_escape: {lockfile} ({exc})")
+        reasons.append("lockfile_escape")
+        return
+
+    if not resolved_lock.is_file():
         disc.append(f"unreadable_lockfile: {lockfile}")
         reasons.append("unreadable_lockfile")
         return
+
     try:
-        actual = hashlib.sha256(lock.read_bytes()).hexdigest()
+        actual = hashlib.sha256(resolved_lock.read_bytes()).hexdigest()
     except OSError as exc:
         disc.append(f"unreadable_lockfile: {lockfile} ({exc})")
         reasons.append("unreadable_lockfile")
         return
+
     if checksum and HEX_SHA256_RE.fullmatch(checksum) and actual.lower() != checksum.lower():
         disc.append(f"lockfile_drift: {lockfile}")
         reasons.append("lockfile_drift")
@@ -408,6 +455,18 @@ def _check_source_identity(
         if not isinstance(lockfile, str) or not lockfile:
             disc.append("malformed_lockfile_declaration")
             reasons.append("malformed_source_identity")
+            return
+        norm = lockfile.replace("\\", "/")
+        parts = Path(norm).parts
+        is_abs = (
+            Path(lockfile).is_absolute()
+            or norm.startswith("/")
+            or (len(norm) >= 2 and norm[1] == ":" and norm[0].isalpha())
+        )
+        has_traversal = ".." in parts or any(p == ".." for p in parts)
+        if is_abs or has_traversal:
+            disc.append(f"lockfile_escape: {lockfile}")
+            reasons.append("lockfile_escape")
             return
         if not checksum:
             disc.append(f"missing_lockfile_checksum: {lockfile}")
@@ -451,7 +510,14 @@ def _declared_placeholders(
     if len(valid) != len(substitutions):
         disc.append("malformed_private_substitution_entry")
         reasons.append("malformed_step")
-    declared.update(str(entry["placeholder"]).lstrip("$") for entry in valid)
+    for entry in valid:
+        raw_ph = str(entry["placeholder"])
+        ph = raw_ph.lstrip("$")
+        if _has_malformed_placeholder(raw_ph if raw_ph.startswith("$") else f"${raw_ph}"):
+            disc.append(f"malformed_private_substitution_entry: {raw_ph}")
+            reasons.append("malformed_step")
+        else:
+            declared.add(ph)
     return declared, valid
 
 
@@ -475,7 +541,12 @@ def _check_recipe(recipe: dict[str, Any], project_root: Path | None) -> dict[str
     _scan_public_safety(recipe, disc, reasons)
     _check_identity_bindings(recipe, disc, reasons)
     _check_steps(recipe, disc, reasons)
-    found = {name for token in _recipe_tokens(recipe) for name in PLACEHOLDER_RE.findall(token)}
+    tokens = _recipe_tokens(recipe)
+    for token in tokens:
+        if _has_malformed_placeholder(token) and "unresolved_placeholder" not in reasons:
+            disc.append(f"malformed_placeholder: {token[:80]}")
+            reasons.append("unresolved_placeholder")
+    found = {name for token in tokens for name in PLACEHOLDER_RE.findall(token)}
     for name in sorted(found - declared):
         disc.append(f"unresolved_placeholder: ${name}")
         reasons.append("unresolved_placeholder")
@@ -520,6 +591,9 @@ def _resolve_safe_workdir(
     substituted = raw_workdir.replace("$RECIPE_ROOT", str(temp_root))
     for name, value in values.items():
         substituted = substituted.replace(f"${{{name}}}", value).replace(f"${name}", value)
+
+    if "$" in substituted:
+        return None, f"unresolved_placeholder_in_workdir: {substituted}"
 
     target_cwd = Path(substituted)
     if not target_cwd.is_absolute():
@@ -571,7 +645,10 @@ def _build_safe_step_env(
     if isinstance(step_env, dict):
         for k, v in step_env.items():
             if str(k).upper() not in PROTECTED_SAFE_CHECK_ENV_KEYS:
-                env[str(k)] = str(v)
+                v_str = str(v)
+                for name, val in values.items():
+                    v_str = v_str.replace(f"${{{name}}}", val).replace(f"${name}", val)
+                env[str(k)] = v_str
     return env
 
 
@@ -582,8 +659,25 @@ def _execute_single_safe_step(
     values: dict[str, str],
     timeout: int,
 ) -> dict[str, Any]:
-    tokens = _strings(step.get("argv", []))
-    unresolved = [n for token in tokens for n in PLACEHOLDER_RE.findall(token) if not values.get(n)]
+    step_tokens = _strings(
+        step.get("argv", []),
+        step.get("workdir", "$RECIPE_ROOT"),
+        step.get("env", {}),
+    )
+
+    for token in step_tokens:
+        if _has_malformed_placeholder(token):
+            return {
+                "step_id": step.get("id"),
+                "status": "error",
+                "error": f"malformed_placeholder: {token}",
+                "isolated": False,
+                "host_mutation": None,
+            }
+
+    unresolved = [
+        n for token in step_tokens for n in PLACEHOLDER_RE.findall(token) if not values.get(n)
+    ]
     if unresolved:
         return {
             "step_id": step.get("id"),
@@ -591,6 +685,7 @@ def _execute_single_safe_step(
             "isolated": True,
             "host_mutation": None,
         }
+    tokens = _strings(step.get("argv", []))
     for name, value in values.items():
         tokens = [t.replace(f"${{{name}}}", value).replace(f"${name}", value) for t in tokens]
 

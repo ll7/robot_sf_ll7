@@ -110,6 +110,18 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/review_work
   --remote origin
 ```
 
+Focused test runs inside the Landlock boundary must keep their cache and log outputs inside the
+worktree; otherwise numba aborts collection and pytest's logging handler fails on an unwritable
+path, which are tooling-isolation failures and never pass evidence. Print the exact recipe with:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/review_worktree_guard.py \
+  pytest-isolation --worktree "$WORKTREE_PARENT/review-pr-123"
+```
+
+Apply its `env` and `pytest_arguments` to the guarded invocation; the process exit status remains
+authoritative over any printed test summary.
+
 The creator writes the worktree-local `robot-sf.worktree-mode=review` marker and installs the
 tracked pre-push guard. Configured remote names also receive inert worktree-local push destinations
 and a nonexistent worktree-local receive-pack command. Push-specific URL rewrites (plus exact

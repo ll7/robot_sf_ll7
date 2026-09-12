@@ -2948,6 +2948,8 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert (campaign_root / "reports" / "campaign_table_core.md").exists()
     assert (campaign_root / "reports" / "campaign_table_experimental.csv").exists()
     assert (campaign_root / "reports" / "campaign_table_experimental.md").exists()
+    assert (campaign_root / "reports" / "arm_identity.csv").exists()
+    assert (campaign_root / "reports" / "arm_identity.md").exists()
     assert (campaign_root / "reports" / "matrix_summary.csv").exists()
     assert (campaign_root / "reports" / "matrix_summary.json").exists()
     assert (campaign_root / "reports" / "amv_coverage_summary.json").exists()
@@ -4250,6 +4252,10 @@ def test_planner_report_row_preserves_serialized_key_order() -> None:
         "human_model_source",
         "planner_group",
         "kinematics",
+        "config_path",
+        "model_id",
+        "action_adapter",
+        "policy_source",
         "status",
         "episodes",
         "started_at_utc",
@@ -6650,3 +6656,253 @@ def test_run_campaign_fails_fast_on_missing_snqi_normalized_term(
 
     with pytest.raises(RuntimeError, match="SNQI sensitivity preflight failed"):
         run_campaign(cfg, output_root=tmp_path / "campaign_out", label="snqi_missing_metric")
+
+
+def test_arm_identity_resolvers_unit() -> None:
+    """Spot-check arm identity fields for ppo, guarded_ppo, socnav_sampling, and goal."""
+    from robot_sf.benchmark.camera_ready._reporting import (
+        _resolve_arm_action_adapter,
+        _resolve_arm_config_path,
+        _resolve_arm_model_id,
+        _resolve_arm_policy_source,
+    )
+
+    # 1. PPO arm with eval-aligned config
+    ppo_spec = PlannerSpec(
+        key="ppo",
+        algo="ppo",
+        algo_config_path=Path("configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml"),
+    )
+    assert (
+        _resolve_arm_config_path(ppo_spec, {})
+        == "configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml"
+    )
+    ppo_model = _resolve_arm_model_id(ppo_spec, {})
+    assert (
+        ppo_model == "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+    )
+    assert _resolve_arm_action_adapter(ppo_spec, {}) == "ppo_action_to_unicycle"
+    assert _resolve_arm_policy_source(ppo_spec, ppo_model) == "trained-here"
+
+    # 2. Guarded PPO arm with camera-ready config
+    guarded_spec = PlannerSpec(
+        key="guarded_ppo",
+        algo="guarded_ppo",
+        algo_config_path=Path("configs/algos/guarded_ppo_camera_ready.yaml"),
+    )
+    assert (
+        _resolve_arm_config_path(guarded_spec, {}) == "configs/algos/guarded_ppo_camera_ready.yaml"
+    )
+    guarded_model = _resolve_arm_model_id(guarded_spec, {})
+    assert guarded_model == "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+    assert _resolve_arm_action_adapter(guarded_spec, {}) == "guarded_ppo_action_to_unicycle"
+    assert _resolve_arm_policy_source(guarded_spec, guarded_model) == "trained-here"
+
+    # 3. Guarded PPO and PPO models must be distinct (issue #9106 core requirement)
+    assert ppo_model != guarded_model
+
+    # 4. SocNav sampling arm (source adapter is SamplingPlannerAdapter, no model)
+    socnav_spec = PlannerSpec(key="socnav_sampling", algo="socnav_sampling")
+    assert _resolve_arm_config_path(socnav_spec, {}) == ""
+    socnav_model = _resolve_arm_model_id(socnav_spec, {})
+    assert socnav_model == ""
+    assert _resolve_arm_action_adapter(socnav_spec, {}) == "SamplingPlannerAdapter"
+    assert _resolve_arm_policy_source(socnav_spec, socnav_model) == "rule-based"
+
+    # 5. Goal baseline (native execution, no adapter, no model)
+    goal_spec = PlannerSpec(key="goal", algo="goal")
+    assert _resolve_arm_config_path(goal_spec, {}) == ""
+    goal_model = _resolve_arm_model_id(goal_spec, {})
+    assert goal_model == ""
+    assert _resolve_arm_action_adapter(goal_spec, {}) == ""
+    assert _resolve_arm_policy_source(goal_spec, goal_model) == "rule-based"
+
+    # 6. Literature-pretrained arm (sacadrl)
+    sacadrl_spec = PlannerSpec(key="sacadrl", algo="sacadrl")
+    sacadrl_model = _resolve_arm_model_id(sacadrl_spec, {})
+    assert sacadrl_model == "ga3c_cadrl_iros18"
+    assert _resolve_arm_action_adapter(sacadrl_spec, {}) == "SACADRLPlannerAdapter"
+    assert _resolve_arm_policy_source(sacadrl_spec, sacadrl_model) == "literature-pretrained"
+
+
+def test_campaign_table_and_arm_identity_artifacts_published(  # noqa: PLR0915
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #9106: campaign_table.csv, core, experimental, and arm_identity.csv carry identity fields."""
+    import csv
+
+    from robot_sf.benchmark.camera_ready._util import _repo_relative
+    from robot_sf.benchmark.camera_ready.campaign import (
+        _ARM_IDENTITY_HEADERS,
+        _CAMPAIGN_TABLE_HEADERS,
+        _CORE_EXPERIMENTAL_TABLE_HEADERS,
+    )
+
+    for header_tuple in (_CAMPAIGN_TABLE_HEADERS, _CORE_EXPERIMENTAL_TABLE_HEADERS):
+        for expected_col in ("config_path", "model_id", "action_adapter", "policy_source"):
+            assert expected_col in header_tuple
+            kin_idx = header_tuple.index("kinematics")
+            col_idx = header_tuple.index(expected_col)
+            assert kin_idx < col_idx <= kin_idx + 4
+
+    assert _ARM_IDENTITY_HEADERS == (
+        "planner_key",
+        "algo",
+        "planner_group",
+        "kinematics",
+        "config_path",
+        "model_id",
+        "action_adapter",
+        "policy_source",
+    )
+
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    # Set up a multi-arm campaign config with ppo, guarded_ppo, socnav_sampling, and goal
+    config_path = tmp_path / "campaign_arm_identity.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_arm_identity",
+                "campaign_id: arm_identity_test",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "robot_kinematics: [unicycle]",
+                "planners:",
+                "  - key: ppo",
+                "    algo: ppo",
+                "    planner_group: core",
+                "    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml",
+                "  - key: guarded_ppo",
+                "    algo: guarded_ppo",
+                "    planner_group: experimental",
+                "    algo_config: configs/algos/guarded_ppo_camera_ready.yaml",
+                "  - key: socnav_sampling",
+                "    algo: socnav_sampling",
+                "    planner_group: experimental",
+                "  - key: goal",
+                "    algo: goal",
+                "    planner_group: core",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(*args, **kwargs):
+        del args
+        out_path = Path(kwargs["out_path"])
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        algo = kwargs.get("planner_algo", "goal")
+        out_path.write_text(
+            json.dumps(
+                {
+                    "episode_id": f"e-{algo}-0",
+                    "scenario_id": "corridor_passing_30m_nominal",
+                    "seed": 111,
+                    "scenario_params": {"algo": algo, "metadata": {"archetype": "crossing"}},
+                    "metrics": {
+                        "success": 1.0,
+                        "collisions": 0.0,
+                        "near_misses": 0.0,
+                        "time_to_goal_norm": 0.5,
+                        "comfort_exposure": 0.1,
+                        "path_efficiency": 0.9,
+                        "jerk_mean": 0.05,
+                        "snqi": 0.85,
+                    },
+                    "algorithm_metadata": {"algorithm": algo, "status": "ok"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return {
+            "total_jobs": 1,
+            "written": 1,
+            "failed_jobs": 0,
+            "failures": [],
+            "preflight": {"status": "ok", "learned_policy_contract": {"status": "not_applicable"}},
+            "algorithm_readiness": {
+                "name": algo,
+                "tier": "baseline-ready",
+                "profile": "baseline-safe",
+            },
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    out_root = tmp_path / "campaign_out"
+    result = run_campaign(cfg, output_root=out_root, label="arm_identity_run")
+    campaign_root = Path(result["campaign_root"])
+    reports_dir = campaign_root / "reports"
+
+    # Verify report files exist
+    assert (reports_dir / "campaign_table.csv").exists()
+    assert (reports_dir / "campaign_table_core.csv").exists()
+    assert (reports_dir / "campaign_table_experimental.csv").exists()
+    assert (reports_dir / "arm_identity.csv").exists()
+    assert (reports_dir / "arm_identity.md").exists()
+
+    # Verify campaign_summary.json artifacts registration
+    summary_path = reports_dir / "campaign_summary.json"
+    summary_data = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary_data["artifacts"]["arm_identity_csv"] == _repo_relative(
+        reports_dir / "arm_identity.csv"
+    )
+    assert summary_data["artifacts"]["arm_identity_md"] == _repo_relative(
+        reports_dir / "arm_identity.md"
+    )
+
+    # Read arm_identity.csv and verify contents
+    with (reports_dir / "arm_identity.csv").open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        assert tuple(reader.fieldnames or ()) == _ARM_IDENTITY_HEADERS
+        arm_rows = {row["planner_key"]: row for row in reader}
+
+    assert set(arm_rows.keys()) == {"ppo", "guarded_ppo", "socnav_sampling", "goal"}
+
+    # Spot-check ppo vs guarded_ppo model distinction
+    ppo_row = arm_rows["ppo"]
+    guarded_row = arm_rows["guarded_ppo"]
+    assert (
+        ppo_row["model_id"]
+        == "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+    )
+    assert guarded_row["model_id"] == "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+    assert ppo_row["model_id"] != guarded_row["model_id"]
+    assert (
+        ppo_row["config_path"] == "configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml"
+    )
+    assert guarded_row["config_path"] == "configs/algos/guarded_ppo_camera_ready.yaml"
+    assert ppo_row["action_adapter"] == "ppo_action_to_unicycle"
+    assert guarded_row["action_adapter"] == "guarded_ppo_action_to_unicycle"
+    assert ppo_row["policy_source"] == "trained-here"
+    assert guarded_row["policy_source"] == "trained-here"
+
+    # Spot-check SocNav sampling arm
+    socnav_row = arm_rows["socnav_sampling"]
+    assert socnav_row["model_id"] == ""
+    assert socnav_row["action_adapter"] == "SamplingPlannerAdapter"
+    assert socnav_row["policy_source"] == "rule-based"
+
+    # Spot-check Goal baseline
+    goal_row = arm_rows["goal"]
+    assert goal_row["model_id"] == ""
+    assert goal_row["action_adapter"] == ""
+    assert goal_row["policy_source"] == "rule-based"
+
+    # Verify campaign_table.csv also contains the exact same arm identity data
+    with (reports_dir / "campaign_table.csv").open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        table_rows = {row["planner_key"]: row for row in reader}
+
+    for key, arm in arm_rows.items():
+        for field in ("config_path", "model_id", "action_adapter", "policy_source"):
+            assert table_rows[key][field] == arm[field]

@@ -137,6 +137,10 @@ _CAMPAIGN_TABLE_HEADERS = (
     "human_model_source",
     "planner_group",
     "kinematics",
+    "config_path",
+    "model_id",
+    "action_adapter",
+    "policy_source",
     "execution_mode",
     "readiness_status",
     "availability_status",
@@ -174,6 +178,10 @@ _CORE_EXPERIMENTAL_TABLE_HEADERS = (
     "human_model_source",
     "planner_group",
     "kinematics",
+    "config_path",
+    "model_id",
+    "action_adapter",
+    "policy_source",
     "readiness_tier",
     "status",
     "episodes",
@@ -183,6 +191,17 @@ _CORE_EXPERIMENTAL_TABLE_HEADERS = (
     "obstacle_collision_count_mean",
     "total_collision_count_mean",
     "snqi_mean",
+)
+
+_ARM_IDENTITY_HEADERS = (
+    "planner_key",
+    "algo",
+    "planner_group",
+    "kinematics",
+    "config_path",
+    "model_id",
+    "action_adapter",
+    "policy_source",
 )
 
 _SCENARIO_BREAKDOWN_HEADERS = (
@@ -1722,6 +1741,8 @@ class _CampaignReportArtifacts:
     core_md_path: Path
     experimental_csv_path: Path
     experimental_md_path: Path
+    arm_identity_csv_path: Path
+    arm_identity_md_path: Path
     scenario_csv_path: Path
     scenario_md_path: Path
     family_csv_path: Path
@@ -1863,12 +1884,13 @@ def _write_campaign_table_artifacts(
     cfg: CampaignConfig,
     reports_dir: Path,
     planner_rows: list[dict[str, Any]],
-) -> tuple[Path, Path, Path, Path, Path, Path]:
-    """Write main, core, and experimental campaign table artifacts.
+) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path]:
+    """Write main, core, experimental, and arm-identity campaign table artifacts.
 
     Returns:
         Tuple of (csv_path, md_table_path, core_csv_path, core_md_path,
-        experimental_csv_path, experimental_md_path).
+        experimental_csv_path, experimental_md_path, arm_identity_csv_path,
+        arm_identity_md_path).
     """
     csv_path, md_table_path = _write_table_artifacts(
         reports_dir,
@@ -1889,6 +1911,12 @@ def _write_campaign_table_artifacts(
         experimental_rows,
         headers=_CORE_EXPERIMENTAL_TABLE_HEADERS,
     )
+    arm_identity_csv_path, arm_identity_md_path = _write_table_artifacts(
+        reports_dir,
+        "arm_identity",
+        planner_rows,
+        headers=_ARM_IDENTITY_HEADERS,
+    )
     return (
         csv_path,
         md_table_path,
@@ -1896,6 +1924,8 @@ def _write_campaign_table_artifacts(
         core_md_path,
         experimental_csv_path,
         experimental_md_path,
+        arm_identity_csv_path,
+        arm_identity_md_path,
     )
 
 
@@ -2795,6 +2825,8 @@ def _build_campaign_artifacts_section(
         "campaign_table_core_md": _repo_relative(table_paths["core_md_path"]),
         "campaign_table_experimental_csv": _repo_relative(table_paths["experimental_csv_path"]),
         "campaign_table_experimental_md": _repo_relative(table_paths["experimental_md_path"]),
+        "arm_identity_csv": _repo_relative(table_paths["arm_identity_csv_path"]),
+        "arm_identity_md": _repo_relative(table_paths["arm_identity_md_path"]),
         "kinematics_parity_csv": _repo_relative(table_paths["parity_csv_path"]),
         "kinematics_parity_md": _repo_relative(table_paths["parity_md_path"]),
         "kinematics_skipped_combinations_csv": _repo_relative(table_paths["skipped_csv_path"]),
@@ -3179,7 +3211,24 @@ def _write_table_and_breakdown_artifacts(
     paths: _CampaignPreflightPaths,
     planner_rows: list[dict[str, Any]],
     run_entries: list[dict[str, Any]],
-) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path]:
+) -> tuple[
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+    Path,
+]:
     """Write campaign table and breakdown artifacts.
 
     Returns:
@@ -3193,6 +3242,8 @@ def _write_table_and_breakdown_artifacts(
         core_md_path,
         experimental_csv_path,
         experimental_md_path,
+        arm_identity_csv_path,
+        arm_identity_md_path,
     ) = _write_campaign_table_artifacts(cfg, reports_dir, planner_rows)
     (
         scenario_csv_path,
@@ -3216,6 +3267,8 @@ def _write_table_and_breakdown_artifacts(
         core_md_path,
         experimental_csv_path,
         experimental_md_path,
+        arm_identity_csv_path,
+        arm_identity_md_path,
         scenario_csv_path,
         scenario_md_path,
         family_csv_path,
@@ -3335,14 +3388,16 @@ def _assemble_report_artifacts(
         core_md_path=table_paths[3],
         experimental_csv_path=table_paths[4],
         experimental_md_path=table_paths[5],
-        scenario_csv_path=table_paths[6],
-        scenario_md_path=table_paths[7],
-        family_csv_path=table_paths[8],
-        family_md_path=table_paths[9],
-        parity_csv_path=table_paths[10],
-        parity_md_path=table_paths[11],
-        skipped_csv_path=table_paths[12],
-        skipped_md_path=table_paths[13],
+        arm_identity_csv_path=table_paths[6],
+        arm_identity_md_path=table_paths[7],
+        scenario_csv_path=table_paths[8],
+        scenario_md_path=table_paths[9],
+        family_csv_path=table_paths[10],
+        family_md_path=table_paths[11],
+        parity_csv_path=table_paths[12],
+        parity_md_path=table_paths[13],
+        skipped_csv_path=table_paths[14],
+        skipped_md_path=table_paths[15],
         seed_variability_json_path=seed_variability_json_path,
         seed_variability_csv_path=seed_variability_csv_path,
         seed_episode_rows_csv_path=seed_episode_rows_csv_path,
@@ -3458,6 +3513,8 @@ def _build_summary_and_write_run_files(  # noqa: PLR0913
         core_md_path=artifacts.core_md_path,
         experimental_csv_path=artifacts.experimental_csv_path,
         experimental_md_path=artifacts.experimental_md_path,
+        arm_identity_csv_path=artifacts.arm_identity_csv_path,
+        arm_identity_md_path=artifacts.arm_identity_md_path,
         scenario_csv_path=artifacts.scenario_csv_path,
         scenario_md_path=artifacts.scenario_md_path,
         family_csv_path=artifacts.family_csv_path,
@@ -3626,6 +3683,8 @@ def _build_table_paths_dict(  # noqa: PLR0913
     core_md_path: Path,
     experimental_csv_path: Path,
     experimental_md_path: Path,
+    arm_identity_csv_path: Path,
+    arm_identity_md_path: Path,
     scenario_csv_path: Path,
     scenario_md_path: Path,
     family_csv_path: Path,
@@ -3656,6 +3715,8 @@ def _build_table_paths_dict(  # noqa: PLR0913
         "core_md_path": core_md_path,
         "experimental_csv_path": experimental_csv_path,
         "experimental_md_path": experimental_md_path,
+        "arm_identity_csv_path": arm_identity_csv_path,
+        "arm_identity_md_path": arm_identity_md_path,
         "scenario_csv_path": scenario_csv_path,
         "scenario_md_path": scenario_md_path,
         "family_csv_path": family_csv_path,

@@ -1,14 +1,381 @@
 {
   "schema": "prune_eligibility_cases.v1",
   "cases": [
-    {"case_id": "complete_custody", "description": "Verified durable custody with matching hashes and active consumers resolved", "destination_receipt": {"durability_class": "cloud_durable", "files": [{"byte_size": 6, "relative_path": "data/sample.txt", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "state": "already_verified"}], "independent_verification": true, "manifest": {"manifest_digest": "any", "member_count": 1, "total_bytes": 6}, "schema_version": "artifact_transfer_custody.v1", "status": "verified"}, "expected_classification": "eligible_verified", "expected_status": "eligible", "source_manifest": {"inventory": [{"byte_size": 6, "path": "data/sample.txt", "retention_class": "durable-required", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}], "manifest_id": "m-custody", "owner": "ops-compute", "schema_version": "terminal_job_harvest.v1"}},
-    {"case_id": "active_consumer", "consumers": [{"id": "consumer-proc", "points_to_destination": false, "refs": ["data/sample.txt"], "state": "active"}], "description": "Active consumer references source without destination coverage", "destination_receipt": {"durability_class": "cloud_durable", "files": [{"byte_size": 6, "relative_path": "data/sample.txt", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "state": "already_verified"}], "independent_verification": true, "manifest": {"manifest_digest": "any", "member_count": 1, "total_bytes": 6}, "schema_version": "artifact_transfer_custody.v1", "status": "verified"}, "expected_classification": "blocked_active_consumer", "expected_status": "blocked", "source_manifest": {"inventory": [{"byte_size": 6, "path": "data/sample.txt", "retention_class": "durable-required", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}], "manifest_id": "m-active-consumer", "owner": "ops-compute", "schema_version": "terminal_job_harvest.v1"}},
-    {"case_id": "partial_copy", "description": "Destination transfer is partial or interrupted", "destination_receipt": {"destination": {"partial_members_cleaned": 1}, "durability_class": "cloud_durable", "files": [{"byte_size": 3, "relative_path": "data/sample.txt", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "state": "pending"}], "independent_verification": true, "manifest": {"manifest_digest": "any", "member_count": 1, "total_bytes": 6}, "partial_transfer": true, "schema_version": "artifact_transfer_custody.v1", "status": "blocked"}, "expected_classification": "blocked_missing_destination", "expected_status": "blocked", "source_manifest": {"inventory": [{"byte_size": 6, "path": "data/sample.txt", "retention_class": "durable-required", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}], "manifest_id": "m-partial", "owner": "ops-compute", "schema_version": "terminal_job_harvest.v1"}},
-    {"case_id": "changed_source", "description": "Source disk file has different digest from manifest", "destination_receipt": {"durability_class": "cloud_durable", "files": [{"byte_size": 6, "relative_path": "data/sample.txt", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "state": "already_verified"}], "independent_verification": true, "manifest": {"manifest_digest": "any", "member_count": 1, "total_bytes": 6}, "schema_version": "artifact_transfer_custody.v1", "status": "verified"}, "expected_classification": "blocked_checksum", "expected_status": "blocked", "source_file_override": {"data/sample.txt": "altered_bytes"}, "source_manifest": {"inventory": [{"byte_size": 6, "path": "data/sample.txt", "retention_class": "durable-required", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}], "manifest_id": "m-changed-source", "owner": "ops-compute", "schema_version": "terminal_job_harvest.v1"}},
-    {"case_id": "changed_destination", "description": "Destination file digest does not match manifest", "destination_receipt": {"durability_class": "cloud_durable", "files": [{"byte_size": 6, "relative_path": "data/sample.txt", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "state": "already_verified"}], "independent_verification": true, "manifest": {"manifest_digest": "any", "member_count": 1, "total_bytes": 6}, "schema_version": "artifact_transfer_custody.v1", "status": "verified"}, "expected_classification": "blocked_checksum", "expected_status": "blocked", "source_manifest": {"inventory": [{"byte_size": 6, "path": "data/sample.txt", "retention_class": "durable-required", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}], "manifest_id": "m-changed-dest", "owner": "ops-compute", "schema_version": "terminal_job_harvest.v1"}},
-    {"case_id": "expired_uri", "description": "Destination URI or access token is expired or mutable", "destination_receipt": {"destination_locator": "s3://durable-store/artifact:latest", "durability_class": "cloud_durable", "files": [{"byte_size": 6, "relative_path": "data/sample.txt", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "state": "already_verified"}], "independent_verification": true, "manifest": {"manifest_digest": "any", "member_count": 1, "total_bytes": 6}, "schema_version": "artifact_transfer_custody.v1", "status": "verified"}, "expected_classification": "blocked_missing_destination", "expected_status": "blocked", "source_manifest": {"inventory": [{"byte_size": 6, "path": "data/sample.txt", "retention_class": "durable-required", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}], "manifest_id": "m-expired-uri", "owner": "ops-compute", "schema_version": "terminal_job_harvest.v1"}},
-    {"case_id": "active_writer", "description": "Active writer or lease blocks pruning", "destination_receipt": {"durability_class": "cloud_durable", "files": [{"byte_size": 6, "relative_path": "data/sample.txt", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "state": "already_verified"}], "independent_verification": true, "manifest": {"manifest_digest": "any", "member_count": 1, "total_bytes": 6}, "schema_version": "artifact_transfer_custody.v1", "status": "verified"}, "expected_classification": "blocked_active_consumer", "expected_status": "blocked", "source_manifest": {"inventory": [{"byte_size": 6, "path": "data/sample.txt", "retention_class": "durable-required", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}], "manifest_id": "m-active-writer", "owner": "ops-compute", "schema_version": "terminal_job_harvest.v1", "writers": [{"state": "active", "writer_id": "writer-job"}]}},
-    {"case_id": "unknown_file", "description": "Untracked addition on source root is marked not_managed and excluded from plan", "destination_receipt": {"durability_class": "cloud_durable", "files": [{"byte_size": 6, "relative_path": "data/sample.txt", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "state": "already_verified"}], "independent_verification": true, "manifest": {"manifest_digest": "any", "member_count": 1, "total_bytes": 6}, "schema_version": "artifact_transfer_custody.v1", "status": "verified"}, "expected_classification": "eligible_verified", "expected_status": "eligible", "extra_source_file": "data/untracked.tmp", "source_manifest": {"inventory": [{"byte_size": 6, "path": "data/sample.txt", "retention_class": "durable-required", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}], "manifest_id": "m-unknown", "owner": "ops-compute", "schema_version": "terminal_job_harvest.v1"}},
-    {"case_id": "already_pruned", "description": "Source files already pruned on disk produces idempotent empty deletion plan", "destination_receipt": {"durability_class": "cloud_durable", "files": [{"byte_size": 6, "relative_path": "data/sample.txt", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "state": "already_verified"}], "independent_verification": true, "manifest": {"manifest_digest": "any", "member_count": 1, "total_bytes": 6}, "schema_version": "artifact_transfer_custody.v1", "status": "verified"}, "expected_classification": "eligible_verified", "expected_status": "eligible", "source_manifest": {"inventory": [{"byte_size": 6, "path": "data/sample.txt", "retention_class": "durable-required", "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}], "manifest_id": "m-already-pruned", "owner": "ops-compute", "schema_version": "terminal_job_harvest.v1"}, "source_missing": true}
+    {
+      "case_id": "complete_custody",
+      "description": "Verified durable custody with matching hashes and active consumers resolved",
+      "destination_receipt": {
+        "durability_class": "cloud_durable",
+        "files": [
+          {
+            "byte_size": 6,
+            "relative_path": "data/sample.txt",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+            "state": "already_verified"
+          }
+        ],
+        "independent_verification": true,
+        "manifest": {
+          "manifest_digest": "1f7b3d76e66339d0f451b439b9ba206c1c272e67453a464b895e8ba46a886bb0",
+          "member_count": 1,
+          "total_bytes": 6
+        },
+        "schema_version": "artifact_transfer_custody.v1",
+        "status": "verified",
+        "destination_locator": "s3://durable-storage/2026/complete_custody"
+      },
+      "expected_classification": "eligible_verified",
+      "expected_status": "eligible",
+      "source_manifest": {
+        "inventory": [
+          {
+            "byte_size": 6,
+            "path": "data/sample.txt",
+            "retention_class": "durable-required",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+          }
+        ],
+        "manifest_id": "m-custody",
+        "owner": "ops-compute",
+        "schema_version": "terminal_job_harvest.v1"
+      }
+    },
+    {
+      "case_id": "active_consumer",
+      "consumers": [
+        {
+          "id": "consumer-proc",
+          "points_to_destination": false,
+          "refs": [
+            "data/sample.txt"
+          ],
+          "state": "active"
+        }
+      ],
+      "description": "Active consumer references source without destination coverage",
+      "destination_receipt": {
+        "durability_class": "cloud_durable",
+        "files": [
+          {
+            "byte_size": 6,
+            "relative_path": "data/sample.txt",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+            "state": "already_verified"
+          }
+        ],
+        "independent_verification": true,
+        "manifest": {
+          "manifest_digest": "25e5d867a92b2286d6a685016caf5e60bc0090024175480ea057b3b8e219f1f9",
+          "member_count": 1,
+          "total_bytes": 6
+        },
+        "schema_version": "artifact_transfer_custody.v1",
+        "status": "verified",
+        "destination_locator": "s3://durable-storage/2026/active_consumer"
+      },
+      "expected_classification": "blocked_active_consumer",
+      "expected_status": "blocked",
+      "source_manifest": {
+        "inventory": [
+          {
+            "byte_size": 6,
+            "path": "data/sample.txt",
+            "retention_class": "durable-required",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+          }
+        ],
+        "manifest_id": "m-active-consumer",
+        "owner": "ops-compute",
+        "schema_version": "terminal_job_harvest.v1"
+      }
+    },
+    {
+      "case_id": "partial_copy",
+      "description": "Destination transfer is partial or interrupted",
+      "destination_receipt": {
+        "destination": {
+          "partial_members_cleaned": 1
+        },
+        "durability_class": "cloud_durable",
+        "files": [
+          {
+            "byte_size": 3,
+            "relative_path": "data/sample.txt",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+            "state": "pending"
+          }
+        ],
+        "independent_verification": true,
+        "manifest": {
+          "manifest_digest": "c6c3284469b72d3aa75041d4641bb58654a6cfcabce94bee8ad1a77198decdd1",
+          "member_count": 1,
+          "total_bytes": 6
+        },
+        "partial_transfer": true,
+        "schema_version": "artifact_transfer_custody.v1",
+        "status": "blocked",
+        "destination_locator": "s3://durable-storage/2026/partial_copy"
+      },
+      "expected_classification": "blocked_missing_destination",
+      "expected_status": "blocked",
+      "source_manifest": {
+        "inventory": [
+          {
+            "byte_size": 6,
+            "path": "data/sample.txt",
+            "retention_class": "durable-required",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+          }
+        ],
+        "manifest_id": "m-partial",
+        "owner": "ops-compute",
+        "schema_version": "terminal_job_harvest.v1"
+      }
+    },
+    {
+      "case_id": "changed_source",
+      "description": "Source disk file has different digest from manifest",
+      "destination_receipt": {
+        "durability_class": "cloud_durable",
+        "files": [
+          {
+            "byte_size": 6,
+            "relative_path": "data/sample.txt",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+            "state": "already_verified"
+          }
+        ],
+        "independent_verification": true,
+        "manifest": {
+          "manifest_digest": "4224955e9cb163e6f12656c9a20cdde159bc4618855bbc72616bf59d9d4789de",
+          "member_count": 1,
+          "total_bytes": 6
+        },
+        "schema_version": "artifact_transfer_custody.v1",
+        "status": "verified",
+        "destination_locator": "s3://durable-storage/2026/changed_source"
+      },
+      "expected_classification": "blocked_checksum",
+      "expected_status": "blocked",
+      "source_file_override": {
+        "data/sample.txt": "altered_bytes"
+      },
+      "source_manifest": {
+        "inventory": [
+          {
+            "byte_size": 6,
+            "path": "data/sample.txt",
+            "retention_class": "durable-required",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+          }
+        ],
+        "manifest_id": "m-changed-source",
+        "owner": "ops-compute",
+        "schema_version": "terminal_job_harvest.v1"
+      }
+    },
+    {
+      "case_id": "changed_destination",
+      "description": "Destination file digest does not match manifest",
+      "destination_receipt": {
+        "durability_class": "cloud_durable",
+        "files": [
+          {
+            "byte_size": 6,
+            "relative_path": "data/sample.txt",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "state": "already_verified"
+          }
+        ],
+        "independent_verification": true,
+        "manifest": {
+          "manifest_digest": "5daeda19a1868ad11d8a114fd9829ab25260a37b090f59c8cc47edef3e482762",
+          "member_count": 1,
+          "total_bytes": 6
+        },
+        "schema_version": "artifact_transfer_custody.v1",
+        "status": "verified",
+        "destination_locator": "s3://durable-storage/2026/changed_destination"
+      },
+      "expected_classification": "blocked_checksum",
+      "expected_status": "blocked",
+      "source_manifest": {
+        "inventory": [
+          {
+            "byte_size": 6,
+            "path": "data/sample.txt",
+            "retention_class": "durable-required",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+          }
+        ],
+        "manifest_id": "m-changed-dest",
+        "owner": "ops-compute",
+        "schema_version": "terminal_job_harvest.v1"
+      }
+    },
+    {
+      "case_id": "expired_uri",
+      "description": "Destination URI or access token is expired or mutable",
+      "destination_receipt": {
+        "destination_locator": "s3://durable-store/artifact:latest",
+        "durability_class": "cloud_durable",
+        "files": [
+          {
+            "byte_size": 6,
+            "relative_path": "data/sample.txt",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+            "state": "already_verified"
+          }
+        ],
+        "independent_verification": true,
+        "manifest": {
+          "manifest_digest": "6b9c8902195f6062113c80921c104ad6a525d713b7b68d5355004c4370ba44c5",
+          "member_count": 1,
+          "total_bytes": 6
+        },
+        "schema_version": "artifact_transfer_custody.v1",
+        "status": "verified"
+      },
+      "expected_classification": "blocked_missing_destination",
+      "expected_status": "blocked",
+      "source_manifest": {
+        "inventory": [
+          {
+            "byte_size": 6,
+            "path": "data/sample.txt",
+            "retention_class": "durable-required",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+          }
+        ],
+        "manifest_id": "m-expired-uri",
+        "owner": "ops-compute",
+        "schema_version": "terminal_job_harvest.v1"
+      }
+    },
+    {
+      "case_id": "active_writer",
+      "description": "Active writer or lease blocks pruning",
+      "destination_receipt": {
+        "durability_class": "cloud_durable",
+        "files": [
+          {
+            "byte_size": 6,
+            "relative_path": "data/sample.txt",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+            "state": "already_verified"
+          }
+        ],
+        "independent_verification": true,
+        "manifest": {
+          "manifest_digest": "a4707feb93a4c9252125981f03db3efb19513b8b0be65fb87608d52ac2aed192",
+          "member_count": 1,
+          "total_bytes": 6
+        },
+        "schema_version": "artifact_transfer_custody.v1",
+        "status": "verified",
+        "destination_locator": "s3://durable-storage/2026/active_writer"
+      },
+      "expected_classification": "blocked_active_consumer",
+      "expected_status": "blocked",
+      "source_manifest": {
+        "inventory": [
+          {
+            "byte_size": 6,
+            "path": "data/sample.txt",
+            "retention_class": "durable-required",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+          }
+        ],
+        "manifest_id": "m-active-writer",
+        "owner": "ops-compute",
+        "schema_version": "terminal_job_harvest.v1",
+        "writers": [
+          {
+            "state": "active",
+            "writer_id": "writer-job"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "unknown_file",
+      "description": "Untracked addition on source root is marked not_managed and excluded from plan",
+      "destination_receipt": {
+        "durability_class": "cloud_durable",
+        "files": [
+          {
+            "byte_size": 6,
+            "relative_path": "data/sample.txt",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+            "state": "already_verified"
+          }
+        ],
+        "independent_verification": true,
+        "manifest": {
+          "manifest_digest": "e7ec3177a3906036f4189555d0a0aa228720383eec183e51fbe7ccd02a755b19",
+          "member_count": 1,
+          "total_bytes": 6
+        },
+        "schema_version": "artifact_transfer_custody.v1",
+        "status": "verified",
+        "destination_locator": "s3://durable-storage/2026/unknown_file"
+      },
+      "expected_classification": "eligible_verified",
+      "expected_status": "eligible",
+      "extra_source_file": "data/untracked.tmp",
+      "source_manifest": {
+        "inventory": [
+          {
+            "byte_size": 6,
+            "path": "data/sample.txt",
+            "retention_class": "durable-required",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+          }
+        ],
+        "manifest_id": "m-unknown",
+        "owner": "ops-compute",
+        "schema_version": "terminal_job_harvest.v1"
+      }
+    },
+    {
+      "case_id": "already_pruned",
+      "description": "Source files already pruned on disk produces idempotent empty deletion plan",
+      "destination_receipt": {
+        "durability_class": "cloud_durable",
+        "files": [
+          {
+            "byte_size": 6,
+            "relative_path": "data/sample.txt",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+            "state": "already_verified"
+          }
+        ],
+        "independent_verification": true,
+        "manifest": {
+          "manifest_digest": "3e64c21e865f9020755632f70c527a0579ec700d5e6ae89e3b43596414d6793c",
+          "member_count": 1,
+          "total_bytes": 6
+        },
+        "schema_version": "artifact_transfer_custody.v1",
+        "status": "verified",
+        "destination_locator": "s3://durable-storage/2026/already_pruned"
+      },
+      "expected_classification": "eligible_verified",
+      "expected_status": "eligible",
+      "source_manifest": {
+        "inventory": [
+          {
+            "byte_size": 6,
+            "path": "data/sample.txt",
+            "retention_class": "durable-required",
+            "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+          }
+        ],
+        "manifest_id": "m-already-pruned",
+        "owner": "ops-compute",
+        "schema_version": "terminal_job_harvest.v1"
+      },
+      "source_missing": true
+    }
   ]
 }

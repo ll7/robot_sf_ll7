@@ -9,6 +9,7 @@ dispositions before producing a deterministic deletion plan.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -93,8 +94,8 @@ def extract_members(m: dict[str, Any]) -> tuple[str | None, list[dict[str, Any]]
                     "byte_size": int(it.get("byte_size", it.get("size", 0))),
                     "retention_class": ret,
                     "owner": ow,
-                    "regenerable": bool(it.get("regenerable", False)),
-                    "regeneration_verified": bool(it.get("regeneration_verified", False)),
+                    "regenerable": it.get("regenerable") is True,
+                    "regeneration_verified": it.get("regeneration_verified") is True,
                 }
             )
     return owner, members
@@ -117,11 +118,12 @@ def scan_source_disk(source_root: Path) -> tuple[dict[str, Path], list[str]]:
 
 def _extract_inputs(
     src_path: Path, dst_path: Path, c_path: Path | None, d_path: Path | None, case_name: str | None
-) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]], dict[str, str], bool]:
     src = load_json(src_path)
     dst = load_json(dst_path) if dst_path.is_file() else {}
     c_data = load_json(c_path) if c_path else None
     d_data = load_json(d_path) if d_path else None
+    from_case = False
     if src.get("schema") == "prune_eligibility_cases.v1" or "cases" in src:
         raw_c = src.get("cases", {})
         cases = (
@@ -135,6 +137,7 @@ def _extract_inputs(
             dst = case.get("destination_receipt", dst)
             c_data = case.get("consumers", c_data)
             d_data = case.get("dispositions", d_data)
+            from_case = True
 
     dispositions = {}
     if isinstance(d_data, Mapping):
@@ -170,7 +173,7 @@ def _extract_inputs(
             )
     if isinstance(src.get("consumers"), list):
         consumers.extend(src["consumers"])
-    return src, dst, consumers, dispositions
+    return src, dst, consumers, dispositions, from_case
 
 
 def _err(code: str, message: str) -> dict[str, str]:
@@ -181,6 +184,170 @@ def _rec(p: str, c: str, s: str | None, b: int, r: str, st: str, rs: list[str]) 
     d = {"path": p, "classification": c, "sha256": s, "byte_size": b}
     d.update({"retention_class": r, "source_state": st, "reasons": rs})
     return d
+
+
+def _check_destination_locator(
+    dst: Mapping[str, Any], dest_obj: Mapping[str, Any]
+) -> tuple[str | None, list[dict[str, str]]]:
+    rejections: list[dict[str, str]] = []
+    loc_fields: list[tuple[str, Any]] = []
+    for alias in ("destination_locator", "locator"):
+        if alias in dst:
+            loc_fields.append((alias, dst[alias]))
+        if alias in dest_obj:
+            loc_fields.append((f"destination.{alias}", dest_obj[alias]))
+
+    if not loc_fields:
+        rejections.append(_err("missing_destination_locator", "destination locator is missing"))
+        return None, rejections
+
+    invalid_locs = [v for _, v in loc_fields if not isinstance(v, str) or not v.strip()]
+    if invalid_locs:
+        rejections.append(
+            _err("invalid_destination_locator", "destination locator must be a non-empty string")
+        )
+        return None, rejections
+
+    unique_locs = list(dict.fromkeys(v.strip() for _, v in loc_fields))
+    if len(unique_locs) > 1:
+        rejections.append(
+            _err(
+                "contradictory_destination_locator",
+                f"conflicting destination locator aliases: {unique_locs}",
+            )
+        )
+        return None, rejections
+
+    loc = unique_locs[0]
+    if any(loc.endswith(sfx) for sfx in MUTABLE_SUFFIXES):
+        rejections.append(_err("mutable_destination_rejected", f"locator '{loc}' mutable"))
+    return loc, rejections
+
+
+def _check_independent_verification(
+    dst: Mapping[str, Any], dest_obj: Mapping[str, Any]
+) -> tuple[bool, list[dict[str, str]]]:
+    rejections: list[dict[str, str]] = []
+    indep_fields: list[tuple[str, Any]] = []
+    for alias in ("independent_verification", "independent_verified"):
+        if alias in dst:
+            indep_fields.append((alias, dst[alias]))
+        if alias in dest_obj:
+            indep_fields.append((f"destination.{alias}", dest_obj[alias]))
+
+    if not indep_fields:
+        vbasis = dst.get("verification_basis") or dest_obj.get("verification_basis")
+        if dst.get("status") == "verified" and vbasis in (
+            "checksum_receipt",
+            "manifest_verification",
+        ):
+            return True, rejections
+        rejections.append(
+            _err("missing_independent_verification", "lacks independent verification")
+        )
+        return False, rejections
+
+    non_bools = [v for _, v in indep_fields if not isinstance(v, bool)]
+    if non_bools:
+        rejections.append(
+            _err("invalid_independent_verification", "independent verification must be a boolean")
+        )
+        return False, rejections
+
+    unique_bools = {v for _, v in indep_fields}
+    if len(unique_bools) > 1:
+        rejections.append(
+            _err(
+                "contradictory_independent_verification",
+                "conflicting independent verification aliases",
+            )
+        )
+        return False, rejections
+
+    if not all(v is True for _, v in indep_fields):
+        rejections.append(
+            _err("missing_independent_verification", "lacks independent verification")
+        )
+        return False, rejections
+
+    return True, rejections
+
+
+def _check_manifest_binding(
+    dm: Any, src_digest: str, members: list[dict[str, Any]]
+) -> list[dict[str, str]]:
+    rejections: list[dict[str, str]] = []
+    if not isinstance(dm, Mapping):
+        rejections.append(
+            _err("manifest_binding_missing", "destination receipt lacks manifest binding")
+        )
+        return rejections
+
+    manifest_digest = dm.get("manifest_digest")
+    if not isinstance(manifest_digest, str) or manifest_digest != src_digest:
+        rejections.append(_err("manifest_identity_mismatch", "digest mismatch"))
+
+    member_count = dm.get("member_count")
+    if (
+        not isinstance(member_count, int)
+        or isinstance(member_count, bool)
+        or member_count != len(members)
+    ):
+        rejections.append(_err("member_count_mismatch", "member count mismatch"))
+
+    total_bytes = dm.get("total_bytes")
+    expected_bytes = sum(m["byte_size"] for m in members)
+    if (
+        not isinstance(total_bytes, int)
+        or isinstance(total_bytes, bool)
+        or total_bytes != expected_bytes
+    ):
+        rejections.append(_err("total_bytes_mismatch", "total bytes mismatch"))
+
+    return rejections
+
+
+def _collect_consumer_migration_candidates(c: Mapping[str, Any]) -> list[tuple[str, Any]]:
+    candidates: list[tuple[str, Any]] = [
+        (key, c[key])
+        for key in (
+            "points_to_destination",
+            "destination_verified",
+            "migrated",
+            "consumer_migrated",
+        )
+        if key in c
+    ]
+    dest_sub = c.get("destination")
+    if isinstance(dest_sub, Mapping):
+        candidates.extend(
+            (f"destination.{key}", dest_sub[key])
+            for key in ("verified", "points_to_destination", "destination_verified")
+            if key in dest_sub
+        )
+    mig_sub = c.get("migration")
+    if isinstance(mig_sub, Mapping):
+        candidates.extend(
+            (f"migration.{key}", mig_sub[key])
+            for key in ("verified", "migrated", "consumer_migrated")
+            if key in mig_sub
+        )
+    return candidates
+
+
+def _evaluate_consumer_migration(c: Mapping[str, Any]) -> tuple[bool, str | None]:
+    candidates = _collect_consumer_migration_candidates(c)
+    if not candidates:
+        return False, None
+
+    if any(not isinstance(v, bool) for _, v in candidates):
+        return False, "invalid_consumer_migration"
+
+    unique_bools = {v for _, v in candidates}
+    if len(unique_bools) > 1:
+        return False, "contradictory_consumer_migration"
+
+    return (True, None) if True in unique_bools else (False, None)
 
 
 def check_prune_eligibility(  # noqa: C901, PLR0912, PLR0915
@@ -194,10 +361,16 @@ def check_prune_eligibility(  # noqa: C901, PLR0912, PLR0915
     apply: bool = False,
 ) -> dict[str, Any]:
     """Check prune eligibility for manifest-owned artifacts."""
-    src, dst, consumers, dispositions = _extract_inputs(
+    src, dst, consumers, dispositions, from_case = _extract_inputs(
         source_manifest_path, destination_receipt_path, consumers_path, dispositions_path, case_name
     )
-    src_digest, (owner, members) = sha256_file(source_manifest_path), extract_members(src)
+    if from_case:
+        src_digest = hashlib.sha256(
+            json.dumps(src, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    else:
+        src_digest = sha256_file(source_manifest_path)
+    owner, members = extract_members(src)
     m_id = src.get("manifest_id") or src.get("receipt_id")
 
     rejections: list[dict[str, str]] = []
@@ -209,24 +382,17 @@ def check_prune_eligibility(  # noqa: C901, PLR0912, PLR0915
             _err("unapproved_durability_class", f"durability '{durability}' unapproved")
         )
     dest_obj = dst.get("destination", {})
-    indep = dst.get("independent_verification", False) or dest_obj.get(
-        "independent_verification", False
-    )
-    vbasis = dst.get("verification_basis") or dest_obj.get("verification_basis")
-    if not indep and not (
-        dst.get("status") == "verified" and vbasis in ("checksum_receipt", "manifest_verification")
-    ):
-        rejections.append(
-            _err("missing_independent_verification", "lacks independent verification")
-        )
-    loc = (
-        dst.get("destination_locator") or dst.get("locator") or dest_obj.get("destination_locator")
-    )
-    if loc and any(loc.endswith(sfx) for sfx in MUTABLE_SUFFIXES):
-        rejections.append(_err("mutable_destination_rejected", f"locator '{loc}' mutable"))
-    if dst.get("expired") is True or _is_expired(
-        dst.get("expires_at") or dest_obj.get("expires_at"), loc
-    ):
+    if not isinstance(dest_obj, Mapping):
+        dest_obj = {}
+
+    indep_proven, indep_errs = _check_independent_verification(dst, dest_obj)
+    rejections.extend(indep_errs)
+
+    loc, loc_errs = _check_destination_locator(dst, dest_obj)
+    rejections.extend(loc_errs)
+
+    expires_at = dst.get("expires_at") or dest_obj.get("expires_at")
+    if dst.get("expired") is True or _is_expired(expires_at, loc):
         rejections.append(_err("expired_destination_uri", "destination access window expired"))
     if dst.get("partial_transfer") is True or (
         dest_obj.get("partial_members_cleaned", 0) > 0 and dst.get("status") != "verified"
@@ -244,13 +410,8 @@ def check_prune_eligibility(  # noqa: C901, PLR0912, PLR0915
             except ChunkManifestError:
                 pass
 
-    dm = dst.get("manifest", {})
-    if dm.get("manifest_digest") not in (None, "any", src_digest, src.get("receipt_id")):
-        rejections.append(_err("manifest_identity_mismatch", "digest mismatch"))
-    if dm.get("member_count") not in (None, len(members)):
-        rejections.append(_err("member_count_mismatch", "member count mismatch"))
-    if dm.get("total_bytes") not in (None, sum(m["byte_size"] for m in members)):
-        rejections.append(_err("total_bytes_mismatch", "total bytes mismatch"))
+    manifest_errs = _check_manifest_binding(dst.get("manifest"), src_digest, members)
+    rejections.extend(manifest_errs)
 
     writers = src.get("writers", [])
     active_writer = src.get("active_job") is True or bool(src.get("active_writers"))
@@ -299,21 +460,33 @@ def check_prune_eligibility(  # noqa: C901, PLR0912, PLR0915
                         r if isinstance(r, str) else r.get("logical_id", r.get("path"))
                         for r in (refs if isinstance(refs, list) else refs.keys())
                     }
-                    if {rel, m.get("sha256"), m_id} & ref_ids and not (
-                        c.get("points_to_destination")
-                        or c.get("destination_verified")
-                        or (m.get("regenerable") and m.get("regeneration_verified"))
-                    ):
-                        cid = c.get("id", c.get("consumer_id", "unnamed"))
-                        cls, reasons = (
-                            "blocked_active_consumer",
-                            [f"active consumer '{cid}' points to source"],
+                    if {rel, m.get("sha256"), m_id} & ref_ids:
+                        migrated, issue = _evaluate_consumer_migration(c)
+                        is_regenerable = (
+                            m.get("regenerable") is True and m.get("regeneration_verified") is True
                         )
-                        break
+                        if not migrated and not is_regenerable:
+                            cid = c.get("id", c.get("consumer_id", "unnamed"))
+                            if issue == "invalid_consumer_migration":
+                                reason = f"active consumer '{cid}' has malformed migration proof"
+                            elif issue == "contradictory_consumer_migration":
+                                reason = (
+                                    f"active consumer '{cid}' has conflicting migration aliases"
+                                )
+                            else:
+                                reason = f"active consumer '{cid}' points to source"
+                            cls, reasons = "blocked_active_consumer", [reason]
+                            break
 
         if not cls and rejections:
             has_sum = any(
-                r["code"] in ("manifest_identity_mismatch", "total_bytes_mismatch")
+                r["code"]
+                in (
+                    "manifest_identity_mismatch",
+                    "total_bytes_mismatch",
+                    "member_count_mismatch",
+                    "manifest_binding_missing",
+                )
                 for r in rejections
             )
             cls = "blocked_checksum" if has_sum else "blocked_missing_destination"
@@ -414,7 +587,7 @@ def check_prune_eligibility(  # noqa: C901, PLR0912, PLR0915
         "mode": "apply" if apply else "check",
         "manifest_id": m_id,
         "durability_class": durability,
-        "independent_verification": indep,
+        "independent_verification": indep_proven,
         "summary": summary,
         "classifications": classifications,
         "deletion_plan": plan,

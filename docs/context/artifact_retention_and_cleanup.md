@@ -178,6 +178,10 @@ uv run python scripts/tools/check_prune_eligibility.py --check \
 The guard verifies durable destination custody, checksums, consumer coverage, and retention
 dispositions before permitting deletion planning. Check mode performs zero file deletions;
 an explicit `--apply` route enforces compare-and-swap revalidation before removing eligible bytes.
+Custody proof requires a non-empty, policy-valid destination locator, an exact source-manifest binding
+(`manifest_digest`, `member_count`, and `total_bytes`), and strictly typed proof booleans without
+truthiness coercion (`independent_verification`, consumer migration). Missing, wildcard, malformed, or
+contradictory aliases fail closed.
 
 ### Check checkpoint preservation custody
 

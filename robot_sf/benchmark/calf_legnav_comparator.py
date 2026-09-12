@@ -1,0 +1,1093 @@
+"""Diagnostic comparator for CALF/LegNav-inspired local-navigation evaluation.
+
+The comparator keeps a Robot SF learned-policy smoke under two paired
+observation contracts: ideal state and perception-limited state. It reuses
+the existing step-diagnostics trace rather than claiming to execute the
+external CALF policy or LegNav simulator. All metrics are therefore local
+trace metrics with explicit proxy and unavailable statuses.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+from collections.abc import Mapping, Sequence
+from numbers import Integral, Real
+from typing import Any
+
+import numpy as np
+
+CALF_LEGNAV_COMPARATOR_SCHEMA_VERSION = "calf_legnav_comparator.v1"
+CALF_LEGNAV_SOURCE_URL = "https://arxiv.org/abs/2607.27922"
+CALF_LEGNAV_SOURCE_TITLE = "Learning Social Robot Navigation By Sensing Human Legs"
+CALF_LEGNAV_CLAIM_BOUNDARY = (
+    "Diagnostic paired Robot SF policy smoke only; this does not execute CALF, LegNav, "
+    "a TurtleBot 4, or a calibrated leg sensor and is not benchmark, safety, or transfer evidence."
+)
+CALF_LEGNAV_EVIDENCE_STATUS = "diagnostic-only"
+CONDITION_IDEAL = "perfect_perception"
+CONDITION_SENSOR = "sensor_limited"
+CONDITIONS = (CONDITION_IDEAL, CONDITION_SENSOR)
+_COLLISION_FIELDS = (
+    "is_pedestrian_collision",
+    "is_obstacle_collision",
+    "is_robot_collision",
+)
+_OBSERVATION_CONFIG_DEFAULTS: dict[str, Any] = {
+    "position_noise_std_m": 0.0,
+    "position_noise_bound_m": 0.0,
+    "missed_detection_probability": 0.0,
+    "occlusion_distance_m": None,
+    "false_positive_actor_count": 0,
+    "false_positive_offset_x_m": 1.0,
+    "false_positive_offset_y_m": 0.0,
+    "false_positive_spacing_y_m": 0.5,
+    "delay_steps": 0,
+    "seed": None,
+    "fixture_visibility_ignored": False,
+}
+_OBSERVATION_CONFIG_KEYS = {
+    "position_noise_std_m": "position_noise_std_m",
+    "position_noise_bound_m": "position_noise_bound_m",
+    "missed_detection_probability": "missed_detection_probability",
+    "occlusion_distance_m": "occlusion_distance_m",
+    "delay_steps": "delay_steps",
+    "observation_perturbation_seed": "seed",
+    "ignore_fixture_visibility": "fixture_visibility_ignored",
+}
+
+
+def canonical_config_digest(config: Mapping[str, Any]) -> str:
+    """Return a SHA-256 digest for a JSON-compatible comparator config."""
+    encoded = json.dumps(
+        config,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    """Return a mapping value or an empty mapping for malformed optional fields."""
+    return value if isinstance(value, Mapping) else {}
+
+
+def _config_values_equal(actual: Any, expected: Any) -> bool:
+    """Compare JSON-loaded observation settings without coercing booleans.
+
+    Returns:
+        Whether the values match without unsafe type coercion.
+    """
+    if isinstance(expected, bool):
+        return isinstance(actual, bool) and actual == expected
+    if expected is None:
+        return actual is None
+    if isinstance(expected, Real) and not isinstance(expected, bool):
+        return isinstance(actual, Real) and not isinstance(actual, bool) and actual == expected
+    return actual == expected
+
+
+def _observation_config_mismatch(
+    trace_config: Mapping[str, Any], expected_config: Mapping[str, Any] | None
+) -> str | None:
+    """Return a blocker when trace perturbation settings do not match the config."""
+    if expected_config is None:
+        return None
+    expected = dict(_OBSERVATION_CONFIG_DEFAULTS)
+    for config_key, trace_key in _OBSERVATION_CONFIG_KEYS.items():
+        if config_key in expected_config:
+            expected[trace_key] = expected_config[config_key]
+    missing = object()
+    mismatches = []
+    for key, expected_value in expected.items():
+        actual_value = trace_config.get(key, missing)
+        if actual_value is missing or not _config_values_equal(actual_value, expected_value):
+            actual_label = "missing" if actual_value is missing else repr(actual_value)
+            mismatches.append(f"{key}={actual_label} (expected {expected_value!r})")
+    if not mismatches:
+        return None
+    return (
+        "trace observation perturbation config does not match the configured condition: "
+        + "; ".join(mismatches)
+    )
+
+
+def _expected_noise_profile(expected_config: Mapping[str, Any] | None) -> str | None:
+    """Return the deterministic noise label implied by a configured profile."""
+    if expected_config is None:
+        return None
+    expected = dict(_OBSERVATION_CONFIG_DEFAULTS)
+    for config_key, trace_key in _OBSERVATION_CONFIG_KEYS.items():
+        if config_key in expected_config:
+            expected[trace_key] = expected_config[config_key]
+    if (_finite_number(expected["position_noise_std_m"]) or 0.0) > 0.0:
+        return "bounded_gaussian"
+    if (_finite_number(expected["missed_detection_probability"]) or 0.0) > 0.0:
+        return "missed_detection"
+    if expected["occlusion_distance_m"] is not None:
+        return "occlusion_mask"
+    if _integer_value(expected["delay_steps"]) not in (None, 0):
+        return "delayed_observation"
+    if _integer_value(expected["false_positive_actor_count"]) not in (None, 0):
+        return "false_positive_actor_injection"
+    if expected["fixture_visibility_ignored"] is True:
+        return "none"
+    return None
+
+
+def _finite_number(value: Any) -> float | None:
+    """Return a finite float, preserving unavailable values as ``None``."""
+    if value is None or isinstance(value, bool) or not isinstance(value, Real):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _integer_value(value: Any) -> int | None:
+    """Return a strict integer value, rejecting booleans, floats, and strings."""
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        return None
+    return int(value)
+
+
+def _trace_rows(trace: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Return trace rows while rejecting a missing or malformed step list."""
+    rows = trace.get("steps")
+    if not isinstance(rows, list):
+        raise ValueError("trace.steps must be a list")
+    if not all(isinstance(row, Mapping) for row in rows):
+        raise ValueError("trace.steps must contain only mapping rows")
+    return list(rows)
+
+
+def _trace_completion_reason(trace: Mapping[str, Any]) -> str | None:
+    """Return a blocker when a trace is incomplete or has invalid step identity."""
+    rows = _trace_rows(trace)
+    horizon = _integer_value(trace.get("horizon"))
+    if horizon is None or horizon < 1:
+        return "trace.horizon must be a positive integer"
+    steps = [row.get("step") for row in rows]
+    if any(_integer_value(step) is None for step in steps):
+        return "trace steps must expose integer step identities"
+    if [int(step) for step in steps] != list(range(len(rows))):
+        return "trace step identities must be contiguous from zero"
+    if len(rows) > horizon:
+        return "trace contains more steps than its declared horizon"
+    if len(rows) == horizon:
+        return None
+    done_info = trace.get("done_info")
+    if not isinstance(done_info, Mapping) or not any(
+        done_info.get(field) is True for field in ("success", "terminated", "truncated")
+    ):
+        return "trace ended before its horizon without a terminal done_info verdict"
+    return None
+
+
+def _metric(
+    *,
+    value: float | None,
+    status: str,
+    units: str,
+    source: str,
+    mapping_class: str,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Build one metric row with explicit missing-data semantics.
+
+    Returns:
+        A schema-shaped metric mapping.
+    """
+    row: dict[str, Any] = {
+        "value": value,
+        "status": status,
+        "units": units,
+        "source": source,
+        "mapping_class": mapping_class,
+    }
+    if reason is not None:
+        row["reason"] = reason
+    return row
+
+
+def _distance_values(rows: Sequence[Mapping[str, Any]]) -> tuple[list[float], bool, bool]:
+    """Extract one conservative ground-truth distance per executed action.
+
+    The diagnostics producer records the distance before and after each action.
+    Those observations overlap between adjacent rows, so treating both fields
+    as independent samples would double-weight interior states in compliance
+    rates. The per-action representative is the minimum finite distance in the
+    interval; if only one field is present, that field is used.
+
+    Returns:
+        A tuple of one finite distance per row that contains at least one distance,
+        whether any provided value was malformed, and whether any row lacked both
+        distance fields.
+    """
+    values: list[float] = []
+    malformed = False
+    incomplete = False
+    for row in rows:
+        row_values: list[float] = []
+        for key in ("min_robot_ped_distance", "post_step_min_robot_ped_distance"):
+            if key not in row or row[key] is None:
+                continue
+            value = _finite_number(row[key])
+            if value is None or value < 0.0:
+                malformed = True
+            else:
+                row_values.append(value)
+        if row_values:
+            values.append(min(row_values))
+        else:
+            incomplete = True
+    return values, malformed, incomplete
+
+
+def _boolean_values(rows: Sequence[Mapping[str, Any]], field: str) -> tuple[list[bool], bool]:
+    """Return boolean field values and whether any present value is malformed."""
+    values: list[bool] = []
+    malformed = False
+    for row in rows:
+        if field not in row:
+            continue
+        value = row[field]
+        if isinstance(value, bool):
+            values.append(value)
+        else:
+            malformed = True
+    return values, malformed
+
+
+def _optional_boolean(mapping: Mapping[str, Any], field: str) -> tuple[bool | None, bool]:
+    """Return one optional boolean and whether a present value is malformed."""
+    if field not in mapping:
+        return None, False
+    value = mapping[field]
+    return (value, False) if isinstance(value, bool) else (None, True)
+
+
+def _action_values(rows: Sequence[Mapping[str, Any]]) -> tuple[np.ndarray, bool]:
+    """Extract finite two-channel actions, preferring environment actions.
+
+    Returns:
+        An ``(n, 2)`` array, or an empty array when no action is usable, and a
+        malformed-input flag.
+    """
+    actions: list[list[float]] = []
+    malformed = False
+    for row in rows:
+        raw = row.get("env_action")
+        if raw is None:
+            raw = row.get("policy_command")
+        if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)):
+            values = [_finite_number(item) for item in raw]
+            if len(values) >= 2 and values[0] is not None and values[1] is not None:
+                actions.append([values[0], values[1]])
+            else:
+                malformed = True
+        else:
+            malformed = True
+    return (
+        np.asarray(actions, dtype=float).reshape(-1, 2) if actions else np.empty((0, 2)),
+        malformed,
+    )
+
+
+def _observed_actor_counts(rows: Sequence[Mapping[str, Any]]) -> tuple[list[int], bool]:
+    """Extract non-negative observed actor counts and flag malformed metadata.
+
+    Returns:
+        Valid counts and whether any row contained missing or malformed count metadata.
+    """
+    counts: list[int] = []
+    malformed = False
+    for row in rows:
+        perturbation = row.get("observation_perturbation")
+        if not isinstance(perturbation, Mapping) or "observed_actor_count" not in perturbation:
+            malformed = True
+            continue
+        count = _integer_value(perturbation["observed_actor_count"])
+        if count is None or count < 0:
+            malformed = True
+            continue
+        counts.append(count)
+    return counts, malformed
+
+
+def _observation_contract(  # noqa: C901
+    trace: Mapping[str, Any],
+    *,
+    expected_condition: str | None = None,
+    expected_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Summarize the observed evidence class and perturbation profile.
+
+    When ``expected_condition`` is supplied, the observed evidence class must
+    match the paired slot the trace was assigned to. A mismatch (for example a
+    ``perfect_perception`` slot whose trace is actually ``perception_limited``)
+    fails closed instead of silently reporting a mislabelled pair.
+
+    Returns:
+        A condition and observation-provenance mapping.
+    """
+    rows = _trace_rows(trace)
+    classes: set[str] = set()
+    profiles: set[str] = set()
+    malformed_rows = False
+    for row in rows:
+        observed = row.get("observed_observation")
+        if not isinstance(observed, Mapping):
+            malformed_rows = True
+            continue
+        evidence_class = observed.get("evidence_class")
+        noise_profile = observed.get("noise_profile")
+        if not isinstance(evidence_class, str) or not evidence_class.strip():
+            malformed_rows = True
+        else:
+            classes.add(evidence_class)
+        if not isinstance(noise_profile, str) or not noise_profile.strip():
+            malformed_rows = True
+        else:
+            profiles.add(noise_profile)
+    if classes == {"ideal_state"}:
+        condition = CONDITION_IDEAL
+    elif classes == {"perception_limited"}:
+        condition = CONDITION_SENSOR
+    else:
+        condition = "unknown"
+    status = "available" if not malformed_rows and condition != "unknown" else "unavailable"
+    mismatch_reason: str | None = None
+    if expected_condition is not None and condition != expected_condition:
+        mismatch_reason = (
+            f"observed observation contract {condition!r} does not match the paired "
+            f"slot {expected_condition!r}; the pair is not a valid contrast"
+        )
+        status = "unavailable"
+    actor_counts, malformed_actor_counts = _observed_actor_counts(rows)
+    trace_config = _mapping(trace.get("observation_perturbation_config"))
+    config_reason = _observation_config_mismatch(trace_config, expected_config)
+    expected_profile = _expected_noise_profile(expected_config)
+    profile_reason = (
+        f"trace noise profiles {sorted(profiles)!r} do not match the configured "
+        f"profile {expected_profile!r}"
+        if expected_profile is not None and profiles != {expected_profile}
+        else None
+    )
+    reasons = []
+    if mismatch_reason:
+        reasons.append(mismatch_reason)
+    if malformed_rows:
+        reasons.append(
+            "each trace row must expose a typed observed observation evidence class and noise profile"
+        )
+    if malformed_actor_counts:
+        reasons.append("each trace row must expose a non-negative integer observed_actor_count")
+        status = "unavailable"
+    if config_reason:
+        reasons.append(config_reason)
+        status = "unavailable"
+    if profile_reason:
+        reasons.append(profile_reason)
+        status = "unavailable"
+    reason = "; ".join(reasons) or None
+    return {
+        "condition": condition,
+        "expected_condition": expected_condition,
+        "condition_binding": (
+            "unavailable"
+            if reason
+            else ("matched" if expected_condition is not None else "not_checked")
+        ),
+        "config_binding": (
+            "unavailable"
+            if config_reason
+            else ("matched" if expected_config is not None else "not_checked")
+        ),
+        **({"reason": reason} if reason else {}),
+        "status": status,
+        "evidence_classes": sorted(classes),
+        "noise_profiles": sorted(profiles),
+        "config": dict(trace_config),
+        "observed_actor_count": {
+            "min": min(actor_counts, default=None),
+            "max": max(actor_counts, default=None),
+        },
+    }
+
+
+def _action_bound_pair(value: Any) -> tuple[float, float] | None:
+    """Normalize one inclusive finite action-bound pair.
+
+    Returns:
+        A finite ``(lower, upper)`` pair, or ``None`` when malformed.
+    """
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    lower = _finite_number(value[0])
+    upper = _finite_number(value[1])
+    if lower is None or upper is None or lower > upper:
+        return None
+    return lower, upper
+
+
+def _trace_policy_command_values(row: Mapping[str, Any]) -> tuple[float | None, float | None]:
+    """Normalize one trace policy command to linear/angular values.
+
+    Returns:
+        A finite linear/angular pair when the row is structurally usable.
+    """
+    raw = row.get("policy_command")
+    if isinstance(raw, Mapping):
+        if "v" in raw and "omega" in raw:
+            return _finite_number(raw["v"]), _finite_number(raw["omega"])
+        if "vx" in raw and "vy" in raw:
+            vx = _finite_number(raw["vx"])
+            vy = _finite_number(raw["vy"])
+            return (
+                (float(np.hypot(vx, vy)), 0.0)
+                if vx is not None and vy is not None
+                else (None, None)
+            )
+        return None, None
+    try:
+        sequence = list(raw) if not isinstance(raw, (str, bytes)) else []
+    except TypeError:
+        sequence = []
+    if len(sequence) < 2:
+        return None, None
+    return _finite_number(sequence[0]), _finite_number(sequence[1])
+
+
+def _policy_action_contract_header_error(contract: Any) -> str | None:
+    """Validate the static portion of a local policy action contract.
+
+    Returns:
+        An admission-blocking reason, or ``None`` when the header is valid.
+    """
+    if not isinstance(contract, Mapping):
+        return "trace lacks a policy_action_contract bound declaration"
+    if contract.get("status") != "available":
+        return "trace policy_action_contract is not available"
+    if contract.get("command_space") != "unicycle_vw":
+        return "trace policy_action_contract has an unrecognized command space"
+    bounds = contract.get("command_bounds")
+    if not isinstance(bounds, Mapping):
+        return "trace policy_action_contract lacks command bounds"
+    if (
+        _action_bound_pair(bounds.get("linear_velocity_mps")) is None
+        or _action_bound_pair(bounds.get("angular_velocity_radps")) is None
+    ):
+        return "trace policy_action_contract has malformed command bounds"
+    return None
+
+
+def _policy_action_contract_rows_error(
+    contract: Mapping[str, Any], rows: list[Mapping[str, Any]]
+) -> str | None:
+    """Validate per-step coverage and command values for an action contract.
+
+    Returns:
+        An admission-blocking reason, or ``None`` when all rows are valid.
+    """
+    steps_validated = contract.get("steps_validated")
+    if (
+        isinstance(steps_validated, bool)
+        or not isinstance(steps_validated, Integral)
+        or int(steps_validated) != len(rows)
+    ):
+        return "trace policy_action_contract does not cover every executed step"
+    violations = contract.get("violations")
+    if isinstance(violations, bool) or not isinstance(violations, Integral) or int(violations) != 0:
+        return "trace policy_action_contract reports out-of-bounds commands"
+    bounds = contract.get("command_bounds")
+    if not isinstance(bounds, Mapping):
+        return "trace policy_action_contract lacks command bounds"
+    linear_bounds = _action_bound_pair(bounds["linear_velocity_mps"])
+    angular_bounds = _action_bound_pair(bounds["angular_velocity_radps"])
+    if linear_bounds is None or angular_bounds is None:
+        return "trace policy_action_contract has malformed command bounds"
+    linear_min, linear_max = linear_bounds
+    angular_min, angular_max = angular_bounds
+    for row in rows:
+        linear, angular = _trace_policy_command_values(row)
+        if (
+            linear is None
+            or angular is None
+            or not linear_min <= linear <= linear_max
+            or not angular_min <= angular <= angular_max
+        ):
+            return "trace policy_command contains a value outside its declared action bounds"
+        validation = row.get("policy_action_validation")
+        if not isinstance(validation, Mapping) or validation.get("status") != "within_bounds":
+            return "trace policy_action_validation is missing or not within_bounds"
+    return None
+
+
+def _policy_action_contract_error(trace: Mapping[str, Any]) -> str | None:
+    """Return an admission blocker for missing or invalid local action bounds."""
+    contract = trace.get("policy_action_contract")
+    header_error = _policy_action_contract_header_error(contract)
+    if header_error is not None:
+        return header_error
+    if not isinstance(contract, Mapping):
+        return "trace lacks a policy_action_contract bound declaration"
+    return _policy_action_contract_rows_error(contract, _trace_rows(trace))
+
+
+def _execution_block(trace: Mapping[str, Any]) -> dict[str, Any]:
+    """Return explicit execution and fallback/degraded state from one trace."""
+    fallback = _mapping(trace.get("fallback_degraded_status"))
+    reported = fallback.get("reported_fallback_or_degraded")
+    action_contract_reason = _policy_action_contract_error(trace)
+    if reported is True:
+        status = "blocked"
+        reason = "trace reports fallback_or_degraded execution"
+    elif reported is False:
+        completion_reason = _trace_completion_reason(trace)
+        execution_mode = trace.get("planner_execution_mode")
+        if completion_reason is not None:
+            status = "blocked"
+            reason = completion_reason
+        elif execution_mode not in {"native_env_action", "command_adapter", "mixed"}:
+            status = "blocked"
+            reason = "trace lacks a recognized planner execution mode"
+        elif action_contract_reason is not None:
+            status = "blocked"
+            reason = action_contract_reason
+        else:
+            status = "available"
+            reason = None
+    else:
+        status = "blocked"
+        reason = "trace lacks an explicit fallback_or_degraded verdict"
+    return {
+        "status": status,
+        "reason": reason,
+        "planner_execution_mode": trace.get("planner_execution_mode"),
+        "fallback_degraded_status": dict(fallback),
+        "policy_action_contract": _mapping(trace.get("policy_action_contract")),
+    }
+
+
+def _condition_metrics(
+    trace: Mapping[str, Any],
+    *,
+    personal_space_radius_m: float,
+    dt_s: float,
+) -> dict[str, dict[str, Any]]:
+    """Compute paired local metrics from one diagnostic trace.
+
+    Returns:
+        Metric mappings keyed by the stable report metric name.
+    """
+    rows = _trace_rows(trace)
+    execution = _execution_block(trace)
+    execution_status = str(execution["status"])
+    unavailable_reason = execution.get("reason")
+
+    if not rows:
+        missing_reason = "trace has no executed steps"
+        return {
+            name: _metric(
+                value=None,
+                status="unavailable",
+                units=units,
+                source=source,
+                mapping_class=mapping,
+                reason=missing_reason,
+            )
+            for name, units, source, mapping in (
+                (
+                    "success_rate",
+                    "fraction",
+                    "trace.done_info.success",
+                    "exact_local",
+                ),
+                (
+                    "collision_rate",
+                    "fraction",
+                    "trace.collision_flags",
+                    "exact_local",
+                ),
+                (
+                    "minimum_human_distance_m",
+                    "m",
+                    "trace.ground_truth_simulator_distance",
+                    "qualified_proxy",
+                ),
+                (
+                    "personal_space_compliance_rate",
+                    "fraction",
+                    "trace.ground_truth_simulator_distance",
+                    "qualified_proxy",
+                ),
+                (
+                    "angular_jerk_rad_s3",
+                    "rad/s^3",
+                    "trace.env_action",
+                    "qualified_proxy",
+                ),
+                (
+                    "action_smoothness_l2",
+                    "action_units/step",
+                    "trace.env_action",
+                    "exact_local",
+                ),
+                (
+                    "timeout_rate",
+                    "fraction",
+                    "trace.done_info.truncated",
+                    "exact_local",
+                ),
+            )
+        }
+
+    def row(
+        *,
+        value: float | None,
+        units: str,
+        source: str,
+        mapping: str,
+        reason: str | None = unavailable_reason,
+    ) -> dict[str, Any]:
+        """Apply common execution status to a computed row.
+
+        Returns:
+            A metric row with blocked or unavailable semantics applied.
+        """
+        if execution_status == "blocked":
+            return _metric(
+                value=None,
+                status="blocked",
+                units=units,
+                source=source,
+                mapping_class=mapping,
+                reason=reason,
+            )
+        return _metric(
+            value=value,
+            status="available" if value is not None else "unavailable",
+            units=units,
+            source=source,
+            mapping_class=mapping,
+            reason=None if value is not None else (reason or "required trace field unavailable"),
+        )
+
+    boolean_reason = "outcome flags must be booleans when present"
+    success_values, malformed_row_success = _boolean_values(rows, "is_success")
+    done_info = _mapping(trace.get("done_info"))
+    done_success, malformed_done_success = _optional_boolean(done_info, "success")
+    success_present = done_success is not None or bool(success_values)
+    contradictory_success = done_success is False and any(success_values)
+    success = (
+        None
+        if (
+            malformed_row_success
+            or malformed_done_success
+            or contradictory_success
+            or not success_present
+        )
+        else float(done_success)
+        if done_success is not None
+        else float(any(success_values))
+    )
+    collision_values: list[bool] = []
+    malformed_collision = False
+    missing_collision = False
+    for row_data in rows:
+        for key in _COLLISION_FIELDS:
+            if key not in row_data:
+                missing_collision = True
+                continue
+            value = row_data[key]
+            if isinstance(value, bool):
+                collision_values.append(value)
+            else:
+                malformed_collision = True
+    collision = (
+        None
+        if malformed_collision or missing_collision or not collision_values
+        else float(any(collision_values))
+    )
+    horizon = _integer_value(trace.get("horizon"))
+    horizon_reached = horizon is not None and horizon > 0 and len(rows) >= horizon
+    row_terminated_values, malformed_row_terminated = _boolean_values(rows, "terminated")
+    done_terminated, malformed_done_terminated = _optional_boolean(done_info, "terminated")
+    terminated = (
+        None
+        if malformed_row_terminated or malformed_done_terminated
+        else bool(done_terminated) or any(row_terminated_values)
+    )
+    row_truncated_values, malformed_row_truncated = _boolean_values(rows, "truncated")
+    done_truncated, malformed_done_truncated = _optional_boolean(done_info, "truncated")
+    truncated = (
+        None
+        if (
+            success is None
+            or terminated is None
+            or malformed_row_truncated
+            or malformed_done_truncated
+        )
+        else float(
+            bool(done_truncated)
+            or any(row_truncated_values)
+            or (horizon_reached and not bool(success) and not bool(terminated))
+        )
+    )
+    distances, malformed_distances, incomplete_distances = _distance_values(rows)
+    actions, malformed_actions = _action_values(rows)
+    success_reason = (
+        boolean_reason
+        if malformed_row_success or malformed_done_success
+        else "trace.done_info.success contradicts trace.is_success"
+        if contradictory_success
+        else None
+    )
+    distance_reason = (
+        "distance fields must be finite non-negative numbers when present"
+        if malformed_distances
+        else "each executed action must expose at least one ground-truth distance field"
+        if incomplete_distances
+        else "ground-truth simulator distance is not present"
+    )
+    complete_distances = bool(distances) and not malformed_distances and not incomplete_distances
+    collision_reason = (
+        boolean_reason
+        if malformed_collision
+        else "each executed row must expose all collision flags"
+        if missing_collision
+        else boolean_reason
+    )
+    action_reason = (
+        "action fields must contain at least two finite numeric channels"
+        if malformed_actions
+        else "at least three finite action rows are required"
+    )
+    metric_rows = {
+        "success_rate": row(
+            value=success,
+            units="fraction",
+            source="trace.done_info.success|trace.is_success",
+            mapping="exact_local",
+            reason=success_reason if success is None else None,
+        ),
+        "collision_rate": row(
+            value=collision,
+            units="fraction",
+            source="trace.collision_flags",
+            mapping="exact_local",
+            reason=collision_reason if collision is None else None,
+        ),
+        "minimum_human_distance_m": row(
+            value=min(distances) if complete_distances else None,
+            units="m",
+            source="trace.ground_truth_simulator_distance",
+            mapping="qualified_proxy",
+            reason=distance_reason,
+        ),
+        "personal_space_compliance_rate": row(
+            value=(
+                float(np.mean(np.asarray(distances) >= personal_space_radius_m))
+                if complete_distances
+                else None
+            ),
+            units="fraction",
+            source="trace.ground_truth_simulator_distance",
+            mapping="qualified_proxy",
+            reason=distance_reason,
+        ),
+        "angular_jerk_rad_s3": row(
+            value=(
+                float(np.mean(np.abs(np.diff(actions[:, 1], n=2))) / dt_s**2)
+                if actions.shape[0] >= 3 and not malformed_actions
+                else None
+            ),
+            units="rad/s^3",
+            source="trace.env_action[1]",
+            mapping="qualified_proxy",
+            reason=action_reason,
+        ),
+        "action_smoothness_l2": row(
+            value=(
+                float(np.mean(np.linalg.norm(np.diff(actions, axis=0), axis=1)))
+                if actions.shape[0] >= 2 and not malformed_actions
+                else None
+            ),
+            units="action_units/step",
+            source="trace.env_action",
+            mapping="exact_local",
+            reason=(
+                "action fields must contain at least two finite numeric channels"
+                if malformed_actions
+                else "at least two finite action rows are required"
+            ),
+        ),
+        "timeout_rate": row(
+            value=(
+                float(bool(truncated) and not bool(success))
+                if truncated is not None and success is not None
+                else None
+            ),
+            units="fraction",
+            source=(
+                "trace.done_info.truncated|trace.truncated|trace.done_info.terminated|"
+                "trace.terminated|trace.horizon"
+            ),
+            mapping="exact_local",
+            reason=boolean_reason if truncated is None else None,
+        ),
+    }
+    return metric_rows
+
+
+def _unsupported_fields() -> list[dict[str, str]]:
+    """Return CALF/LegNav fields not reproduced by this Robot SF diagnostic."""
+    return [
+        {
+            "field": "leg_lidar_segmentation_and_gait_state",
+            "status": "unavailable",
+            "reason": "Robot SF trace exposes simulator pedestrian state, not leg-segmented scans.",
+        },
+        {
+            "field": "legnav_pedestrian_gait_model",
+            "status": "unavailable",
+            "reason": "The external LegNav pedestrian gait model is not hydrated here.",
+        },
+        {
+            "field": "turtlebot_4_zero_shot_deployment",
+            "status": "unavailable",
+            "reason": "No TurtleBot 4 hardware, deployment checkpoint, or runtime is in scope.",
+        },
+        {
+            "field": "source_policy_training_algorithm_and_bounds",
+            "status": "unavailable",
+            "reason": "The comparator evaluates a Robot SF PPO candidate; CALF training settings are not imported.",
+        },
+        {
+            "field": "social_force_hsfm_calibration_or_parity",
+            "status": "unavailable",
+            "reason": "No Social Force or HSFM calibration is established for this paired diagnostic.",
+        },
+    ]
+
+
+def _condition_report(
+    trace: Mapping[str, Any],
+    *,
+    expected_condition: str,
+    expected_config: Mapping[str, Any] | None = None,
+    personal_space_radius_m: float,
+    dt_s: float,
+) -> dict[str, Any]:
+    """Build the provenance and metrics block for one condition trace.
+
+    Returns:
+        A schema-shaped condition report.
+    """
+    observation = _observation_contract(
+        trace,
+        expected_condition=expected_condition,
+        expected_config=expected_config,
+    )
+    execution = _execution_block(trace)
+    metrics = _condition_metrics(
+        trace,
+        personal_space_radius_m=personal_space_radius_m,
+        dt_s=dt_s,
+    )
+    required_outcome_metrics = ("success_rate", "collision_rate", "timeout_rate")
+    return {
+        "status": (
+            "available"
+            if observation["status"] == "available"
+            and execution["status"] == "available"
+            and all(metrics[name]["status"] == "available" for name in required_outcome_metrics)
+            else "blocked"
+        ),
+        "scenario_id": trace.get("scenario_id"),
+        "seed": trace.get("seed"),
+        "candidate": trace.get("candidate"),
+        "algo": trace.get("algo"),
+        "observation_contract": observation,
+        "execution": execution,
+        "metrics": metrics,
+    }
+
+
+def build_calf_legnav_comparator_report(
+    perfect_trace: Mapping[str, Any],
+    sensor_trace: Mapping[str, Any],
+    *,
+    config: Mapping[str, Any],
+    input_refs: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Build a fail-closed paired CALF/LegNav-inspired diagnostic report.
+
+    The two traces must use the same candidate, scenario, and seed. The
+    comparator intentionally reports a one-episode paired smoke, not an
+    aggregate benchmark result or a source-policy reproduction.
+
+    Returns:
+        A schema-shaped diagnostic report with explicit proxy and unavailable fields.
+    """
+    identity_fields = ("candidate", "scenario_id", "seed", "horizon", "algo")
+    mismatches = [
+        field for field in identity_fields if perfect_trace.get(field) != sensor_trace.get(field)
+    ]
+    if mismatches:
+        raise ValueError("paired traces disagree on: " + ", ".join(mismatches))
+
+    config_identity = {
+        "candidate": "candidate",
+        "scenario_name": "scenario_id",
+        "seed": "seed",
+        "horizon": "horizon",
+    }
+    config_mismatches = [
+        config_field
+        for config_field, trace_field in config_identity.items()
+        if config.get(config_field) != perfect_trace.get(trace_field)
+    ]
+    if config_mismatches:
+        raise ValueError("trace identity disagrees with config: " + ", ".join(config_mismatches))
+
+    personal_space_radius_m = _finite_number(config.get("personal_space_radius_m"))
+    if personal_space_radius_m is None or personal_space_radius_m <= 0.0:
+        raise ValueError("personal_space_radius_m must be a positive finite number")
+    dt_s = _finite_number(config.get("dt_s", 0.1))
+    if dt_s is None or dt_s <= 0.0:
+        raise ValueError("dt_s must be a positive finite number")
+
+    configured_conditions = _mapping(config.get("conditions"))
+    conditions = {
+        CONDITION_IDEAL: _condition_report(
+            perfect_trace,
+            expected_condition=CONDITION_IDEAL,
+            expected_config=(
+                _mapping(configured_conditions[CONDITION_IDEAL])
+                if CONDITION_IDEAL in configured_conditions
+                else None
+            ),
+            personal_space_radius_m=personal_space_radius_m,
+            dt_s=dt_s,
+        ),
+        CONDITION_SENSOR: _condition_report(
+            sensor_trace,
+            expected_condition=CONDITION_SENSOR,
+            expected_config=(
+                _mapping(configured_conditions[CONDITION_SENSOR])
+                if CONDITION_SENSOR in configured_conditions
+                else None
+            ),
+            personal_space_radius_m=personal_space_radius_m,
+            dt_s=dt_s,
+        ),
+    }
+    for condition in conditions.values():
+        observation = condition["observation_contract"]
+        if observation["status"] == "available":
+            continue
+        reason = str(observation.get("reason") or "observation contract is unavailable")
+        for metric in condition["metrics"].values():
+            metric["value"] = None
+            metric["status"] = "blocked"
+            metric["reason"] = reason
+    metric_names = sorted(
+        set(conditions[CONDITION_IDEAL]["metrics"]) | set(conditions[CONDITION_SENSOR]["metrics"])
+    )
+    paired_metrics: dict[str, Any] = {}
+    for name in metric_names:
+        left = conditions[CONDITION_IDEAL]["metrics"][name]
+        right = conditions[CONDITION_SENSOR]["metrics"][name]
+        left_value = _finite_number(left.get("value"))
+        right_value = _finite_number(right.get("value"))
+        paired_metrics[name] = {
+            "perfect_perception": left,
+            "sensor_limited": right,
+            "sensor_minus_perfect": (
+                right_value - left_value
+                if left_value is not None and right_value is not None
+                else None
+            ),
+            "delta_status": (
+                "available" if left_value is not None and right_value is not None else "unavailable"
+            ),
+        }
+
+    trace_status = [conditions[name]["status"] for name in CONDITIONS]
+    top_status = "available" if all(status == "available" for status in trace_status) else "blocked"
+    return {
+        "schema_version": CALF_LEGNAV_COMPARATOR_SCHEMA_VERSION,
+        "issue": 7318,
+        "status": top_status,
+        "evidence_status": CALF_LEGNAV_EVIDENCE_STATUS,
+        "claim_boundary": CALF_LEGNAV_CLAIM_BOUNDARY,
+        "method_card": {
+            "source_title": CALF_LEGNAV_SOURCE_TITLE,
+            "source_url": CALF_LEGNAV_SOURCE_URL,
+            "source_method": {
+                "observation": "2D LiDAR leg patterns; exact source sensor dimensions are not imported.",
+                "temporal_features": "Source temporal-feature details are not imported into the Robot SF trace adapter.",
+                "architecture": "CALF combines convolution, attention, and multilayer perceptron components.",
+                "action_bounds": "Source action bounds are not imported; local bounds remain candidate-specific.",
+                "training": "Deep reinforcement learning in the external LegNav simulator; exact recipe not reproduced.",
+                "simulator": "LegNav is a lightweight 2D simulator with LiDAR ray tracing and a pedestrian gait model.",
+                "social_force_hsfm": "No Social Force or HSFM calibration/parity is assumed by this comparator.",
+                "deployment": "The source reports zero-shot TurtleBot 4 deployment; this comparator does not reproduce it.",
+            },
+            "local_transfer_question": (
+                "Which observation and evaluation fields can be compared in Robot SF without treating "
+                "sensor, embodiment, or simulator differences as validated transfer?"
+            ),
+        },
+        "provenance": {
+            "candidate": perfect_trace.get("candidate"),
+            "algo": perfect_trace.get("algo"),
+            "scenario_id": perfect_trace.get("scenario_id"),
+            "seed": perfect_trace.get("seed"),
+            "horizon": perfect_trace.get("horizon"),
+            "config_digest": canonical_config_digest(config),
+            "input_refs": dict(input_refs or {}),
+            "paired_episode_count": 1,
+            "uncertainty": {
+                "status": "unavailable",
+                "reason": "One paired episode is a deterministic smoke and cannot estimate variance or confidence intervals.",
+            },
+        },
+        "conditions": conditions,
+        "paired_metrics": paired_metrics,
+        "unsupported_fields": _unsupported_fields(),
+        "zero_shot_transfer": {
+            "status": "unavailable",
+            "reason": "No CALF checkpoint, LegNav simulator, leg-sensor contract, or TurtleBot 4 runtime is hydrated.",
+        },
+        "comparison_interpretation": {
+            "status": CALF_LEGNAV_EVIDENCE_STATUS,
+            "result": "paired_observation_contract_smoke",
+            "not_claims": [
+                "CALF policy reproduction",
+                "LegNav simulator parity",
+                "sensor realism or calibration",
+                "Social Force or HSFM parity",
+                "universal policy or planner ranking",
+                "real-world safety or zero-shot transfer",
+            ],
+        },
+    }
+
+
+__all__ = [
+    "CALF_LEGNAV_CLAIM_BOUNDARY",
+    "CALF_LEGNAV_COMPARATOR_SCHEMA_VERSION",
+    "CALF_LEGNAV_SOURCE_TITLE",
+    "CALF_LEGNAV_SOURCE_URL",
+    "CONDITION_IDEAL",
+    "CONDITION_SENSOR",
+    "build_calf_legnav_comparator_report",
+    "canonical_config_digest",
+]

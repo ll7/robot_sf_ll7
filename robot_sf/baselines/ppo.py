@@ -137,6 +137,7 @@ class PPOPlanner:
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None
+        self._resolved_model_path: Path | None = None
         self._status = "ok"
         self._fallback_reason: str | None = None
         self._predictive_foresight: PredictiveForesightEncoder | None = None
@@ -164,6 +165,7 @@ class PPOPlanner:
 
     def _load_model(self) -> None:
         """Load the PPO model from disk or enter fallback mode."""
+        self._resolved_model_path = None
         if self.config.model_id is None:
             validate_no_local_model_path_value(
                 self.config.model_path,
@@ -223,6 +225,7 @@ class PPOPlanner:
         try:
             # Avoid printing system info in CI/test logs
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)
+            self._resolved_model_path = mp
             self._status = "ok"
             self._fallback_reason = None
         except (RuntimeError, ValueError, OSError) as e:
@@ -268,6 +271,7 @@ class PPOPlanner:
         """Update the planner's configuration."""
         self.config = self._parse_config(config)
         self._model = None
+        self._resolved_model_path = None
         self._initialized = False
         if not self._defer_model_loading:
             self._ensure_model_loaded()
@@ -601,6 +605,7 @@ class PPOPlanner:
                         f"expected {target_shape}",
                     )
                 arr = arr.reshape(target_shape)
+            self._validate_model_observation_value(key, arr, sub_space)
             converted[key] = arr
         if backfilled:
             logger.debug(
@@ -609,6 +614,19 @@ class PPOPlanner:
                 ", ".join(backfilled[:6]),
             )
         return converted
+
+    @staticmethod
+    def _validate_model_observation_value(key: str, value: Any, sub_space: Any) -> None:
+        """Reject a supplied observation value outside its declared model space."""
+        contains = getattr(sub_space, "contains", None)
+        if not callable(contains):
+            return
+        try:
+            in_bounds = bool(contains(value))
+        except (TypeError, ValueError):
+            in_bounds = False
+        if not in_bounds:
+            raise ValueError(f"Observation key '{key}' is outside the model-declared space")
 
     @classmethod
     def _default_for_space(cls, sub_space: Any) -> Any:
@@ -724,6 +742,7 @@ class PPOPlanner:
                     f"got shape {tuple(flat_obs.shape)}, expected {target_shape}."
                 )
             flat_obs = flat_obs.reshape(target_shape)
+        self._validate_model_observation_value("<flat>", flat_obs, model_space)
         return flat_obs
 
     def _predictive_feature_payload(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:

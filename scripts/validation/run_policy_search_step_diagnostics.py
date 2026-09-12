@@ -7,6 +7,7 @@ import argparse
 import json
 from collections import Counter
 from collections.abc import Mapping
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ import numpy as np
 from robot_sf.benchmark.map_runner.map_runner import (
     _build_env_config,
     _build_policy,
+    _observation_heading,
     _policy_command_to_env_action,
     _scenario_with_episode_seed_defaults,
 )
@@ -24,8 +26,8 @@ from robot_sf.benchmark.observation_perturbation import (
     ObservationPerturbationState,
     perturb_ground_truth,
 )
-from robot_sf.benchmark.termination_reason import route_complete_success
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.planner.kinematics_model import resolve_benchmark_kinematics_model
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.policy_search_common import infer_scenario_family
 from scripts.validation.run_policy_search_candidate import (
@@ -62,6 +64,159 @@ def _json_ready(value: Any) -> Any:
         except Exception:
             pass
     return str(value)
+
+
+def _finite_real(value: Any, *, field: str) -> float:
+    """Return a finite numeric field, rejecting booleans and non-numbers."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValueError(f"{field} must be a finite number")
+    number = float(value)
+    if not np.isfinite(number):
+        raise ValueError(f"{field} must be a finite number")
+    return number
+
+
+def _policy_action_contract(
+    config: Mapping[str, Any],
+    *,
+    robot_kinematics: str = "differential_drive",
+) -> dict[str, Any]:
+    """Build the local policy-command bounds used by diagnostics admission.
+
+    The external CALF/LegNav action contract remains unavailable. This contract
+    describes only the local candidate and the resolved Robot SF command model.
+    """
+    action_space = str(config.get("action_space", "unicycle")).strip().lower()
+    if action_space not in {"velocity", "unicycle"}:
+        raise ValueError(f"Unsupported policy action_space: {action_space!r}")
+    v_max = _finite_real(config.get("v_max", 2.0), field="v_max")
+    omega_max = _finite_real(config.get("omega_max", 1.0), field="omega_max")
+    if v_max < 0.0 or omega_max < 0.0:
+        raise ValueError("policy action bounds must be non-negative")
+    model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=dict(config),
+    )
+    max_linear = getattr(model, "max_linear_speed", getattr(model, "max_velocity", None))
+    max_angular = getattr(model, "max_angular_speed", None)
+    if max_linear is None or max_angular is None:
+        raise ValueError(
+            f"resolved kinematics model {getattr(model, 'name', type(model).__name__)} "
+            "does not expose finite action bounds"
+        )
+    max_linear = _finite_real(max_linear, field="resolved max_linear_speed")
+    max_angular = _finite_real(max_angular, field="resolved max_angular_speed")
+    if max_linear < 0.0 or max_angular < 0.0:
+        raise ValueError("resolved action bounds must be non-negative")
+    allow_backwards = bool(getattr(model, "allow_backwards", False))
+    command_bounds = {
+        "linear_velocity_mps": [
+            -float(max_linear) if allow_backwards else 0.0,
+            float(max_linear),
+        ],
+        "angular_velocity_radps": [-float(max_angular), float(max_angular)],
+    }
+    policy_bounds = (
+        {
+            "v": [0.0, float(v_max)],
+            "omega": [-float(omega_max), float(omega_max)],
+        }
+        if action_space == "unicycle"
+        else {
+            "speed_mps": [0.0, float(v_max)],
+            "vx_mps": [-float(v_max), float(v_max)],
+            "vy_mps": [-float(v_max), float(v_max)],
+        }
+    )
+    return {
+        "status": "available",
+        "action_space": action_space,
+        "command_space": "unicycle_vw",
+        "policy_bounds": policy_bounds,
+        "command_bounds": command_bounds,
+        "kinematics_model": str(getattr(model, "name", type(model).__name__)),
+        "source": "effective_algo_config_and_resolved_kinematics_model",
+        "steps_validated": 0,
+        "violations": 0,
+    }
+
+
+def _policy_command_values(command: Any) -> tuple[float, float]:
+    """Normalize a policy output to canonical ``(linear, angular)`` values."""
+    if isinstance(command, Mapping):
+        if "v" in command and "omega" in command:
+            return (
+                _finite_real(command["v"], field="policy command v"),
+                _finite_real(command["omega"], field="policy command omega"),
+            )
+        if "vx" in command and "vy" in command:
+            vx = _finite_real(command["vx"], field="policy command vx")
+            vy = _finite_real(command["vy"], field="policy command vy")
+            return float(np.hypot(vx, vy)), 0.0
+        raise ValueError("policy command must expose v/omega or vx/vy")
+    if isinstance(command, (str, bytes)):
+        raise ValueError("policy command must expose two numeric channels")
+    try:
+        values = list(command)
+    except TypeError as exc:
+        raise ValueError("policy command must expose two numeric channels") from exc
+    if len(values) < 2:
+        raise ValueError("policy command must expose two numeric channels")
+    return (
+        _finite_real(values[0], field="policy command linear velocity"),
+        _finite_real(values[1], field="policy command angular velocity"),
+    )
+
+
+def _validate_policy_command(command: Any, contract: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate one canonical policy command against the local action envelope."""
+    values = _policy_command_values(command)
+    bounds = contract.get("command_bounds")
+    if not isinstance(bounds, Mapping):
+        raise ValueError("policy action contract has no command_bounds mapping")
+    linear_bounds = bounds.get("linear_velocity_mps")
+    angular_bounds = bounds.get("angular_velocity_radps")
+    if (
+        not isinstance(linear_bounds, (list, tuple))
+        or len(linear_bounds) != 2
+        or not isinstance(angular_bounds, (list, tuple))
+        or len(angular_bounds) != 2
+    ):
+        raise ValueError("policy action contract has malformed command bounds")
+    linear_min = _finite_real(linear_bounds[0], field="linear action lower bound")
+    linear_max = _finite_real(linear_bounds[1], field="linear action upper bound")
+    angular_min = _finite_real(angular_bounds[0], field="angular action lower bound")
+    angular_max = _finite_real(angular_bounds[1], field="angular action upper bound")
+    linear, angular = values
+    if not linear_min <= linear <= linear_max:
+        raise ValueError(
+            f"policy command linear velocity {linear!r} is outside [{linear_min}, {linear_max}]"
+        )
+    if not angular_min <= angular <= angular_max:
+        raise ValueError(
+            f"policy command angular velocity {angular!r} is outside [{angular_min}, {angular_max}]"
+        )
+    return {
+        "status": "within_bounds",
+        "linear_velocity_mps": float(linear),
+        "angular_velocity_radps": float(angular),
+    }
+
+
+def _strict_route_complete_success(info: Mapping[str, Any] | None) -> bool | None:
+    """Return route completion only when the environment emits a typed flag."""
+    if not isinstance(info, Mapping):
+        return None
+    meta = info.get("meta")
+    if not isinstance(meta, Mapping) or "is_route_complete" not in meta:
+        return None
+    value = _json_ready(meta["is_route_complete"])
+    return value if isinstance(value, bool) else None
+
+
+def _optional_trace_fields(mapping: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+    """Copy optional trace fields without defaulting missing values to false."""
+    return {field: _json_ready(mapping[field]) for field in fields if field in mapping}
 
 
 def _optional_float(value: Any) -> float | None:
@@ -317,18 +472,93 @@ def _diagnostics_stdout_payload(
 def _planner_fallback_degraded_status(planner_summary: Any) -> dict[str, Any]:
     """Return a compact fallback/degraded status from planner diagnostics."""
     summary = _json_ready(planner_summary)
-    if summary is None:
+    if not isinstance(summary, dict):
         return {
             "source": "planner_adapter_diagnostics",
             "available": False,
             "reported_fallback_or_degraded": None,
+            "reason": "planner diagnostics did not expose a structured fallback verdict",
         }
-    rendered = json.dumps(summary, sort_keys=True).lower()
-    return {
+
+    verdict = _planner_fallback_verdict(summary)
+
+    result = {
         "source": "planner_adapter_diagnostics",
-        "available": True,
-        "reported_fallback_or_degraded": "fallback" in rendered or "degraded" in rendered,
+        "available": verdict is not None,
+        "reported_fallback_or_degraded": verdict,
     }
+    if verdict is None:
+        result["reason"] = "planner diagnostics lacked an explicit fallback/degraded verdict"
+    return result
+
+
+def _fallback_status_verdict(value: Any) -> bool | None:
+    """Translate a known fallback status token into a boolean verdict."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"clear", "native", "ok", "available", "none", "loaded"}:
+        return False
+    if normalized in {"fallback", "degraded", "blocked", "failed"}:
+        return True
+    return None
+
+
+def _fallback_field_signals(key: Any, value: Any) -> tuple[list[bool], bool]:
+    """Return fallback signals and malformed state for one known diagnostic field."""
+    if key in {
+        "fallback_or_degraded",
+        "fallback_used",
+        "fallback_triggered",
+        "fallback_applied",
+        "reported_fallback_or_degraded",
+    }:
+        return ([value], False) if isinstance(value, bool) else ([], value is not None)
+    if key in {"fallback_degraded_status", "load_status"}:
+        if isinstance(value, str):
+            status_verdict = _fallback_status_verdict(value)
+            neutral_statuses = {
+                "not_run",
+                "not_attempted",
+                "not_requested",
+                "unavailable",
+                "unknown",
+            }
+            if status_verdict is not None:
+                return [status_verdict], False
+            return [], value.strip().lower() not in neutral_statuses
+        return [], value is not None and not isinstance(value, dict)
+    if key in {"fallback_count", "fallback_stop_count", "fallback_step_count"}:
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return [value > 0], False
+        return [], value is not None
+    return [], False
+
+
+def _collect_fallback_signals(value: Any) -> tuple[list[bool], bool]:
+    """Collect explicit fallback signals recursively from structured diagnostics."""
+    if not isinstance(value, dict):
+        return [], False
+    verdicts: list[bool] = []
+    malformed = False
+    for key, item in value.items():
+        field_verdicts, field_malformed = _fallback_field_signals(key, item)
+        verdicts.extend(field_verdicts)
+        malformed = malformed or field_malformed
+        nested_verdicts, nested_malformed = _collect_fallback_signals(item)
+        verdicts.extend(nested_verdicts)
+        malformed = malformed or nested_malformed
+    return verdicts, malformed
+
+
+def _planner_fallback_verdict(summary: dict[str, Any]) -> bool | None:
+    """Resolve nested fallback diagnostics without allowing contradictory clear flags."""
+    verdicts, malformed = _collect_fallback_signals(summary)
+    if malformed:
+        return None
+    if any(verdicts):
+        return True
+    return False if verdicts else None
 
 
 def parse_args() -> argparse.Namespace:
@@ -364,6 +594,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--false-positive-spacing-y-m", type=float, default=0.5)
     parser.add_argument("--observation-delay-steps", type=int, default=0)
     parser.add_argument("--observation-perturbation-seed", type=int, default=None)
+    parser.add_argument(
+        "--ignore-fixture-visibility",
+        action="store_true",
+        help="Disable scenario fixture visibility masking for an ideal-perception comparator row.",
+    )
     return parser.parse_args()
 
 
@@ -548,9 +783,119 @@ def _observation_perturbation_spec(
     )
 
 
+def _observed_pedestrian_arrays_for_policy(
+    obs: Mapping[str, Any],
+    observed: Mapping[str, Any],
+) -> tuple[np.ndarray, np.ndarray, list[Any]]:
+    """Normalize observed pedestrian rows to the Robot SF policy contract.
+
+    Perturbation output is world-frame and row-aligned by pedestrian ID. Sort
+    complete rows by current world-frame distance, then rotate only velocities
+    into the robot ego frame; pedestrian positions remain world-frame values.
+    """
+    raw_positions = np.asarray(observed["positions"], dtype=np.float32).reshape(-1, 2)
+    raw_velocities = np.asarray(observed["velocities"], dtype=np.float32).reshape(-1, 2)
+    if raw_positions.shape[0] != raw_velocities.shape[0]:
+        raise ValueError(
+            "Observed pedestrian positions and velocities must have matching row counts"
+        )
+    if not np.all(np.isfinite(raw_positions)) or not np.all(np.isfinite(raw_velocities)):
+        raise ValueError("Observed pedestrian positions and velocities must be finite")
+
+    raw_ids = observed.get("ids")
+    if raw_ids is None:
+        row_ids: list[Any] = [None] * raw_positions.shape[0]
+    else:
+        try:
+            row_ids = list(raw_ids)
+        except TypeError as exc:
+            raise ValueError("Observed pedestrian IDs must be an iterable") from exc
+        if len(row_ids) != raw_positions.shape[0]:
+            raise ValueError(
+                "Observed pedestrian positions, velocities, and IDs must stay row-aligned"
+            )
+
+    robot = obs.get("robot")
+    if isinstance(robot, Mapping) and "position" in robot:
+        robot_position_source = robot["position"]
+    else:
+        robot_position_source = obs.get("robot_position", [0.0, 0.0])
+    robot_position = np.asarray(robot_position_source, dtype=np.float32).reshape(-1)
+    if robot_position.shape != (2,) or not np.all(np.isfinite(robot_position)):
+        raise ValueError("Robot position must be a finite 2D value")
+
+    rows = list(zip(raw_positions, raw_velocities, row_ids, strict=True))
+    rows.sort(key=lambda row: float(np.linalg.norm(row[0] - robot_position)))
+    if rows:
+        ordered_positions = np.stack([row[0] for row in rows]).astype(np.float32, copy=False)
+        world_velocities = np.stack([row[1] for row in rows]).astype(np.float32, copy=False)
+    else:
+        ordered_positions = np.zeros((0, 2), dtype=np.float32)
+        world_velocities = np.zeros((0, 2), dtype=np.float32)
+
+    heading = _observation_heading(obs)
+    cos_heading = float(np.cos(heading))
+    sin_heading = float(np.sin(heading))
+    ego_velocities = np.empty_like(world_velocities)
+    ego_velocities[:, 0] = (
+        cos_heading * world_velocities[:, 0] + sin_heading * world_velocities[:, 1]
+    )
+    ego_velocities[:, 1] = (
+        -sin_heading * world_velocities[:, 0] + cos_heading * world_velocities[:, 1]
+    )
+    ordered_ids = [row[2] for row in rows]
+    return ordered_positions, ego_velocities, ordered_ids
+
+
+def _policy_observation_payload(
+    obs: Mapping[str, Any],
+    observed: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the sorted, frame-normalized pedestrian rows sent to the policy."""
+    positions, velocities, ids = _observed_pedestrian_arrays_for_policy(obs, observed)
+    return {
+        "positions": positions,
+        "velocities": velocities,
+        "ids": ids,
+        "position_frame": "world",
+        "velocity_frame": "robot_ego",
+        "ordering": "nearest_first_world_distance",
+    }
+
+
+def _fit_observed_actor_array(
+    observed: np.ndarray,
+    template: Any,
+    *,
+    field_name: str,
+) -> np.ndarray:
+    """Fit a variable-length observed actor array to the policy contract.
+
+    Learned policies commonly declare a fixed actor-slot shape while the
+    simulator and perception perturbation helpers expose only currently
+    observed actors. Keep the explicit actor count as the semantic mask and
+    zero-pad unused slots; reject overflow rather than silently truncating.
+    """
+    template_array = np.asarray(template)
+    if template_array.ndim != 2 or template_array.shape[1] != 2:
+        return observed
+    if observed.shape[0] > template_array.shape[0]:
+        raise ValueError(
+            f"Observed {field_name} count {observed.shape[0]} exceeds "
+            f"policy capacity {template_array.shape[0]}"
+        )
+    if observed.shape == template_array.shape:
+        return observed
+    padded = np.zeros(template_array.shape, dtype=observed.dtype)
+    padded[: observed.shape[0]] = observed
+    return padded
+
+
 def _apply_observed_pedestrians_to_policy_obs(
     obs: Any,
     perturbation: dict[str, Any],
+    *,
+    policy_observation: Mapping[str, Any] | None = None,
 ) -> Any:
     """Return an observation copy whose pedestrian payload uses perturbed state."""
     if not isinstance(obs, dict):
@@ -558,9 +903,22 @@ def _apply_observed_pedestrians_to_policy_obs(
     policy_obs = dict(obs)
     pedestrians = dict(policy_obs.get("pedestrians", {}))
     observed = perturbation["observed"]
-    observed_positions = np.asarray(observed["positions"], dtype=np.float32)
-    observed_velocities = np.asarray(observed["velocities"], dtype=np.float32)
-    observed_count = np.asarray([observed_positions.shape[0]], dtype=np.float32)
+    normalized = policy_observation or _policy_observation_payload(obs, observed)
+    raw_positions = np.asarray(normalized["positions"], dtype=np.float32)
+    raw_velocities = np.asarray(normalized["velocities"], dtype=np.float32)
+    position_template = pedestrians.get("positions", policy_obs.get("pedestrians_positions"))
+    velocity_template = pedestrians.get("velocities", policy_obs.get("pedestrians_velocities"))
+    observed_positions = _fit_observed_actor_array(
+        raw_positions,
+        position_template,
+        field_name="positions",
+    )
+    observed_velocities = _fit_observed_actor_array(
+        raw_velocities,
+        velocity_template,
+        field_name="velocities",
+    )
+    observed_count = np.asarray([raw_positions.shape[0]], dtype=np.float32)
     pedestrians["positions"] = observed_positions
     pedestrians["velocities"] = observed_velocities
     pedestrians["count"] = observed_count
@@ -574,12 +932,16 @@ def _apply_observed_pedestrians_to_policy_obs(
     return policy_obs
 
 
-def _trace_observation_payload(perturbation: dict[str, Any]) -> dict[str, Any]:
+def _trace_observation_payload(
+    perturbation: dict[str, Any],
+    *,
+    policy_observation: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return the compact trace payload for ground-truth and observed pedestrians."""
     metadata = perturbation["metadata"]
     ground_truth = perturbation["ground_truth"]
     observed = perturbation["observed"]
-    return {
+    payload = {
         "ground_truth_observation": {
             "positions": _json_ready(ground_truth["positions"]),
             "velocities": _json_ready(ground_truth["velocities"]),
@@ -596,6 +958,9 @@ def _trace_observation_payload(perturbation: dict[str, Any]) -> dict[str, Any]:
         },
         "observation_perturbation": _json_ready(metadata),
     }
+    if policy_observation is not None:
+        payload["policy_observation"] = _json_ready(dict(policy_observation))
+    return payload
 
 
 def main() -> int:  # noqa: C901, PLR0912, PLR0915
@@ -633,6 +998,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         scenario,
         default_algo=algo.strip().lower(),
         config_anchor=config_path.parent,
+    )
+    policy_action_contract = _policy_action_contract(
+        effective_cfg,
+        robot_kinematics="differential_drive",
     )
 
     scenario_seed_list = _seed_list(scenario)
@@ -674,7 +1043,9 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         if int(args.observation_delay_steps) > 0
         else None
     )
-    first_visible_step = _fixture_first_visible_step(scenario)
+    first_visible_step = (
+        None if args.ignore_fixture_visibility else _fixture_first_visible_step(scenario)
+    )
     if observation_state is not None and first_visible_step is not None:
         observation_state.reset(initial_obs=_empty_observation_snapshot())
     try:
@@ -711,8 +1082,24 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 step=step_idx,
                 state=observation_state,
             )
-            policy_obs = _apply_observed_pedestrians_to_policy_obs(obs, perturbation)
+            policy_observation = (
+                _policy_observation_payload(obs, perturbation["observed"])
+                if isinstance(obs, Mapping)
+                else None
+            )
+            policy_obs = _apply_observed_pedestrians_to_policy_obs(
+                obs,
+                perturbation,
+                policy_observation=policy_observation,
+            )
             policy_command = policy_fn(policy_obs)
+            policy_action_validation = _validate_policy_command(
+                policy_command,
+                policy_action_contract,
+            )
+            policy_action_contract["steps_validated"] = (
+                int(policy_action_contract["steps_validated"]) + 1
+            )
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
             if step_is_native:
                 env_action = np.asarray(policy_command, dtype=np.float32)
@@ -730,7 +1117,8 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     planner_decision = last_decision()
 
             obs, reward, terminated, truncated, info = env.step(env_action)
-            meta = info.get("meta", {}) if isinstance(info, dict) else {}
+            raw_meta = info.get("meta", {}) if isinstance(info, Mapping) else {}
+            meta = dict(raw_meta) if isinstance(raw_meta, Mapping) else {}
             post_step_min_robot_ped_dist = _sim_min_robot_ped_distance(env)
             post_step_goal_distance = float(
                 np.linalg.norm(
@@ -738,11 +1126,16 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     - np.array(env.simulator.robot_pos[0], dtype=float)
                 )
             )
-            is_success = route_complete_success(info if isinstance(info, dict) else {})
+            is_success = _strict_route_complete_success(info if isinstance(info, Mapping) else None)
+            terminated_flag = _json_ready(terminated)
+            terminated_flag = terminated_flag if isinstance(terminated_flag, bool) else None
+            truncated_flag = _json_ready(truncated)
+            truncated_flag = truncated_flag if isinstance(truncated_flag, bool) else None
             trace_rows.append(
                 {
                     "step": int(step_idx),
                     "policy_command": _json_ready(policy_command),
+                    "policy_action_validation": policy_action_validation,
                     "env_action": _json_ready(env_action),
                     "reward": float(reward),
                     "goal_distance": goal_distance,
@@ -754,28 +1147,39 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                     "planner_execution_mode": (
                         "native_env_action" if step_is_native else "command_adapter"
                     ),
-                    "terminated": bool(terminated),
-                    "truncated": bool(truncated),
-                    "is_success": bool(is_success),
-                    "is_pedestrian_collision": bool(meta.get("is_pedestrian_collision", False)),
-                    "is_obstacle_collision": bool(meta.get("is_obstacle_collision", False)),
-                    "is_robot_collision": bool(meta.get("is_robot_collision", False)),
-                    **_trace_observation_payload(perturbation),
+                    "terminated": terminated_flag,
+                    "truncated": truncated_flag,
+                    "is_success": is_success,
+                    **_optional_trace_fields(
+                        meta,
+                        (
+                            "is_pedestrian_collision",
+                            "is_obstacle_collision",
+                            "is_robot_collision",
+                        ),
+                    ),
+                    **_trace_observation_payload(
+                        perturbation,
+                        policy_observation=policy_observation,
+                    ),
                 }
             )
-            if terminated or truncated or is_success:
+            if terminated_flag is True or truncated_flag is True or is_success is True:
                 done_info = {
                     "step": int(step_idx),
-                    "terminated": bool(terminated),
-                    "truncated": bool(truncated),
-                    "success": bool(is_success),
+                    "terminated": terminated_flag,
+                    "truncated": truncated_flag,
+                    "success": is_success,
                     "meta": _json_ready(meta),
                     "family": family,
                 }
                 break
     finally:
         planner_summary = None
-        if planner_adapter is not None:
+        planner_stats = getattr(policy_fn, "_planner_stats", None)
+        if callable(planner_stats):
+            planner_summary = planner_stats()
+        elif planner_adapter is not None:
             diagnostics = getattr(planner_adapter, "diagnostics", None)
             if callable(diagnostics):
                 planner_summary = diagnostics()
@@ -799,6 +1203,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "algorithm_metadata": _json_ready(algo_meta),
         **execution_mode_summary,
         "fallback_degraded_status": fallback_degraded_status,
+        "policy_action_contract": policy_action_contract,
         "observation_perturbation_config": {
             "position_noise_std_m": float(args.observation_noise_std_m),
             "position_noise_bound_m": float(args.observation_noise_bound_m),
@@ -811,6 +1216,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
             "delay_steps": int(args.observation_delay_steps),
             "seed": args.observation_perturbation_seed,
             "fixture_first_visible_step": first_visible_step,
+            "fixture_visibility_ignored": bool(args.ignore_fixture_visibility),
         },
         "planner_summary": _json_ready(planner_summary),
         "progress_summary": _json_ready(progress_summary),

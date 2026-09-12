@@ -1364,8 +1364,11 @@ def write_typed_snapshot(
     """Write each file of the typed snapshot pair with atomic replacement.
 
     The metadata and payload are separate files, so their pair replacement is not
-    one filesystem transaction. The reader validates both digests and sizes and
-    rejects a mixed-generation pair.
+    one filesystem transaction. Metadata is bound to the writer's own completed
+    temporary payload before exposing that payload under a shared pathname, and
+    writer-unique temporary files are used. A concurrent or interrupted write either
+    produces a coherent generation or a reader-visible mismatch rejected by
+    digest and size verification; it never silently seals a mixed pair.
 
     Returns:
         Artifact paths and measured byte sizes.
@@ -1374,29 +1377,47 @@ def write_typed_snapshot(
     payload_target = metadata_target.with_suffix(metadata_target.suffix + ".npz")
     metadata_target.parent.mkdir(parents=True, exist_ok=True)
     metadata, arrays = snapshot._metadata_and_arrays()
-    with tempfile.NamedTemporaryFile(
-        dir=metadata_target.parent, suffix=".npz", delete=False
-    ) as tmp:
-        payload_tmp = Path(tmp.name)
-        np.savez_compressed(tmp, **arrays)
-    metadata_tmp = metadata_target.with_suffix(metadata_target.suffix + ".tmp")
+    payload_tmp: Path | None = None
+    metadata_tmp: Path | None = None
     try:
-        payload_tmp.replace(payload_target)
-        metadata["payload_sha256"] = _sha256_file(payload_target)
-        metadata["payload_bytes"] = payload_target.stat().st_size
+        with tempfile.NamedTemporaryFile(
+            dir=metadata_target.parent,
+            prefix=f"{metadata_target.name}.",
+            suffix=".npz.tmp",
+            delete=False,
+        ) as tmp_payload:
+            payload_tmp = Path(tmp_payload.name)
+            np.savez_compressed(tmp_payload, **arrays)
+
+        metadata["payload_sha256"] = _sha256_file(payload_tmp)
+        payload_bytes = payload_tmp.stat().st_size
+        metadata["payload_bytes"] = payload_bytes
         metadata["metadata_sha256"] = _metadata_digest(metadata)
-        metadata_tmp.write_text(
-            json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+
+        encoded_metadata = (json.dumps(metadata, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        metadata_bytes = len(encoded_metadata)
+
+        with tempfile.NamedTemporaryFile(
+            dir=metadata_target.parent,
+            prefix=f"{metadata_target.name}.",
+            suffix=".json.tmp",
+            delete=False,
+        ) as tmp_meta:
+            metadata_tmp = Path(tmp_meta.name)
+            tmp_meta.write(encoded_metadata)
+
+        payload_tmp.replace(payload_target)
         metadata_tmp.replace(metadata_target)
     finally:
-        payload_tmp.unlink(missing_ok=True)
-        metadata_tmp.unlink(missing_ok=True)
+        if payload_tmp is not None:
+            payload_tmp.unlink(missing_ok=True)
+        if metadata_tmp is not None:
+            metadata_tmp.unlink(missing_ok=True)
     return SnapshotArtifact(
         metadata_path=metadata_target,
         payload_path=payload_target,
-        metadata_bytes=metadata_target.stat().st_size,
-        payload_bytes=payload_target.stat().st_size,
+        metadata_bytes=metadata_bytes,
+        payload_bytes=payload_bytes,
     )
 
 

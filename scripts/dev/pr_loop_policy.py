@@ -38,9 +38,10 @@ Review state (e.g. CHANGES_REQUESTED, APPROVED, COMMENTED) from the snapshot
 is incorporated: CHANGES_REQUESTED forces a non-continue flow decision.
 
 Gate-verdict contract (issue #6019): an exact head is only eligible to advance
-toward merge when every required check is green AND a current exact-head
-``gate-verdict: accepted @ <head_sha>`` trailer exists. The dispatcher rejects
-(fail closed) any head missing such a trailer, classifying it as
+toward merge when every required check is green AND the uniquely latest trusted
+exact-head verdict is ``accepted``. A current ``hold`` blocks admission until a
+later accepted carrier supersedes it. The dispatcher rejects (fail closed) any
+head without an accepted current verdict, classifying it as
 ``pending_gate_verdict`` instead of ``ready_to_merge``.
 After the gate verdict is current, a matching ``pr-metadata: reconciled @
 <digest>`` trailer is also required so final title/body state is reviewed.
@@ -116,16 +117,24 @@ VALID_STATES = frozenset(
 # Minimum overlap (hex chars) required to treat an abbreviated trailer SHA as a
 # match for a longer head SHA. Seven mirrors git's default short SHA width.
 GATE_VERDICT_MIN_SHA_OVERLAP = 7
+GATE_VERDICT_PROJECTION_SOURCE = "trusted-review-projection"
+_GATE_VERDICT_STATUSES = frozenset({"accepted", "hold", "missing", "malformed", "ambiguous"})
 
-# Matches ``gate-verdict: accepted @ <sha>`` trailers embedded in comment or
-# review body excerpts, capturing the hex SHA. The verdict word is matched
-# case-insensitively so a human- or bot-authored ``Accepted`` still satisfies
-# the contract; surrounding markdown/code fences are tolerated.
+# Matches accepted and blocking HOLD trailers embedded in comment or review
+# body excerpts, capturing the verdict and hex SHA. The verdict word is
+# matched case-insensitively; surrounding markdown/code fences are tolerated.
 _GATE_VERDICT_RE = re.compile(
-    r"gate-verdict\s*:\s*accepted\s*@\s*([0-9a-fA-F]{7,40})\b",
+    r"(?=gate-verdict\s*:\s*(?:accepted|hold)\s*@\s*"
+    r"(?P<sha>[0-9a-fA-F]{7,40})\b)"
+    r"gate-verdict\s*:\s*(?P<verdict>accepted|hold)\s*@\s*"
+    r"[0-9a-fA-F]{7,40}\b",
     re.IGNORECASE,
 )
 GATE_VERDICT_RE = _GATE_VERDICT_RE
+_GATE_VERDICT_MARKER_RE = re.compile(
+    r"gate-verdict\s*:\s*(?P<verdict>accepted|hold)\b",
+    re.IGNORECASE,
+)
 _BASE_POLICY_RE = re.compile(
     r"base-policy\s*:\s*(ordinary-cas|current-base)\s*@\s*([0-9a-fA-F]{7,40})\b",
     re.IGNORECASE,
@@ -199,7 +208,7 @@ def extract_sha_carriers(text: str) -> list[ShaCarrier]:
         return []
     carriers: list[ShaCarrier] = []
     for match in _GATE_VERDICT_RE.finditer(text):
-        raw = match.group(1)
+        raw = match.group("sha")
         carriers.append(ShaCarrier(kind="gate-verdict", sha=raw.lower(), full=len(raw) == 40))
     for match in _BASE_POLICY_RE.finditer(text):
         raw = match.group(2)
@@ -320,6 +329,17 @@ class _MarkerPosition:
     offset: int
     published_at: datetime | None
     legacy_order: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _GateVerdictEvent:
+    """One parsed accepted or blocking exact-head gate-verdict event."""
+
+    verdict: str
+    sha: str
+    position: _MarkerPosition | None
+    commit_sha: str | None
+    valid: bool
 
 
 def _marker_publication(entry: dict[str, Any]) -> tuple[datetime | None, bool]:
@@ -575,17 +595,29 @@ def _compact_artifacts_from_pr(
 
 
 def _gate_verdict_sha_from_item(item: Any) -> str | None:
-    """Return the accepted SHA from one explicit gate-verdict record, if any."""
-    if isinstance(item, str):
-        return None
+    """Return the SHA from one explicit accepted or HOLD record, if valid."""
+    fields = _gate_verdict_fields_from_item(item)
+    return fields[1] if fields is not None else None
+
+
+def _gate_verdict_fields_from_item(item: Any) -> tuple[str, str] | None:
+    """Return normalized verdict/SHA fields from a structured carrier."""
     if not isinstance(item, dict):
         return None
-    verdict = str(item.get("verdict", "")).lower()
+    raw_verdict = str(item.get("verdict", "")).strip().lower()
     accepted_flag = item.get("accepted")
-    sha = str(item.get("sha") or item.get("head_sha") or "")
-    if sha and (verdict == "accepted" or accepted_flag is True):
-        return sha
-    return None
+    if raw_verdict in {"accepted", "hold"}:
+        if raw_verdict == "hold" and accepted_flag is True:
+            return None
+        verdict = raw_verdict
+    elif accepted_flag is True:
+        verdict = "accepted"
+    else:
+        return None
+    sha = item.get("sha") or item.get("head_sha")
+    if not isinstance(sha, str) or not sha:
+        return None
+    return verdict, sha
 
 
 def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
@@ -597,13 +629,15 @@ def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
             if isinstance(item, str):
                 texts.append(item)
                 continue
-            sha = _gate_verdict_sha_from_item(item)
-            if sha:
-                texts.append(f"gate-verdict: accepted @ {sha}")
+            fields = _gate_verdict_fields_from_item(item)
+            if fields:
+                verdict, sha = fields
+                texts.append(f"gate-verdict: {verdict} @ {sha}")
     explicit = pr.get("gate_verdict")
-    sha = _gate_verdict_sha_from_item(explicit)
-    if sha:
-        texts.append(f"gate-verdict: accepted @ {sha}")
+    fields = _gate_verdict_fields_from_item(explicit)
+    if fields:
+        verdict, sha = fields
+        texts.append(f"gate-verdict: {verdict} @ {sha}")
     return texts
 
 
@@ -696,24 +730,217 @@ def _gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
 
     Sources, in priority order:
       - explicit ``gate_verdicts`` list of strings or ``{"sha": ...}`` dicts,
-      - explicit ``gate_verdict`` dict (``{"verdict": "accepted", "sha": ...}``
+      - explicit ``gate_verdict`` dict (``{"verdict": "accepted|hold", "sha": ...}``
         or ``{"accepted": True, "head_sha": ...}``),
       - compact ``comment_snapshot.latest[].body_excerpt`` blobs,
       - compact ``review_snapshot.latest[].body_excerpt`` blobs.
 
     The snapshot producer truncates bodies to ``COMMENT_BODY_LIMIT`` (180), which
-    is ample for a ``gate-verdict: accepted @ <40-char-sha>`` trailer.
+    is ample for a ``gate-verdict: accepted|hold @ <40-char-sha>`` trailer.
     """
     return _explicit_gate_verdict_texts(pr) + _snapshot_body_texts(pr)
 
 
+def _invalid_gate_verdict_event() -> _GateVerdictEvent:
+    """Build a sentinel event that forces fail-closed verdict evaluation."""
+    return _GateVerdictEvent("", "", None, None, False)
+
+
+def _gate_verdict_commit_binding(entry: dict[str, Any]) -> tuple[str | None, bool]:
+    """Return an optional full review-commit binding and its validity."""
+    if "commit" in entry:
+        raw_commit: Any = entry["commit"]
+        if isinstance(raw_commit, dict):
+            if "oid" in raw_commit:
+                raw_commit = raw_commit["oid"]
+            elif "sha" in raw_commit:
+                raw_commit = raw_commit["sha"]
+            else:
+                return "", False
+    else:
+        raw_commit = next(
+            (
+                entry[key]
+                for key in ("commit_id", "commitId", "commit_sha", "commitSha")
+                if key in entry
+            ),
+            None,
+        )
+    if raw_commit is None:
+        return None, True
+    if not isinstance(raw_commit, str):
+        return "", False
+    return raw_commit.lower(), bool(re.fullmatch(r"[0-9a-fA-F]{40}", raw_commit))
+
+
+def _gate_verdict_events_from_body(
+    body: Any,
+    *,
+    collection: str,
+    entry_index: int,
+    entry: dict[str, Any] | None = None,
+) -> list[_GateVerdictEvent]:
+    """Parse accepted/HOLD markers from one trusted body with ordering evidence."""
+    if not isinstance(body, str) or not body:
+        return []
+    markers = list(_GATE_VERDICT_MARKER_RE.finditer(body))
+    if not markers:
+        return []
+
+    published_at, legacy_order = (None, True)
+    evidence_valid = True
+    commit_sha: str | None = None
+    if entry is not None:
+        published_at, legacy_order = _marker_publication(entry)
+        commit_sha, binding_valid = _gate_verdict_commit_binding(entry)
+        evidence_valid = (published_at is not None or legacy_order) and binding_valid
+
+    events: list[_GateVerdictEvent] = []
+    for marker in markers:
+        match = _GATE_VERDICT_RE.match(body, marker.start())
+        position = _MarkerPosition(
+            collection=collection,
+            entry_index=entry_index,
+            offset=marker.start(),
+            published_at=published_at,
+            legacy_order=legacy_order,
+        )
+        if match is None:
+            events.append(_GateVerdictEvent("", "", position, commit_sha, False))
+        else:
+            events.append(
+                _GateVerdictEvent(
+                    verdict=match.group("verdict").lower(),
+                    sha=match.group("sha").lower(),
+                    position=position,
+                    commit_sha=commit_sha,
+                    valid=evidence_valid,
+                )
+            )
+    return events
+
+
+def _gate_verdict_events_from_entries(
+    entries: Any, *, collection: str, body_key: str = "body"
+) -> list[_GateVerdictEvent]:
+    """Parse trusted gate-verdict bodies from one raw or compact collection."""
+    if not isinstance(entries, list):
+        return []
+    events: list[_GateVerdictEvent] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            continue
+        body = entry.get(body_key)
+        if body_key != "body":
+            candidate = dict(entry)
+            candidate["body"] = body
+            candidate["authorAssociation"] = entry.get("author_association") or entry.get(
+                "authorAssociation"
+            )
+            for source, target in (("submitted_at", "submittedAt"), ("created_at", "createdAt")):
+                value = entry.get(source)
+                candidate.pop(source, None)
+                if value is None or value == "":
+                    candidate.pop(target, None)
+                else:
+                    candidate[target] = value
+            entry = candidate
+        if authoritative_body_text(entry) is None:
+            continue
+        events.extend(
+            _gate_verdict_events_from_body(
+                body,
+                collection=collection,
+                entry_index=index,
+                entry=entry,
+            )
+        )
+    return events
+
+
+def _explicit_gate_verdict_event(item: Any, *, index: int) -> list[_GateVerdictEvent]:
+    """Parse one trusted structured gate-verdict carrier."""
+    if isinstance(item, str):
+        return _gate_verdict_events_from_body(
+            item,
+            collection="explicit",
+            entry_index=index,
+        )
+    if not isinstance(item, dict):
+        return [_invalid_gate_verdict_event()] if item is not None else []
+    fields = _gate_verdict_fields_from_item(item)
+    if fields is None:
+        return (
+            [_invalid_gate_verdict_event()]
+            if any(key in item for key in ("verdict", "accepted", "sha", "head_sha"))
+            else []
+        )
+    verdict, sha = fields
+    return [
+        _GateVerdictEvent(
+            verdict=verdict,
+            sha=sha.lower(),
+            position=_MarkerPosition("explicit", index, 0, None, True),
+            commit_sha=None,
+            valid=bool(re.fullmatch(r"[0-9a-fA-F]{7,40}", sha)),
+        )
+    ]
+
+
+def _snapshot_gate_verdict_events(pr: dict[str, Any]) -> list[_GateVerdictEvent]:
+    """Parse trusted markers from compact review/comment snapshots."""
+    events: list[_GateVerdictEvent] = []
+    for collection in ("review_snapshot", "comment_snapshot"):
+        snapshot = pr.get(collection)
+        if isinstance(snapshot, dict):
+            events.extend(
+                _gate_verdict_events_from_entries(
+                    snapshot.get("latest"),
+                    collection=collection,
+                    body_key="body_excerpt",
+                )
+            )
+    return events
+
+
+def _gate_verdict_events(pr: dict[str, Any]) -> list[_GateVerdictEvent]:
+    """Return trusted accepted/HOLD events with validated ordering evidence."""
+    events: list[_GateVerdictEvent] = []
+    explicit_list = pr.get("gate_verdicts")
+    if explicit_list is not None:
+        if not isinstance(explicit_list, list):
+            events.append(_invalid_gate_verdict_event())
+        else:
+            for index, item in enumerate(explicit_list):
+                events.extend(_explicit_gate_verdict_event(item, index=index))
+
+    if "gate_verdict" in pr:
+        explicit = pr.get("gate_verdict")
+        if isinstance(explicit, (str, dict)):
+            events.extend(_explicit_gate_verdict_event(explicit, index=0))
+        elif explicit is not None:
+            events.append(_invalid_gate_verdict_event())
+
+    has_raw_collection = any(
+        isinstance(pr.get(collection), list) for collection in ("reviews", "comments")
+    )
+    if has_raw_collection:
+        for collection in ("reviews", "comments"):
+            events.extend(
+                _gate_verdict_events_from_entries(pr.get(collection), collection=collection)
+            )
+    else:
+        events.extend(_snapshot_gate_verdict_events(pr))
+    return events
+
+
 def _accepted_gate_verdict_shas(pr: dict[str, Any]) -> set[str]:
     """Return the set of lowercased SHAs with an accepted gate-verdict trailer."""
-    shas: set[str] = set()
-    for text in _gate_verdict_texts(pr):
-        for match in _GATE_VERDICT_RE.finditer(text):
-            shas.add(match.group(1).lower())
-    return shas
+    return {
+        event.sha
+        for event in _gate_verdict_events(pr)
+        if event.valid and event.verdict == "accepted"
+    }
 
 
 def _sha_matches_head(trailer_sha: str, head_sha: str) -> bool:
@@ -736,6 +963,79 @@ def _sha_matches_head(trailer_sha: str, head_sha: str) -> bool:
     return head.startswith(trailer)
 
 
+def _gate_verdict_is_later(later: _GateVerdictEvent, earlier: _GateVerdictEvent) -> bool:
+    """Return whether publication evidence proves one verdict follows another."""
+    if later.position is None or earlier.position is None:
+        return False
+    return _release_is_later(later.position, earlier.position)
+
+
+def _projected_gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str | None:
+    """Read a status projected by the live snapshot producer, with head binding."""
+    projection_keys = {
+        "gate_verdict_status",
+        "gate_verdict_status_head_sha",
+        "gate_verdict_status_source",
+    }
+    if not projection_keys.intersection(pr):
+        return None
+    status = pr.get("gate_verdict_status")
+    bound_head = pr.get("gate_verdict_status_head_sha")
+    source = pr.get("gate_verdict_status_source")
+    if (
+        source != GATE_VERDICT_PROJECTION_SOURCE
+        or status not in _GATE_VERDICT_STATUSES
+        or not isinstance(bound_head, str)
+        or not bound_head
+        or bound_head.lower() != head_sha.lower()
+    ):
+        return "malformed"
+    return status
+
+
+def current_gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
+    """Return the deterministic current-head gate verdict status.
+
+    The result is ``accepted``, ``hold``, ``missing``, ``malformed``, or
+    ``ambiguous``. Only trusted carriers whose SHA and optional review commit
+    bind to the live head participate. A current verdict is admitted only when
+    one uniquely latest event can be proven from publication timestamps,
+    same-entry text order, or timestamp-free order within one collection.
+    """
+    if not isinstance(pr, dict) or not head_sha:
+        return "missing"
+    projected = _projected_gate_verdict_status(pr, head_sha)
+    if projected is not None:
+        return projected
+    events = _gate_verdict_events(pr)
+    if any(not event.valid for event in events):
+        return "malformed"
+
+    current: list[_GateVerdictEvent] = []
+    for event in events:
+        if not _sha_matches_head(event.sha, head_sha):
+            continue
+        if event.commit_sha is not None and (
+            not re.fullmatch(r"[0-9a-fA-F]{40}", event.commit_sha)
+            or event.commit_sha.lower() != head_sha.lower()
+        ):
+            return "malformed"
+        current.append(event)
+    if not current:
+        return "missing"
+
+    latest = [
+        event
+        for index, event in enumerate(current)
+        if not any(
+            other_index != index and _gate_verdict_is_later(other, event)
+            for other_index, other in enumerate(current)
+        )
+    ]
+    verdicts = {event.verdict for event in latest}
+    return next(iter(verdicts)) if len(verdicts) == 1 else "ambiguous"
+
+
 def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool:
     """Return True iff a current exact-head ``gate-verdict: accepted`` trailer exists.
 
@@ -744,10 +1044,7 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
     gate described in issue #6019 — the dispatcher must reject any exact head
     unless every required check is green AND such a trailer is present.
     """
-    if not isinstance(pr, dict) or not head_sha:
-        return False
-    accepted = _accepted_gate_verdict_shas(pr)
-    return any(_sha_matches_head(sha, head_sha) for sha in accepted)
+    return current_gate_verdict_status(pr, head_sha) == "accepted"
 
 
 def _explicit_metadata_verdict_texts(pr: dict[str, Any]) -> list[str]:

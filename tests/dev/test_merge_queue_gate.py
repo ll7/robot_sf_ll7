@@ -2273,6 +2273,264 @@ def _gate_ready_pr(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _gate_review_carrier(
+    body: str,
+    *,
+    submitted_at: str | None,
+    commit_sha: str = FULL_SHA,
+    association: str = "OWNER",
+) -> dict[str, object]:
+    """Build a trusted review carrier with optional ordering and head evidence."""
+    entry: dict[str, object] = {
+        "body": body,
+        "authorAssociation": association,
+        "state": "COMMENTED",
+        "commit": {"oid": commit_sha},
+    }
+    if submitted_at is not None:
+        entry["submittedAt"] = submitted_at
+    return entry
+
+
+def test_current_hold_supersedes_older_exact_head_acceptance_from_issue_9116() -> None:
+    """The #9116 ordering regression must block admission on the newer HOLD."""
+    accepted = f"gate-verdict: accepted @ {FULL_SHA}"
+    hold = f"gate-verdict: hold @ {FULL_SHA}"
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            reviews=[
+                _gate_review_carrier(
+                    accepted,
+                    submitted_at="2026-09-12T12:33:51Z",
+                ),
+                _gate_review_carrier(
+                    hold,
+                    submitted_at="2026-09-12T12:33:57Z",
+                ),
+            ],
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "hold"
+    assert "exact_head_gate_hold" in audit.reasons
+
+
+def test_later_exact_head_acceptance_supersedes_older_hold() -> None:
+    """A timestamp-proven later accepted review can clear an older HOLD."""
+    accepted = f"gate-verdict: accepted @ {FULL_SHA}"
+    hold = f"gate-verdict: hold @ {FULL_SHA}"
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            # Deliberately reverse list order: publication timestamps own the
+            # chronology when the API collection order is not authoritative.
+            reviews=[
+                _gate_review_carrier(
+                    accepted,
+                    submitted_at="2026-09-12T12:34:07Z",
+                ),
+                _gate_review_carrier(
+                    hold,
+                    submitted_at="2026-09-12T12:33:57Z",
+                ),
+            ],
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.gate_verdict_status == "accepted"
+
+
+def test_untrusted_current_gate_carrier_cannot_admit_the_head() -> None:
+    """An untrusted exact-head acceptance remains non-authoritative."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            reviews=[
+                _gate_review_carrier(
+                    f"gate-verdict: accepted @ {FULL_SHA}",
+                    submitted_at="2026-09-12T12:34:07Z",
+                    association="CONTRIBUTOR",
+                )
+            ],
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "missing"
+    assert "missing_exact_head_gate_verdict" in audit.reasons
+
+
+def test_stale_head_gate_carrier_cannot_admit_the_head() -> None:
+    """A trusted verdict naming another head must fail the exact-head gate."""
+    other_head = "c" * 40
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            reviews=[
+                _gate_review_carrier(
+                    f"gate-verdict: accepted @ {other_head}",
+                    submitted_at="2026-09-12T12:34:07Z",
+                    commit_sha=other_head,
+                )
+            ],
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "missing"
+    assert "missing_exact_head_gate_verdict" in audit.reasons
+
+
+def test_current_gate_carrier_requires_review_commit_binding() -> None:
+    """A current trailer on a stale review commit must fail closed."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            reviews=[
+                _gate_review_carrier(
+                    f"gate-verdict: accepted @ {FULL_SHA}",
+                    submitted_at="2026-09-12T12:34:07Z",
+                    commit_sha="c" * 40,
+                )
+            ],
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "malformed"
+    assert "malformed_exact_head_gate_verdict" in audit.reasons
+
+
+def test_malformed_current_gate_carrier_fails_closed() -> None:
+    """A recognized but malformed current carrier cannot be ignored beside the gate."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            reviews=[
+                _gate_review_carrier(
+                    f"gate-verdict: accepted @ {FULL_SHA}_suffix",
+                    submitted_at="2026-09-12T12:34:07Z",
+                )
+            ],
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "malformed"
+    assert "malformed_exact_head_gate_verdict" in audit.reasons
+
+
+def test_equal_publication_times_make_conflicting_gate_carriers_ambiguous() -> None:
+    """Equal timestamps cannot establish whether acceptance superseded a HOLD."""
+    timestamp = "2026-09-12T12:34:07Z"
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            reviews=[
+                _gate_review_carrier(
+                    f"gate-verdict: accepted @ {FULL_SHA}",
+                    submitted_at=timestamp,
+                ),
+                _gate_review_carrier(
+                    f"gate-verdict: hold @ {FULL_SHA}",
+                    submitted_at=timestamp,
+                ),
+            ],
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "ambiguous"
+    assert "ambiguous_exact_head_gate_verdict" in audit.reasons
+
+
+def test_native_merge_group_fails_closed_on_current_hold(tmp_path, capsys) -> None:
+    """The native merge-group command must return nonzero for the #9116 ordering."""
+    synthetic_head = "9" * 40
+    event_path = tmp_path / "merge_group.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "event_name": "merge_group",
+                "merge_group": {
+                    "head_ref": f"refs/heads/gh-readonly-queue/main/pr-42-{FULL_SHA[:12]}",
+                    "base_sha": "queue_base_sha",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    raw_pr = _raw_pr()
+    raw_pr["reviews"] = [
+        _gate_review_carrier(
+            f"gate-verdict: accepted @ {FULL_SHA}",
+            submitted_at="2026-09-12T12:33:51Z",
+        ),
+        _gate_review_carrier(
+            f"gate-verdict: hold @ {FULL_SHA}",
+            submitted_at="2026-09-12T12:33:57Z",
+        ),
+    ]
+    threads = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
+
+    with (
+        patch("scripts.dev.merge_queue_gate._gh") as mock_gh,
+        patch.object(
+            merge_queue_gate_module,
+            "get_pr_commit_messages",
+            return_value="repair commit\n",
+        ),
+    ):
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(head_sha=synthetic_head),
+            _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
+            _gh_response(stdout=json.dumps(threads)),
+        ]
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
+
+    audit = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert audit["passed"] is False
+    assert audit["gate_verdict_status"] == "hold"
+    assert "exact_head_gate_hold" in audit["reasons"]
+
+
 def test_stacked_ancestry_fails_gate_closed() -> None:
     """A stacked-not-independently-mergeable PR must never pass the merge gate."""
     for state in (

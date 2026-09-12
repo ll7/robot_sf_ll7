@@ -8,6 +8,7 @@ documents that the curated site intentionally does not build.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -162,6 +163,54 @@ def test_classify_warnings_allows_only_resolvable_crossrefs(tmp_path: Path) -> N
     assert len(blocking) == 2
     assert any("ghost" in line for line in blocking)
     assert any("myst.header" in line for line in blocking)
+
+
+def test_sphinx_subprocess_failure_cannot_report_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A nonzero Sphinx return code must fail the build even without warning lines."""
+
+    docs = _make_project(tmp_path, page_body="# Page\n\nBody.\n")
+    completed = subprocess.CompletedProcess(
+        args=["sphinx"], returncode=1, stdout="", stderr="crash without warnings\n"
+    )
+    monkeypatch.setattr(
+        "scripts.dev.sphinx_curated_build.subprocess.run", lambda *args, **kwargs: completed
+    )
+
+    result = strict_build(docs_dir=docs, output_dir=tmp_path / "out")
+
+    assert result.status == "failed"
+    assert result.returncode == 1
+    assert any("exit code 1" in line for line in result.blocking_warnings)
+
+
+def test_cli_exits_nonzero_for_sphinx_subprocess_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """main() must return nonzero in JSON and non-JSON modes when Sphinx fails."""
+
+    from scripts.dev import sphinx_curated_build as module
+
+    failed = module.CuratedBuildResult(
+        status="failed",
+        curated_count=1,
+        excluded_count=0,
+        returncode=1,
+        output_dir=str(tmp_path / "out"),
+        warning_lines=(),
+        blocking_warnings=("Sphinx subprocess failed with exit code 1.",),
+    )
+    monkeypatch.setattr(module, "strict_build", lambda **kwargs: failed)
+
+    json_exit = module.main(["--builder", "dummy", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert json_exit == 1
+    assert payload["status"] == "failed"
+    assert payload["returncode"] == 1
+    assert payload["sphinx_returncode"] == 1
+
+    assert module.main(["--builder", "dummy"]) == 1
 
 
 def test_real_curated_manifest_matches_toctree_closure() -> None:

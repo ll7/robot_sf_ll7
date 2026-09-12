@@ -74,6 +74,124 @@ evidence stays `unknown`; an application nonzero exit is never auto-retried as
 infrastructure, and a completed scheduler state is never scientific success. Exit code 2
 means the receipt was unreadable or malformed, not that the job failed.
 
+## Array-index mapping verification (check-only)
+
+Before launching array-based SLURM jobs or retries, verify that array task IDs map
+bijectively and without bounds errors to campaign matrix rows:
+
+```bash
+uv run python scripts/validation/verify_slurm_array_mapping.py \
+  --manifest path/to/campaign_manifest.json \
+  --array-spec 0-99%10 \
+  --step-chunk 1 \
+  --output-dir output/benchmarks/campaign_1/
+```
+
+The verifier is read-only and fail-closed: it checks for gaps, duplicate row mappings,
+off-by-one bounds, zero- vs one-based index mismatches, chunk tail truncations, shard
+reorderings, resume/retry collisions, and invalid array concurrency specs. It exits with code
+0 on success, 1 on mapping errors (or warnings under `--strict`), and 2 on invalid invocation.
+
+## Receipt public projection (check-only)
+
+Before a private scheduler, harvest, or custody receipt is quoted publicly, validate the proposed
+sanitized projection against `scripts/tools/receipt_projection_policies.json`:
+
+```bash
+uv run python scripts/tools/validate_receipt_projection.py \
+  --check --private <private-receipt.json> --public <proposed-public-receipt.json> --format json
+```
+
+Policies are explicit per field path (`keep`, alias transforms, `digest`, `omit`, `reject`).
+Unknown or credential-named fields, private paths, hostnames, IPs, signed URLs, accounts, and
+queue topology fail closed. Approved stable aliases replace private IDs and artifact roots, and
+the public receipt binds `source_binding.receipt_sha256` to the canonical SHA-256 of the full
+private receipt without publishing private bytes; repeated projection is byte-stable. Required
+identity (source/config digests, environment class, row counts, terminal status, artifact
+checksums, claim boundary) must survive, and over-redaction that erases it fails. Unsupported
+classes are reported `unsupported_receipt_class`, never partially projected. Exit codes: 0 valid,
+2 invalid or unsupported, 3 malformed input; the tool is check-only and changes no state.
+
+## Scheduler-job reconciliation (check-only)
+
+Before access ends, join a sanitized scheduler inventory projection with public issue/PR states,
+immutable launch-manifest packet digests, expected row counts, and artifact owner/harvest metadata
+so unbound, duplicate, stale, or ownerless jobs stay visible without exposing private infrastructure:
+
+```bash
+uv run python scripts/tools/reconcile_scheduler_jobs.py \
+  --check --projection <sanitized-projection.json> [--public <public-snapshot.json>] --format json
+```
+
+Each output row binds one sanitized job alias (plus optional array index and parent lineage) to its
+exact public owner, immutable input packet digest, artifact root, owner, harvest state, transfer
+state, and next action. Rows classify as `owned_active`, `owned_terminal_unharvested`,
+`owned_harvested`, `duplicate_candidate`, `orphan_unknown`, `stale_input`, `missing_output_owner`,
+or `projection_unavailable`. Ownership is never inferred from mutable job names: missing or
+unsanitized identity fails closed, equivalent active duplicates and conflicting owner bindings are
+reported, and `scheduler_state == completed` never implies artifact completeness or result
+validity. The report is byte-stable after documented volatile-field normalization (`generated_at`,
+`snapshot_at`, `observed_at`, and peers are dropped). Exit codes: 0 every row active or harvested,
+1 actionable rows, 2 malformed input. The tool is check-only: it never submits, cancels, relabels,
+claims, comments, or deletes scheduler, GitHub, or artifact state.
+
+## Staged source isolation verification
+
+Before submitting compute-window or cluster jobs, verify that staged commands run
+strictly from the immutable staged source without leakage from ambient `PYTHONPATH`,
+user-site packages, sibling worktree checkouts, stale editable installations, or `.pth`
+injections:
+
+```bash
+uv run python scripts/validation/verify_staged_source_isolation.py \
+  --packet <staging-packet-or-bundle.json> \
+  --format json
+```
+
+The verifier executes bounded import and startup probes in an isolated subprocess,
+validates that all first-party imports resolve inside the staged source or an explicitly
+declared companion (`--companion NAME=PATH`), checks git tree cleanliness, and emits a
+sanitized `staged_source_isolation_receipt.v1` artifact without revealing private host paths.
+Exit codes: `0` passed, `1` blocked, `2` malformed.
+
+## Running-job monitor (check-only)
+
+While a job is pending or running, reduce explicit sanitized observations without cancelling,
+retrying, or harvesting anything:
+
+```bash
+uv run python scripts/tools/monitor_running_jobs.py \
+  --check --projection <sanitized-projection.json> --once --format json
+```
+
+The projection lists only the intended job identities plus expected artifacts/rows and the
+harvest request/artifact-root packet. The monitor verifies job, source, and immutable
+submission-receipt identity before every state reduction, records transitions, observation
+timestamps, evidence digests, and array summaries, and emits `running_job_harvest_handoff.v1`
+naming the canonical `scripts/validation/harvest_terminal_job.py --check` command when a
+terminal state is observed. For live polling, pass `--state-query "<read-only command with
+{job_id}>"` with `--interval` and a hard `--max-wall-seconds`; expiry emits
+`monitor_window_expired` with the current state instead of classifying the job terminal. The
+query subprocess timeout is clamped to the remaining wall-clock budget. The monitor never
+cancels, retries, submits, or harvests, and scheduler completion is never artifact or scientific
+success.
+
+## SLURM launcher static audit (check-only)
+
+Before submitting or handing off SLURM scripts and wrappers, audit them for stale partitions,
+missing job names, missing timeouts, unsafe log paths, hardcoded host/user paths, unbounded
+arrays, conflicting GPU requests, stale module commands, missing preflight, and non-portable resume:
+
+```bash
+uv run python scripts/validation/audit_slurm_launchers.py \
+  [<launcher-files>...] --check --format json
+```
+
+The audit tool is static, credential-safe, and read-only. It parses `#SBATCH` directives and
+wrapper flags, compares them against sanitized capability classes, and reports violations
+with exit code 0 (clean) or 1 (errors found).
+
+
 ## Training submission queue
 
 Use `experiments/submission_queue.yaml` for reviewable planned training submissions that should be
@@ -362,3 +480,25 @@ explicit config and either `CAMERA_READY_BENCHMARK_LABEL` or `CAMERA_READY_BENCH
 so queued jobs have a reviewable identity before they consume cluster time. Slurm logs stay under
 `output/slurm/`; campaign outputs should stay under `output/benchmarks/...` unless a small
 manifest, summary, or durable artifact pointer is intentionally promoted.
+
+## Campaign input drift verification (check-only)
+
+Before mutating the scheduler or submitting scarce compute-window jobs, verify that the live
+submission packet has not drifted from the preflight receipt using the compare-and-swap binding
+validator:
+
+```bash
+uv run python scripts/validation/validate_campaign_submission_binding.py --check \
+  --preflight path/to/preflight_receipt.json \
+  --submission path/to/live_submission_packet.json \
+  --format json
+```
+
+The validator operates in check-only mode and fails closed: it recomputes and compares all
+authority-bearing identities (Git commit SHA, working tree dirty state, config content SHA-256,
+seed ordering, model checkpoint hash, Python/lock environment, expected row count, resource
+allocations, output root, command tokens, admission claim, and duplicate execution state).
+Permitted volatile fields (`observed_at_utc`, `submission_nonce`, `pid`, `hostname`, `host`,
+`process_id`, `job_id_pending`) are tracked and reported in `volatile_fields_observed` without
+causing false drift failures, while any unpermitted or unknown field divergence blocks submission
+and exits with code 1.

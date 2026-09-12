@@ -1,10 +1,10 @@
-"""TODO docstring. Document this module."""
+"""Tests for the simple_reward function used by robot environments."""
 
 from robot_sf.gym_env.reward import simple_reward
 
 
 def test_simple_reward():
-    """TODO docstring. Document this function."""
+    """simple_reward returns 0.9999 for metadata reporting route completion without collisions."""
     meta = {
         "step": 0,
         "episode": 0,

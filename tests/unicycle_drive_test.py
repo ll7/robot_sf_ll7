@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for UnicycleMotion steering, acceleration, and clipping behavior."""
 
 from math import isclose, pi
 
@@ -11,13 +11,13 @@ from robot_sf.ped_ego.unicycle_drive import (
 
 
 def norm_angle(angle: float) -> float:
-    """TODO docstring. Document this function.
+    """Wrap an angle in radians into the [0, 2*pi) interval.
 
     Args:
-        angle: TODO docstring.
+        angle: Angle in radians.
 
     Returns:
-        TODO docstring.
+        Equivalent angle in [0, 2*pi).
     """
     while angle < 0:
         angle += 2 * pi
@@ -27,7 +27,7 @@ def norm_angle(angle: float) -> float:
 
 
 def test_unicycle_can_drive_right_curve():
-    """TODO docstring. Document this function."""
+    """Steering right then straight leaves the unicycle in the fourth quadrant."""
     motion = UnicycleMotion(UnicycleDriveSettings())
     pose_before, vel_before = ((0, 0), 0), 1
     state = UnicycleDriveState(pose_before, vel_before)
@@ -44,7 +44,7 @@ def test_unicycle_can_drive_right_curve():
 
 
 def test_unicycle_can_drive_left_curve():
-    """TODO docstring. Document this function."""
+    """Steering left then straight leaves the unicycle in the first quadrant."""
     motion = UnicycleMotion(UnicycleDriveSettings())
     pose_before, vel_before = ((0, 0), 0), 1
     state = UnicycleDriveState(pose_before, vel_before)
@@ -61,7 +61,7 @@ def test_unicycle_can_drive_left_curve():
 
 
 def test_unicycle_acceleration():
-    """TODO docstring. Document this function."""
+    """Acceleration ramps speed to the max and deceleration through zero to backwards."""
     motion = UnicycleMotion(UnicycleDriveSettings(allow_backwards=True))
     pose_before, vel_before = ((0, 0), 0), 0
     state = UnicycleDriveState(pose_before, vel_before)

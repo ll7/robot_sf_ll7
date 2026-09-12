@@ -536,3 +536,23 @@ Permitted volatile fields (`observed_at_utc`, `submission_nonce`, `pid`, `hostna
 `process_id`, `job_id_pending`) are tracked and reported in `volatile_fields_observed` without
 causing false drift failures, while any unpermitted or unknown field divergence blocks submission
 and exits with code 1.
+
+## Expected-row ledger generation and verification (fail-closed)
+
+Expand campaign packets into canonical byte-stable expected-row ledgers before launch:
+
+```bash
+uv run python scripts/validation/generate_campaign_row_ledger.py \
+  --packet path/to/campaign_packet.json \
+  --output path/to/campaign_expected_row_ledger.json \
+  --check
+```
+
+The tool enforces schema `campaign_expected_row_ledger.v1.schema.json` across Cartesian grids, paired
+arms, array tasks, and excluded-cells pruning. Every row receives a unique key
+(`campaign_id::arm::scenario_id::seed::replicate`). Staging fails closed (`--check` exits with 1) on
+duplicate identities, underspecified dimensions, unresolved aliases, mutable paths, or count mismatches.
+Observed rows (`--observed path/to/rows.jsonl`) verify completion across 9 row states (`present`, `missing`,
+`duplicate`, `unexpected`, `conflict`, `fallback`, `degraded`, `failed`, `provenance_invalid`).
+
+

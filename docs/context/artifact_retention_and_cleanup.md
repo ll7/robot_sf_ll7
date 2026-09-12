@@ -241,6 +241,10 @@ uv run python scripts/tools/check_log_retention.py --check --manifest <LOG_MANIF
 The check-only helper requires per-log role, job/task identity, byte/line counts, encoding, completion,
 digest, and retention class; it emits deterministic bounded excerpts with private values redacted.
 Active, truncated, binary, secret-like, duplicate, unidentified, mismatched, or uncustodied logs remain blocked; failed/unknown jobs retain full logs until verified custody. It never deletes files or changes runtime logging.
+Pruning also requires `custody.status: verified`, an approved durable class, matching member digests and
+sizes, and explicit `true` values for `independent_verification`, `transfer_verification` (or
+`transfer_verified`), and `consumer_review` (or `consumer_reviewed`); missing or malformed proof keeps
+eligibility blocked.
 
 ### 4.13 Report a blocker
 

@@ -51,7 +51,16 @@ PRIVATE_PATH_RE = re.compile(
     r"(?i)(?<![\w])(?:/[^\s,;]+|[a-z]:[\\/][^\s,;]+|\\\\[^\s,;]+|~[/\\][^\s,;]+)"
 )
 STRUCTURED_SECRET_RE = re.compile(r"""(?ix)(["'](?:password|passwd|token|secret|api[_-]?key|authorization|bearer|private[_-]?key)["']\s*:\s*)(?:"[^"\n]*"|'[^'\n]*'|[^,}\s]+)""")  # fmt: skip
-STRUCTURED_IDENTITY_RE = re.compile(r"""(?ix)(["'](?:user|username|account)["']\s*:\s*)(?:"[^"\n]*"|'[^'\n]*'|[^,}\s]+)""")  # fmt: skip
+STRUCTURED_SECRET_KEY_RE = re.compile(
+    r"""(?ix)(?:\\+)?["'](?:password|passwd|token|secret|api[_-]?key|authorization|bearer|private[_-]?key)(?:\\+)?["']"""
+)
+STRUCTURED_IDENTITY_KEY_RE = re.compile(r"""(?ix)(["'])(?:username|account|user)\1""")
+STRUCTURED_IDENTITY_KEY_CANDIDATE_RE = re.compile(
+    r"""(?ix)(?:[{,]\s*)(?P<quote>["'])(?:username|account|user)(?![A-Za-z0-9_])"""
+)
+STRUCTURED_IDENTITY_ESCAPED_KEY_RE = re.compile(
+    r"""(?ix)(?:\\+["'](?:user|username|account)["']|["'](?:user|username|account)\\+["'])"""
+)
 IDENTITY_RE = re.compile(r"(?i)\b(?:user|username|account)\s*[:=]\s*\S+")
 TOPOLOGY_RE = re.compile(
     r"(?i)\b(?:host|hostname|node|partition|topology|gpu|cpu|rank|world_size)\s*[:=]\s*\S+"
@@ -104,6 +113,30 @@ def _relative(value: Any, location: str, problems: list[dict[str, str]]) -> str 
         return None
 
 
+def _symlinked(path: Path) -> bool:
+    """Return True when a path or an existing parent is a symlink."""
+    return any(candidate.is_symlink() for candidate in (path, *path.parents))
+
+
+def _safe_source(
+    root: Path, resolved_root: Path, relative: str, location: str, problems: list[dict[str, str]]
+) -> Path | None:
+    """Resolve one source without reading links or paths outside the declared root."""
+    source = root / relative
+    linked = _symlinked(source)
+    try:
+        resolved = source.resolve(strict=False)
+        escaped = resolved != resolved_root and resolved_root not in resolved.parents
+    except (OSError, RuntimeError):
+        problems.append(_problem("source_path_unavailable", location))
+        return None
+    if linked:
+        problems.append(_problem("source_path_symlink", location))
+    if escaped:
+        problems.append(_problem("source_outside_root", location))
+    return None if linked or escaped else source
+
+
 def _policy(raw: Any, problems: list[dict[str, str]]) -> dict[str, Any]:
     if not isinstance(raw, Mapping):
         problems.append(_problem("excerpt_policy_missing", "excerpt_policy"))
@@ -127,6 +160,40 @@ def _policy(raw: Any, problems: list[dict[str, str]]) -> dict[str, Any]:
         problems.append(_problem("loss_not_declared", "excerpt_policy.loss_declared"))
     result["loss_declared"] = raw.get("loss_declared")
     return result
+
+
+def _completion(
+    raw: Mapping[str, Any],
+    location: str,
+    problems: list[dict[str, str]],
+    reasons: list[str],
+) -> str:
+    """Reconcile completion aliases and retain only an established state."""
+    fields = [(name, raw[name]) for name in ("completion", "completion_status") if name in raw]
+    values: list[str] = []
+    for name, value in fields:
+        if not isinstance(value, str):
+            code, reason = "completion_malformed", "completion_malformed"
+        elif value not in COMPLETIONS:
+            code, reason = "completion_unknown", "completion_unknown"
+        else:
+            values.append(value)
+            if value == "unknown":
+                code, reason = "completion_unknown", "unknown_completion"
+            else:
+                continue
+        problems.append(_problem(code, f"{location}.{name}"))
+        reasons.append(reason)
+    if not fields:
+        problems.append(_problem("completion_missing", f"{location}.completion"))
+        reasons.append("completion_missing")
+    if len(set(values)) > 1:
+        problems.append(_problem("completion_contradictory", location))
+        reasons.append("completion_contradictory")
+    completion = values[0] if values else "unknown"
+    if completion == "unknown" and "unknown_completion" not in reasons:
+        reasons.append("unknown_completion")
+    return completion
 
 
 def _scan_file(path: Path, encoding: str | None) -> dict[str, Any]:
@@ -168,13 +235,65 @@ def _scan_file(path: Path, encoding: str | None) -> dict[str, Any]:
     }
 
 
+def _sanitize_structured_identity(  # noqa: C901, PLR0912 - fail-closed parser branches are explicit
+    value: str,
+) -> str:
+    """Redact quoted identity fields, rejecting escaped or malformed values."""
+    if STRUCTURED_IDENTITY_ESCAPED_KEY_RE.search(value):
+        raise ValueError("structured identity escape is unsupported")
+    for candidate in STRUCTURED_IDENTITY_KEY_CANDIDATE_RE.finditer(value):
+        if candidate.end() >= len(value) or value[candidate.end()] != candidate.group("quote"):
+            raise ValueError("structured identity is malformed")
+    rendered: list[str] = []
+    cursor = 0
+    for match in STRUCTURED_IDENTITY_KEY_RE.finditer(value):
+        if match.start() < cursor or (match.start() and value[match.start() - 1] == "\\"):
+            raise ValueError("structured identity is malformed")
+        colon = match.end()
+        while colon < len(value) and value[colon].isspace():
+            colon += 1
+        if colon >= len(value) or value[colon] != ":":
+            raise ValueError("structured identity is malformed")
+        start = colon + 1
+        while start < len(value) and value[start].isspace():
+            start += 1
+        if start >= len(value):
+            raise ValueError("structured identity is malformed")
+        if value[start] in "\"'":
+            quote, end = value[start], start + 1
+            while end < len(value) and value[end] != quote:
+                if value[end] == "\\":
+                    raise ValueError("structured identity escape is unsupported")
+                end += 1
+            if end >= len(value):
+                raise ValueError("structured identity is malformed")
+            end += 1
+        else:
+            end = start
+            while end < len(value) and not value[end].isspace() and value[end] not in ",}":
+                end += 1
+            if end == start:
+                raise ValueError("structured identity is malformed")
+            if "\\" in value[start:end]:
+                raise ValueError("structured identity escape is unsupported")
+        separator = end
+        while separator < len(value) and value[separator].isspace():
+            separator += 1
+        if separator < len(value) and value[separator] not in ",}":
+            raise ValueError("structured identity is malformed")
+        rendered.extend((value[cursor:start], "<redacted-identity>"))
+        cursor = end
+    rendered.append(value[cursor:])
+    return "".join(rendered)
+
+
 def _sanitize(value: str) -> str:
     value = URL_RE.sub("<redacted-url>", value)
     value = SECRET_ASSIGN_RE.sub(lambda match: f"{match.group(1)}=<redacted-secret>", value)
     value = STRUCTURED_SECRET_RE.sub(r"\1<redacted-secret>", value)
+    value = _sanitize_structured_identity(value)
     value = PRIVATE_PATH_RE.sub("<redacted-path>", value)
     value = IDENTITY_RE.sub("<redacted-identity>", value)
-    value = STRUCTURED_IDENTITY_RE.sub(r"\1<redacted-identity>", value)
     value = TOPOLOGY_RE.sub("<redacted-topology>", value)
     value = HOST_RE.sub("<redacted-host>", value)
     clean = "".join(char if char >= " " else " " for char in value)
@@ -220,7 +339,7 @@ def _excerpt(text: str, policy: Mapping[str, Any]) -> dict[str, Any]:
     return {"ranges": ranges, "text": _bounded("\n".join(rendered), policy["max_bytes"])}
 
 
-def _custody(  # noqa: C901
+def _custody(  # noqa: C901, PLR0912
     raw: Any, entries: list[dict[str, Any]], problems: list[dict[str, str]]
 ) -> bool:
     if not isinstance(raw, Mapping):
@@ -235,6 +354,18 @@ def _custody(  # noqa: C901
     ):
         problems.append(_problem("durable_custody_unapproved", "custody.durability_class"))
         verified = False
+    for name, aliases in (
+        ("independent_verification", ("independent_verification",)),
+        ("transfer_verification", ("transfer_verification", "transfer_verified")),
+        ("consumer_review", ("consumer_review", "consumer_reviewed")),
+    ):
+        values = [raw[alias] for alias in aliases if alias in raw]
+        if not values:
+            problems.append(_problem("custody_proof_missing", f"custody.{name}"))
+            verified = False
+        elif any(value is not True for value in values):
+            problems.append(_problem("custody_proof_invalid", f"custody.{name}"))
+            verified = False
     files = raw.get("files")
     by_path: dict[str, Mapping[str, Any]] = {}
     if not isinstance(files, list):
@@ -306,9 +437,25 @@ def build_report(  # noqa: C901, PLR0912, PLR0915
         diagnosis = "unknown"
         problems.append(_problem("diagnosis_unknown", "job.diagnosis"))
     policy = _policy(manifest.get("excerpt_policy"), problems)
+    policy_valid = (
+        policy.get("version") == POLICY_VERSION
+        and policy.get("loss_declared") is True
+        and all(
+            name in policy
+            for name in ("max_bytes", "first_lines", "last_lines", "context_lines", "max_log_bytes")
+        )
+    )
     root = Path(root)
+    root_linked = _symlinked(root)
+    try:
+        resolved_root = root.resolve(strict=False)
+    except (OSError, RuntimeError):
+        resolved_root = root.absolute()
+        root_linked = True
     if not root.is_dir():
         problems.append(_problem("source_root_unavailable", "source_root"))
+    elif root_linked:
+        problems.append(_problem("source_root_symlink", "source_root"))
 
     raw_logs = manifest.get("logs")
     if not isinstance(raw_logs, list) or not raw_logs:
@@ -356,14 +503,7 @@ def build_report(  # noqa: C901, PLR0912, PLR0915
             entry_reasons.append("duplicate_identity")
         else:
             seen_identities.add(identity)
-        completion = _member(raw.get("completion", raw.get("completion_status")), COMPLETIONS)
-        if completion is None:
-            problems.append(_problem("completion_missing", f"{location}.completion"))
-            entry_reasons.append("completion_missing")
-            completion = "unknown"
-        elif completion == "unknown":
-            problems.append(_problem("completion_unknown", f"{location}.completion"))
-            entry_reasons.append("unknown_completion")
+        completion = _completion(raw, location, problems, entry_reasons)
         for flag in ("active_writer", "truncated"):
             if flag in raw and not isinstance(raw[flag], bool):
                 problems.append(_problem("flag_invalid", f"{location}.{flag}"))
@@ -403,8 +543,8 @@ def build_report(  # noqa: C901, PLR0912, PLR0915
             "reasons": entry_reasons,
             "prune_eligible": False,
         }
-        source = root / path if path else None
-        if source is None or not source.is_file() or source.is_symlink():
+        source = _safe_source(root, resolved_root, path, location, problems) if path else None
+        if source is None or not source.is_file():
             problems.append(_problem("source_unreadable", location))
         elif encoding is not None:
             scan = _scan_file(source, encoding)
@@ -443,19 +583,28 @@ def build_report(  # noqa: C901, PLR0912, PLR0915
                     problems.append(_problem("truncated_log", location))
                     entry["reasons"].append("truncated_log")
                 if scan["text"] is not None:
-                    if SECRET_RE.search(scan["text"]) or STRUCTURED_SECRET_RE.search(scan["text"]):
+                    if (
+                        SECRET_RE.search(scan["text"])
+                        or STRUCTURED_SECRET_RE.search(scan["text"])
+                        or STRUCTURED_SECRET_KEY_RE.search(scan["text"])
+                    ):
                         problems.append(_problem("secret_like_log", location))
                         entry["reasons"].append("secret_like_log")
-                    elif not entry["reasons"] and policy:
-                        excerpt = _excerpt(scan["text"], policy)
-                        excerpt.update(
-                            {
-                                "source_sha256": scan["sha256"],
-                                "source_location": entry["source_location"],
-                                "policy_version": policy.get("version"),
-                            }
-                        )
-                        entry["excerpt"] = excerpt
+                    elif not entry["reasons"] and policy_valid:
+                        try:
+                            excerpt = _excerpt(scan["text"], policy)
+                        except ValueError:
+                            problems.append(_problem("redaction_failed", location))
+                            entry["reasons"].append("redaction_failed")
+                        else:
+                            excerpt.update(
+                                {
+                                    "source_sha256": scan["sha256"],
+                                    "source_location": entry["source_location"],
+                                    "policy_version": policy.get("version"),
+                                }
+                            )
+                            entry["excerpt"] = excerpt
                 elif scan["inspection_bounded"]:
                     problems.append(_problem("excerpt_unavailable", location))
                     entry["reasons"].append("excerpt_unavailable")

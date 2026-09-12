@@ -495,6 +495,9 @@ _FAST_FILES = {
     # The bounded answerability packet uses deterministic schema, digest, and
     # provenance fixtures; keep its changed-module coverage in fast shards.
     "test_research_answerability.py",
+    # The bounded falsification preflight uses deterministic manifest, overlay,
+    # and provenance fixtures; keep its changed-module coverage in fast shards.
+    "test_bounded_falsification.py",
     # Matched-compute runtime and canary tests use injected seams and deterministic
     # receipt fixtures; keep their accounting coverage in pull-request fast shards.
     "test_matched_compute_runtime.py",
@@ -777,6 +780,10 @@ _FAST_FILES = {
     # Relevance-window tests are deterministic selector, manifest, and missing
     # signal contracts for the preparation-only research scaffold (issue #8622).
     "test_relevance_windows.py",
+    # Scenario route-override contract tests cover the changed runtime guard in
+    # robot_sf/training/scenario_loader.py and must run in the exact-head fast
+    # lane so changed-line coverage includes both rejection paths (issue #8571).
+    "test_scenario_loader_route_overrides.py",
     # Source-bound fixture and provenance contracts are deterministic analysis
     # coverage for the issue #8566 diagnostic packet.
     "test_issue_8566_source_bound_component_contrasts.py",

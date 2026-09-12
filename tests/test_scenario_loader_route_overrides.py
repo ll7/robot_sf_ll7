@@ -1,5 +1,8 @@
 """Tests for scenario route override artifacts in scenario_loader."""
 
+# evidence-writer-exempt: These tests write synthetic YAML route/manifest fixtures only under
+# pytest tmp_path; they are parser inputs, not retained evidence artifacts.
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -99,6 +102,33 @@ def test_build_robot_config_from_scenario_supports_route_overrides_file(tmp_path
     _map_name, updated_map = next(iter(config.map_pool.map_defs.items()))
     assert updated_map.robot_routes[0].waypoints == [(4.0, 4.0), (8.0, 8.0), (12.0, 12.0)]
     assert updated_map.ped_routes[0].waypoints == [(5.0, 16.0), (10.0, 10.0), (15.0, 4.0)]
+
+
+def test_build_robot_config_rejects_mixed_route_representations(tmp_path: Path) -> None:
+    """Mixed inline/file routes must fail before runtime can discard inline provenance."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    scenario = {
+        "name": "ambiguous-route-proposal",
+        "map_file": str(Path("maps/svg_maps/classic_overtaking.svg").resolve()),
+        "route_overrides": {"robot_routes": [], "ped_routes": []},
+        "route_overrides_file": str(tmp_path / "route_override.yaml"),
+    }
+
+    with pytest.raises(ValueError, match="both inline route_overrides and route_overrides_file"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+def test_build_robot_config_rejects_inline_route_proposals() -> None:
+    """Inline route proposals must fail until an authorized route file is materialized."""
+    scenario_path = Path("configs/scenarios/classic_interactions.yaml").resolve()
+    scenario = {
+        "name": "inline-route-proposal",
+        "map_file": str(Path("maps/svg_maps/classic_overtaking.svg").resolve()),
+        "route_overrides": {"robot_routes": [], "ped_routes": []},
+    }
+
+    with pytest.raises(ValueError, match="inline route_overrides are proposal-only"):
+        build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
 
 
 def test_load_scenarios_rebases_route_override_paths_from_included_archetypes() -> None:

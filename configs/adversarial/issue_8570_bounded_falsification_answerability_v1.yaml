@@ -19,15 +19,15 @@ source:
     search_space:
       path: configs/adversarial/issue_7340_station_platform_search_space_v1.yaml
       sha256: c196ccd789238dd0ea946b6d45f2c29d3f225527cbc4ab8c65d6c6221f4d57f4
-      role: frozen #7340 search-space bytes and bounds
+      role: "frozen #7340 search-space bytes and bounds"
     scenario_template:
       path: configs/adversarial/issue_7340_station_platform_medium_v1.yaml
       sha256: b82dce96beb16cedd53a0584981d1c5cc9d1a4bdac043b2a9e9168fcb058dec1
-      role: frozen #7340 scenario-template bytes and actor binding
+      role: "frozen #7340 scenario-template bytes and actor binding"
     map:
       path: maps/svg_maps/classic_station_platform.svg
       sha256: 5f03421ac3d16d6008e92e00634fa9f3d0c896304ffd204691d79a3a115be156
-      role: map input referenced by the frozen #7340 scenario template
+      role: "map input referenced by the frozen #7340 scenario template"
   search_space:
     input_id: search_space
     schema_version: adversarial-search-space.v1
@@ -265,7 +265,7 @@ search_methods:
   primary:
     id: cma_es
     algorithm: CMA-ES
-    owner: robot_sf.adversarial.cma_me
+    owner: robot_sf.adversarial.samplers.CmaEsCandidateSampler
     role: proposal
     budget_per_seed: 64
     seed_group: search
@@ -374,7 +374,7 @@ compute_ceiling:
 answerability:
   schema_version: research_answerability.v1
   question:
-    research_question: Can the approved first-slice falsification design be checked before compute without changing the frozen #7340 source contract?
+    research_question: "Can the approved first-slice falsification design be checked before compute without changing the frozen #7340 source contract?"
     bounded_claim: This packet records a reproducible diagnostic preparation design and no empirical falsification result.
     decision_vocabulary: [continue, stop, inconclusive, invalid]
     negative_result_meaning: No valid runtime result, null, or confirmation is implied by a preparation-only or unavailable row.
@@ -382,7 +382,7 @@ answerability:
     primary: Candidate-level falsification outcome by declared search arm and held-out confirmation seed, with invalid and unavailable rows visible.
     reference_or_null: Equal-budget seeded random and Halton controls over the same source-bound candidate surface.
     decision_predicates: Only rows passing every feasibility predicate and the future runtime-effective adapter gate may contribute to a result or null decision.
-    minimally_important_effect: Not required for this diagnostic packet; the #7382 budget is a starting design and is not powered evidence.
+    minimally_important_effect: "Not required for this diagnostic packet; the #7382 budget is a starting design and is not powered evidence."
   producers:
     - field: feasibility_predicates
       producer: feasibility_first.build_scenario_feasibility_ledger
@@ -443,11 +443,11 @@ compute_authorization:
   authorized: false
   evaluated_state: blocked_missing_producer
   blocking_reasons:
-    - pedestrian_delay_s is not runtime-effective in #7340 template mode; metadata or provenance cannot authorize compute.
+    - "pedestrian_delay_s is not runtime-effective in #7340 template mode; metadata or provenance cannot authorize compute."
     - native falsification outcomes and held-out confirmation artifacts are unavailable in this preparation-only packet.
   future_adapter_condition: >-
     A future adapter may reconsider this gate only after it proves a runtime-effective pedestrian_delay_s
     binding, preserves the source digest and bounds, supplies native/replay outputs, and passes the same
     research_answerability.v1 evaluator; metadata-only changes remain blocked.
 
-self_digest: 060fcd95d00bdeeabfc1697bb378e606188a4fa678b8375f937831914ca65395
+self_digest: e8c9c66e6e7fc39ecfb14175348e7b486d169be8e7ac7f46116f2c9c9970af64

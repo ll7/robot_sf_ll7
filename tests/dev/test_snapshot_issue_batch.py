@@ -1423,7 +1423,7 @@ def test_main_claimable_mode_can_be_called_without_issue_numbers() -> None:  # t
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
         with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
             claim.return_value = {2669: _claim_status(2669)}
-            rc = main(["--claimable", "--json", "--limit", "1"])
+            rc = main(["--claimable", "--json", "--limit", "5"])
 
     assert rc == 0
 
@@ -1623,3 +1623,60 @@ def test_snapshot_claimable_issues_marks_failed_scan_unavailable(
     assert payload["queue_completeness"] == "unavailable"
     assert payload["zero_work_authoritative"] is False
     assert payload["claimable_count"] == 0
+
+
+def _claimable_payload(*, completeness: str) -> dict[str, object]:
+    """Build a minimal claimable payload for CLI-boundary tests."""
+    return {
+        "schema": "issue_batch_snapshot.v1",
+        "mode": "candidate_queue",
+        "queue_completeness": completeness,
+        "zero_work_authoritative": completeness == "complete",
+        "truncated": completeness != "complete",
+        "claimable_issues": [],
+        "claimable_count": 0,
+        "issues": [],
+    }
+
+
+@patch("scripts.dev.snapshot_issue_batch._build_payload")
+def test_main_fails_closed_for_incomplete_claimable_scan(mock_build: MagicMock, capsys) -> None:  # type: ignore[no-untyped-def]
+    """An incomplete claimable scan exits non-zero and names queue_completeness."""
+    mock_build.return_value = _claimable_payload(completeness="incomplete")
+
+    rc = main(["--claimable", "--json"])
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert '"queue_completeness": "incomplete"' in captured.out
+    assert "not authoritative for zero work" in captured.err
+    assert "queue_completeness=incomplete" in captured.err
+
+
+@patch("scripts.dev.snapshot_issue_batch._build_payload")
+def test_main_allows_incomplete_claimable_scan_with_explicit_opt_out(
+    mock_build: MagicMock, capsys
+) -> None:  # type: ignore[no-untyped-def]
+    """Bounded discovery can opt out while the payload keeps the truth fields."""
+    mock_build.return_value = _claimable_payload(completeness="incomplete")
+
+    rc = main(["--claimable", "--allow-incomplete", "--json"])
+
+    assert rc == 0
+    assert capsys.readouterr().err == ""
+
+
+@patch("scripts.dev.snapshot_issue_batch._build_payload")
+def test_main_complete_claimable_scan_exits_zero(mock_build: MagicMock) -> None:
+    """A complete claimable scan remains a successful zero-work authority."""
+    mock_build.return_value = _claimable_payload(completeness="complete")
+
+    assert main(["--claimable", "--json"]) == 0
+
+
+def test_main_rejects_allow_incomplete_without_claimable(capsys) -> None:  # type: ignore[no-untyped-def]
+    """The opt-out is claimable-only."""
+    rc = main(["--allow-incomplete", "42", "--json"])
+
+    assert rc == 1
+    assert "--allow-incomplete requires --claimable" in capsys.readouterr().err

@@ -1133,7 +1133,10 @@ def snapshot_claimable_issues(
     ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
     ``queue_completeness`` is ``complete``. The returned
     ``zero_work_authoritative`` flag makes that boundary machine-readable and
-    is true only for a complete, error-free page-one scan.
+    is true only for a complete, error-free page-one scan. The CLI enforces this
+    boundary at the process exit: an incomplete ``--claimable`` scan exits non-zero
+    after printing the payload, unless ``--allow-incomplete`` is passed for
+    intentional bounded discovery.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
     blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
@@ -1735,12 +1738,23 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--claimable",
         action="store_true",
-        help="Discover bounded open claimable issues without explicit issue numbers.",
+        help=(
+            "Discover bounded open claimable issues without explicit issue numbers; an "
+            "incomplete scan exits non-zero unless --allow-incomplete is passed."
+        ),
     )
     parser.add_argument(
         "--include-blocked-external",
         action="store_true",
         help="Include blocked external-input issues in --claimable output.",
+    )
+    parser.add_argument(
+        "--allow-incomplete",
+        action="store_true",
+        help=(
+            "Allow an incomplete --claimable scan to exit zero for intentional bounded "
+            "discovery; zero-work conclusions still require zero_work_authoritative."
+        ),
     )
     parser.add_argument(
         "--blocked-external-report",
@@ -1801,8 +1815,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _validate_args(args: argparse.Namespace) -> int:
-    """Return nonzero after printing a CLI contract error."""
+def _validate_mode_flags(args: argparse.Namespace) -> int:
+    """Return nonzero for incompatible mode-flag combinations."""
     if args.claimable and args.issues:
         print(
             "--claimable cannot be combined with explicit issue numbers",
@@ -1812,6 +1826,12 @@ def _validate_args(args: argparse.Namespace) -> int:
     if args.include_blocked_external and not args.claimable:
         print(
             "--include-blocked-external requires --claimable",
+            file=sys.stderr,
+        )
+        return 1
+    if args.allow_incomplete and not args.claimable:
+        print(
+            "--allow-incomplete requires --claimable",
             file=sys.stderr,
         )
         return 1
@@ -1837,6 +1857,14 @@ def _validate_args(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    return 0
+
+
+def _validate_args(args: argparse.Namespace) -> int:
+    """Return nonzero after printing a CLI contract error."""
+    mode_error = _validate_mode_flags(args)
+    if mode_error:
+        return mode_error
     if args.limit <= 0:
         print("--limit must be positive", file=sys.stderr)
         return 1
@@ -1914,9 +1942,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"snapshot command timed out: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else json.dumps(payload))
-    if "issues" in payload:
-        return 1 if any(issue.get("status") == "error" for issue in payload["issues"]) else 0
-    return 1 if payload.get("errors") else 0
+    issue_errors = "issues" in payload and any(
+        issue.get("status") == "error" for issue in payload["issues"]
+    )
+    if issue_errors or payload.get("errors"):
+        return 1
+    completeness = payload.get("queue_completeness")
+    if completeness is not None and completeness != "complete" and not args.allow_incomplete:
+        print(
+            "claimable queue scan is not authoritative for zero work "
+            f"(queue_completeness={completeness}); resume with --resume-page/--limit until "
+            "complete, or pass --allow-incomplete for intentional bounded discovery",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

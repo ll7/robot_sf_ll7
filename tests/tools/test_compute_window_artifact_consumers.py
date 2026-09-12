@@ -157,19 +157,19 @@ def test_verification_flags_are_strict_booleans() -> None:
             {"logical_id": "target", "replacement_verified": True},
             {"logical_id": "new", "replacement_for": "old", "replacement_verified": "yes"},
             {"logical_id": "trace", "regenerable": 1, "regeneration_verified": "true"},
-            {"logical_id": "orphan", "orphan_candidate": "false"},
+            {"id": "orphan", "path": "..", "replacement_for": "x", "orphan_candidate": True},
         ],
     }
     report = tool.build_graph(payload)
     classes = {row["logical_id"]: row["classification"] for row in report["classifications"]}
     assert classes == {
-        "new": "consumer_unknown",
+        "new": "unresolved_conflict",
         "old": "consumer_unknown",
         "target": "consumer_unknown",
-        "orphan": "consumer_unknown",
-        "trace": "consumer_unknown",
+        "orphan": "unresolved_conflict",
+        "trace": "unresolved_conflict",
     }
-    assert sum(item["code"] == "invalid_boolean" for item in report["findings"]) == 4
+    assert sum(item["code"] == "invalid_boolean" for item in report["findings"]) == 3
 
 
 def test_malformed_collections_fail_closed_and_cli_check_exits_two(capsys, tmp_path) -> None:

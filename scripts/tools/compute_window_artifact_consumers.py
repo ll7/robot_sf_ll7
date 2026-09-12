@@ -523,17 +523,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
             or r["kind"] in {"paper", "dissertation", "release", "report", "tracked_file"}
             for r in refs
         )
-        conflict = any(
-            f["target"] == ident or f["source"] == ident
-            for f in findings
-            if f["code"]
-            in {
-                "conflicting_identity",
-                "stale_path",
-                "ambiguous_superseders",
-                "supersession_cycle",
-            }
-        )
+        conflict = any(f["target"] == ident or f["source"] == ident for f in findings)
         conflict = conflict or ident in cycle_nodes or ident in ambiguous_targets
         if conflict:
             classification = "unresolved_conflict"

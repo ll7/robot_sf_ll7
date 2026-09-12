@@ -1,9 +1,10 @@
 # Issue #6561 pedestrian desired-speed activation preflight.
 #
 # Plain-language summary: check-only, disjoint-seed preflight specification that
-# proves the slow/typical desired-speed interventions activate before the
-# registered 111-140 rows are submitted. It executes no registered rows and
-# produces no benchmark evidence.
+# checks the slow/typical desired-speed activation inputs before the registered
+# 111-140 rows are submitted. It executes no registered rows and produces no
+# benchmark evidence. The current canonical native diagnostics owner is
+# unavailable, so classifier output remains blocked and not admitted.
 
 schema_version: robot_sf.issue_6561_pedestrian_speed_activation_preflight.v1
 issue: 6561
@@ -11,6 +12,8 @@ child_issue: 8888
 status: preflight_only
 protocol_config: configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml
 protocol_semantic_hash: 6dca14e2021394fcfc9116418d23ebd351cba5ffd135abfe84d6c140ee1ced3d
+preflight_config_semantic_hash: c3a537c4cfde5e0bba3666de44ab5f6bdd6bb1db2a18ebc731e871f818034c1b
+preflight_manifest_hash: 4a5ccdfd2502da4b9033bdd0a5a3141c86b0c12ca94e3ee613a7b526d9815fa9
 
 claim_boundary: >-
   Check-only disjoint-seed activation specification. This does not execute
@@ -83,6 +86,17 @@ activation_rule:
     - degraded
     - provenance_invalid
     - intervention_not_activated
+    - not_available
+    - unavailable
+    - blocked
+
+canonical_native_diagnostics_contract:
+  owner: unavailable
+  schema_version: unavailable
+  status: blocked
+  admission: not_admitted
+  availability_status: not_available
+  reason_code: canonical_native_activation_diagnostics_owner_unavailable
 
 validation_contract:
   check_only_command: >-

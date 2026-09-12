@@ -43,7 +43,7 @@ def test_complete_fixture_is_ready_and_records_inventory():
     assert row["producer"]["data_identity"] == "fixture_dataset_v1"
     assert row["observation_contract"]["shape"] == [4] and row["seed"] == 7
     assert {item["role"] for item in row["companions"]} == {"normalizer", "vecnormalize"}
-    assert row["downstream_consumers"] == ["configs/train.yaml"]
+    assert row["downstream_consumers"] == ["fixture_config.yaml"]
     assert row["byte_size"] == row["byte_size_observed"] == 25
 
 

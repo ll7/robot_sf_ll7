@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
+import pytest
+
 from scripts.dev.github_graphql_retry import (
     is_quota_exhausted,
     run_with_retry,
@@ -180,12 +182,108 @@ def test_transport_marker_exhaustion_stays_fail_closed() -> None:
     assert "unexpected EOF" in outcome.terminal_diagnostic
 
 
-def test_deterministic_diagnostic_is_not_retried_with_markers_present() -> None:
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422, 501])
+def test_deterministic_diagnostic_is_not_retried_with_markers_present(status: int) -> None:
     """A permanent failure keeps its single-attempt behavior."""
-    runner = MagicMock(return_value=_transport_failure("gh: Not Found (HTTP 404)"))
+    runner = MagicMock(
+        return_value=_transport_failure(f"gh: request failed (HTTP {status}): unexpected EOF")
+    )
 
     outcome = run_with_retry(runner, ["pr", "list"], sleep=lambda _seconds: None)
 
     assert runner.call_count == 1
     assert outcome.exhausted is False
+    assert outcome.retryable_failure is False
+
+
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
+def test_retryable_http_error_with_transport_marker_recovers(status: int) -> None:
+    """Explicit transient statuses retain their existing bounded retry policy."""
+    runner = MagicMock(
+        side_effect=[
+            _transport_failure(f"gh: request failed (HTTP {status}): unexpected EOF"),
+            _response(stdout="ok"),
+        ]
+    )
+    sleeps: list[float] = []
+
+    outcome = run_with_retry(runner, ["api", "graphql"], sleep=sleeps.append)
+
+    assert runner.call_count == 2
+    assert sleeps == [1]
+    assert outcome.result.stdout == "ok"
+    assert outcome.exhausted is False
+
+
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "unexpected end of JSON input",
+        "unexpected EOF",
+        "EOF while reading",
+        "connection reset by peer",
+        "connection refused",
+        "i/o timeout",
+        "TLS handshake timeout",
+        "context deadline exceeded",
+        "the request timed out",
+    ],
+)
+def test_transport_markers_recover_in_either_stream(marker: str, stream: str) -> None:
+    """Marker matching is case-insensitive and accepts either diagnostic stream."""
+    failure = MagicMock(returncode=1, stdout="", stderr="")
+    setattr(failure, stream, marker.upper())
+    runner = MagicMock(side_effect=[failure, _response(stdout="ok")])
+
+    outcome = run_with_retry(runner, ["api", "graphql"], sleep=lambda _seconds: None)
+
+    assert runner.call_count == 2
+    assert outcome.result.stdout == "ok"
+    assert outcome.retryable_failure is False
+    assert outcome.exhausted is False
+
+
+def test_success_payload_transport_text_is_not_retried() -> None:
+    """Successful user content cannot be reclassified as a transport failure."""
+    runner = MagicMock(return_value=_response(stdout='{"body":"unexpected EOF (HTTP 503)"}'))
+
+    outcome = run_with_retry(runner, ["api", "graphql"], sleep=lambda _seconds: None)
+
+    assert runner.call_count == 1
+    assert outcome.result.returncode == 0
+    assert outcome.retryable_failure is False
+    assert outcome.exhausted is False
+
+
+def test_truncated_success_status_response_remains_retryable() -> None:
+    """An HTTP 200 with a failed body read is still a transport failure."""
+    runner = MagicMock(
+        side_effect=[
+            _transport_failure("gh: HTTP 200: unexpected EOF"),
+            _response(stdout="ok"),
+        ]
+    )
+
+    outcome = run_with_retry(runner, ["api", "graphql"], sleep=lambda _seconds: None)
+
+    assert runner.call_count == 2
+    assert outcome.result.stdout == "ok"
+    assert outcome.exhausted is False
+
+
+def test_quota_exhaustion_with_transport_marker_is_not_retried() -> None:
+    """Quota exhaustion retains precedence over transport-marker matching."""
+    runner = MagicMock(
+        return_value=_transport_failure(
+            "gh: GraphQL: API rate limit already exceeded (403): unexpected EOF"
+        )
+    )
+    sleeps: list[float] = []
+
+    outcome = run_with_retry(runner, ["api", "graphql"], sleep=sleeps.append)
+
+    assert runner.call_count == 1
+    assert sleeps == []
+    assert outcome.quota_exhausted is True
     assert outcome.retryable_failure is False

@@ -176,6 +176,35 @@ query subprocess timeout is clamped to the remaining wall-clock budget. The moni
 cancels, retries, submits, or harvests, and scheduler completion is never artifact or scientific
 success.
 
+## Urgent-packet batch preflight (check-only)
+
+Before touching scarce compute, run one bounded readiness matrix over the explicitly registered
+urgent campaign packets:
+
+```bash
+uv run python scripts/tools/run_urgent_packet_preflight.py --check \
+  --registry scripts/tools/urgent_packet_registry.v1.json --format json
+```
+
+Registry entries declare the public issue, a canonical side-effect-free local preflight argv, a
+positive timeout, and an output contract (`json_object`, `json_tail_object`, or `text`), plus the
+preflight script SHA-256 that must still match on disk. Entries that lack a canonical preflight,
+or that would require external services or substantive workload execution, are declared with an
+`unsupported_reason` instead of an invented command. Optional `expires_at`,
+`resource_projection`, `packet_sha256`, and `shared_check` fields bind registration expiry, a
+required sanitized resource projection, the source/config packet digest, and cheap shared checks
+that run once when their exact identities match while each packet row keeps its own evidence.
+
+Commands run as argument vectors without `shell=True`, under a minimal sanitized environment, with
+a per-command timeout and a captured-output cap. Rows classify as
+`ready_for_private_submission_check`, `local_preflight_failed`, `blocked_prerequisite`,
+`stale_input`, `duplicate_active`, `resource_projection_unavailable`, or `unsupported`; every row
+records the command, source/config digests, exit status, duration, normalized output digest, first
+blocker, and expiry. Timeouts, malformed output, path escapes, source drift, command mismatch,
+conflicting shared checks, and missing validators fail closed. A local pass is never compute
+authority or scheduler admission. Exit codes: 0 every packet ready, 1 actionable rows, 2 malformed
+registry. Focused fixture tests live in `tests/tools/test_run_urgent_packet_preflight.py`.
+
 ## SLURM launcher static audit (check-only)
 
 Before submitting or handing off SLURM scripts and wrappers, audit them for stale partitions,
@@ -554,5 +583,30 @@ arms, array tasks, and excluded-cells pruning. Every row receives a unique key
 duplicate identities, underspecified dimensions, unresolved aliases, mutable paths, or count mismatches.
 Observed rows (`--observed path/to/rows.jsonl`) verify completion across 9 row states (`present`, `missing`,
 `duplicate`, `unexpected`, `conflict`, `fallback`, `degraded`, `failed`, `provenance_invalid`).
+
+## Campaign recovery and retry verification (check-only)
+
+Before resuming an interrupted campaign or resubmitting uncompleted cells, verify recovery and retry
+behavior under fail-closed contracts:
+
+```bash
+uv run python scripts/validation/verify_campaign_recovery.py \
+  --fixture path/to/campaign_recovery_packet.json \
+  --output path/to/campaign_recovery_receipt.json \
+  --format json \
+  --check
+```
+
+The verifier enforces schema `campaign_recovery_receipt.v1.schema.json` and evaluates:
+- **Preservation of valid completed identities**: completed rows are never rerun or overwritten.
+- **Fail-closed retry admission**: outcome-driven failures (collisions, task failure) cannot be retried
+  away under infrastructure labels; retries are admitted only for documented infrastructure interruptions.
+- **Authority input drift**: commit, config SHA-256, and model digest must match across attempts.
+- **Degraded/fallback protection**: fallback executions cannot become clean successes through resume.
+- **Lineage tracking**: scheduler job IDs and attempt indices are recorded across executions.
+- **Supported runners**: canonical runners (`benchmark_matrix`, `slurm_array`) are verified; unknown runners
+  report `status: "unsupported"`.
+- **Ledger reconciliation**: final reconciled rows must match the expected-row ledger 1-to-1.
+
 
 

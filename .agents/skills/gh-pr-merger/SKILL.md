@@ -184,9 +184,11 @@ commands:
 ```bash
 # add/remove a label (verify-on-write, pure REST issues-labels endpoint)
 uv run python scripts/dev/gh_pr_label_rest.py add <number> \
-    --label <label> --repo ll7/robot_sf_ll7
+    --target pr --label <label> --expected-head-sha <head_sha> \
+    --expected-base-sha <base_sha> --repo ll7/robot_sf_ll7
 uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
-    --label <label> --repo ll7/robot_sf_ll7
+    --target pr --label <label> --expected-head-sha <head_sha> \
+    --expected-base-sha <base_sha> --repo ll7/robot_sf_ll7
 
 # PR conversation comments, drop-in for `gh pr view <number> --comments`
 # (pure REST repos/{repo}/issues/{n}/comments; no projectCards field queried)

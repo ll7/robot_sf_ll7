@@ -137,9 +137,11 @@ helpers instead of the broad `gh pr` commands:
 ```bash
 # merge-ready label add/remove (verify-on-write, pure REST issues-labels endpoint)
 uv run python scripts/dev/gh_pr_label_rest.py add <number> \
-    --label merge-ready --expected-head-sha <head_sha> --repo ll7/robot_sf_ll7
+    --target pr --label merge-ready --expected-head-sha <head_sha> \
+    --expected-base-sha <base_sha> --repo ll7/robot_sf_ll7
 uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
-    --label merge-ready --repo ll7/robot_sf_ll7
+    --target pr --label merge-ready --expected-head-sha <head_sha> \
+    --expected-base-sha <base_sha> --repo ll7/robot_sf_ll7
 
 # PR conversation comments, drop-in for `gh pr view <number> --comments`
 # (pure REST repos/{repo}/issues/{n}/comments; no projectCards field queried)
@@ -385,7 +387,8 @@ stops after advancing the child until fresh CI and exact-head evidence are curre
    COMMENTED review naming the reviewed SHA, the validation, findings disposition, any
    single-account waiver, and
    `pr-metadata: reconciled @ <digest>` alongside `gate-verdict: accepted @ <head_sha>`. Then update
-   `merge-ready` through `gh_pr_label_rest.py` with the same expected head SHA. Both writes
+   `merge-ready` through `gh_pr_label_rest.py` with `--target pr` and the same expected
+   head/base SHA pair. Both writes
    return `review_skipped_stale_state` without mutating a PR if it is no longer open or its
    head moved. The
    The review event refreshes the source-head queue gate after the verdict. Release the bounded

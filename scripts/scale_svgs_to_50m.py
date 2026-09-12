@@ -26,10 +26,14 @@ def scale_path_data(d: str, scale_factor: float) -> str:
 
     # Match numbers (including negative and decimals)
     def replace_number(match):
-        """TODO docstring. Document this function.
+        """Scale one numeric regex match by the enclosing scale factor.
 
         Args:
-            match: TODO docstring.
+            match: Regex match whose full text is a single coordinate token.
+
+        Returns:
+            The scaled coordinate string; non-numeric tokens are returned
+            unchanged by :func:`scale_coordinate`.
         """
         return scale_coordinate(match.group(0), scale_factor)
 

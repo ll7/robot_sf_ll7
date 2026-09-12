@@ -17,7 +17,9 @@ def test_core_guidance_surfaces_are_mcp_first_with_gh_fallback() -> None:
 
     # The AGENTS.md token diet (#4464) relocated the MCP-first GitHub workflow guidance into the
     # linked pointer file, so accept these strings either directly in AGENTS.md or via the relocated
-    # guidance that AGENTS.md references. See issue #4469.
+    # guidance that AGENTS.md references. See issue #4469. The relocated file is a policy-free topic
+    # index after #8939, so also follow its route to the canonical GitHub workflow owner and assert
+    # the contract against that owner (issue #8946).
     agents_text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     relocated_guidance_path = ROOT / "docs" / "dev" / "agents" / "relocated-agents-guidance.md"
     relocated_text = (
@@ -25,9 +27,16 @@ def test_core_guidance_surfaces_are_mcp_first_with_gh_fallback() -> None:
         if "relocated-agents-guidance.md" in agents_text and relocated_guidance_path.exists()
         else ""
     )
-    agents_guidance = f"{agents_text}\n{relocated_text}"
+    github_workflow_path = ROOT / "docs" / "context" / "issue_713_batch_first_issue_workflow.md"
+    routed_github_text = (
+        github_workflow_path.read_text(encoding="utf-8")
+        if "issue_713_batch_first_issue_workflow.md" in relocated_text
+        and github_workflow_path.exists()
+        else ""
+    )
+    agents_guidance = f"{agents_text}\n{relocated_text}\n{routed_github_text}"
     assert "Prefer GitHub MCP / GitHub app tools" in agents_guidance
-    assert "Keep the GitHub CLI (`gh`) for scripted batch" in agents_guidance
+    assert "Keep `gh` as the deterministic fallback" in agents_guidance
 
     # The concise landing page intentionally links to the preserved procedural reference;
     # keep the detailed workflow assertions against that canonical owner.

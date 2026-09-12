@@ -1,0 +1,102 @@
+{
+  "schema_version": "issue_8566_source_bound_component_rows.v1",
+  "source_id": "issue_8566_fixture_rows",
+  "rows": [
+    {
+      "row_id": "fixture_corridor_111",
+      "source_id": "issue_8566_fixture_rows",
+      "corpus_id": "issue_8566_synthetic_fixture",
+      "release_id": "issue_8566_synthetic_fixture_v1",
+      "contrast_id": "fixture_reference_vs_component_probe",
+      "scenario_id": "fixture_corridor",
+      "seed": 111,
+      "reference_arm": "baseline",
+      "comparison_arm": "component_probe",
+      "components": {
+        "terminal_outcome": {"status": "available", "reference": 1, "comparison": 0},
+        "safety_wrapper": {"status": "available", "reference": 0.1, "comparison": 0.05},
+        "snqi": {"status": "available", "reference": 0.6, "comparison": 0.65}
+      }
+    },
+    {
+      "row_id": "fixture_corridor_112",
+      "source_id": "issue_8566_fixture_rows",
+      "corpus_id": "issue_8566_synthetic_fixture",
+      "release_id": "issue_8566_synthetic_fixture_v1",
+      "contrast_id": "fixture_reference_vs_component_probe",
+      "scenario_id": "fixture_corridor",
+      "seed": 112,
+      "reference_arm": "baseline",
+      "comparison_arm": "component_probe",
+      "components": {
+        "terminal_outcome": {"status": "available", "reference": 0, "comparison": 0},
+        "safety_wrapper": {"status": "available", "reference": 0.2, "comparison": 0.15},
+        "snqi": {"status": "available", "reference": 0.62, "comparison": 0.61}
+      }
+    },
+    {
+      "row_id": "fixture_doorway_111",
+      "source_id": "issue_8566_fixture_rows",
+      "corpus_id": "issue_8566_synthetic_fixture",
+      "release_id": "issue_8566_synthetic_fixture_v1",
+      "contrast_id": "fixture_reference_vs_component_probe",
+      "scenario_id": "fixture_doorway",
+      "seed": 111,
+      "reference_arm": "baseline",
+      "comparison_arm": "component_probe",
+      "components": {
+        "terminal_outcome": {"status": "available", "reference": 0, "comparison": 1},
+        "safety_wrapper": {"status": "available", "reference": 0.05, "comparison": 0.1},
+        "snqi": {"status": "available", "reference": 0.55, "comparison": 0.5}
+      }
+    },
+    {
+      "row_id": "fixture_doorway_112",
+      "source_id": "issue_8566_fixture_rows",
+      "corpus_id": "issue_8566_synthetic_fixture",
+      "release_id": "issue_8566_synthetic_fixture_v1",
+      "contrast_id": "fixture_reference_vs_component_probe",
+      "scenario_id": "fixture_doorway",
+      "seed": 112,
+      "reference_arm": "baseline",
+      "comparison_arm": "component_probe",
+      "components": {
+        "terminal_outcome": {"status": "available", "reference": 1, "comparison": 0},
+        "safety_wrapper": {"status": "available", "reference": 0.1, "comparison": 0.05},
+        "snqi": {"status": "available", "reference": 0.58, "comparison": 0.6}
+      }
+    },
+    {
+      "row_id": "fixture_crossing_111",
+      "source_id": "issue_8566_fixture_rows",
+      "corpus_id": "issue_8566_synthetic_fixture",
+      "release_id": "issue_8566_synthetic_fixture_v1",
+      "contrast_id": "fixture_reference_vs_component_probe",
+      "scenario_id": "fixture_crossing",
+      "seed": 111,
+      "reference_arm": "baseline",
+      "comparison_arm": "component_probe",
+      "components": {
+        "terminal_outcome": {"status": "available", "reference": 0, "comparison": 0},
+        "safety_wrapper": {"status": "available", "reference": 0.15, "comparison": 0.2},
+        "snqi": {"status": "available", "reference": 0.7, "comparison": 0.72}
+      }
+    },
+    {
+      "row_id": "fixture_crossing_112",
+      "source_id": "issue_8566_fixture_rows",
+      "corpus_id": "issue_8566_synthetic_fixture",
+      "release_id": "issue_8566_synthetic_fixture_v1",
+      "contrast_id": "fixture_reference_vs_component_probe",
+      "scenario_id": "fixture_crossing",
+      "seed": 112,
+      "reference_arm": "baseline",
+      "comparison_arm": "component_probe",
+      "components": {
+        "terminal_outcome": {"status": "available", "reference": 1, "comparison": 1},
+        "safety_wrapper": {"status": "available", "reference": 0.2, "comparison": 0.15},
+        "snqi": {"status": "available", "reference": 0.68, "comparison": 0.67}
+      }
+    }
+  ]
+}

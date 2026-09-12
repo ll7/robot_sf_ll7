@@ -70,7 +70,7 @@ release gates are present.
 
 Use `validate_assurance_fragment()` to check the exported JSON against the v1 schema. A valid
 fragment proves the claim-argument-evidence structure is well formed; it does not prove the
-underlying benchmark should be interpreted as release evidence. Apply the normal benchmark evidence
-rules from [Maintainer Values And Hard Contracts](./maintainer_values.md) and
+underlying benchmark should be interpreted as release evidence. Apply the stable principles from
+[Maintainer Values](./maintainer_values.md) and the normal benchmark evidence
 [Benchmark Scenario And Model Governance](./benchmark_governance.md) before making benchmark,
 release, or paper-facing claims.

@@ -8,17 +8,26 @@ large files.
 
 ## Task Routes And Preflight Discipline
 
+This document is the single owner of task-to-guidance routing. Other instruction surfaces link here
+instead of restating the route mapping. The "Required context / evidence" column is required by
+default; a reference is optional only when it is marked optional/illustrative, is itself generated,
+or is explicitly scoped as background. Reference semantics are enforced by
+`scripts/dev/check_instruction_references.py`. Repository-internal precedence is owned by the
+`Instruction Precedence` contract in `AGENTS.md`; this route table selects procedure and does not
+change that precedence. The machine-readable execution-profile mapping for these routes is
+`.agents/task_scope_manifest.yaml`.
+
 Agents must choose the bounded task route matching their assigned goal and consume existing deterministic
 preflight and status outputs rather than repeatedly scanning instructions, reconstructing validation requirements,
 or mutating branches during read-only review.
 
 | Route | Purpose | Required context / evidence | First deterministic command | Permitted mutations | Authoritative acceptance command |
 | --- | --- | --- | --- | --- | --- |
-| **Read-only observation** | PR / issue audit, queue review, CI status, non-mutating review | Target/base/head SHAs, PR/issue metadata, triage state | `git rev-parse HEAD` or `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/watch_pr_ci_status.py <pr> --json --once` | None for ordinary Git (fail-closed via #8321 guard); deliberate override probes require the Linux Landlock `run` boundary | Structured snapshot report or non-mutating review assessment |
-| **Documentation-only edit** | Documentation, markdown, instructions, glossaries | Changed paths, referenced file/link targets | `git diff --name-only` or targeted link check | Markdown/text files under `docs/`, `.agents/`, or root instructions | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/sync_ai_config.py --check` and diff/link verification |
-| **Implementation / runtime change** | Bugfix, feature, or refactor in runtime code/tests | Issue contract, reproduction test, plan | Focused test: `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest <path> -q` | Scoped code and tests within declared `owned_paths` | `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` |
-| **Scientific / benchmark interpretation** | Benchmark analysis, policy eval, metric review | Scenario/config/seed provenance, campaign runs | Canonical benchmark runner / analyzer or row inspection | None (or diagnostic scripts / artifact manifests only) | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/camera_ready_baseline_safe.yaml --mode preflight` (preflight only; no fallback/degraded as success) |
-| **Environment / worktree repair** | Capacity reclamation, venv repair, git worktree hygiene | Capacity inventory, worktree status, venv health | `scripts/dev/run_worktree_shared_venv.sh --standalone -- uv run python scripts/dev/check_worktree_capacity.py --inventory --json` | Worktree prune, `.venv` recreation, scratch cleanup | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras` |
+| **Read-only observation** | PR / issue audit, queue review, CI status, non-mutating review | Target/base/head SHAs, PR/issue metadata, triage state; `docs/code_review.md`; `.agents/skills/implementation-verification/SKILL.md` | `git rev-parse HEAD` or `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/watch_pr_ci_status.py <pr> --json --once` | None for ordinary Git (fail-closed via #8321 guard); deliberate override probes require the Linux Landlock `run` boundary | Structured snapshot report or non-mutating review assessment |
+| **Documentation-only edit** | Documentation, markdown, instructions, glossaries | Changed paths, referenced file/link targets; `docs/glossary.md`; `docs/maintainer_values.md` | `git diff --name-only` or targeted link check | Markdown/text files under `docs/`, `.agents/`, or root instructions | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/sync_ai_config.py --check` and diff/link verification |
+| **Implementation / runtime change** | Bugfix, feature, or refactor in runtime code/tests | Issue contract, reproduction test, plan (when the coordinated trigger applies), `docs/code_review.md`, targeted modules and tests | Focused test: `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest <path> -q` | Scoped code and tests within declared `owned_paths` | `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` |
+| **Scientific / benchmark interpretation** | Benchmark analysis, policy eval, metric review | Scenario/config/seed provenance, campaign runs; `memory/MEMORY.md`; `docs/context/INDEX.md`; benchmark skills (`benchmark-overview`, `benchmark-row-status`, `evidence-synthesis`) | Canonical benchmark runner / analyzer or row inspection | None (or diagnostic scripts / artifact manifests only) | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/camera_ready_baseline_safe.yaml --mode preflight` (preflight only; no fallback/degraded as success) |
+| **Environment / worktree repair** | Capacity reclamation, venv repair, git worktree hygiene | Capacity inventory, worktree status, venv health; `docs/dev/worktree_lifecycle.md` | `scripts/dev/run_worktree_shared_venv.sh --standalone -- uv run python scripts/dev/check_worktree_capacity.py --inventory --json` | Worktree prune, `.venv` recreation, scratch cleanup | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras` |
 
 ### Protected read-only worktrees
 
@@ -59,7 +68,7 @@ started outside that process are not adversarially isolated. See
 ### Route Boundaries and Negative Rules
 
 - **Read-only review never mutates branches**: A reviewer records target/base/head SHAs and inspects or fetches according to existing policy; it must never merge `origin/main` into the implementation branch or push to it. Ordinary Git invocations use the machine guard (`scripts/dev/review_worktree_guard.py`, issue #8321); deliberate override probes require its Linux Landlock `run` boundary.
-- **Validation proportional to change risk**: A pure documentation edit does not trigger an expensive simulation campaign; conversely, a runtime or benchmark change cannot pass on documentation or lint checks alone (see maintainer value hierarchy in `AGENTS.md`).
+- **Validation proportional to change risk**: A pure documentation edit does not trigger an expensive simulation campaign; conversely, a runtime or benchmark change cannot pass on documentation or lint checks alone (see maintainer values in `docs/maintainer_values.md`).
 - **Environment blockers are not relaxation licenses**: Missing optional or native dependencies remain visible. An environment blocker is an explicit blocker that routes to environment repair or closes as `blocked`; it never authorizes lowering scientific gates or claiming fallback/degraded execution as benchmark success.
 - **Freshness before expensive proof**: A moved PR head/base or changed material metadata invalidates prior readiness proof; re-validate against the exact current head before handoff (issue #7649).
 - **Separation of observer/audit collection from mutations**: Observers and audit scripts emit bounded snapshots with producer revision, freshness timestamp, and data completeness marker. Quota exhaustion, truncated pagination, or a stale producer must never be treated as an empty-success result or authorize state mutations, issue updates, or label writes (issues #8304 and #8307).
@@ -82,6 +91,13 @@ Use the same complete wrapper for focused validation:
 scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/<path> -q
 scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check <changed-file>
 scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check <changed-file>
+```
+
+For instruction, execution-profile, or provider-adapter changes, one combined check covers the
+reference contract, adapter scope, and the focused instruction tests:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- scripts/dev/check_agent_instructions.sh
 ```
 
 For broad pull request readiness, use the repository wrapper from the repository root:
@@ -140,48 +156,9 @@ later retries to avoid duplicate work; every route manifest remains route eviden
 
 The accepted handoff input is a flat `handoff.v2` request (there is no nested `packet`):
 
-<!-- handoff.v2-example:start -->
-
-```yaml
-schema_version: handoff.v2
-handoff_type: request
-task_id: ROBOTSF-EXAMPLE
-provider: opencode_go
-mode: issue_implementation
-goal: Implement the bounded Robot SF packet and return frozen-head evidence.
-owned_paths:
-  - .agents/README.md
-forbidden_actions:
-  - push
-  - open_pr
-  - mutate_remote
-required_context:
-  - target repository frozen HEAD
-  - accepted route-plan contract
-required_output:
-  - changed_files
-  - validation_evidence
-  - final_status
-acceptance_gate:
-  - all declared validation commands pass
-  - changed files stay within owned_paths
-validation_commands:
-  - scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q tests/dev/test_check_skills.py
-execution_mode: external_runtime
-dependencies: []
-budget:
-  runtime_minutes: 30
-stop_conditions:
-  - scope expands beyond owned_paths
-  - a forbidden action is requested
-side_effect_policy:
-  remote_mutation: false
-  local_edits: true
-max_depth: 0
-sync_barrier: null
-```
-
-<!-- handoff.v2-example:end -->
+The accepted handoff example lives next to the routing contract in
+`docs/templates/handoff.v2.example.yaml`; the field contract is enforced by the shared route
+resolver, not restated here.
 
 For a production `--out` plan, pass the explicit identity/risk/head contract
 `--task-id`, `--task-class`, `--risk`, `--handoff-file`, `--frozen-head`, `--target-repo`, and
@@ -240,7 +217,7 @@ Common large or fragile files:
 | File | Purpose | Navigation hint |
 | --- | --- | --- |
 | `robot_sf/benchmark/camera_ready_campaign.py` | Camera-ready benchmark orchestration and reporting. | Search for the specific command, planner family, or artifact phase before reading. |
-| `robot_sf/benchmark/map_runner.py` | Benchmark map execution and policy construction. | Search for policy names, `_build_policy`, or scenario/map handling branches. |
+| `robot_sf/benchmark/map_runner/map_runner.py` | Benchmark map execution and policy construction. | Search for policy names, `_build_policy`, or scenario/map handling branches. |
 | `robot_sf/benchmark/metrics.py` | Benchmark metric calculations and aggregation helpers. | Search for the metric name or schema field before changing formulas. |
 | `scripts/training/train_ppo.py` | Proximal Policy Optimization training entrypoint. | Search for config loading, checkpoint, or callback anchors. |
 | `scripts/validation/run_policy_search_step_diagnostics.py` | Policy-search step diagnostics launcher. | Search by candidate, diagnostic stage, or output field. |

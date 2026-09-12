@@ -19,13 +19,13 @@ SNAPSHOT_PATH = Path(__file__).parent / "snapshots" / "snqi_optimization_keys_sn
 
 
 def _make_dataset(tmp: Path) -> tuple[Path, Path]:
-    """TODO docstring. Document this function.
+    """Write a two-episode JSONL file and matching baseline stats JSON under tmp.
 
     Args:
-        tmp: TODO docstring.
+        tmp: Directory in which to create the episodes and baseline files.
 
     Returns:
-        TODO docstring.
+        Tuple of the episodes JSONL path and the baseline JSON path.
     """
     episodes_path = tmp / "episodes.jsonl"
     baseline_path = tmp / "baseline.json"
@@ -69,15 +69,15 @@ def _make_dataset(tmp: Path) -> tuple[Path, Path]:
 
 
 def _run_script(episodes: Path, baseline: Path, out: Path) -> dict:
-    """TODO docstring. Document this function.
+    """Run the SNQI optimization script in grid mode and load its validated output.
 
     Args:
-        episodes: TODO docstring.
-        baseline: TODO docstring.
-        out: TODO docstring.
+        episodes: Path to the episodes JSONL input file.
+        baseline: Path to the baseline statistics JSON input file.
+        out: Path where the script writes its JSON output.
 
     Returns:
-        TODO docstring.
+        Parsed output JSON that also passed validate_snqi.
     """
     cmd = [
         sys.executable,
@@ -105,10 +105,10 @@ def _run_script(episodes: Path, baseline: Path, out: Path) -> dict:
 
 
 def test_snqi_optimization_schema_snapshot(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify the optimization output contains the keys recorded in the stored snapshot.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: pytest-provided temporary directory used for inputs and output.
     """
     episodes, baseline = _make_dataset(tmp_path)
     out_file = tmp_path / "out.json"

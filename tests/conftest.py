@@ -109,7 +109,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 def _import_torch_optional():
-    """TODO docstring. Document this function."""
+    """Import torch if available in the environment, returning None on failure."""
     try:
         return importlib.import_module("torch")  # type: ignore
     except Exception:  # pragma: no cover - torch optional in some envs
@@ -117,10 +117,13 @@ def _import_torch_optional():
 
 
 def _snapshot_torch_determinism(torch_module):
-    """TODO docstring. Document this function.
+    """Snapshot determinism-related flags for PyTorch and cuDNN backends.
 
     Args:
-        torch_module: TODO docstring.
+        torch_module: Loaded PyTorch module from which to capture deterministic settings.
+
+    Returns:
+        Dictionary mapping determinism flag names to their pre-test captured values.
     """
     state: dict[str, object | None] = {
         "algos": None,
@@ -142,11 +145,11 @@ def _snapshot_torch_determinism(torch_module):
 
 
 def _apply_nondeterministic(torch_module, cudnn_backend):
-    """TODO docstring. Document this function.
+    """Apply non-deterministic settings to PyTorch and cuDNN for stress testing.
 
     Args:
-        torch_module: TODO docstring.
-        cudnn_backend: TODO docstring.
+        torch_module: Loaded PyTorch module to configure.
+        cudnn_backend: PyTorch cuDNN backend object to configure, or None.
     """
     try:
         _set_torch_deterministic_algorithms(torch_module, False)
@@ -158,11 +161,11 @@ def _apply_nondeterministic(torch_module, cudnn_backend):
 
 
 def _restore_torch_determinism(torch_module, state):
-    """TODO docstring. Document this function.
+    """Restore previously captured PyTorch and cuDNN determinism flags.
 
     Args:
-        torch_module: TODO docstring.
-        state: TODO docstring.
+        torch_module: Loaded PyTorch module whose settings should be restored.
+        state: State dictionary captured by ``_snapshot_torch_determinism``.
     """
     try:
         prev_algos = state.get("algos")
@@ -276,7 +279,7 @@ def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
 
 @pytest.fixture(scope="session")
 def perf_policy():  # type: ignore[missing-return-type-doc]
-    """TODO docstring. Document this function."""
+    """Provide session-scoped performance budget policy or fallback envelope."""
     if PerformanceBudgetPolicy is not None:
         try:
             return PerformanceBudgetPolicy()
@@ -377,6 +380,28 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    # Differential-drive kinematics tests are deterministic unit coverage for
+    # the changed robot motion module; keep them in the exact-head fast lane.
+    "differential_drive_test.py",
+    # Native replay adapter and engine tests are deterministic fixture contracts
+    # for the exact-head changed-coverage gate (issue #5442).
+    "test_simulator_counterfactual_adapter_issue_5442.py",
+    "test_last_avoidable_replay_issue_5442.py",
+    "test_collision_causal_report.py",
+    "test_collision_causal_report_join_5442.py",
+    # Deterministic examples metadata, CLI, and tutorial contracts belong in
+    # the fast coverage shards; only the subprocess-heavy example runner stays
+    # in the dedicated examples-smoke phase.
+    "test_examples_manifest.py",
+    "test_examples_cli.py",
+    # Fixture-based check-only prerequisite contracts are deterministic and
+    # provide the exact-head changed-line coverage for the shared example
+    # prerequisite checker (issue #8735).
+    "test_example_prerequisites.py",
+    # Deterministic resolved-config drift contracts for the compute-sunset
+    # configuration example (issue #8904).
+    "test_compare_resolved_configs.py",
+    "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
     "test_global_route.py",
     "test_open_coverage_report.py",
@@ -403,6 +428,20 @@ _FAST_FILES = {
     # in the exact-head changed-coverage gate.
     "test_check_cuda_runtime.py",
     "test_gpu_telemetry.py",
+    # The environment-manifest owner is deterministic schema, redaction, and
+    # digest coverage for the changed capture/check command (issue #8894).
+    "test_environment_manifest.py",
+    # TODO-docstring baseline guards must run in pull-request fast shards.
+    # PR shards exclude slow tests, so without this registration a cleanup PR
+    # can skip the guard and turn main red only after merge (issue #9000).
+    "test_check_docstring_todos.py",
+    # Routed-worker path/hash contract tests are deterministic and provide
+    # exact-head changed-line coverage for the manifest producer (issue #8925).
+    "test_routed_worker_manifest.py",
+    # Pedestrian-speed protocol and activation-preflight guards are deterministic
+    # check-only contracts; keep them in PR fast shards (issue #8888).
+    "test_check_issue_6561_pedestrian_speed_protocol.py",
+    "test_check_issue_6561_activation_preflight.py",
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",
@@ -415,6 +454,14 @@ _FAST_FILES = {
     # Distribution plotting tests use Agg and deterministic fixtures; keep their
     # changed-line coverage in the exact-head fast lane.
     "test_distributions.py",
+    # Pareto plotting tests use Agg and deterministic fixtures; keep the
+    # save_pareto_png SVG output branch in the exact-head fast lane.
+    "test_plots_pareto.py",
+    # Digest-helper reuse (#8948) touches these deterministic owner modules;
+    # keep their owner tests in the exact-head fast lane.
+    "test_held_out_preflight.py",
+    "test_artifact_catalog.py",
+    "test_sha256_file_reuse_issue_8948.py",
     # CLI distribution-control regressions are deterministic input-boundary
     # contracts and exercise the benchmark error path in PR fast shards.
     "test_cli_plot_distributions_ci.py",
@@ -441,6 +488,10 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # The issue #8891 packet tests are deterministic diagnostic-only contract
+    # checks; keep them in pull-request fast shards so the repaired producer
+    # participates in the exact-head changed-coverage gate.
+    "test_issue_8891_temporal_robustness_packet.py",
     # The bounded answerability packet uses deterministic schema, digest, and
     # provenance fixtures; keep its changed-module coverage in fast shards.
     "test_research_answerability.py",
@@ -554,6 +605,10 @@ _FAST_FILES = {
     "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
+    # Doctor JSON and top-level CLI tests are deterministic readiness contracts;
+    # keep both source-adjacent owners in the exact-head changed-coverage lane.
+    "test_doctor.py",
+    "test_cli_doctor.py",
     "test_post_execution_release_doctor.py",
     # Checkpoint provenance and Predictive MPPI adapter tests are deterministic
     # contract coverage for release-smoke producer changes; keep them in the
@@ -633,6 +688,9 @@ _FAST_FILES = {
     # Forecast-preparation packet tests are deterministic schema/provenance
     # contracts; keep their changed producer covered by the fast lane.
     "test_forecast_preparation.py",
+    # Evidence-registry tests include deterministic historical-binding resolver
+    # boundaries; keep the shared resolver covered in exact-head fast shards.
+    "test_lint_evidence_registry.py",
     # Figure-interpretation replay tests are provider-free deterministic contracts;
     # keep their exact-head mutation and provenance coverage in fast shards.
     "test_agent_figure_interpretation_eval.py",
@@ -710,6 +768,30 @@ _FAST_FILES = {
     # shells, no environments) for the changed recording-save path; keep them in
     # PR fast shards for the exact-head changed-coverage gate (issue #8422).
     "test_recording_save_policy.py",
+    # Typed simulator snapshots are deterministic serialization and compatibility
+    # contracts for the preparation-only continuation prototype (issue #8620).
+    "test_typed_snapshot.py",
+    # Continuation-plan tests are deterministic admission and cost-table
+    # contracts for the preparation-only research scaffold (issue #8622).
+    "test_continuation_experiment_plan.py",
+    # Relevance-window tests are deterministic selector, manifest, and missing
+    # signal contracts for the preparation-only research scaffold (issue #8622).
+    "test_relevance_windows.py",
+    # Source-bound fixture and provenance contracts are deterministic analysis
+    # coverage for the issue #8566 diagnostic packet.
+    "test_issue_8566_source_bound_component_contrasts.py",
+    # Canonical artifact-path helper tests (tests/research and tests/test_guard)
+    # are deterministic path and override contracts for the changed reusable
+    # helper module; keep their producer coverage in the exact-head fast lane
+    # (issue #8910).
+    "test_artifact_paths.py",
+    "test_build_compute_staging_bundle.py",
+    # The terminal-job harvest helper (issue #8824) is deterministic fixture and
+    # fail-closed receipt coverage for the changed operational tooling module.
+    "test_harvest_terminal_job.py",
+    # The artifact transfer verifier (issue #8825) is deterministic fixture and
+    # fail-closed custody coverage for the changed operational tooling module.
+    "test_verify_artifact_transfer.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",
@@ -885,10 +967,10 @@ def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-d
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):  # type: ignore[missing-type-doc]
-    """TODO docstring. Document this function.
+    """Wrap test call execution to record measured duration for the slow report.
 
     Args:
-        item: TODO docstring.
+        item: Pytest test item being executed.
     """
     start = time.perf_counter()
     try:

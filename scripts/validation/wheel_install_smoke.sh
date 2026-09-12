@@ -17,12 +17,12 @@ export PYTHONNOUSERSITE="1"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-VALIDATION_DIR="${REPO_ROOT}/output/validation"
 if [[ "${REPORT_FILE}" = /* ]]; then
   REPORT_PATH="${REPORT_FILE}"
 else
   REPORT_PATH="${REPO_ROOT}/${REPORT_FILE}"
 fi
+REPORT_DIR="$(dirname "${REPORT_PATH}")"
 WHEEL_INPUT="${1:-${WHEEL_GLOB:-}}"
 WHEEL_PATH="$(python3 - "${REPO_ROOT}" "${WHEEL_INPUT}" <<'PY'
 import glob
@@ -54,7 +54,7 @@ if [[ ! -f "${WHEEL_PATH}" ]]; then
   exit 1
 fi
 
-mkdir -p "${VALIDATION_DIR}" "$(dirname "${REPORT_PATH}")"
+mkdir -p "${REPORT_DIR}"
 WORK_DIR="$(mktemp -d)"
 cleanup() {
   rm -rf "${WORK_DIR}"
@@ -322,14 +322,27 @@ PY
 extras_status_json="[]"
 if [[ -n "${EXTRAS_SMOKE}" ]]; then
   extras_status_file="${WORK_DIR}/extras-status.jsonl"
+  # Issue #8917: every invocation persists its extra logs under a directory
+  # derived from its own report path plus a run identity, so concurrent smoke
+  # runs cannot overwrite each other's evidence.
+  LOG_DIR="$(PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - "${REPORT_PATH}" <<'PY'
+import sys
+from pathlib import Path
+
+from scripts.validation.wheel_install_smoke_evidence import log_dir_for_report, run_id_from_env
+
+print(log_dir_for_report(Path(sys.argv[1]), run_id_from_env()))
+PY
+)"
+  mkdir -p "${LOG_DIR}"
   # shellcheck disable=SC2206
   extras=(${EXTRAS_SMOKE})
   for extra in "${extras[@]}"; do
     extra_venv="${WORK_DIR}/extra-${extra}-venv"
     extra_pip="${extra_venv}/bin/pip"
     extra_python="${extra_venv}/bin/python"
-    install_log="${VALIDATION_DIR}/wheel-extra-${extra}-install.log"
-    probe_log="${VALIDATION_DIR}/wheel-extra-${extra}-probe.log"
+    install_log="${LOG_DIR}/wheel-extra-${extra}-install.log"
+    probe_log="${LOG_DIR}/wheel-extra-${extra}-probe.log"
     create_venv "${extra_venv}"
     echo "Installing optional extra independently: ${extra}" >&2
     if ! "${extra_pip}" install --no-cache-dir "${WHEEL_PATH}[${extra}]" \
@@ -338,13 +351,15 @@ if [[ -n "${EXTRAS_SMOKE}" ]]; then
       tail -n 200 "${install_log}" >&2
       "${PYTHON_BIN}" - "${REPORT_PATH}" "${WHEEL_PATH}" "${extra}" \
         "${install_log}" <<'PY'
+import hashlib
 import json
 import sys
 from pathlib import Path
 
 report_path, wheel, extra, install_log = sys.argv[1:]
 log_path = Path(install_log)
-log_tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-200:]
+log_bytes = log_path.read_bytes()
+log_tail = log_bytes.decode("utf-8", errors="replace").splitlines()[-200:]
 Path(report_path).write_text(
     json.dumps(
         {
@@ -353,6 +368,7 @@ Path(report_path).write_text(
             "stage": "extra_install",
             "extra": extra,
             "install_log": str(log_path),
+            "install_log_sha256": hashlib.sha256(log_bytes).hexdigest(),
             "install_log_tail": log_tail,
         },
         indent=2,
@@ -367,6 +383,7 @@ PY
       cd /tmp
       PYTHONPATH= PYTHONNOUSERSITE=1 "${extra_python}" - "${extra}" >>"${extras_status_file}" <<'PY'
 import importlib
+import importlib.metadata
 import json
 import sys
 
@@ -425,13 +442,25 @@ modules = feature_modules.get(extra, [])
 for module_name in modules:
     importlib.import_module(module_name)
 
+distribution_versions: dict[str, str] = {}
+packages = importlib.metadata.packages_distributions()
+for module_name in modules:
+    for distribution in packages.get(module_name.split(".")[0], []):
+        try:
+            distribution_versions[distribution] = importlib.metadata.version(distribution)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+
 print(
     json.dumps(
         {
             "extra": extra,
             "status": "passed",
             "module_file": robot_sf.__file__,
+            "python_version": sys.version.split()[0],
+            "python_executable": sys.executable,
             "feature_modules": modules,
+            "distribution_versions": distribution_versions,
         }
     )
 )
@@ -442,16 +471,21 @@ PY
       exit 1
     fi
   done
-  extras_status_json="$("${PYTHON_BIN}" - "${extras_status_file}" <<'PY'
+  extras_status_json="$(PYTHONPATH="${REPO_ROOT}" "${PYTHON_BIN}" - \
+    "${extras_status_file}" "${LOG_DIR}" <<'PY'
 import json
 import sys
 from pathlib import Path
 
+from scripts.validation.wheel_install_smoke_evidence import enrich_extras_rows
+
 status_path = Path(sys.argv[1])
+log_dir = Path(sys.argv[2])
 if not status_path.exists():
-    print("[]")
+    rows = []
 else:
-    print(json.dumps([json.loads(line) for line in status_path.read_text().splitlines() if line]))
+    rows = [json.loads(line) for line in status_path.read_text().splitlines() if line]
+print(json.dumps(enrich_extras_rows(rows, log_dir)))
 PY
 )"
 fi

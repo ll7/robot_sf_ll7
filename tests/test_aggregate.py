@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for benchmark aggregate computation, formatting, and export helpers."""
 
 from __future__ import annotations
 
@@ -26,13 +26,13 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 def _make_sample_jsonl(tmp_path: Path) -> Path:
     # Use run_batch to generate 3 episodes across 2 algos (via scenario_params.algo)
-    """TODO docstring. Document this function.
+    """Generate sample batch episode records in JSONL format for aggregation tests.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory used to write the sample episodes file.
 
     Returns:
-        TODO docstring.
+        Path to the generated episodes JSONL file.
     """
     scenarios = [
         {
@@ -76,11 +76,7 @@ def _make_sample_jsonl(tmp_path: Path) -> Path:
 
 
 def test_read_and_flatten_and_write_csv(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify reading JSONL episodes, flattening metrics, and exporting to CSV."""
     jsonl_path = _make_sample_jsonl(tmp_path)
     recs = read_jsonl(jsonl_path)
     assert len(recs) == 3
@@ -177,11 +173,7 @@ def test_aggregation_metadata_error_to_dict_includes_optional_context() -> None:
 
 
 def test_compute_aggregates_group_by_algo(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify computing summary statistics grouped by algorithm identifier."""
     jsonl_path = _make_sample_jsonl(tmp_path)
     recs = read_jsonl(jsonl_path)
     # We stored algo at the top-level of scenario params; group path is scenario_params.algo
@@ -200,11 +192,7 @@ def test_compute_aggregates_group_by_algo(tmp_path: Path):
 
 
 def test_compute_aggregates_with_ci_shape_and_determinism(tmp_path: Path):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-    """
+    """Verify bootstrap confidence intervals shape, bounds, and deterministic output."""
     jsonl_path = _make_sample_jsonl(tmp_path)
     recs = read_jsonl(jsonl_path)
     # Compute with CIs

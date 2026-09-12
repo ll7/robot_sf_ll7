@@ -476,6 +476,60 @@ def test_shared_venv_recovery_reuses_fresh_local_environment(tmp_path: Path) -> 
         _remove_linked_recovery_fixture(repo, worktree)
 
 
+@pytest.mark.parametrize(
+    ("profile_args", "expected_profile"),
+    [([], "core"), (["--profile", "all-extras"], "all-extras")],
+)
+def test_recover_fast_pysf_postcondition_fails_on_incomplete_profile(
+    tmp_path: Path,
+    profile_args: list[str],
+    expected_profile: str,
+) -> None:
+    """Issue #8811: recovery must certify the requested dependency profile before success.
+
+    The fast-pysf checker passes while the profile probe reports a missing import,
+    so a coherent-but-incomplete environment must still be refreshed and then
+    reported as an incomplete recovery result instead of a certified one.
+    """
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    local_python = worktree / ".venv" / "bin" / "python"
+    local_python.parent.mkdir(parents=True)
+    _write_executable(
+        local_python,
+        "#!/usr/bin/env bash\n"
+        'case "${1:-}" in\n'
+        '  *check_fast_pysf_runtime.py) printf "fast-pysf runtime preflight passed\\n"; exit 0 ;;\n'
+        "  *check_worktree_optional_deps.py)\n"
+        '    printf "Worktree optional dependency preflight: missing_optional\\n"\n'
+        '    printf "Missing optional imports: yaml\\n"\n'
+        "    exit 2 ;;\n"
+        "  *) exit 0 ;;\n"
+        "esac\n",
+    )
+    try:
+        result = subprocess.run(
+            [
+                str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name),
+                *profile_args,
+            ],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2, result.stderr
+        assert f"post-sync dependency profile '{expected_profile}' is incomplete" in result.stderr
+        assert "Missing optional imports: yaml" in result.stderr
+        assert "bootstrap_worktree.sh" in result.stderr
+        calls = capture.read_text(encoding="utf-8").splitlines()
+        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 1
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
 def test_shared_venv_recovery_rejects_nested_main_venv_symlink(tmp_path: Path) -> None:
     """A nested bin symlink must not redirect recovery into the owning checkout."""
     repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)

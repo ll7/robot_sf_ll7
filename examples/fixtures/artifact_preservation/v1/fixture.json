@@ -1,0 +1,16 @@
+{
+  "schema": "artifact_preservation_fixture.v1",
+  "artifact": {"artifact_id": "artifact-preservation-example", "artifact_version": "v1", "root_identity": "synthetic-task-output-v1", "retention_role": "short-lived", "retention_class": "diagnostic", "owner_id": "issue-8909-example", "source_id": "synthetic-source-v1", "config_id": "synthetic-config-v1", "campaign_id": "synthetic-campaign-v1"},
+  "exclude_patterns": [".task-owner.json", "cache/**"],
+  "forbidden": [{"path": "credentials/api_token.txt", "role": "forbidden", "reason": "credential-like members are rejected before preservation"}],
+  "members": [
+    {"path": "config/run.yaml", "role": "required", "semantic_id": "config:synthetic-config-v1", "content": "config_id: synthetic-config-v1\ncampaign_id: synthetic-campaign-v1\nseed: 7\n"},
+    {"path": "source/source_receipt.json", "role": "required", "semantic_id": "source:synthetic-source-v1", "content": "{\"source_id\":\"synthetic-source-v1\",\"source_kind\":\"fixture\",\"source_version\":\"v1\"}\n"},
+    {"path": "rows/results.jsonl", "role": "required", "semantic_id": "rows:synthetic-campaign-v1", "content": "{\"row\":1,\"value\":0.25}\n{\"row\":2,\"value\":0.75}\n"},
+    {"path": "report/summary.md", "role": "optional_diagnostic", "semantic_id": "report:synthetic-campaign-v1", "content": "# Synthetic preservation walkthrough\n\nThis report is diagnostic-only output from the fixture.\n"},
+    {"path": "logs/run.log", "role": "optional_diagnostic", "semantic_id": "log:synthetic-campaign-v1", "content": "step=0 status=complete\nstep=1 status=complete\n"},
+    {"path": "cache/index.tmp", "role": "transient", "content": "transient local cache; regenerate locally\n"},
+    {"path": "images/summary.svg", "role": "optional_diagnostic", "semantic_id": "image:summary-v1", "content": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"16\"><rect width=\"32\" height=\"16\" fill=\"#4c78a8\"/></svg>\n"},
+    {"path": "images/preview.png", "role": "optional_diagnostic", "semantic_id": "image:preview-v1", "content_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="}
+  ]
+}

@@ -380,6 +380,6 @@ class DifferentialDriveRobot:
             action: A numpy array containing linear and angular components.
 
         Returns:
-            DifferentialDriveAction: The tuple with linear and angular velocity.
+            DifferentialDriveAction: The tuple with linear and angular acceleration.
         """
         return (action[0], action[1])

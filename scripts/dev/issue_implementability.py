@@ -687,6 +687,9 @@ def _classify_issue(
                 "wrong_owner_repo",
             )
 
+    blocking_present = sorted(
+        label for label in labels if label in BLOCKING_LABELS or label.startswith("blocked:")
+    )
     rules = [
         (
             normalized["state"] != "OPEN",
@@ -771,9 +774,9 @@ def _classify_issue(
             "covering_pr_open",
         ),
         (
-            bool(labels & BLOCKING_LABELS) or _has_blocked_prefix(labels),
+            bool(blocking_present),
             "blocked",
-            "a blocking workflow label is present",
+            "a blocking workflow label is present: " + ", ".join(blocking_present),
             "blocked",
         ),
         (

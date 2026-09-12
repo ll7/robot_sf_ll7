@@ -34,6 +34,10 @@ runtime evaluation tooling lives under **Benchmarks**, and plotting resources
 reside in **Plotting & Analysis**. Archived scripts remain available for
 reference but are excluded from CI by default.
 
+The SNQI (Social Navigation Quality Index) fixture mode is diagnostic-only:
+its synthetic outputs verify example plumbing and are not benchmark or
+scientific evidence.
+
 """
 
 DECISION_TREE_NOTE = """## Quickstart Decision Path
@@ -132,7 +136,7 @@ def main() -> int:
     )
 
     if args.dry_run:
-        print(markdown)
+        sys.stdout.write(markdown)
         return 0
 
     output_path.write_text(markdown, encoding="utf-8")
@@ -151,7 +155,7 @@ def build_markdown(
     sections: list[str] = [HEADER, DECISION_TREE_NOTE]
 
     for category in manifest.categories:
-        if not include_archived and category.slug == "_archived":
+        if category.slug == "_archived":
             continue
         sections.append(
             render_category_section(

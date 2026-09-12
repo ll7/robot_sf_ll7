@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for comparing training runs and resolving manifest files."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ from scripts.tools import compare_training_runs as ctr
 
 def test_load_training_run_falls_back_to_prefixed_manifest(tmp_path: Path, monkeypatch):
     # Point artifact root to temp location
-    """TODO docstring. Document this function.
+    """Verify manifest resolution falls back to prefix-matched filenames when exact match is absent.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Temporary directory fixture serving as the artifact root.
+        monkeypatch: Pytest monkeypatch fixture to redirect ROBOT_SF_ARTIFACT_ROOT.
     """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     runs_dir = tmp_path / "benchmarks" / "ppo_imitation" / "runs"
@@ -33,11 +33,11 @@ def test_load_training_run_falls_back_to_prefixed_manifest(tmp_path: Path, monke
 
 
 def test_load_training_run_searches_nested_timestamp_root(tmp_path: Path, monkeypatch):
-    """TODO docstring. Document this function.
+    """Verify manifest resolution recursively discovers runs under nested timestamp directories.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Temporary directory fixture serving as the artifact root.
+        monkeypatch: Pytest monkeypatch fixture to redirect ROBOT_SF_ARTIFACT_ROOT.
     """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     nested = tmp_path / "benchmarks" / "ts123" / "benchmarks" / "ppo_imitation" / "runs"
@@ -53,11 +53,11 @@ def test_load_training_run_searches_nested_timestamp_root(tmp_path: Path, monkey
 
 
 def test_load_training_run_falls_back_to_newest_when_missing(tmp_path: Path, monkeypatch):
-    """TODO docstring. Document this function.
+    """Verify manifest resolution falls back to the newest available run when requested run is missing.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Temporary directory fixture serving as the artifact root.
+        monkeypatch: Pytest monkeypatch fixture to redirect ROBOT_SF_ARTIFACT_ROOT.
     """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     runs_dir = tmp_path / "benchmarks" / "ppo_imitation" / "runs"

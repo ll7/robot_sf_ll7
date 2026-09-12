@@ -15,41 +15,40 @@ class FakeClock:
     """Deterministic clock helper for tracker tests."""
 
     def __init__(self) -> None:
-        """TODO docstring. Document this function."""
+        """Initialize deterministic test clock at fixed epoch timestamp."""
         self._current = datetime(2025, 1, 1, tzinfo=UTC)
 
     def __call__(self) -> datetime:
-        """TODO docstring. Document this function.
-
+        """Return the current simulated timestamp.
 
         Returns:
-            TODO docstring.
+            Current datetime value of the fake clock.
         """
         return self._current
 
     def advance(self, seconds: float) -> datetime:
-        """TODO docstring. Document this function.
+        """Advance the simulated clock by the specified duration in seconds.
 
         Args:
-            seconds: TODO docstring.
+            seconds: Number of seconds to add to current simulated time.
 
         Returns:
-            TODO docstring.
+            Updated current datetime value.
         """
         self._current = self._current + timedelta(seconds=seconds)
         return self._current
 
 
 def _make_tracker(*, writer, log_fn, time_provider) -> ProgressTracker:
-    """TODO docstring. Document this function.
+    """Construct a ProgressTracker preconfigured with standard test pipeline steps.
 
     Args:
-        writer: TODO docstring.
-        log_fn: TODO docstring.
-        time_provider: TODO docstring.
+        writer: ManifestWriter instance for persisting step status updates.
+        log_fn: Callable receiving formatted progress log messages.
+        time_provider: Callable returning the current timestamp.
 
     Returns:
-        TODO docstring.
+        Configured ProgressTracker instance.
     """
     return ProgressTracker(
         [
@@ -63,10 +62,10 @@ def _make_tracker(*, writer, log_fn, time_provider) -> ProgressTracker:
 
 
 def test_progress_tracker_emits_eta_and_writes_index(run_tracker_config) -> None:
-    """TODO docstring. Document this function.
+    """Verify that ProgressTracker calculates remaining step ETAs and updates the index file.
 
     Args:
-        run_tracker_config: TODO docstring.
+        run_tracker_config: Telemetry run tracker configuration fixture.
     """
     logs: list[str] = []
     clock = FakeClock()
@@ -95,10 +94,10 @@ def test_progress_tracker_emits_eta_and_writes_index(run_tracker_config) -> None
 
 
 def test_progress_tracker_handles_skip_and_fail(run_tracker_config) -> None:
-    """TODO docstring. Document this function.
+    """Verify that ProgressTracker properly transitions steps to SKIPPED and FAILED states.
 
     Args:
-        run_tracker_config: TODO docstring.
+        run_tracker_config: Telemetry run tracker configuration fixture.
     """
     writer = ManifestWriter(run_tracker_config, run_id="skip-demo")
     tracker = _make_tracker(

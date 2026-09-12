@@ -134,5 +134,6 @@ tiers; it makes no new benchmark claim.
 
 - Contributor workflow and testing strategy: [`dev_guide.md`](dev_guide.md).
 - AI-assistant workflow and cheaper validation paths: [`ai/ai-workflow.md`](ai/ai-workflow.md).
-- Repository values, hard rules, and validation hierarchy: [`maintainer_values.md`](maintainer_values.md).
+- Repository principles and validation hierarchy: [`AGENTS.md`](../AGENTS.md) and
+  [`benchmark_governance.md`](benchmark_governance.md).
 - Retrieval-first context routing: [`context/INDEX.md`](context/INDEX.md).

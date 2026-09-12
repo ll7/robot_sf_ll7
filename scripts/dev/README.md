@@ -23,6 +23,17 @@ When quoting readiness counts, use the named selectors in
 [`docs/dev/local_ci.md`](../../docs/dev/local_ci.md#readiness-count-selectors),
 including `--collect-only -q` when only the collected count is needed.
 
+[`check_base_drift.py`](check_base_drift.py) backs the readiness gate's base-drift recheck (issue
+#5782). The gate captures the concrete base SHA before the expensive lanes and invokes this check
+immediately before recording the stamp, so it can tell whether `origin/main` moved during the run.
+Drift that touches none of the PR's changed files recommends reuse; drift that intersects them
+requires revalidation. One regenerable exception exists: when the intersection is exactly
+`scripts/validation/docstring_todo_baseline.json`, the gate re-runs the targeted docstring baseline
+and ratchet gates and, only on success, revalidates through that narrow path with a recorded
+`baseline_revalidation` receipt; mixed drift stays fail-closed. The checker exits `0` when the base
+is current or the drift is reusable, `1` when revalidation is required, and `2` when the base ref
+or drift cannot be resolved.
+
 The native merge queue enforcement path is
 [`merge_queue_gate.py`](merge_queue_gate.py), invoked by
 [`.github/workflows/merge-queue-gate.yml`](../../.github/workflows/merge-queue-gate.yml)
@@ -39,6 +50,10 @@ workflow or change branch protection.
   preflight; use `--preflight <skill>` before relying on a skill's declared requirements.
 - `scripts/tools/sync_ai_config.py --check` keeps provider adapters thin, scoped, and linked to
   canonical sources (see [`.agents/README.md`](../../.agents/README.md)).
+- [`check_agent_instructions.sh`](check_agent_instructions.sh) composes the three checks above into
+  one entry point for instruction-contract changes; run
+  `scripts/dev/check_agent_instructions.sh` (optional `--json`). It is also available as the VS Code
+  task `Agent Instruction Checks`.
 
 These are contract checks for repository instructions, not PR merge gates;
 `pr_ready_check.sh` remains the required readiness entry point.
@@ -134,6 +149,20 @@ uv run python -m scripts.dev.prepare_open_issue_contracts \
 See [`docs/ai/open-issue-contract-preparation.md`](../../docs/ai/open-issue-contract-preparation.md)
 for the operator contract. Focused offline tests live in
 `tests/dev/test_prepare_open_issue_contracts.py`.
+
+[`ready_triage_reconcile.py`](ready_triage_reconcile.py) repairs the contradictory
+`state:ready` + `needs-triage` pair on open issues (issue #9012): report mode
+derives one evidence-backed action per issue from its classification with the triage
+label ignored, and apply mode performs only the planned label removal with a
+per-issue drift check. It never closes issues, merges pull requests, or edits
+Project #5 state.
+
+```bash
+uv run python scripts/dev/ready_triage_reconcile.py --json
+uv run python scripts/dev/ready_triage_reconcile.py --apply --json
+```
+
+Focused offline tests live in `tests/dev/test_ready_triage_reconcile.py`.
 
 ## Parent goal-autopilot arbitration
 

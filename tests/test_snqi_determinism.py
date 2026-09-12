@@ -13,10 +13,10 @@ from scripts.snqi_weight_optimization import SNQIWeightOptimizer
 
 
 def _make_synthetic_episodes(n: int = 6):
-    """TODO docstring. Document this function.
+    """Build a reproducible list of synthetic episodes with random metric values.
 
     Args:
-        n: TODO docstring.
+        n: Number of synthetic episodes to generate.
     """
     episodes = []
     rng = np.random.default_rng(123)
@@ -40,10 +40,10 @@ def _make_synthetic_episodes(n: int = 6):
 
 def _baseline_from_episodes(episodes):
     # Compute simple med/p95 stats to approximate real baseline structure
-    """TODO docstring. Document this function.
+    """Compute median and p95 baseline stats for collision-related episode metrics.
 
     Args:
-        episodes: TODO docstring.
+        episodes: Episode records whose metrics are aggregated into the baseline stats.
     """
     metrics = {
         k: []
@@ -66,7 +66,7 @@ def _baseline_from_episodes(episodes):
 
 
 def test_differential_evolution_deterministic_same_seed():
-    """TODO docstring. Document this function."""
+    """Same seed should produce identical differential-evolution weights and objective value."""
     episodes = _make_synthetic_episodes()
     baseline = _baseline_from_episodes(episodes)
     opt1 = SNQIWeightOptimizer(episodes, baseline)
@@ -80,7 +80,10 @@ def test_differential_evolution_deterministic_same_seed():
 
 
 def test_differential_evolution_differs_different_seed():
-    """TODO docstring. Document this function."""
+    """Different seeds should usually change at least one weight, else objectives must tie.
+
+    When all weights coincide, the test instead checks that objective values match.
+    """
     episodes = _make_synthetic_episodes()
     baseline = _baseline_from_episodes(episodes)
     opt1 = SNQIWeightOptimizer(episodes, baseline)

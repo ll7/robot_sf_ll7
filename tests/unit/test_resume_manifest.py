@@ -29,11 +29,11 @@ if TYPE_CHECKING:
 
 
 def _write_jsonl(tmp: Path, lines: list[dict]):
-    """TODO docstring. Document this function.
+    """Write list of dictionaries as line-delimited JSON records.
 
     Args:
-        tmp: TODO docstring.
-        lines: TODO docstring.
+        tmp: Destination file path for JSONL output.
+        lines: Sequence of dictionary records to write.
     """
     with tmp.open("w", encoding="utf-8") as f:
         for rec in lines:
@@ -41,22 +41,22 @@ def _write_jsonl(tmp: Path, lines: list[dict]):
 
 
 def _basic_episode(eid: str) -> dict:
-    """TODO docstring. Document this function.
+    """Create minimal episode record dictionary for testing.
 
     Args:
-        eid: TODO docstring.
+        eid: Unique episode identifier string.
 
     Returns:
-        TODO docstring.
+        Dictionary containing episode_id key.
     """
     return {"episode_id": eid}
 
 
 def test_manifest_valid_roundtrip(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that save_manifest and load_manifest successfully roundtrip episode IDs.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for episode records and manifest.
     """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0"), _basic_episode("sc1--1")]
@@ -67,10 +67,10 @@ def test_manifest_valid_roundtrip(tmp_path: Path):
 
 
 def test_invalidate_on_size_change(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that changing file size invalidates cached manifest and load_manifest returns None.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for episode records and manifest.
     """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
@@ -83,10 +83,10 @@ def test_invalidate_on_size_change(tmp_path: Path):
 
 
 def test_invalidate_on_mtime_change(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that updating file modification time invalidates cached manifest.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for episode records and manifest.
     """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
@@ -100,10 +100,10 @@ def test_invalidate_on_mtime_change(tmp_path: Path):
 
 
 def test_invalidate_on_schema_version_mismatch(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that manifest schema version mismatch returns None on load.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for episode records and manifest.
     """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]
@@ -125,10 +125,10 @@ def test_invalidate_on_schema_version_mismatch(tmp_path: Path):
 
 
 def test_invalidate_on_episodes_count_mismatch(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that corrupted episodes_count field causes load_manifest to return None.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for episode records and manifest.
     """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0"), _basic_episode("sc1--1")]
@@ -142,10 +142,10 @@ def test_invalidate_on_episodes_count_mismatch(tmp_path: Path):
 
 
 def test_invalidate_on_identity_hash_mismatch(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that mismatched expected identity hash causes load_manifest to return None.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for episode records and manifest.
     """
     out = tmp_path / "episodes.jsonl"
     lines = [_basic_episode("sc1--0")]

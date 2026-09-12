@@ -201,3 +201,139 @@ def test_identical_sha_is_current_without_drift_compute(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["status"] == "current"
+
+
+def _build_baseline_drift_repo(tmp_path: Path, *, mixed: bool = False) -> tuple[Path, str]:
+    """Build a repo whose PR and advanced main both touch the docstring baseline.
+
+    With *mixed* the PR and main also touch ``shared.py`` so the drift
+    intersection is no longer baseline-only.
+    """
+    repo = tmp_path / "repo"
+    baseline = repo / "scripts" / "validation" / "docstring_todo_baseline.json"
+    baseline.parent.mkdir(parents=True, exist_ok=True)
+    baseline.write_text('{"counts": {}}\n', encoding="utf-8")
+    if mixed:
+        (repo / "shared.py").write_text("print('base')\n", encoding="utf-8")
+    _init_repo(repo)
+    baseline.write_text('{"counts": {"base": 0}}\n', encoding="utf-8")
+    if mixed:
+        (repo / "shared.py").write_text("print('base commit')\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], cwd=repo, check=True
+    )
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base"],
+        cwd=repo,
+        check=True,
+    )
+    base_sha = _git(repo, "rev-parse", "HEAD")
+
+    baseline.write_text('{"counts": {"pr": 1}}\n', encoding="utf-8")
+    if mixed:
+        (repo / "shared.py").write_text("print('pr change')\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], cwd=repo, check=True
+    )
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "pr"],
+        cwd=repo,
+        check=True,
+    )
+    pr_commit = _git(repo, "rev-parse", "HEAD")
+
+    subprocess.run(["git", "checkout", "-q", "--detach"], cwd=repo, check=True)
+    subprocess.run(["git", "branch", "-f", "main", base_sha], cwd=repo, check=True)
+    subprocess.run(["git", "checkout", "-q", "main"], cwd=repo, check=True)
+    baseline.write_text('{"counts": {"main": 1}}\n', encoding="utf-8")
+    if mixed:
+        (repo / "shared.py").write_text("print('main change')\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], cwd=repo, check=True
+    )
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "main advance"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], cwd=repo, check=True)
+
+    subprocess.run(["git", "checkout", "-q", pr_commit], cwd=repo, check=True)
+    return repo, base_sha
+
+
+def test_baseline_only_drift_without_revalidation_fails_closed(tmp_path: Path) -> None:
+    """Baseline-only drift keeps the ordinary fail-closed result by default."""
+    repo, base_sha = _build_baseline_drift_repo(tmp_path)
+    result = _run_in(repo, "--base-ref", "origin/main", "--validated-base-sha", base_sha)
+    assert result.returncode == 1, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "revalidate_required"
+    assert payload["docstring_baseline_only"] is True
+    assert payload["baseline_revalidation"]["applied"] is False
+    assert "--docstring-baseline-revalidated" in payload["message"]
+
+
+def test_baseline_only_drift_with_revalidation_recommends_reuse(tmp_path: Path) -> None:
+    """Confirmed baseline-only drift recommends reuse with an explicit record."""
+    repo, base_sha = _build_baseline_drift_repo(tmp_path)
+    result = _run_in(
+        repo,
+        "--base-ref",
+        "origin/main",
+        "--validated-base-sha",
+        base_sha,
+        "--docstring-baseline-revalidated",
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "reuse_recommended"
+    assert payload["docstring_baseline_only"] is True
+    assert payload["baseline_revalidation"]["applied"] is True
+    assert "issue #9049" in payload["message"]
+
+
+def test_revalidation_flag_cannot_bypass_mixed_drift(tmp_path: Path) -> None:
+    """The revalidation flag never relaxes drift that touches other files."""
+    repo, base_sha = _build_baseline_drift_repo(tmp_path, mixed=True)
+    result = _run_in(
+        repo,
+        "--base-ref",
+        "origin/main",
+        "--validated-base-sha",
+        base_sha,
+        "--docstring-baseline-revalidated",
+    )
+    assert result.returncode == 1, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "revalidate_required"
+    assert payload["docstring_baseline_only"] is False
+    assert payload["affected_file_count"] >= 2
+
+
+def test_baseline_only_classifier_matches_only_baseline_drift(tmp_path: Path) -> None:
+    """The classifier exits 0 for baseline-only drift and 1 for other drift."""
+    repo, base_sha = _build_baseline_drift_repo(tmp_path)
+    baseline_result = _run_in(
+        repo,
+        "--base-ref",
+        "origin/main",
+        "--validated-base-sha",
+        base_sha,
+        "--baseline-only",
+    )
+    assert baseline_result.returncode == 0, baseline_result.stderr
+
+    other_repo, other_base_sha = _build_drift_repo(tmp_path / "other", main_touches_pr_file=True)
+    other_result = _run_in(
+        other_repo,
+        "--base-ref",
+        "origin/main",
+        "--validated-base-sha",
+        other_base_sha,
+        "--changed-files",
+        "/dev/stdin",
+        "--baseline-only",
+        stdin="shared.py\n",
+    )
+    assert other_result.returncode == 1, other_result.stderr

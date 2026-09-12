@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for the plot-distributions CLI subcommand with confidence intervals and validation."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 
 def _write_matrix(path: Path, repeats: int = 4) -> None:
-    """TODO docstring. Document this function.
+    """Write a minimal scenario matrix YAML file for distribution CI plot tests.
 
     Args:
-        path: TODO docstring.
-        repeats: TODO docstring.
+        path: Destination filesystem path for the matrix YAML.
+        repeats: Number of episode repetitions per scenario.
     """
     scenarios = [
         {
@@ -108,12 +108,7 @@ def test_cli_plot_distributions_rejects_invalid_controls(
 
 
 def test_cli_plot_distributions_ci(tmp_path: Path, capsys):
-    """TODO docstring. Document this function.
-
-    Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
-    """
+    """Verify plot-distributions CLI with bootstrap CI overlay outputs PNG and PDF plots."""
     matrix_path = tmp_path / "matrix.yaml"
     _write_matrix(matrix_path, repeats=4)
     episodes = tmp_path / "episodes.jsonl"

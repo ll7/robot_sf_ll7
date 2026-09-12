@@ -77,8 +77,10 @@ class RemoteProbe:
         """Return ``open``/``closed`` for one issue number (None on error)."""
         raise NotImplementedError
 
-    def delete_head(self, ref: str) -> tuple[bool, str]:  # pragma: no cover - protocol
-        """Delete one remote head; return ``(ok, error_message)``."""
+    def delete_head(
+        self, ref: str, expected_sha: str = ""
+    ) -> tuple[bool, str]:  # pragma: no cover - protocol
+        """Delete one remote head with atomic expected-sha lease; return ``(ok, error_message)``."""
         raise NotImplementedError
 
 
@@ -183,12 +185,58 @@ def run_scan(probe: RemoteProbe, *, repo: str, main_ref: str) -> dict:
     return build_report(rows, repo=repo, main_ref=main_ref)
 
 
+def _check_candidate_eligibility(
+    probe: RemoteProbe, candidate: dict, fresh_open_prs: set[str] | None
+) -> str | None:
+    ref = candidate["ref"]
+    reason = candidate.get("reason", "")
+    if _is_protected(ref):
+        return "candidate blocked: ref is protected"
+
+    if reason == DELETE_MERGED:
+        if fresh_open_prs is None:
+            return "candidate blocked: open PR refresh unavailable"
+        if _short_name(ref) in fresh_open_prs:
+            return f"candidate blocked: open PR detected for {_short_name(ref)}"
+        return None
+
+    if reason == DELETE_CLAIM_CLOSED:
+        claim_match = CLAIM_REF_RE.match(ref)
+        if claim_match is None:
+            return "candidate blocked: invalid claim ref format"
+        issue_num = int(claim_match.group(1))
+        current_state = probe.issue_state(issue_num)
+        if current_state is None:
+            return f"candidate blocked: could not refresh state for issue {issue_num}"
+        if current_state != "closed":
+            return f"candidate blocked: claim issue {issue_num} is {current_state}"
+        return None
+
+    return f"candidate blocked: non-deletable reason '{reason}'"
+
+
 def apply_deletions(probe: RemoteProbe, report: dict, *, limit: int) -> dict:
-    """Delete up to *limit* candidates and return the updated report."""
+    """Delete up to *limit* candidates after re-verifying eligibility facts."""
     deletions: list[dict] = []
-    for candidate in report["candidates"][:limit]:
-        ok, error = probe.delete_head(candidate["ref"])
-        deletions.append({"ref": candidate["ref"], "ok": ok, "error": error})
+    candidates = report.get("candidates", [])[:limit]
+
+    # Pre-fetch fresh open PRs if any candidate is a merged code branch
+    needs_open_prs = any(c.get("reason") == DELETE_MERGED for c in candidates)
+    fresh_open_prs: set[str] | None = None
+    if needs_open_prs:
+        fresh_open_prs = probe.open_pr_heads()
+
+    for candidate in candidates:
+        ref = candidate["ref"]
+        sha = candidate.get("sha", "")
+        block_reason = _check_candidate_eligibility(probe, candidate, fresh_open_prs)
+        if block_reason is not None:
+            deletions.append({"ref": ref, "sha": sha, "ok": False, "error": block_reason})
+            continue
+
+        ok, error = probe.delete_head(ref, expected_sha=sha)
+        deletions.append({"ref": ref, "sha": sha, "ok": ok, "error": error})
+
     updated = dict(report)
     updated["deletions"] = deletions
     updated["deleted_count"] = sum(1 for item in deletions if item["ok"])
@@ -207,7 +255,12 @@ class GitGhProbe:
 
     def _run(self, args: Sequence[str]) -> tuple[int, str]:
         completed = subprocess.run(list(args), capture_output=True, text=True, check=False)
-        return completed.returncode, completed.stdout.strip()
+        output = completed.stdout.strip()
+        if not output and completed.stderr:
+            output = completed.stderr.strip()
+        elif output and completed.stderr:
+            output = f"{output}\n{completed.stderr.strip()}".strip()
+        return completed.returncode, output
 
     def list_heads(self) -> dict[str, str]:
         """Return ``{ref, sha}`` for every remote head."""
@@ -265,9 +318,15 @@ class GitGhProbe:
             return None
         return output.strip() or None
 
-    def delete_head(self, ref: str) -> tuple[bool, str]:
-        """Delete one remote head and return ``(ok, error_message)``."""
-        code, output = self._run(["git", "push", self.remote, "--delete", _short_name(ref)])
+    def delete_head(self, ref: str, expected_sha: str = "") -> tuple[bool, str]:
+        """Delete one remote head with atomic expected-sha lease and return ``(ok, error_message)``."""
+        short = _short_name(ref)
+        lease_ref = ref if ref.startswith("refs/") else f"refs/heads/{ref}"
+        cmd = ["git", "push"]
+        if expected_sha:
+            cmd.append(f"--force-with-lease={lease_ref}:{expected_sha}")
+        cmd.extend([self.remote, "--delete", short])
+        code, output = self._run(cmd)
         if code == 0:
             return True, ""
         return False, output or f"git push --delete failed with exit code {code}"

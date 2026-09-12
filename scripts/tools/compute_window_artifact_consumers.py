@@ -553,10 +553,6 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
             and artifact["replacement_for"] in artifacts
         ):
             classification = "replacement_verified"
-        elif artifact["replacement_verified"] and any(
-            edge["type"] == "supersedes" and edge["target"] == ident for edge in edges
-        ):
-            classification = "replacement_verified"
         elif artifact["orphan_candidate"]:
             classification = "orphan_candidate"
         else:

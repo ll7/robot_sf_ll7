@@ -151,7 +151,8 @@ def test_verification_flags_are_strict_booleans() -> None:
     payload = {
         "schema": tool.SCHEMA,
         "artifacts": [
-            {"logical_id": "old"},
+            {"logical_id": "old", "replacement_for": "target"},
+            {"logical_id": "target", "replacement_verified": True},
             {"logical_id": "new", "replacement_for": "old", "replacement_verified": "yes"},
             {"logical_id": "trace", "regenerable": 1, "regeneration_verified": "true"},
             {"logical_id": "orphan", "orphan_candidate": "false"},
@@ -162,6 +163,7 @@ def test_verification_flags_are_strict_booleans() -> None:
     assert classes == {
         "new": "consumer_unknown",
         "old": "consumer_unknown",
+        "target": "consumer_unknown",
         "orphan": "consumer_unknown",
         "trace": "consumer_unknown",
     }

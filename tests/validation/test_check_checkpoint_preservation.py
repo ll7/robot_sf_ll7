@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -106,3 +108,134 @@ def test_private_paths_and_uncovered_workload_refs_fail_closed(tmp_path):
     assert report["status"] == "blocked" and "workload_reference_uncovered" in codes
     assert "unsafe_input_path" in _rows(report)["leaky"]["reason_codes"]
     assert secret not in tool.render_json(report)
+
+
+def _fixture_copy(tmp_path: Path) -> Path:
+    """Copy the shared fixtures into a mutable root for one test."""
+    root = tmp_path / "root"
+    shutil.copytree(FIXTURES, root)
+    return root
+
+
+def _mutate_json(path: Path, mutate) -> None:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    mutate(payload)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _audit_row(root: Path, model_id: str) -> dict:
+    payload = json.loads((root / "compatibility_audit.json").read_text(encoding="utf-8"))
+    return next(row for row in payload["models"] if row["model_id"] == model_id)
+
+
+@pytest.mark.parametrize("code", ["invalid_artifact", "missing_data_member"])
+def test_fatal_loadability_codes_block_regardless_of_named_code(tmp_path: Path, code: str) -> None:
+    """Every fatal loadability reason reaches the blocked load state."""
+    root = _fixture_copy(tmp_path)
+    audit = json.loads((root / "compatibility_audit.json").read_text(encoding="utf-8"))
+    for row in audit["models"]:
+        if row["model_id"] == "fixture_fatal_v1":
+            row["reason_codes"] = [code]
+    (root / "compatibility_audit.json").write_text(json.dumps(audit), encoding="utf-8")
+
+    row = _rows(tool.build_report(root / "failing.json"))["loadability_failed"]
+
+    assert row["state"] == tool.STATE_LOAD
+    assert "loadability_failed" in row["reason_codes"]
+    assert code in row["reason_codes"]
+
+
+def test_verified_receipt_requires_declared_digest_binding(tmp_path: Path) -> None:
+    """A verified receipt without the artifact digest is not loadability evidence."""
+    root = _fixture_copy(tmp_path)
+    audit = json.loads((root / "compatibility_audit.json").read_text(encoding="utf-8"))
+    for row in audit["models"]:
+        if row["model_id"] == "fixture_complete_v1":
+            row["artifact"].pop("sha256", None)
+    (root / "compatibility_audit.json").write_text(json.dumps(audit), encoding="utf-8")
+
+    row = _rows(tool.build_report(root / "complete.json"))["checkpoint_complete"]
+
+    assert row["state"] == tool.STATE_DIGEST
+    assert "receipt_digest_mismatch" in row["reason_codes"]
+
+
+def test_verified_receipt_requires_declared_framework_binding(tmp_path: Path) -> None:
+    """A verified receipt naming another loader is a contract mismatch."""
+    root = _fixture_copy(tmp_path)
+    audit = json.loads((root / "compatibility_audit.json").read_text(encoding="utf-8"))
+    for row in audit["models"]:
+        if row["model_id"] == "fixture_complete_v1":
+            row["probe"]["loader"] = "jax"
+    (root / "compatibility_audit.json").write_text(json.dumps(audit), encoding="utf-8")
+
+    row = _rows(tool.build_report(root / "complete.json"))["checkpoint_complete"]
+
+    assert row["state"] == tool.STATE_CONTRACT
+    assert "loadability_contract_mismatch" in row["reason_codes"]
+
+
+def test_trace_registry_placeholder_is_not_resolvable(tmp_path: Path) -> None:
+    """A non-digest placeholder must never resolve as a dataset identity."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    complete["artifacts"][0]["producer"]["data_identity"] = "pending"
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    row = _rows(tool.build_report(root / "complete.json"))["checkpoint_complete"]
+
+    assert row["state"] == tool.STATE_LINEAGE
+    assert "data_identity_unresolved" in row["reason_codes"]
+
+
+def test_malformed_trace_entry_fails_closed(tmp_path: Path) -> None:
+    """A malformed trace identity is a blocking registry finding."""
+    root = _fixture_copy(tmp_path)
+    trace = root / "trace_registry.yaml"
+    trace.write_text(
+        trace.read_text(encoding="utf-8").replace(
+            "trace_id: fixture_train", "trace_id: 123-bad id"
+        ),
+        encoding="utf-8",
+    )
+
+    report = tool.build_report(root / "complete.json")
+
+    assert report["status"] == "blocked"
+    assert "unsupported_receipt" in {item["code"] for item in report["findings"]}
+
+
+def test_free_text_absolute_paths_never_render(tmp_path: Path) -> None:
+    """Absolute private paths in free-text fields are rejected and never echoed."""
+    root = _fixture_copy(tmp_path)
+    secret = "/home/private-host/secret-checkpoint.bin"
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    complete["artifacts"][0]["downstream_consumers"] = [secret]
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+
+    assert row["state"] == tool.STATE_INVENTORY
+    assert "inventory_field_missing" in row["reason_codes"]
+    assert secret not in tool.render_json(report)
+
+
+def test_companion_symlink_escape_fails_closed(tmp_path: Path) -> None:
+    """A companion symlink escaping the fixture root is refused even with a match."""
+    root = _fixture_copy(tmp_path)
+    content = b"outside companion bytes\n"
+    outside = tmp_path / "outside.bin"
+    outside.write_bytes(content)
+    (root / "artifacts" / "escaped.bin").symlink_to(outside)
+    digest = hashlib.sha256(content).hexdigest()
+
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    for companion in complete["artifacts"][0]["companions"]:
+        companion.update(path="artifacts/escaped.bin", sha256=digest, byte_size=len(content))
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    row = _rows(tool.build_report(root / "complete.json"))["checkpoint_complete"]
+
+    assert row["state"] == tool.STATE_NO_COMPANION
+    assert "companion_unsafe" in row["reason_codes"]

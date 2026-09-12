@@ -80,14 +80,24 @@ _STATE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = tuple(
         (STATE_LINEAGE, "missing_lineage data_identity_unresolved missing_training_status"),
         (STATE_INVENTORY, "inventory_field_missing"),
         (STATE_NO_ARTIFACT, "artifact_missing unsafe_input_path unsafe_symlink"),
-        (STATE_NO_COMPANION, "companion_missing normalizer_missing"),
+        (
+            STATE_NO_COMPANION,
+            "companion_missing normalizer_missing companion_unsafe normalizer_unsafe",
+        ),
         (STATE_PARTIAL, "partial_copy companion_partial_copy"),
         (
             STATE_DIGEST,
             "digest_mismatch companion_digest_mismatch normalizer_digest_mismatch receipt_digest_mismatch",
         ),
-        (STATE_LOAD, "loadability_failed non_finite_parameters artifact_unreadable"),
-        (STATE_CONTRACT, "observation_contract_mismatch action_contract_mismatch"),
+        (
+            STATE_LOAD,
+            "loadability_failed invalid_artifact missing_data_member "
+            "non_finite_parameters artifact_unreadable",
+        ),
+        (
+            STATE_CONTRACT,
+            "observation_contract_mismatch action_contract_mismatch loadability_contract_mismatch",
+        ),
         (STATE_TRAINING, "incomplete_training"),
         (
             STATE_DESTINATION,
@@ -131,6 +141,9 @@ _PRIVATE_TEXT_RE = re.compile(
     r"(?i)(?::/{2}|(?:^|[^a-z0-9])(?:api[_-]?key|secret|password|passwd|token|credential|bearer)(?:[^a-z0-9]|$))"
 )
 _SIGNED_URL_RE = re.compile(r"(?i)[?&](?:sig|signature|token|expires|x-amz-|x-goog-)")
+_ABSOLUTE_PATH_RE = re.compile(
+    r"(?:^|[\s\"'(=,])(?:~(?:[/\\]|$)|/[\w.-]+(?:/[\w.-]+)+|[A-Za-z]:[\\/])"
+)
 
 
 @dataclass(frozen=True)
@@ -157,11 +170,17 @@ def _label(path: Path) -> str:
 
 
 def _text(value: Any, limit: int = 200) -> str | None:
-    """Return a private-safe stripped string, or ``None`` when unsafe or empty."""
+    """Return a private-safe stripped string, or ``None`` when unsafe or empty.
+
+    Free-text fields must never echo credential-like values or absolute private
+    paths, so any absolute-path shape is rejected as unsafe.
+    """
     if not isinstance(value, str):
         return None
     text = value.strip()
-    return text if text and len(text) <= limit and not _PRIVATE_TEXT_RE.search(text) else None
+    if not text or len(text) > limit:
+        return None
+    return None if _PRIVATE_TEXT_RE.search(text) or _ABSOLUTE_PATH_RE.search(text) else text
 
 
 def _rel(value: Any) -> str | None:
@@ -270,6 +289,39 @@ def _read_json(path: Path) -> Any:
     return payload
 
 
+def _trace_identities(source: Mapping[str, Any]) -> tuple[list[str], bool]:
+    """Return canonical trace identities and validity for one registry entry.
+
+    Only canonical identifiers are indexed. Explicit non-digest placeholders
+    (``pending``/``unknown``/``unavailable``) stay valid but are never treated as
+    resolvable identities, and malformed shapes fail closed.
+    """
+    identities: list[str] = []
+    valid = True
+    for key in ("dataset_id", "trace_id"):
+        value = source.get(key)
+        if value is None:
+            continue
+        canonical = _text(value, 128)
+        if canonical is None or _SAFE_ID_RE.fullmatch(canonical) is None:
+            valid = False
+            continue
+        identities.append(canonical)
+    if source.get("uri") is not None:
+        uri = _uri(source.get("uri"))
+        if uri is None:
+            valid = False
+        else:
+            identities.append(uri)
+    if source.get("sha256") is not None:
+        digest = _sha(source.get("sha256"))
+        if digest is not None:
+            identities.append(digest)
+        elif str(source.get("sha256")).strip().lower() not in {"pending", "unknown", "unavailable"}:
+            valid = False
+    return identities, valid
+
+
 def _load_context(
     payload: Mapping[str, Any], root: Path, findings: list[dict[str, Any]]
 ) -> _Context:
@@ -290,13 +342,25 @@ def _load_context(
     )
     traces: set[str] = set()
     if isinstance(trace_doc, Mapping):
-        for trace in [trace_doc, *(trace_doc.get("traces") or [])]:
-            if isinstance(trace, Mapping):
-                traces.update(
-                    value
-                    for key in ("dataset_id", "trace_id", "uri", "sha256")
-                    if (value := _text(trace.get(key))) is not None
-                )
+        identities, valid = _trace_identities(trace_doc)
+        if not valid or not identities:
+            findings.append(_find("unsupported_receipt", None, "trace registry document"))
+        traces.update(identities)
+        raw_traces = trace_doc.get("traces")
+        if not isinstance(raw_traces, list):
+            findings.append(_find("unsupported_receipt", None, "trace registry traces list"))
+            raw_traces = []
+        for index, trace in enumerate(raw_traces):
+            if not isinstance(trace, Mapping):
+                findings.append(_find("unsupported_receipt", None, f"trace registry entry {index}"))
+                continue
+            entry_ids, entry_valid = _trace_identities(trace)
+            if not entry_valid or not entry_ids:
+                findings.append(_find("unsupported_receipt", None, f"trace registry entry {index}"))
+                continue
+            traces.update(entry_ids)
+    elif trace_doc is not None:
+        findings.append(_find("unsupported_receipt", None, "trace registry document"))
     rows = (
         audit_doc.get("models")
         if isinstance(audit_doc, Mapping) and audit_doc.get("schema") == AUDIT_SCHEMA
@@ -423,6 +487,15 @@ def _resolve(  # noqa: C901, PLR0912 - flat fail-closed check sequence
     return row, codes, entry
 
 
+def _contained(candidate: Path, root: Path) -> bool:
+    """Return True when *candidate* resolves inside *root* without symlinks."""
+    try:
+        candidate.resolve(strict=True).relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def _companions(
     record: Mapping[str, Any], ctx: _Context
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
@@ -462,12 +535,16 @@ def _companions(
         prefix = "normalizer" if role == "normalizer" else "companion"
         if rel is None or digest is None or size is None:
             codes.append("inventory_field_missing")
-        elif not (ctx.root / rel).is_file():
-            codes.append(f"{prefix}_missing")
-        elif (ctx.root / rel).stat().st_size != size:
-            codes.append(f"{prefix}_partial_copy")
-        elif sha256_file(ctx.root / rel) != digest:
-            codes.append(f"{prefix}_digest_mismatch")
+        else:
+            candidate = ctx.root / rel
+            if not candidate.is_file() and not candidate.is_symlink():
+                codes.append(f"{prefix}_missing")
+            elif candidate.is_symlink() or not _contained(candidate, ctx.root):
+                codes.append(f"{prefix}_unsafe")
+            elif candidate.stat().st_size != size:
+                codes.append(f"{prefix}_partial_copy")
+            elif sha256_file(candidate) != digest:
+                codes.append(f"{prefix}_digest_mismatch")
     return norm, companions, codes
 
 
@@ -510,10 +587,51 @@ def _lineage(
     )
 
 
+def _receipt_binding_codes(
+    receipt: Mapping[str, Any], observed: str | None, framework: str | None
+) -> list[str]:
+    """Return digest and framework binding codes for a loadability receipt."""
+    codes: list[str] = []
+    artifact = receipt.get("artifact")
+    receipt_sha = _sha(artifact.get("sha256")) if isinstance(artifact, Mapping) else None
+    verified = receipt.get("load_status") == "verified"
+    if (verified and (receipt_sha is None or observed is None)) or (
+        receipt_sha is not None and observed is not None and receipt_sha != observed
+    ):
+        codes.append("receipt_digest_mismatch")
+    probe = receipt.get("probe") if isinstance(receipt.get("probe"), Mapping) else {}
+    loader = _text(probe.get("loader"), 64)
+    if verified and framework is not None and loader is not None and loader != framework:
+        codes.append("loadability_contract_mismatch")
+    return codes
+
+
+def _probe_contract_codes(probe: Mapping[str, Any], contracts: Mapping[str, Any]) -> list[str]:
+    """Return shape and finiteness contract codes from the loadability probe."""
+    codes: list[str] = []
+    for prefix in ("observation", "action"):
+        declared = (contracts.get(prefix) or {}).get("shape")
+        seen = probe.get(f"{prefix}_shape")
+        if declared is not None and seen is not None and list(declared) != list(seen):
+            codes.append(f"{prefix}_contract_mismatch")
+    if probe.get("parameters_finite") is False:
+        codes.append("non_finite_parameters")
+    return codes
+
+
 def _loadability(
-    ctx: _Context, model_id: str | None, contracts: Mapping[str, Any], observed: str | None
+    ctx: _Context,
+    model_id: str | None,
+    contracts: Mapping[str, Any],
+    observed: str | None,
+    framework: str | None,
 ) -> tuple[dict[str, Any], list[str]]:
-    """Classify metadata-only loadability from the existing owner's receipt."""
+    """Classify metadata-only loadability from the existing owner's receipt.
+
+    A receipt that claims ``verified`` is trusted only when it is bound to the
+    declared artifact digest and framework loader; every fatal outcome stays
+    blocking even when its reason code is not part of the generic fatal set.
+    """
     if not ctx.audit:
         return {"status": LOAD_NOT_CHECKED, "owner": None}, []
     receipt = ctx.audit.get(model_id) if model_id is not None else None
@@ -522,25 +640,23 @@ def _loadability(
             {"status": LOAD_UNAVAILABLE, "owner": LOADABILITY_OWNER},
             ["loadability_receipt_missing"],
         )
-    codes: list[str] = []
-    artifact = receipt.get("artifact")
-    receipt_sha = _sha(artifact.get("sha256")) if isinstance(artifact, Mapping) else None
-    if receipt_sha is not None and observed is not None and receipt_sha != observed:
-        codes.append("receipt_digest_mismatch")
     probe = receipt.get("probe") if isinstance(receipt.get("probe"), Mapping) else {}
-    for prefix in ("observation", "action"):
-        declared = (contracts.get(prefix) or {}).get("shape")
-        seen = probe.get(f"{prefix}_shape")
-        if declared is not None and seen is not None and list(declared) != list(seen):
-            codes.append(f"{prefix}_contract_mismatch")
-    if probe.get("parameters_finite") is False:
-        codes.append("non_finite_parameters")
+    codes = _receipt_binding_codes(receipt, observed, framework) + _probe_contract_codes(
+        probe, contracts
+    )
     if receipt.get("load_status") == "verified":
         return {"status": LOAD_VERIFIED, "owner": LOADABILITY_OWNER}, codes
     reasons = {str(code) for code in receipt.get("reason_codes") or []}
     fatal = reasons & _LOAD_FATAL_CODES
     if fatal:
-        return {"status": LOAD_FAILED, "owner": LOADABILITY_OWNER}, [*codes, *sorted(fatal)]
+        return {"status": LOAD_FAILED, "owner": LOADABILITY_OWNER}, [
+            *codes,
+            "loadability_failed",
+            *sorted(fatal),
+        ]
+    status = str(receipt.get("load_status") or "").lower()
+    if status in {"failed", "error", "blocked", "invalid"}:
+        return {"status": LOAD_FAILED, "owner": LOADABILITY_OWNER}, [*codes, "loadability_failed"]
     detail = "framework_unavailable" if reasons & _LOAD_ENV_CODES else "loadability_unavailable"
     return {"status": LOAD_UNAVAILABLE, "owner": LOADABILITY_OWNER}, [*codes, detail]
 
@@ -606,6 +722,7 @@ def _evaluate(raw: Any, index: int, ctx: _Context) -> dict[str, Any]:
         row["model_id"],
         {"observation": row["observation_contract"], "action": row["action_contract"]},
         row["sha256_observed"],
+        (row["framework"] or {}).get("name"),
     )
     consumers: set[str] = set()
     raw_consumers = raw.get("downstream_consumers")

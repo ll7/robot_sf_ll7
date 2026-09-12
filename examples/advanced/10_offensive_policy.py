@@ -5,7 +5,7 @@ Usage:
     uv run python examples/advanced/10_offensive_policy.py --check --format json
 
 Prerequisites:
-    - model/run_043
+    - output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip
 
 Expected Output:
     - Pygame window showing the offensive policy navigating the environment.
@@ -53,7 +53,10 @@ def demo_offensive_policy() -> None:
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
     env = RobotEnv(env_config, debug=True, recording_enabled=False)
-    model = load_trained_policy("./model/run_043")
+    from robot_sf.models.registry import resolve_model_path
+
+    model_path = resolve_model_path("legacy_ppo_run_043", allow_download=True)
+    model = load_trained_policy(str(model_path))
 
     obs, _ = env.reset()
     for _ in range(10000):

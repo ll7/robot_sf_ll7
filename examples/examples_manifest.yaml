@@ -101,9 +101,9 @@ examples:
     summary: "Replay defensive PPO policy with observation adapters."
     category_slug: advanced
     prerequisites:
-      - model/run_023
+      - output/model_cache/legacy_ppo_run_023/legacy_ppo_run_023.zip
     ci_enabled: false
-    ci_reason: "Requires offline PPO checkpoint (model/run_023)."
+    ci_reason: "Requires offline PPO checkpoint (legacy_ppo_run_023)."
     doc_reference: docs/dev_guide.md#baseline-policies
     tags: [policy, ppo]
   - path: advanced/02_factory_options.py
@@ -139,9 +139,9 @@ examples:
     summary: "Replay offensive PPO policy in the robot environment."
     category_slug: advanced
     prerequisites:
-      - model/run_043
+      - output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip
     ci_enabled: false
-    ci_reason: "Requires offline PPO checkpoint (model/run_043)."
+    ci_reason: "Requires offline PPO checkpoint (legacy_ppo_run_043)."
     doc_reference: docs/dev_guide.md#baseline-policies
     tags: [policy, ppo]
   - path: _archived/demo_pedestrian.py
@@ -163,9 +163,9 @@ examples:
     prerequisites:
       - maps/svg_maps/debug_06.svg
       - model/pedestrian/ppo_ped_02.zip
-      - model/run_043
+      - output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip
     ci_enabled: false
-    ci_reason: "Depends on external models (model/run_043, model/pedestrian/ppo_ped_02.zip)."
+    ci_reason: "Depends on external models (legacy_ppo_run_043, model/pedestrian/ppo_ped_02.zip)."
     doc_reference: docs/single_pedestrians.md
     tags: [pedestrian, factory]
   - path: quickstart/01_basic_robot.py
@@ -212,8 +212,8 @@ examples:
     summary: "Run ego pedestrian simulation with recording playback."
     category_slug: advanced
     prerequisites:
-      - maps/svg_maps/narrow_corridor2.svg
-      - model/run_043
+      - maps/svg_maps/debug_06.svg
+      - output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip
     ci_enabled: false
     ci_reason: "Requires external PPO checkpoint and long recording playback."
     doc_reference: docs/single_pedestrians.md
@@ -224,7 +224,7 @@ examples:
     category_slug: advanced
     prerequisites:
       - maps/svg_maps/masterthesis/intersection.svg
-      - model/run_043
+      - output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip
       - model/pedestrian/ppo_intersection.zip
     ci_enabled: false
     ci_reason: "Interactive pygame debug demo with offline checkpoints."

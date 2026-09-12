@@ -6,7 +6,7 @@ Usage:
 
 Prerequisites:
     - maps/svg_maps/debug_06.svg
-    - model/run_043
+    - output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip
 
 Expected Output:
     - Recording saved under `output/recordings/` and replayed via the playback viewer.
@@ -54,7 +54,10 @@ def test_simulation(map_definition: MapDefinition) -> None:
         robot_config=BicycleDriveSettings(radius=0.5, max_accel=3.0, allow_backwards=True),
     )
 
-    robot_model = PPO.load("./model/run_043", env=None)
+    from robot_sf.models.registry import resolve_model_path
+
+    robot_model_path = resolve_model_path("legacy_ppo_run_043", allow_download=True)
+    robot_model = PPO.load(str(robot_model_path), env=None)
 
     env = PedestrianEnv(
         env_config,

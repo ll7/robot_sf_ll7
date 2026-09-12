@@ -5,7 +5,7 @@ Usage:
     uv run python examples/advanced/09_defensive_policy.py --check --format json
 
 Prerequisites:
-    - model/run_023.zip
+    - output/model_cache/legacy_ppo_run_023/legacy_ppo_run_023.zip
 
 Expected Output:
     - Pygame window showing the defensive policy interacting with pedestrians.
@@ -20,7 +20,6 @@ References:
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from robot_sf.examples.prerequisites import (
@@ -58,7 +57,9 @@ def run_simulation() -> None:
         env.sim_ui.ped_render_mode = "sprite"
         env.sim_ui.ego_ped_render_mode = "sprite"
     env.observation_space, env.action_space = prepare_gym_spaces()
-    model_path = Path(__file__).resolve().parents[2] / "model" / "run_023.zip"
+    from robot_sf.models.registry import resolve_model_path
+
+    model_path = resolve_model_path("legacy_ppo_run_023", allow_download=True)
     model = load_trained_policy(str(model_path))
 
     def obs_adapter(orig_obs):

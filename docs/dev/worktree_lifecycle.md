@@ -280,11 +280,19 @@ scripts/dev/create_worktree.sh \
 ```
 
 `--task-id` creates the lifecycle lease regardless of whether `--receipt` is supplied. When a
-receipt is requested, creation writes it atomically after the linked worktree exists. The `--exec`
-command is guarded before it starts; the read-only receipt check exits nonzero with one JSON result
-when the current working directory, top-level, shared Git directory, branch/ref, or base ancestry
-differs. Workers started separately must run the equivalent check from inside the assigned worktree
-with `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/worktree_receipt.py check`.
+receipt is requested, `create_worktree.sh` validates the receipt path before creating the worktree
+and writes it atomically after the linked worktree exists. Relative paths starting with `.git/` or
+`./.git/` resolve through the linked-worktree `.git` file indirection to the repository's shared
+common Git directory, matching primary-checkout behavior. Other relative paths resolve relative to
+the invoking working directory. Validation fails closed with exit code 2 before `git worktree add`
+if the receipt path contains symlink components, references an existing directory or file, has
+non-directory parent components, or target directories that are not writable. Paths can be verified
+independently with `python3 scripts/dev/worktree_receipt.py resolve-path --receipt PATH`.
+
+The `--exec` command is guarded before it starts; the read-only receipt check exits nonzero with one
+JSON result when the current working directory, top-level, shared Git directory, branch/ref, or base
+ancestry differs. Workers started separately must run the equivalent check from inside the assigned
+worktree with `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/worktree_receipt.py check`.
 The receipt proves assignment identity; the lease protects the active path from repository-owned
 cleanup. They are deliberately separate contracts.
 

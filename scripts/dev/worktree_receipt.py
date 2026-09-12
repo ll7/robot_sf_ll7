@@ -86,13 +86,21 @@ def _absolute_directory(path: str | Path) -> Path:
     return resolved
 
 
+def _git_common_dir(path: Path | None = None) -> Path:
+    """Get the Git common directory for the given path or current working directory."""
+    target = path or Path.cwd()
+    raw = _git(target, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    common_dir = Path(raw)
+    if not common_dir.is_absolute():
+        common_dir = target / common_dir
+    return common_dir.resolve()
+
+
 def _identity(worktree: Path) -> dict[str, str]:
     top_level = Path(_git(worktree, "rev-parse", "--show-toplevel")).resolve()
     if top_level != worktree:
         raise ValueError(f"git top-level {top_level} does not match worktree {worktree}")
-    common_git_dir = Path(
-        _git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    ).resolve()
+    common_git_dir = _git_common_dir(worktree)
     current_ref = _git_optional(worktree, "symbolic-ref", "--quiet", "--short", "HEAD")
     if current_ref:
         current_ref = f"refs/heads/{current_ref}"
@@ -110,20 +118,113 @@ def _resolve_base(worktree: Path, base_ref: str) -> str:
     return _git(worktree, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
 
 
-def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
-    absolute = Path(os.path.abspath(path))
-    cursor = Path(absolute.anchor)
-    for component in absolute.relative_to(cursor).parts:
+def _normalize_receipt_candidate(receipt: str | Path, target_cwd: Path) -> Path:
+    receipt_str = str(receipt).strip()
+    if not receipt_str:
+        raise ValueError("receipt path must be a non-empty string")
+    if any(char in receipt_str for char in "\r\n"):
+        raise ValueError("receipt path must not contain newline characters")
+
+    raw_path = Path(receipt)
+    if raw_path.is_absolute():
+        return Path(os.path.abspath(raw_path))
+
+    parts = raw_path.parts
+    if not parts or parts[0] != ".git":
+        return Path(os.path.abspath(target_cwd / raw_path))
+
+    common_dir = _git_common_dir(target_cwd)
+    candidate = common_dir if len(parts) == 1 else common_dir.joinpath(*parts[1:])
+    absolute = Path(os.path.abspath(candidate))
+    if not absolute.is_relative_to(common_dir) or absolute == common_dir:
+        if absolute.is_dir():
+            raise ValueError(f"receipt path must not be an existing directory: {absolute}")
+        raise ValueError(
+            f"receipt path starting with .git must remain within the common git directory: {absolute}"
+        )
+    return absolute
+
+
+def _verify_receipt_components(path: Path) -> None:
+    cursor = Path(path.anchor)
+    for component in path.relative_to(cursor).parts:
         cursor /= component
         if cursor.is_symlink():
-            raise ValueError("receipt path must not contain symlink components")
-    if absolute.exists() or absolute.is_symlink():
+            raise ValueError(f"receipt path must not contain symlink components: {cursor}")
+        if cursor != path and cursor.exists() and not cursor.is_dir():
+            raise ValueError(f"receipt parent component is not a directory: {cursor}")
+
+    if path.is_dir():
+        raise ValueError(f"receipt path must not be an existing directory: {path}")
+
+
+def _verify_existing_receipt(path: Path, *, allow_existing: bool, must_exist: bool) -> bool:
+    """Verify an existing receipt candidate; returns True if path exists and is valid."""
+    if must_exist:
+        if not path.exists():
+            raise ValueError(f"receipt file does not exist: {path}")
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"receipt must be a regular file and must not be a symlink: {path}")
+        if not os.access(path, os.R_OK):
+            raise ValueError(f"receipt file is not readable: {path}")
+        return True
+
+    if not allow_existing and (path.exists() or path.is_symlink()):
         raise ValueError(f"refusing to overwrite existing receipt: {path}")
+
+    if path.exists():
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"receipt must be a regular file and must not be a symlink: {path}")
+        if not os.access(path, os.W_OK):
+            raise ValueError(f"receipt file is not writable: {path}")
+        return True
+
+    return False
+
+
+def _verify_receipt_permissions(path: Path, *, allow_existing: bool, must_exist: bool) -> None:
+    if _verify_existing_receipt(path, allow_existing=allow_existing, must_exist=must_exist):
+        return
+
+    deepest = path.parent
+    while not deepest.exists():
+        deepest = deepest.parent
+    if not os.access(deepest, os.W_OK):
+        raise ValueError(f"receipt directory is not writable: {deepest}")
+
+
+def resolve_receipt_path(
+    receipt: str | Path,
+    *,
+    cwd: str | Path | None = None,
+    allow_existing: bool = False,
+    must_exist: bool = False,
+) -> Path:
+    """Resolve and validate a receipt path.
+
+    - Paths starting with ``.git/`` or ``./.git/`` resolve to the Git common
+      directory (preserving primary-checkout semantics in linked worktrees).
+    - Other relative paths resolve relative to ``cwd`` (defaults to Path.cwd()).
+    - Validates that the path contains no symlink components, is not an existing
+      directory, parent components are directories, and the target location is
+      writable (or readable if ``must_exist``).
+    - If ``allow_existing`` is False, refuses to overwrite existing files.
+    - If ``must_exist`` is True, requires that the target exists and is a regular file.
+    """
+    target_cwd = Path(cwd).resolve() if cwd is not None else Path.cwd().resolve()
+    candidate = _normalize_receipt_candidate(receipt, target_cwd)
+    _verify_receipt_components(candidate)
+    _verify_receipt_permissions(candidate, allow_existing=allow_existing, must_exist=must_exist)
+    return candidate
+
+
+def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
+    absolute = resolve_receipt_path(path, allow_existing=False)
     parent = absolute.parent
     parent.mkdir(parents=True, exist_ok=True)
     if parent.is_symlink():
         raise ValueError("receipt parent must not be a symlink")
-    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=parent)
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{absolute.name}.", suffix=".tmp", dir=parent)
     temporary: Path | None = Path(temporary_name)
     try:
         os.fchmod(fd, 0o600)
@@ -254,7 +355,9 @@ def check_receipt(receipt: str | Path, worktree: str | Path = ".") -> CheckResul
         "failure": None,
     }
     try:
-        expected = _load_receipt(receipt)
+        current_directory = Path.cwd().resolve()
+        resolved_receipt = resolve_receipt_path(receipt, cwd=current_directory, must_exist=True)
+        expected = _load_receipt(resolved_receipt)
         values.update(
             task_id=expected["task_id"],
             expected_worktree=expected["worktree"],
@@ -263,7 +366,6 @@ def check_receipt(receipt: str | Path, worktree: str | Path = ".") -> CheckResul
             expected_base_commit=expected["base_commit"],
         )
         requested_worktree = _absolute_directory(worktree)
-        current_directory = Path.cwd().resolve()
         values["current_worktree"] = str(current_directory)
         if requested_worktree != current_directory:
             raise ValueError(
@@ -330,6 +432,24 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--receipt", required=True)
     check.add_argument("--worktree", default=".")
     check.add_argument("--json", action="store_true")
+    resolve = subparsers.add_parser("resolve-path")
+    resolve.add_argument("--receipt", required=True, help="Path to receipt candidate.")
+    resolve.add_argument(
+        "--worktree",
+        default=None,
+        help="Optional base directory to resolve relative paths against (defaults to cwd).",
+    )
+    resolve.add_argument(
+        "--allow-existing",
+        action="store_true",
+        help="Allow the receipt file to already exist (default: must not exist).",
+    )
+    resolve.add_argument(
+        "--must-exist",
+        action="store_true",
+        help="Require the receipt file to already exist as a regular file.",
+    )
+    resolve.add_argument("--json", action="store_true", help="Output JSON result.")
     return parser
 
 
@@ -337,6 +457,18 @@ def main() -> int:
     """Run the receipt creation or read-only verification CLI."""
     args = _parser().parse_args()
     try:
+        if args.command == "resolve-path":
+            resolved = resolve_receipt_path(
+                args.receipt,
+                cwd=args.worktree,
+                allow_existing=args.allow_existing,
+                must_exist=args.must_exist,
+            )
+            if args.json:
+                print(json.dumps({"ok": True, "path": str(resolved)}, separators=(",", ":")))
+            else:
+                print(resolved)
+            return 0
         if args.command == "create":
             receipt = create_receipt(
                 args.worktree,
@@ -351,6 +483,12 @@ def main() -> int:
         print(json.dumps(asdict(result), sort_keys=True, separators=(",", ":")))
         return 0 if result.ok else 1
     except (OSError, ValueError) as exc:
+        if getattr(args, "command", None) == "resolve-path":
+            if getattr(args, "json", False):
+                print(json.dumps({"ok": False, "failure": str(exc)}, separators=(",", ":")))
+            else:
+                print(f"worktree_receipt: {exc}", file=sys.stderr)
+            return 2
         print(
             json.dumps(
                 {"schema": SCHEMA_VERSION, "ok": False, "failure": str(exc)}, separators=(",", ":")

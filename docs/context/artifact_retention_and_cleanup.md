@@ -23,6 +23,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
 | Log retention and diagnostic excerpts | [check_log_retention.py](../../scripts/tools/check_log_retention.py) |
 | Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
+| Bootstrap recipe freeze and check | [bootstrap_recipe_check.py](../../scripts/tools/bootstrap_recipe_check.py) |
 | Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
 ## 1. Retention classes in operational terms
@@ -187,7 +188,15 @@ summarizing workloads, scheduler receipts, artifact custody, and environment rec
 It redacts private paths, internal hosts, and credentials, rejects contradictory statuses and
 orphan records, and enforces actionable next commands for incomplete runs.
 
-### 4.9 Check log retention and bounded diagnostic excerpts
+### 4.9 Freeze and rehearse a bootstrap recipe
+
+Each recipe in [configs/bootstrap_recipes/README.md](../../configs/bootstrap_recipes/README.md)
+freezes an execution class's setup, probe, and cleanup sequence with its source/lock and immutable
+identities. `scripts/tools/bootstrap_recipe_check.py --check --recipes configs/bootstrap_recipes`
+reports structurally; `--execute-safe-checks` runs `safe_check` probes in an isolated temporary root.
+A class without a verified recipe needs an explicit `verification_status: unavailable` reason.
+
+### 4.10 Check log retention and bounded diagnostic excerpts
 
 ```bash
 uv run python scripts/tools/check_log_retention.py --check --manifest <LOG_MANIFEST> --root <LOG_ROOT> --format json
@@ -197,7 +206,7 @@ The check-only helper requires per-log role, job/task identity, byte/line counts
 digest, and retention class; it emits deterministic bounded excerpts with private values redacted.
 Active, truncated, binary, secret-like, duplicate, unidentified, mismatched, or uncustodied logs remain blocked; failed/unknown jobs retain full logs until verified custody. It never deletes files or changes runtime logging.
 
-### 4.10 Report a blocker
+### 4.11 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

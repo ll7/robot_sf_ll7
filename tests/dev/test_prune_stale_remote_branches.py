@@ -301,7 +301,9 @@ def test_apply_deletions_blocks_when_claim_issue_refresh_unavailable() -> None:
     assert "could not refresh state" in del_entry["error"]
 
 
-def test_git_gh_probe_atomic_lease_with_local_bare_repo(tmp_path: Path) -> None:
+def test_git_gh_probe_atomic_lease_with_local_bare_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Issue #9168: GitGhProbe.delete_head enforces atomic lease on a real git remote."""
     bare = tmp_path / "remote.git"
     work = tmp_path / "work"
@@ -317,14 +319,22 @@ def test_git_gh_probe_atomic_lease_with_local_bare_repo(tmp_path: Path) -> None:
     sha_a = subprocess.check_output(
         ["git", "-C", str(work), "rev-parse", "HEAD"], text=True
     ).strip()
+    fixture_branch = subprocess.check_output(
+        ["git", "-C", str(work), "branch", "--show-current"], text=True
+    ).strip()
+    assert fixture_branch
     subprocess.run(["git", "-C", str(work), "remote", "add", "origin", str(bare)], check=True)
     subprocess.run(
-        ["git", "-C", str(work), "push", "origin", "master:refs/heads/topic"],
+        ["git", "-C", str(work), "push", "origin", f"{fixture_branch}:refs/heads/topic"],
         check=True,
         capture_output=True,
     )
 
-    probe = GitGhProbe(repo="ll7/robot_sf_ll7", remote=str(bare), main_ref="master")
+    # GitGhProbe inherits the test process cwd. Use the temporary repository's
+    # local Git config so a protected review-worktree push barrier cannot
+    # rewrite this network-free fixture's local-bare remote.
+    monkeypatch.chdir(work)
+    probe = GitGhProbe(repo="ll7/robot_sf_ll7", remote=str(bare), main_ref=fixture_branch)
 
     # Mismatched expected_sha fails and leaves ref intact
     ok, error = probe.delete_head(

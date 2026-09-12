@@ -448,6 +448,9 @@ _FAST_FILES = {
     # Checkpoint preservation custody tests are deterministic check-only
     # contracts; keep their changed-line coverage in PR fast shards (#8831).
     "test_check_checkpoint_preservation.py",
+    # Shared-ops-guide heading contract is deterministic docs coverage for the
+    # no-renumber fix; keep it in PR fast shards (issue #9132).
+    "test_artifact_retention_heading_contract.py",
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",

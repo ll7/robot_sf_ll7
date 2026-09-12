@@ -8,8 +8,9 @@ fail-closed preflight as ``gh-pr-merger``:
 
   - non-draft state,
   - current ``merge-ready`` label,
-  - a current exact-head ``gate-verdict: accepted @ <head_sha>`` trailer
-    (reuses ``scripts.dev.pr_loop_policy.has_current_accepted_gate_verdict``),
+  - a uniquely latest trusted exact-head ``gate-verdict: accepted`` trailer,
+    with a current ``gate-verdict: hold`` taking precedence until a later
+    accepted carrier supersedes it,
   - a current ``pr-metadata: reconciled @ <digest>`` trailer binding the
     final PR title/body to the review evidence,
   - a successful ``changed-coverage-gate`` check on the exact live PR head, or
@@ -92,9 +93,10 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
 from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
 from scripts.dev.github_quota import quota_reset_handoff  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
+    GATE_VERDICT_PROJECTION_SOURCE,
     active_review_claim,
+    current_gate_verdict_status,
     has_any_pr_metadata_verdict,
-    has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
 )
 from scripts.dev.pr_metadata import (  # noqa: E402
@@ -237,14 +239,11 @@ def _label_names(pr: dict[str, Any]) -> list[str]:
 def _gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
     """Classify the exact-head gate-verdict trailer state.
 
-    Returns ``accepted`` when a current exact-head ``gate-verdict: accepted``
-    trailer exists, ``missing`` otherwise (including an empty head SHA, a missing
-    trailer, or a trailer whose SHA does not identify the exact head). Mirrors
-    the fail-closed contract in ``pr_loop_policy.has_current_accepted_gate_verdict``.
+    Returns the canonical current verdict status, including ``hold`` for a
+    current trusted blocker and ``ambiguous``/``malformed`` for evidence that
+    cannot safely establish the latest verdict.
     """
-    if not head_sha:
-        return "missing"
-    return "accepted" if has_current_accepted_gate_verdict(pr, head_sha) else "missing"
+    return current_gate_verdict_status(pr, head_sha)
 
 
 def _metadata_verdict_status(pr: dict[str, Any], digest: str) -> str:
@@ -374,7 +373,13 @@ def _core_preflight_reasons(
     if staleness_verdict == "stale":
         reasons.append("stale_merge_base")
     if gate_verdict_status != "accepted":
-        reasons.append("missing_exact_head_gate_verdict")
+        reasons.append(
+            {
+                "hold": "exact_head_gate_hold",
+                "ambiguous": "ambiguous_exact_head_gate_verdict",
+                "malformed": "malformed_exact_head_gate_verdict",
+            }.get(gate_verdict_status, "missing_exact_head_gate_verdict")
+        )
     return reasons
 
 
@@ -554,7 +559,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
         pass), ``labels``, ``draft``, ``base_sha``, ``checks.overall``,
         ``changed_coverage`` (which must bind a success result to ``head_sha``), plus any
         gate-verdict carrier fields understood by
-        ``has_current_accepted_gate_verdict`` (``gate_verdict`` /
+        ``current_gate_verdict_status`` (``gate_verdict`` /
         ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts),
         ``metadata_digest`` and trusted ``metadata_verdicts``, and
         ``reviewers_requested`` when supplied by the live snapshot, plus the
@@ -1095,7 +1100,8 @@ def _to_body_snapshot(items: Any, *, limit: int = 180) -> dict[str, Any]:
     """Convert raw ``gh`` comment/review objects into the compact snapshot shape.
 
     The compact excerpts are audit context only. ``fetch_pr_snapshot`` extracts
-    accepted gate-verdict trailers from the full raw bodies before truncation,
+    accepted/HOLD gate-verdict trailers from the full raw bodies before
+    truncation, and projects their validated current status.
     so a valid trailer after the excerpt limit cannot be discarded.
     """
     if not isinstance(items, list):
@@ -2122,6 +2128,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         payload.get("reviews"),
         head_sha=head_sha,
     )
+    gate_verdict_status = _gate_verdict_status(payload, head_sha)
 
     snapshot: dict[str, Any] = {
         "number": payload.get("number"),
@@ -2138,6 +2145,9 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         "changed_coverage": changed_coverage,
         # Canonical extraction rejects trailers from untrusted author associations.
         "gate_verdicts": _extract_gate_verdicts(payload),
+        "gate_verdict_status": gate_verdict_status,
+        "gate_verdict_status_head_sha": head_sha,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
         "base_policy": _extract_base_policies(payload),
         "metadata_verdicts": _extract_metadata_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
@@ -2422,8 +2432,9 @@ def _format_summary(audit: MergeGateAudit) -> str:
         lines.append(f"- fail-closed reasons: `{', '.join(audit.reasons)}`")
     lines.append("")
     lines.append(
-        "Gate contract: non-draft + `merge-ready` + current exact-head "
-        "`gate-verdict: accepted` trailer + current `pr-metadata: reconciled` "
+        "Gate contract: non-draft + `merge-ready` + latest trusted exact-head "
+        "`gate-verdict: accepted` trailer (a current HOLD blocks until a later "
+        "accepted carrier) + current `pr-metadata: reconciled` "
         "trailer + exact-head `changed-coverage-gate` proof (or a complete CI-ignored docs-only "
         "file-set proof) + resolved threads + no outstanding reviewer requests + "
         "no active exact-head review claim + `ALLGREEN` queue strategy; fail-closed on any "

@@ -27,8 +27,10 @@ from scripts.dev.github_graphql_retry import run_with_retry
 from scripts.dev.github_quota import quota_reset_handoff
 from scripts.dev.pr_loop_policy import (
     BASE_POLICY_RE,
+    GATE_VERDICT_PROJECTION_SOURCE,
     GATE_VERDICT_RE,
     authoritative_body_text,
+    current_gate_verdict_status,
 )
 from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest, metadata_trailer
 
@@ -1422,8 +1424,12 @@ def _parse_explicit_verdict(item: Any) -> str | None:
         verdict = str(item.get("verdict", "")).lower()
         accepted_flag = item.get("accepted")
         sha = str(item.get("sha") or item.get("head_sha") or "")
-        if sha and (verdict == "accepted" or accepted_flag is True):
-            return f"gate-verdict: accepted @ {sha}"
+        if verdict == "hold" and accepted_flag is True:
+            return None
+        if sha and (verdict in {"accepted", "hold"} or accepted_flag is True):
+            normalized_verdict = "accepted" if accepted_flag is True else verdict
+            if normalized_verdict in {"accepted", "hold"}:
+                return f"gate-verdict: {normalized_verdict} @ {sha}"
     return None
 
 
@@ -1437,7 +1443,9 @@ def _extract_trailers_from_bodies(items: Any) -> list[str]:
             body = authoritative_body_text(entry)
             if body is not None:
                 for match in GATE_VERDICT_RE.finditer(body):
-                    trailers.append(f"gate-verdict: accepted @ {match.group(1)}")
+                    trailers.append(
+                        f"gate-verdict: {match.group('verdict').lower()} @ {match.group('sha')}"
+                    )
     return trailers
 
 
@@ -1555,6 +1563,7 @@ def _pr_payload_from_dict(
     )
     reviews = _reviews(pr)
     gate_verdicts = _extract_gate_verdicts(pr)
+    gate_verdict_status = current_gate_verdict_status(pr, head_sha)
     title = str(pr.get("title", "") or "")
     body = str(pr.get("body", "") or "")
     metadata_digest_value = metadata_digest(title, body)
@@ -1576,6 +1585,9 @@ def _pr_payload_from_dict(
         "checks": checks,
         "reviews": reviews,
         "gate_verdicts": gate_verdicts,
+        "gate_verdict_status": gate_verdict_status,
+        "gate_verdict_status_head_sha": head_sha,
+        "gate_verdict_status_source": GATE_VERDICT_PROJECTION_SOURCE,
         "base_policy": _extract_base_policies(pr),
         "metadata_digest": metadata_digest_value,
         "metadata_verdicts": metadata_verdicts,

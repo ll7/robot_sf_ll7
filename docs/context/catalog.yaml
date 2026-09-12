@@ -152,6 +152,10 @@ entries:
   status: evidence
   freshness: evidence
   area: release_evidence
+- path: docs/context/evidence/dependency_license_batch_2026-09-11.staged-external-only.receipt.json
+  status: evidence
+  freshness: evidence
+  area: release_evidence
 - path: docs/context/evidence/issue_7600_context_curation_pilot/README.md
   status: evidence
   freshness: evidence

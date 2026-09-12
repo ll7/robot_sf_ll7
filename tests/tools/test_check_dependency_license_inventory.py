@@ -1414,6 +1414,21 @@ def test_issue_8163_receipt_binds_policy_license_and_strict_inputs(tmp_path: Pat
     )
 
 
+def test_issue_8163_staged_p06_receipt_is_not_canonical_inventory_input() -> None:
+    """The staged P06 envelope remains separate from the canonical receipt contract."""
+    root = Path(__file__).resolve().parents[2]
+    receipt_path = (
+        root
+        / "docs/context/evidence"
+        / ("dependency_license_batch_2026-09-11.staged-external-only.receipt.json")
+    )
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert receipt["schema_version"] == "robot-sf.p06.8163.staged-external-only-receipt.v1"
+    issues = validate_dependency_license_receipt(root, receipt_path)
+    assert "dependency receipt has an unsupported schema_version" in issues
+
+
 def test_issue_8163_receipt_summaries_are_bound_fail_closed(tmp_path: Path) -> None:
     """Receipt status, scope, archive, strict, and candidate claims cannot drift."""
     root = Path(__file__).resolve().parents[2]

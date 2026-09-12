@@ -925,7 +925,7 @@ def _diff_numstat(base_ref: str) -> str | None:
     which is exact for the merge-ref checkout. Returns None when neither form
     can be computed; budget enforcement treats that as a blocker.
     """
-    for diff_spec in (f"{base_ref}...HEAD", base_ref):
+    for diff_spec in (f"{base_ref}...HEAD", f"{base_ref} HEAD"):
         try:
             res = subprocess.run(
                 ["git", "diff", "--numstat", diff_spec],

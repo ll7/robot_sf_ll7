@@ -203,10 +203,19 @@ def _add_landlock_path_rule(
     path: Path,
     allowed_access: int,
 ) -> None:
-    try:
-        path_fd = os.open(path, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
-    except (AttributeError, OSError) as exc:
-        raise GuardError(f"review process isolation cannot open policy path {path}: {exc}") from exc
+    path_fd = -1
+    for flags in (os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC, os.O_PATH | os.O_CLOEXEC):
+        try:
+            path_fd = os.open(path, flags)
+            break
+        except NotADirectoryError:
+            continue
+        except (AttributeError, OSError) as exc:
+            raise GuardError(
+                f"review process isolation cannot open policy path {path}: {exc}"
+            ) from exc
+    if path_fd < 0:
+        raise GuardError(f"review process isolation cannot open policy path {path}")
     try:
         rule = _LandlockPathBeneathAttr(allowed_access=allowed_access, parent_fd=path_fd)
         result = libc.syscall(
@@ -227,8 +236,9 @@ def _install_os_isolation(identity: dict[str, Path]) -> None:
 
     The policy permits read/execute access throughout the host, permits all filesystem
     mutation rights only below the review worktree and its linked administrative directory,
-    and handles TCP bind/connect without adding any network rule (deny by default).  The
-    policy is intentionally Linux-specific and requires Landlock ABI 4 or newer.
+    permits writing to the null device so standard tooling can discard output, and handles TCP
+    bind/connect without adding any network rule (deny by default).  The policy is intentionally
+    Linux-specific and requires Landlock ABI 4 or newer.
     """
     libc = _isolation_libc()
     _landlock_abi(libc)
@@ -255,6 +265,16 @@ def _install_os_isolation(identity: dict[str, Path]) -> None:
                 int(ruleset_fd),
                 writable_path,
                 LANDLOCK_ACCESS_FS_ALL,
+            )
+        null_device = Path(os.devnull)
+        if null_device.exists():
+            _add_landlock_path_rule(
+                libc,
+                int(ruleset_fd),
+                null_device,
+                LANDLOCK_ACCESS_FS_READ_FILE
+                | LANDLOCK_ACCESS_FS_WRITE_FILE
+                | LANDLOCK_ACCESS_FS_TRUNCATE,
             )
         if libc.prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
             _raise_isolation_errno("could not set no-new-privileges")

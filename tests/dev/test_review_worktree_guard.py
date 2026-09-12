@@ -575,6 +575,32 @@ def test_review_process_boundary_rejects_network_and_requires_review_mode(tmp_pa
         _remove_worktree(repo, implementation, implementation_branch)
 
 
+def test_review_process_boundary_allows_the_null_device(tmp_path: Path) -> None:
+    """Standard tooling (for example pytest 9 log handling) must be able to write os.devnull."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review-null-device"
+    branch = "review/null-device"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        configured = _configure(worktree, "review")
+        assert configured.returncode == 0, configured.stderr
+        _require_isolation(worktree)
+        probe = _run_isolated(
+            worktree,
+            sys.executable,
+            "-c",
+            (
+                "import os; "
+                "handle = open(os.devnull, 'w'); "
+                "handle.write('probe'); "
+                "handle.close()"
+            ),
+        )
+        assert probe.returncode == 0, probe.stdout + probe.stderr
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
 def test_review_process_boundary_fails_closed_on_an_old_landlock_abi() -> None:
     """An OS capability below the declared contract must not launch a child command."""
     import importlib.util

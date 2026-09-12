@@ -113,6 +113,55 @@ def _decode_object(
     return response, None
 
 
+def _looks_like_not_found(error: str) -> bool:
+    """Return whether an error text is a GitHub 404 / Not Found response."""
+    lowered = error.lower()
+    return "not found" in lowered or "404" in lowered
+
+
+def _linked_pull_request(repo: str, number: int) -> int | None:
+    """Return a PR number cross-referenced from an issue timeline, when present."""
+    result = _gh_api_get(f"repos/{repo}/issues/{number}/timeline?per_page=100")
+    if result.returncode != 0:
+        return None
+    try:
+        entries = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("event") != "cross-referenced":
+            continue
+        source = entry.get("source")
+        issue = source.get("issue") if isinstance(source, dict) else None
+        if isinstance(issue, dict) and issue.get("pull_request") is not None:
+            candidate = issue.get("number")
+            if isinstance(candidate, int):
+                return candidate
+    return None
+
+
+def _issue_number_diagnostic(repo: str, number: int) -> str | None:
+    """Explain an issue-number mixup when *number* is not a pull request.
+
+    Only used after a 404 from a pull-request endpoint: when the number resolves
+    to an issue, point the caller at the linked PR (or at the missing PR
+    linkage) instead of leaving a bare ``Not Found``.
+    """
+    issue_result = _gh_api_get(f"repos/{repo}/issues/{number}")
+    issue, error = _decode_object(issue_result, operation="issue diagnostic read")
+    if error or issue is None or issue.get("pull_request") is not None:
+        return None
+    linked = _linked_pull_request(repo, number)
+    if linked is not None:
+        return (
+            f"number {number} is an issue, not a pull request; its linked PR is #{linked} - "
+            "pass the PR number"
+        )
+    return f"number {number} is an issue, not a pull request - pass the PR number"
+
+
 def _head_sha(payload: dict[str, Any]) -> str | None:
     """Return a live PR head SHA when the REST payload provides one."""
     head = payload.get("head")
@@ -447,6 +496,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         result = update_pr_body(args.number, args.body_file, repo=args.repo)
+    if result.get("status") not in {"ok", "unchanged"} and _looks_like_not_found(
+        str(result.get("error", ""))
+    ):
+        diagnostic = _issue_number_diagnostic(args.repo, args.number)
+        if diagnostic:
+            result["error"] = f"{result['error']}. {diagnostic}"
     success = result["status"] in {"ok", "unchanged"}
     stream = sys.stdout if success else sys.stderr
     print(json.dumps(result, sort_keys=True), file=stream)

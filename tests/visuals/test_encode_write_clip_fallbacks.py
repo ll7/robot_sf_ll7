@@ -1,4 +1,8 @@
-"""TODO docstring. Document this module."""
+"""Encode fallback coverage for ImageSequenceClip write_videofile signatures.
+
+encode_frames is exercised with fake clips implementing keyword-only,
+positional, and path-only writer signatures, plus a clip that always fails.
+"""
 
 from pathlib import Path
 
@@ -12,78 +16,78 @@ from robot_sf.benchmark.full_classic import encode as encode_mod
 
 
 class _BaseClip:
-    """TODO docstring. Document this class."""
+    """Base fake clip storing frames and fps for the writer-signature variants."""
 
     def __init__(self, frames, fps=10):
-        """TODO docstring. Document this function.
+        """Store frames and fps.
 
         Args:
-            frames: TODO docstring.
-            fps: TODO docstring.
+            frames: Frame sequence handed to the clip.
+            fps: Frames-per-second value handed to the clip.
         """
         self.frames = frames
         self.fps = fps
 
 
 class KeywordClip(_BaseClip):
-    """TODO docstring. Document this class."""
+    """Fake clip whose writer accepts keyword-only options and writes b"kw"."""
 
     def write_videofile(self, path, *, fps, codec, audio, preset, logger):
-        """TODO docstring. Document this function.
+        """Write b"kw" to path, ignoring keyword-only options.
 
         Args:
-            path: TODO docstring.
-            fps: TODO docstring.
-            codec: TODO docstring.
-            audio: TODO docstring.
-            preset: TODO docstring.
-            logger: TODO docstring.
+            path: Output file path to create.
+            fps: Frames-per-second option accepted and ignored.
+            codec: Codec option accepted and ignored.
+            audio: Audio option accepted and ignored.
+            preset: Encoder preset option accepted and ignored.
+            logger: Logger option accepted and ignored.
         """
         _ = (fps, codec, audio, preset, logger)
         Path(path).write_bytes(b"kw")
 
 
 class PositionalClip(_BaseClip):
-    """TODO docstring. Document this class."""
+    """Fake clip whose writer accepts positional options and writes b"pos"."""
 
     def write_videofile(self, path, codec, fps, audio, preset, logger):
-        """TODO docstring. Document this function.
+        """Write b"pos" to path, ignoring positional options.
 
         Args:
-            path: TODO docstring.
-            codec: TODO docstring.
-            fps: TODO docstring.
-            audio: TODO docstring.
-            preset: TODO docstring.
-            logger: TODO docstring.
+            path: Output file path to create.
+            codec: Codec option accepted and ignored.
+            fps: Frames-per-second option accepted and ignored.
+            audio: Audio option accepted and ignored.
+            preset: Encoder preset option accepted and ignored.
+            logger: Logger option accepted and ignored.
         """
         _ = (codec, fps, audio, preset, logger)
         Path(path).write_bytes(b"pos")
 
 
 class MinimalClip(_BaseClip):
-    """TODO docstring. Document this class."""
+    """Fake clip whose writer accepts only the output path and writes b"min"."""
 
     def write_videofile(self, path):
-        """TODO docstring. Document this function.
+        """Write b"min" to path.
 
         Args:
-            path: TODO docstring.
+            path: Output file path to create.
         """
         Path(path).write_bytes(b"min")
 
 
 class AlwaysFailClip(_BaseClip):
-    """TODO docstring. Document this class."""
+    """Fake clip whose writer always raises RuntimeError and counts invocations."""
 
     calls = 0
 
     def write_videofile(self, *args, **kwargs):
-        """TODO docstring. Document this function.
+        """Increment the class call counter and raise RuntimeError.
 
         Args:
-            args: TODO docstring.
-            kwargs: TODO docstring.
+            args: Positional writer arguments accepted and ignored.
+            kwargs: Keyword writer arguments accepted and ignored.
         """
         _ = (args, kwargs)
         self.__class__.calls += 1
@@ -99,13 +103,17 @@ class AlwaysFailClip(_BaseClip):
     ],
 )
 def test_write_clip_fallback_success(monkeypatch, tmp_path, clip_cls, expected_bytes):
-    """TODO docstring. Document this function.
+    """Assert encode_frames succeeds for each supported writer calling convention.
+
+    Parametrized over fake clips using keyword-only, positional, and path-only
+    write_videofile signatures; each clip's bytes are written to the output file
+    and the result reports success.
 
     Args:
-        monkeypatch: TODO docstring.
-        tmp_path: TODO docstring.
-        clip_cls: TODO docstring.
-        expected_bytes: TODO docstring.
+        monkeypatch: Pytest fixture used to inject the fake clip and force readiness.
+        tmp_path: Directory receiving the output file.
+        clip_cls: Fake clip class exercising one writer signature.
+        expected_bytes: Bytes the clip is expected to write.
     """
     monkeypatch.setattr(encode_mod, "ImageSequenceClip", clip_cls)
     monkeypatch.setattr(encode_mod, "moviepy_ready", lambda: True)
@@ -125,11 +133,14 @@ def test_write_clip_fallback_success(monkeypatch, tmp_path, clip_cls, expected_b
 
 def test_write_clip_all_fail(monkeypatch, tmp_path):
     # Force all attempts to raise, expecting failed note encode-error:RuntimeError
-    """TODO docstring. Document this function.
+    """Assert every writer failure surfaces as an encode-error result.
+
+    The fake clip raises RuntimeError on each attempt; the result is failed with an
+    encode-error:RuntimeError note and no non-empty output file.
 
     Args:
-        monkeypatch: TODO docstring.
-        tmp_path: TODO docstring.
+        monkeypatch: Pytest fixture used to inject the always-failing fake clip.
+        tmp_path: Directory checked for an absent or empty output file.
     """
     monkeypatch.setattr(encode_mod, "ImageSequenceClip", AlwaysFailClip)
     monkeypatch.setattr(encode_mod, "moviepy_ready", lambda: True)

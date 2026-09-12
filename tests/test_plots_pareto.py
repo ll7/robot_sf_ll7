@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for Pareto front computation and Pareto curve plotting utilities."""
 
 from __future__ import annotations
 
@@ -10,15 +10,15 @@ from robot_sf.benchmark.plots import (
 
 
 def _rec(g: str, x: float, y: float) -> dict:
-    """TODO docstring. Document this function.
+    """Construct a mock benchmark episode record.
 
     Args:
-        g: TODO docstring.
-        x: TODO docstring.
-        y: TODO docstring.
+        g: Algorithm/group identifier.
+        x: Collision metric value.
+        y: Comfort exposure metric value.
 
     Returns:
-        TODO docstring.
+        Dictionary representing a benchmark record with algorithm metadata and metrics.
     """
     return {
         "scenario_id": f"scn-{g}",
@@ -29,7 +29,7 @@ def _rec(g: str, x: float, y: float) -> dict:
 
 
 def test_compute_points_and_front():
-    """TODO docstring. Document this function."""
+    """Verify Pareto front points and dominant index calculation across algorithms."""
     records = [
         _rec("A", 1.0, 0.5),
         _rec("A", 1.0, 0.6),
@@ -44,10 +44,10 @@ def test_compute_points_and_front():
 
 
 def test_save_png_creates_file(tmp_path):
-    """TODO docstring. Document this function.
+    """Verify save_pareto_png creates an output PNG and returns metadata.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture.
     """
     records = [
         _rec("A", 1.0, 0.5),
@@ -61,11 +61,11 @@ def test_save_png_creates_file(tmp_path):
     assert "front_size" in meta
 
 
-def test_save_pdf_option(tmp_path):
-    """TODO docstring. Document this function.
+def test_save_vector_options(tmp_path):
+    """Verify save_pareto_png creates requested PDF and SVG vector outputs.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture.
     """
     records = [
         _rec("A", 1.0, 0.5),
@@ -74,6 +74,7 @@ def test_save_pdf_option(tmp_path):
     ]
     out_png = tmp_path / "pareto.png"
     out_pdf = tmp_path / "pareto.pdf"
+    out_svg = tmp_path / "vector" / "pareto.svg"
     meta = save_pareto_png(
         records,
         str(out_png),
@@ -81,7 +82,47 @@ def test_save_pdf_option(tmp_path):
         "comfort_exposure",
         title="PDF Test",
         out_pdf=str(out_pdf),
+        out_svg=str(out_svg),
     )
     assert out_png.exists() and out_png.stat().st_size > 0
     assert out_pdf.exists() and out_pdf.stat().st_size > 0
+    assert out_svg.exists() and out_svg.stat().st_size > 0
     assert meta.get("pdf") == str(out_pdf)
+    assert meta.get("svg") == str(out_svg)
+
+
+def test_save_pareto_png_preserves_positional_observation_track_mode(tmp_path):
+    """The pre-existing positional observation-track mode remains effective."""
+    records = [
+        {
+            "scenario_id": "scn-a",
+            "benchmark_track": "track-a",
+            "scenario_params": {"algo": "A"},
+            "metrics": {"collisions": 1.0, "comfort_exposure": 0.5},
+        },
+        {
+            "scenario_id": "scn-b",
+            "benchmark_track": "track-b",
+            "scenario_params": {"algo": "A"},
+            "metrics": {"collisions": 0.8, "comfort_exposure": 0.9},
+        },
+    ]
+    out = tmp_path / "diagnostic-pareto.png"
+
+    meta = save_pareto_png(
+        records,
+        str(out),
+        "collisions",
+        "comfort_exposure",
+        "scenario_params.algo",
+        "scenario_id",
+        "mean",
+        False,
+        False,
+        None,
+        None,
+        "diagnostic-cross-track",
+    )
+
+    assert out.exists()
+    assert meta["count"] == 2

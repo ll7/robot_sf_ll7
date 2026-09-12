@@ -23,11 +23,40 @@ When quoting readiness counts, use the named selectors in
 [`docs/dev/local_ci.md`](../../docs/dev/local_ci.md#readiness-count-selectors),
 including `--collect-only -q` when only the collected count is needed.
 
+[`check_base_drift.py`](check_base_drift.py) backs the readiness gate's base-drift recheck (issue
+#5782). The gate captures the concrete base SHA before the expensive lanes and invokes this check
+immediately before recording the stamp, so it can tell whether `origin/main` moved during the run.
+Drift that touches none of the PR's changed files recommends reuse; drift that intersects them
+requires revalidation. One regenerable exception exists: when the intersection is exactly
+`scripts/validation/docstring_todo_baseline.json`, the gate re-runs the targeted docstring baseline
+and ratchet gates and, only on success, revalidates through that narrow path with a recorded
+`baseline_revalidation` receipt; mixed drift stays fail-closed. The checker exits `0` when the base
+is current or the drift is reusable, `1` when revalidation is required, and `2` when the base ref
+or drift cannot be resolved.
+
 The native merge queue enforcement path is
 [`merge_queue_gate.py`](merge_queue_gate.py), invoked by
 [`.github/workflows/merge-queue-gate.yml`](../../.github/workflows/merge-queue-gate.yml)
 on `merge_group`. The standalone protection audit below does not replace that
 workflow or change branch protection.
+
+## Agent instruction and skill checks
+
+- [`check_instruction_references.py`](check_instruction_references.py) validates the agent
+  instruction graph: the single task-route owner, the `Instruction Precedence` block, the
+  execution-profile manifest, the maintainer-values drift rule, and repository-local reference
+  resolution. Run `uv run python scripts/dev/check_instruction_references.py [--json]`.
+- [`check_skills.py`](check_skills.py) validates the repo-local skill registry and runs a skill
+  preflight; use `--preflight <skill>` before relying on a skill's declared requirements.
+- `scripts/tools/sync_ai_config.py --check` keeps provider adapters thin, scoped, and linked to
+  canonical sources (see [`.agents/README.md`](../../.agents/README.md)).
+- [`check_agent_instructions.sh`](check_agent_instructions.sh) composes the three checks above into
+  one entry point for instruction-contract changes; run
+  `scripts/dev/check_agent_instructions.sh` (optional `--json`). It is also available as the VS Code
+  task `Agent Instruction Checks`.
+
+These are contract checks for repository instructions, not PR merge gates;
+`pr_ready_check.sh` remains the required readiness entry point.
 
 ## Explicit issue-scoped verification
 
@@ -69,6 +98,26 @@ it probes the live `ALLGREEN` strategy. The audit fails closed when a required
 dimension is unsatisfied or unverifiable. It performs no ruleset, branch,
 queue, PR, issue, or workflow mutation, and it cannot claim that a real
 `merge_group` run exists unless GitHub provides that evidence.
+
+[`prune_stale_remote_branches.py`](prune_stale_remote_branches.py) is the
+dry-run-first sweep for stale remote heads (issue #9087). It deletes only two
+safe classes: `merged_code_branch` (tip already an ancestor of `origin/main`
+with no open PR) and `claim_ref_closed_issue` (`agent-claims/issue-<n>` whose
+issue is closed). Everything else is kept, including protected refs, open-PR
+heads, claims whose issue is open or unresolved, and any ref whose state cannot
+be determined. Run a scan (no deletion) at a cadence of roughly once a month or
+after a large campaign:
+
+```bash
+uv run python scripts/dev/prune_stale_remote_branches.py --report /tmp/prune.json
+```
+
+Apply is explicit and bounded; rerunning is idempotent because deleted refs no
+longer classify:
+
+```bash
+uv run python scripts/dev/prune_stale_remote_branches.py --apply --limit 25 --report /tmp/prune.json
+```
 
 ## CI inline-logic helpers
 
@@ -120,6 +169,20 @@ uv run python -m scripts.dev.prepare_open_issue_contracts \
 See [`docs/ai/open-issue-contract-preparation.md`](../../docs/ai/open-issue-contract-preparation.md)
 for the operator contract. Focused offline tests live in
 `tests/dev/test_prepare_open_issue_contracts.py`.
+
+[`ready_triage_reconcile.py`](ready_triage_reconcile.py) repairs the contradictory
+`state:ready` + `needs-triage` pair on open issues (issue #9012): report mode
+derives one evidence-backed action per issue from its classification with the triage
+label ignored, and apply mode performs only the planned label removal with a
+per-issue drift check. It never closes issues, merges pull requests, or edits
+Project #5 state.
+
+```bash
+uv run python scripts/dev/ready_triage_reconcile.py --json
+uv run python scripts/dev/ready_triage_reconcile.py --apply --json
+```
+
+Focused offline tests live in `tests/dev/test_ready_triage_reconcile.py`.
 
 ## Parent goal-autopilot arbitration
 

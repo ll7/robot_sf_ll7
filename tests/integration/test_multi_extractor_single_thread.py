@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Integration test for the single-threaded multi-extractor training run."""
 
 import json
 import os
@@ -15,10 +15,10 @@ CONFIG_DEFAULT = ROOT / "configs" / "scenarios" / "multi_extractor_default.yaml"
 
 @pytest.mark.skipif(not CONFIG_DEFAULT.exists(), reason="default multi-extractor config missing")
 def test_single_thread_run_produces_timestamped_summary(tmp_path):
-    """TODO docstring. Document this function.
+    """A test-mode single-threaded run writes a timestamped summary and artifacts.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary output root set via ROBOT_SF_MULTI_EXTRACTOR_TMP.
     """
     env = os.environ.copy()
     env["ROBOT_SF_MULTI_EXTRACTOR_TMP"] = str(tmp_path)

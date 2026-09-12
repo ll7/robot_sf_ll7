@@ -13,10 +13,10 @@ from robot_sf.benchmark.full_classic.orchestrator import run_full_benchmark
 
 
 def test_effect_sizes_presence(config_factory):
-    """TODO docstring. Document this function.
+    """Verify a smoke run writes an effect_sizes.json report with comparison entries.
 
     Args:
-        config_factory: TODO docstring.
+        config_factory: Fixture building the smoke-mode benchmark config.
     """
     cfg = config_factory(smoke=True)
     manifest = run_full_benchmark(cfg)

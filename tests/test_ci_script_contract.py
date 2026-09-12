@@ -33,6 +33,7 @@ import shlex
 import shutil
 import signal
 import subprocess
+import time
 import tomllib
 from pathlib import Path
 
@@ -1291,7 +1292,10 @@ def test_ci_driver_test_phase_runs_benchmark_reconciliation_guard() -> None:
     assert '[[ "$shard_index" != "1" ]]' in script_text
     assert "$SCRIPT_DIR/check_event_ledger_reconciliation_guard.sh" in script_text
     assert "run_fast_feedback_benchmark_reconciliation_guard" in script_text
-    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples' in script_text
+    assert (
+        '"$SCRIPT_DIR/run_tests_parallel.sh" --ignore=tests/examples/test_examples_run.py'
+        in script_text
+    )
 
 
 def test_run_ci_local_loads_default_phases_from_ci_driver() -> None:
@@ -1459,6 +1463,20 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
     assert "recording interim PR readiness from a dirty non-ignored worktree" in script_text
     assert "--require-clean-tree" in script_text
     assert "pr_ready_freshness.py" in script_text
+
+
+def test_pr_ready_check_fails_with_explicit_format_signal_before_clean_tree_tests() -> None:
+    """A scoped format fix must fail with an explicit signal before clean-tree tests (issue #8971)."""
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    assert "Ruff formatting changed tracked files in the working tree" in script_text
+    assert "Commit the formatting changes, then rerun this readiness command" in script_text
+
+    format_signal_index = script_text.find(
+        "Ruff formatting changed tracked files in the working tree"
+    )
+    test_lane_index = script_text.find('"$SCRIPT_DIR/run_tests_parallel.sh" --lane core')
+    assert 0 < format_signal_index < test_lane_index
 
 
 def test_pr_ready_check_final_mode_runs_evidence_hygiene_contract() -> None:
@@ -1930,6 +1948,7 @@ def _make_freshness_fixture_repo(
     fake_uv.write_text(
         '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\n'
         'printf "venv=%s\\n" "${UV_PROJECT_ENVIRONMENT-}" >&2\n'
+        'printf "virtual_env=%s\\n" "${VIRTUAL_ENV-}" >&2\n'
         'printf "pythonpath=%s\\n" "${PYTHONPATH-}" >&2\nexit 7\n',
         encoding="utf-8",
     )
@@ -1952,6 +1971,163 @@ def _make_freshness_fixture_repo(
     }
     env.pop("PYTHONPATH", None)
     return repo, venv, env
+
+
+def _make_incomplete_profile_worktree(
+    tmp_path: Path,
+    *,
+    recovery_heals: bool,
+) -> tuple[Path, Path, Path, dict[str, str]]:
+    """Build a linked worktree whose local .venv fails the core profile preflight.
+
+    A stub recovery helper records every invocation and either repairs the local
+    interpreter stub (``recovery_heals``) or leaves the profile incomplete while
+    reporting success, so the wrapper's re-check decides the outcome.
+    """
+    matching_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
+    repo, _main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=matching_scene)
+    recovery_log = tmp_path / "profile-completion.log"
+    recovery_script = repo / "scripts" / "dev" / "recover_fast_pysf_worktree.sh"
+    heal_step = ""
+    if recovery_heals:
+        heal_step = (
+            "cat > .venv/bin/python <<'PY'\n"
+            "#!/usr/bin/env bash\n"
+            "exit 0\n"
+            "PY\n"
+            "chmod +x .venv/bin/python\n"
+        )
+    recovery_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f'printf "%s\\n" "$*" >> {shlex.quote(str(recovery_log))}\n'
+        f"{heal_step}",
+        encoding="utf-8",
+    )
+    recovery_script.chmod(0o755)
+    subprocess.run(
+        ["git", "add", str(recovery_script.relative_to(repo))],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture profile-completion helper"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    local_python = worktree / ".venv" / "bin" / "python"
+    local_python.parent.mkdir(parents=True)
+    local_python.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "${1:-}" == *check_worktree_optional_deps.py ]]; then\n'
+        '  printf "Missing optional imports: yaml\\n" >&2\n'
+        "  exit 2\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    local_python.chmod(0o755)
+    env = {**env, "ROBOT_SF_CI_MIN_FREE_BYTES": "0"}
+    env.pop("ROBOT_SF_VENV_SELECTION_GATE_HELD", None)
+    return worktree, recovery_log, local_python, env
+
+
+def test_worktree_shared_venv_self_heals_incomplete_profile_with_one_sync(
+    tmp_path: Path,
+) -> None:
+    """Issue #8811: a profile-incomplete worktree env gets exactly one completion sync."""
+    worktree, recovery_log, local_python, env = _make_incomplete_profile_worktree(
+        tmp_path, recovery_heals=True
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7, result.stderr
+    assert "Attempting one bounded completion sync" in result.stderr
+    assert "Shared-venv dependency profile 'core' completed" in result.stderr
+    assert "uv-reached" in result.stderr
+    recovery_calls = recovery_log.read_text(encoding="utf-8").splitlines()
+    assert len(recovery_calls) == 1
+    assert "--profile core" in recovery_calls[0]
+    assert local_python.read_text(encoding="utf-8") == "#!/usr/bin/env bash\nexit 0\n"
+
+
+def test_worktree_shared_venv_fails_closed_when_completion_sync_cannot_repair(
+    tmp_path: Path,
+) -> None:
+    """Issue #8811: a completion sync that leaves the profile incomplete stays fail-closed."""
+    worktree, recovery_log, _local_python, env = _make_incomplete_profile_worktree(
+        tmp_path, recovery_heals=False
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "shared-venv dependency profile 'core' is incomplete" in result.stderr
+    assert "Missing optional imports: yaml" in result.stderr
+    assert "bootstrap_worktree.sh" in result.stderr
+    assert "uv-reached" not in result.stderr
+    assert len(recovery_log.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_worktree_shared_venv_does_not_completion_sync_explicit_venv(
+    tmp_path: Path,
+) -> None:
+    """Issue #8811: an explicit --venv stays authoritative and is never completion-synced."""
+    worktree, recovery_log, _local_python, env = _make_incomplete_profile_worktree(
+        tmp_path, recovery_heals=True
+    )
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(worktree / ".venv"),
+            "--",
+            "python",
+            "-V",
+        ],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "shared-venv dependency profile 'core' is incomplete" in result.stderr
+    assert "bootstrap_worktree.sh" in result.stderr
+    assert not recovery_log.exists()
 
 
 def test_worktree_shared_venv_rejects_stale_installed_copy(
@@ -2225,6 +2401,79 @@ def test_worktree_shared_venv_marks_explicit_override_for_nested_helpers() -> No
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
 
     assert 'export ROBOT_SF_EXPLICIT_VENV_OVERRIDE="$venv_path"' in script_text
+    assert 'export VIRTUAL_ENV="$venv_path"' in script_text
+
+
+def test_worktree_shared_venv_updates_interpreter_after_automatic_recovery(
+    tmp_path: Path,
+) -> None:
+    """Automatic stale-package recovery must replace an inherited owning env (issue #8772)."""
+    stale_scene = "# stale install without normalize_integration_scheme\n"
+    repo, main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=stale_scene)
+
+    recovery_script = repo / "scripts" / "dev" / "recover_fast_pysf_worktree.sh"
+    recovery_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "mkdir -p .venv/bin\n"
+        "cat > .venv/bin/python <<'PY'\n"
+        "#!/usr/bin/env bash\n"
+        "exit 0\n"
+        "PY\n"
+        "chmod +x .venv/bin/python\n",
+        encoding="utf-8",
+    )
+    recovery_script.chmod(0o755)
+    subprocess.run(
+        ["git", "add", str(recovery_script.relative_to(repo))],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture recovery helper"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    env = {
+        **env,
+        "VIRTUAL_ENV": str(main_venv),
+        "UV_PROJECT_ENVIRONMENT": str(main_venv),
+    }
+    # A nested wrapper run must not inherit an outer gate marker; the gate is
+    # per-invocation selection state, not an environment capability.
+    env.pop("ROBOT_SF_VENV_SELECTION_GATE_HELD", None)
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    local_venv = worktree / ".venv"
+    assert result.returncode == 7
+    assert f"Automatic fast-pysf recovery selected worktree environment: {local_venv}" in (
+        result.stderr
+    )
+    assert f"venv={local_venv}" in result.stderr
+    assert f"virtual_env={local_venv}" in result.stderr
+    assert f"virtual_env={main_venv}" not in result.stderr
 
 
 def test_worktree_shared_venv_falls_back_to_main_env_without_local_env(tmp_path: Path) -> None:
@@ -5372,4 +5621,118 @@ def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> No
     )[0]
     assert "PYTEST_XDIST_DIST" not in core_invocation, (
         "core lane must not change its distribution default"
+    )
+
+
+def test_worktree_shared_venv_selection_gate_contract() -> None:
+    """Issue #8798: selection and freshness checks must run inside one serialized gate."""
+    script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
+
+    assert 'worktree_selection_key="$(printf' in script_text, (
+        "the gate must be keyed per linked worktree"
+    )
+    assert "robot-sf-venv-selection-${worktree_selection_key}.lockdir" in script_text
+    assert script_text.index("acquire_venv_selection_gate") < script_text.index(
+        'venv_path="$repo_root/.venv"'
+    ), "the gate must be acquired before the environment is selected"
+    assert script_text.index("release_venv_selection_gate") < script_text.index(
+        'export UV_PROJECT_ENVIRONMENT="$venv_path"'
+    ), "the gate must be released before the wrapped command starts"
+    assert "trap release_venv_selection_gate EXIT" in script_text, (
+        "early fail-closed exits must release the gate"
+    )
+    assert "timed out waiting for the shared-venv selection gate" in script_text, (
+        "a hung gate holder must fail closed instead of waiting forever"
+    )
+
+
+def test_worktree_shared_venv_concurrent_recovery_serializes(
+    tmp_path: Path,
+) -> None:
+    """Issue #8798: a concurrent invocation waits for recovery instead of racing it."""
+    stale_scene = "# stale install without normalize_integration_scheme\n"
+    repo, main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=stale_scene)
+    recovery_log = tmp_path / "recovery-runs.log"
+    recovery_script = repo / "scripts" / "dev" / "recover_fast_pysf_worktree.sh"
+    recovery_script.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f'echo "start" >> "{recovery_log}"\n'
+        "sleep 3\n"
+        "mkdir -p .venv/bin\n"
+        "cat > .venv/bin/python <<'PY'\n"
+        "#!/usr/bin/env bash\n"
+        "exit 0\n"
+        "PY\n"
+        "chmod +x .venv/bin/python\n"
+        f'echo "done" >> "{recovery_log}"\n',
+        encoding="utf-8",
+    )
+    recovery_script.chmod(0o755)
+    subprocess.run(
+        ["git", "add", str(recovery_script.relative_to(repo))],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "fixture slow recovery helper"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    env = {
+        **env,
+        "VIRTUAL_ENV": str(main_venv),
+        "UV_PROJECT_ENVIRONMENT": str(main_venv),
+    }
+
+    first = subprocess.Popen(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    deadline = time.monotonic() + 20
+    while not recovery_log.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert recovery_log.exists(), "fixture recovery never started"
+
+    second = subprocess.Popen(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    _, second_stderr = second.communicate(timeout=60)
+    _, first_stderr = first.communicate(timeout=60)
+
+    local_venv = worktree / ".venv"
+    assert first.returncode == 7, first_stderr
+    assert second.returncode == 7, second_stderr
+    assert f"venv={local_venv}" in first_stderr
+    assert f"venv={local_venv}" in second_stderr
+    assert "Shared-venv selection gate acquired" in second_stderr, (
+        "the concurrent invocation must wait on the per-worktree selection gate"
+    )
+    assert "Recovering stale fast-pysf" not in second_stderr, (
+        "the waiting invocation must reuse the recovered environment, not recover again"
+    )
+    assert recovery_log.read_text(encoding="utf-8").split().count("start") == 1, (
+        "concurrent invocations must not race duplicate recovery runs"
     )

@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Unit tests for runner video generation and artifact recording."""
 
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 )
 def test_run_batch_with_synthetic_video(tmp_path: Path):
     # Minimal in-memory scenario list (single episode)
-    """TODO docstring. Document this function.
+    """Verify that run_batch generates valid synthetic video artifacts when enabled.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for episode records and video output.
     """
     scenarios = [
         {
@@ -78,19 +78,19 @@ def test_run_batch_with_synthetic_video(tmp_path: Path):
     reason="moviepy/ffmpeg not available",
 )
 def test_zero_step_episode_skips_video(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """TODO docstring. Document this function.
+    """Verify that episodes with zero steps skip video creation and record explanation notes.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for benchmark records and video outputs.
+        monkeypatch: Pytest monkeypatch fixture for injecting stub synthetic video encoder.
     """
 
     def fake_encoder(*args, **kwargs):  # type: ignore[no-untyped-def]
-        """TODO docstring. Document this function.
+        """Stub encoder returning no video path and a zero-step skip diagnostic dictionary.
 
         Args:
-            args: TODO docstring.
-            kwargs: TODO docstring.
+            args: Positional arguments accepted by the stub encoder.
+            kwargs: Keyword arguments accepted by the stub encoder.
         """
         return None, {"reason": "no-frames", "renderer": "synthetic", "steps": 0}
 
@@ -145,10 +145,10 @@ def test_zero_step_episode_skips_video(tmp_path: Path, monkeypatch: pytest.Monke
     reason="moviepy/ffmpeg not available",
 )
 def test_metrics_match_with_and_without_video(tmp_path: Path):
-    """TODO docstring. Document this function.
+    """Verify that enabling video recording does not perturb simulation trajectory metrics.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Pytest temporary directory fixture for isolated episode output directories.
     """
     scenarios = [
         {

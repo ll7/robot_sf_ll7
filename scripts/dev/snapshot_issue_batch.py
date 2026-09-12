@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from scripts.dev import (
+    agent_content_gate,
     blocker_transition,
     gh_issue_rest,
     goal_issue_admission,
@@ -787,6 +788,41 @@ def _body_excerpt(body: Any, *, limit: int) -> tuple[str, bool]:
     return text[:limit], len(text) > limit
 
 
+def _body_author_trust(issue: dict[str, Any], *, labels: list[str]) -> dict[str, Any]:
+    """Classify one issue or PR body through the canonical fail-closed gate.
+
+    The returned receipt entry carries ``classification``, ``reason``, and any
+    own-user flag attribution. Missing author metadata is untrusted.
+    """
+    receipt = agent_content_gate.receipt_for_rows(
+        [
+            {
+                "id": "body",
+                "kind": "pr_body" if issue.get("is_pull_request") else "issue_body",
+                "author": issue.get("user", ""),
+                "body": issue.get("body", ""),
+                "url": issue.get("url", ""),
+                "created_at": issue.get("created_at", ""),
+            }
+        ],
+        labels=labels,
+    )
+    entries = [*receipt["included"], *receipt["excluded"]]
+    return entries[0]
+
+
+def _gated_body_excerpt(body: Any, *, limit: int, trust: dict[str, Any]) -> tuple[str, bool, bool]:
+    """Return a body excerpt only when the author gate trusts the body.
+
+    Returns ``(excerpt, truncated, excluded)``; untrusted content always returns
+    an empty excerpt so it cannot enter a context capsule or prompt digest.
+    """
+    if trust["classification"] in agent_content_gate.TRUSTED_CLASSIFICATIONS:
+        excerpt, truncated = _body_excerpt(body, limit=limit)
+        return excerpt, truncated, False
+    return "", False, True
+
+
 def _load_blocker_decisions(  # noqa: C901 - fail-closed artifact parsing.
     paths: list[str],
 ) -> tuple[dict[int, dict[str, Any]], list[str]]:
@@ -970,17 +1006,26 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         fallback_classification=fallback_classification,
         fallback_reason=fallback_reason,
     )
-    excerpt, truncated = _body_excerpt(issue.get("body"), limit=body_limit)
+    trust = _body_author_trust(issue, labels=labels)
+    excerpt, truncated, excerpt_excluded = _gated_body_excerpt(
+        issue.get("body"), limit=body_limit, trust=trust
+    )
     return {
         "number": issue.get("number", number),
         "status": "ok",
         "title": issue.get("title", ""),
         "state": state,
         "url": issue.get("url", ""),
+        "author": issue.get("user", ""),
+        "author_trust": trust["classification"],
+        "author_trust_reason": trust["reason"],
+        "author_trust_flag": trust.get("flag"),
         "labels": labels,
         "assignees": assignees,
         "body_excerpt": excerpt,
         "body_truncated": truncated,
+        "body_excerpt_excluded": excerpt_excluded,
+        "body_excerpt_reason": trust["reason"] if excerpt_excluded else "",
         "claim": _claim_payload(claim),
         "admission": admission,
         "transition": _transition_plan(issue),
@@ -1598,14 +1643,26 @@ def snapshot_active_issue_portfolio(
 
 def _context_capsule(issue: dict[str, Any]) -> dict[str, Any]:
     """Return a compact worker-seeding capsule for one issue snapshot."""
+    classification = str(issue.get("author_trust", agent_content_gate.CLASS_UNTRUSTED))
     return {
         "schema": "issue_context_capsule.v1",
         "issue": {
             "number": issue.get("number"),
             "title": issue.get("title", ""),
+            "author": issue.get("author", ""),
+            "author_trust": classification,
             "url": issue.get("url", ""),
             "labels": issue.get("labels", []),
             "body_excerpt": issue.get("body_excerpt", ""),
+            "body_excerpt_excluded": issue.get("body_excerpt_excluded", False),
+            "body_excerpt_reason": issue.get("body_excerpt_reason", ""),
+        },
+        "content_trust": {
+            "schema": agent_content_gate.SCHEMA,
+            "classification": classification,
+            "reason": issue.get("author_trust_reason", agent_content_gate.REASON_MISSING_AUTHOR),
+            "flag": issue.get("author_trust_flag"),
+            "auto_ingest_allowed": classification in agent_content_gate.TRUSTED_CLASSIFICATIONS,
         },
         "admission": issue.get("admission", {}),
         "claim": issue.get("claim", {}),

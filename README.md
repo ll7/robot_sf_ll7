@@ -18,6 +18,7 @@ pedestrian-filled environments.
 | I want to... | Go to |
 | --- | --- |
 | **Install and use Robot SF (newcomer path)** | [`docs/user-guide.md`](docs/user-guide.md) — task-oriented: install, run a demo, load a map, choose a planner, run a benchmark, visualize results, troubleshoot |
+| Continue after a host or access window ends | [`docs/post_access_local_analysis_runbook.md`](docs/post_access_local_analysis_runbook.md) — restore public-safe inputs, verify them locally, and label unavailable capabilities |
 | Understand the project quickly | [Why Robot SF?](#why-robot-sf) |
 | Decode an acronym or project term | [`docs/glossary.md`](docs/glossary.md) |
 | Install dependencies and run the first demos | [Quickstart](#quickstart) |
@@ -63,6 +64,8 @@ software/package release.
 - **Repo-native contributor workflow:** setup, validation, and shared `scripts/dev/` entry points
   are documented in [`docs/dev_guide.md`](docs/dev_guide.md).
 
+
+> Platform-specific paths (Linux, macOS, headless): [Platform Setup Profiles](docs/quickstart_platforms.md).
 ## Quickstart
 
 The repository uses `uv` for dependency management and keeps generated artifacts under the
@@ -88,6 +91,9 @@ uv run python examples/quickstart/03_custom_map.py
 (`thumbnail.png`), and a plain-English summary under `output/demo/latest/`. It is the
 fastest install → run → *see something* path and is CPU-only. Open
 `output/demo/latest/viewer/index.html` in a browser to replay the episode.
+
+If setup misbehaves, run `uv run robot-sf doctor` and follow the per-check remedies in
+[`docs/troubleshooting/doctor.md`](docs/troubleshooting/doctor.md).
 
 ### Beginner notebooks
 
@@ -133,6 +139,22 @@ uv sync --extra all
 CARLA is not installed by `uv sync --all-extras`. On CARLA-capable Linux x86_64 hosts, opt into
 the pinned host-side client with `uv sync --all-extras --group carla` and check the Docker runtime
 with `scripts/dev/check_carla_runtime.sh`.
+
+### Prepared software release metadata
+
+This untagged tree carries non-authorizing preparation metadata for the planned software release
+`v0.0.6`. It is awaiting maintainer approval; no package upload, GitHub Release, Zenodo deposit,
+DOI, or tag is created by this preparation.
+
+The planned sanitized package surface includes the `all` extra and these twelve supported extras:
+`viz`, `maps`, `benchmark`, `training`, `gpu`, `recurrent`, `progress`, `analytics`, `browser`,
+`sacadrl`, `socnav`, and `criticality`. `rllib` remains development-only and is omitted from the
+sanitized candidate metadata. ORCA and `pyrvo2` remain external optional infrastructure.
+
+The sanitized candidate source excludes repository-level `examples/`, `model/`, and `maps/` payloads.
+The quickstart commands above that read those paths require a development checkout; they are not
+candidate-package runtime proof. A clean wheel-install check and exact candidate source/archive
+proof remain release gates.
 
 These three scripts provide the fastest first-touch path:
 
@@ -206,7 +228,7 @@ The framework is designed to be extended. Common extension points:
 
 ### Adding a New Planner
 
-Planner adapters usually live under [`robot_sf/planner/`](robot_sf/planner/), with metadata and
+Planner adapters usually live under [`robot_sf/planner/`](robot_sf/planner/__init__.py), with metadata and
 benchmark wiring described in [`docs/contributing_planner.md`](docs/contributing_planner.md).
 
 ### Adding Scenario Families
@@ -218,7 +240,7 @@ and [`examples/README.md`](examples/README.md) for how to load and customize sce
 ### Custom Maps
 
 Maps are SVG files under [`maps/svg_maps/`](maps/svg_maps/) and related map assets under
-[`maps/`](maps/). To add a new map, create valid SVG geometry, update the relevant map/scenario
+[`maps/`](maps/registry.yaml). To add a new map, create valid SVG geometry, update the relevant map/scenario
 config, and test with `examples/quickstart/03_custom_map.py`.
 
 ## Acknowledgments and provenance

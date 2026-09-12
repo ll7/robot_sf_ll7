@@ -29,14 +29,14 @@ from robot_sf.benchmark.schemas.episode_schema import EpisodeSchema
 
 
 def _make_episode(T: int, K: int) -> EpisodeData:
-    """TODO docstring. Document this function.
+    """Create a synthetic EpisodeData structure with zeros for positions, velocities, and forces.
 
     Args:
-        T: TODO docstring.
-        K: TODO docstring.
+        T: Number of timesteps in the episode.
+        K: Number of pedestrians present in the episode.
 
     Returns:
-        TODO docstring.
+        Populated EpisodeData instance.
     """
     robot_pos = np.zeros((T, 2))
     robot_vel = np.zeros((T, 2))
@@ -57,7 +57,7 @@ def _make_episode(T: int, K: int) -> EpisodeData:
 
 
 def test_metrics_docstring_marks_implemented_and_not_stubbed():
-    """TODO docstring. Document this function."""
+    """Verify metrics module docstring documents implemented metrics without stub markings."""
     doc = (metrics_mod.__doc__ or "").lower()
     assert "stub" not in doc, "Docstring should not advertise implemented metrics as stubs"
     assert "implemented" in doc, "Docstring should describe implementation status"
@@ -75,7 +75,7 @@ def test_ped_turn_rate_wraps_heading_delta_at_pi_boundary() -> None:
 
 
 def test_metrics_keys_empty_crowd():
-    """TODO docstring. Document this function."""
+    """Verify compute_all_metrics returns all standard metric keys even when crowd is empty."""
     ep = _make_episode(T=5, K=0)
     values = compute_all_metrics(ep, horizon=10)
     for name in METRIC_NAMES:
@@ -83,7 +83,7 @@ def test_metrics_keys_empty_crowd():
 
 
 def test_metrics_keys_all_collisions():
-    """TODO docstring. Document this function."""
+    """Verify collision and clearance metric counts when robot and pedestrians strictly overlap."""
     ep = _make_episode(T=5, K=3)
     # Overwrite positions to simulate overlap (robot at origin, peds too)
     ep.peds_pos[:] = 0.0
@@ -105,7 +105,7 @@ def test_metrics_keys_all_collisions():
 
 
 def test_metrics_partial_success_flag_present():
-    """TODO docstring. Document this function."""
+    """Verify compute_all_metrics includes the success boolean flag."""
     ep = _make_episode(T=5, K=2)
     vals = compute_all_metrics(ep, horizon=10)
     assert "success" in vals
@@ -113,7 +113,7 @@ def test_metrics_partial_success_flag_present():
 
 def test_near_miss_region_only():
     # Craft positions so robot at origin; pedestrians are close but non-overlapping.
-    """TODO docstring. Document this function."""
+    """Verify near-miss counts when pedestrians are within threshold but non-overlapping."""
     T, K = 4, 2
     ep = _make_episode(T=T, K=K)
     # Robot stays at origin
@@ -172,7 +172,7 @@ def test_ttc_near_miss_ignores_slow_drift_at_equal_clearance():
 
 def test_mixed_collision_and_near_miss():
     # First two timesteps overlap (collision), next two are positive-clearance near-misses.
-    """TODO docstring. Document this function."""
+    """Verify distance and clearance metrics on mixed collision and near-miss timesteps."""
     T = 4
     ep = _make_episode(T=T, K=1)
     dists = [0.1, 0.2, 1.5, 1.6]
@@ -248,7 +248,7 @@ def test_radius_clearance_near_miss_is_not_collision():
 
 def test_success_and_time_to_goal_norm_success_case():
     # Robot moves linearly to goal without collisions
-    """TODO docstring. Document this function."""
+    """Verify success flag, time-to-goal normalization, and path efficiency for direct goal navigation."""
     T = 6
     ep = _make_episode(T=T, K=0)
     # Create linear motion towards goal x=5.0 reached at step 5 (< horizon 10)
@@ -275,7 +275,7 @@ def test_time_to_goal_metrics_fail_closed_when_success_metadata_is_inconsistent(
 
 
 def test_time_to_goal_nan_when_goal_not_reached():
-    """TODO docstring. Document this function."""
+    """Verify time_to_goal returns NaN when goal was not reached."""
     ep = _make_episode(T=4, K=0)
     ep.reached_goal_step = None
     assert math.isnan(time_to_goal(ep))
@@ -438,7 +438,7 @@ def test_post_process_metrics_adds_clear_tracking_block() -> None:
 
 
 def test_success_failure_due_to_collision():
-    """TODO docstring. Document this function."""
+    """Verify collision results in failure flag and penalty time_to_goal_norm."""
     T = 5
     ep = _make_episode(T=T, K=1)
     # Robot moves, but pedestrian collides at step 1
@@ -453,7 +453,7 @@ def test_success_failure_due_to_collision():
 
 def test_path_efficiency_curved_path_less_than_one():
     # Robot zig-zags to goal increasing actual length
-    """TODO docstring. Document this function."""
+    """Verify path efficiency is less than 1.0 when robot trajectory zig-zags."""
     T = 6
     ep = _make_episode(T=T, K=0)
     # Start (0,0) to goal (5,0); zig zag in y
@@ -472,7 +472,7 @@ def test_path_efficiency_curved_path_less_than_one():
 
 
 def test_force_metrics_basic():
-    """TODO docstring. Document this function."""
+    """Verify force quantile metrics, exceed events, and comfort exposure bounds."""
     T, K = 5, 3
     ep = _make_episode(T=T, K=K)
     # Populate forces with increasing pattern
@@ -493,7 +493,7 @@ def test_force_metrics_basic():
 
 
 def test_force_metrics_no_peds():
-    """TODO docstring. Document this function."""
+    """Verify force quantiles and exposure default to NaN or zero when no pedestrians exist."""
     ep = _make_episode(T=4, K=0)
     vals = compute_all_metrics(ep, horizon=10)
     assert np.isnan(vals["force_q50"])  # no pedestrians
@@ -685,7 +685,7 @@ def test_force_metrics_missing_force_data_flagged():
 
 
 def test_energy_and_jerk_mean():
-    """TODO docstring. Document this function."""
+    """Verify cumulative acceleration energy and mean jerk calculation."""
     T = 6
     ep = _make_episode(T=T, K=0)
     # Construct acceleration as linearly increasing in x: a_t = t
@@ -700,7 +700,7 @@ def test_energy_and_jerk_mean():
 
 
 def test_curvature_mean():
-    """TODO docstring. Document this function."""
+    """Verify mean curvature computation on a circular arc trajectory."""
     T = 6
     ep = _make_episode(T=T, K=0)
 
@@ -726,7 +726,7 @@ def test_curvature_mean():
 
 
 def test_curvature_mean_straight_line():
-    """TODO docstring. Document this function."""
+    """Verify mean curvature is zero for a straight-line trajectory."""
     T = 6
     ep = _make_episode(T=T, K=0)
 
@@ -745,7 +745,7 @@ def test_curvature_mean_straight_line():
 
 def test_curvature_mean_insufficient_points():
     # Test with fewer than 4 points (should return 0.0)
-    """TODO docstring. Document this function."""
+    """Verify mean curvature returns 0.0 when trajectory has fewer than 4 points."""
     T = 3
     ep = _make_episode(T=T, K=0)
 
@@ -759,7 +759,7 @@ def test_curvature_mean_insufficient_points():
 
 def test_curvature_mean_invalid_dt_zero():
     # dt == 0 should safely return 0.0
-    """TODO docstring. Document this function."""
+    """Verify mean curvature safely returns 0.0 when timestep dt is zero."""
     T = 6
     ep = _make_episode(T=T, K=0)
     ep.dt = 0.0
@@ -771,7 +771,7 @@ def test_curvature_mean_invalid_dt_zero():
 
 def test_curvature_mean_invalid_dt_nan():
     # dt NaN should safely return 0.0
-    """TODO docstring. Document this function."""
+    """Verify mean curvature safely returns 0.0 when timestep dt is NaN."""
     T = 6
     ep = _make_episode(T=T, K=0)
     ep.dt = float("nan")
@@ -781,7 +781,7 @@ def test_curvature_mean_invalid_dt_nan():
 
 
 def test_force_gradient_requires_grid():
-    """TODO docstring. Document this function."""
+    """Verify force gradient metric returns NaN when force field grid is not provided."""
     ep = _make_episode(T=3, K=1)
     vals = compute_all_metrics(ep, horizon=10)
     assert math.isnan(vals["force_gradient_norm_mean"])
@@ -790,7 +790,7 @@ def test_force_gradient_requires_grid():
 def test_force_gradient_norm_mean():
     # Create a simple linear force field Fx = x, Fy = y so |F| = sqrt(x^2+y^2).
     # Gradient norm of |F| is 1 everywhere except at origin where it's undefined (we exclude by path).
-    """TODO docstring. Document this function."""
+    """Verify mean force gradient norm calculation along trajectory across a force field grid."""
     nx, ny = 6, 4
     xs = np.linspace(0, 5, nx)
     ys = np.linspace(0, 3, ny)
@@ -1185,7 +1185,7 @@ def test_experimental_ped_impact_handles_empty_crowd() -> None:
 
 def test_snqi_scoring():
     # Construct two metric dicts: one ideal, one poor
-    """TODO docstring. Document this function."""
+    """Verify SNQI composite score computation and comparative ranking for good vs bad metrics."""
     good = {
         "success": 1.0,
         "time_to_goal_norm": 0.2,

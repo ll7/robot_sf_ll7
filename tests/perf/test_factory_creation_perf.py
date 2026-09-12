@@ -25,10 +25,13 @@ ITERATIONS = 2  # keep light for CI; baseline may have been generated with more
 
 
 def _time_once(fn):  # minimal inline timing to avoid importing heavy script
-    """TODO docstring. Document this function.
+    """Measure the elapsed time in milliseconds to construct, reset, and close an environment.
 
     Args:
-        fn: TODO docstring.
+        fn: Zero-argument factory callable returning an environment instance.
+
+    Returns:
+        Total elapsed execution time in milliseconds.
     """
     import time
 
@@ -50,10 +53,10 @@ def _time_once(fn):  # minimal inline timing to avoid importing heavy script
 )
 def test_factory_creation_mean_within_budget(monkeypatch):
     # Disable fast demo shortcut if present
-    """TODO docstring. Document this function.
+    """Verify that environment factory creation times do not exceed baseline budgets.
 
     Args:
-        monkeypatch: TODO docstring.
+        monkeypatch: Pytest monkeypatch fixture used to unset fast demo mode.
     """
     monkeypatch.delenv("ROBOT_SF_FAST_DEMO", raising=False)
 

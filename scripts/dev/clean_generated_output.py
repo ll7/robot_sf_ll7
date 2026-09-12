@@ -10,6 +10,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 
 def _git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run a git command in *cwd*."""
@@ -142,13 +146,48 @@ def clean_paths(paths: list[Path], *, cwd: Path) -> int:
     return 0
 
 
+def eligibility_gate(record_path: Path, artifact_id: str) -> int:
+    """Check one artifact identity before deleting anything.
+
+    Check-only integration for the shared cleanup-eligibility guard (#8906): it never
+    deletes, prints the public-safe report, and returns 0 only when ``eligible``.
+    """
+    from scripts.validation.check_cleanup_eligibility import (
+        RecordError,
+        check_artifact_file,
+        render_text,
+    )
+
+    try:
+        report = check_artifact_file(record_path, artifact_id)
+    except RecordError as exc:
+        print(f"cleanup-eligibility: {exc}", file=sys.stderr)
+        return 2
+    print(render_text(report))
+    return 0 if report.outcome == "eligible" else 2
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "paths",
-        nargs="+",
+        nargs="*",
         type=Path,
         help="Generated output paths to clean without deleting tracked files.",
+    )
+    parser.add_argument(
+        "--eligibility-record",
+        type=Path,
+        help="Cleanup-eligibility record to gate deletion on (check-only).",
+    )
+    parser.add_argument(
+        "--artifact",
+        help="Artifact identity to evaluate in the eligibility record.",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Evaluate eligibility only; never delete, even when eligible.",
     )
     return parser.parse_args(argv)
 
@@ -156,6 +195,22 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
+    if args.check and args.eligibility_record is None and args.artifact is None:
+        print(
+            "--check requires --eligibility-record and --artifact; refusing to delete",
+            file=sys.stderr,
+        )
+        return 2
+    if args.eligibility_record is not None or args.artifact is not None:
+        if args.eligibility_record is None or args.artifact is None:
+            print("--eligibility-record and --artifact must be used together", file=sys.stderr)
+            return 2
+        code = eligibility_gate(args.eligibility_record, args.artifact)
+        if code != 0 or args.check:
+            return code
+    if not args.paths:
+        print("no paths to clean and no eligibility check requested", file=sys.stderr)
+        return 2
     return clean_paths(args.paths, cwd=Path.cwd())
 
 

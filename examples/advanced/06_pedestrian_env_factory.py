@@ -18,25 +18,30 @@ References:
     - docs/dev_guide.md#pedestrian-environments
 """
 
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import loguru
 
-# New factory pattern imports
-from robot_sf.benchmark.helper_catalog import load_trained_policy
-from robot_sf.gym_env._stub_robot_model import StubRobotModel
-from robot_sf.gym_env.environment_factory import make_pedestrian_env
-from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
-from robot_sf.nav.map_config import MapDefinitionPool
-from robot_sf.nav.svg_map_parser import convert_map
-from robot_sf.robot.bicycle_drive import BicycleDriveSettings
-from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.examples.prerequisites import (
+    add_prerequisite_check_arguments,
+    run_prerequisite_check,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 logger = loguru.logger
 
 
 def _load_robot_model_or_stub(robot_model_path: str):
     """Load a robot model or fall back to the stub when missing."""
+    from robot_sf.benchmark.helper_catalog import load_trained_policy
+    from robot_sf.gym_env._stub_robot_model import StubRobotModel
+
     if not Path(robot_model_path).exists():
         logger.warning(
             f"Robot model not found at {robot_model_path}; using StubRobotModel for demo."
@@ -47,6 +52,13 @@ def _load_robot_model_or_stub(robot_model_path: str):
 
 def make_env_new(map_name: str, robot_model_path: str):
     """Create environment using new factory pattern."""
+    from robot_sf.gym_env.environment_factory import make_pedestrian_env
+    from robot_sf.gym_env.unified_config import PedestrianSimulationConfig
+    from robot_sf.nav.map_config import MapDefinitionPool
+    from robot_sf.nav.svg_map_parser import convert_map
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+    from robot_sf.sim.sim_config import SimulationSettings
+
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
     map_definition = convert_map(map_name)
@@ -75,6 +87,10 @@ def make_env_old(map_name: str, robot_model_path: str):
     """Legacy environment creation - still works for backward compatibility."""
     from robot_sf.gym_env.env_config import PedEnvSettings
     from robot_sf.gym_env.pedestrian_env import PedestrianEnv
+    from robot_sf.nav.map_config import MapDefinitionPool
+    from robot_sf.nav.svg_map_parser import convert_map
+    from robot_sf.robot.bicycle_drive import BicycleDriveSettings
+    from robot_sf.sim.sim_config import SimulationSettings
 
     ped_densities = [0.01, 0.02, 0.04, 0.08]
     difficulty = 2
@@ -94,6 +110,8 @@ def make_env_old(map_name: str, robot_model_path: str):
 
 def run(filename: str, map_name: str, robot_model: str, use_new_pattern: bool = True):
     """Run the simulation with either new or old environment creation pattern."""
+    from robot_sf.benchmark.helper_catalog import load_trained_policy
+
     if not Path(filename).exists():
         raise FileNotFoundError(
             "Pedestrian model file not found: "
@@ -124,19 +142,32 @@ def run(filename: str, map_name: str, robot_model: str, use_new_pattern: bool = 
     env.close()
 
 
-if __name__ == "__main__":
-    SVG_MAP = "maps/svg_maps/debug_06.svg"
-    PED_MODEL = "./model/pedestrian/ppo_ped_02.zip"
-    ROBOT_MODEL = "./model/run_043.zip"
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run check-only mode or the factory-comparison demo."""
+
+    parser = argparse.ArgumentParser(description="Compare pedestrian environment factories.")
+    add_prerequisite_check_arguments(parser)
+    args = parser.parse_args(argv)
+    if args.check:
+        return run_prerequisite_check(__file__, output_format=args.format)
+
+    svg_map = "maps/svg_maps/debug_06.svg"
+    ped_model = "./model/pedestrian/ppo_ped_02.zip"
+    robot_model = "./model/run_043.zip"
 
     # Demonstrate both new and old patterns work
     logger.info("=== Testing New Factory Pattern ===")
     try:
-        run(PED_MODEL, SVG_MAP, ROBOT_MODEL, use_new_pattern=True)
+        run(ped_model, svg_map, robot_model, use_new_pattern=True)
     except FileNotFoundError as e:
         logger.exception(str(e))
-        raise SystemExit(1) from e
+        return 1
     except Exception as e:
         logger.warning(f"New pattern failed: {e}")
         logger.info("=== Falling back to Legacy Pattern ===")
-        run(PED_MODEL, SVG_MAP, ROBOT_MODEL, use_new_pattern=False)
+        run(ped_model, svg_map, robot_model, use_new_pattern=False)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -9,6 +9,7 @@ see :doc:`Robot SF Public API </public_api>`.
    :maxdepth: 1
 
    robot_sf
+   robot_sf.api
    robot_sf.common
    robot_sf.research
    robot_sf.telemetry

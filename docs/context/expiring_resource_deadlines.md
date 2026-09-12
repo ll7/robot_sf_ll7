@@ -67,19 +67,5 @@ uv run python scripts/validation/check_expiring_resource_feasibility.py \
 uv run pytest -q tests/validation/test_expiring_resource_feasibility.py
 ```
 
-## Companion expiring-compute inventory
-
-`scripts/validation/build_expiring_compute_inventory.py` emits one read-only row per public work
-item: public owner, dependence class (`resource_dependent`, `locally_runnable_later`, or `unknown`
-from cited structured evidence only), capability, gates, exact identity status, expected
-compute/storage, command/artifact owner, job/harvest/transfer state, access-loss consequence, and
-one action (`submit_now`, `prestage_now`, `harvest_now`, `transfer_now`, `blocked_do_not_submit`,
-`safe_to_defer`, or `unknown`). Keywords are never evidence; disagreement, missing identities,
-secret risk, unsanitized input, duplicates, or insufficient evidence stay `unknown`, excluded
-items keep an explicit reason, and output is compact, sorted-key, byte-stable JSON. The tool never
-contacts GitHub, the scheduler, or credentials, never writes or mutates state, and binds a private
-companion inventory by digest only
-(`tests/validation/fixtures/expiring_compute_inventory/cases.json`).
-
 Non-goals: no scheduler/cancellation change, no fabricated deadline, no campaign scope or
 wall-time rewrite, no historical manifest rewrite, no private route or locator disclosure.

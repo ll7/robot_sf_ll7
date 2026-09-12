@@ -100,7 +100,7 @@ def test_write_fails_closed_on_ambiguous_double_pin(
         encoding="utf-8",
     )
     before = target.read_text(encoding="utf-8")
-    monkeypatch.setattr(helper, "resolve_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(helper, "_repo_root", lambda: tmp_path)
     monkeypatch.setattr(helper, "_actual_hash", lambda _root, _art: "ab" * 32)
 
     assert helper.main(["--write", "--path", target.name]) == 1

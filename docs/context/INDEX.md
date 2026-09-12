@@ -7,11 +7,6 @@ Start from the contract, then the release guide section:
 [benchmark_data_release_s30_h600_2026_09_erratum_1.json](../../configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json),
 [../RELEASE.md](../RELEASE.md), [../benchmark_release_reproducibility.md](../benchmark_release_reproducibility.md).
 
-Issue #8829 compute-window capacity planner: deterministic, fail-closed ranking
-of admitted workload metadata across CPU, GPU, CARLA, and host-pinned lanes;
-operational planning only, with no scheduler mutation or benchmark claim:
-[issue_8829_compute_window_capacity_planner.md](issue_8829_compute_window_capacity_planner.md).
-
 Issue #8566 source-bound uncertainty and component-contrast fixture packet: a deterministic,
 fixture-only adapter with source/release identity, paired scenario-block uncertainty, separate
 terminal-outcome, safety-wrapper, and Social Navigation Quality Index (SNQI) components, and

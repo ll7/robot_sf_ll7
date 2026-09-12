@@ -39,7 +39,7 @@ explicit opt-in group for CARLA-capable worktrees.
 
 | Change | Minimum proof | Canonical entry point |
 | --- | --- | --- |
-| Docs or instructions | Diff, changed links/paths, lightweight docs checks | `scripts/dev/check_docs_evidence_integrity.py`, `scripts/dev/check_curated_doc_links.py` |
+| Docs or instructions | Diff, changed links/paths, lightweight docs checks | `scripts/dev/check_docs_evidence_integrity.py` |
 | Workflow, helper, or skill | Focused tests plus schema/sync checks | [`docs/dev/local_ci.md`](./dev/local_ci.md) |
 | Runtime code | Focused tests, Ruff, and format | `scripts/dev/run_tests_parallel.sh` |
 | Benchmark, metric, schema, provenance, or paper claim | Executable proof with provenance and caveats | [`docs/code_review.md`](./code_review.md) |

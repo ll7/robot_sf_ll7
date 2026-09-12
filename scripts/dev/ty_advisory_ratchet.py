@@ -85,8 +85,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts.dev.git_common import resolve_repo_root
-
 DEFAULT_BASELINE = Path("scripts/validation/ty_advisory_baseline.json")
 # Deterministic, host-independent raw-findings fixture reconstructed from the
 # committed baseline. The baseline-reproduction test parses THIS file (never a
@@ -416,6 +414,19 @@ def write_json(path: Path, payload: dict[str, Any] | list[Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _repo_root() -> Path:
+    """Return the current Git repository root."""
+    proc = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError("Could not determine git repository root.")
+    return Path(proc.stdout.strip())
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(
@@ -553,7 +564,7 @@ def _report_check(
 def main(argv: list[str] | None = None) -> int:
     """Run the ratchet gate, baseline refresh, or aggregate report."""
     args = parse_args(sys.argv[1:] if argv is None else argv)
-    repo_root = args.root.resolve() if args.root is not None else resolve_repo_root()
+    repo_root = args.root.resolve() if args.root is not None else _repo_root()
     baseline_path = args.baseline if args.baseline.is_absolute() else repo_root / args.baseline
 
     # --emit-baseline-fixture reconstructs a deterministic fixture from the

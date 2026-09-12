@@ -20,10 +20,6 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
-- path: docs/context/issue_8829_compute_window_capacity_planner.md
-  status: current
-  freshness: maintained
-  area: operations
 - path: docs/context/simulator_typed_snapshot_contract.md
   status: current
   freshness: maintained
@@ -7599,3 +7595,4 @@ entries:
   status: historical
   freshness: dated
   area: training
+

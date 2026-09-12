@@ -80,8 +80,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from scripts.dev.git_common import resolve_repo_root
-
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -136,6 +134,19 @@ def ensure_mutmut_safe_temproot(repo_root: Path) -> Path:
     shared.mkdir(parents=True, exist_ok=True)
     os.environ["PYTEST_DEBUG_TEMPROOT"] = str(shared)
     return shared
+
+
+def _repo_root() -> Path:
+    """Return the current Git repository root."""
+    proc = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError("Could not determine git repository root.")
+    return Path(proc.stdout.strip())
 
 
 def run_mutmut(repo_root: Path) -> tuple[list[str], dict[str, Any]]:
@@ -433,7 +444,7 @@ def _report_check(
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the ratchet gate, baseline refresh, or aggregate report."""
     args = parse_args(list(sys.argv[1:] if argv is None else argv))
-    repo_root = args.root.resolve() if args.root is not None else resolve_repo_root()
+    repo_root = args.root.resolve() if args.root is not None else _repo_root()
     baseline_path = args.baseline if args.baseline.is_absolute() else repo_root / args.baseline
 
     try:

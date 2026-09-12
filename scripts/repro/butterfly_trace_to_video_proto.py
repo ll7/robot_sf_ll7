@@ -18,14 +18,11 @@ frames to an mp4 with imageio (already a repo dependency, used elsewhere for
 artifact export).
 
 Stage 2 glue (metric minimap, on by default): compute per-step robot speed and
-robot-nearest-pedestrian centre-to-centre distance directly from
-``trace_series.json`` frames (``robot.velocity`` / ``robot.position`` /
-``pedestrians[].position``, all already present, no new simulation data needed),
-render a two-panel matplotlib strip (speed, centre-to-centre-distance-with-
-thresholds) with a moving time cursor, and stack it beneath each scene frame
-before encoding. The series is the raw centre-to-centre distance; trace frames
-carry no per-agent ``radius`` field, so a radius-corrected clearance cannot be
-derived from this trace. Near-miss/collision thresholds are
+robot-nearest-pedestrian clearance directly from ``trace_series.json`` frames
+(``robot.velocity`` / ``robot.position`` / ``pedestrians[].position``, all
+already present, no new simulation data needed), render a two-panel matplotlib
+strip (speed, clearance-with-thresholds) with a moving time cursor, and stack it
+beneath each scene frame before encoding. Near-miss/collision thresholds are
 imported from the repo's own trace-failure-predicate defaults
 (``robot_sf.analysis_workbench.trace_failure_predicates``) rather than
 re-invented here -- see the module docstring of that file and
@@ -74,16 +71,14 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
     DEFAULT_NEAR_MISS_THRESHOLD_M,
 )
 
-#: Centre-to-centre robot-pedestrian distance at/below which a step counts as a
-#: near-miss.
+#: Center-to-center clearance at/below which a step counts as a near-miss.
 #: Sourced from ``trace_failure_predicates.DEFAULT_NEAR_MISS_THRESHOLD_M`` (0.5 m):
 #: the same threshold + distance convention (raw robot-pedestrian center distance,
 #: no radius subtraction) the repo's own ``occlusion_triggered_near_miss`` /
 #: ``late_evasive_reaction`` predicates use.
 NEAR_MISS_THRESHOLD_M: float = DEFAULT_NEAR_MISS_THRESHOLD_M
 
-#: Centre-to-centre robot-pedestrian distance at/below which a step counts as a
-#: collision.
+#: Center-to-center clearance at/below which a step counts as a collision.
 #: This trace's frames carry no per-agent ``radius`` field, so the true
 #: geometric collision distance (robot_radius + pedestrian_radius) cannot be
 #: computed from the trace itself. We therefore use
@@ -93,8 +88,8 @@ NEAR_MISS_THRESHOLD_M: float = DEFAULT_NEAR_MISS_THRESHOLD_M
 #: repo-wide default *geometric* collision distance would be
 #: ``DEFAULT_ROBOT_RADIUS`` (1.0 m, robot_sf/common/robot_defaults.py) +
 #: pedestrian radius default (0.4 m, robot_sf/nav/occupancy.py:262) = 1.4 m;
-#: this trace's global minimum centre-to-centre distance (2.27 m at step 127)
-#: clears both thresholds, so neither marker fires for this particular episode.
+#: this trace's global minimum clearance (2.27 m at step 127) clears both
+#: thresholds, so neither marker fires for this particular episode.
 COLLISION_THRESHOLD_M: float = DEFAULT_COLLISION_MISSING_RADIUS_NEAR_DISTANCE_M
 
 
@@ -197,7 +192,7 @@ def render_episode_to_video(
 
 
 def compute_trace_metrics(trace_series_path: Path) -> dict[str, np.ndarray]:
-    """Compute per-step robot speed and nearest-pedestrian distance from a trace.
+    """Compute per-step robot speed and nearest-pedestrian clearance from a trace.
 
     Reads ``frames[].robot.{position,velocity}`` and ``frames[].pedestrians[].position``
     directly from the exemplar ``trace_series.json`` (schema
@@ -207,10 +202,10 @@ def compute_trace_metrics(trace_series_path: Path) -> dict[str, np.ndarray]:
     already present in the trace.
 
     Returns:
-        Dict with ``time_s``, ``speed_mps``, ``clearance_m`` (key name retained;
-        holds the nearest-pedestrian center-to-center distance, ``nan`` for steps
-        with zero pedestrians), and ``nearest_pedestrian_id`` (``float`` array,
-        ``nan`` where undefined) arrays, one entry per trace step, in trace order.
+        Dict with ``time_s``, ``speed_mps``, ``clearance_m`` (nearest-pedestrian
+        center-to-center distance, ``nan`` for steps with zero pedestrians), and
+        ``nearest_pedestrian_id`` (``float`` array, ``nan`` where undefined)
+        arrays, one entry per trace step, in trace order.
     """
     with trace_series_path.open(encoding="utf-8") as f:
         payload = json.load(f)
@@ -251,7 +246,7 @@ def compute_trace_metrics(trace_series_path: Path) -> dict[str, np.ndarray]:
     }
 
 
-def build_minimap_figure(
+def render_minimap_frames(
     metrics: dict[str, np.ndarray],
     *,
     near_miss_threshold_m: float,
@@ -259,24 +254,27 @@ def build_minimap_figure(
     width: int,
     height: int,
     dpi: int = 100,
-) -> tuple[Any, Any, Any]:
-    """Build the two-panel metric strip used by the minimap frames.
+) -> list[np.ndarray]:
+    """Render one metric-strip frame per trace step, cursor advancing in lockstep.
 
-    The lower series is the raw robot-nearest-pedestrian centre-to-centre
-    distance (stored under the retained ``clearance_m`` metric key); no radius
-    is subtracted, and the trace carries no per-agent radius data to do so.
+    Draws the full (speed, clearance) strip once and, per step, moves a vertical
+    cursor line to that step's ``time_s`` before re-rasterizing the same Matplotlib
+    canvas (Agg backend). This keeps a single deterministic figure/axes layout for
+    every frame -- the cursor position is read directly off the shared time axis,
+    so cursor-frame alignment holds by construction rather than by a separate
+    pixel-offset calculation.
 
     Returns:
-        ``(fig, ax_speed, ax_distance)`` with all series, threshold diagnostics,
-        labels, and the shared time axis applied.
+        RGB frames (``uint8``, shape ``(height, width, 3)``), one per trace step,
+        each with the cursor at that step's time.
     """
     import matplotlib.pyplot as plt
 
     time_s = metrics["time_s"]
     speed = metrics["speed_mps"]
-    distance = metrics["clearance_m"]
-    near_miss_mask = distance <= near_miss_threshold_m
-    collision_mask = distance <= collision_threshold_m
+    clearance = metrics["clearance_m"]
+    near_miss_mask = clearance <= near_miss_threshold_m
+    collision_mask = clearance <= collision_threshold_m
 
     fig, (ax_speed, ax_clear) = plt.subplots(
         2,
@@ -290,11 +288,11 @@ def build_minimap_figure(
 
     ax_speed.plot(time_s, speed, color="#1f77b4", linewidth=1.2)
     ax_speed.set_ylabel("speed (m/s)", fontsize=8)
-    ax_speed.set_title("robot speed  /  robot-pedestrian centre-to-centre distance", fontsize=9)
+    ax_speed.set_title("robot speed  /  nearest-pedestrian clearance", fontsize=9)
     ax_speed.tick_params(labelsize=7)
     ax_speed.grid(alpha=0.3)
 
-    ax_clear.plot(time_s, distance, color="#2ca02c", linewidth=1.2, zorder=3)
+    ax_clear.plot(time_s, clearance, color="#2ca02c", linewidth=1.2, zorder=3)
     ax_clear.axhline(
         near_miss_threshold_m,
         color="#ff7f0e",
@@ -314,7 +312,7 @@ def build_minimap_figure(
     if np.any(near_miss_mask):
         ax_clear.scatter(
             time_s[near_miss_mask],
-            distance[near_miss_mask],
+            clearance[near_miss_mask],
             color="#ff7f0e",
             s=14,
             zorder=5,
@@ -323,13 +321,13 @@ def build_minimap_figure(
     if np.any(collision_mask):
         ax_clear.scatter(
             time_s[collision_mask],
-            distance[collision_mask],
+            clearance[collision_mask],
             color="#d62728",
             s=18,
             zorder=6,
             label="collision-proximity diagnostic step",
         )
-    ax_clear.set_ylabel("centre-to-centre distance (m)", fontsize=8)
+    ax_clear.set_ylabel("clearance (m)", fontsize=8)
     ax_clear.set_xlabel("time (s)", fontsize=8)
     ax_clear.tick_params(labelsize=7)
     ax_clear.legend(loc="upper right", fontsize=6, framealpha=0.85)
@@ -338,42 +336,6 @@ def build_minimap_figure(
     t_min, t_max = float(time_s[0]), float(time_s[-1])
     for ax in (ax_speed, ax_clear):
         ax.set_xlim(t_min, t_max)
-    return fig, ax_speed, ax_clear
-
-
-def render_minimap_frames(
-    metrics: dict[str, np.ndarray],
-    *,
-    near_miss_threshold_m: float,
-    collision_threshold_m: float,
-    width: int,
-    height: int,
-    dpi: int = 100,
-) -> list[np.ndarray]:
-    """Render one metric-strip frame per trace step, cursor advancing in lockstep.
-
-    Draws the full (speed, centre-to-centre distance) strip once and, per step,
-    moves a vertical cursor line to that step's ``time_s`` before re-rasterizing
-    the same Matplotlib canvas (Agg backend). This keeps a single deterministic
-    figure/axes layout for every frame -- the cursor position is read directly
-    off the shared time axis, so cursor-frame alignment holds by construction
-    rather than by a separate pixel-offset calculation.
-
-    Returns:
-        RGB frames (``uint8``, shape ``(height, width, 3)``), one per trace step,
-        each with the cursor at that step's time.
-    """
-    import matplotlib.pyplot as plt
-
-    fig, ax_speed, ax_clear = build_minimap_figure(
-        metrics,
-        near_miss_threshold_m=near_miss_threshold_m,
-        collision_threshold_m=collision_threshold_m,
-        width=width,
-        height=height,
-        dpi=dpi,
-    )
-    time_s = metrics["time_s"]
 
     canvas = fig.canvas
     frames: list[np.ndarray] = []
@@ -441,7 +403,7 @@ def render_episode_with_minimap(
 
     Returns:
         Summary dict: frame count, near-miss/collision step counts, and the
-        (step, clearance_m) of the trace's global minimum centre-to-centre distance.
+        (step, clearance_m) of the trace's global minimum clearance.
     """
     import imageio.v3 as iio
 
@@ -519,8 +481,8 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=NEAR_MISS_THRESHOLD_M,
         help=(
-            "Centre-to-centre robot-pedestrian distance (m) at/below which a step "
-            f"is marked near-miss (default: repo trace_failure_predicates default, {NEAR_MISS_THRESHOLD_M} m)."
+            "Center-to-center clearance (m) at/below which a step is marked "
+            f"near-miss (default: repo trace_failure_predicates default, {NEAR_MISS_THRESHOLD_M} m)."
         ),
     )
     parser.add_argument(
@@ -528,8 +490,8 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=COLLISION_THRESHOLD_M,
         help=(
-            "Centre-to-centre robot-pedestrian distance (m) at/below which a step "
-            f"is marked collision (default: repo missing-radius fallback, {COLLISION_THRESHOLD_M} m)."
+            "Center-to-center clearance (m) at/below which a step is marked "
+            f"collision (default: repo missing-radius fallback, {COLLISION_THRESHOLD_M} m)."
         ),
     )
     return parser
@@ -570,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
             f"{args.collision_threshold_m:g} m): {summary['collision_proximity_steps']}"
         )
         print(
-            f"global min centre-to-centre distance: {summary['min_clearance_m']:.6f} m "
+            f"global min clearance: {summary['min_clearance_m']:.6f} m "
             f"at step {summary['min_clearance_step']}"
         )
     print(f"video: {args.out}")

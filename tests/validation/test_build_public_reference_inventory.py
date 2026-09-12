@@ -1,5 +1,9 @@
 """Tests for the declared public reference inventory (issue #8929)."""
 
+# evidence-writer-exempt: this module writes only tmp_path YAML/JSON fixtures whose exact bytes
+# are the parser inputs under test; robot_sf.evidence.writers would inject AI-GENERATED review
+# markers and catalog registration, changing the payloads the inventory builder must parse.
+
 from __future__ import annotations
 
 import json

@@ -72,11 +72,14 @@ def _repository_parts(repository: str) -> tuple[str, str]:
 
 
 def _report_match(body: str) -> re.Match[str]:
-    """Return the one canonical review marker block or raise ``ValueError``."""
+    """Return the one terminal canonical marker block or raise ``ValueError``."""
     matches = list(_REPORT_BLOCK_RE.finditer(body))
     if len(matches) != 1:
         raise ValueError("review report must contain exactly one canonical marker block")
-    return matches[0]
+    match = matches[0]
+    if body[match.end() :].strip():
+        raise ValueError("review report marker block must be terminal")
+    return match
 
 
 def _validate_report_shape(body: str, match: re.Match[str]) -> None:
@@ -249,7 +252,10 @@ def _custody_reason(comment: Mapping[str, Any], *, repository: str, pr_number: i
         return "static_report_timestamp_malformed"
     if created_at != updated_at:
         return "static_report_comment_edited"
-    if comment.get("minimized") is True:
+    minimized = comment.get("minimized")
+    if minimized is not None and type(minimized) is not bool:
+        return "static_report_comment_minimized_malformed"
+    if minimized is True:
         return "static_report_comment_minimized"
     return None
 

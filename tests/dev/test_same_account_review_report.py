@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from scripts.dev import same_account_review_report as review_report
 from scripts.dev.same_account_review_report import (
     APPROVED_APP_ID,
     APPROVED_APP_OWNER,
@@ -35,7 +36,9 @@ def _report_body(
     metadata: str = METADATA,
     verdict: str = "accepted",
     findings: int = 0,
+    trailing_text: str = "",
 ) -> str:
+    trailing_suffix = f"\n{trailing_text}" if trailing_text else ""
     body = f"""## Independent implementation review
 
 ### Scope
@@ -53,7 +56,7 @@ Inspected the changed source and exercised the focused deterministic verificatio
 single-account-review: {verdict} @ {head}
 metadata: {metadata}
 evidence: {"0" * 64}
-unresolved-correctness-findings: {findings}
+unresolved-correctness-findings: {findings}{trailing_suffix}
 """
     return bind_report_evidence(body=body, repository=REPO, pr_number=PR)
 
@@ -203,6 +206,59 @@ def test_latest_invalid_report_supersedes_older_acceptance() -> None:
     assert reports[1].get("superseded") is not True
     assert _classify(reports)["status"] == "conflicting"
     assert provenance["selected_comment_id"] == 101
+
+
+def test_nonterminal_marker_block_is_not_projected_as_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Contradictory text after a rebound marker block cannot be accepted."""
+    legacy_matcher = review_report._report_match
+
+    def match_nonterminal_body(body: str) -> Any:
+        matches = list(review_report._REPORT_BLOCK_RE.finditer(body))
+        assert len(matches) == 1
+        return matches[0]
+
+    monkeypatch.setattr(review_report, "_report_match", match_nonterminal_body)
+    body = _report_body(trailing_text="Contradictory trailing assessment: changes requested.")
+    monkeypatch.setattr(review_report, "_report_match", legacy_matcher)
+
+    reports, provenance = project_static_reports_from_comments(
+        [_app_comment(body)], repository=REPO, pr_number=PR
+    )
+
+    assert reports[0]["verdict"] == "malformed"
+    assert reports[0]["projection_reason"] == "review report marker block must be terminal"
+    assert provenance["status"] == "malformed"
+    assert _classify(reports)["status"] == "conflicting"
+
+
+@pytest.mark.parametrize("minimized", ["true", 1, [], {}])
+def test_malformed_minimized_custody_refuses(minimized: Any) -> None:
+    comment = _app_comment(_report_body())
+    comment["minimized"] = minimized
+
+    reports, provenance = project_static_reports_from_comments(
+        [comment], repository=REPO, pr_number=PR
+    )
+
+    assert reports[0]["approved_source"] is False
+    assert reports[0]["custody"]["reason_code"] == "static_report_comment_minimized_malformed"
+    assert provenance["status"] == "unavailable"
+    assert provenance["reason_codes"] == ["static_report_comment_minimized_malformed"]
+    assert _classify(reports)["status"] == "unavailable"
+
+
+def test_strict_false_minimized_custody_is_accepted() -> None:
+    comment = _app_comment(_report_body())
+    comment["minimized"] = False
+
+    reports, provenance = project_static_reports_from_comments(
+        [comment], repository=REPO, pr_number=PR
+    )
+
+    assert _classify(reports)["status"] == "accepted"
+    assert provenance["status"] == "accepted"
 
 
 @dataclass

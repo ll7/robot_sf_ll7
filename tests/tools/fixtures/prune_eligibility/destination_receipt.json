@@ -1,0 +1,10 @@
+{
+  "schema_version": "artifact_transfer_custody.v1",
+  "status": "verified",
+  "durability_class": "cloud_durable",
+  "independent_verification": true,
+  "destination_locator": "s3://durable-storage/2026/manifest-8846-alpha",
+  "manifest": {"manifest_digest": "88d866cfd6b20e2e7d435c36709e7d844a811815dea3fe6043a7cedca0ae4cf5", "member_count": 1, "total_bytes": 6},
+  "destination": {"verified_members": 1, "receipt_written": true},
+  "files": [{"relative_path": "job_evidence.log", "byte_size": 6, "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03", "state": "already_verified"}]
+}

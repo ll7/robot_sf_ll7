@@ -69,12 +69,36 @@ def test_model_id_from_config_file_id_keys_and_nested_fallback(
     direct = tmp_path / "direct.yaml"
     direct.write_text("model_id: file-m\n", encoding="utf-8")
     assert _model_id_from_config_file(direct) == "file-m"
+
+    ckpt_direct = tmp_path / "ckpt_direct.yaml"
+    ckpt_direct.write_text("checkpoint_path: direct/model.pt\n", encoding="utf-8")
+    assert _model_id_from_config_file(ckpt_direct) == "direct/model.pt"
+
     nested = tmp_path / "nested.yaml"
     nested.write_text("outer:\n  inner:\n    model_path: deep/nested.ckpt\n", encoding="utf-8")
     assert _model_id_from_config_file(nested) == "deep/nested.ckpt"
+
+    nested_ckpt = tmp_path / "nested_ckpt.yaml"
+    nested_ckpt.write_text(
+        "outer:\n  inner:\n    checkpoint_path: deep/nested.pt\n", encoding="utf-8"
+    )
+    assert _model_id_from_config_file(nested_ckpt) == "deep/nested.pt"
+
     empty = tmp_path / "empty.yaml"
     empty.write_text("unrelated_key: 1\n", encoding="utf-8")
     assert _model_id_from_config_file(empty) == ""
+
+    # Issue #9171 real config regressions:
+    assert (
+        _model_id_from_config_file("configs/algos/sicnav_camera_ready.yaml")
+        == "sicnav_diffusion/JMID/MID/checkpoints/jrdb_bev_0_25_multi_class_epoch16.pt"
+    )
+    assert (
+        _model_id_from_config_file(
+            "configs/algos/learned_prediction_mpc_issue_4013_checkpoint.yaml"
+        )
+        == "output/models/issue_4013/short_horizon_predictor/short_horizon_predictor.pt"
+    )
 
 
 def test_resolve_arm_model_id_summary_config_and_sacadrl_default(
@@ -97,17 +121,70 @@ def test_action_adapter_explicit_kinematics_default_and_native() -> None:
     assert _resolve_arm_action_adapter(_spec(), {"adapter_name": "none"}) == ""
 
 
-def test_policy_source_explicit_rule_based_and_trained() -> None:
+def test_policy_source_explicit_rule_based_and_trained(tmp_path: Path) -> None:
     assert (
         _resolve_arm_policy_source(_spec(), "m", {"policy_source": "literature-pretrained"})
         == "literature-pretrained"
     )
+    assert (
+        _resolve_arm_policy_source(_spec(), "m", {"policy_source": "trained-here"})
+        == "trained-here"
+    )
+    assert (
+        _resolve_arm_policy_source(
+            _spec(), "m", {"checkpoint_provenance": {"policy_source": "trained-here"}}
+        )
+        == "trained-here"
+    )
     assert _resolve_arm_policy_source(_spec(), "") == "rule-based"
+
+    # Authoritative literature mappings defined by repository
     assert (
         _resolve_arm_policy_source(_spec(key="sacadrl", algo="sacadrl"), "m")
         == "literature-pretrained"
     )
-    assert _resolve_arm_policy_source(_spec(key="ppo", algo="ppo"), "m") == "trained-here"
+    assert (
+        _resolve_arm_policy_source(_spec(key="sicnav", algo="sicnav"), "m")
+        == "literature-pretrained"
+    )
+
+    # Issue #9171: arbitrary model ID without explicit provenance MUST emit unknown, not trained-here
+    assert _resolve_arm_policy_source(_spec(key="ppo", algo="ppo"), "m") == "unknown"
+
+    # Model registry with recorded training provenance emits trained-here
+    assert (
+        _resolve_arm_policy_source(
+            _spec(key="ppo", algo="ppo"),
+            "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        )
+        == "trained-here"
+    )
+
+    # Explicit config-level policy_source
+    explicit_cfg = tmp_path / "explicit.yaml"
+    explicit_cfg.write_text("policy_source: trained-here\n", encoding="utf-8")
+    assert (
+        _resolve_arm_policy_source(
+            PlannerSpec(key="custom", algo="custom", algo_config_path=explicit_cfg),
+            "custom_model",
+        )
+        == "trained-here"
+    )
+
+    # Real learned prediction MPC checkpoint config resolves to unknown
+    assert (
+        _resolve_arm_policy_source(
+            PlannerSpec(
+                key="learned_mpc",
+                algo="learned_prediction_mpc",
+                algo_config_path=Path(
+                    "configs/algos/learned_prediction_mpc_issue_4013_checkpoint.yaml"
+                ),
+            ),
+            "output/models/issue_4013/short_horizon_predictor/short_horizon_predictor.pt",
+        )
+        == "unknown"
+    )
 
 
 def test_write_campaign_table_artifacts_publishes_arm_identity(

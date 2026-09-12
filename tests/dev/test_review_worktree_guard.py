@@ -589,12 +589,7 @@ def test_review_process_boundary_allows_the_null_device(tmp_path: Path) -> None:
             worktree,
             sys.executable,
             "-c",
-            (
-                "import os; "
-                "handle = open(os.devnull, 'w'); "
-                "handle.write('probe'); "
-                "handle.close()"
-            ),
+            ("import os; handle = open(os.devnull, 'w'); handle.write('probe'); handle.close()"),
         )
         assert probe.returncode == 0, probe.stdout + probe.stderr
     finally:

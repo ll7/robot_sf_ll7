@@ -1,0 +1,15 @@
+{
+  "schema": "durable_artifact_locator_projection.v1",
+  "generated_at": "2026-09-10",
+  "verification_max_age_days": 30,
+  "minimum_release_copies": 2,
+  "references": [
+    {"reference_id": "release.camera_ready_table_1", "artifact_id": "camera_ready_table_1", "version": "1.0.0", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "consumer_path": "configs/releases/release_0_0_5_checksum_manifest.yaml", "consumer_status": "active", "retention_class": "release_facing"},
+    {"reference_id": "model.learned_risk_v2", "artifact_id": "learned_risk_model_v2", "version": "2.1.0", "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "consumer_path": "configs/releases/release_0_0_5_preparation.yaml", "consumer_status": "active", "retention_class": "durable_required"},
+    {"reference_id": "evidence.retired_campaign", "artifact_id": "campaign_2025_legacy", "version": "0.9.0", "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "consumer_path": "docs/context/evidence/legacy_campaign/summary.json", "consumer_status": "inactive", "retention_class": "historical"}
+  ],
+  "artifacts": [
+    {"artifact_id": "camera_ready_table_1", "version": "1.0.0", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "locators": [{"locator_class": "public_release", "verification": "verified", "verified_at": "2026-09-05", "failure_domain_id": "release-public", "mutable_alias": false}, {"locator_class": "cloud_durable", "verification": "verified", "verified_at": "2026-09-05", "failure_domain_id": "cloud-region-b", "mutable_alias": false}]},
+    {"artifact_id": "learned_risk_model_v2", "version": "2.1.0", "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "locators": [{"locator_class": "public_release", "verification": "verified", "verified_at": "2026-09-09", "failure_domain_id": "release-public", "mutable_alias": false}]}
+  ]
+}

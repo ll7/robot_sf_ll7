@@ -25,26 +25,26 @@ _TRACKED_DATASET = _REPO_ROOT / "examples" / "datasets" / "2024-12-06_15-39-44.j
 
 
 def _id(example: ExampleScript) -> str:
-    """TODO docstring. Document this function.
+    """Return the example path used as the parametrized pytest test ID.
 
     Args:
-        example: TODO docstring.
+        example: Manifest entry whose relative path identifies the test case.
 
     Returns:
-        TODO docstring.
+        The example script path in POSIX form.
     """
     return example.path.as_posix()
 
 
 def _merge_pythonpath(root: Path, existing: str | None) -> str:
-    """TODO docstring. Document this function.
+    """Prepend root to PYTHONPATH, dropping duplicates while preserving order.
 
     Args:
-        root: TODO docstring.
-        existing: TODO docstring.
+        root: Repository root directory to place first on the path.
+        existing: Current PYTHONPATH value, or None when it is unset.
 
     Returns:
-        TODO docstring.
+        An os.pathsep-joined path string with unique entries.
     """
     parts: list[str] = [str(root)]
     if existing:
@@ -59,14 +59,14 @@ def _merge_pythonpath(root: Path, existing: str | None) -> str:
 
 
 def _tail(text: str | bytes | None, limit: int = 20) -> str:
-    """TODO docstring. Document this function.
+    """Return the last ``limit`` lines of captured process output.
 
     Args:
-        text: TODO docstring.
-        limit: TODO docstring.
+        text: Captured stdout or stderr as str or bytes; None yields an empty string.
+        limit: Maximum number of trailing lines to keep.
 
     Returns:
-        TODO docstring.
+        Decoded, right-stripped output truncated to the final ``limit`` lines.
     """
     if text is None:
         return ""
@@ -80,11 +80,11 @@ def _tail(text: str | bytes | None, limit: int = 20) -> str:
 
 @pytest.fixture(scope="module", name="repo_root_path")
 def _repo_root_path() -> Path:
-    """TODO docstring. Document this function.
+    """Provide the repository root used by module-scoped example tests.
 
 
     Returns:
-        TODO docstring.
+        Absolute path to the repository root.
     """
     return _REPO_ROOT
 
@@ -118,6 +118,14 @@ def test_example_runs_without_error(
 
     timeout_seconds = getattr(perf_policy, "hard_timeout_seconds", 120.0)
     command = [sys.executable, str(script_path)]
+    if "fixture" in example.tags:
+        command.extend(
+            [
+                "--fixture",
+                "--out-dir",
+                str(repo_root_path / "output" / "example-fixtures" / example.path.stem),
+            ]
+        )
 
     start = time.perf_counter()
     try:

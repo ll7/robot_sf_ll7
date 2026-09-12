@@ -12,12 +12,16 @@ REQUIRED_KEYS = {"scenario", "seed", "steps", "success", "collision", "timeout"}
 
 
 def _demo():
-    """TODO docstring. Document this function."""
+    """Import and return the classic interactions Pygame demo module."""
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_episode_summary_schema():
-    """TODO docstring. Document this function."""
+    """Verify the first episode summary carries the required outcome schema keys.
+
+    Forces DRY_RUN off and asserts episodes are produced and that the first summary
+    contains 'scenario', 'seed', 'steps', 'success', 'collision', and 'timeout'.
+    """
     mod = _demo()
     if hasattr(mod, "DRY_RUN"):
         original = mod.DRY_RUN

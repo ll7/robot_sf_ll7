@@ -499,7 +499,7 @@ def all_obstacle_forces(
             out_forces[i, 1] += force_y
 
 
-@njit(fastmath=True, nogil=True)
+@njit(nogil=True)
 def all_obstacle_forces_surface_distance_unit_normal(
     out_forces: np.ndarray, ped_positions: np.ndarray, obstacles: np.ndarray, ped_radius: float
 ):
@@ -602,7 +602,7 @@ def obstacle_force(
     return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
 
 
-@njit(fastmath=True, nogil=True)
+@njit(nogil=True)
 def surface_distance_unit_normal_force(
     raw_distance: float, dx_to_surface: float, dy_to_surface: float, ped_radius: float
 ) -> tuple[float, float]:
@@ -616,16 +616,28 @@ def surface_distance_unit_normal_force(
     Returns:
         tuple[float, float]: Corrected repulsive force components.
     """
-    if raw_distance <= 0.0:
+    if (
+        not np.isfinite(raw_distance)
+        or not np.isfinite(dx_to_surface)
+        or not np.isfinite(dy_to_surface)
+        or not np.isfinite(ped_radius)
+        or raw_distance <= 0.0
+    ):
         return 0.0, 0.0
     obst_dist = max(raw_distance - ped_radius, OBSTACLE_FORCE_DISTANCE_FLOOR)
+    if not np.isfinite(obst_dist):
+        return 0.0, 0.0
     der_potential = 1 / pow(obst_dist, 3)
     normal_x = dx_to_surface / raw_distance
     normal_y = dy_to_surface / raw_distance
-    return der_potential * normal_x, der_potential * normal_y
+    force_x = der_potential * normal_x
+    force_y = der_potential * normal_y
+    if not np.isfinite(force_x) or not np.isfinite(force_y):
+        return 0.0, 0.0
+    return force_x, force_y
 
 
-@njit(fastmath=True, nogil=True)
+@njit(nogil=True)
 def obstacle_force_surface_distance_unit_normal(
     obstacle: Line2D, ortho_vec: Point2D, ped_pos: Point2D, ped_radius: float
 ) -> tuple[float, float]:
@@ -641,6 +653,18 @@ def obstacle_force_surface_distance_unit_normal(
     """
     x1, y1, x2, y2 = obstacle
     (x3, y3), (x4, y4) = ped_pos, (ped_pos[0] + ortho_vec[0], ped_pos[1] + ortho_vec[1])
+    if not (
+        np.isfinite(x1)
+        and np.isfinite(y1)
+        and np.isfinite(x2)
+        and np.isfinite(y2)
+        and np.isfinite(ortho_vec[0])
+        and np.isfinite(ortho_vec[1])
+        and np.isfinite(ped_pos[0])
+        and np.isfinite(ped_pos[1])
+        and np.isfinite(ped_radius)
+    ):
+        return 0.0, 0.0
 
     if (x1, y1) == (x2, y2):
         raw_distance = euclid_dist(ped_pos[0], ped_pos[1], x1, y1)
@@ -746,6 +770,7 @@ def surface_distance_unit_normal_force_vectors(
     valid = (
         np.isfinite(positions).all(axis=1)
         & np.isfinite(raw_distances)
+        & np.isfinite(offsets)
         & (raw_distances > 0.0)
         & np.isfinite(surface_distances)
     )

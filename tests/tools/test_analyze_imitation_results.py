@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for the analyze_imitation_results tool and summary generation."""
 
 from __future__ import annotations
 
@@ -15,15 +15,15 @@ if TYPE_CHECKING:
 
 
 def _write_manifest(run_id: str, root: Path, metrics: dict[str, float]) -> Path:
-    """TODO docstring. Document this function.
+    """Write a mock training run manifest JSON with synthetic metrics.
 
     Args:
-        run_id: TODO docstring.
-        root: TODO docstring.
-        metrics: TODO docstring.
+        run_id: Unique identifier for the simulated training run.
+        root: Artifact directory root under which the manifest is written.
+        metrics: Dictionary mapping metric names to representative float values.
 
     Returns:
-        TODO docstring.
+        Path pointing to the written training run manifest JSON file.
     """
     path = get_training_run_manifest_path(run_id)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -47,11 +47,11 @@ def _write_manifest(run_id: str, root: Path, metrics: dict[str, float]) -> Path:
 
 
 def test_analyze_imitation_results_generates_summary(tmp_path: Path, monkeypatch):
-    """TODO docstring. Document this function.
+    """Verify analyze_imitation_results computes summary metrics across baseline and pretrained runs.
 
     Args:
-        tmp_path: TODO docstring.
-        monkeypatch: TODO docstring.
+        tmp_path: Temporary directory fixture serving as the artifact root.
+        monkeypatch: Pytest monkeypatch fixture to redirect ROBOT_SF_ARTIFACT_ROOT.
     """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     baseline_metrics = {

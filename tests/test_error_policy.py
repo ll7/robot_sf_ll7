@@ -133,10 +133,10 @@ class TestSensorRegistryErrors:
 
         # Register a known sensor for the test
         def _dummy_factory(_config):
-            """TODO docstring. Document this function.
+            """Construct a mock sensor instance for error testing.
 
             Args:
-                _config: TODO docstring.
+                _config: Sensor configuration mapping (unused by mock).
             """
             return MagicMock()
 
@@ -158,10 +158,10 @@ class TestSensorRegistryErrors:
         """Duplicate sensor registration without override raises ValueError."""
 
         def _factory(_config):
-            """TODO docstring. Document this function.
+            """Construct a mock sensor instance for duplicate registration testing.
 
             Args:
-                _config: TODO docstring.
+                _config: Sensor configuration mapping (unused by mock).
             """
             return MagicMock()
 
@@ -198,10 +198,10 @@ class TestErrorPolicyIntegration:
 
         # Register some test sensors
         def _factory(_config):
-            """TODO docstring. Document this function.
+            """Construct a mock sensor instance for alternative-listing verification.
 
             Args:
-                _config: TODO docstring.
+                _config: Sensor configuration mapping (unused by mock).
             """
             return MagicMock()
 

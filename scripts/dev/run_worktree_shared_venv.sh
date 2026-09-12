@@ -20,8 +20,11 @@ installed vendored `pysocialforce` package against this checkout. If it is stale
 worktree using the default environment, the helper automatically creates or refreshes only that
 worktree's `.venv`, checks capacity, serializes recovery, and verifies freshness before the command
 starts. It never repairs the owning checkout implicitly. Explicit `--recover-stale-fast-pysf`
-remains available to force the same worktree-local recovery. Use --standalone for commands that do
-not import project packages, or --no-freshness-check only after confirming the environment matches.
+remains available to force the same worktree-local recovery. A selected worktree-local `.venv` that
+fails the dependency-profile preflight also gets exactly one bounded completion sync through the
+same recovery owner before the wrapper fails closed (issue #8811); that sync never touches an
+explicit --venv or the owning checkout. Use --standalone for commands that do not import project
+packages, or --no-freshness-check only after confirming the environment matches.
 Pinned tool binaries are a separate boundary (issue #8250): `uv run` executes the requested tool
 from the selected venv, so a stale venv would silently run a drifted binary. Before proceeding,
 the freshness preflight compares the resolved `<venv>/bin/<tool>` version against the exact `==`
@@ -156,6 +159,7 @@ venv_override=""
 dependency_profile="core"
 skip_freshness=""
 recover_stale_fast_pysf=""
+dependency_profile_recovery_attempted=""
 standalone=""
 isolated_ruff=""
 isolated_conflict=""
@@ -490,10 +494,71 @@ if [[ "$git_common_dir" != "$repo_root/.git" ]]; then
   is_linked_worktree=1
 fi
 
+worktree_selection_key=""
+if [[ "$is_linked_worktree" -eq 1 ]]; then
+  worktree_selection_key="$(printf '%s' "$repo_root" | git hash-object --stdin | cut -c1-12)"
+fi
+
 if [[ -n "$scratch_dir" ]]; then
   configure_scratch_dir "$scratch_dir"
 fi
 check_scratch_capacity "${TMPDIR:-/tmp}"
+
+# Per-worktree selection gate (issue #8798): serialize venv selection plus the
+# interpreter/tool freshness checks (and any automatic fast-pysf recovery) so a
+# concurrent invocation cannot observe a half-finished owner->worktree handoff.
+# The gate is released as soon as verification finishes, before the wrapped
+# command runs, so it never serializes command execution itself.
+selection_gate_dir=""
+
+release_venv_selection_gate() {
+  if [[ -n "$selection_gate_dir" ]]; then
+    rm -rf "$selection_gate_dir" 2>/dev/null || true
+    selection_gate_dir=""
+  fi
+}
+
+acquire_venv_selection_gate() {
+  if [[ "$is_linked_worktree" -ne 1 || -n "$venv_override" || -n "$standalone"     || -n "$skip_freshness" || "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" == "skip"     || -n "$recover_stale_fast_pysf" ]]; then
+    return 0
+  fi
+  selection_gate_dir="$git_common_dir/robot-sf-venv-selection-${worktree_selection_key}.lockdir"
+  if [[ -L "$selection_gate_dir" ]]; then
+    echo "ERROR: refusing a symlinked shared-venv selection gate: $selection_gate_dir" >&2
+    return 2
+  fi
+
+  local gate_deadline=$((SECONDS + 600))
+  while ! mkdir "$selection_gate_dir" 2>/dev/null; do
+    local gate_owner=""
+    local gate_is_stale=0
+    gate_owner="$(cat "$selection_gate_dir/pid" 2>/dev/null || true)"
+    if [[ -z "$gate_owner" ]]; then
+      gate_is_stale=1
+    elif [[ "$gate_owner" =~ ^[0-9]+$ ]] && ! kill -0 "$gate_owner" 2>/dev/null; then
+      gate_is_stale=1
+    fi
+    if [[ "$gate_is_stale" -eq 1 ]] \
+      && find "$selection_gate_dir" -maxdepth 0 -mmin +2 2>/dev/null | grep -q .; then
+      # The gate holder died mid-verification; reclaim after its directory is
+      # old enough that a live holder could not still be writing its PID.
+      rm -rf "$selection_gate_dir" 2>/dev/null || true
+      continue
+    fi
+    if (( SECONDS >= gate_deadline )); then
+      echo "ERROR: timed out waiting for the shared-venv selection gate: $selection_gate_dir" >&2
+      echo "Another invocation is verifying the linked-worktree environment; retry after it finishes." >&2
+      return 2
+    fi
+    sleep 0.2
+  done
+  printf '%s\n' "$$" >"$selection_gate_dir/pid"
+  trap release_venv_selection_gate EXIT
+  echo "Shared-venv selection gate acquired: $selection_gate_dir" >&2
+}
+
+
+acquire_venv_selection_gate
 
 if [[ -n "$recover_stale_fast_pysf" ]]; then
   if [[ -n "$venv_override" ]]; then
@@ -517,12 +582,15 @@ if [[ -n "$recover_stale_fast_pysf" ]]; then
     echo "ERROR: worktree fast-pysf recovery helper is missing or not executable: $recovery_script" >&2
     exit 2
   fi
-  if "$recovery_script"; then
+  # The recovery postcondition certifies the same dependency profile the
+  # wrapper checks below (issue #8811).
+  if "$recovery_script" --profile "$dependency_profile"; then
     :
   else
     recovery_rc=$?
     exit "$recovery_rc"
   fi
+  dependency_profile_recovery_attempted=1
   venv_path="$repo_root/.venv"
 else
   if [[ -n "$venv_override" ]]; then
@@ -543,20 +611,82 @@ if [[ ! -x "$venv_path/bin/python" ]]; then
   exit 2
 fi
 
-check_dependency_profile() {
-  local report
-  if ! report="$("$venv_path/bin/python" \
+# Kept caller-visible: completion sync (issue #8811) and fail-closed reporting
+# both need the latest checker output.
+dependency_profile_report=""
+
+run_dependency_profile_check() {
+  if dependency_profile_report="$("$venv_path/bin/python" \
     "$repo_root/scripts/dev/check_worktree_optional_deps.py" \
     --profile "$dependency_profile" 2>&1)"; then
-    echo "ERROR: shared-venv dependency profile '$dependency_profile' is incomplete in $venv_path." >&2
-    printf '%s\n' "$report" >&2
-    echo "Run 'cd $repo_root && scripts/dev/bootstrap_worktree.sh', then rerun this command." >&2
-    return 2
+    return 0
   fi
+  return 2
+}
+
+report_incomplete_dependency_profile() {
+  echo "ERROR: shared-venv dependency profile '$dependency_profile' is incomplete in $venv_path." >&2
+  printf '%s\n' "$dependency_profile_report" >&2
+  echo "Run 'cd $repo_root && scripts/dev/bootstrap_worktree.sh', then rerun this command." >&2
+}
+
+check_dependency_profile() {
+  if run_dependency_profile_check; then
+    return 0
+  fi
+  report_incomplete_dependency_profile
+  return 2
+}
+
+complete_worktree_dependency_profile() {
+  # Issue #8811: exactly one bounded completion sync through the canonical
+  # recovery owner. Only a selected worktree-local environment in a linked
+  # worktree is eligible; an explicit --venv stays authoritative and the
+  # owning checkout is never mutated. Recovery runs its own capacity gate and
+  # repository lock, so this preserves the existing fail-closed boundaries.
+  if [[ -n "$dependency_profile_recovery_attempted" ]]; then
+    return 1
+  fi
+  if [[ "$is_linked_worktree" -ne 1 || -n "$venv_override" || -n "$standalone" ]]; then
+    return 1
+  fi
+  if [[ "$venv_path" != "$repo_root/.venv" ]]; then
+    return 1
+  fi
+  local recovery_script="$repo_root/scripts/dev/recover_fast_pysf_worktree.sh"
+  if [[ ! -x "$recovery_script" ]]; then
+    echo "ERROR: worktree dependency-profile completion helper is missing or not executable: $recovery_script" >&2
+    echo "Run 'cd $repo_root && scripts/dev/bootstrap_worktree.sh', then rerun this command." >&2
+    return 1
+  fi
+  echo "ERROR: shared-venv dependency profile '$dependency_profile' is incomplete in $venv_path." >&2
+  printf '%s\n' "$dependency_profile_report" >&2
+  echo "Attempting one bounded completion sync: $recovery_script --profile $dependency_profile" >&2
+  local recovery_rc=0
+  "$recovery_script" --profile "$dependency_profile" || recovery_rc=$?
+  if [[ "$recovery_rc" -ne 0 ]]; then
+    echo "ERROR: dependency-profile completion sync failed (recovery exit $recovery_rc)." >&2
+    return 1
+  fi
+  return 0
+}
+
+ensure_dependency_profile() {
+  if run_dependency_profile_check; then
+    return 0
+  fi
+  if complete_worktree_dependency_profile && run_dependency_profile_check; then
+    echo "Shared-venv dependency profile '$dependency_profile' completed in $venv_path." >&2
+    return 0
+  fi
+  report_incomplete_dependency_profile
+  return 2
 }
 
 if [[ -z "$standalone" ]]; then
-  check_dependency_profile
+  if ! ensure_dependency_profile; then
+    exit 2
+  fi
 fi
 
 is_project_interpreter_command() {
@@ -607,7 +737,10 @@ recover_stale_fast_pysf_automatically() {
     return 2
   fi
   echo "Recovering stale fast-pysf in the linked worktree: $repo_root/.venv" >&2
-  "$recovery_script" || return $?
+  # The recovery postcondition certifies the same dependency profile the
+  # wrapper checks below (issue #8811).
+  "$recovery_script" --profile "$dependency_profile" || return $?
+  dependency_profile_recovery_attempted=1
   venv_path="$repo_root/.venv"
   if [[ ! -x "$venv_path/bin/python" ]]; then
     echo "ERROR: automatic fast-pysf recovery did not create a usable worktree environment: $venv_path" >&2
@@ -677,7 +810,9 @@ PY
 }
 
 check_shared_venv_freshness() {
-  local venv_path="$1"
+  # Keep this caller-visible: automatic recovery may replace the selected
+  # owning-checkout environment with the worktree-local .venv.
+  venv_path="$1"
   local src_pkg="$repo_root/fast-pysf/pysocialforce"
 
   # PYTHONPATH makes the checkout source authoritative after the interpreter
@@ -881,13 +1016,18 @@ if [[ -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]];
   fi
 fi
 
+release_venv_selection_gate
+
 export UV_PROJECT_ENVIRONMENT="$venv_path"
 export UV_NO_SYNC=1
-# An explicit shared --venv override must stay authoritative across nested
-# common_setup.sh consumers: pin VIRTUAL_ENV so an incomplete worktree-local
-# .venv cannot shadow the shared environment (issue #7823).
+# Keep the selected environment authoritative across nested uv and
+# common_setup.sh consumers. Automatic stale-package recovery can change the
+# selection from the owning checkout to this worktree's .venv, so an inherited
+# VIRTUAL_ENV must not keep pointing at the pre-recovery environment.
+export VIRTUAL_ENV="$venv_path"
+# An explicit shared --venv override also carries a marker so common_setup.sh
+# preserves that selection when it applies its own environment policy (issue #7823).
 if [[ -n "$venv_override" ]]; then
-  export VIRTUAL_ENV="$venv_path"
   export ROBOT_SF_EXPLICIT_VENV_OVERRIDE="$venv_path"
 fi
 if [[ -z "$standalone" ]]; then

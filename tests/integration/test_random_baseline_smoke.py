@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Smoke tests for the random baseline planner action spaces."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from robot_sf.baselines import get_baseline
 
 
 def _obs():
-    """TODO docstring. Document this function."""
+    """Return a minimal single-robot observation dict for planner steps."""
     return {
         "dt": 0.1,
         "robot": {
@@ -21,7 +21,7 @@ def _obs():
 
 
 def test_random_velocity_mode_step():
-    """TODO docstring. Document this function."""
+    """Velocity mode returns vx/vy keys bounded by the configured v_max."""
     Random = get_baseline("random")
     policy = Random({"mode": "velocity", "v_max": 1.5}, seed=123)
     act = policy.step(_obs())
@@ -31,7 +31,7 @@ def test_random_velocity_mode_step():
 
 
 def test_random_unicycle_mode_step():
-    """TODO docstring. Document this function."""
+    """Unicycle mode returns v/omega keys within the configured action limits."""
     Random = get_baseline("random")
     policy = Random({"mode": "unicycle", "v_max": 1.0, "omega_max": 2.0}, seed=42)
     act = policy.step(_obs())

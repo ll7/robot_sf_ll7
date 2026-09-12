@@ -2,6 +2,7 @@
 
 Usage:
     uv run python examples/advanced/09_defensive_policy.py
+    uv run python examples/advanced/09_defensive_policy.py --check --format json
 
 Prerequisites:
     - model/run_023.zip
@@ -16,21 +17,32 @@ References:
     - docs/dev_guide.md#baseline-policies
 """
 
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import numpy as np
-from gymnasium import spaces
+from robot_sf.examples.prerequisites import (
+    add_prerequisite_check_arguments,
+    run_prerequisite_check,
+)
 
-from robot_sf.benchmark.helper_catalog import load_trained_policy
-from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.gym_env.robot_env import RobotEnv
-from robot_sf.robot.differential_drive import DifferentialDriveSettings
-from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
-from robot_sf.sim.sim_config import SimulationSettings
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def run_simulation() -> None:
     """Execute the defensive policy rollout and render the result."""
+    import numpy as np
+
+    from robot_sf.benchmark.helper_catalog import load_trained_policy
+    from robot_sf.gym_env.env_config import EnvSettings
+    from robot_sf.gym_env.robot_env import RobotEnv
+    from robot_sf.robot.differential_drive import DifferentialDriveSettings
+    from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
+    from robot_sf.sim.sim_config import SimulationSettings
+
     env_config = EnvSettings(
         sim_config=SimulationSettings(
             stack_steps=1,
@@ -82,6 +94,9 @@ def prepare_gym_spaces():
     Returns:
         Tuple of (observation_space, action_space) as Box spaces.
     """
+    import numpy as np
+    from gymnasium import spaces
+
     obs_low = np.array(
         [
             0.0,
@@ -652,5 +667,17 @@ def prepare_gym_spaces():
     return obs_space, action_space
 
 
-if __name__ == "__main__":
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run check-only mode or the defensive-policy rollout."""
+
+    parser = argparse.ArgumentParser(description="Replay the defensive PPO policy.")
+    add_prerequisite_check_arguments(parser)
+    args = parser.parse_args(argv)
+    if args.check:
+        return run_prerequisite_check(__file__, output_format=args.format)
     run_simulation()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

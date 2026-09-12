@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Verify SNQI recompute/optimize warn on small datasets and still exit zero."""
 
 import json
 import re
@@ -12,14 +12,14 @@ from robot_sf.benchmark.cli import cli_main
 
 
 def _run_cli(tmp_path: Path, action: str) -> tuple[int, str]:
-    """TODO docstring. Document this function.
+    """Run the unified SNQI CLI for one action on the small fixture dataset.
 
     Args:
-        tmp_path: TODO docstring.
-        action: TODO docstring.
+        tmp_path: Temporary directory where the output JSON is written.
+        action: SNQI action to run (``recompute`` or ``optimize``).
 
     Returns:
-        TODO docstring.
+        Tuple of the CLI exit code and the generated output JSON text.
     """
     out = tmp_path / f"snqi_{action}_small.json"
     episodes = Path("tests/data/snqi/episodes_small.jsonl").absolute()
@@ -53,12 +53,12 @@ def _run_cli(tmp_path: Path, action: str) -> tuple[int, str]:
 
 @pytest.mark.parametrize("action", ["recompute", "optimize"])
 def test_small_dataset_warning_emitted_and_exit_zero(tmp_path: Path, caplog, action: str):
-    """TODO docstring. Document this function.
+    """Assert each SNQI action exits zero and logs the small-dataset warning.
 
     Args:
-        tmp_path: TODO docstring.
-        caplog: TODO docstring.
-        action: TODO docstring.
+        tmp_path: Temporary directory for the generated output file.
+        caplog: Pytest log capture used to inspect warning records.
+        action: Parametrized SNQI action under test (``recompute`` or ``optimize``).
     """
     caplog.set_level("WARNING")
     code, _ = _run_cli(tmp_path, action)

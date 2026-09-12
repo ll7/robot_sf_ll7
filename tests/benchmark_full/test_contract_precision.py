@@ -11,18 +11,18 @@ from robot_sf.benchmark.full_classic.precision import evaluate_precision
 
 
 def test_evaluate_precision_structure():
-    """TODO docstring. Document this function."""
+    """Verify evaluate_precision reports per-group metric status within CI targets."""
 
     class _Metric:
-        """TODO docstring. Document this class."""
+        """Minimal metric double with a mean and confidence interval."""
 
         def __init__(self, name, mean, mean_ci):
-            """TODO docstring. Document this function.
+            """Store metric identity and the CI used to derive the half-width.
 
             Args:
-                name: TODO docstring.
-                mean: TODO docstring.
-                mean_ci: TODO docstring.
+                name: Metric identifier expected in the precision report.
+                mean: Point estimate for the metric.
+                mean_ci: Confidence interval used to compute the reported half-width.
             """
             self.name = name
             self.mean = mean
@@ -32,14 +32,14 @@ def test_evaluate_precision_structure():
             self.median_ci = None
 
     class _Group:
-        """TODO docstring. Document this class."""
+        """Minimal aggregate-group double exposing collision and success metrics."""
 
         def __init__(self, archetype, density):
-            """TODO docstring. Document this function.
+            """Store group identity and the rate metrics evaluated for precision.
 
             Args:
-                archetype: TODO docstring.
-                density: TODO docstring.
+                archetype: Interaction archetype label.
+                density: Density label evaluated as its own group.
             """
             self.archetype = archetype
             self.density = density
@@ -52,7 +52,7 @@ def test_evaluate_precision_structure():
     groups = [_Group("crossing", "low")]
 
     class _Cfg:
-        """TODO docstring. Document this class."""
+        """Minimal config stub with smoke mode and per-metric CI targets."""
 
         smoke = True
         collision_ci = 0.05

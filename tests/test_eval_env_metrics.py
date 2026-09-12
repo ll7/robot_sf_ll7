@@ -8,7 +8,7 @@ from robot_sf.eval import EnvMetrics, EnvOutcome, PedEnvMetrics, PedVecEnvMetric
 
 
 def test_total_routes():
-    """TODO docstring. Document this function."""
+    """total_routes is 1 with no logged outcomes and stays 1 after one route outcome."""
     metrics = EnvMetrics()
     assert metrics.total_routes == 1
     metrics.route_outcomes.append(EnvOutcome.REACHED_GOAL)
@@ -16,7 +16,7 @@ def test_total_routes():
 
 
 def test_total_intermediate_goals():
-    """TODO docstring. Document this function."""
+    """total_intermediate_goals is 1 with none logged and stays 1 after one outcome."""
     metrics = EnvMetrics()
     assert metrics.total_intermediate_goals == 1
     metrics.intermediate_goal_outcomes.append(EnvOutcome.REACHED_GOAL)
@@ -24,7 +24,7 @@ def test_total_intermediate_goals():
 
 
 def test_pedestrian_collisions():
-    """TODO docstring. Document this function."""
+    """pedestrian_collisions counts PEDESTRIAN_COLLISION route outcomes."""
     metrics = EnvMetrics()
     assert metrics.pedestrian_collisions == 0
     metrics.route_outcomes.append(EnvOutcome.PEDESTRIAN_COLLISION)
@@ -32,7 +32,7 @@ def test_pedestrian_collisions():
 
 
 def test_obstacle_collisions():
-    """TODO docstring. Document this function."""
+    """obstacle_collisions counts OBSTACLE_COLLISION route outcomes."""
     metrics = EnvMetrics()
     assert metrics.obstacle_collisions == 0
     metrics.route_outcomes.append(EnvOutcome.OBSTACLE_COLLISION)
@@ -40,7 +40,7 @@ def test_obstacle_collisions():
 
 
 def test_exceeded_timesteps():
-    """TODO docstring. Document this function."""
+    """exceeded_timesteps counts TIMEOUT route outcomes."""
     metrics = EnvMetrics()
     assert metrics.exceeded_timesteps == 0
     metrics.route_outcomes.append(EnvOutcome.TIMEOUT)
@@ -48,7 +48,7 @@ def test_exceeded_timesteps():
 
 
 def test_completed_routes():
-    """TODO docstring. Document this function."""
+    """completed_routes counts REACHED_GOAL route outcomes."""
     metrics = EnvMetrics()
     assert metrics.completed_routes == 0
     metrics.route_outcomes.append(EnvOutcome.REACHED_GOAL)
@@ -56,7 +56,7 @@ def test_completed_routes():
 
 
 def test_reached_intermediate_goals():
-    """TODO docstring. Document this function."""
+    """reached_intermediate_goals counts REACHED_GOAL intermediate-goal outcomes."""
     metrics = EnvMetrics()
     assert metrics.reached_intermediate_goals == 0
     metrics.intermediate_goal_outcomes.append(EnvOutcome.REACHED_GOAL)
@@ -64,7 +64,7 @@ def test_reached_intermediate_goals():
 
 
 def test_robot_collisions():
-    """TODO docstring. Document this function."""
+    """PedEnvMetrics.robot_collisions counts ROBOT_COLLISION route outcomes."""
     metrics = PedEnvMetrics()
     assert metrics.robot_collisions == 0
     metrics.route_outcomes.append(EnvOutcome.ROBOT_COLLISION)
@@ -72,7 +72,7 @@ def test_robot_collisions():
 
 
 def test_update():
-    """TODO docstring. Document this function."""
+    """update records completion and waypoint outcomes from env metadata flags."""
     metrics = EnvMetrics()
     meta = {
         "is_pedestrian_collision": False,
@@ -87,7 +87,7 @@ def test_update():
 
 
 def test_on_next_intermediate_outcome():
-    """TODO docstring. Document this function."""
+    """_on_next_intermediate_outcome logs a reached intermediate goal on waypoint completion."""
     metrics = EnvMetrics()
     meta = {
         "is_pedestrian_collision": False,
@@ -100,7 +100,7 @@ def test_on_next_intermediate_outcome():
 
 
 def test_on_next_route_outcome():
-    """TODO docstring. Document this function."""
+    """_on_next_route_outcome logs a completed route when is_route_complete is true."""
     metrics = EnvMetrics()
     meta = {
         "is_pedestrian_collision": False,
@@ -113,7 +113,7 @@ def test_on_next_route_outcome():
 
 
 def test_ped_update():
-    """TODO docstring. Document this function."""
+    """PedEnvMetrics.update logs a timeout and records distance, speed, and impact angle."""
     metrics = PedEnvMetrics()
     meta = {
         "is_pedestrian_collision": False,

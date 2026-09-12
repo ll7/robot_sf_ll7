@@ -22,6 +22,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Active-worktree lease | [pr_gate_lease.py](../../scripts/dev/pr_gate_lease.py) |
 | Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
 | Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
+| Checkpoint preservation custody check | [check_checkpoint_preservation.py](../../scripts/validation/check_checkpoint_preservation.py) |
 
 ## 1. Retention classes in operational terms
 
@@ -173,7 +174,25 @@ The guard verifies durable destination custody, checksums, consumer coverage, an
 dispositions before permitting deletion planning. Check mode performs zero file deletions;
 an explicit `--apply` route enforces compare-and-swap revalidation before removing eligible bytes.
 
-### 4.8 Report a blocker
+### 4.8 Check checkpoint preservation custody
+
+```bash
+uv run python scripts/validation/check_checkpoint_preservation.py --check \
+  --fixture tests/validation/fixtures/checkpoint_preservation/complete.json --format json
+```
+
+The check-only inventory resolves `model_id` references through the model registry, binds producer
+data identity through the oracle trace-URI registry, recomputes byte and companion digests with the
+shared evidence writer, and reads metadata-only loadability from a checkpoint compatibility audit
+receipt (the existing owner's output; no inference and no reimplemented loader). Each artifact ends
+in one stable state: `preservation_ready` or a `blocked_*` state covering ambiguous identity,
+missing lineage, incomplete inventory, missing artifact or companion, partial copy, digest
+mismatch, loadability or contract failure, incomplete training, unsafe destination, and uncleared
+publication. Load status is reported separately (`verified_metadata`, `loadability_unavailable`,
+`loadability_failed`, `not_checked`) and is never preservation, performance, or benchmark evidence.
+The tool is read-only and emits no private paths.
+
+### 4.9 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

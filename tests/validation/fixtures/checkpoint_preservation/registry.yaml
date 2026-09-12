@@ -1,0 +1,6 @@
+version: 1
+models:
+  - {model_id: fixture_complete_v1, local_path: artifacts/checkpoint.bin, config_path: configs/train.yaml, commit: abcdef1234567, tags: [ppo], github_release: {tag: fixture/complete, per_file_sha256: {checkpoint.bin: ab845fa46f17c9d67c4486e3f1b2f3d550074f8aa9c8f75cf4d0c4d130d9a96a}}}
+  - {model_id: fixture_alias_v1, local_path: artifacts/checkpoint.bin, config_path: configs/train.yaml, commit: abcdef1234567, tags: [ppo]}
+  - {model_id: fixture_unavailable_v1, local_path: artifacts/checkpoint.bin, config_path: configs/train.yaml, commit: abcdef1234567, tags: [ppo]}
+  - {model_id: fixture_fatal_v1, local_path: artifacts/checkpoint.bin, config_path: configs/train.yaml, commit: abcdef1234567, tags: [ppo]}

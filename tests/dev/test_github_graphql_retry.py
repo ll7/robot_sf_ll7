@@ -135,3 +135,57 @@ def test_quota_exhaustion_is_not_retried_and_is_flagged() -> None:
     assert outcome.exhausted is True
     assert outcome.retryable_failure is False
     assert "quota exhausted" in outcome.terminal_diagnostic
+
+
+def _transport_failure(stderr: str) -> MagicMock:
+    """Build a failed response carrying a transport diagnostic."""
+    return MagicMock(returncode=1, stdout="", stderr=stderr)
+
+
+def test_truncated_json_transport_failure_is_retried() -> None:
+    """The #9081 truncation signature is retried like a transient HTTP failure."""
+    responses = [
+        _transport_failure("gh: unexpected end of JSON input"),
+        _response(stdout="ok"),
+    ]
+    sleeps: list[float] = []
+
+    outcome = run_with_retry(
+        MagicMock(side_effect=responses),
+        ["pr", "list"],
+        backoff_base_seconds=1,
+        sleep=sleeps.append,
+    )
+
+    assert outcome.result.stdout == "ok"
+    assert outcome.attempts == 2
+    assert outcome.retryable_failure is False
+    assert outcome.exhausted is False
+    assert sleeps == [1]
+
+
+def test_transport_marker_exhaustion_stays_fail_closed() -> None:
+    """A persistent truncation still ends as an explicit exhausted failure."""
+    outcome = run_with_retry(
+        MagicMock(side_effect=[_transport_failure("unexpected EOF")] * 3),
+        ["pr", "list"],
+        sleep=lambda _seconds: None,
+    )
+
+    assert outcome.result.returncode == 1
+    assert outcome.attempts == 3
+    assert outcome.retryable_failure is True
+    assert outcome.exhausted is True
+    assert "after 3 attempts" in outcome.terminal_diagnostic
+    assert "unexpected EOF" in outcome.terminal_diagnostic
+
+
+def test_deterministic_diagnostic_is_not_retried_with_markers_present() -> None:
+    """A permanent failure keeps its single-attempt behavior."""
+    runner = MagicMock(return_value=_transport_failure("gh: Not Found (HTTP 404)"))
+
+    outcome = run_with_retry(runner, ["pr", "list"], sleep=lambda _seconds: None)
+
+    assert runner.call_count == 1
+    assert outcome.exhausted is False
+    assert outcome.retryable_failure is False

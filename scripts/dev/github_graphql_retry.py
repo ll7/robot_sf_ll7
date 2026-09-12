@@ -22,6 +22,20 @@ TRANSIENT_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_BACKOFF_BASE_SECONDS = 1.0
 _HTTP_STATUS_RE = re.compile(r"\b(?:HTTP\s*)?(429|500|502|503|504)\b", re.IGNORECASE)
+# gh surfaces truncated or dropped GraphQL responses as transport diagnostics
+# without an HTTP status (issue #9081: "unexpected end of JSON input"). Treat
+# these as retryable so callers do not fail closed on a momentary truncation.
+_TRANSIENT_TRANSPORT_MARKERS = (
+    "unexpected end of json input",
+    "unexpected eof",
+    "eof while reading",
+    "connection reset by peer",
+    "connection refused",
+    "i/o timeout",
+    "tls handshake timeout",
+    "context deadline exceeded",
+    "the request timed out",
+)
 
 
 def is_quota_exhausted(result: subprocess.CompletedProcess[Any]) -> bool:
@@ -114,11 +128,14 @@ def transient_http_status(output: str) -> int | None:
 
 
 def is_transient_failure(result: subprocess.CompletedProcess[Any]) -> bool:
-    """Return whether a failed command reports a retryable HTTP response."""
+    """Return whether a failed command reports a retryable transport failure."""
     if result.returncode == 0:
         return False
     output = f"{result.stderr or ''}\n{result.stdout or ''}"
-    return transient_http_status(output) in TRANSIENT_HTTP_STATUSES
+    if transient_http_status(output) in TRANSIENT_HTTP_STATUSES:
+        return True
+    lowered = output.lower()
+    return any(marker in lowered for marker in _TRANSIENT_TRANSPORT_MARKERS)
 
 
 def run_with_retry(

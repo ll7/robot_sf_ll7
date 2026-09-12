@@ -15,30 +15,13 @@ from robot_sf.baselines.dr_mpc import Observation as DRMPCObservation
 from robot_sf.baselines.interface import Observation as InterfaceObservation
 from robot_sf.baselines.sicnav import Observation as SICNavObservation
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
+from tests.baselines._helpers import (
+    make_robot_observation,
+    write_fake_module_file,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SICNAV_STAGE_PATH = REPO_ROOT / "third_party" / "external_repos" / "sicnav"
-
-
-def _make_robot_observation() -> dict[str, object]:
-    """Return a minimal robot observation accepted by external MPC wrappers."""
-    return {
-        "dt": 0.1,
-        "robot": {
-            "position": [0.0, 0.0],
-            "velocity": [0.0, 0.0],
-            "goal": [1.0, 0.0],
-            "radius": 0.3,
-        },
-        "agents": [],
-        "obstacles": [],
-    }
-
-
-def _write(path, text: str) -> None:
-    """Write a fake external-package file while creating parent directories."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
 
 
 def test_baseline_registry_contains_mpc_algorithms() -> None:
@@ -61,7 +44,7 @@ def test_sicnav_step_raises_when_dependency_missing(
         lambda: (_ for _ in ()).throw(ImportError("SICNav dependency is missing.")),
     )
     with pytest.raises(RuntimeError, match="SICNav dependency"):
-        planner.step(_make_robot_observation())
+        planner.step(make_robot_observation())
 
 
 def test_sicnav_config_builder_uses_external_repos_default() -> None:
@@ -142,7 +125,7 @@ def test_dr_mpc_step_raises_when_dependency_missing() -> None:
     """A missing DR-MPC dependency should raise a runtime error during step execution."""
     planner = DRMPCPlanner({}, seed=1)
     with pytest.raises(RuntimeError, match="DR-MPC dependency"):
-        planner.step(_make_robot_observation())
+        planner.step(make_robot_observation())
 
 
 def test_sicnav_planner_uses_external_policy_from_repo_root(
@@ -151,7 +134,7 @@ def test_sicnav_planner_uses_external_policy_from_repo_root(
 ) -> None:
     """The SICNav wrapper should load a policy from a checked-out repo root."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(
+    write_fake_module_file(
         repo_root / "sicnav_diffusion" / "__init__.py",
         """
 class SICNavPolicy:
@@ -168,7 +151,7 @@ class SICNavPolicy:
         return {"v": obs.robot["goal"][0] * 0.5, "omega": 0.1}
 """,
     )
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
 
     original_cwd = Path.cwd()
     non_repo_cwd = tmp_path / "elsewhere"
@@ -179,7 +162,7 @@ class SICNavPolicy:
         seed=1,
     )
     try:
-        action = planner.step(_make_robot_observation())
+        action = planner.step(make_robot_observation())
         assert action == {"v": 0.5, "omega": 0.1}
         assert "sicnav_diffusion" in sys.modules
         assert planner._policy.seed_value == 1
@@ -198,7 +181,7 @@ def test_external_mpc_wrappers_reexport_shared_observation_type() -> None:
 def test_sicnav_planner_accepts_shared_observation_defaults(tmp_path: Path) -> None:
     """SICNav dict observations should use the shared default-obstacle container."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(
+    write_fake_module_file(
         repo_root / "sicnav_diffusion" / "__init__.py",
         """
 class SICNavPolicy:
@@ -212,10 +195,10 @@ class SICNavPolicy:
         return {"v": 0.5, "omega": 0.1}
 """,
     )
-    _write(repo_root / "sicnav" / "__init__.py", "")
+    write_fake_module_file(repo_root / "sicnav" / "__init__.py", "")
 
     planner = SICNavPlanner(build_sicnav_config({"repo_root": str(repo_root)}), seed=1)
-    obs = _make_robot_observation()
+    obs = make_robot_observation()
     obs.pop("obstacles")
     try:
         action = planner.step(obs)
@@ -228,7 +211,7 @@ class SICNavPolicy:
 def test_sicnav_metadata_marks_incompatible_module_as_missing(tmp_path: Path) -> None:
     """SICNav metadata should fail closed when the import lacks a policy constructor."""
     repo_root = tmp_path / "sicnav_repo"
-    _write(repo_root / "sicnav_diffusion" / "__init__.py", "VALUE = 1\n")
+    write_fake_module_file(repo_root / "sicnav_diffusion" / "__init__.py", "VALUE = 1\n")
 
     planner = SICNavPlanner(build_sicnav_config({"repo_root": str(repo_root)}), seed=1)
     try:
@@ -256,7 +239,7 @@ def test_dr_mpc_planner_uses_external_policy(monkeypatch: pytest.MonkeyPatch) ->
     fake_module.DRMPCPolicy = FakePolicy
     monkeypatch.setitem(sys.modules, "dr_mpc", fake_module)
     planner = DRMPCPlanner({"checkpoint_path": "dummy.pt"}, seed=1)
-    action = planner.step(_make_robot_observation())
+    action = planner.step(make_robot_observation())
     assert action == {"v": 0.25, "omega": -0.05}
     assert planner.get_metadata()["status"] == "ok"
 
@@ -282,7 +265,7 @@ def test_dr_mpc_planner_accepts_shared_observation_defaults_and_clamps_velocity(
     fake_module.load_policy = load_policy
     monkeypatch.setitem(sys.modules, "dr_mpc", fake_module)
     planner = DRMPCPlanner({"checkpoint_path": "dummy.pt", "v_max": 2.0}, seed=1)
-    obs = _make_robot_observation()
+    obs = make_robot_observation()
     obs.pop("obstacles")
 
     action = planner.step(obs)

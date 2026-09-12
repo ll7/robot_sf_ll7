@@ -23,6 +23,7 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
 | Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
 | Bootstrap recipe freeze and check | [bootstrap_recipe_check.py](../../scripts/tools/bootstrap_recipe_check.py) |
+| Dependency cache manifest and reconstruction status | [dependency_cache_manifest.py](../../scripts/tools/dependency_cache_manifest.py) |
 | Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
 ## 1. Retention classes in operational terms

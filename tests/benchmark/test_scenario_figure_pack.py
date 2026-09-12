@@ -13,9 +13,11 @@ from dataclasses import replace
 import matplotlib
 import numpy as np
 import pytest
+from PIL import Image
 
 from robot_sf.benchmark.figures import export
 from robot_sf.benchmark.figures import scenario_pack as pack
+from robot_sf.benchmark.figures.profile import FigureProfile
 
 
 @pytest.fixture
@@ -298,6 +300,18 @@ def test_bundle_roundtrip_inventory_and_no_raw_trace(source, tmp_path):
         artifact["path"] for artifact in result["artifacts"]
     } | {"manifest.json"}
     assert not (output / ".INCOMPLETE").exists()
+
+
+def test_png_export_uses_selected_profile_dpi(source, tmp_path):
+    profile = replace(FigureProfile.builtin("single"), dpi=144)
+    config = replace(diagnostic(), formats=("png",), views=("speed",))
+    output = tmp_path / "profiled"
+
+    pack.build_pack(source, output, config=config, profile=profile)
+
+    png_path = next(output.rglob("*.png"))
+    with Image.open(png_path) as image:
+        assert image.info["dpi"] == pytest.approx((profile.dpi, profile.dpi), abs=0.01)
 
 
 def test_diagnostic_export_preserves_admitted_source_status(source, tmp_path):

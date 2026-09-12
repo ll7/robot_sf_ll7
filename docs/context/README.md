@@ -74,6 +74,10 @@ in [svg_geometry_contract.md](svg_geometry_contract.md); legacy and corrected ro
 pooled as comparable evidence.
 Issue #8891's outcome-free matched-budget temporal-robustness packet is documented in [issue_8891_temporal_robustness_packet.md](issue_8891_temporal_robustness_packet.md).
 
+The issue #8829 compute-window capacity planner is documented in
+[issue_8829_compute_window_capacity_planner.md](issue_8829_compute_window_capacity_planner.md);
+it is operational planning context only, not benchmark or research evidence.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 

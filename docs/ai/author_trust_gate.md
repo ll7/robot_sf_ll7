@@ -109,6 +109,10 @@ Exit code `0` means the receipt was built; `2` means the fixture was malformed.
   PR label and own-user `agent-digest: allow` comment marker are thread-scoped
   opt-ins, so flagged foreign excerpts are retained with attribution.
 
-Not yet wired: the issue-audit inventory (`scripts/dev/issue_audit_core.py`) and
-worker prompt assembly outside these helpers. Treat their foreign-authored text
-as unclassified until the gate is extended.
+- `scripts/dev/issue_audit_core.py`: issue body and comment source rows annotate
+  `author_trust` and blank `text` for untrusted authors, so decision excerpts and
+  documented options cannot quote foreign-authored instructions. The `agent:digest`
+  label and own-user `agent-digest: allow` marker are thread-scoped opt-ins.
+
+Not yet wired: worker prompt assembly outside these helpers. Treat its
+foreign-authored text as unclassified until the gate is extended.

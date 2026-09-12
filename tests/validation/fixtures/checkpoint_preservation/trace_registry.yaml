@@ -1,0 +1,8 @@
+schema_version: oracle-trace-uri-registry.v1
+dataset_id: fixture_dataset_v1
+traces:
+  - split: train
+    trace_id: fixture_train
+    uri: artifact://fixture/dataset/train.jsonl
+    sha256: pending
+    retrieval_status: resolvable

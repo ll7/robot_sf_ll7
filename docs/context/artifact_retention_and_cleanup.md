@@ -23,7 +23,9 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
 | Log retention and diagnostic excerpts | [check_log_retention.py](../../scripts/tools/check_log_retention.py) |
 | Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
+| Checkpoint preservation custody check | [check_checkpoint_preservation.py](../../scripts/validation/check_checkpoint_preservation.py) |
 | Bootstrap recipe freeze and check | [bootstrap_recipe_check.py](../../scripts/tools/bootstrap_recipe_check.py) |
+| Dependency cache manifest and reconstruction status | [dependency_cache_manifest.py](../../scripts/tools/dependency_cache_manifest.py) |
 | Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
 ## 1. Retention classes in operational terms
@@ -176,7 +178,25 @@ The guard verifies durable destination custody, checksums, consumer coverage, an
 dispositions before permitting deletion planning. Check mode performs zero file deletions;
 an explicit `--apply` route enforces compare-and-swap revalidation before removing eligible bytes.
 
-### 4.8 Generate complete post-access handoff
+### 4.8 Check checkpoint preservation custody
+
+```bash
+uv run python scripts/validation/check_checkpoint_preservation.py --check \
+  --fixture tests/validation/fixtures/checkpoint_preservation/complete.json --format json
+```
+
+The check-only inventory resolves `model_id` references through the model registry, binds producer
+data identity through the oracle trace-URI registry, recomputes byte and companion digests with the
+shared evidence writer, and reads metadata-only loadability from a checkpoint compatibility audit
+receipt (the existing owner's output; no inference and no reimplemented loader). Each artifact ends
+in one stable state: `preservation_ready` or a `blocked_*` state covering ambiguous identity,
+missing lineage, incomplete inventory, missing artifact or companion, partial copy, digest
+mismatch, loadability or contract failure, incomplete training, unsafe destination, and uncleared
+publication. Load status is reported separately (`verified_metadata`, `loadability_unavailable`,
+`loadability_failed`, `not_checked`) and is never preservation, performance, or benchmark evidence.
+The tool is read-only and emits no private paths.
+
+### 4.9 Generate complete post-access handoff
 
 ```bash
 uv run python scripts/tools/generate_post_access_handoff.py --check \
@@ -188,7 +208,7 @@ summarizing workloads, scheduler receipts, artifact custody, and environment rec
 It redacts private paths, internal hosts, and credentials, rejects contradictory statuses and
 orphan records, and enforces actionable next commands for incomplete runs.
 
-### 4.9 Freeze and rehearse a bootstrap recipe
+### 4.10 Freeze and rehearse a bootstrap recipe
 
 Each recipe in [configs/bootstrap_recipes/README.md](../../configs/bootstrap_recipes/README.md)
 freezes an execution class's setup, probe, and cleanup sequence with its source/lock and immutable
@@ -196,7 +216,7 @@ identities. `scripts/tools/bootstrap_recipe_check.py --check --recipes configs/b
 reports structurally; `--execute-safe-checks` runs `safe_check` probes in an isolated temporary root.
 A class without a verified recipe needs an explicit `verification_status: unavailable` reason.
 
-### 4.10 Check log retention and bounded diagnostic excerpts
+### 4.11 Check log retention and bounded diagnostic excerpts
 
 ```bash
 uv run python scripts/tools/check_log_retention.py --check --manifest <LOG_MANIFEST> --root <LOG_ROOT> --format json
@@ -206,7 +226,7 @@ The check-only helper requires per-log role, job/task identity, byte/line counts
 digest, and retention class; it emits deterministic bounded excerpts with private values redacted.
 Active, truncated, binary, secret-like, duplicate, unidentified, mismatched, or uncustodied logs remain blocked; failed/unknown jobs retain full logs until verified custody. It never deletes files or changes runtime logging.
 
-### 4.11 Report a blocker
+### 4.12 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

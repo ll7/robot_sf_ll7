@@ -849,6 +849,65 @@ def _drift_reason(drift: dict[str, dict[str, str | None]]) -> str:
     return "local_head_changed"
 
 
+def _unchanged_head_advanced_base_refresh(
+    baseline: dict[str, Any], current: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Return a justified refresh for an unchanged branch after a main fast-forward.
+
+    A baseline captured against the then-current main tip is verified ``clean``.
+    When main later fast-forwards and the branch head (local and remote, still
+    equal) is unchanged, the only drift is the base: the canonical sync
+    integrates the new main and restores a clean ancestry classification.
+    Anything less certain keeps the existing fail-closed block.
+    """
+    baseline_ancestry = baseline.get("ancestry")
+    current_ancestry = current.get("ancestry")
+    if not isinstance(baseline_ancestry, dict) or not isinstance(current_ancestry, dict):
+        return None
+    if (
+        str(baseline_ancestry.get("state") or "") != "clean"
+        or str(current_ancestry.get("state") or "") != "undeclared_stack"
+    ):
+        return None
+    local_head = str(current.get("local_head_sha") or "")
+    remote_head = str(current.get("remote_branch_sha") or "")
+    if (
+        not local_head
+        or local_head != str(baseline.get("local_head_sha") or "")
+        or local_head != remote_head
+        or remote_head != str(baseline.get("remote_branch_sha") or "")
+    ):
+        return None
+    baseline_main_tip = str(baseline_ancestry.get("main_tip_sha") or "")
+    current_main_tip = str(current_ancestry.get("main_tip_sha") or "")
+    current_merge_base = str(current_ancestry.get("merge_base_sha") or "")
+    if (
+        not baseline_main_tip
+        or not current_main_tip
+        or not current_merge_base
+        or str(baseline.get("base_sha") or "") != baseline_main_tip
+        or str(current.get("base_sha") or "") != current_main_tip
+        or current_merge_base != baseline_main_tip
+        or current_main_tip == baseline_main_tip
+    ):
+        return None
+    return _decision(
+        baseline,
+        current,
+        decision="refresh-required",
+        reason="base_changed",
+        extra={
+            "drift": {
+                "base_sha": {
+                    "baseline": baseline.get("base_sha"),
+                    "current": current.get("base_sha"),
+                }
+            },
+            "ancestry": current.get("ancestry"),
+        },
+    )
+
+
 def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Classify a baseline/current pair without performing external I/O."""
     _validate_snapshot_pair(baseline, current)
@@ -911,6 +970,9 @@ def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[st
 
     ancestry_state_value = _ancestry_blocking_state(current)
     if ancestry_state_value is not None:
+        justified_refresh = _unchanged_head_advanced_base_refresh(baseline, current)
+        if justified_refresh is not None:
+            return justified_refresh
         return _decision(
             baseline,
             current,

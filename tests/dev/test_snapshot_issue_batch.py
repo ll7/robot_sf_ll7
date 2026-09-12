@@ -1666,6 +1666,86 @@ def test_main_allows_incomplete_claimable_scan_with_explicit_opt_out(
     assert capsys.readouterr().err == ""
 
 
+@pytest.mark.parametrize("allow_incomplete", [False, True])
+def test_main_rejects_unavailable_claimable_scan_with_or_without_opt_out(
+    allow_incomplete: bool, capsys
+) -> None:  # type: ignore[no-untyped-def]
+    """The bounded opt-out must not turn unavailable discovery into success."""
+    with patch("scripts.dev.snapshot_issue_batch._build_payload") as mock_build:
+        mock_build.return_value = _claimable_payload(completeness="unavailable")
+        argv = ["--claimable", "--json"]
+        if allow_incomplete:
+            argv.insert(1, "--allow-incomplete")
+        rc = main(argv)
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert '"queue_completeness": "unavailable"' in captured.out
+    assert "queue_completeness=unavailable" in captured.err
+
+
+@pytest.mark.parametrize("missing_field", ["queue_completeness", "zero_work_authoritative"])
+def test_main_fails_closed_for_missing_claimable_authority(missing_field: str, capsys) -> None:  # type: ignore[no-untyped-def]
+    """Missing authority fields remain failures even with the bounded opt-out."""
+    payload = _claimable_payload(completeness="incomplete")
+    payload.pop(missing_field)
+    with patch("scripts.dev.snapshot_issue_batch._build_payload") as mock_build:
+        mock_build.return_value = payload
+        rc = main(["--claimable", "--allow-incomplete", "--json"])
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert '"schema": "issue_batch_snapshot.v1"' in captured.out
+    assert f"missing {missing_field} authority" in captured.err
+
+
+@pytest.mark.parametrize(
+    ("completeness", "zero_work_authoritative"),
+    [("complete", False), ("incomplete", True)],
+)
+def test_main_fails_closed_for_inconsistent_claimable_authority(
+    completeness: str, zero_work_authoritative: bool, capsys
+) -> None:  # type: ignore[no-untyped-def]
+    """Authority must agree with the reported queue completeness state."""
+    payload = _claimable_payload(completeness=completeness)
+    payload["zero_work_authoritative"] = zero_work_authoritative
+    with patch("scripts.dev.snapshot_issue_batch._build_payload") as mock_build:
+        mock_build.return_value = payload
+        rc = main(["--claimable", "--allow-incomplete", "--json"])
+
+    assert rc == 1
+    assert "inconsistent authority fields" in capsys.readouterr().err
+
+
+def test_main_rejects_unknown_claimable_completeness_with_opt_out(
+    capsys,
+) -> None:  # type: ignore[no-untyped-def]
+    """Only the known incomplete state may use the bounded opt-out."""
+    payload = _claimable_payload(completeness="outage")
+    with patch("scripts.dev.snapshot_issue_batch._build_payload") as mock_build:
+        mock_build.return_value = payload
+        rc = main(["--claimable", "--allow-incomplete", "--json"])
+
+    assert rc == 1
+    assert "unknown queue_completeness authority" in capsys.readouterr().err
+
+
+def test_main_preserves_hard_error_precedence_over_claimable_authority(
+    capsys,
+) -> None:  # type: ignore[no-untyped-def]
+    """Payload hard errors remain failures before authority handling or opt-out."""
+    payload = _claimable_payload(completeness="incomplete")
+    payload["errors"] = [{"status": "error", "error": "discovery failed"}]
+    with patch("scripts.dev.snapshot_issue_batch._build_payload") as mock_build:
+        mock_build.return_value = payload
+        rc = main(["--claimable", "--allow-incomplete", "--json"])
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert '"error": "discovery failed"' in captured.out
+    assert captured.err == ""
+
+
 @patch("scripts.dev.snapshot_issue_batch._build_payload")
 def test_main_complete_claimable_scan_exits_zero(mock_build: MagicMock) -> None:
     """A complete claimable scan remains a successful zero-work authority."""

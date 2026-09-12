@@ -1135,8 +1135,9 @@ def snapshot_claimable_issues(
     ``zero_work_authoritative`` flag makes that boundary machine-readable and
     is true only for a complete, error-free page-one scan. The CLI enforces this
     boundary at the process exit: an incomplete ``--claimable`` scan exits non-zero
-    after printing the payload, unless ``--allow-incomplete`` is passed for
-    intentional bounded discovery.
+    after printing the payload. The opt-out restores exit zero only for the
+    literal ``queue_completeness == "incomplete"`` state; unavailable, unknown,
+    or inconsistent authority remains a failure.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
     blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
@@ -1740,7 +1741,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help=(
             "Discover bounded open claimable issues without explicit issue numbers; an "
-            "incomplete scan exits non-zero unless --allow-incomplete is passed."
+            "incomplete scan exits non-zero unless --allow-incomplete is passed for the "
+            "literal incomplete state."
         ),
     )
     parser.add_argument(
@@ -1752,8 +1754,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--allow-incomplete",
         action="store_true",
         help=(
-            "Allow an incomplete --claimable scan to exit zero for intentional bounded "
-            "discovery; zero-work conclusions still require zero_work_authoritative."
+            "Allow only a literal queue_completeness=incomplete --claimable scan to exit "
+            "zero for intentional bounded discovery; unavailable or unknown authority "
+            "remains a failure."
         ),
     )
     parser.add_argument(
@@ -1917,6 +1920,44 @@ def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, An
     )
 
 
+def _claimable_authority_error(payload: dict[str, Any], *, allow_incomplete: bool) -> str | None:
+    """Return a fail-closed CLI error for claimable queue authority fields."""
+    if "queue_completeness" not in payload:
+        return "claimable queue scan is missing queue_completeness authority"
+    completeness = payload["queue_completeness"]
+    if not isinstance(completeness, str) or completeness not in {
+        "complete",
+        "incomplete",
+        "unavailable",
+    }:
+        return (
+            "claimable queue scan has unknown queue_completeness authority "
+            f"(queue_completeness={completeness!r})"
+        )
+    if "zero_work_authoritative" not in payload:
+        return "claimable queue scan is missing zero_work_authoritative authority"
+    zero_work_authoritative = payload["zero_work_authoritative"]
+    if not isinstance(zero_work_authoritative, bool):
+        return (
+            "claimable queue scan has invalid zero_work_authoritative authority "
+            f"(zero_work_authoritative={zero_work_authoritative!r})"
+        )
+    expected_authority = completeness == "complete"
+    if zero_work_authoritative is not expected_authority:
+        return (
+            "claimable queue scan has inconsistent authority fields "
+            f"(queue_completeness={completeness}, "
+            f"zero_work_authoritative={zero_work_authoritative})"
+        )
+    if completeness == "complete" or (completeness == "incomplete" and allow_incomplete):
+        return None
+    return (
+        "claimable queue scan is not authoritative for zero work "
+        f"(queue_completeness={completeness}); resume with --resume-page/--limit until "
+        "complete, or pass --allow-incomplete only for queue_completeness=incomplete"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
@@ -1947,15 +1988,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     if issue_errors or payload.get("errors"):
         return 1
-    completeness = payload.get("queue_completeness")
-    if completeness is not None and completeness != "complete" and not args.allow_incomplete:
-        print(
-            "claimable queue scan is not authoritative for zero work "
-            f"(queue_completeness={completeness}); resume with --resume-page/--limit until "
-            "complete, or pass --allow-incomplete for intentional bounded discovery",
-            file=sys.stderr,
+    if args.claimable:
+        authority_error = _claimable_authority_error(
+            payload, allow_incomplete=args.allow_incomplete
         )
-        return 1
+        if authority_error:
+            print(authority_error, file=sys.stderr)
+            return 1
     return 0
 
 

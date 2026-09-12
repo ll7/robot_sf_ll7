@@ -104,8 +104,11 @@ Exit code `0` means the receipt was built; `2` means the fixture was malformed.
   `author_trust` and gate `body_excerpt`; `--capsule-dir` capsules blank
   untrusted bodies and add a `content_trust` block.
 
-Not yet wired: PR queue review/comment snapshots
-(`scripts/dev/snapshot_pr_queue.py`), the issue-audit inventory
-(`scripts/dev/issue_audit_core.py`), and worker prompt assembly outside these
-helpers. Treat their foreign-authored text as unclassified until the gate is
-extended.
+- `scripts/dev/snapshot_pr_queue.py`: review and comment snapshots annotate
+  `author_trust` and blank excerpts from untrusted authors. The `agent:digest`
+  PR label and own-user `agent-digest: allow` comment marker are thread-scoped
+  opt-ins, so flagged foreign excerpts are retained with attribution.
+
+Not yet wired: the issue-audit inventory (`scripts/dev/issue_audit_core.py`) and
+worker prompt assembly outside these helpers. Treat their foreign-authored text
+as unclassified until the gate is extended.

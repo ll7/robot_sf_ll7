@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
+from typing import TYPE_CHECKING
+
 import pytest
 
 from scripts.dev.prune_stale_remote_branches import (
@@ -12,12 +15,16 @@ from scripts.dev.prune_stale_remote_branches import (
     KEEP_PROBE_ERROR,
     KEEP_PROTECTED,
     KEEP_UNMERGED,
+    GitGhProbe,
     apply_deletions,
     build_report,
     classify_heads,
     main,
     run_scan,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class FakeProbe:
@@ -52,7 +59,12 @@ class FakeProbe:
     def issue_state(self, number: int) -> str | None:
         return self.issue_states.get(number)
 
-    def delete_head(self, ref: str) -> tuple[bool, str]:
+    def delete_head(self, ref: str, expected_sha: str = "") -> tuple[bool, str]:
+        current_sha = self.heads.get(ref)
+        if current_sha is None:
+            return False, f"ref not found: {ref}"
+        if expected_sha and current_sha != expected_sha:
+            return False, f"stale ref {ref}: expected {expected_sha}, found {current_sha}"
         self.deleted.append(ref)
         if self.delete_ok:
             self.heads.pop(ref, None)
@@ -196,3 +208,137 @@ def test_main_returns_one_when_a_deletion_fails() -> None:
     probe.delete_ok = False
 
     assert main(["--apply", "--limit", "5"], probe=probe) == 1
+
+
+def test_apply_deletions_rejects_stale_tip_when_branch_advances() -> None:
+    """Issue #9168: advancing A to B after scan leaves B untouched and reports stale tip."""
+    probe = _probe()
+    scan = run_scan(probe, repo="ll7/robot_sf_ll7", main_ref="origin/main")
+    candidate = next(c for c in scan["candidates"] if c["ref"] == "refs/heads/fix/merged")
+    assert candidate["sha"] == "sha-merged"
+
+    # Simulate another worker advancing the remote branch to sha-new-unmerged
+    probe.heads["refs/heads/fix/merged"] = "sha-new-unmerged"
+
+    applied = apply_deletions(probe, scan, limit=10)
+    # The advanced ref must NOT be deleted
+    assert "refs/heads/fix/merged" not in probe.deleted
+    assert probe.heads["refs/heads/fix/merged"] == "sha-new-unmerged"
+
+    # Deletion entry must record failure with stale tip error
+    del_entry = next(d for d in applied["deletions"] if d["ref"] == "refs/heads/fix/merged")
+    assert not del_entry["ok"]
+    assert "stale" in del_entry["error"]
+
+
+def test_apply_deletions_blocks_when_pr_opened_after_scan() -> None:
+    """Issue #9168: a newly opened PR prevents deletion even when the tip is unchanged."""
+    probe = _probe()
+    scan = run_scan(probe, repo="ll7/robot_sf_ll7", main_ref="origin/main")
+    assert any(c["ref"] == "refs/heads/fix/merged" for c in scan["candidates"])
+
+    # Simulate a PR opened for fix/merged before apply
+    probe.open_pr_heads_value = {"fix/merged-with-pr", "fix/merged"}
+
+    applied = apply_deletions(probe, scan, limit=10)
+    assert "refs/heads/fix/merged" not in probe.deleted
+    assert "refs/heads/fix/merged" in probe.heads
+
+    del_entry = next(d for d in applied["deletions"] if d["ref"] == "refs/heads/fix/merged")
+    assert not del_entry["ok"]
+    assert "open PR detected" in del_entry["error"]
+
+
+def test_apply_deletions_blocks_when_open_pr_refresh_unavailable() -> None:
+    """Issue #9168: keep refs when open PR refresh fails."""
+    probe = _probe()
+    scan = run_scan(probe, repo="ll7/robot_sf_ll7", main_ref="origin/main")
+
+    probe.open_pr_heads_value = None
+
+    applied = apply_deletions(probe, scan, limit=10)
+    assert "refs/heads/fix/merged" not in probe.deleted
+
+    del_entry = next(d for d in applied["deletions"] if d["ref"] == "refs/heads/fix/merged")
+    assert not del_entry["ok"]
+    assert "open PR refresh unavailable" in del_entry["error"]
+
+
+def test_apply_deletions_blocks_when_claim_issue_reopened() -> None:
+    """Issue #9168: a reopened claim issue prevents deletion even when tip is unchanged."""
+    probe = _probe()
+    scan = run_scan(probe, repo="ll7/robot_sf_ll7", main_ref="origin/main")
+    assert any(c["ref"] == "refs/heads/agent-claims/issue-1" for c in scan["candidates"])
+
+    # Reopen issue 1
+    probe.issue_states[1] = "open"
+
+    applied = apply_deletions(probe, scan, limit=10)
+    assert "refs/heads/agent-claims/issue-1" not in probe.deleted
+    assert "refs/heads/agent-claims/issue-1" in probe.heads
+
+    del_entry = next(
+        d for d in applied["deletions"] if d["ref"] == "refs/heads/agent-claims/issue-1"
+    )
+    assert not del_entry["ok"]
+    assert "claim issue 1 is open" in del_entry["error"]
+
+
+def test_apply_deletions_blocks_when_claim_issue_refresh_unavailable() -> None:
+    """Issue #9168: keep claim refs when issue state refresh fails."""
+    probe = _probe()
+    scan = run_scan(probe, repo="ll7/robot_sf_ll7", main_ref="origin/main")
+
+    probe.issue_states[1] = None
+
+    applied = apply_deletions(probe, scan, limit=10)
+    assert "refs/heads/agent-claims/issue-1" not in probe.deleted
+
+    del_entry = next(
+        d for d in applied["deletions"] if d["ref"] == "refs/heads/agent-claims/issue-1"
+    )
+    assert not del_entry["ok"]
+    assert "could not refresh state" in del_entry["error"]
+
+
+def test_git_gh_probe_atomic_lease_with_local_bare_repo(tmp_path: Path) -> None:
+    """Issue #9168: GitGhProbe.delete_head enforces atomic lease on a real git remote."""
+    bare = tmp_path / "remote.git"
+    work = tmp_path / "work"
+    subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+    subprocess.run(["git", "init", str(work)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(work), "config", "user.name", "test"], check=True)
+    (work / "file.txt").write_text("hello", encoding="utf-8")
+    subprocess.run(["git", "-C", str(work), "add", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "commit", "-m", "initial"], check=True, capture_output=True
+    )
+    sha_a = subprocess.check_output(
+        ["git", "-C", str(work), "rev-parse", "HEAD"], text=True
+    ).strip()
+    subprocess.run(["git", "-C", str(work), "remote", "add", "origin", str(bare)], check=True)
+    subprocess.run(
+        ["git", "-C", str(work), "push", "origin", "master:refs/heads/topic"],
+        check=True,
+        capture_output=True,
+    )
+
+    probe = GitGhProbe(repo="ll7/robot_sf_ll7", remote=str(bare), main_ref="master")
+
+    # Mismatched expected_sha fails and leaves ref intact
+    ok, error = probe.delete_head(
+        "refs/heads/topic", expected_sha="0000000000000000000000000000000000000000"
+    )
+    assert not ok
+    assert "stale info" in error or "rejected" in error
+    heads = probe.list_heads()
+    assert "refs/heads/topic" in heads
+    assert heads["refs/heads/topic"] == sha_a
+
+    # Matching expected_sha succeeds and deletes ref
+    ok, error = probe.delete_head("refs/heads/topic", expected_sha=sha_a)
+    assert ok
+    assert error == ""
+    heads_after = probe.list_heads()
+    assert "refs/heads/topic" not in heads_after

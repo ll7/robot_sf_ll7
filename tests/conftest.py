@@ -614,6 +614,9 @@ _FAST_FILES = {
     "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
+    # Stale remote branch prune tests are fast deterministic tooling contracts;
+    # keep them in PR fast shards (issue #9168).
+    "test_prune_stale_remote_branches.py",
     # Doctor JSON and top-level CLI tests are deterministic readiness contracts;
     # keep both source-adjacent owners in the exact-head changed-coverage lane.
     "test_doctor.py",

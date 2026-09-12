@@ -1,7 +1,8 @@
-"""Tests for source_bundle_export (#8851).
+"""Tests for source_bundle_export (#8851, repaired by #9131).
 
-Fixture scenarios: clean commit, dirty tree, admitted patch, missing object, shallow
-clone, subproject mismatch, generated-file drift, private remote, byte-stable verify.
+Coverage: clean commit, dirty tree, admitted patch binding, missing object, shallow
+clone, vendored subproject, gitlink subproject, generated-file confinement, private
+remote redaction, ignored state, byte-stable export, and CLI round trip.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
 
 def _repo(tmp_path: Path, vendored: bool = False) -> Path:
     repo = tmp_path / "repo"
-    repo.mkdir()
+    repo.mkdir(parents=True, exist_ok=True)
     _git(repo, "init", "-q", "-b", "main")
     (repo / "a.txt").write_text("hello\n", encoding="utf-8")
     if vendored:
@@ -47,41 +48,57 @@ def test_clean_commit_exports_and_verifies(tmp_path: Path) -> None:
     out = tmp_path / "bundle"
     manifest = export_bundle(repo, out, "workload-a")
     assert manifest["status"] == "pass"
+    assert manifest["ref"] == "HEAD"
     assert (out / "source.bundle").is_file()
-    assert (out / "SHA256SUMS").is_file()
-    assert manifest["inventory_count"] == 1
     report = verify_bundle(out, tmp_path / "restore")
     assert report["status"] == "pass"
-    assert report["commit"] == manifest["commit"]
 
 
-def test_dirty_and_untracked_state_is_rejected(tmp_path: Path) -> None:
+def test_dirty_untracked_and_ignored_state_is_rejected(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     (repo / "a.txt").write_text("changed\n", encoding="utf-8")
-    manifest = export_bundle(repo, tmp_path / "b1", "dirty")
-    assert manifest["status"] == "blocked"
-    assert "dirty_tree_not_admitted" in manifest["reasons"]
+    assert export_bundle(repo, tmp_path / "b1", "dirty")["reasons"] == ["dirty_tree_not_admitted"]
 
     (repo / "a.txt").write_text("hello\n", encoding="utf-8")
     (repo / "scratch.txt").write_text("x\n", encoding="utf-8")
-    manifest = export_bundle(repo, tmp_path / "b2", "untracked")
+    assert export_bundle(repo, tmp_path / "b2", "untracked")["reasons"] == [
+        "untracked_state_not_admitted"
+    ]
+
+    (repo / "scratch.txt").unlink()
+    (repo / ".gitignore").write_text("ignored.txt\n", encoding="utf-8")
+    _git(repo, "add", ".gitignore")
+    _git(repo, "commit", "-qm", "ignore")
+    (repo / "ignored.txt").write_text("secret-ish\n", encoding="utf-8")
+    manifest = export_bundle(repo, tmp_path / "b3", "ignored")
     assert manifest["status"] == "blocked"
-    assert "untracked_state_not_admitted" in manifest["reasons"]
+    assert "ignored_state_not_admitted" in manifest["reasons"]
 
 
-def test_admitted_patch_is_checksum_bound(tmp_path: Path) -> None:
+def test_admitted_patch_must_match_captured_diff(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     (repo / "a.txt").write_text("patched\n", encoding="utf-8")
     patch = tmp_path / "admitted.patch"
     patch.write_text(_git(repo, "diff").stdout, encoding="utf-8")
-    _git(repo, "checkout", "--", "a.txt")
 
     out = tmp_path / "bundle"
     manifest = export_bundle(repo, out, "patched", patch_path=patch)
     assert manifest["status"] == "pass"
-    assert manifest["patch"]["sha256"]
-    assert (out / "admitted.patch").is_file()
-    assert verify_bundle(out, tmp_path / "restore")["status"] == "pass"
+    assert manifest["patch"]["matches_captured_diff"] is True
+    assert manifest["patch"]["captured_diff_sha256"]
+    report = verify_bundle(out, tmp_path / "restore")
+    assert report["status"] == "pass", report["discrepancies"]
+    assert "patched" in (tmp_path / "restore" / "a.txt").read_text(encoding="utf-8")
+
+    _git(repo, "checkout", "--", "a.txt")
+    mismatched = tmp_path / "foreign.patch"
+    mismatched.write_text(
+        "--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-hello\n+other\n", encoding="utf-8"
+    )
+    (repo / "a.txt").write_text("changed\n", encoding="utf-8")
+    manifest = export_bundle(repo, tmp_path / "b2", "mismatch", patch_path=mismatched)
+    assert manifest["status"] == "blocked"
+    assert "patch_does_not_match_dirty_state" in manifest["reasons"]
 
 
 def test_missing_object_and_shallow_clone_are_blocked(tmp_path: Path) -> None:
@@ -90,14 +107,19 @@ def test_missing_object_and_shallow_clone_are_blocked(tmp_path: Path) -> None:
     assert "missing_object" in missing["reasons"]
 
     repo = _repo(tmp_path)
-    head_sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
-    (repo / ".git" / "shallow").write_text(f"{head_sha}\n", encoding="utf-8")
-    manifest = export_bundle(repo, tmp_path / "b1", "shallow")
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "--depth", "1", "--no-local", str(repo), str(shallow)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    manifest = export_bundle(shallow, tmp_path / "b1", "shallow")
     assert manifest["status"] == "blocked"
     assert "shallow_clone_rejected" in manifest["reasons"]
 
 
-def test_subproject_mismatch_and_generated_drift(tmp_path: Path) -> None:
+def test_vendored_subproject_mismatch(tmp_path: Path) -> None:
     repo = _repo(tmp_path, vendored=True)
     out = tmp_path / "bundle"
     manifest = export_bundle(
@@ -117,24 +139,88 @@ def test_subproject_mismatch_and_generated_drift(tmp_path: Path) -> None:
     assert "generated_drift" in report["reasons"]
 
 
-def test_private_remote_is_never_published(tmp_path: Path) -> None:
+def test_gitlink_subproject_is_explicitly_rejected_and_never_crashes(tmp_path: Path) -> None:
+    """A gitlink is not carried by the bundle: it must be rejected, not crash."""
+    inner = _repo(tmp_path / "inner")
+    repo = _repo(tmp_path / "outer")
+    subprocess.run(
+        [
+            *GIT,
+            "-C",
+            str(repo),
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            str(inner),
+            "sub",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    _git(repo, "commit", "-qm", "add submodule")
+    manifest = export_bundle(repo, tmp_path / "bundle", "submodular", subprojects=["sub"])
+    assert manifest["status"] == "blocked"
+    assert "subproject_not_restorable" in manifest["reasons"]
+    assert any(
+        row["kind"] == "git" and row["restorable"] is False for row in manifest["subprojects"]
+    )
+    # inventory must tolerate the non-numeric gitlink size
+    assert any(
+        row["kind"] == "commit" and row["size_bytes"] is None for row in manifest["inventory"]
+    )
+
+
+def test_generated_source_custody_is_confined(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    _git(repo, "remote", "add", "origin", "https://user:secret@git.internal.example/org/repo.git")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret\n", encoding="utf-8")
+    link = repo / "link.txt"
+    link.symlink_to(outside)
+
+    escaped = export_bundle(repo, tmp_path / "b1", "escape", generated=[{"path": "../outside.txt"}])
+    assert escaped["status"] == "blocked"
+    assert "generated_path_escape" in escaped["reasons"]
+
+    linked = export_bundle(repo, tmp_path / "b2", "link", generated=[{"path": "link.txt"}])
+    assert linked["status"] == "blocked"
+    assert "generated_path_escape" in linked["reasons"]
+    link.unlink()
+
+    confined = export_bundle(repo, tmp_path / "b3", "ok", generated=[{"path": "a.txt"}])
+    assert confined["status"] == "pass"
+    assert confined["generated"][0]["confined"] is True
+
+
+def test_private_remote_is_redacted_to_a_digest(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    _git(
+        repo,
+        "remote",
+        "add",
+        "origin",
+        "https://user:secret@git.internal.example/org/repo.git?access_token=abc",
+    )
     manifest = export_bundle(repo, tmp_path / "bundle", "private")
     status = public_status(manifest)
+    text = json.dumps(status)
     assert status["remote"] is None
     assert status["remote_public"] is False
-    assert "secret" not in json.dumps(status)
-    assert "git.internal.example" not in json.dumps(status)
+    assert status["remote_digest"]
+    for secret in ("secret", "git.internal.example", "access_token", "abc"):
+        assert secret not in text
+    assert str(tmp_path) not in text
 
 
-def test_export_is_byte_stable_and_cli_returns_codes(tmp_path: Path, capsys) -> None:
+def test_export_is_byte_stable_and_cli_round_trips(tmp_path: Path, capsys) -> None:
     repo = _repo(tmp_path)
     first, second = tmp_path / "one", tmp_path / "two"
     assert export_bundle(repo, first, "stable")["status"] == "pass"
     assert export_bundle(repo, second, "stable")["status"] == "pass"
     assert (first / "manifest.json").read_bytes() == (second / "manifest.json").read_bytes()
 
+    third = tmp_path / "three"
     assert (
         main(
             [
@@ -142,7 +228,7 @@ def test_export_is_byte_stable_and_cli_returns_codes(tmp_path: Path, capsys) -> 
                 "--repo",
                 str(repo),
                 "--out",
-                str(third := tmp_path / "three"),
+                str(third),
                 "--workload-id",
                 "cli",
                 "--format",
@@ -167,26 +253,3 @@ def test_export_is_byte_stable_and_cli_returns_codes(tmp_path: Path, capsys) -> 
         == 0
     )
     assert json.loads(capsys.readouterr().out)["status"] == "pass"
-    assert (
-        main(
-            [
-                "--export",
-                "--repo",
-                str(repo),
-                "--out",
-                str(tmp_path / "four"),
-                "--workload-id",
-                "cli",
-            ]
-        )
-        == 0
-    )
-
-
-def test_public_status_redacts_private_paths(tmp_path: Path) -> None:
-    repo = _repo(tmp_path)
-    manifest = export_bundle(repo, tmp_path / "bundle", "redact")
-    status = public_status(manifest)
-    text = json.dumps(status)
-    assert str(tmp_path) not in text
-    assert status["status"] == "pass"

@@ -221,6 +221,13 @@ machine-readable. It validates the current working directory, assigned absolute 
 Git common directory, branch/ref, and base ancestry. Human callers that omit receipt options retain
 the ordinary path.
 
+Receipts may additionally declare the issue's path scope with repeated
+`--allowed-path GLOB` (recorded at creation, enforced at check time). With a scope declared,
+`check` also rejects cross-scope changes before commit/push or at the handoff boundary: branch
+commits on the first-parent line touching paths outside the scope (intentional current-main merge
+commits are exempt) and staged or untracked paths outside the scope. Without a scope the check keeps
+its identity-only behavior, so existing receipts and human callers are unaffected (issue #9115).
+
 ## Protected review-worktree guard
 
 Use `create_worktree.sh --mode review` for review-only or synthetic-integration work. It installs

@@ -49,6 +49,7 @@ WORKTREE_MODE_KEY = "robot-sf.worktree-mode"
 BACKUP_KEY = "robot-sf.review-push-guard-backup"
 BLOCKED_URL_KEY = "robot-sf.review-push-blocked-url"
 REVIEW_MODE = "review"
+PYTEST_ISOLATION_SCHEMA = "review_pytest_isolation.v1"
 IMPLEMENTATION_MODE = "implementation"
 HOOK_RELATIVE_PATH = Path("scripts/dev/git_hooks/pre-push")
 GUARD_RELATIVE_PATH = Path("scripts/dev/review_worktree_guard.py")
@@ -278,6 +279,33 @@ def run_isolated(worktree: str | Path, command: list[str]) -> None:
         os.execvpe(command[0], command, os.environ.copy())  # noqa: S606 - intentional argv boundary
     except OSError as exc:
         raise GuardError(f"isolated command could not be executed: {exc}") from exc
+
+
+def pytest_isolation(worktree: str | Path) -> dict[str, object]:
+    """Print the guarded focused-pytest recipe for a review-mode worktree.
+
+    Inside the Landlock boundary only the review worktree and its linked Git directory
+    are writable, so a focused pytest run must keep its cache and log outputs inside
+    the worktree. Two observed tooling failures are avoided this way: numba aborts
+    collection with "no locator available" when its cache directory is not writable,
+    and pytest's logging file handler fails with a permission error when the
+    configured log file resolves outside the writable set (for example ``/dev/null``).
+    These are tooling-isolation failures, not test outcomes: the process exit status
+    stays authoritative for pass evidence.
+    """
+    identity = _identity(worktree)
+    if _configured_mode(identity) != REVIEW_MODE:
+        raise GuardError("pytest isolation guidance requires a review-mode worktree")
+    root = Path(identity["path"]).resolve()
+    log_file = root / "output" / "scratch" / "pytest-guarded.log"
+    return {
+        "schema": PYTEST_ISOLATION_SCHEMA,
+        "worktree": str(root),
+        "env": {"NUMBA_CACHE_DIR": str(root / "output" / "numba-cache")},
+        "pytest_arguments": ["-p", "no:cacheprovider", "-o", f"log_file={log_file}"],
+        "writable_paths": [str(root), str(Path(identity["git_dir"]).resolve())],
+        "process_exit_status_authoritative": True,
+    }
 
 
 def _run_git(
@@ -1236,6 +1264,12 @@ def _parser() -> argparse.ArgumentParser:
     integrate.add_argument("--source-ref", default="origin/main")
     integrate.add_argument("--remote", default="origin")
     integrate.add_argument("--timeout", type=_positive_int, default=DEFAULT_TIMEOUT_SECONDS)
+
+    isolation = subparsers.add_parser(
+        "pytest-isolation",
+        help="print the guarded focused-pytest recipe for a review worktree",
+    )
+    isolation.add_argument("--worktree", default=".")
     return parser
 
 
@@ -1259,6 +1293,9 @@ def main(argv: list[str] | None = None) -> int:
             if command and command[0] == "--":
                 command = command[1:]
             run_isolated(args.worktree, command)
+            return_code = 0
+        elif args.command == "pytest-isolation":
+            payload = pytest_isolation(args.worktree)
             return_code = 0
         else:
             payload, return_code = integrate_worktree(

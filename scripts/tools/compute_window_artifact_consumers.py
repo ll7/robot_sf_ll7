@@ -28,16 +28,12 @@ from typing import Any
 SCHEMA = "robot_sf.compute_window_artifact_consumers.v1"
 VERIFICATION_CONTRACT = (
     "replacement_verified requires replacement_verified=true and a present replacement_for target; "
-    "regenerable_verified requires regeneration_verified=true, regenerable=true, and a "
-    "requires_for_resume edge. Flags and relations never imply verification."
+    "regenerable_verified requires regeneration_verified=true, regenerable=true, and a requires_for_resume edge. "
+    "Flags and relations never imply verification."
 )
 EDGE_TYPES = tuple(
     "loads validates reports_from releases cites replays restores "
     "requires_for_resume supersedes".split()
-)
-CLASSES = tuple(
-    "active_required historical_required replacement_verified regenerable_verified "
-    "consumer_unknown orphan_candidate unresolved_conflict".split()
 )
 CONSUMER_GROUPS = tuple(
     "consumers configs registries manifests scripts reports releases papers active_tasks".split()
@@ -48,20 +44,11 @@ PUBLIC_REF_RE = re.compile(
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 KNOWN_CONSUMER_STATES = frozenset("active running open queued historical published closed".split())
-EVIDENCE_FAILURE_CODES = frozenset(
-    "invalid_records invalid_private_projection invalid_refs invalid_ref invalid_reference_id "
-    "invalid_edge_type invalid_content_identity invalid_path".split()
-)
+EVIDENCE_FAILURE_CODES = frozenset("invalid_records invalid_private_projection invalid_refs invalid_ref invalid_reference_id invalid_edge_type invalid_content_identity invalid_path".split())  # fmt: skip
 PRIVATE_RE = re.compile(
     r"(?i)(?:://|api[_-]?key|secret|password|token|credential|bearer|^[/~\\]|@[A-Za-z]|(?:[a-z0-9][a-z0-9-]{0,61}\.){2,}[a-z]{2,24})"
 )
-PRIVATE_KEYS = frozenset(
-    "command environment host hostname locator password secret token url".split()
-)
-
-
-def _key(value: Any) -> str:
-    return str(value).strip()
+PRIVATE_KEYS = frozenset("command environment host hostname locator password secret token url".split())  # fmt: skip
 
 
 def _valid_id(value: Any) -> bool:
@@ -85,7 +72,6 @@ def _finding(code: str, source: str, target: str | None, detail: str) -> dict[st
 
 
 def _safe_id(value: Any, fallback: str) -> str:
-    """Return an output-safe identifier without exposing invalid input."""
     return value if _valid_id(value) and not _private(value) else fallback
 
 
@@ -101,7 +87,6 @@ def _safe_path(value: Any) -> bool:
 def _refs(  # noqa: C901
     item: Mapping[str, Any], source: str, findings: list[dict[str, Any]]
 ) -> list[tuple[str, str, str | None, str | None]]:
-    """Return (logical id, edge type, digest, path) references from one record."""
     raw = item.get("refs", item.get("references", []))
     if isinstance(raw, Mapping):
         raw = [
@@ -186,14 +171,9 @@ def _refs(  # noqa: C901
     return result
 
 
-def _record_id(item: Mapping[str, Any]) -> Any:
-    return item.get("consumer_id", item.get("id", item.get("name")))
-
-
 def _record_entries(
     value: Any, group: str, findings: list[dict[str, Any]]
 ) -> list[Mapping[str, Any]]:
-    """Validate one explicit consumer collection without echoing malformed input."""
     private = group == "private_projection"
     invalid_code = "invalid_private_projection" if private else "invalid_records"
     details = (
@@ -210,29 +190,24 @@ def _record_entries(
     return [item for item in value if isinstance(item, Mapping)]
 
 
-def _tracked_failure(findings: list[dict[str, Any]], code: str) -> None:
-    findings.append(_finding(code, "/tracked", None, "tracked reference collection failed"))
-
-
 def _tracked_refs(root: Path, findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Derive only safe whole-line public markers from tracked text."""
     try:
         names = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
     except UnicodeError:
-        _tracked_failure(findings, "tracked_decode_failed")
+        findings.append(_finding("tracked_decode_failed", "/tracked", None, "tracked scan failed"))
         return []
     except (OSError, subprocess.SubprocessError):
-        _tracked_failure(findings, "tracked_scan_failed")
+        findings.append(_finding("tracked_scan_failed", "/tracked", None, "tracked scan failed"))
         return []
     found = []
     for name in sorted(n for n in names if n and not n.startswith("output/")):
         try:
             text = (root / name).read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
-            _tracked_failure(
-                findings,
-                "tracked_decode_failed" if isinstance(exc, UnicodeError) else "tracked_read_failed",
+            code = (
+                "tracked_decode_failed" if isinstance(exc, UnicodeError) else "tracked_read_failed"
             )
+            findings.append(_finding(code, "/tracked", None, "tracked read failed"))
             continue
         hits = sorted(set(PUBLIC_REF_RE.findall(text)))
         hits = [hit for hit in hits if not _private(hit)]
@@ -291,7 +266,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                 _finding("invalid_identity", ident, None, "content identity must be sha256")
             )
             digest = None
-        identities.setdefault(ident, set()).add(_key(digest) if digest else "unknown")
+        identities.setdefault(ident, set()).add(str(digest).strip() if digest else "unknown")
         path = raw.get("path")
         if path is not None and not _safe_path(path):
             findings.append(
@@ -299,7 +274,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
             )
             path = None
         if path:
-            paths.setdefault(ident, set()).add(_key(path))
+            paths.setdefault(ident, set()).add(str(path).strip())
         for field in PRIVATE_KEYS:
             if field in raw:
                 findings.append(
@@ -367,7 +342,7 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
         if group not in payload:
             continue
         for item in _record_entries(payload[group], group, findings):
-            raw_consumer_id = _record_id(item)
+            raw_consumer_id = item.get("consumer_id", item.get("id", item.get("name")))
             if not _valid_id(raw_consumer_id) or _private(raw_consumer_id):
                 code = "missing_consumer_id" if raw_consumer_id is None else "invalid_consumer_id"
                 findings.append(
@@ -379,7 +354,13 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
     if root is not None:
         tracked_records = _tracked_refs(root, findings)
         records.extend(
-            (_safe_id(_record_id(item), "redacted-consumer-tracked"), item)
+            (
+                _safe_id(
+                    item.get("consumer_id", item.get("id", item.get("name"))),
+                    "redacted-consumer-tracked",
+                ),
+                item,
+            )
             for item in tracked_records
         )
     nodes = [
@@ -394,8 +375,8 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
     ):
         raw_state = item.get("state", item.get("status", "unknown"))
         raw_kind = item.get("kind", "consumer")
-        state = _key(raw_state)
-        kind = _key(raw_kind)
+        state = str(raw_state).strip()
+        kind = str(raw_kind).strip()
         if not isinstance(raw_kind, str) or not isinstance(raw_state, str):
             findings.append(
                 _finding(
@@ -431,7 +412,8 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
         if (
             state in {"active", "running", "queued"}
             and item.get("runtime") is True
-            and _key(item.get("issue_state", item.get("issue_status", ""))).lower() == "closed"
+            and str(item.get("issue_state", item.get("issue_status", ""))).strip().lower()
+            == "closed"
         ):
             findings.append(
                 _finding(
@@ -616,21 +598,17 @@ def render_json(report: Mapping[str, Any]) -> str:
     return json.dumps(report, indent=2, sort_keys=True) + "\n"
 
 
-def _dot_node(namespace: str, identifier: str) -> str:
-    return f"{namespace}:{identifier}"
-
-
 def render_dot(report: Mapping[str, Any]) -> str:
     """Return a deterministic Graphviz projection of a graph report."""
     lines = ["digraph consumer_graph {", '  rankdir="LR";']
     for artifact in report["artifacts"]:
-        lines.append(f'  "{_dot_node("artifact", artifact["id"])}" [shape=box];')
+        lines.append(f'  "artifact:{artifact["id"]}" [shape=box];')
     for consumer in report["consumers"]:
-        lines.append(f'  "{_dot_node("consumer", consumer["id"])}" [shape=ellipse];')
+        lines.append(f'  "consumer:{consumer["id"]}" [shape=ellipse];')
     for edge in report["edges"]:
         namespace = "artifact" if edge["type"] == "supersedes" else "consumer"
-        source = _dot_node(namespace, edge["source"])
-        target = _dot_node("artifact", edge["target"])
+        source = f"{namespace}:{edge['source']}"
+        target = f"artifact:{edge['target']}"
         lines.append(f'  "{source}" -> "{target}" [label="{edge["type"]}"];')
     return "\n".join(lines) + "\n} \n"
 

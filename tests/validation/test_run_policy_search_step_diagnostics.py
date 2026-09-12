@@ -19,11 +19,14 @@ from scripts.validation.run_policy_search_step_diagnostics import (
     _optional_trace_fields,
     _pedestrian_state_from_sim,
     _planner_fallback_degraded_status,
+    _policy_action_contract,
+    _policy_command_values,
     _policy_observation_payload,
     _strict_route_complete_success,
     _trace_observation_payload,
     _trace_planner_execution_mode,
     _trace_progress_summary,
+    _validate_policy_command,
 )
 
 
@@ -242,6 +245,44 @@ def test_stdout_payload_includes_planner_summary(tmp_path) -> None:
 
     assert payload["planner_summary"] == {"fallback_count": 1}
     assert payload["progress_summary"] == {"steps_observed": 1}
+
+
+def test_policy_action_contract_declares_resolved_local_bounds() -> None:
+    """Diagnostics should bind local policy commands to the resolved kinematics model."""
+    contract = _policy_action_contract({"action_space": "unicycle", "v_max": 2.0, "omega_max": 1.0})
+
+    assert contract["status"] == "available"
+    assert contract["command_space"] == "unicycle_vw"
+    assert contract["command_bounds"] == {
+        "linear_velocity_mps": [0.0, 2.0],
+        "angular_velocity_radps": [-1.0, 1.0],
+    }
+    assert contract["steps_validated"] == 0
+    assert contract["violations"] == 0
+
+
+@pytest.mark.parametrize(
+    ("command", "message"),
+    (
+        ((2.1, 0.0), "linear velocity.*outside"),
+        ((1.0, -1.1), "angular velocity.*outside"),
+        ((float("nan"), 0.0), "finite number"),
+    ),
+)
+def test_validate_policy_command_fails_closed(command, message: str) -> None:
+    """Canonical policy commands cannot bypass the trace action envelope."""
+    contract = _policy_action_contract({"action_space": "unicycle", "v_max": 2.0, "omega_max": 1.0})
+
+    with pytest.raises(ValueError, match=message):
+        _validate_policy_command(command, contract)
+
+
+def test_policy_command_values_normalizes_velocity_mapping() -> None:
+    """Velocity-vector policy mappings are normalized before bound checking."""
+    linear, angular = _policy_command_values({"vx": 0.3, "vy": 0.4})
+
+    assert linear == pytest.approx(0.5)
+    assert angular == pytest.approx(0.0)
 
 
 @pytest.mark.parametrize(

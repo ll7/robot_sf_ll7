@@ -420,10 +420,130 @@ def _observation_contract(  # noqa: C901
     }
 
 
+def _action_bound_pair(value: Any) -> tuple[float, float] | None:
+    """Normalize one inclusive finite action-bound pair.
+
+    Returns:
+        A finite ``(lower, upper)`` pair, or ``None`` when malformed.
+    """
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    lower = _finite_number(value[0])
+    upper = _finite_number(value[1])
+    if lower is None or upper is None or lower > upper:
+        return None
+    return lower, upper
+
+
+def _trace_policy_command_values(row: Mapping[str, Any]) -> tuple[float | None, float | None]:
+    """Normalize one trace policy command to linear/angular values.
+
+    Returns:
+        A finite linear/angular pair when the row is structurally usable.
+    """
+    raw = row.get("policy_command")
+    if isinstance(raw, Mapping):
+        if "v" in raw and "omega" in raw:
+            return _finite_number(raw["v"]), _finite_number(raw["omega"])
+        if "vx" in raw and "vy" in raw:
+            vx = _finite_number(raw["vx"])
+            vy = _finite_number(raw["vy"])
+            return (
+                (float(np.hypot(vx, vy)), 0.0)
+                if vx is not None and vy is not None
+                else (None, None)
+            )
+        return None, None
+    try:
+        sequence = list(raw) if not isinstance(raw, (str, bytes)) else []
+    except TypeError:
+        sequence = []
+    if len(sequence) < 2:
+        return None, None
+    return _finite_number(sequence[0]), _finite_number(sequence[1])
+
+
+def _policy_action_contract_header_error(contract: Any) -> str | None:
+    """Validate the static portion of a local policy action contract.
+
+    Returns:
+        An admission-blocking reason, or ``None`` when the header is valid.
+    """
+    if not isinstance(contract, Mapping):
+        return "trace lacks a policy_action_contract bound declaration"
+    if contract.get("status") != "available":
+        return "trace policy_action_contract is not available"
+    if contract.get("command_space") != "unicycle_vw":
+        return "trace policy_action_contract has an unrecognized command space"
+    bounds = contract.get("command_bounds")
+    if not isinstance(bounds, Mapping):
+        return "trace policy_action_contract lacks command bounds"
+    if (
+        _action_bound_pair(bounds.get("linear_velocity_mps")) is None
+        or _action_bound_pair(bounds.get("angular_velocity_radps")) is None
+    ):
+        return "trace policy_action_contract has malformed command bounds"
+    return None
+
+
+def _policy_action_contract_rows_error(
+    contract: Mapping[str, Any], rows: list[Mapping[str, Any]]
+) -> str | None:
+    """Validate per-step coverage and command values for an action contract.
+
+    Returns:
+        An admission-blocking reason, or ``None`` when all rows are valid.
+    """
+    steps_validated = contract.get("steps_validated")
+    if (
+        isinstance(steps_validated, bool)
+        or not isinstance(steps_validated, Integral)
+        or int(steps_validated) != len(rows)
+    ):
+        return "trace policy_action_contract does not cover every executed step"
+    violations = contract.get("violations")
+    if isinstance(violations, bool) or not isinstance(violations, Integral) or int(violations) != 0:
+        return "trace policy_action_contract reports out-of-bounds commands"
+    bounds = contract.get("command_bounds")
+    if not isinstance(bounds, Mapping):
+        return "trace policy_action_contract lacks command bounds"
+    linear_bounds = _action_bound_pair(bounds["linear_velocity_mps"])
+    angular_bounds = _action_bound_pair(bounds["angular_velocity_radps"])
+    if linear_bounds is None or angular_bounds is None:
+        return "trace policy_action_contract has malformed command bounds"
+    linear_min, linear_max = linear_bounds
+    angular_min, angular_max = angular_bounds
+    for row in rows:
+        linear, angular = _trace_policy_command_values(row)
+        if (
+            linear is None
+            or angular is None
+            or not linear_min <= linear <= linear_max
+            or not angular_min <= angular <= angular_max
+        ):
+            return "trace policy_command contains a value outside its declared action bounds"
+        validation = row.get("policy_action_validation")
+        if not isinstance(validation, Mapping) or validation.get("status") != "within_bounds":
+            return "trace policy_action_validation is missing or not within_bounds"
+    return None
+
+
+def _policy_action_contract_error(trace: Mapping[str, Any]) -> str | None:
+    """Return an admission blocker for missing or invalid local action bounds."""
+    contract = trace.get("policy_action_contract")
+    header_error = _policy_action_contract_header_error(contract)
+    if header_error is not None:
+        return header_error
+    if not isinstance(contract, Mapping):
+        return "trace lacks a policy_action_contract bound declaration"
+    return _policy_action_contract_rows_error(contract, _trace_rows(trace))
+
+
 def _execution_block(trace: Mapping[str, Any]) -> dict[str, Any]:
     """Return explicit execution and fallback/degraded state from one trace."""
     fallback = _mapping(trace.get("fallback_degraded_status"))
     reported = fallback.get("reported_fallback_or_degraded")
+    action_contract_reason = _policy_action_contract_error(trace)
     if reported is True:
         status = "blocked"
         reason = "trace reports fallback_or_degraded execution"
@@ -436,6 +556,9 @@ def _execution_block(trace: Mapping[str, Any]) -> dict[str, Any]:
         elif execution_mode not in {"native_env_action", "command_adapter", "mixed"}:
             status = "blocked"
             reason = "trace lacks a recognized planner execution mode"
+        elif action_contract_reason is not None:
+            status = "blocked"
+            reason = action_contract_reason
         else:
             status = "available"
             reason = None
@@ -447,6 +570,7 @@ def _execution_block(trace: Mapping[str, Any]) -> dict[str, Any]:
         "reason": reason,
         "planner_execution_mode": trace.get("planner_execution_mode"),
         "fallback_degraded_status": dict(fallback),
+        "policy_action_contract": _mapping(trace.get("policy_action_contract")),
     }
 
 

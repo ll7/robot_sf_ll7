@@ -173,6 +173,9 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
     update_adapter_impact_metrics as _update_adapter_impact_metrics,
 )
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
+    validate_ppo_policy_action as _validate_ppo_policy_action,
+)
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import (
     build_adapter_policy as _build_adapter_policy,
 )
@@ -1326,6 +1329,9 @@ def _build_ppo_policy(  # noqa: C901
         action = ppo_planner.step(ppo_obs)
         if not isinstance(action, dict):
             raise TypeError(f"PPO planner returned non-dict action: {type(action)}")
+        if "action_space" in algo_config:
+            action_contract = _validate_ppo_policy_action(action, algo_config)
+            meta["policy_action_contract"] = action_contract
         linear, angular, conversion_mode = _ppo_action_to_unicycle(
             action,
             obs,

@@ -6,6 +6,7 @@ import json
 import math
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -34,6 +35,12 @@ def _trace(
         rows.append(
             {
                 "step": step,
+                "policy_command": [1.0 + step * 0.1, 0.1 + step * 0.05],
+                "policy_action_validation": {
+                    "status": "within_bounds",
+                    "linear_velocity_mps": 1.0 + step * 0.1,
+                    "angular_velocity_radps": 0.1 + step * 0.05,
+                },
                 "env_action": [1.0 + step * 0.1, 0.1 + step * 0.05],
                 "is_success": False,
                 "is_pedestrian_collision": False,
@@ -59,6 +66,20 @@ def _trace(
         "algo": "PPO",
         "planner_execution_mode": "command_adapter",
         "fallback_degraded_status": {"reported_fallback_or_degraded": fallback},
+        "policy_action_contract": {
+            "status": "available",
+            "action_space": "unicycle",
+            "command_space": "unicycle_vw",
+            "policy_bounds": {"v": [0.0, 2.0], "omega": [-1.0, 1.0]},
+            "command_bounds": {
+                "linear_velocity_mps": [0.0, 2.0],
+                "angular_velocity_radps": [-1.0, 1.0],
+            },
+            "kinematics_model": "differential_drive",
+            "source": "fixture",
+            "steps_validated": len(rows),
+            "violations": 0,
+        },
         "observation_perturbation_config": {"seed": 7318},
         "done_info": {"success": True, "truncated": False},
         "steps": rows,
@@ -413,6 +434,82 @@ def test_runner_materializes_blocked_report_for_malformed_trace(
     report = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert report["status"] == "blocked"
     assert report["runner_errors"][0]["condition"] == "paired"
+
+
+def test_runner_stub_is_deterministic_end_to_end(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The paired runner wiring should load, validate, and reproduce stub traces byte-for-byte."""
+    config_path = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    checkpoint_digest = "a" * 64
+    calls: list[list[str]] = []
+
+    def stub_run(command: list[str], **_kwargs: Any) -> SimpleNamespace:
+        """Materialize one deterministic trace in the runner's expected output directory."""
+        calls.append(list(command))
+        output_dir = Path(command[command.index("--output-dir") + 1])
+        condition = (
+            "perfect_perception" if "--ignore-fixture-visibility" in command else "sensor_limited"
+        )
+        evidence_class = (
+            "ideal_state" if condition == "perfect_perception" else "perception_limited"
+        )
+        noise_profile = "none" if condition == "perfect_perception" else "bounded_gaussian"
+        trace = _trace(evidence_class, [2.0] * int(config["horizon"]))
+        trace["candidate"] = config["candidate"]
+        trace["scenario_id"] = config["scenario_name"]
+        trace["seed"] = config["seed"]
+        trace["horizon"] = config["horizon"]
+        trace["observation_perturbation_config"] = _configured_observation_config(
+            sensor=condition == "sensor_limited"
+        )
+        trace["planner_summary"] = {
+            "checkpoint_provenance": {
+                "checkpoint_sha256": checkpoint_digest,
+                "hash_source": "computed_resolved_file",
+                "load_succeeded": True,
+                "model_id": "ppo_fixture",
+            }
+        }
+        for step, row in enumerate(trace["steps"]):
+            row["observed_observation"]["noise_profile"] = noise_profile
+            row["policy_command"] = [1.0 + step * 0.05, 0.1 + step * 0.01]
+            row["env_action"] = list(row["policy_command"])
+            row["policy_action_validation"] = {
+                "status": "within_bounds",
+                "linear_velocity_mps": row["policy_command"][0],
+                "angular_velocity_radps": row["policy_command"][1],
+            }
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "trace.json").write_text(json.dumps(trace, sort_keys=True), encoding="utf-8")
+        return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    def stub_input_refs(*_args: Any, **_kwargs: Any) -> dict[str, str]:
+        """Supply deterministic checkpoint provenance while the model itself remains stubbed."""
+        return {
+            "config": "fixture-config.yaml",
+            "checkpoint_sha256_declared": checkpoint_digest,
+            "checkpoint_model_id": "ppo_fixture",
+        }
+
+    monkeypatch.setattr(comparator_runner.subprocess, "run", stub_run)
+    monkeypatch.setattr(comparator_runner, "_input_refs", stub_input_refs)
+
+    first_output = tmp_path / "first"
+    second_output = tmp_path / "second"
+    assert (
+        comparator_runner.main(["--config", str(config_path), "--output-dir", str(first_output)])
+        == 0
+    )
+    assert (
+        comparator_runner.main(["--config", str(config_path), "--output-dir", str(second_output)])
+        == 0
+    )
+
+    assert len(calls) == 4
+    for filename in ("summary.json", "README.md"):
+        assert (first_output / filename).read_bytes() == (second_output / filename).read_bytes()
 
 
 def test_runner_materializes_blocked_report_for_schema_invalid_trace(
@@ -790,6 +887,33 @@ def test_missing_fallback_verdict_blocks_metrics() -> None:
     )
     assert condition["metrics"]["success_rate"]["status"] == "blocked"
     assert report["status"] == "blocked"
+
+
+def test_missing_policy_action_contract_blocks_metrics() -> None:
+    """A trace without a local action envelope cannot be admitted as a paired run."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
+    perfect.pop("policy_action_contract")
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+
+    condition = report["conditions"]["perfect_perception"]
+    assert condition["status"] == "blocked"
+    assert "policy_action_contract" in condition["execution"]["reason"]
+    assert report["status"] == "blocked"
+
+
+def test_policy_action_contract_rejects_out_of_bounds_trace_command() -> None:
+    """A producer cannot claim valid bounds while recording an invalid command."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
+    perfect["steps"][0]["policy_command"] = [2.5, 0.0]
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+
+    condition = report["conditions"]["perfect_perception"]
+    assert condition["status"] == "blocked"
+    assert "outside" in condition["execution"]["reason"]
 
 
 def test_horizon_exhaustion_is_recorded_as_timeout() -> None:

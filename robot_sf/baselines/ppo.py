@@ -605,6 +605,7 @@ class PPOPlanner:
                         f"expected {target_shape}",
                     )
                 arr = arr.reshape(target_shape)
+            self._validate_model_observation_value(key, arr, sub_space)
             converted[key] = arr
         if backfilled:
             logger.debug(
@@ -613,6 +614,19 @@ class PPOPlanner:
                 ", ".join(backfilled[:6]),
             )
         return converted
+
+    @staticmethod
+    def _validate_model_observation_value(key: str, value: Any, sub_space: Any) -> None:
+        """Reject a supplied observation value outside its declared model space."""
+        contains = getattr(sub_space, "contains", None)
+        if not callable(contains):
+            return
+        try:
+            in_bounds = bool(contains(value))
+        except (TypeError, ValueError):
+            in_bounds = False
+        if not in_bounds:
+            raise ValueError(f"Observation key '{key}' is outside the model-declared space")
 
     @classmethod
     def _default_for_space(cls, sub_space: Any) -> Any:
@@ -728,6 +742,7 @@ class PPOPlanner:
                     f"got shape {tuple(flat_obs.shape)}, expected {target_shape}."
                 )
             flat_obs = flat_obs.reshape(target_shape)
+        self._validate_model_observation_value("<flat>", flat_obs, model_space)
         return flat_obs
 
     def _predictive_feature_payload(self, obs: dict[str, Any]) -> dict[str, np.ndarray]:

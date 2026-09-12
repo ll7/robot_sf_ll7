@@ -63,6 +63,14 @@ The report keeps local and proxy semantics explicit:
 | Action smoothness | successive two-channel action difference | exact local |
 | Timeout rate | trace termination fields | exact local |
 
+The external CALF/LegNav action envelope is unavailable and is never inferred. For
+the local PPO candidate, the runner records the effective `action_space`, resolved
+Robot SF kinematics, and finite linear/angular command bounds in
+`policy_action_contract`. Each emitted policy command is checked against that
+contract before environment conversion; a missing, incomplete, or out-of-range
+contract blocks the paired condition rather than allowing downstream clipping to
+look like valid policy output.
+
 For each executed action, the distance metrics use the conservative minimum of
 the available pre-step and post-step ground-truth distances. This keeps the
 shared state between adjacent rows from being counted twice while preserving

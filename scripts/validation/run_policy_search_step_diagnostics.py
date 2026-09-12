@@ -7,6 +7,7 @@ import argparse
 import json
 from collections import Counter
 from collections.abc import Mapping
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from robot_sf.benchmark.observation_perturbation import (
     perturb_ground_truth,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.planner.kinematics_model import resolve_benchmark_kinematics_model
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.policy_search_common import infer_scenario_family
 from scripts.validation.run_policy_search_candidate import (
@@ -62,6 +64,143 @@ def _json_ready(value: Any) -> Any:
         except Exception:
             pass
     return str(value)
+
+
+def _finite_real(value: Any, *, field: str) -> float:
+    """Return a finite numeric field, rejecting booleans and non-numbers."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValueError(f"{field} must be a finite number")
+    number = float(value)
+    if not np.isfinite(number):
+        raise ValueError(f"{field} must be a finite number")
+    return number
+
+
+def _policy_action_contract(
+    config: Mapping[str, Any],
+    *,
+    robot_kinematics: str = "differential_drive",
+) -> dict[str, Any]:
+    """Build the local policy-command bounds used by diagnostics admission.
+
+    The external CALF/LegNav action contract remains unavailable. This contract
+    describes only the local candidate and the resolved Robot SF command model.
+    """
+    action_space = str(config.get("action_space", "unicycle")).strip().lower()
+    if action_space not in {"velocity", "unicycle"}:
+        raise ValueError(f"Unsupported policy action_space: {action_space!r}")
+    v_max = _finite_real(config.get("v_max", 2.0), field="v_max")
+    omega_max = _finite_real(config.get("omega_max", 1.0), field="omega_max")
+    if v_max < 0.0 or omega_max < 0.0:
+        raise ValueError("policy action bounds must be non-negative")
+    model = resolve_benchmark_kinematics_model(
+        robot_kinematics=robot_kinematics,
+        command_limits=dict(config),
+    )
+    max_linear = getattr(model, "max_linear_speed", getattr(model, "max_velocity", None))
+    max_angular = getattr(model, "max_angular_speed", None)
+    if max_linear is None or max_angular is None:
+        raise ValueError(
+            f"resolved kinematics model {getattr(model, 'name', type(model).__name__)} "
+            "does not expose finite action bounds"
+        )
+    max_linear = _finite_real(max_linear, field="resolved max_linear_speed")
+    max_angular = _finite_real(max_angular, field="resolved max_angular_speed")
+    if max_linear < 0.0 or max_angular < 0.0:
+        raise ValueError("resolved action bounds must be non-negative")
+    allow_backwards = bool(getattr(model, "allow_backwards", False))
+    command_bounds = {
+        "linear_velocity_mps": [
+            -float(max_linear) if allow_backwards else 0.0,
+            float(max_linear),
+        ],
+        "angular_velocity_radps": [-float(max_angular), float(max_angular)],
+    }
+    policy_bounds = (
+        {
+            "v": [0.0, float(v_max)],
+            "omega": [-float(omega_max), float(omega_max)],
+        }
+        if action_space == "unicycle"
+        else {
+            "speed_mps": [0.0, float(v_max)],
+            "vx_mps": [-float(v_max), float(v_max)],
+            "vy_mps": [-float(v_max), float(v_max)],
+        }
+    )
+    return {
+        "status": "available",
+        "action_space": action_space,
+        "command_space": "unicycle_vw",
+        "policy_bounds": policy_bounds,
+        "command_bounds": command_bounds,
+        "kinematics_model": str(getattr(model, "name", type(model).__name__)),
+        "source": "effective_algo_config_and_resolved_kinematics_model",
+        "steps_validated": 0,
+        "violations": 0,
+    }
+
+
+def _policy_command_values(command: Any) -> tuple[float, float]:
+    """Normalize a policy output to canonical ``(linear, angular)`` values."""
+    if isinstance(command, Mapping):
+        if "v" in command and "omega" in command:
+            return (
+                _finite_real(command["v"], field="policy command v"),
+                _finite_real(command["omega"], field="policy command omega"),
+            )
+        if "vx" in command and "vy" in command:
+            vx = _finite_real(command["vx"], field="policy command vx")
+            vy = _finite_real(command["vy"], field="policy command vy")
+            return float(np.hypot(vx, vy)), 0.0
+        raise ValueError("policy command must expose v/omega or vx/vy")
+    if isinstance(command, (str, bytes)):
+        raise ValueError("policy command must expose two numeric channels")
+    try:
+        values = list(command)
+    except TypeError as exc:
+        raise ValueError("policy command must expose two numeric channels") from exc
+    if len(values) < 2:
+        raise ValueError("policy command must expose two numeric channels")
+    return (
+        _finite_real(values[0], field="policy command linear velocity"),
+        _finite_real(values[1], field="policy command angular velocity"),
+    )
+
+
+def _validate_policy_command(command: Any, contract: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate one canonical policy command against the local action envelope."""
+    values = _policy_command_values(command)
+    bounds = contract.get("command_bounds")
+    if not isinstance(bounds, Mapping):
+        raise ValueError("policy action contract has no command_bounds mapping")
+    linear_bounds = bounds.get("linear_velocity_mps")
+    angular_bounds = bounds.get("angular_velocity_radps")
+    if (
+        not isinstance(linear_bounds, (list, tuple))
+        or len(linear_bounds) != 2
+        or not isinstance(angular_bounds, (list, tuple))
+        or len(angular_bounds) != 2
+    ):
+        raise ValueError("policy action contract has malformed command bounds")
+    linear_min = _finite_real(linear_bounds[0], field="linear action lower bound")
+    linear_max = _finite_real(linear_bounds[1], field="linear action upper bound")
+    angular_min = _finite_real(angular_bounds[0], field="angular action lower bound")
+    angular_max = _finite_real(angular_bounds[1], field="angular action upper bound")
+    linear, angular = values
+    if not linear_min <= linear <= linear_max:
+        raise ValueError(
+            f"policy command linear velocity {linear!r} is outside [{linear_min}, {linear_max}]"
+        )
+    if not angular_min <= angular <= angular_max:
+        raise ValueError(
+            f"policy command angular velocity {angular!r} is outside [{angular_min}, {angular_max}]"
+        )
+    return {
+        "status": "within_bounds",
+        "linear_velocity_mps": float(linear),
+        "angular_velocity_radps": float(angular),
+    }
 
 
 def _strict_route_complete_success(info: Mapping[str, Any] | None) -> bool | None:
@@ -860,6 +999,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         default_algo=algo.strip().lower(),
         config_anchor=config_path.parent,
     )
+    policy_action_contract = _policy_action_contract(
+        effective_cfg,
+        robot_kinematics="differential_drive",
+    )
 
     scenario_seed_list = _seed_list(scenario)
     seed = (
@@ -950,6 +1093,13 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 policy_observation=policy_observation,
             )
             policy_command = policy_fn(policy_obs)
+            policy_action_validation = _validate_policy_command(
+                policy_command,
+                policy_action_contract,
+            )
+            policy_action_contract["steps_validated"] = (
+                int(policy_action_contract["steps_validated"]) + 1
+            )
             step_is_native = getattr(policy_fn, "_last_step_native", planner_native_action)
             if step_is_native:
                 env_action = np.asarray(policy_command, dtype=np.float32)
@@ -985,6 +1135,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 {
                     "step": int(step_idx),
                     "policy_command": _json_ready(policy_command),
+                    "policy_action_validation": policy_action_validation,
                     "env_action": _json_ready(env_action),
                     "reward": float(reward),
                     "goal_distance": goal_distance,
@@ -1052,6 +1203,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "algorithm_metadata": _json_ready(algo_meta),
         **execution_mode_summary,
         "fallback_degraded_status": fallback_degraded_status,
+        "policy_action_contract": policy_action_contract,
         "observation_perturbation_config": {
             "position_noise_std_m": float(args.observation_noise_std_m),
             "position_noise_bound_m": float(args.observation_noise_bound_m),

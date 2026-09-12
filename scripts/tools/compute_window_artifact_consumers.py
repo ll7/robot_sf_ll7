@@ -373,7 +373,9 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
     edges: list[dict[str, Any]] = []
     consumers: dict[str, dict[str, Any]] = {}
     known: dict[str, list[dict[str, Any]]] = {ident: [] for ident in artifacts}
-    for consumer_id, item in records:
+    for consumer_id, item in sorted(
+        records, key=lambda row: (row[0], json.dumps(row[1], sort_keys=True, default=str))
+    ):
         raw_state = item.get("state", item.get("status", "unknown"))
         raw_kind = item.get("kind", "consumer")
         state = _key(raw_state)

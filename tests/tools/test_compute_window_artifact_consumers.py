@@ -12,8 +12,10 @@ FIXTURE = Path(__file__).parent / "fixtures" / "compute_window_artifact_consumer
 
 def test_requested_fixture_graph_and_classes_are_deterministic() -> None:
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    payload["active_tasks"].append({"id": "resume-task", "kind": "zzz", "state": "zzz"})
     permuted = json.loads(json.dumps(payload))
-    permuted["active_tasks"][0]["refs"].reverse()
+    permuted["active_tasks"].reverse()
+    permuted["active_tasks"][1]["refs"].reverse()
     first = tool.build_graph(payload)
     second = tool.build_graph(payload)
     assert first == second == tool.build_graph(permuted)

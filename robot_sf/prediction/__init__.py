@@ -84,6 +84,13 @@ from robot_sf.prediction.goal_intention import (
     update_goal_posterior,
     update_heading_goal_posterior,
 )
+from robot_sf.prediction.hierarchical_goal_belief import (
+    HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION,
+    HIERARCHICAL_PROJECTION_LEVELS,
+    HierarchicalGoalPosteriorV1,
+    HierarchicalProbability,
+    HierarchicalWaypointConditionalV1,
+)
 from robot_sf.prediction.oracle_transition_trace import (
     ORACLE_TRANSITION_TRACE_SCHEMA_VERSION,
     SIMULATOR_TIMING_ORDER,
@@ -143,6 +150,8 @@ __all__ = [  # noqa: F822 - names are resolved lazily by __getattr__
     "GOAL_CANDIDATE_PROVIDER_SCHEMA_VERSION",
     "GOAL_FORCE_INVERSE_CLAIM_BOUNDARY",
     "GOAL_FORCE_INVERSE_SCHEMA_VERSION",
+    "HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION",
+    "HIERARCHICAL_PROJECTION_LEVELS",
     "HISTORY_ORDER",
     "ORACLE_TRANSITION_TRACE_SCHEMA_VERSION",
     "SIMULATOR_TIMING_ORDER",
@@ -198,6 +207,9 @@ __all__ = [  # noqa: F822 - names are resolved lazily by __getattr__
     "GoalIntentionPosterior",
     "GoalPosteriorConfig",
     "HeadingGoalPosteriorConfig",
+    "HierarchicalGoalPosteriorV1",
+    "HierarchicalProbability",
+    "HierarchicalWaypointConditionalV1",
     "ObservableForceComponent",
     "ObservableForceComponentType",
     "ObservableForceReconstruction",

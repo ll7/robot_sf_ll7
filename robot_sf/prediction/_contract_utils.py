@@ -10,6 +10,43 @@ from typing import Any
 
 import rfc8785
 
+FORBIDDEN_EVIDENCE_SOURCE_NAMES = frozenset(
+    {
+        "scenario_assigned_route",
+        "assigned_route",
+        "true_goal",
+        "goal_truth",
+        "waypoint_truth",
+        "future_trajectory",
+        "simulator_goal",
+        "simulator_route",
+    }
+)
+FORBIDDEN_EVIDENCE_SOURCE_TOKENS = frozenset(
+    {
+        "oracle",
+        "simulator",
+        "true_goal",
+        "route_truth",
+        "waypoint_truth",
+        "force_component",
+    }
+)
+
+
+def is_forbidden_evidence_source(value: str) -> bool:
+    """Return whether one source label is reserved for privileged evidence."""
+    normalized = value.strip().lower()
+    separator_normalized = normalized.replace("-", "_").replace(" ", "_")
+    return (
+        normalized in FORBIDDEN_EVIDENCE_SOURCE_NAMES
+        or separator_normalized in FORBIDDEN_EVIDENCE_SOURCE_NAMES
+        or any(
+            token in normalized or token in separator_normalized
+            for token in FORBIDDEN_EVIDENCE_SOURCE_TOKENS
+        )
+    )
+
 
 def require_text(value: Any, field_name: str) -> str:
     """Return non-empty text, rejecting values that would be ambiguous in JSON."""
@@ -132,7 +169,10 @@ def stable_config_hash(config: Mapping[str, Any]) -> str:
 
 
 __all__ = [
+    "FORBIDDEN_EVIDENCE_SOURCE_NAMES",
+    "FORBIDDEN_EVIDENCE_SOURCE_TOKENS",
     "canonical_json",
+    "is_forbidden_evidence_source",
     "reject_unknown_keys",
     "require_covariance",
     "require_digest",

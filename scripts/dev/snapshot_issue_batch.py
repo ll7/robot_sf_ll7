@@ -1133,7 +1133,11 @@ def snapshot_claimable_issues(
     ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
     ``queue_completeness`` is ``complete``. The returned
     ``zero_work_authoritative`` flag makes that boundary machine-readable and
-    is true only for a complete, error-free page-one scan.
+    is true only for a complete, error-free page-one scan. The CLI enforces this
+    boundary at the process exit: an incomplete ``--claimable`` scan exits non-zero
+    after printing the payload. The opt-out restores exit zero only for the
+    literal ``queue_completeness == "incomplete"`` state; unavailable, unknown,
+    or inconsistent authority remains a failure.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
     blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
@@ -1735,12 +1739,25 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--claimable",
         action="store_true",
-        help="Discover bounded open claimable issues without explicit issue numbers.",
+        help=(
+            "Discover bounded open claimable issues without explicit issue numbers; an "
+            "incomplete scan exits non-zero unless --allow-incomplete is passed for the "
+            "literal incomplete state."
+        ),
     )
     parser.add_argument(
         "--include-blocked-external",
         action="store_true",
         help="Include blocked external-input issues in --claimable output.",
+    )
+    parser.add_argument(
+        "--allow-incomplete",
+        action="store_true",
+        help=(
+            "Allow only a literal queue_completeness=incomplete --claimable scan to exit "
+            "zero for intentional bounded discovery; unavailable or unknown authority "
+            "remains a failure."
+        ),
     )
     parser.add_argument(
         "--blocked-external-report",
@@ -1801,8 +1818,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _validate_args(args: argparse.Namespace) -> int:
-    """Return nonzero after printing a CLI contract error."""
+def _validate_mode_flags(args: argparse.Namespace) -> int:
+    """Return nonzero for incompatible mode-flag combinations."""
     if args.claimable and args.issues:
         print(
             "--claimable cannot be combined with explicit issue numbers",
@@ -1812,6 +1829,12 @@ def _validate_args(args: argparse.Namespace) -> int:
     if args.include_blocked_external and not args.claimable:
         print(
             "--include-blocked-external requires --claimable",
+            file=sys.stderr,
+        )
+        return 1
+    if args.allow_incomplete and not args.claimable:
+        print(
+            "--allow-incomplete requires --claimable",
             file=sys.stderr,
         )
         return 1
@@ -1837,6 +1860,14 @@ def _validate_args(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    return 0
+
+
+def _validate_args(args: argparse.Namespace) -> int:
+    """Return nonzero after printing a CLI contract error."""
+    mode_error = _validate_mode_flags(args)
+    if mode_error:
+        return mode_error
     if args.limit <= 0:
         print("--limit must be positive", file=sys.stderr)
         return 1
@@ -1889,6 +1920,44 @@ def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, An
     )
 
 
+def _claimable_authority_error(payload: dict[str, Any], *, allow_incomplete: bool) -> str | None:
+    """Return a fail-closed CLI error for claimable queue authority fields."""
+    if "queue_completeness" not in payload:
+        return "claimable queue scan is missing queue_completeness authority"
+    completeness = payload["queue_completeness"]
+    if not isinstance(completeness, str) or completeness not in {
+        "complete",
+        "incomplete",
+        "unavailable",
+    }:
+        return (
+            "claimable queue scan has unknown queue_completeness authority "
+            f"(queue_completeness={completeness!r})"
+        )
+    if "zero_work_authoritative" not in payload:
+        return "claimable queue scan is missing zero_work_authoritative authority"
+    zero_work_authoritative = payload["zero_work_authoritative"]
+    if not isinstance(zero_work_authoritative, bool):
+        return (
+            "claimable queue scan has invalid zero_work_authoritative authority "
+            f"(zero_work_authoritative={zero_work_authoritative!r})"
+        )
+    expected_authority = completeness == "complete"
+    if zero_work_authoritative is not expected_authority:
+        return (
+            "claimable queue scan has inconsistent authority fields "
+            f"(queue_completeness={completeness}, "
+            f"zero_work_authoritative={zero_work_authoritative})"
+        )
+    if completeness == "complete" or (completeness == "incomplete" and allow_incomplete):
+        return None
+    return (
+        "claimable queue scan is not authoritative for zero work "
+        f"(queue_completeness={completeness}); resume with --resume-page/--limit until "
+        "complete, or pass --allow-incomplete only for queue_completeness=incomplete"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
@@ -1914,9 +1983,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"snapshot command timed out: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else json.dumps(payload))
-    if "issues" in payload:
-        return 1 if any(issue.get("status") == "error" for issue in payload["issues"]) else 0
-    return 1 if payload.get("errors") else 0
+    issue_errors = "issues" in payload and any(
+        issue.get("status") == "error" for issue in payload["issues"]
+    )
+    if issue_errors or payload.get("errors"):
+        return 1
+    if args.claimable:
+        authority_error = _claimable_authority_error(
+            payload, allow_incomplete=args.allow_incomplete
+        )
+        if authority_error:
+            print(authority_error, file=sys.stderr)
+            return 1
+    return 0
 
 
 if __name__ == "__main__":

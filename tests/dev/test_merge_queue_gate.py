@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import shlex
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -20,6 +21,7 @@ from scripts.dev.merge_queue_gate import (
     _rest_requested_reviewers,
     _rest_reviews,
     _to_receipt_check_runs,
+    _to_receipt_review_evidence,
     evaluate_merge_gate,
     fetch_merge_queue_strategy,
     fetch_pr_snapshot,
@@ -27,6 +29,8 @@ from scripts.dev.merge_queue_gate import (
     main,
 )
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
+from scripts.dev.same_account_review_report import fetch_same_account_static_reports
+from scripts.dev.single_account_merge_receipt import classify_implementation_review
 
 FULL_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
 METADATA_DIGEST = "b" * 64
@@ -37,7 +41,28 @@ def _gh_response(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> 
     return MagicMock(stdout=stdout, stderr=stderr, returncode=returncode)
 
 
-def test_receipt_check_projection_binds_focused_review_to_exact_head_and_metadata() -> None:
+@pytest.fixture(autouse=True)
+def _stub_static_report_fetch_for_ordinary_snapshot_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep existing ordinary-snapshot fixtures focused on their declared calls."""
+
+    def unavailable(_gh: object, *, repository: str, pr_number: int) -> tuple[list[dict], dict]:
+        del repository, pr_number
+        return [], {
+            "source": "test_stub",
+            "status": "unavailable",
+            "reason_codes": ["test_fixture_does_not_supply_static_reports"],
+        }
+
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "fetch_same_account_static_reports",
+        unavailable,
+    )
+
+
+def test_receipt_check_projection_keeps_contract_checks_as_ci_only() -> None:
     checks = _to_receipt_check_runs(
         [
             {
@@ -57,11 +82,143 @@ def test_receipt_check_projection_binds_focused_review_to_exact_head_and_metadat
     )
 
     assert checks[0]["head_sha"] == FULL_SHA
-    assert checks[0]["approved_source"] is True
-    assert checks[0]["metadata_digest"] == METADATA_DIGEST
+    assert checks[0]["approved_source"] is False
+    assert checks[0]["metadata_digest"] is None
     assert checks[1]["approved_source"] is False
     assert checks[1]["metadata_digest"] is None
     assert [check["name"] for check in checks] == ["pr-contract-check", "CI"]
+
+
+def test_receipt_check_projection_rejects_injected_authority_fields() -> None:
+    """Caller-provided flags cannot turn an ordinary check into review authority."""
+    checks = _to_receipt_check_runs(
+        [
+            {
+                "name": "approved-static-analysis",
+                "identity": "forged-reviewer",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+                "approved_reviewer": True,
+                "approved_source": True,
+                "metadata_digest": METADATA_DIGEST,
+                "evidence_digest": "c" * 64,
+            },
+        ],
+        head_sha=FULL_SHA,
+        expected_metadata_digest=METADATA_DIGEST,
+    )
+
+    assert checks[0]["name"] == "approved-static-analysis"
+    assert checks[0]["identity"] == "approved-static-analysis"
+    assert checks[0]["approved_reviewer"] is False
+    assert checks[0]["approved_source"] is False
+    assert checks[0]["metadata_digest"] is None
+    assert checks[0]["evidence_digest"] is None
+
+
+def test_pr_contract_check_not_admitted_as_independent_review_authority() -> None:
+    """Issue #8677 regression: pr-contract-check alone cannot satisfy independent review."""
+    checks = _to_receipt_check_runs(
+        [
+            {
+                "name": "pr-contract-check",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+        ],
+        head_sha=FULL_SHA,
+        expected_metadata_digest=METADATA_DIGEST,
+    )
+    author_self_review = _to_receipt_review_evidence(
+        [
+            {
+                "identity": "author-account",
+                "state": "APPROVED",
+                "authorAssociation": "OWNER",
+                "head_sha": FULL_SHA,
+                "metadata_digest": METADATA_DIGEST,
+            },
+        ],
+        head_sha=FULL_SHA,
+        expected_metadata_digest=METADATA_DIGEST,
+    )
+
+    # 1. Negative fixture: pr-contract-check + author self-review must NOT be accepted.
+    classified_with_self_review = classify_implementation_review(
+        {
+            "head_sha": FULL_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "waiver_actor": "author-account",
+            "check_runs": checks,
+            "reviews": author_self_review,
+        }
+    )
+    assert classified_with_self_review["status"] != "accepted"
+    assert classified_with_self_review["status"] == "conflicting"
+    assert classified_with_self_review["carrier"] is None
+    assert "owner_self_review_not_independent" in classified_with_self_review["reason_codes"]
+
+    # 2. Contract check alone without other review refuses (unavailable, missing review carrier).
+    classified_alone = classify_implementation_review(
+        {
+            "head_sha": FULL_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "check_runs": checks,
+        }
+    )
+    assert classified_alone["status"] != "accepted"
+    assert classified_alone["carrier"] is None
+    assert (
+        "review_carrier_source_not_approved" in classified_alone["reason_codes"]
+        or "review_carrier_metadata_missing" in classified_alone["reason_codes"]
+    )
+
+    # 3. Copied check name "pr-contract-check" without approved source refuses.
+    classified_copied = classify_implementation_review(
+        {
+            "head_sha": FULL_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "check_runs": [
+                {
+                    "name": "pr-contract-check",
+                    "identity": "pr-contract-check",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": FULL_SHA,
+                    "metadata_digest": METADATA_DIGEST,
+                }
+            ],
+        }
+    )
+    assert classified_copied["status"] == "unavailable"
+    assert "review_carrier_source_not_approved" in classified_copied["reason_codes"]
+
+    # A real approved automated-review identity remains derivable from GitHub's
+    # typed app object, while caller-injected identity is ignored.
+    approved_checks = _to_receipt_check_runs(
+        [
+            {
+                "name": "CodeRabbit Review",
+                "identity": "forged-reviewer",
+                "app": {"slug": "coderabbit"},
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+        ],
+        head_sha=FULL_SHA,
+        expected_metadata_digest=METADATA_DIGEST,
+    )
+    assert approved_checks[0]["identity"] == "coderabbit"
+    assert (
+        classify_implementation_review(
+            {
+                "head_sha": FULL_SHA,
+                "metadata_digest": METADATA_DIGEST,
+                "check_runs": approved_checks,
+            }
+        )["status"]
+        != "accepted"
+    )
 
 
 def test_receipt_check_projection_drops_superseded_duplicate_runs() -> None:
@@ -254,6 +411,93 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert "baseRefOid" not in fields
     assert "reviewRequests" in fields
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
+
+
+def test_fetch_pr_snapshot_passes_static_reports_to_receipt_classifier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live snapshot carries the approved static-report projection to receipts."""
+    current_metadata = metadata_digest("merge queue test PR", "final body")
+    reports = [
+        {
+            "identity": "openai/chatgpt-codex-connector",
+            "publisher_identity": "ll7",
+            "approved_source": True,
+            "head_sha": FULL_SHA,
+            "metadata_digest": current_metadata,
+            "evidence_digest": "9" * 64,
+            "verdict": "accepted",
+            "source_comment_id": 5622445291,
+        }
+    ]
+    provenance = {
+        "source": "rest_issue_comments",
+        "status": "accepted",
+        "producer_identity": "openai/chatgpt-codex-connector",
+        "publisher_identity": "ll7",
+        "selected_comment_id": 5622445291,
+    }
+
+    def static_report_fetch(_gh: object, *, repository: str, pr_number: int) -> tuple[list, dict]:
+        assert repository == "owner/repo"
+        assert pr_number == 42
+        return reports, provenance
+
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "fetch_same_account_static_reports",
+        static_report_fetch,
+    )
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["review_evidence"]["static_reports"] == reports
+    assert snapshot["evidence_provenance"]["implementation_review_reports"] == provenance
+    classified = classify_implementation_review(
+        {
+            "head_sha": snapshot["head_sha"],
+            "metadata_digest": snapshot["metadata_digest"],
+            **snapshot["review_evidence"],
+        }
+    )
+    assert classified["status"] == "accepted"
+    assert classified["carrier"]["kind"] == "static_report"
+    assert classified["carrier"]["identity"] == "openai/chatgpt-codex-connector"
+    assert classified["carrier"]["evidence_digest"] == "9" * 64
+
+
+def test_fetch_pr_snapshot_preserves_static_report_timeout_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A comments timeout produces a structured snapshot provenance result."""
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "fetch_same_account_static_reports",
+        fetch_same_account_static_reports,
+    )
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
+            subprocess.TimeoutExpired(
+                cmd=["gh", "api", "comments"],
+                timeout=45,
+            ),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["review_evidence"]["static_reports"] == []
+    provenance = snapshot["evidence_provenance"]["implementation_review_reports"]
+    assert provenance["status"] == "unavailable"
+    assert provenance["reason_codes"] == ["static_report_comment_fetch_timeout"]
 
 
 def test_fetch_pr_snapshot_refreshes_graphql_evidence_status_by_exact_head() -> None:

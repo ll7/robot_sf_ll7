@@ -55,7 +55,26 @@ resolved threads, requested-reviewer state, and separate dependency, draft, doma
 scientific/evidence, legal/release, security, and merge holds. A single-account waiver may
 only document the absence of a distinct human implementation reviewer; it cannot clear any
 other hold or replace hosted checks, domain approval, evidence, legal, release, security, or
-dependency authority. The receipt owner performs the final expected-head compare-and-swap
+dependency authority. Per issue #8677, PR contract and metadata formatting checks (such as
+`pr-contract-check`) remain standard CI evidence and cannot by themselves satisfy independent
+implementation-review authority. Existing distinct-reviewer and approved automated-review
+carriers retain their normal precedence and rules.
+
+For same-account publication, reuse the approved `static_report` carrier through
+`scripts/dev/same_account_review_report.py`. The visible repository-owner account is only the
+publisher; producer/custody authority comes from the exact existing OpenAI-owned ChatGPT Codex
+Connector GitHub App tuple returned by the REST issue-comment object. Direct owner comments,
+copied app names, edited app comments, and caller-injected approval fields remain unapproved.
+The report must assess the implementation under `## Independent implementation review`, include
+`### Scope`, `### Findings`, and `### Validation`, and end with the canonical exact-head,
+metadata, evidence, and unresolved-findings markers. The original evidence digest binds the
+report text, repository/PR/head/metadata, verdict/findings, publisher, and fixed app identity.
+The gate re-reads the complete REST comment collection and projects only that authenticated
+source into `static_reports`; the newest app-custodied report supersedes older reports from that
+producer. Stale, malformed, edited, findings-bearing, or digest-mismatched evidence refuses
+admission. This route does not waive any other receipt hold.
+
+The receipt owner performs the final expected-head compare-and-swap
 merge and records GitHub's returned merge SHA. When an ordinary PR's recorded base predates
 current `main`, the receipt additionally binds the complete changed-file record inventory
 (filename, status, and prior rename path), exact

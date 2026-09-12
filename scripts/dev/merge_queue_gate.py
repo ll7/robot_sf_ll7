@@ -105,6 +105,9 @@ from scripts.dev.pr_metadata import (  # noqa: E402
     metadata_digest,
     metadata_trailer,
 )
+from scripts.dev.same_account_review_report import (  # noqa: E402
+    fetch_same_account_static_reports,
+)
 from scripts.dev.snapshot_pr_queue import (  # noqa: E402
     _extract_base_policies,
     _extract_gate_verdicts,
@@ -112,7 +115,11 @@ from scripts.dev.snapshot_pr_queue import (  # noqa: E402
 )
 
 AUDIT_SCHEMA = "merge_queue_gate.v1"
-RECEIPT_REVIEW_CHECK_NAMES = frozenset({"pr-contract-check"})
+# Check-run names automatically recognized as review authority in merge receipts.
+# Per issue #8677 (Option A ruling), contract and metadata formatting checks
+# (including 'pr-contract-check') remain ordinary CI evidence and cannot by
+# themselves satisfy independent implementation review authority.
+RECEIPT_REVIEW_CHECK_NAMES: frozenset[str] = frozenset()
 NON_REQUIRED_RECEIPT_CHECK_NAMES = frozenset({"coderabbit"})
 
 # CI rollup classification constants (mirror scripts/dev/check_pr_ci_status.py
@@ -1164,6 +1171,11 @@ def _to_receipt_check_runs(
         if name.strip().lower() in NON_REQUIRED_RECEIPT_CHECK_NAMES:
             continue
         is_receipt_review = name in RECEIPT_REVIEW_CHECK_NAMES
+        # Status-check rollups are ordinary CI evidence.  Authority, identity,
+        # metadata, and evidence digests supplied by a caller or fixture are
+        # not GitHub custody facts and must never be copied into a receipt.
+        approved_source = is_receipt_review
+        metadata_digest = expected_metadata_digest if is_receipt_review else None
         checks.append(
             {
                 "name": name,
@@ -1180,9 +1192,10 @@ def _to_receipt_check_runs(
                     "slug": str(app.get("slug") or ""),
                     "name": str(app.get("name") or ""),
                 },
-                "approved_reviewer": item.get("approved_reviewer") is True,
-                "approved_source": is_receipt_review,
-                "metadata_digest": expected_metadata_digest if is_receipt_review else None,
+                "approved_reviewer": False,
+                "approved_source": approved_source,
+                "metadata_digest": metadata_digest,
+                "evidence_digest": None,
             }
         )
     return checks
@@ -1992,7 +2005,7 @@ def _rest_pr_view_payload(pr_number: str | int, *, repo: str) -> tuple[dict[str,
     }, None
 
 
-def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent live API fields fail-closed.
+def fetch_pr_snapshot(  # noqa: C901, PLR0912, PLR0915 - validates several independent live API fields fail-closed.
     pr_number: str | int, *, repo: str
 ) -> tuple[dict[str, Any], str | None]:
     """Fetch a compact PR snapshot via ``gh pr view`` for gate evaluation.
@@ -2091,6 +2104,17 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         return {}, changed_scope_err
 
     current_metadata_digest = metadata_digest(title, body)
+    try:
+        static_report_pr_number = int(pr_number)
+    except (TypeError, ValueError):
+        return {}, "PR number is malformed for static-report retrieval"
+    if static_report_pr_number < 1:
+        return {}, "PR number is malformed for static-report retrieval"
+    static_reports, static_report_provenance = fetch_same_account_static_reports(
+        _gh,
+        repository=repo,
+        pr_number=static_report_pr_number,
+    )
     requested_reviewers, requested_teams = _requested_review_identities(review_requests)
     required_checks = _to_receipt_check_runs(
         payload.get("statusCheckRollup"),
@@ -2112,6 +2136,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
             return {}, f"failed to fetch exact-head evidence registry: {evidence_registry_err}"
     review_evidence = {
         "check_runs": required_checks,
+        "static_reports": static_reports,
         "reviews": _to_receipt_review_evidence(
             payload.get("reviews"),
             head_sha=head_sha,
@@ -2183,6 +2208,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
                 "status": "separate_query",
             },
             "fallback_diagnostic": graphql_fallback_diagnostic or None,
+            "implementation_review_reports": static_report_provenance,
         },
     }
     if evidence_registry["status"] != "missing":

@@ -86,6 +86,8 @@ def _fixture_artifacts(tmp_path: Path) -> SimpleNamespace:
         "core_md_path": reports_dir / "campaign_table_core.md",
         "experimental_csv_path": reports_dir / "campaign_table_experimental.csv",
         "experimental_md_path": reports_dir / "campaign_table_experimental.md",
+        "arm_identity_csv_path": reports_dir / "arm_identity.csv",
+        "arm_identity_md_path": reports_dir / "arm_identity.md",
         "scenario_csv_path": reports_dir / "scenario_breakdown.csv",
         "scenario_md_path": reports_dir / "scenario_breakdown.md",
         "family_csv_path": reports_dir / "scenario_family_breakdown.csv",

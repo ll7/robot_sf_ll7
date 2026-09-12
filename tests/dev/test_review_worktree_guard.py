@@ -575,6 +575,55 @@ def test_review_process_boundary_rejects_network_and_requires_review_mode(tmp_pa
         _remove_worktree(repo, implementation, implementation_branch)
 
 
+def test_pytest_isolation_recipe_stays_inside_the_writable_worktree(tmp_path: Path) -> None:
+    """Guarded pytest guidance confines cache and log outputs to the worktree."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review-pytest-isolation"
+    branch = "review/pytest-isolation"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        configured = _configure(worktree, "review")
+        assert configured.returncode == 0, configured.stderr
+
+        cli = subprocess.run(
+            [sys.executable, str(GUARD), "pytest-isolation", "--worktree", str(worktree)],
+            cwd=worktree,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert cli.returncode == 0, cli.stderr
+        payload = json.loads(cli.stdout)
+        root = Path(str(payload["worktree"])).resolve()
+        assert payload["schema"] == "review_pytest_isolation.v1"
+        assert payload["process_exit_status_authoritative"] is True
+        assert Path(str(payload["env"]["NUMBA_CACHE_DIR"])).resolve().is_relative_to(root)
+        log_argument = next(
+            str(argument)
+            for argument in payload["pytest_arguments"]
+            if str(argument).startswith("log_file=")
+        )
+        assert Path(log_argument.split("=", 1)[1]).resolve().is_relative_to(root)
+        assert all(
+            Path(str(path)).is_relative_to(root) or ".git" in str(path)
+            for path in payload["writable_paths"]
+        )
+
+        plain = tmp_path / "plain-worktree"
+        _git(repo, "worktree", "add", "--no-track", "-b", "plain-branch", str(plain), "HEAD")
+        blocked = subprocess.run(
+            [sys.executable, str(GUARD), "pytest-isolation", "--worktree", str(plain)],
+            cwd=plain,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert blocked.returncode != 0, "non-review worktrees must not receive isolation guidance"
+        _remove_worktree(repo, plain, "plain-branch")
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
 def test_review_process_boundary_fails_closed_on_an_old_landlock_abi() -> None:
     """An OS capability below the declared contract must not launch a child command."""
     import importlib.util

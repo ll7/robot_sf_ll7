@@ -10,7 +10,9 @@ inventory reads, ``POST /repos/{owner}/{repo}/issues/{number}/labels`` for adds,
 and ``DELETE /repos/{owner}/{repo}/issues/{number}/labels/{label}`` for removals;
 write operations verify that GitHub actually applied or removed the requested
 label. It is deliberately REST-only: authentication, authorization, malformed
-responses, and verification mismatches fail closed.
+responses, and verification mismatches fail closed. A rate-limited mutation
+retries only within a small bounded policy and otherwise returns an explicit
+``blocked`` receipt carrying the rate-limit reset evidence (issue #9146).
 
 The REST issues-labels endpoint works for both issues and PRs because GitHub
 treats PRs as issues for labeling. One helper covers ``gh pr edit --add-label``
@@ -38,7 +40,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
@@ -61,6 +65,13 @@ if TYPE_CHECKING:
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 LABEL_PAGE_SIZE = 100
 LABEL_PAGE_CEILING = 10
+RATE_LIMIT_STATUS = "rate_limited"
+BLOCKED_STATUS = "blocked"
+RATE_LIMIT_MAX_ATTEMPTS = 3
+RATE_LIMIT_MAX_WAIT_SECONDS = 15.0
+_RATE_LIMIT_MARKERS = ("rate limit", "rate_limit", "too many requests")
+_RATE_LIMIT_RESET_RE = re.compile(r"x-ratelimit-reset:\s*(\d{9,})", re.IGNORECASE)
+_RATE_LIMIT_RETRY_AFTER_RE = re.compile(r"retry-after:\s*(\d+)", re.IGNORECASE)
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_label_rest.py")
 
 
@@ -94,6 +105,95 @@ def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
         return False
     detail = (result.stderr or result.stdout).strip().lower()
     return "http 404" in detail and "label does not exist" in detail
+
+
+def _is_rate_limit_failure(result: subprocess.CompletedProcess[str]) -> bool:
+    """Return whether a failed gh result reports a REST rate or secondary limit."""
+    if result.returncode == 0:
+        return False
+    text = f"{result.stderr or ''}\n{result.stdout or ''}".lower()
+    return any(marker in text for marker in _RATE_LIMIT_MARKERS)
+
+
+def _parse_rate_limit_reset_epoch(text: str, *, now: float) -> int | None:
+    """Parse an absolute reset epoch or relative Retry-After delay, else None."""
+    reset_match = _RATE_LIMIT_RESET_RE.search(text or "")
+    if reset_match is not None:
+        return int(reset_match.group(1))
+    retry_match = _RATE_LIMIT_RETRY_AFTER_RE.search(text or "")
+    if retry_match is not None:
+        return int(now) + int(retry_match.group(1))
+    return None
+
+
+def _rate_limit_evidence(
+    result: subprocess.CompletedProcess[str], *, now: float
+) -> dict[str, Any] | None:
+    """Return reset evidence for a rate-limited mutation failure, else None."""
+    if not _is_rate_limit_failure(result):
+        return None
+    text = f"{result.stderr or ''}\n{result.stdout or ''}"
+    return {"reset_at": _parse_rate_limit_reset_epoch(text, now=now)}
+
+
+def _fetch_core_rate_limit_reset_at() -> int | None:
+    """Return the canonical REST core-quota reset epoch, or None when unavailable."""
+    try:
+        from scripts.dev.github_quota import fetch_core_reset_at
+    except ImportError:
+        return None
+    return fetch_core_reset_at()
+
+
+def _run_bounded_label_mutation(
+    attempt: Callable[[], dict[str, Any]],
+    *,
+    action: str,
+    number: int,
+    repo: str,
+    label: str,
+    now: Callable[[], float] | None = None,
+    sleep: Callable[[float], None] | None = None,
+    reset_fetcher: Callable[[], int | None] | None = None,
+) -> dict[str, Any]:
+    """Run one label mutation with a bounded rate-limit retry policy.
+
+    Only a rate-limit failure is retryable, and only when a reset time is known
+    and falls inside ``RATE_LIMIT_MAX_WAIT_SECONDS`` under an attempt cap of
+    ``RATE_LIMIT_MAX_ATTEMPTS``. Unknown reset evidence blocks fail-closed with
+    an explicit receipt. Guarded callers pass an ``attempt`` that re-runs their
+    live exact-head/base CAS preflight, so a retry can never mutate a moved PR.
+    """
+    now_fn = now or time.time
+    sleep_fn = sleep or time.sleep
+    reset_fn = reset_fetcher or _fetch_core_rate_limit_reset_at
+    attempts = 0
+    while True:
+        attempts += 1
+        result = attempt()
+        if result.get("status") != RATE_LIMIT_STATUS:
+            if result.get("status") == "ok" and attempts > 1:
+                result = {**result, "attempts": attempts}
+            return result
+        reset_at = result.get("reset_at")
+        if reset_at is None:
+            reset_at = reset_fn()
+        if reset_at is not None and attempts < RATE_LIMIT_MAX_ATTEMPTS:
+            wait_seconds = max(0.0, float(reset_at) - now_fn())
+            if wait_seconds <= RATE_LIMIT_MAX_WAIT_SECONDS:
+                sleep_fn(min(max(1.0, wait_seconds + 1.0), RATE_LIMIT_MAX_WAIT_SECONDS))
+                continue
+        return {
+            "status": BLOCKED_STATUS,
+            "reason": "rate_limited",
+            "action": action,
+            "number": number,
+            "repo": repo,
+            "label": label,
+            "attempts": attempts,
+            "reset_at": reset_at,
+            "error": result.get("error", "GitHub rate limit blocked the label mutation"),
+        }
 
 
 def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30) -> dict[str, Any]:
@@ -263,34 +363,46 @@ def _guarded_merge_ready_write(
     The write additionally requires the PR body and its exact-head review
     comments to be bound to the live head/base: a stale body or a
     stale-narrative review comment (including any pending domain-review
-    disposition) withholds ``merge-ready`` fail-closed (issue #7610).
+    disposition) withholds ``merge-ready`` fail-closed (issue #7610). The
+    preflight is re-run before every mutation attempt, including each bounded
+    rate-limit retry, so a moved head or base can never receive the write.
     """
     try:
         with pr_write_lock(repo, number):
-            guard = guard_pr_write(
-                number,
+
+            def _attempt() -> dict[str, Any]:
+                guard = guard_pr_write(
+                    number,
+                    repo=repo,
+                    expected_head_sha=expected_head_sha,
+                    expected_base_sha=expected_base_sha,
+                    operation="merge_ready_label",
+                )
+                if guard["status"] != "ok":
+                    return guard
+                observed_base = guard.get("observed_base_sha")
+                if not observed_base:
+                    return {
+                        "status": "error",
+                        "error": "live PR base SHA unavailable for the carrier gate",
+                    }
+                carriers = check_merge_ready_carriers(
+                    number,
+                    repo=repo,
+                    live_head=guard["observed_head_sha"],
+                    live_base=observed_base,
+                )
+                if carriers["status"] != "ok":
+                    return carriers
+                return write()
+
+            return _run_bounded_label_mutation(
+                _attempt,
+                action="add",
+                number=number,
                 repo=repo,
-                expected_head_sha=expected_head_sha,
-                expected_base_sha=expected_base_sha,
-                operation="merge_ready_label",
+                label="merge-ready",
             )
-            if guard["status"] != "ok":
-                return guard
-            observed_base = guard.get("observed_base_sha")
-            if not observed_base:
-                return {
-                    "status": "error",
-                    "error": "live PR base SHA unavailable for the carrier gate",
-                }
-            carriers = check_merge_ready_carriers(
-                number,
-                repo=repo,
-                live_head=guard["observed_head_sha"],
-                live_base=observed_base,
-            )
-            if carriers["status"] != "ok":
-                return carriers
-            return write()
     except RuntimeError as exc:
         return {"status": "error", "error": str(exc)}
 
@@ -320,6 +432,12 @@ def add_label(
         result = _gh_api_post(path, {"labels": [label]})
         if result.returncode != 0:
             detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+            if (rate := _rate_limit_evidence(result, now=time.time())) is not None:
+                return {
+                    "status": RATE_LIMIT_STATUS,
+                    "error": f"label add failed: {detail}",
+                    **rate,
+                }
             return {"status": "error", "error": f"label add failed: {detail}"}
         try:
             json.loads(result.stdout)
@@ -348,7 +466,13 @@ def add_label(
         }
 
     if label != "merge-ready":
-        return _write()
+        return _run_bounded_label_mutation(
+            _write,
+            action="add",
+            number=number,
+            repo=repo,
+            label=label,
+        )
     return _guarded_merge_ready_write(
         number,
         repo=repo,
@@ -370,33 +494,49 @@ def remove_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[s
     if label_error is not None:
         return {"status": "error", "error": label_error}
 
-    path = f"repos/{repo}/issues/{number}/labels/{quote(label, safe='')}"
-    result = _gh_api_delete(path)
-    idempotent = _is_absent_label_delete(result)
-    if result.returncode != 0 and not idempotent:
-        detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
-        return {"status": "error", "error": f"label remove failed: {detail}"}
+    def _remove() -> dict[str, Any]:
+        """Delete and verify one label, classifying rate-limit failures."""
+        path = f"repos/{repo}/issues/{number}/labels/{quote(label, safe='')}"
+        result = _gh_api_delete(path)
+        idempotent = _is_absent_label_delete(result)
+        if result.returncode != 0 and not idempotent:
+            detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+            if (rate := _rate_limit_evidence(result, now=time.time())) is not None:
+                return {
+                    "status": RATE_LIMIT_STATUS,
+                    "error": f"label remove failed: {detail}",
+                    **rate,
+                }
+            return {"status": "error", "error": f"label remove failed: {detail}"}
 
-    # Verify the label was actually removed by re-reading labels.
-    current = get_label_names(number, repo=repo)
-    if current["status"] == "error":
-        return current
-    if label in current["labels"]:
-        return {
-            "status": "error",
-            "error": f"label '{label}' was still found in labels after remove; "
-            "the delete may not have taken effect",
+        # Verify the label was actually removed by re-reading labels.
+        current = get_label_names(number, repo=repo)
+        if current["status"] == "error":
+            return current
+        if label in current["labels"]:
+            return {
+                "status": "error",
+                "error": f"label '{label}' was still found in labels after remove; "
+                "the delete may not have taken effect",
+            }
+        response = {
+            "status": "ok",
+            "number": number,
+            "label": label,
+            "action": "remove",
+            "repo": repo,
         }
-    response = {
-        "status": "ok",
-        "number": number,
-        "label": label,
-        "action": "remove",
-        "repo": repo,
-    }
-    if idempotent:
-        response["idempotent"] = True
-    return response
+        if idempotent:
+            response["idempotent"] = True
+        return response
+
+    return _run_bounded_label_mutation(
+        _remove,
+        action="remove",
+        number=number,
+        repo=repo,
+        label=label,
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -6,15 +6,21 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from scripts.dev.gh_pr_label_rest import (
+    BLOCKED_STATUS,
     LABEL_PAGE_CEILING,
     LABEL_PAGE_SIZE,
+    RATE_LIMIT_MAX_ATTEMPTS,
+    RATE_LIMIT_MAX_WAIT_SECONDS,
     _get_label_names,
+    _is_rate_limit_failure,
+    _parse_rate_limit_reset_epoch,
     add_label,
     check_merge_ready_carriers,
     get_label_names,
@@ -739,6 +745,227 @@ class TestRemoveLabel:
         assert result["status"] == "error"
         assert "printable" in result["error"]
         mock_delete.assert_not_called()
+
+
+def _rate_limited_403(
+    *, reset_at: int | None = None, message: str = "API rate limit exceeded for user ID 1."
+) -> MagicMock:
+    """Build a fake gh 403 rate-limit result with optional reset evidence."""
+    stderr = f"gh: {message} (HTTP 403)"
+    if reset_at is not None:
+        stderr += f"\nX-RateLimit-Reset: {reset_at}"
+    return _proc(returncode=1, stderr=stderr)
+
+
+class TestRateLimitRetry:
+    """Focused coverage for bounded rate-limit handling (issue #9146)."""
+
+    def test_rate_limit_classifier_ignores_plain_forbidden(self) -> None:
+        """Only explicit rate-limit text is retryable, never a generic 403."""
+        assert _is_rate_limit_failure(_rate_limited_403()) is True
+        assert _is_rate_limit_failure(_proc(returncode=1, stderr="HTTP 403: forbidden")) is False
+        assert _is_rate_limit_failure(_proc(stdout="ok")) is False
+
+    def test_parse_reset_epoch_supports_header_and_retry_after(self) -> None:
+        """Reset evidence is an absolute epoch or a relative Retry-After delay."""
+        assert _parse_rate_limit_reset_epoch("X-RateLimit-Reset: 1757690123", now=0) == 1757690123
+        assert _parse_rate_limit_reset_epoch("Retry-After: 30", now=1000) == 1030
+        assert _parse_rate_limit_reset_epoch("temporary failure", now=1000) is None
+
+    def test_remove_retries_rate_limited_delete_and_verifies_success(self) -> None:
+        """A retry inside the bound succeeds only after authoritative re-readback."""
+        reset_at = int(time.time()) + 1
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_get,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+        ):
+            mock_delete.side_effect = [_rate_limited_403(reset_at=reset_at), _proc(stdout="")]
+            mock_get.return_value = _proc(stdout=_mock_labels_payload("bug"))
+            result = remove_label(5220, "merge-ready", repo="ll7/robot_sf_ll7")
+
+        assert result == {
+            "status": "ok",
+            "number": 5220,
+            "label": "merge-ready",
+            "action": "remove",
+            "repo": "ll7/robot_sf_ll7",
+            "attempts": 2,
+        }
+        assert mock_delete.call_count == 2
+        assert mock_sleep.call_count == 1
+        delay = mock_sleep.call_args.args[0]
+        assert 0 < delay <= RATE_LIMIT_MAX_WAIT_SECONDS
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "API rate limit exceeded for user ID 1.",
+            "You have exceeded a secondary rate limit. Please wait a few minutes.",
+        ],
+    )
+    def test_remove_blocks_when_rate_limit_reset_is_unavailable(self, message: str) -> None:
+        """Unknown reset evidence blocks fail-closed without any fallback mutation."""
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_get,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+            patch(
+                "scripts.dev.gh_pr_label_rest._fetch_core_rate_limit_reset_at",
+                return_value=None,
+            ),
+        ):
+            mock_delete.return_value = _rate_limited_403(message=message)
+            result = remove_label(5220, "merge-ready")
+
+        assert result == {
+            "status": BLOCKED_STATUS,
+            "reason": "rate_limited",
+            "action": "remove",
+            "number": 5220,
+            "repo": "ll7/robot_sf_ll7",
+            "label": "merge-ready",
+            "attempts": 1,
+            "reset_at": None,
+            "error": f"label remove failed: gh: {message} (HTTP 403)",
+        }
+        mock_delete.assert_called_once()
+        mock_sleep.assert_not_called()
+        mock_get.assert_not_called()
+
+    def test_blocked_receipt_carries_fetched_reset_epoch(self) -> None:
+        """A reset outside the bounded wait is reported instead of sleeping."""
+        fetched_reset = int(time.time()) + 3600
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+            patch(
+                "scripts.dev.gh_pr_label_rest._fetch_core_rate_limit_reset_at",
+                return_value=fetched_reset,
+            ),
+        ):
+            mock_delete.return_value = _rate_limited_403()
+            result = remove_label(5220, "merge-ready")
+
+        assert result["status"] == BLOCKED_STATUS
+        assert result["reason"] == "rate_limited"
+        assert result["reset_at"] == fetched_reset
+        assert result["attempts"] == 1
+        mock_delete.assert_called_once()
+        mock_sleep.assert_not_called()
+
+    def test_plain_forbidden_is_not_retried_or_blocked(self) -> None:
+        """A non-rate-limit 403 keeps the existing fail-closed error contract."""
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+        ):
+            mock_post.return_value = _proc(returncode=1, stderr="HTTP 403: forbidden")
+            result = add_label(5220, "cheap-lane")
+
+        assert result["status"] == "error"
+        assert "403" in result["error"]
+        mock_post.assert_called_once()
+        mock_sleep.assert_not_called()
+
+    def test_merge_ready_retry_rechecks_exact_head_and_aborts_on_drift(self) -> None:
+        """Every retry re-runs the live CAS preflight before it may mutate."""
+        head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+        base_sha = "b1c2d3e4f5061728394a5b6c7d8e9f0011121314"
+        stale = {
+            "status": "review_skipped_stale_state",
+            "reason": "head_sha_changed",
+            "observed_head_sha": "c" * 40,
+        }
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                side_effect=[
+                    {
+                        "status": "ok",
+                        "observed_head_sha": head_sha,
+                        "observed_base_sha": base_sha,
+                    },
+                    stale,
+                ],
+            ) as mock_guard,
+            patch(
+                "scripts.dev.gh_pr_label_rest.check_merge_ready_carriers",
+                return_value={"status": "ok"},
+            ) as mock_carriers,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep"),
+        ):
+            mock_post.return_value = _rate_limited_403(reset_at=int(time.time()) + 1)
+            result = add_label(
+                5220,
+                "merge-ready",
+                repo="ll7/robot_sf_ll7",
+                expected_head_sha=head_sha,
+                expected_base_sha=base_sha,
+            )
+
+        assert result == stale
+        assert mock_guard.call_count == 2
+        assert mock_carriers.call_count == 1
+        mock_post.assert_called_once()
+
+    def test_merge_ready_exhausts_bounded_attempts_then_blocks(self) -> None:
+        """The retry cap bounds sleeps and returns reset evidence when exhausted."""
+        head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+        base_sha = "b1c2d3e4f5061728394a5b6c7d8e9f0011121314"
+        reset_at = int(time.time()) + 1
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                return_value={
+                    "status": "ok",
+                    "observed_head_sha": head_sha,
+                    "observed_base_sha": base_sha,
+                },
+            ) as mock_guard,
+            patch(
+                "scripts.dev.gh_pr_label_rest.check_merge_ready_carriers",
+                return_value={"status": "ok"},
+            ),
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+        ):
+            mock_post.return_value = _rate_limited_403(reset_at=reset_at)
+            result = add_label(
+                5220,
+                "merge-ready",
+                expected_head_sha=head_sha,
+                expected_base_sha=base_sha,
+            )
+
+        assert result["status"] == BLOCKED_STATUS
+        assert result["reason"] == "rate_limited"
+        assert result["attempts"] == RATE_LIMIT_MAX_ATTEMPTS
+        assert result["reset_at"] == reset_at
+        assert mock_post.call_count == RATE_LIMIT_MAX_ATTEMPTS
+        assert mock_guard.call_count == RATE_LIMIT_MAX_ATTEMPTS
+        assert mock_sleep.call_count == RATE_LIMIT_MAX_ATTEMPTS - 1
+
+    def test_cli_blocked_rate_limit_receipt_exits_nonzero(self, capsys) -> None:
+        """A blocked receipt is never printed as a successful mutation."""
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+            patch(
+                "scripts.dev.gh_pr_label_rest._fetch_core_rate_limit_reset_at",
+                return_value=None,
+            ),
+        ):
+            mock_delete.return_value = _rate_limited_403()
+            rc = main(["remove", "5220", "--label", "merge-ready"])
+
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert not captured.out
+        payload = json.loads(captured.err)
+        assert payload["status"] == BLOCKED_STATUS
+        assert payload["reason"] == "rate_limited"
+        assert payload["reset_at"] is None
 
 
 class TestCli:

@@ -48,6 +48,10 @@ PUBLIC_REF_RE = re.compile(
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 KNOWN_CONSUMER_STATES = frozenset("active running open queued historical published closed".split())
+EVIDENCE_FAILURE_CODES = frozenset(
+    "invalid_records invalid_private_projection invalid_refs invalid_ref invalid_reference_id "
+    "invalid_edge_type invalid_content_identity invalid_path".split()
+)
 PRIVATE_RE = re.compile(
     r"(?i)(?:://|api[_-]?key|secret|password|token|credential|bearer|^[/~\\]|@[A-Za-z]|(?:[a-z0-9][a-z0-9-]{0,61}\.){2,}[a-z]{2,24})"
 )
@@ -279,11 +283,6 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                     "logical ID is invalid or private",
                 )
             )
-        if ident in artifacts:
-            findings.append(
-                _finding("duplicate_logical_id", ident, None, "artifact declaration is duplicated")
-            )
-            continue
         digest = raw.get("sha256", raw.get("content_identity"))
         if isinstance(digest, Mapping):
             digest = digest.get("sha256")
@@ -336,16 +335,21 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                 )
                 value = False
             booleans[field] = value
-        artifacts.setdefault(
-            ident,
-            {
-                "logical_id": ident,
-                "kind": kind,
-                "sha256": digest,
-                "path": path,
-                **booleans,
-                "replacement_for": replacement,
-            },
+        candidate = {
+            "logical_id": ident,
+            "kind": kind,
+            "sha256": digest,
+            "path": path,
+            **booleans,
+            "replacement_for": replacement,
+        }
+        if ident in artifacts:
+            findings.append(
+                _finding("duplicate_logical_id", ident, None, "artifact declaration is duplicated")
+            )
+        artifacts[ident] = min(
+            (artifacts.get(ident, candidate), candidate),
+            key=lambda item: json.dumps(item, sort_keys=True),
         )
     for ident, values in identities.items():
         if len(values - {"unknown"}) > 1:
@@ -412,6 +416,8 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
                 )
             )
             kind, state = "consumer", "unknown"
+        elif state not in KNOWN_CONSUMER_STATES:
+            findings.append(_finding("unknown_consumer_state", consumer_id, None, "unknown"))
         if _private(item) and kind != "tracked_file":
             findings.append(
                 _finding(
@@ -547,11 +553,21 @@ def build_graph(  # noqa: C901, PLR0912, PLR0915
             or ident in cycle_nodes
             or ident in ambiguous_targets
             or ident in invalid_artifact_ids
+            or any(
+                f["code"] in EVIDENCE_FAILURE_CODES
+                and not (
+                    f["code"] == "invalid_path" and f["target"] is None and f["source"] in artifacts
+                )
+                and (f["target"] is None or f["target"] == ident)
+                for f in findings
+            )
         )
         if conflict:
             classification = "unresolved_conflict"
         elif active:
             classification = "active_required"
+        elif unknown_state:
+            classification = "consumer_unknown"
         elif (
             artifact["regeneration_verified"]
             and artifact["regenerable"]
@@ -600,17 +616,21 @@ def render_json(report: Mapping[str, Any]) -> str:
     return json.dumps(report, indent=2, sort_keys=True) + "\n"
 
 
+def _dot_node(namespace: str, identifier: str) -> str:
+    return f"{namespace}:{identifier}"
+
+
 def render_dot(report: Mapping[str, Any]) -> str:
     """Return a deterministic Graphviz projection of a graph report."""
     lines = ["digraph consumer_graph {", '  rankdir="LR";']
     for artifact in report["artifacts"]:
-        lines.append(f'  "artifact:{artifact["id"]}" [shape=box];')
+        lines.append(f'  "{_dot_node("artifact", artifact["id"])}" [shape=box];')
     for consumer in report["consumers"]:
-        lines.append(f'  "consumer:{consumer["id"]}" [shape=ellipse];')
+        lines.append(f'  "{_dot_node("consumer", consumer["id"])}" [shape=ellipse];')
     for edge in report["edges"]:
-        source = edge["source"] if edge["type"] == "supersedes" else f"consumer:{edge['source']}"
-        target = f"artifact:{edge['target']}"
-        source = source if source.startswith(("consumer:", "artifact:")) else f"artifact:{source}"
+        namespace = "artifact" if edge["type"] == "supersedes" else "consumer"
+        source = _dot_node(namespace, edge["source"])
+        target = _dot_node("artifact", edge["target"])
         lines.append(f'  "{source}" -> "{target}" [label="{edge["type"]}"];')
     return "\n".join(lines) + "\n} \n"
 

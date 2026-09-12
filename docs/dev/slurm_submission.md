@@ -608,5 +608,36 @@ The verifier enforces schema `campaign_recovery_receipt.v1.schema.json` and eval
   report `status: "unsupported"`.
 - **Ledger reconciliation**: final reconciled rows must match the expected-row ledger 1-to-1.
 
+## Host-independent campaign analysis capsules (packaging and verification)
 
+Package source-independent inputs, schemas, analysis code, dependencies, and compact fixtures into portable
+capsules so campaign validation and reports can be regenerated on surviving machines after compute-host loss:
 
+```bash
+# Verify an analysis capsule (fail-closed check)
+uv run python scripts/tools/package_campaign_analysis_capsule.py --check \
+  --capsule path/to/campaign_capsule \
+  --format json
+
+# Regenerate deterministic reports into a fresh output root
+uv run python scripts/tools/package_campaign_analysis_capsule.py --check \
+  --capsule path/to/campaign_capsule \
+  --regenerate-reports \
+  --output-dir path/to/fresh_output_root
+
+# Build a capsule into an explicit temporary root from a build specification
+uv run python scripts/tools/package_campaign_analysis_capsule.py --build \
+  --spec path/to/capsule_spec.json \
+  --output-dir path/to/temporary_capsule_root
+```
+
+The tool enforces schema `campaign_analysis_capsule.v1.schema.json` and `SHA256SUMS` integrity, rejecting:
+- **Hidden absolute paths**: paths referencing `/home/`, `/tmp/`, `/var/`, or drive letters.
+- **Source-host dependencies and scheduler state**: `SLURM_*` variables, scheduler logs, or cluster domain names.
+- **Editable sibling imports**: `sys.path.insert`, `site-packages`, or `../` parent traversals in analysis scripts.
+- **Missing or invalid schemas**: referenced schemas must be present and validate as Draft 2020-12 JSON schemas.
+- **Mutable artifact aliases**: durable references with mutable tags (`:latest`, `master`, `main`) without content hashes.
+- **Unbound or stale analysis code**: script digest must match `analysis_code_digest`.
+- **Missing or duplicate data rows**: row IDs must be unique, and row counts must reconcile with expected ledgers.
+- **Output overwrite**: report regeneration refuses to overwrite existing files in the destination root.
+- **Explicit unavailable/unsupported analyses**: non-runnable optional analyses must state an explicit justification.

@@ -90,7 +90,7 @@ policy.
 
 ## 4. Checked workflows
 
-### 4.1 Inventory without deleting
+### Inventory without deleting
 
 ```bash
 uv run python scripts/dev/check_worktree_capacity.py --inventory --json
@@ -99,7 +99,7 @@ uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retiremen
 
 Both helpers are read-only and never delete files.
 
-### 4.2 Verify a large result tree
+### Verify a large result tree
 
 ```bash
 uv run python scripts/tools/chunk_manifest.py manifest --root <RESULT_TREE> --output <MANIFEST.json>
@@ -109,7 +109,7 @@ uv run python scripts/tools/chunk_manifest.py verify --root <RESULT_TREE> --mani
 `verify` fails closed with exact file or chunk locations on mutation, truncation, sparse/symlink/
 hardlink/special-file, path, collision, and partial-manifest conditions.
 
-### 4.3 Preserve
+### Preserve
 
 1. Produce or locate the result tree.
 2. Verify it with `chunk_manifest.py` (or the owning schema check for small artifacts).
@@ -118,7 +118,7 @@ hardlink/special-file, path, collision, and partial-manifest conditions.
 4. Link the durable copy from the owning context note or evidence README.
 5. Record whether an independent second copy exists and in which failure domain.
 
-### 4.4 Restore-test
+### Restore-test
 
 Hydrate the artifact from the durable copy into a scratch path and rerun the owning verification
 command. A successful restore test is required before claiming preservation or cleanup eligibility.
@@ -132,7 +132,7 @@ The verifier reconstructs the declared environment in a clean temporary root wit
 dependencies, validates all checksums, row/config/checkpoint identities, and executes safe
 read-only smoke assertions. The outcome is labelled restoration smoke, not scientific reproduction.
 
-### 4.5 Check cleanup eligibility
+### Check cleanup eligibility
 
 ```bash
 uv run python scripts/dev/stale_worktree_reaper.py --path "$WORKTREE_PATH" --json
@@ -155,7 +155,7 @@ Any deletion, symlink/path alias, identity drift, new content, lease, lookup err
 refuses removal. Normal worktree removal preserves the local branch and its commits; artifact
 preservation remains the owner's responsibility before retirement.
 
-### 4.6 Audit durable locality and failure domains
+### Audit durable locality and failure domains
 
 ```bash
 uv run python scripts/validation/check_durable_artifact_locality.py \
@@ -167,7 +167,7 @@ projection by artifact ID, version, and digest, and exits non-zero when an activ
 reference has no verified non-institutional custody or a release-facing reference lacks independent
 failure-domain copies. It reads sanitized inputs only and never emits locator values.
 
-### 4.7 Gate source-host artifact pruning on verified custody
+### Gate source-host artifact pruning on verified custody
 
 ```bash
 uv run python scripts/tools/check_prune_eligibility.py --check \
@@ -179,7 +179,7 @@ The guard verifies durable destination custody, checksums, consumer coverage, an
 dispositions before permitting deletion planning. Check mode performs zero file deletions;
 an explicit `--apply` route enforces compare-and-swap revalidation before removing eligible bytes.
 
-### 4.8 Check checkpoint preservation custody
+### Check checkpoint preservation custody
 
 ```bash
 uv run python scripts/validation/check_checkpoint_preservation.py --check \
@@ -197,7 +197,7 @@ publication. Load status is reported separately (`verified_metadata`, `loadabili
 `loadability_failed`, `not_checked`) and is never preservation, performance, or benchmark evidence.
 The tool is read-only and emits no private paths.
 
-### 4.9 Generate complete post-access handoff
+### Generate complete post-access handoff
 
 ```bash
 uv run python scripts/tools/generate_post_access_handoff.py --check \
@@ -209,7 +209,7 @@ summarizing workloads, scheduler receipts, artifact custody, and environment rec
 It redacts private paths, internal hosts, and credentials, rejects contradictory statuses and
 orphan records, and enforces actionable next commands for incomplete runs.
 
-### 4.10 Freeze and rehearse a bootstrap recipe
+### Freeze and rehearse a bootstrap recipe
 
 Each recipe in [configs/bootstrap_recipes/README.md](../../configs/bootstrap_recipes/README.md)
 freezes an execution class's setup, probe, and cleanup sequence with its source/lock and immutable
@@ -217,7 +217,7 @@ identities. `scripts/tools/bootstrap_recipe_check.py --check --recipes configs/b
 reports structurally; `--execute-safe-checks` runs `safe_check` probes in an isolated temporary root.
 A class without a verified recipe needs an explicit `verification_status: unavailable` reason.
 
-### 4.11 Export a restorable source bundle
+### Export a restorable source bundle
 
 ```bash
 uv run python scripts/tools/source_bundle_export.py --export \
@@ -232,7 +232,7 @@ tracked-file inventory, and verifies by cloning into a fresh repository and repr
 identities. Dirty or untracked state is rejected unless an explicit patch is admitted and
 checksum-bound; private or credentialed remotes are never written into the public status.
 
-### 4.12 Check log retention and bounded diagnostic excerpts
+### Check log retention and bounded diagnostic excerpts
 
 ```bash
 uv run python scripts/tools/check_log_retention.py --check --manifest <LOG_MANIFEST> --root <LOG_ROOT> --format json
@@ -242,7 +242,7 @@ The check-only helper requires per-log role, job/task identity, byte/line counts
 digest, and retention class; it emits deterministic bounded excerpts with private values redacted.
 Active, truncated, binary, secret-like, duplicate, unidentified, mismatched, or uncustodied logs remain blocked; failed/unknown jobs retain full logs until verified custody. It never deletes files or changes runtime logging.
 
-### 4.13 Report a blocker
+### Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

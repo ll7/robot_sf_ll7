@@ -231,8 +231,20 @@ def test_every_view_is_single_axis_and_visibly_diagnostic(case, view):
     figure, receipt = pack.render_view(pack.prepare_case(case, diagnostic()), view, diagnostic())
     figure.canvas.draw()
     assert len(figure.axes) == 1
-    assert "DIAGNOSTIC ONLY" in figure.axes[0].get_title()
+    assert (
+        figure.axes[0]
+        .get_title()
+        .endswith("DIAGNOSTIC ONLY - not benchmark or publication evidence")
+    )
     assert receipt["view"] == view
+    figure.clear()
+
+
+def test_admitted_mode_keeps_diagnostic_only_title(case):
+    config = pack.PackConfig(mode="admitted", formats=("svg",), views=("trajectory",))
+    figure, _receipt = pack.render_view(pack.prepare_case(case, diagnostic()), "trajectory", config)
+    assert "DIAGNOSTIC ONLY - not benchmark or publication evidence" in figure.axes[0].get_title()
+    assert "Author-admitted" not in figure.axes[0].get_title()
     figure.clear()
 
 
@@ -289,11 +301,21 @@ def test_bundle_roundtrip_inventory_and_no_raw_trace(source, tmp_path):
     assert result["source_admission_status"] == "not_admitted"
     assert result["cases"][0]["source_trace"]["status"] == "structural-only"
     assert '"steps"' not in (output / "manifest.json").read_text()
-    sidecar = next(output.rglob("*.provenance.json"))
-    sidecar_payload = json.loads(sidecar.read_text(encoding="utf-8"))
-    assert sidecar_payload["evidence_status"] == "diagnostic-only"
-    assert sidecar_payload["source_trace_provenance_status"] == "structural-only"
-    assert sidecar_payload["source_trace_sha256"] is None
+    sidecars = sorted(output.rglob("*.provenance.json"))
+    assert len(sidecars) == len(pack.VIEWS)
+    for sidecar in sidecars:
+        sidecar_payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert sidecar_payload["schema_version"] == pack.VIEW_PROVENANCE_SCHEMA
+        assert sidecar_payload["pack_config_path"] == "config.json"
+        assert sidecar_payload["pack_config_sha256"] == result["config_sha256"]
+        assert sidecar_payload["source_proposal_path"] == "proposal.json"
+        assert sidecar_payload["source_proposal_sha256"] == result["source_proposal_sha256"]
+        assert sidecar_payload["source_inventory_sha256"] == result["source_inventory_sha256"]
+        assert sidecar_payload["evidence_status"] == "diagnostic-only"
+        assert sidecar_payload["source_trace_provenance_status"] == "structural-only"
+        assert sidecar_payload["source_trace_sha256"] is None
+        assert "scenario_matrix_path" not in sidecar_payload
+        assert "scenario_matrix_hash" not in sidecar_payload
     for artifact in result["artifacts"]:
         assert pack._sha(output / artifact["path"]) == artifact["sha256"]
     assert {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()} == {

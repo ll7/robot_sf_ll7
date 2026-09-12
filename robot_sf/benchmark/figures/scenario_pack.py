@@ -2,7 +2,8 @@
 
 Selection/admission, metric semantics, map parsing and publication styling remain
 owned by their existing modules. This module owns composition and packaging only.
-No simulator is run; a diagnostic pack is never an author-admitted figure.
+No simulator is run; every rendered figure is diagnostic-only, including when
+the input package passes the separate source-admission checks.
 See docs/scenario_figure_pack.md for the config-first workflow.
 """
 
@@ -28,6 +29,7 @@ from typing import Any
 from robot_sf.benchmark.figures.profile import FigureProfile
 
 SCHEMA = "scenario-figure-pack.v1"
+VIEW_PROVENANCE_SCHEMA = "scenario-figure-pack-provenance.v1"
 EVIDENCE_STATUS = "diagnostic-only"
 BOUNDARY = (
     "Exact recorded episode only. Selection is not prevalence, planner superiority, "
@@ -435,11 +437,7 @@ def _render_view(
         "figure_profile_sha256": profile.sha256(),
         "figure_size_in": [width, height],
     }
-    mode_label = (
-        "DIAGNOSTIC ONLY - not author admitted"
-        if config.mode == "diagnostic"
-        else "Author-admitted recorded case"
-    )
+    mode_label = "DIAGNOSTIC ONLY - not benchmark or publication evidence"
     title = (
         f"{view.replace('_', ' ').title()}\n"
         f"{_case_title(case, width=76 if width > 4 else 35)}\n{mode_label}"
@@ -734,6 +732,12 @@ def build_pack(
                     figure, view_info = render_view(item, view, config, profile=profile)
                     view_info["stem"] = f"{stem}/{view}"
                     prov = {
+                        "schema_version": VIEW_PROVENANCE_SCHEMA,
+                        "pack_config_path": "config.json",
+                        "pack_config_sha256": receipt["config_sha256"],
+                        "source_proposal_path": "proposal.json",
+                        "source_proposal_sha256": before["proposal.json"],
+                        "source_inventory_sha256": receipt["source_inventory_sha256"],
                         "source_artifacts": [
                             {"path": "proposal.json", "sha256": before["proposal.json"]}
                         ],

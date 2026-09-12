@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from scripts.dev.check_issue_line_budget import (
+    STATUS_INVALID,
     STATUS_NO_CAP,
     STATUS_OVER,
     STATUS_OVERRIDE,
@@ -60,6 +61,18 @@ def test_measure_diffstat_counts_files_additions_and_binary_rows() -> None:
     assert measured == {"files": 3, "added": 120, "deleted": 5, "net": 115}
 
 
+def test_evaluate_budget_enforces_net_new_lines() -> None:
+    """Deletions reduce the measured line budget rather than being ignored."""
+    result = evaluate_budget(
+        issue_body=ISSUE_WITH_CAP,
+        pr_body="Refs #1\n",
+        numstat_text="1000\t500\tscripts/dev/rewrite.py\n",
+    )
+
+    assert result["status"] == STATUS_WITHIN
+    assert result["ok"] is True
+
+
 def test_evaluate_budget_within_cap_passes() -> None:
     """A diff inside both caps passes."""
     result = evaluate_budget(
@@ -78,7 +91,7 @@ def test_evaluate_budget_over_cap_fails_with_breach_detail() -> None:
 
     assert result["ok"] is False
     assert result["status"] == STATUS_OVER
-    assert "1414 added lines > 800-line cap" in result["breaches"]
+    assert "1378 net new lines > 800-line cap" in result["breaches"]
     assert "5 files > 10-file cap" not in result["breaches"]
 
 
@@ -114,6 +127,19 @@ def test_evaluate_budget_without_a_declared_cap_is_inert() -> None:
     assert result["status"] == STATUS_NO_CAP
 
 
+def test_evaluate_budget_rejects_unrepresentable_cap() -> None:
+    """A malformed numeric cap is a stable fail-closed result, not a crash or no-cap pass."""
+    result = evaluate_budget(
+        issue_body=f"Maximum {'9' * 5000} lines\n",
+        pr_body="Refs #1\n",
+        numstat_text=WITHIN_NUMSTAT,
+    )
+
+    assert result["status"] == STATUS_INVALID
+    assert result["ok"] is False
+    assert result["breaches"] == ["declared budget cap is not a valid integer"]
+
+
 def test_find_override_reason_reads_only_non_empty_lines() -> None:
     """Override parsing requires a non-empty reason on its own line."""
     assert (
@@ -121,6 +147,7 @@ def test_find_override_reason_reads_only_non_empty_lines() -> None:
     )
     assert find_override_reason("prose about budget-override: inline\n") is None
     assert find_override_reason("budget-override:\n") is None
+    assert find_override_reason("budget-override: <reason>\n") is None
 
 
 def test_main_exit_codes_and_json_output(tmp_path: Path, capsys) -> None:

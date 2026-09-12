@@ -916,12 +916,11 @@ def _diff_added_python_lines(base_ref: str, repo_root: str | None = None) -> dic
     return added
 
 
-def _diff_numstat(base_ref: str) -> str:
+def _diff_numstat(base_ref: str) -> str | None:
     """Return ``git diff --numstat`` output for the PR head against *base_ref*.
 
-    Returns an empty string when the diff cannot be computed; the caller then
-    finds no measurable breach, matching the fail-soft behavior of the other
-    diff-scoped checks.
+    Returns None when the diff cannot be computed. Budget enforcement treats
+    unavailable measurements as a blocker rather than an empty diff.
     """
     try:
         res = subprocess.run(
@@ -931,10 +930,10 @@ def _diff_numstat(base_ref: str) -> str:
             check=False,
         )
         if res.returncode != 0:
-            return ""
+            return None
         return res.stdout
     except _BEST_EFFORT_ERRORS:
-        return ""
+        return None
 
 
 def check_line_budget_discipline(body: str, base_ref: str, repo: str) -> list[str]:
@@ -956,6 +955,13 @@ def check_line_budget_discipline(body: str, base_ref: str, repo: str) -> list[st
             continue
         if numstat_text is None:
             numstat_text = _diff_numstat(base_ref)
+            if numstat_text is None:
+                blockers.append(
+                    f"BLOCKER: cannot measure the PR diff against base ref {base_ref!r}; "
+                    f"budget enforcement for issue #{issue} is unavailable and remains "
+                    "fail-closed (issue #9094)."
+                )
+                break
         result = evaluate_budget(issue_body=issue_body, pr_body=body, numstat_text=numstat_text)
         if not result.get("ok", True):
             blockers.append(

@@ -40,6 +40,7 @@ STATUS_NO_CAP = "no_declared_cap"
 STATUS_WITHIN = "within_budget"
 STATUS_OVERRIDE = "override_applied"
 STATUS_OVER = "over_budget"
+STATUS_INVALID = "invalid_cap"
 _CAP_KEYWORDS = r"(?:max(?:imum)?|cap(?:ped)?(?:\s+at)?|budget\s+of|no\s+more\s+than|at\s+most)"
 LINE_CAP_PATTERNS = (
     re.compile(rf"{_CAP_KEYWORDS}\D{{0,15}}?([\d,]+)\s*(?:net\s+new\s+)?lines?\b", re.IGNORECASE),
@@ -57,12 +58,19 @@ OVERRIDE_PATTERN = re.compile(
 )
 
 
+class BudgetParseError(ValueError):
+    """Raised when a matched budget number cannot be represented safely."""
+
+
 def _first_cap(patterns: tuple[re.Pattern[str], ...], body: str) -> int | None:
     """Return the first declared cap in *body*, or None."""
     for pattern in patterns:
         match = pattern.search(body)
         if match is not None:
-            return int(match.group(1).replace(",", ""))
+            try:
+                return int(match.group(1).replace(",", ""))
+            except ValueError as error:
+                raise BudgetParseError("declared budget cap is not a valid integer") from error
     return None
 
 
@@ -76,7 +84,10 @@ def parse_declared_caps(issue_body: str) -> dict[str, int | None]:
 
 def has_declared_cap(issue_body: str) -> bool:
     """Return whether *issue_body* declares at least one budget cap."""
-    caps = parse_declared_caps(issue_body)
+    try:
+        caps = parse_declared_caps(issue_body)
+    except BudgetParseError:
+        return True
     return caps["files"] is not None or caps["lines"] is not None
 
 
@@ -101,18 +112,32 @@ def find_override_reason(pr_body: str) -> str | None:
     if match is None:
         return None
     reason = match.group("reason").strip()
-    return reason or None
+    return None if not reason or reason.casefold() in {"<reason>", "reason"} else reason
 
 
 def evaluate_budget(*, issue_body: str, pr_body: str, numstat_text: str) -> dict[str, object]:
     """Evaluate the declared budget and return a stable result payload."""
-    caps = parse_declared_caps(issue_body)
     measured = measure_diffstat(numstat_text)
+    override_reason = find_override_reason(pr_body)
+    try:
+        caps = parse_declared_caps(issue_body)
+    except BudgetParseError as error:
+        message = str(error)
+        return {
+            "schema": SCHEMA,
+            "caps": {"files": None, "lines": None},
+            "measured": measured,
+            "override_reason": override_reason,
+            "status": STATUS_INVALID,
+            "ok": False,
+            "message": message,
+            "breaches": [message],
+        }
     result: dict[str, object] = {
         "schema": SCHEMA,
         "caps": caps,
         "measured": measured,
-        "override_reason": find_override_reason(pr_body),
+        "override_reason": override_reason,
     }
     if caps["files"] is None and caps["lines"] is None:
         result["status"] = STATUS_NO_CAP
@@ -124,8 +149,8 @@ def evaluate_budget(*, issue_body: str, pr_body: str, numstat_text: str) -> dict
     breaches: list[str] = []
     if caps["files"] is not None and measured["files"] > caps["files"]:
         breaches.append(f"{measured['files']} files > {caps['files']}-file cap")
-    if caps["lines"] is not None and measured["added"] > caps["lines"]:
-        breaches.append(f"{measured['added']} added lines > {caps['lines']}-line cap")
+    if caps["lines"] is not None and measured["net"] > caps["lines"]:
+        breaches.append(f"{measured['net']} net new lines > {caps['lines']}-line cap")
     result["breaches"] = breaches
     if not breaches:
         result["status"] = STATUS_WITHIN

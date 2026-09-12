@@ -292,7 +292,7 @@ def test_check_line_budget_discipline_blocks_over_budget(
 
     assert len(blockers) == 1
     assert "#9094" in blockers[0]
-    assert "1500 added lines > 800-line cap" in blockers[0]
+    assert "1500 net new lines > 800-line cap" in blockers[0]
     mock_numstat.assert_called_once_with("origin/main")
 
 
@@ -339,6 +339,24 @@ def test_check_line_budget_discipline_skips_unreadable_issue(
         )
         == []
     )
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat", return_value=None)
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_fails_closed_when_diff_unavailable(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """An unresolvable base cannot masquerade as an empty, within-budget diff."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n", "missing-base", "ll7/robot_sf_ll7"
+    )
+
+    assert len(blockers) == 1
+    assert "cannot measure the PR diff" in blockers[0]
+    assert "fail-closed" in blockers[0]
+    mock_numstat.assert_called_once_with("missing-base")
 
 
 def test_build_comment_body_marks_main_ci_closing_guard_failure() -> None:

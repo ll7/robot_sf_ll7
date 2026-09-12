@@ -274,6 +274,73 @@ def test_check_closes_discipline_allows_non_closing_reference() -> None:
     assert not pr_contract_check.check_closes_discipline("Refs #8414", "ll7/robot_sf_ll7")
 
 
+_OVERRIDE_NUMSTAT = "\n".join(f"300\t0\tscripts/dev/file_{index}.py" for index in range(5)) + "\n"
+_CAPPED_ISSUE_BODY = "Reviewability budget: Maximum 10 files and 800 net new lines.\n"
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat", return_value=_OVERRIDE_NUMSTAT)
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_blocks_over_budget(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """An over-cap PR without an override is blocked with the issue number."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n", "origin/main", "ll7/robot_sf_ll7"
+    )
+
+    assert len(blockers) == 1
+    assert "#9094" in blockers[0]
+    assert "1500 added lines > 800-line cap" in blockers[0]
+    mock_numstat.assert_called_once_with("origin/main")
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat", return_value=_OVERRIDE_NUMSTAT)
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_honors_reasoned_override(
+    mock_metadata: MagicMock, _mock_numstat: MagicMock
+) -> None:
+    """A reasoned budget-override line clears the breach."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\nbudget-override: split agreed with review; follow-up filed\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+    )
+
+    assert blockers == []
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_is_inert_without_cap(
+    mock_metadata: MagicMock,
+) -> None:
+    """Issues without a declared cap never produce blockers."""
+    mock_metadata.return_value = (["technical-debt"], "No budget declared here.\n")
+
+    assert (
+        pr_contract_check.check_line_budget_discipline(
+            "Closes #9094\n", "origin/main", "ll7/robot_sf_ll7"
+        )
+        == []
+    )
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata", return_value=None)
+def test_check_line_budget_discipline_skips_unreadable_issue(
+    _mock_metadata: MagicMock,
+) -> None:
+    """An unreadable linked issue is left to the closes-discipline check."""
+    assert (
+        pr_contract_check.check_line_budget_discipline(
+            "Closes #9094\n", "origin/main", "ll7/robot_sf_ll7"
+        )
+        == []
+    )
+
+
 def test_build_comment_body_marks_main_ci_closing_guard_failure() -> None:
     """The summary row reports incident-closure blockers as failed."""
     blocker = (

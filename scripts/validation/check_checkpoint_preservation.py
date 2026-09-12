@@ -17,6 +17,26 @@ separately and is never a performance, benchmark, or redistribution claim. CLI::
 
     uv run python scripts/validation/check_checkpoint_preservation.py \
         --check --fixture <checkpoint-fixture> --format json
+
+For a durable destination, the custody proof is one mapping with the required fields
+``receipt_id`` (a safe non-empty identifier), ``sha256`` (a 64-character hexadecimal
+digest), ``byte_size`` (a non-negative integer), and ``status``.  The accepted completed
+statuses are ``verified``, ``transferred``, and ``complete``.  The checker also accepts
+the legacy field aliases ``receipt`` (scalar in a flat proof), ``artifact_sha256``/``digest``, ``size``, and
+``transfer_status``/``verification`` respectively.  At most one proof source may be
+present: ``destination.custody_proof``, a mapping in ``destination.receipt``, or flat
+proof fields on ``destination``.  A mapping in ``destination.receipt`` is the nested
+source; its scalar form is the flat ``receipt_id`` alias and cannot be mixed with a
+nested source.  Every supplied alias must be valid and normalize to
+the same value; falsey canonical values paired with fallback aliases, conflicting aliases,
+and mixed or non-mapping containers emit ``destination_custody_incomplete`` instead of
+selecting a first-truthy value.  Existing ``destination_custody_missing``,
+``destination_digest_mismatch``,
+``destination_size_mismatch``, and ``destination_transfer_incomplete`` codes cover
+single-field failures.  An opaque receipt ID is only a local field-level binding: this
+checker does not dereference a receipt or prove that it is cryptographically bound to
+the destination URI or storage class.  Mutable and undeclared destinations retain their
+existing refusal codes without adding custody-proof findings.
 """
 
 from __future__ import annotations
@@ -135,6 +155,19 @@ _ROW_KEYS = (
     "byte_size byte_size_observed availability storage_class architecture observation_contract "
     "action_contract seed training_status downstream_consumers load_status loadability_owner"
 ).split()
+_CUSTODY_CONTAINER_KEYS = ("custody_proof", "receipt")
+_CUSTODY_PROOF_ALIASES = {
+    "receipt_id": ("receipt_id", "receipt"),
+    "sha256": ("sha256", "artifact_sha256", "digest"),
+    "byte_size": ("byte_size", "size"),
+    "status": ("status", "transfer_status", "verification"),
+}
+_CUSTODY_FLAT_KEYS = frozenset(
+    alias
+    for aliases in _CUSTODY_PROOF_ALIASES.values()
+    for alias in aliases
+    if alias not in _CUSTODY_CONTAINER_KEYS
+)
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
@@ -286,8 +319,17 @@ def _read_declared(
 
 
 def _read_json(path: Path) -> Any:
-    """Return parsed JSON from *path*, raising ``ValueError`` on malformed content."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    """Return parsed JSON, rejecting duplicate object keys before validation."""
+
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in payload:
+                raise ValueError(f"duplicate JSON object key: {key}")
+            payload[key] = value
+        return payload
+
+    payload = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_keys)
     if not isinstance(payload, Mapping):
         raise ValueError("JSON document must be a mapping")
     return payload
@@ -674,6 +716,66 @@ def _loadability(
     return {"status": LOAD_UNAVAILABLE, "owner": LOADABILITY_OWNER}, [*codes, detail]
 
 
+def _reconcile_aliases(
+    raw: Mapping[str, Any], aliases: Sequence[str], normalizer: Callable[[Any], Any]
+) -> tuple[Any | None, bool]:
+    """Return one normalized alias value and whether supplied aliases conflict."""
+    values = [normalizer(raw[key]) for key in aliases if key in raw]
+    if not values:
+        return None, False
+    if any(value is None for value in values):
+        return (None, len(values) > 1)
+    if len(values) > 1 and len(set(values)) != 1:
+        return None, True
+    return values[0], False
+
+
+def _custody_receipt_id(value: Any) -> str | None:
+    """Normalize one custody receipt identifier without trusting its provenance."""
+    receipt_id = _text(value, 128)
+    if receipt_id is not None and (_SAFE_ID_RE.fullmatch(receipt_id) is None or ".." in receipt_id):
+        return None
+    return receipt_id
+
+
+def _custody_status(value: Any) -> str | None:
+    """Normalize one custody transfer status."""
+    status = _text(value, 32)
+    return status.lower() if status is not None else None
+
+
+def _custody_proof_source(
+    destination: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], list[str]]:
+    """Resolve exactly one nested or flat custody-proof source."""
+    nested: list[Mapping[str, Any]] = []
+    invalid_container = False
+    for key in _CUSTODY_CONTAINER_KEYS:
+        if key not in destination:
+            continue
+        value = destination[key]
+        if isinstance(value, Mapping):
+            nested.append(value)
+        elif key == "receipt" and not isinstance(value, (list, tuple, set)):
+            # ``receipt`` is both a legacy scalar receipt_id alias and the
+            # mapping container used by newer fixtures.  Treat only the
+            # scalar form as a flat source; mixing it with a nested source
+            # remains an ambiguity and is rejected below.
+            continue
+        else:
+            invalid_container = True
+    flat = any(key in destination for key in _CUSTODY_FLAT_KEYS) or (
+        "receipt" in destination and not isinstance(destination["receipt"], Mapping)
+    )
+    if invalid_container or len(nested) > 1 or (nested and flat):
+        return {}, ["destination_custody_incomplete"]
+    if nested:
+        return nested[0], []
+    if flat:
+        return destination, []
+    return {}, []
+
+
 def _custody_proof(
     raw: Mapping[str, Any],
     declared_sha: str | None,
@@ -681,15 +783,16 @@ def _custody_proof(
 ) -> tuple[dict[str, Any], list[str]]:
     """Validate destination custody proof bound to declared digest and size."""
     codes: list[str] = []
-    receipt_id = _text(raw.get("receipt_id") or raw.get("receipt"), 128)
-    if receipt_id is not None and (_SAFE_ID_RE.fullmatch(receipt_id) is None or ".." in receipt_id):
-        receipt_id = None
-    proof_sha = _sha(raw.get("sha256") or raw.get("artifact_sha256") or raw.get("digest"))
-    proof_size = _int(raw.get("byte_size") if raw.get("byte_size") is not None else raw.get("size"))
-    raw_status = raw.get("status") or raw.get("transfer_status") or raw.get("verification")
-    proof_status = _text(raw_status, 32)
-    if proof_status is not None:
-        proof_status = proof_status.lower()
+    receipt_id, receipt_conflict = _reconcile_aliases(
+        raw, _CUSTODY_PROOF_ALIASES["receipt_id"], _custody_receipt_id
+    )
+    proof_sha, sha_conflict = _reconcile_aliases(raw, _CUSTODY_PROOF_ALIASES["sha256"], _sha)
+    proof_size, size_conflict = _reconcile_aliases(raw, _CUSTODY_PROOF_ALIASES["byte_size"], _int)
+    proof_status, status_conflict = _reconcile_aliases(
+        raw, _CUSTODY_PROOF_ALIASES["status"], _custody_status
+    )
+    if any((receipt_conflict, sha_conflict, size_conflict, status_conflict)):
+        codes.append("destination_custody_incomplete")
     proof_dict: dict[str, Any] = {
         "receipt_id": receipt_id,
         "sha256": proof_sha,
@@ -699,13 +802,17 @@ def _custody_proof(
     if not raw:
         codes.append("destination_custody_missing")
         return proof_dict, codes
-    if receipt_id is None:
+    if receipt_id is None and not receipt_conflict:
         codes.append("destination_custody_missing")
-    if proof_sha is None or declared_sha is None or proof_sha != declared_sha:
+    if not sha_conflict and (
+        proof_sha is None or declared_sha is None or proof_sha != declared_sha
+    ):
         codes.append("destination_digest_mismatch")
-    if proof_size is None or declared_size is None or proof_size != declared_size:
+    if not size_conflict and (
+        proof_size is None or declared_size is None or proof_size != declared_size
+    ):
         codes.append("destination_size_mismatch")
-    if proof_status not in {"verified", "transferred", "complete"}:
+    if not status_conflict and proof_status not in {"verified", "transferred", "complete"}:
         codes.append("destination_transfer_incomplete")
     return proof_dict, codes
 
@@ -724,17 +831,9 @@ def _destination(
     publication = publication if isinstance(publication, Mapping) else {}
     requested, rights = bool(publication.get("requested")), _text(publication.get("rights"), 32)
 
-    raw_proof = destination.get("custody_proof")
-    if not isinstance(raw_proof, Mapping):
-        raw_proof = destination.get("receipt")
-    if not isinstance(raw_proof, Mapping):
-        raw_proof = (
-            destination
-            if any(k in destination for k in ("receipt_id", "status", "transfer_status"))
-            else {}
-        )
-
+    raw_proof, source_codes = _custody_proof_source(destination)
     proof_dict, proof_codes = _custody_proof(raw_proof, declared_sha, declared_size)
+    proof_codes.extend(source_codes)
 
     if class_name not in DURABLE_LOCATORS or uri is None:
         codes.append("undeclared_destination")

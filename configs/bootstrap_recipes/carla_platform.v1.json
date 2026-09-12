@@ -1,0 +1,26 @@
+{
+  "schema": "bootstrap_recipe.v1",
+  "recipe_id": "carla-platform-docker-v1",
+  "execution_class": "carla_platform",
+  "title": "CARLA platform environment (digest-pinned Docker server, host CARLA client group)",
+  "verification_status": "verified",
+  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "d01cbbf7fb7215d140b3c78f66202e0c48e449601f809036f5e02e9a9bfb79c7"},
+  "prerequisites": [
+    {"id": "docker", "kind": "container-runtime", "identity": "docker>=29", "probe": {"argv": ["docker", "--version"], "expect_exit_code": 0}},
+    {"id": "nvidia-container-toolkit", "kind": "container-runtime", "identity": "nvidia-container-toolkit>=1.17", "probe": {"argv": ["docker", "info", "--format", "{{.Runtimes}}"], "expect_exit_code": 0}}
+  ],
+  "identity_bindings": [
+    {"kind": "container", "name": "carlasim/carla", "tag": "0.9.16", "digest": "sha256:aaf1df22702780ece072069e23d03c4879b002ae028c79744b09c4c7ddbae953"},
+    {"kind": "python-package", "name": "carla", "version": "0.9.16"}
+  ],
+  "steps": [
+    {"id": "start-server", "phase": "setup", "argv": ["docker", "run", "--rm", "-d", "--name", "robot-sf-carla-check", "-p", "2000-2002:2000-2002", "carlasim/carla@sha256:aaf1df22702780ece072069e23d03c4879b002ae028c79744b09c4c7ddbae953"]},
+    {"id": "image-identity", "phase": "probe", "argv": ["docker", "image", "inspect", "carlasim/carla:0.9.16", "--format", "{{.Id}}"], "workdir": "$RECIPE_ROOT", "safe_check": true},
+    {"id": "runtime-smoke", "phase": "probe", "argv": ["scripts/dev/check_carla_runtime.sh", "--smoke"], "workdir": "$PROJECT_ROOT"},
+    {"id": "stop-server", "phase": "cleanup", "argv": ["docker", "rm", "-f", "robot-sf-carla-check"]}
+  ],
+  "environment_inputs": {"PATH": "toolchain resolving docker and uv"},
+  "outputs": ["$PROJECT_ROOT/output/carla_smoke/"],
+  "private_substitutions": [],
+  "verification": {"mode": "structural+discovery-probe", "checked_at": "2026-09-12", "host_class": "linux-x86_64-docker-nvidia"}
+}

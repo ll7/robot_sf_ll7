@@ -99,6 +99,26 @@ dimension is unsatisfied or unverifiable. It performs no ruleset, branch,
 queue, PR, issue, or workflow mutation, and it cannot claim that a real
 `merge_group` run exists unless GitHub provides that evidence.
 
+[`prune_stale_remote_branches.py`](prune_stale_remote_branches.py) is the
+dry-run-first sweep for stale remote heads (issue #9087). It deletes only two
+safe classes: `merged_code_branch` (tip already an ancestor of `origin/main`
+with no open PR) and `claim_ref_closed_issue` (`agent-claims/issue-<n>` whose
+issue is closed). Everything else is kept, including protected refs, open-PR
+heads, claims whose issue is open or unresolved, and any ref whose state cannot
+be determined. Run a scan (no deletion) at a cadence of roughly once a month or
+after a large campaign:
+
+```bash
+uv run python scripts/dev/prune_stale_remote_branches.py --report /tmp/prune.json
+```
+
+Apply is explicit and bounded; rerunning is idempotent because deleted refs no
+longer classify:
+
+```bash
+uv run python scripts/dev/prune_stale_remote_branches.py --apply --limit 25 --report /tmp/prune.json
+```
+
 ## CI inline-logic helpers
 
 The CI aggregate workflow extracts its reusable executable logic into tested
@@ -200,6 +220,13 @@ receipt and checks it before launching the command. The check is read-only, fail
 machine-readable. It validates the current working directory, assigned absolute worktree, linked
 Git common directory, branch/ref, and base ancestry. Human callers that omit receipt options retain
 the ordinary path.
+
+Receipts may additionally declare the issue's path scope with repeated
+`--allowed-path GLOB` (recorded at creation, enforced at check time). With a scope declared,
+`check` also rejects cross-scope changes before commit/push or at the handoff boundary: branch
+commits on the first-parent line touching paths outside the scope (intentional current-main merge
+commits are exempt) and staged or untracked paths outside the scope. Without a scope the check keeps
+its identity-only behavior, so existing receipts and human callers are unaffected (issue #9115).
 
 ## Protected review-worktree guard
 

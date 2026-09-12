@@ -442,6 +442,12 @@ _FAST_FILES = {
     # check-only contracts; keep them in PR fast shards (issue #8888).
     "test_check_issue_6561_pedestrian_speed_protocol.py",
     "test_check_issue_6561_activation_preflight.py",
+    # Expiring-compute inventory tests are deterministic check-only contracts;
+    # keep their changed-line coverage in PR fast shards (issue #8822).
+    "test_build_expiring_compute_inventory.py",
+    # Checkpoint preservation custody tests are deterministic check-only
+    # contracts; keep their changed-line coverage in PR fast shards (#8831).
+    "test_check_checkpoint_preservation.py",
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",

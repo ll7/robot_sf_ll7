@@ -1,0 +1,28 @@
+{
+  "schema": "bootstrap_recipe.v1",
+  "recipe_id": "gpu-training-uv-v1",
+  "execution_class": "gpu_training",
+  "title": "GPU training environment (NVIDIA driver, CUDA torch, single-GPU discipline)",
+  "verification_status": "verified",
+  "source_identity": {"repository": "ll7/robot_sf_ll7", "lockfile": "uv.lock", "lockfile_sha256": "d01cbbf7fb7215d140b3c78f66202e0c48e449601f809036f5e02e9a9bfb79c7"},
+  "prerequisites": [
+    {"id": "nvidia-driver", "kind": "driver", "identity": "nvidia>=560", "probe": {"argv": ["nvidia-smi", "--query-gpu=driver_version,name", "--format=csv,noheader"], "expect_exit_code": 0}},
+    {"id": "uv", "kind": "binary", "identity": "uv>=0.11", "probe": {"argv": ["uv", "--version"], "expect_exit_code": 0}}
+  ],
+  "identity_bindings": [
+    {"kind": "python-package", "name": "torch", "version": "2.13.0"},
+    {"kind": "python-package", "name": "stable-baselines3", "version": "2.9.0"}
+  ],
+  "steps": [
+    {"id": "sync-env", "phase": "setup", "argv": ["uv", "sync", "--all-extras"], "workdir": "$PROJECT_ROOT", "env": {"UV_PROJECT_ENVIRONMENT": "$PROJECT_ROOT/.venv"}},
+    {"id": "driver-probe", "phase": "probe", "argv": ["nvidia-smi", "--query-gpu=driver_version,name,memory.total", "--format=csv,noheader"], "workdir": "$RECIPE_ROOT", "safe_check": true},
+    {"id": "cuda-available", "phase": "probe", "argv": ["uv", "run", "python", "-c", "import torch; print(torch.cuda.is_available())"], "workdir": "$PROJECT_ROOT"},
+    {"id": "drop-scratch", "phase": "cleanup", "argv": ["rm", "-rf", "$RECIPE_ROOT/scratch"], "workdir": "$RECIPE_ROOT"}
+  ],
+  "environment_inputs": {"CUDA_VISIBLE_DEVICES": "single visible GPU index; never two long runs at once"},
+  "outputs": ["$PRIVATE_ARTIFACT_ROOT/<run-id>/", "$PROJECT_ROOT/output/<run-id>/"],
+  "private_substitutions": [
+    {"placeholder": "PRIVATE_ARTIFACT_ROOT", "capability_class": "durable-storage", "default": "<private-durable-storage-root>"}
+  ],
+  "verification": {"mode": "structural+discovery-probe", "checked_at": "2026-09-12", "host_class": "linux-x86_64-single-gpu"}
+}

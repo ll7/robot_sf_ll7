@@ -1,0 +1,16 @@
+{
+  "schema": "artifact_transfer_manifest.v1",
+  "manifest_id": "transfer_manifest_001",
+  "source_commit": "e01434909462b682b571746a8572bd1abd53286b",
+  "environment": "canonical_env.json",
+  "files": [
+    {"path": "data/rows.jsonl", "sha256": "98ee4459c3ab98e09df3cf77729fda86173025971879e593cea3d222ce7b330f", "size_bytes": 48, "content": "{\"id\": \"r1\", \"val\": 10}\n{\"id\": \"r2\", \"val\": 20}\n"},
+    {"path": "config/scenario.json", "sha256": "569ffe582d297f005718c2113e9b081d11dc12a37b5fec138a63ec3e75ccb3f8", "size_bytes": 27, "content": "{\"seed\": 42, \"param\": 1.5}\n"},
+    {"path": "checkpoints/policy.pt", "sha256": "39e62d731dd422ae48df52a0dc631557b71494e5ff23c6e643ed875ed9fbd8fe", "size_bytes": 23, "content": "CHECKPOINT_METADATA_V1\n"},
+    {"path": "output/summary.json", "sha256": "700479a313e2b52f1bbb59b243e12d6446971476c04d4bd61560b129a0787808", "size_bytes": 32, "content": "{\"mean_return\": 0.9, \"ep\": 100}\n"}
+  ],
+  "row_identity": {"file": "data/rows.jsonl", "expected_count": 2, "row_ids": ["r1", "r2"]},
+  "config_identity": {"file": "config/scenario.json", "seed": 42, "parameters": {"param": 1.5}},
+  "checkpoint_identity": {"file": "checkpoints/policy.pt", "metadata": {"model_type": "ppo"}},
+  "summary_identity": {"file": "output/summary.json"}
+}

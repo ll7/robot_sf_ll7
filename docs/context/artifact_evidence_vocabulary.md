@@ -123,6 +123,19 @@ output carries no private paths, hostnames, accounts, credentials, or signed URL
 [`scripts/validation/verify_artifact_transfer.py`](../../scripts/validation/verify_artifact_transfer.py) consumes one existing `terminal_job_harvest.v1` or `compute_staging_bundle.v1` receipt and copies only its manifest-declared members between explicit local roots. Destination members are re-hashed first (`already_verified` avoids re-copy), conflicts fail closed without overwrite, and interrupted `.transfer-partial` files are cleaned and resumed. `--apply` writes a deterministic `artifact_transfer_custody.v1` receipt (per-file states, byte counts, capacity, independently re-hashed destination bytes); `--check` is read-only and receipts carry normalized relative paths only.
 Validate with `uv run python scripts/validation/verify_artifact_transfer.py --check --manifest <receipt> --source-root <root> --destination-root <root> --format json`; live SSH/private-host transfer stays routed through private operations.
 
+## Deterministic Manifest-Owned Archives
+
+[`scripts/tools/build_artifact_archive.py`](../../scripts/tools/build_artifact_archive.py) builds a
+new deterministic PAX-tar/gzip archive from a complete `terminal_job_harvest.v1` or
+`compute_staging_bundle.v1` manifest. It records stable member paths, byte sizes, source SHA-256
+values, mode classes, and content roles in `artifact_archive.v1`; source drift, active writers,
+path escapes, links/special files, partial outputs, and insufficient capacity fail closed. Archive
+and member-manifest finalization is atomic, sources are never deleted, and this receipt is
+operational custody evidence rather than benchmark or scientific evidence.
+
+Build with `--build --manifest <source-manifest> --source-root <root> --archive <archive>` and
+verify with `--check --manifest <member-manifest> --archive <archive> --format json`.
+
 ## Checkpoint Compatibility Audit
 
 [`scripts/models/audit_checkpoint_compatibility.py`](../../scripts/models/audit_checkpoint_compatibility.py)

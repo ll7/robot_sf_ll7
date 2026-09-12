@@ -34,6 +34,7 @@ def cli_checkout(tmp_path: Path) -> Iterator[Path]:
     paths = ["scripts/__init__.py"] + [
         f"scripts/dev/{name}.py"
         for name in (
+            "agent_content_gate",
             "issue_implementability",
             "gh_issue_rest",
             "issue_claim",

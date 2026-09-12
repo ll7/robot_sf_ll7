@@ -20,6 +20,13 @@ Status: operational guide. Canonical policy remains with the linked owners below
 | Read-only worktree hygiene snapshot | [worktree_hygiene_snapshot.py](../../scripts/dev/worktree_hygiene_snapshot.py) |
 | Preservation-aware retirement | [stale_worktree_reaper.py](../../scripts/dev/stale_worktree_reaper.py) |
 | Active-worktree lease | [pr_gate_lease.py](../../scripts/dev/pr_gate_lease.py) |
+| Source-host prune eligibility guard | [check_prune_eligibility.py](../../scripts/tools/check_prune_eligibility.py) |
+| Environment and artifact restore verifier | [verify_restored_environment.py](../../scripts/tools/verify_restored_environment.py) |
+| Checkpoint preservation custody check | [check_checkpoint_preservation.py](../../scripts/validation/check_checkpoint_preservation.py) |
+| Bootstrap recipe freeze and check | [bootstrap_recipe_check.py](../../scripts/tools/bootstrap_recipe_check.py) |
+| Dependency cache manifest and reconstruction status | [dependency_cache_manifest.py](../../scripts/tools/dependency_cache_manifest.py) |
+| Source bundle export and verification | [source_bundle_export.py](../../scripts/tools/source_bundle_export.py) |
+| Post-access execution and artifact handoff | [generate_post_access_handoff.py](../../scripts/tools/generate_post_access_handoff.py) |
 
 ## 1. Retention classes in operational terms
 
@@ -115,6 +122,15 @@ hardlink/special-file, path, collision, and partial-manifest conditions.
 Hydrate the artifact from the durable copy into a scratch path and rerun the owning verification
 command. A successful restore test is required before claiming preservation or cleanup eligibility.
 
+```bash
+uv run python scripts/tools/verify_restored_environment.py --check \
+  --manifest <TRANSFERRED_MANIFEST> --root "$SCRATCH_ROOT" --format json
+```
+
+The verifier reconstructs the declared environment in a clean temporary root without source-host
+dependencies, validates all checksums, row/config/checkpoint identities, and executes safe
+read-only smoke assertions. The outcome is labelled restoration smoke, not scientific reproduction.
+
 ### 4.5 Check cleanup eligibility
 
 ```bash
@@ -150,7 +166,72 @@ projection by artifact ID, version, and digest, and exits non-zero when an activ
 reference has no verified non-institutional custody or a release-facing reference lacks independent
 failure-domain copies. It reads sanitized inputs only and never emits locator values.
 
-### 4.7 Report a blocker
+### 4.7 Gate source-host artifact pruning on verified custody
+
+```bash
+uv run python scripts/tools/check_prune_eligibility.py --check \
+  --source-manifest <SOURCE_MANIFEST> --destination-receipt <DESTINATION_RECEIPT> \
+  --format json
+```
+
+The guard verifies durable destination custody, checksums, consumer coverage, and retention
+dispositions before permitting deletion planning. Check mode performs zero file deletions;
+an explicit `--apply` route enforces compare-and-swap revalidation before removing eligible bytes.
+
+### 4.8 Check checkpoint preservation custody
+
+```bash
+uv run python scripts/validation/check_checkpoint_preservation.py --check \
+  --fixture tests/validation/fixtures/checkpoint_preservation/complete.json --format json
+```
+
+The check-only inventory resolves `model_id` references through the model registry, binds producer
+data identity through the oracle trace-URI registry, recomputes byte and companion digests with the
+shared evidence writer, and reads metadata-only loadability from a checkpoint compatibility audit
+receipt (the existing owner's output; no inference and no reimplemented loader). Each artifact ends
+in one stable state: `preservation_ready` or a `blocked_*` state covering ambiguous identity,
+missing lineage, incomplete inventory, missing artifact or companion, partial copy, digest
+mismatch, loadability or contract failure, incomplete training, unsafe destination, and uncleared
+publication. Load status is reported separately (`verified_metadata`, `loadability_unavailable`,
+`loadability_failed`, `not_checked`) and is never preservation, performance, or benchmark evidence.
+The tool is read-only and emits no private paths.
+
+### 4.9 Generate complete post-access handoff
+
+```bash
+uv run python scripts/tools/generate_post_access_handoff.py --check \
+  --inventory <COMPUTE_INVENTORY_JSON> --format json
+```
+
+The generator produces a deterministic, sanitized post-access handoff report in JSON or Markdown
+summarizing workloads, scheduler receipts, artifact custody, and environment recreation states.
+It redacts private paths, internal hosts, and credentials, rejects contradictory statuses and
+orphan records, and enforces actionable next commands for incomplete runs.
+
+### 4.10 Freeze and rehearse a bootstrap recipe
+
+Each recipe in [configs/bootstrap_recipes/README.md](../../configs/bootstrap_recipes/README.md)
+freezes an execution class's setup, probe, and cleanup sequence with its source/lock and immutable
+identities. `scripts/tools/bootstrap_recipe_check.py --check --recipes configs/bootstrap_recipes`
+reports structurally; `--execute-safe-checks` runs `safe_check` probes in an isolated temporary root.
+A class without a verified recipe needs an explicit `verification_status: unavailable` reason.
+
+### 4.11 Export a restorable source bundle
+
+```bash
+uv run python scripts/tools/source_bundle_export.py --export \
+  --repo "$SOURCE_REPO" --out "$BUNDLE_DIR" --workload-id <id> --format json
+uv run python scripts/tools/source_bundle_export.py --verify \
+  --bundle "$BUNDLE_DIR" --workdir "$SCRATCH_RESTORE" --format json
+```
+
+The bundle records repository URL classification, commit, tree, parents, ref context, vendored
+subproject revisions, generated-source provenance, admitted patch identity, and a compact
+tracked-file inventory, and verifies by cloning into a fresh repository and reproducing those
+identities. Dirty or untracked state is rejected unless an explicit patch is admitted and
+checksum-bound; private or credentialed remotes are never written into the public status.
+
+### 4.12 Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is
 missing, stop and open a bounded issue describing the exact conflict. Do not invent a lifecycle

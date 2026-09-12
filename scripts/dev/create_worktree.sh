@@ -20,6 +20,7 @@ Options:
   --minimum-free-bytes N   Override ROBOT_SF_WORKTREE_MIN_FREE_BYTES.
   --receipt PATH            Write a delegated-worker receipt after creation.
   --task-id ID              Acquire an active-worktree lease for this task.
+  --allowed-path GLOB       Path-scope glob enforced by the receipt (repeatable).
   --dry-run                Run the preflight without invoking Git.
   --exec COMMAND [ARG...]  Run an explicit command from inside the new worktree.
   -h, --help               Show this help and exit.
@@ -58,6 +59,7 @@ worktree_mode="implementation"
 minimum_free_bytes="${ROBOT_SF_WORKTREE_MIN_FREE_BYTES:-}"
 receipt_path=""
 task_id=""
+allowed_path_args=()
 dry_run=0
 command_args=()
 # Internal re-entry flag: the portable-lock fallback re-executes this script
@@ -103,6 +105,11 @@ while [[ $# -gt 0 ]]; do
     --task-id)
       [[ $# -ge 2 ]] || { echo "--task-id requires a value" >&2; exit 2; }
       task_id="$2"
+      shift 2
+      ;;
+    --allowed-path)
+      [[ $# -ge 2 ]] || { echo "--allowed-path requires a value" >&2; exit 2; }
+      allowed_path_args+=("$2")
       shift 2
       ;;
     --dry-run)
@@ -455,8 +462,13 @@ run_locked_transaction() {
     fi
   fi
   if [[ -n "$receipt_path" ]]; then
-    if python3 "$SCRIPT_DIR/worktree_receipt.py" create \
-      --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"; then
+    receipt_args=(--worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path")
+    if [[ "${#allowed_path_args[@]}" -gt 0 ]]; then
+      for scope_glob in "${allowed_path_args[@]}"; do
+        receipt_args+=(--allowed-path "$scope_glob")
+      done
+    fi
+    if python3 "$SCRIPT_DIR/worktree_receipt.py" create "${receipt_args[@]}"; then
       :
     else
       local receipt_rc=$?

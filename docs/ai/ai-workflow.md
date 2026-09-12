@@ -25,6 +25,7 @@ Read these first when working in this workflow:
 - [docs/README.md](../README.md)
 - [docs/ai/repo_overview.md](repo_overview.md)
 - [docs/ai/agent_workflow_entrypoints.md](agent_workflow_entrypoints.md)
+- [docs/ai/author_trust_gate.md](author_trust_gate.md)
 - [docs/ai/label-taxonomy.md](label-taxonomy.md)
 - [docs/ai/issue_dependency_packets.md](issue_dependency_packets.md)
 - [docs/context/README.md](../context/README.md)

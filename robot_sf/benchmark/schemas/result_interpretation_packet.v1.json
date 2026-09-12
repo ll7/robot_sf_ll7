@@ -33,6 +33,9 @@
       "minLength": 1,
       "pattern": "^[a-z][a-z0-9_]*$"
     },
+    "claim_identity": {
+      "$ref": "#/$defs/claim_identity"
+    },
     "question": {
       "$ref": "#/$defs/question"
     },
@@ -154,6 +157,25 @@
     }
   },
   "$defs": {
+    "claim_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaign_id", "question", "estimand"],
+      "properties": {
+        "campaign_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "estimand": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "question": {
       "type": "object",
       "additionalProperties": false,

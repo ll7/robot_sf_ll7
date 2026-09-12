@@ -191,9 +191,44 @@ answerability:
       - summary.json
     durability_status: planned
     incomplete_policy: Interrupted or unavailable outputs remain explicit and cannot be promoted.
+  proof_surfaces:
+    producer:
+      status: not_run
+      required: true
+    preregistration:
+      status: unavailable
+      required: false
+      unavailable_reason: This manifest is a shape-only example without a preregistration file.
+    evidence_contract:
+      status: unavailable
+      required: false
+      unavailable_reason: No evidence-contract id is declared by this example.
+    analysis:
+      status: not_run
+      required: true
+    artifact:
+      status: unavailable
+      required: false
+      unavailable_reason: The example plans durable evidence but does not ship a catalog.
+    result_packet:
+      status: unavailable
+      required: false
+      unavailable_reason: No generic result-interpretation validator is available for this example.
 
 validation:
   commands:
     - uv run pytest tests/benchmark/test_research_campaign_manifest_contract.py
+  answerability_proof:
+    producer:
+      kind: manifest_rows
+    analysis:
+      kind: command
+      validator_id: pytest_contract
+      command:
+        - uv
+        - run
+        - pytest
+        - tests/benchmark/test_research_campaign_manifest_contract.py
+        - -q
   dry_run: not_required_for_example
   expected_result: Manifest loads and required contract fields are present.

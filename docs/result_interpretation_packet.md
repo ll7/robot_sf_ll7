@@ -19,6 +19,12 @@ Each packet also records an explicit controlled evidence tier and admission stat
 This keeps a nominal benchmark result, diagnostic observation, and visualization
 fixture distinct even when they share the same packet schema.
 
+Packets may carry an optional top-level `claim_identity` object with the exact
+`campaign_id`, `question`, and `estimand` supported by the packet. A
+decision-capable answerability proof requires this object and compares it with
+the manifest; a packet's question and estimand fields must match it as well.
+Older diagnostic and fixture packets may omit the field.
+
 The packet does not re-run experiments or infer values from filenames or plots.
 It preserves existing `artifact_catalog` and `figure_qa` contracts by referencing
 artifacts via `file_ref` digests rather than re-registering them.

@@ -372,7 +372,7 @@ def test_diff_numstat_falls_back_to_two_dot_without_merge_base(
     assert pr_contract_check._diff_numstat("origin/main") == "10\t2\tscripts/dev/a.py\n"
     assert mock_run.call_count == 2
     assert mock_run.call_args_list[0].args[0][-1] == "origin/main...HEAD"
-    assert mock_run.call_args_list[1].args[0][-1] == "origin/main HEAD"
+    assert mock_run.call_args_list[1].args[0][-1] == "origin/main..HEAD"
 
 
 @patch("subprocess.run")

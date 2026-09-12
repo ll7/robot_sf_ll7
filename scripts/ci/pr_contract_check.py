@@ -921,11 +921,11 @@ def _diff_numstat(base_ref: str) -> str | None:
 
     Prefers the merge-base form ``{base_ref}...HEAD``. CI fetches the base ref
     with ``--depth=1`` (see ``pr-contract-check.yml``), so no merge base exists
-    and ``...`` fails; the two-dot tree diff ``{base_ref} HEAD`` is then used,
+    and ``...`` fails; the two-dot tree diff ``{base_ref}..HEAD`` is then used,
     which is exact for the merge-ref checkout. Returns None when neither form
     can be computed; budget enforcement treats that as a blocker.
     """
-    for diff_spec in (f"{base_ref}...HEAD", f"{base_ref} HEAD"):
+    for diff_spec in (f"{base_ref}...HEAD", f"{base_ref}..HEAD"):
         try:
             res = subprocess.run(
                 ["git", "diff", "--numstat", diff_spec],

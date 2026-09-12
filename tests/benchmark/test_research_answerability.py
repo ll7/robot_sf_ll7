@@ -21,14 +21,14 @@ from robot_sf.adversarial.feasibility_first import (
 from robot_sf.benchmark import research_answerability as answerability_module
 from robot_sf.benchmark.research_answerability import (
     ADVERSARIAL_FALSIFICATION_PACKET_OUTCOMES,
-    AdversarialFalsificationPacketError,
     DECISION_REQUIRED_PROOF_SURFACES,
     PROOF_BINDING_SCHEMA,
     PROOF_SURFACE_KINDS,
     PROOF_SURFACES,
+    AdversarialFalsificationPacketError,
     answerability_from_manifest,
-    compute_proof_digest,
     compute_adversarial_falsification_packet_digest,
+    compute_proof_digest,
     evaluate_answerability,
     load_adversarial_falsification_packet,
     load_adversarial_falsification_packet_schema,

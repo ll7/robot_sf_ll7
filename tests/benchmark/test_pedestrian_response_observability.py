@@ -325,6 +325,27 @@ def test_non_none_upstream_reason_hides_non_unavailable_side(failure_reason: str
     assert record.unavailable_reason == f"offered_side:{failure_reason}"
 
 
+def test_unhashable_route_side_is_marked_unavailable() -> None:
+    """An unhashable upstream side uses the stable invalid-value vocabulary."""
+    routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
+    malformed_route = replace(routes["left"].side_report, side=["left"])
+
+    record = build_pedestrian_response_observation(
+        encounter_id="unhashable-route-side",
+        offered_route=malformed_route,
+        taken_route=routes["right"].side_report,
+        minimum_passing_clearance_m=0.8,
+        response_present=True,
+    )
+
+    assert record.status == "not_available"
+    assert record.offered_side == "unavailable"
+    assert record.taken_side == "right"
+    assert record.missing_fields == ()
+    assert record.unavailable_fields == ("offered_side",)
+    assert record.unavailable_reason == "offered_side:invalid_value"
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [

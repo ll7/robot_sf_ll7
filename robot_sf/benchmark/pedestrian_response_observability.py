@@ -449,7 +449,12 @@ def _extract_route_side(
         return None, None, None
     if not isinstance(report, RouteSideReport):
         raise TypeError(f"{field_name} must be a RouteSideReport or None")
-    if report.side not in ROUTE_SIDES:
+    try:
+        side_is_valid = report.side in ROUTE_SIDES
+    except TypeError:
+        unavailable.add(field_name)
+        return "unavailable", None, f"{field_name}:invalid_value"
+    if not side_is_valid:
         raise ValueError(f"{field_name} report uses an unknown route-side value")
     try:
         reference = RouteReference.from_report(report)

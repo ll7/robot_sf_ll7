@@ -18,9 +18,10 @@ import csv
 import json
 import math
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 from loguru import logger
@@ -36,6 +37,41 @@ from robot_sf.benchmark.thresholds import validate_threshold_parameter_consisten
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+
+    from robot_sf.benchmark.metric_layers import MetricSourceBinding
+
+
+type AggregateStatistic = Literal["mean", "median", "p95"]
+_AGGREGATE_STATISTICS: frozenset[AggregateStatistic] = frozenset({"mean", "median", "p95"})
+
+
+class AggregateProvenanceError(ValueError):
+    """Raised when aggregate-cell provenance cannot be resolved safely."""
+
+    def __init__(self, reason: str, detail: str) -> None:
+        """Store a stable machine-readable reason and request detail."""
+        self.reason = reason
+        self.detail = detail
+        super().__init__(f"{reason}: {detail}")
+
+
+@dataclass(frozen=True, slots=True)
+class AggregateCellIdentity:
+    """Stable selector for one canonical aggregate metric cell."""
+
+    group_identity: str
+    metric_id: str
+    statistic: AggregateStatistic
+
+
+@dataclass(frozen=True, slots=True)
+class AggregateCellProvenance:
+    """Exact episode contributors and source binding for one aggregate cell."""
+
+    identity: AggregateCellIdentity
+    value: float
+    contributor_episode_ids: tuple[str, ...]
+    metric_binding: MetricSourceBinding
 
 
 def _format_jsonl_input_error(
@@ -767,7 +803,7 @@ def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
     return out
 
 
-def compute_aggregates(  # noqa: PLR0913
+def _compute_aggregates_and_contributors(  # noqa: PLR0913
     records: list[dict[str, Any]],
     *,
     group_by: str = "scenario_params.algo",
@@ -778,11 +814,15 @@ def compute_aggregates(  # noqa: PLR0913
     expected_algorithms: set[str] | None = None,
     observation_track_mode: str = "strict",
     logger_ctx=None,
-) -> dict[str, dict[str, dict[str, float]]]:
-    """Aggregate metrics by group and compute summary statistics.
+) -> tuple[
+    dict[str, dict[str, dict[str, float]]],
+    dict[str, dict[str, list[Any]]],
+    list[dict[str, Any]],
+]:
+    """Run canonical aggregation and retain the row identities used by each numeric column.
 
     Returns:
-        Nested dict of group -> metric -> summary statistics.
+        Aggregate summary, contributor IDs by group/metric, and eligible episode records.
     """
     records, excluded_evidence_records = filter_evidence_eligible_records(records)
     for rec in records:
@@ -812,13 +852,16 @@ def compute_aggregates(  # noqa: PLR0913
         groups[key_str].append(flatten_metrics(rec))
 
     summary: dict[str, dict[str, dict[str, float]]] = {}
+    contributors: dict[str, dict[str, list[Any]]] = {}
     for g, rows in groups.items():
         # collect numeric columns
         cols: dict[str, list[float]] = defaultdict(list)
+        contributor_ids: dict[str, list[Any]] = defaultdict(list)
         for row in rows:
             num = _numeric_items(row)
             for k, v in num.items():
                 cols[k].append(v)
+                contributor_ids[k].append(row.get("episode_id"))
         agg: dict[str, dict[str, float]] = {}
         for k, vals in cols.items():
             arr = np.asarray(vals, dtype=float)
@@ -831,6 +874,7 @@ def compute_aggregates(  # noqa: PLR0913
         if social_summary is not None:
             agg["social_compliance"] = social_summary
         summary[g] = agg
+        contributors[g] = dict(contributor_ids)
 
     meta: dict[str, Any] = {
         "group_by": group_by,
@@ -870,7 +914,131 @@ def compute_aggregates(  # noqa: PLR0913
             ).warning(warning_text)
 
     summary["_meta"] = meta
+    return summary, contributors, records
+
+
+def compute_aggregates(  # noqa: PLR0913
+    records: list[dict[str, Any]],
+    *,
+    group_by: str = "scenario_params.algo",
+    fallback_group_by: str = "scenario_id",
+    snqi_weights: dict[str, float] | None = None,
+    snqi_baseline: dict[str, dict[str, float]] | None = None,
+    recompute_snqi: bool = False,
+    expected_algorithms: set[str] | None = None,
+    observation_track_mode: str = "strict",
+    logger_ctx=None,
+) -> dict[str, dict[str, dict[str, float]]]:
+    """Aggregate metrics by group and compute summary statistics.
+
+    Returns:
+        Nested dict of group -> metric -> summary statistics.
+    """
+    summary, _, _ = _compute_aggregates_and_contributors(
+        records,
+        group_by=group_by,
+        fallback_group_by=fallback_group_by,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+        recompute_snqi=recompute_snqi,
+        expected_algorithms=expected_algorithms,
+        observation_track_mode=observation_track_mode,
+        logger_ctx=logger_ctx,
+    )
     return summary
+
+
+def resolve_aggregate_cell_provenance(  # noqa: C901, PLR0913
+    records: list[dict[str, Any]],
+    identity: AggregateCellIdentity,
+    *,
+    group_by: str = "scenario_params.algo",
+    fallback_group_by: str = "scenario_id",
+    snqi_weights: dict[str, float] | None = None,
+    snqi_baseline: dict[str, dict[str, float]] | None = None,
+    recompute_snqi: bool = False,
+    observation_track_mode: str = "strict",
+    expected_metric_binding: MetricSourceBinding | None = None,
+) -> AggregateCellProvenance:
+    """Resolve one aggregate cell to the exact episode IDs used by canonical aggregation.
+
+    This is an in-memory reader over existing episode rows. It does not add provenance fields to
+    serialized aggregate output and rejects aliases, missing identities, duplicates, and stale
+    metric bindings rather than guessing.
+
+    Returns:
+        Typed aggregate-cell provenance and canonical metric-source binding.
+    """
+    from robot_sf.benchmark.metric_layers import (  # noqa: PLC0415
+        MetricBindingError,
+        resolve_metric_source_binding,
+    )
+
+    if not isinstance(identity.group_identity, str) or not identity.group_identity:
+        raise AggregateProvenanceError("invalid_group_identity", repr(identity.group_identity))
+    if identity.statistic not in _AGGREGATE_STATISTICS:
+        raise AggregateProvenanceError("unknown_aggregate_statistic", identity.statistic)
+    try:
+        metric_binding = resolve_metric_source_binding(
+            identity.metric_id,
+            expected=expected_metric_binding,
+        )
+    except MetricBindingError as exc:
+        raise AggregateProvenanceError(exc.reason, exc.metric_id) from exc
+    if metric_binding.status != "available":
+        raise AggregateProvenanceError("unsupported_metric_source", identity.metric_id)
+
+    summary, contributors, eligible_records = _compute_aggregates_and_contributors(
+        records,
+        group_by=group_by,
+        fallback_group_by=fallback_group_by,
+        snqi_weights=snqi_weights,
+        snqi_baseline=snqi_baseline,
+        recompute_snqi=recompute_snqi,
+        observation_track_mode=observation_track_mode,
+    )
+
+    episode_ids: list[str] = []
+    for record in eligible_records:
+        episode_id = record.get("episode_id")
+        if not isinstance(episode_id, str) or not episode_id:
+            raise AggregateProvenanceError("missing_episode_identity", repr(episode_id))
+        episode_ids.append(episode_id)
+    duplicate_ids = sorted(
+        episode_id for episode_id, count in Counter(episode_ids).items() if count > 1
+    )
+    if duplicate_ids:
+        raise AggregateProvenanceError("duplicate_episode_identity", ", ".join(duplicate_ids))
+
+    group = summary.get(identity.group_identity)
+    if group is None or identity.group_identity == "_meta":
+        raise AggregateProvenanceError("unknown_group_identity", identity.group_identity)
+    metric = group.get(identity.metric_id)
+    if not isinstance(metric, dict):
+        raise AggregateProvenanceError("missing_contributor_row", identity.metric_id)
+    if identity.statistic not in metric:
+        raise AggregateProvenanceError(
+            "aggregate_cell_not_reproducible",
+            f"{identity.group_identity}/{identity.metric_id}/{identity.statistic}",
+        )
+    value = metric[identity.statistic]
+    if not isinstance(value, int | float) or isinstance(value, bool) or not math.isfinite(value):
+        raise AggregateProvenanceError(
+            "aggregate_cell_not_numeric",
+            f"{identity.group_identity}/{identity.metric_id}/{identity.statistic}",
+        )
+    contributing_ids = contributors.get(identity.group_identity, {}).get(identity.metric_id, [])
+    if not contributing_ids:
+        raise AggregateProvenanceError("missing_contributor_row", identity.metric_id)
+    if any(not isinstance(episode_id, str) or not episode_id for episode_id in contributing_ids):
+        raise AggregateProvenanceError("missing_contributor_identity", identity.metric_id)
+
+    return AggregateCellProvenance(
+        identity=identity,
+        value=float(value),
+        contributor_episode_ids=tuple(sorted(contributing_ids)),
+        metric_binding=metric_binding,
+    )
 
 
 # --- Optional bootstrap confidence intervals ---
@@ -1283,6 +1451,10 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
 
 
 __all__ = [
+    "AggregateCellIdentity",
+    "AggregateCellProvenance",
+    "AggregateProvenanceError",
+    "AggregateStatistic",
     "build_observation_track_meta",
     "compute_aggregates",
     "compute_aggregates_with_ci",
@@ -1292,6 +1464,7 @@ __all__ = [
     "normalize_observation_track_mode",
     "observation_track_group_label",
     "read_jsonl",
+    "resolve_aggregate_cell_provenance",
     "resolve_benchmark_track",
     "resolve_report_group_key",
     "write_episode_csv",

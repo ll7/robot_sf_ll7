@@ -101,7 +101,11 @@ _STATE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = tuple(
         (STATE_TRAINING, "incomplete_training"),
         (
             STATE_DESTINATION,
-            "undeclared_destination unsafe_destination mutable_destination publication_destination_not_public",
+            "undeclared_destination unsafe_destination mutable_destination "
+            "publication_destination_not_public destination_custody_missing "
+            "destination_proof_missing destination_digest_mismatch "
+            "destination_size_mismatch destination_transfer_incomplete "
+            "destination_custody_incomplete",
         ),
         (STATE_PUBLICATION, "publication_uncleared publication_rights_blocked rights_blocked"),
     )
@@ -399,7 +403,16 @@ def _blank_row(artifact_id: str) -> dict[str, Any]:
         companions=[],
         producer={"config": None, "commit": None, "data_identity": None},
         downstream_consumers=[],
-        destination={"uri": None, "class": None},
+        destination={
+            "uri": None,
+            "class": None,
+            "custody_proof": {
+                "receipt_id": None,
+                "sha256": None,
+                "byte_size": None,
+                "status": None,
+            },
+        },
         publication={"requested": False, "rights": None},
         load_status=LOAD_NOT_CHECKED,
         loadability_owner=None,
@@ -661,8 +674,48 @@ def _loadability(
     return {"status": LOAD_UNAVAILABLE, "owner": LOADABILITY_OWNER}, [*codes, detail]
 
 
-def _destination(record: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
-    """Verify durable destination declaration and publication clearance."""
+def _custody_proof(
+    raw: Mapping[str, Any],
+    declared_sha: str | None,
+    declared_size: int | None,
+) -> tuple[dict[str, Any], list[str]]:
+    """Validate destination custody proof bound to declared digest and size."""
+    codes: list[str] = []
+    receipt_id = _text(raw.get("receipt_id") or raw.get("receipt"), 128)
+    if receipt_id is not None and (_SAFE_ID_RE.fullmatch(receipt_id) is None or ".." in receipt_id):
+        receipt_id = None
+    proof_sha = _sha(raw.get("sha256") or raw.get("artifact_sha256") or raw.get("digest"))
+    proof_size = _int(raw.get("byte_size") if raw.get("byte_size") is not None else raw.get("size"))
+    raw_status = raw.get("status") or raw.get("transfer_status") or raw.get("verification")
+    proof_status = _text(raw_status, 32)
+    if proof_status is not None:
+        proof_status = proof_status.lower()
+    proof_dict: dict[str, Any] = {
+        "receipt_id": receipt_id,
+        "sha256": proof_sha,
+        "byte_size": proof_size,
+        "status": proof_status,
+    }
+    if not raw:
+        codes.append("destination_custody_missing")
+        return proof_dict, codes
+    if receipt_id is None:
+        codes.append("destination_custody_missing")
+    if proof_sha is None or declared_sha is None or proof_sha != declared_sha:
+        codes.append("destination_digest_mismatch")
+    if proof_size is None or declared_size is None or proof_size != declared_size:
+        codes.append("destination_size_mismatch")
+    if proof_status not in {"verified", "transferred", "complete"}:
+        codes.append("destination_transfer_incomplete")
+    return proof_dict, codes
+
+
+def _destination(
+    record: Mapping[str, Any],
+    declared_sha: str | None = None,
+    declared_size: int | None = None,
+) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    """Verify durable destination declaration, custody proof, and publication clearance."""
     codes: list[str] = []
     destination = record.get("destination")
     destination = destination if isinstance(destination, Mapping) else {}
@@ -670,10 +723,26 @@ def _destination(record: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, A
     publication = record.get("publication")
     publication = publication if isinstance(publication, Mapping) else {}
     requested, rights = bool(publication.get("requested")), _text(publication.get("rights"), 32)
+
+    raw_proof = destination.get("custody_proof")
+    if not isinstance(raw_proof, Mapping):
+        raw_proof = destination.get("receipt")
+    if not isinstance(raw_proof, Mapping):
+        raw_proof = (
+            destination
+            if any(k in destination for k in ("receipt_id", "status", "transfer_status"))
+            else {}
+        )
+
+    proof_dict, proof_codes = _custody_proof(raw_proof, declared_sha, declared_size)
+
     if class_name not in DURABLE_LOCATORS or uri is None:
         codes.append("undeclared_destination")
     elif any(uri.endswith(suffix) for suffix in _URI_SUFFIXES):
         codes.append("mutable_destination")
+    else:
+        codes.extend(proof_codes)
+
     if requested:
         if rights == "blocked":
             codes.append("publication_rights_blocked")
@@ -682,7 +751,7 @@ def _destination(record: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, A
         if class_name != "public_release":
             codes.append("publication_destination_not_public")
     return (
-        {"uri": uri, "class": class_name},
+        {"uri": uri, "class": class_name, "custody_proof": proof_dict},
         {"requested": requested, "rights": rights},
         codes,
     )
@@ -716,7 +785,9 @@ def _evaluate(raw: Any, index: int, ctx: _Context) -> dict[str, Any]:
     row, codes, entry = _resolve(raw, index, ctx)
     norm, companions, companion_codes = _companions(raw, ctx)
     producer, lineage_codes = _lineage(raw, entry, ctx)
-    destination, publication, destination_codes = _destination(raw)
+    destination, publication, destination_codes = _destination(
+        raw, declared_sha=row["artifact_sha256"], declared_size=row["byte_size"]
+    )
     load, load_codes = _loadability(
         ctx,
         row["model_id"],

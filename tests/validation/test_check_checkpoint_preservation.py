@@ -47,6 +47,13 @@ def test_complete_fixture_is_ready_and_records_inventory():
     assert {item["role"] for item in row["companions"]} == {"normalizer", "vecnormalize"}
     assert row["downstream_consumers"] == ["fixture_config.yaml"]
     assert row["byte_size"] == row["byte_size_observed"] == 25
+    assert row["destination"]["uri"] == "artifact://fixture/checkpoint_complete"
+    assert row["destination"]["class"] == "personal_durable"
+    proof = row["destination"]["custody_proof"]
+    assert proof["receipt_id"] == "receipt-checkpoint-complete-v1"
+    assert proof["sha256"] == row["artifact_sha256"]
+    assert proof["byte_size"] == row["byte_size"] == 25
+    assert proof["status"] == "verified"
 
 
 @pytest.mark.parametrize(("artifact_id", "state"), sorted(CASE_STATES.items()))
@@ -239,3 +246,134 @@ def test_companion_symlink_escape_fails_closed(tmp_path: Path) -> None:
 
     assert row["state"] == tool.STATE_NO_COMPANION
     assert "companion_unsafe" in row["reason_codes"]
+
+
+def test_destination_custody_proof_missing_fails_closed(tmp_path: Path) -> None:
+    """A durable destination without custody proof cannot reach preservation_ready."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    complete["artifacts"][0]["destination"] = {
+        "uri": "artifact://fixture/checkpoint_complete",
+        "class": "personal_durable",
+    }
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+
+    assert report["status"] == "blocked"
+    assert row["state"] == tool.STATE_DESTINATION
+    assert "destination_custody_missing" in row["reason_codes"]
+
+
+def test_destination_custody_missing_receipt_identity_fails_closed(tmp_path: Path) -> None:
+    """A durable destination custody proof without a receipt identity is refused."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    complete["artifacts"][0]["destination"]["custody_proof"]["receipt_id"] = None
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+
+    assert report["status"] == "blocked"
+    assert row["state"] == tool.STATE_DESTINATION
+    assert "destination_custody_missing" in row["reason_codes"]
+
+
+def test_destination_custody_digest_mismatch_fails_closed(tmp_path: Path) -> None:
+    """A destination proof with mismatched member digest is refused."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    complete["artifacts"][0]["destination"]["custody_proof"]["sha256"] = "0" * 64
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+
+    assert report["status"] == "blocked"
+    assert row["state"] == tool.STATE_DESTINATION
+    assert "destination_digest_mismatch" in row["reason_codes"]
+
+
+def test_destination_custody_size_mismatch_fails_closed(tmp_path: Path) -> None:
+    """A destination proof with mismatched byte size is refused."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    complete["artifacts"][0]["destination"]["custody_proof"]["byte_size"] = 9999
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+
+    assert report["status"] == "blocked"
+    assert row["state"] == tool.STATE_DESTINATION
+    assert "destination_size_mismatch" in row["reason_codes"]
+
+
+@pytest.mark.parametrize("status", ["pending", "incomplete", "failed", "unverified"])
+def test_destination_custody_incomplete_transfer_status_fails_closed(
+    tmp_path: Path, status: str
+) -> None:
+    """An incomplete or unverified transfer status fails closed."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    complete["artifacts"][0]["destination"]["custody_proof"]["status"] = status
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+
+    assert report["status"] == "blocked"
+    assert row["state"] == tool.STATE_DESTINATION
+    assert "destination_transfer_incomplete" in row["reason_codes"]
+
+
+@pytest.mark.parametrize("durable_class", sorted(tool.DURABLE_LOCATORS))
+def test_destination_custody_all_durable_classes_require_proof(
+    tmp_path: Path, durable_class: str
+) -> None:
+    """All durable destination locator classes require destination custody proof."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    complete["artifacts"][0]["destination"] = {
+        "uri": f"artifact://fixture/{durable_class}",
+        "class": durable_class,
+    }
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+
+    assert report["status"] == "blocked"
+    assert row["state"] == tool.STATE_DESTINATION
+    assert "destination_custody_missing" in row["reason_codes"]
+
+
+def test_destination_mutable_and_undeclared_preserve_existing_refusal_codes(
+    tmp_path: Path,
+) -> None:
+    """Mutable and undeclared destinations retain their distinct refusal codes."""
+    root = _fixture_copy(tmp_path)
+    complete = json.loads((root / "complete.json").read_text(encoding="utf-8"))
+    complete["artifacts"][0]["destination"] = {
+        "uri": "artifact://fixture/latest",
+        "class": "personal_durable",
+    }
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+    assert "mutable_destination" in row["reason_codes"]
+    assert "destination_custody_missing" not in row["reason_codes"]
+
+    complete["artifacts"][0]["destination"] = {
+        "uri": "artifact://fixture/scratch",
+        "class": "local_scratch",
+    }
+    (root / "complete.json").write_text(json.dumps(complete), encoding="utf-8")
+
+    report = tool.build_report(root / "complete.json")
+    row = _rows(report)["checkpoint_complete"]
+    assert "undeclared_destination" in row["reason_codes"]
+    assert "destination_custody_missing" not in row["reason_codes"]

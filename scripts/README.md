@@ -14,6 +14,8 @@ catalog (or script docstrings/`--help`) rather than this file's generated sectio
 * **Compare training runs** → `scripts/tools/compare_training_runs.py`
 * **Preview scenario trajectories** → `scripts/tools/preview_scenario_trajectories.py`
 * **Validate changes** → `scripts/validation/`
+* **Operate SLURM compute-window jobs** → [`docs/dev/slurm_submission.md`](../docs/dev/slurm_submission.md) plus `scripts/tools/classify_scheduler_failure.py`, `scripts/validation/harvest_terminal_job.py`, and `scripts/validation/verify_slurm_array_mapping.py`
+* **Find prior task context** → [`docs/context/INDEX.md`](../docs/context/INDEX.md)
 * **Capture an environment manifest** → `scripts/tools/capture_environment_manifest.py`
 * **Work with SNQI metrics** → SNQI commands in [Root-Level Entry Points](#root-level-entry-points) and [`README_SNQI_WEIGHTS.md`](README_SNQI_WEIGHTS.md)
 * **Check performance** → `scripts/validation/performance_smoke_test.py`

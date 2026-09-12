@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""CLI tests for benchmark run command with explicit SNQI flag configuration."""
 
 from __future__ import annotations
 
@@ -15,11 +15,11 @@ SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 
 def test_cli_run_with_snqi_flags(tmp_path: Path, capsys):
     # Minimal scenario matrix YAML
-    """TODO docstring. Document this function.
+    """Verify running benchmark episodes via CLI with custom SNQI weights and baseline stats.
 
     Args:
-        tmp_path: TODO docstring.
-        capsys: TODO docstring.
+        tmp_path: Temporary directory fixture for matrices, weights, and episode outputs.
+        capsys: Pytest fixture capturing standard output and error streams.
     """
     matrix_path = tmp_path / "matrix.yaml"
     scenarios = [

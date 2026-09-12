@@ -12,21 +12,21 @@ from scripts.tools.migrate_artifacts import migrate_artifacts
 
 
 def _create_file(path: Path, content: str = "test") -> None:
-    """TODO docstring. Document this function.
+    """Create a file and its parent directories.
 
     Args:
-        path: TODO docstring.
-        content: TODO docstring.
+        path: Target file path.
+        content: Text content written to the file.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
 
 
 def test_migrate_artifacts_moves_known_paths(tmp_path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Move every known legacy path into the canonical artifact tree.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory used as the synthetic repository root.
     """
     repo_root = tmp_path / "repo"
     artifact_root = repo_root / "output"
@@ -69,10 +69,10 @@ def test_migrate_artifacts_moves_known_paths(tmp_path: Path) -> None:
 
 
 def test_migrate_artifacts_dry_run_does_not_modify(tmp_path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Report planned moves without changing the source tree.
 
     Args:
-        tmp_path: TODO docstring.
+        tmp_path: Temporary directory used as the synthetic repository root.
     """
     repo_root = tmp_path / "repo"
     artifact_root = repo_root / "output"

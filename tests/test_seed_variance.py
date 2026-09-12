@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for seed variance computation and variability export helpers."""
 
 from __future__ import annotations
 
@@ -10,15 +10,15 @@ from robot_sf.benchmark.seed_variance import (
 
 
 def _make_record(group: str, seed: int, metrics: dict[str, float]) -> dict:
-    """TODO docstring. Document this function.
+    """Construct a mock benchmark episode record with a seed and metrics dictionary.
 
     Args:
-        group: TODO docstring.
-        seed: TODO docstring.
-        metrics: TODO docstring.
+        group: Scenario or group identifier.
+        seed: Random seed used for the episode.
+        metrics: Mapping from metric names to floating point values.
 
     Returns:
-        TODO docstring.
+        Dictionary representing the simulated episode record.
     """
     return {
         "episode_id": f"{group}-{seed}",
@@ -29,7 +29,7 @@ def _make_record(group: str, seed: int, metrics: dict[str, float]) -> dict:
 
 
 def test_compute_seed_variance_basic():
-    """TODO docstring. Document this function."""
+    """Verify basic mean, standard deviation, and coefficient of variation across seeds."""
     records = [
         _make_record("g1", 0, {"a": 1.0, "b": 2.0}),
         _make_record("g1", 1, {"a": 3.0, "b": 2.0}),
@@ -49,7 +49,7 @@ def test_compute_seed_variance_basic():
 
 
 def test_compute_seed_variance_metric_filter():
-    """TODO docstring. Document this function."""
+    """Verify metrics filter restricts compute_seed_variance output to requested metrics."""
     records = [
         _make_record("g", 0, {"a": 1.0, "b": 2.0}),
         _make_record("g", 1, {"a": 3.0, "b": 4.0}),

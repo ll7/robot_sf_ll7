@@ -15,12 +15,16 @@ import pytest
 
 
 def _mod():
-    """TODO docstring. Document this function."""
+    """Import and return the classic interactions Pygame demo module."""
     return importlib.import_module("examples.classic_interactions_pygame")
 
 
 def test_valid_scenario_selection():
-    """TODO docstring. Document this function."""
+    """Verify the first matrix scenario produces at least one episode.
+
+    Loads the classic scenario matrix, temporarily sets SCENARIO_NAME to the first
+    scenario with DRY_RUN off, runs run_demo, and asserts a non-empty episode list.
+    """
     mod = _mod()
     # Identify first scenario name via loader directly
     from robot_sf.benchmark.classic_interactions_loader import load_classic_matrix
@@ -42,7 +46,11 @@ def test_valid_scenario_selection():
 
 
 def test_invalid_scenario_name_lists_available():
-    """TODO docstring. Document this function."""
+    """Verify an unknown scenario name raises ValueError listing available scenarios.
+
+    Temporarily sets SCENARIO_NAME to a sentinel unknown name with DRY_RUN off and
+    asserts run_demo raises ValueError whose message contains 'Available:'.
+    """
     mod = _mod()
     original_name = mod.SCENARIO_NAME
     original_dry = mod.DRY_RUN

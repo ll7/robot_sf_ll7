@@ -20,8 +20,11 @@ installed vendored `pysocialforce` package against this checkout. If it is stale
 worktree using the default environment, the helper automatically creates or refreshes only that
 worktree's `.venv`, checks capacity, serializes recovery, and verifies freshness before the command
 starts. It never repairs the owning checkout implicitly. Explicit `--recover-stale-fast-pysf`
-remains available to force the same worktree-local recovery. Use --standalone for commands that do
-not import project packages, or --no-freshness-check only after confirming the environment matches.
+remains available to force the same worktree-local recovery. A selected worktree-local `.venv` that
+fails the dependency-profile preflight also gets exactly one bounded completion sync through the
+same recovery owner before the wrapper fails closed (issue #8811); that sync never touches an
+explicit --venv or the owning checkout. Use --standalone for commands that do not import project
+packages, or --no-freshness-check only after confirming the environment matches.
 Pinned tool binaries are a separate boundary (issue #8250): `uv run` executes the requested tool
 from the selected venv, so a stale venv would silently run a drifted binary. Before proceeding,
 the freshness preflight compares the resolved `<venv>/bin/<tool>` version against the exact `==`
@@ -156,6 +159,7 @@ venv_override=""
 dependency_profile="core"
 skip_freshness=""
 recover_stale_fast_pysf=""
+dependency_profile_recovery_attempted=""
 standalone=""
 isolated_ruff=""
 isolated_conflict=""
@@ -578,12 +582,15 @@ if [[ -n "$recover_stale_fast_pysf" ]]; then
     echo "ERROR: worktree fast-pysf recovery helper is missing or not executable: $recovery_script" >&2
     exit 2
   fi
-  if "$recovery_script"; then
+  # The recovery postcondition certifies the same dependency profile the
+  # wrapper checks below (issue #8811).
+  if "$recovery_script" --profile "$dependency_profile"; then
     :
   else
     recovery_rc=$?
     exit "$recovery_rc"
   fi
+  dependency_profile_recovery_attempted=1
   venv_path="$repo_root/.venv"
 else
   if [[ -n "$venv_override" ]]; then
@@ -604,20 +611,82 @@ if [[ ! -x "$venv_path/bin/python" ]]; then
   exit 2
 fi
 
-check_dependency_profile() {
-  local report
-  if ! report="$("$venv_path/bin/python" \
+# Kept caller-visible: completion sync (issue #8811) and fail-closed reporting
+# both need the latest checker output.
+dependency_profile_report=""
+
+run_dependency_profile_check() {
+  if dependency_profile_report="$("$venv_path/bin/python" \
     "$repo_root/scripts/dev/check_worktree_optional_deps.py" \
     --profile "$dependency_profile" 2>&1)"; then
-    echo "ERROR: shared-venv dependency profile '$dependency_profile' is incomplete in $venv_path." >&2
-    printf '%s\n' "$report" >&2
-    echo "Run 'cd $repo_root && scripts/dev/bootstrap_worktree.sh', then rerun this command." >&2
-    return 2
+    return 0
   fi
+  return 2
+}
+
+report_incomplete_dependency_profile() {
+  echo "ERROR: shared-venv dependency profile '$dependency_profile' is incomplete in $venv_path." >&2
+  printf '%s\n' "$dependency_profile_report" >&2
+  echo "Run 'cd $repo_root && scripts/dev/bootstrap_worktree.sh', then rerun this command." >&2
+}
+
+check_dependency_profile() {
+  if run_dependency_profile_check; then
+    return 0
+  fi
+  report_incomplete_dependency_profile
+  return 2
+}
+
+complete_worktree_dependency_profile() {
+  # Issue #8811: exactly one bounded completion sync through the canonical
+  # recovery owner. Only a selected worktree-local environment in a linked
+  # worktree is eligible; an explicit --venv stays authoritative and the
+  # owning checkout is never mutated. Recovery runs its own capacity gate and
+  # repository lock, so this preserves the existing fail-closed boundaries.
+  if [[ -n "$dependency_profile_recovery_attempted" ]]; then
+    return 1
+  fi
+  if [[ "$is_linked_worktree" -ne 1 || -n "$venv_override" || -n "$standalone" ]]; then
+    return 1
+  fi
+  if [[ "$venv_path" != "$repo_root/.venv" ]]; then
+    return 1
+  fi
+  local recovery_script="$repo_root/scripts/dev/recover_fast_pysf_worktree.sh"
+  if [[ ! -x "$recovery_script" ]]; then
+    echo "ERROR: worktree dependency-profile completion helper is missing or not executable: $recovery_script" >&2
+    echo "Run 'cd $repo_root && scripts/dev/bootstrap_worktree.sh', then rerun this command." >&2
+    return 1
+  fi
+  echo "ERROR: shared-venv dependency profile '$dependency_profile' is incomplete in $venv_path." >&2
+  printf '%s\n' "$dependency_profile_report" >&2
+  echo "Attempting one bounded completion sync: $recovery_script --profile $dependency_profile" >&2
+  local recovery_rc=0
+  "$recovery_script" --profile "$dependency_profile" || recovery_rc=$?
+  if [[ "$recovery_rc" -ne 0 ]]; then
+    echo "ERROR: dependency-profile completion sync failed (recovery exit $recovery_rc)." >&2
+    return 1
+  fi
+  return 0
+}
+
+ensure_dependency_profile() {
+  if run_dependency_profile_check; then
+    return 0
+  fi
+  if complete_worktree_dependency_profile && run_dependency_profile_check; then
+    echo "Shared-venv dependency profile '$dependency_profile' completed in $venv_path." >&2
+    return 0
+  fi
+  report_incomplete_dependency_profile
+  return 2
 }
 
 if [[ -z "$standalone" ]]; then
-  check_dependency_profile
+  if ! ensure_dependency_profile; then
+    exit 2
+  fi
 fi
 
 is_project_interpreter_command() {
@@ -668,7 +737,10 @@ recover_stale_fast_pysf_automatically() {
     return 2
   fi
   echo "Recovering stale fast-pysf in the linked worktree: $repo_root/.venv" >&2
-  "$recovery_script" || return $?
+  # The recovery postcondition certifies the same dependency profile the
+  # wrapper checks below (issue #8811).
+  "$recovery_script" --profile "$dependency_profile" || return $?
+  dependency_profile_recovery_attempted=1
   venv_path="$repo_root/.venv"
   if [[ ! -x "$venv_path/bin/python" ]]; then
     echo "ERROR: automatic fast-pysf recovery did not create a usable worktree environment: $venv_path" >&2

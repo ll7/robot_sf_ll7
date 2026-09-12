@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for RobotEnv and PedestrianEnv creation, observations, and short rollouts."""
 
 from typing import cast
 
@@ -11,13 +11,13 @@ from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
 
 def test_can_create_env():
-    """TODO docstring. Document this function."""
+    """RobotEnv can be constructed with default settings."""
     env = RobotEnv()
     assert env is not None
 
 
 def test_can_return_valid_observation():
-    """TODO docstring. Document this function."""
+    """RobotEnv reset returns drive-state and lidar observations matching the Box shapes."""
     env = RobotEnv()
     # Cast observation_space to spaces.Dict for static type checkers
     obs_dict = cast("spaces.Dict", env.observation_space)

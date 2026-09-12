@@ -30,6 +30,12 @@ For the check-only guard that decides when one artifact or output identity may b
 For the complete post-access restore and local-analysis sequence, see the
 [post-access restoration and local-analysis runbook](../post_access_local_analysis_runbook.md).
 
+Tool-specific contracts live in their own `docs/context/<tool>.md` note and are linked from a stable
+location in this file (this section), not as a new top-level section per tool. Keeping the shared
+vocabulary free of appended per-tool sections avoids parallel-merge conflicts and CI restarts when
+several tooling PRs land together; the note-maintenance convention is documented in the
+[Context Notes Workflow](README.md#per-tool-contract-notes).
+
 ## Vocabulary
 
 | Category | Meaning | May cite `output/`? | Acceptable reference |
@@ -103,6 +109,19 @@ and next owner, with implementation/compute/scheduler/artifact/evidence/review/c
 separate. No scientific score or admission decision is computed; stale, missing, contradictory,
 duplicate, wrong-schema, or unsanitized input masks affected rows as explicit `unavailable`, and
 output carries no private paths, hostnames, accounts, credentials, or signed URLs.
+
+## Compute Staging Bundles
+
+[`scripts/validation/build_compute_staging_bundle.py`](../../scripts/validation/build_compute_staging_bundle.py) binds one authorized workload's source/config/seed/checkpoint/lock identities into a deterministic `compute_staging_bundle.v1` receipt plus `SHA256SUMS`/inventory/transfer instructions; `--help` lists the stable fail-closed reason codes.
+
+## Terminal-Job Harvest Receipts
+
+[`scripts/validation/harvest_terminal_job.py`](../../scripts/validation/harvest_terminal_job.py) consumes one explicit `terminal_job_harvest_request.v1` plus a local artifact root and writes a deterministic `terminal_job_harvest.v1` public receipt, a private detailed receipt, and `SHA256SUMS`. Scheduler state and artifact completeness stay separate; only `completed`, `failed`, `cancelled`, and `timeout` are validated terminal dispositions, while unknown or non-terminal states remain blocked. Every required `manifest`, `rows`, and `environment` inventory role must have a valid non-empty path that resolves to a present member; all environment records must agree on source/config identity. The fail-closed reason codes for these boundaries include `unsupported_scheduler_state`, `job_not_terminal`, `empty_required_role`, and `conflicting_environment_records`. Destination verification follows the exact relative-member rule in [`chunk_manifest.py`](../../scripts/tools/chunk_manifest.py), so missing, mismatched, or extra members (`destination_unexpected_member`) fail closed and cannot authorize the local cleanup gate. This local gate does not replace the canonical [`check_cleanup_eligibility.py`](../../scripts/validation/check_cleanup_eligibility.py) guard. Validate with `uv run python scripts/validation/harvest_terminal_job.py --check --fixture <fixture-root> --format json`.
+
+## Artifact Transfer Custody
+
+[`scripts/validation/verify_artifact_transfer.py`](../../scripts/validation/verify_artifact_transfer.py) consumes one existing `terminal_job_harvest.v1` or `compute_staging_bundle.v1` receipt and copies only its manifest-declared members between explicit local roots. Destination members are re-hashed first (`already_verified` avoids re-copy), conflicts fail closed without overwrite, and interrupted `.transfer-partial` files are cleaned and resumed. `--apply` writes a deterministic `artifact_transfer_custody.v1` receipt (per-file states, byte counts, capacity, independently re-hashed destination bytes); `--check` is read-only and receipts carry normalized relative paths only.
+Validate with `uv run python scripts/validation/verify_artifact_transfer.py --check --manifest <receipt> --source-root <root> --destination-root <root> --format json`; live SSH/private-host transfer stays routed through private operations.
 
 ## Checkpoint Compatibility Audit
 

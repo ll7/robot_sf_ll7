@@ -1,4 +1,4 @@
-"""TODO docstring. Document this module."""
+"""Tests for benchmark algorithm ranking and report formatting functions."""
 
 from __future__ import annotations
 
@@ -12,11 +12,14 @@ from robot_sf.benchmark.ranking import compute_ranking, format_csv, format_markd
 
 
 def _rec(g, **m):
-    """TODO docstring. Document this function.
+    """Build a mock scenario record for ranking tests.
 
     Args:
-        g: TODO docstring.
-        m: TODO docstring.
+        g: Algorithm/group name.
+        **m: Keyword arguments mapping metric names to values.
+
+    Returns:
+        Dictionary representing an episode record.
     """
     return {
         "scenario_params": {"algo": g},
@@ -27,7 +30,7 @@ def _rec(g, **m):
 
 
 def test_compute_ranking_basic():
-    """TODO docstring. Document this function."""
+    """Verify basic ascending ranking computation by metric mean across groups."""
     records = [
         _rec("a", collisions=1),
         _rec("a", collisions=3),
@@ -42,7 +45,7 @@ def test_compute_ranking_basic():
 
 
 def test_compute_ranking_top_and_desc():
-    """TODO docstring. Document this function."""
+    """Verify descending ranking computation and top-k slicing."""
     records = [
         _rec("a", comfort_exposure=0.1),
         _rec("a", comfort_exposure=0.4),
@@ -59,7 +62,7 @@ def test_compute_ranking_top_and_desc():
 
 
 def test_formatters_return_strings():
-    """TODO docstring. Document this function."""
+    """Verify Markdown and CSV ranking formatters produce expected formatted strings."""
     records = [_rec("a", collisions=1), _rec("a", collisions=3)]
     rows = compute_ranking(records, metric="collisions")
     md = format_markdown(rows, "collisions")

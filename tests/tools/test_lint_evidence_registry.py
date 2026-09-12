@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[2]
 LINTER = ROOT / "scripts" / "tools" / "lint_evidence_registry.py"
@@ -452,6 +453,136 @@ def test_json_pointer_rejects_malformed_tilde_escape() -> None:
 
     with pytest.raises(ValueError, match="invalid JSON pointer escape"):
         linter._json_pointer_get({"literal~2": "value"}, "/literal~2")
+
+
+def test_historical_binding_helpers_fail_closed_at_boundary_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Low-level historical helpers reject unsafe paths, pointers, and missing bytes."""
+    historical = importlib.import_module("robot_sf.evidence.historical_bindings")
+    repo, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    config_path = "configs/campaign.yaml"
+
+    assert historical._is_tracked(
+        repo, config_path, content_ref="HEAD", tracked_paths={config_path}
+    )
+    assert historical._is_tracked(
+        repo, config_path, content_ref="HEAD", content_cache={config_path: b"cached"}
+    )
+    assert historical._is_tracked(repo, config_path, content_ref="HEAD", content_cache={})
+    assert (
+        historical._repository_file_bytes(
+            repo, config_path, content_ref="HEAD", content_cache={config_path: b"cached"}
+        )
+        == b"cached"
+    )
+    assert historical._repository_file_bytes(repo, "missing.json") is None
+    assert historical._resolve_repo_path(repo, "https://example.invalid/artifact") is None
+    assert historical._resolve_repo_path(repo, "urn:example:artifact") is None
+    assert historical._resolve_repo_path(repo, "../outside") is None
+
+    document_path = tmp_path / "document.json"
+    document_path.write_text('{"value": 1}', encoding="utf-8")
+    assert historical._load_document(document_path) == {"value": 1}
+    with pytest.raises(ValueError, match="not JSON"):
+        historical._load_document(tmp_path / "document.txt", raw=b"{}")
+
+    document = {"array": ["zero"], "scalar": "value"}
+    assert historical._json_pointer_get(document, "") is document
+    with pytest.raises(ValueError, match="invalid JSON pointer"):
+        historical._json_pointer_get(document, "array")
+    with pytest.raises(KeyError):
+        historical._json_pointer_get(document, "/array/1")
+    with pytest.raises(KeyError):
+        historical._json_pointer_get(document, "/array/not-an-index")
+    with pytest.raises(KeyError):
+        historical._json_pointer_get(document, "/scalar/value")
+
+    assert historical._historical_binding_occurrences("not an object", "x", "y") == []
+    assert not historical._historical_binding_locator_is_valid("reference")
+    with pytest.raises(
+        historical.HistoricalBindingError, match="canonical repository-relative path"
+    ):
+        historical._historical_binding_path(repo, "../outside", "reference_path")
+    with pytest.raises(historical.HistoricalBindingError, match="repository-relative"):
+        historical._historical_binding_path(repo, "/absolute", "reference_path")
+    with pytest.raises(historical.HistoricalBindingError, match="requires non-empty"):
+        historical._historical_binding_text({}, "reference_locator")
+    with pytest.raises(historical.HistoricalBindingError, match="full hexadecimal"):
+        historical._historical_binding_sha({"digest": "short"}, "digest", historical.SHA256_RE)
+
+    monkeypatch.setattr(historical, "_git_bytes", lambda *_args: b"\xff")
+    assert historical._historical_binding_git_text(repo, "rev-parse", "HEAD") is None
+
+    with pytest.raises(historical.HistoricalBindingError, match="is not tracked"):
+        historical._historical_binding_file(
+            repo,
+            "missing.json",
+            content_ref=None,
+            content_cache=None,
+            tracked_paths=None,
+            label="test",
+        )
+    monkeypatch.setattr(historical, "_repository_file_bytes", lambda *_args, **_kwargs: None)
+    with pytest.raises(historical.HistoricalBindingError, match="cannot be read"):
+        historical._historical_binding_file(
+            repo,
+            config_path,
+            content_ref=None,
+            content_cache=None,
+            tracked_paths={config_path},
+            label="test",
+        )
+
+
+def test_historical_binding_digest_validation_matches_schema_for_every_field() -> None:
+    """Every manifest digest field must share the schema's lowercase-only contract."""
+    historical = importlib.import_module("robot_sf.evidence.historical_bindings")
+    schema_path = ROOT / "scripts/validation/evidence_registry_historical_bindings.v1.schema.json"
+    manifest_path = ROOT / "scripts/validation/evidence_registry_historical_bindings.v1.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema)
+    digest_fields = {
+        "consumer_sha256": (historical.SHA256_RE, "a" * 64),
+        "consumer_blob_sha1": (historical.FULL_SHA1_RE, "a" * 40),
+        "declared_sha256": (historical.SHA256_RE, "a" * 64),
+        "producer_commit": (historical.FULL_SHA1_RE, "a" * 40),
+        "producer_tree": (historical.FULL_SHA1_RE, "a" * 40),
+        "producer_reference_sha256": (historical.SHA256_RE, "a" * 64),
+        "producer_reference_blob_sha1": (historical.FULL_SHA1_RE, "a" * 40),
+        "producer_consumer_sha256": (historical.SHA256_RE, "a" * 64),
+        "producer_consumer_blob_sha1": (historical.FULL_SHA1_RE, "a" * 40),
+        "parent_commit": (historical.FULL_SHA1_RE, "a" * 40),
+        "parent_reference_sha256": (historical.SHA256_RE, "a" * 64),
+    }
+
+    for field, (pattern, lowercase_value) in digest_fields.items():
+        assert (
+            historical._historical_binding_sha({field: lowercase_value}, field, pattern)
+            == lowercase_value
+        )
+        with pytest.raises(historical.HistoricalBindingError, match=f"bindings {field}"):
+            historical._historical_binding_sha({field: lowercase_value.upper()}, field, pattern)
+
+        uppercase_manifest = json.loads(json.dumps(manifest))
+        original_value = uppercase_manifest["bindings"][0][field]
+        uppercase_manifest["bindings"][0][field] = original_value.upper()
+        assert list(validator.iter_errors(uppercase_manifest)), field
+
+    uppercase_manifest = json.loads(json.dumps(manifest))
+    uppercase_manifest["reviewed_ancestry_anchor"] = manifest["reviewed_ancestry_anchor"].upper()
+    assert list(validator.iter_errors(uppercase_manifest)), "reviewed_ancestry_anchor"
+    with pytest.raises(historical.HistoricalBindingError, match="reviewed_ancestry_anchor"):
+        historical._load_historical_bindings(
+            ROOT,
+            content_ref="HEAD",
+            content_cache={
+                historical.HISTORICAL_BINDING_MANIFEST.as_posix(): (
+                    json.dumps(uppercase_manifest).encode("utf-8")
+                )
+            },
+        )
 
 
 def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:

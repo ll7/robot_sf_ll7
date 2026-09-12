@@ -109,7 +109,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 def _import_torch_optional():
-    """TODO docstring. Document this function."""
+    """Import torch if available in the environment, returning None on failure."""
     try:
         return importlib.import_module("torch")  # type: ignore
     except Exception:  # pragma: no cover - torch optional in some envs
@@ -117,10 +117,13 @@ def _import_torch_optional():
 
 
 def _snapshot_torch_determinism(torch_module):
-    """TODO docstring. Document this function.
+    """Snapshot determinism-related flags for PyTorch and cuDNN backends.
 
     Args:
-        torch_module: TODO docstring.
+        torch_module: Loaded PyTorch module from which to capture deterministic settings.
+
+    Returns:
+        Dictionary mapping determinism flag names to their pre-test captured values.
     """
     state: dict[str, object | None] = {
         "algos": None,
@@ -142,11 +145,11 @@ def _snapshot_torch_determinism(torch_module):
 
 
 def _apply_nondeterministic(torch_module, cudnn_backend):
-    """TODO docstring. Document this function.
+    """Apply non-deterministic settings to PyTorch and cuDNN for stress testing.
 
     Args:
-        torch_module: TODO docstring.
-        cudnn_backend: TODO docstring.
+        torch_module: Loaded PyTorch module to configure.
+        cudnn_backend: PyTorch cuDNN backend object to configure, or None.
     """
     try:
         _set_torch_deterministic_algorithms(torch_module, False)
@@ -158,11 +161,11 @@ def _apply_nondeterministic(torch_module, cudnn_backend):
 
 
 def _restore_torch_determinism(torch_module, state):
-    """TODO docstring. Document this function.
+    """Restore previously captured PyTorch and cuDNN determinism flags.
 
     Args:
-        torch_module: TODO docstring.
-        state: TODO docstring.
+        torch_module: Loaded PyTorch module whose settings should be restored.
+        state: State dictionary captured by ``_snapshot_torch_determinism``.
     """
     try:
         prev_algos = state.get("algos")
@@ -276,7 +279,7 @@ def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
 
 @pytest.fixture(scope="session")
 def perf_policy():  # type: ignore[missing-return-type-doc]
-    """TODO docstring. Document this function."""
+    """Provide session-scoped performance budget policy or fallback envelope."""
     if PerformanceBudgetPolicy is not None:
         try:
             return PerformanceBudgetPolicy()
@@ -428,6 +431,17 @@ _FAST_FILES = {
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",
+    # TODO-docstring baseline guards must run in pull-request fast shards.
+    # PR shards exclude slow tests, so without this registration a cleanup PR
+    # can skip the guard and turn main red only after merge (issue #9000).
+    "test_check_docstring_todos.py",
+    # Routed-worker path/hash contract tests are deterministic and provide
+    # exact-head changed-line coverage for the manifest producer (issue #8925).
+    "test_routed_worker_manifest.py",
+    # Pedestrian-speed protocol and activation-preflight guards are deterministic
+    # check-only contracts; keep them in PR fast shards (issue #8888).
+    "test_check_issue_6561_pedestrian_speed_protocol.py",
+    "test_check_issue_6561_activation_preflight.py",
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",
@@ -674,6 +688,9 @@ _FAST_FILES = {
     # Forecast-preparation packet tests are deterministic schema/provenance
     # contracts; keep their changed producer covered by the fast lane.
     "test_forecast_preparation.py",
+    # Evidence-registry tests include deterministic historical-binding resolver
+    # boundaries; keep the shared resolver covered in exact-head fast shards.
+    "test_lint_evidence_registry.py",
     # Figure-interpretation replay tests are provider-free deterministic contracts;
     # keep their exact-head mutation and provenance coverage in fast shards.
     "test_agent_figure_interpretation_eval.py",
@@ -768,6 +785,13 @@ _FAST_FILES = {
     # helper module; keep their producer coverage in the exact-head fast lane
     # (issue #8910).
     "test_artifact_paths.py",
+    "test_build_compute_staging_bundle.py",
+    # The terminal-job harvest helper (issue #8824) is deterministic fixture and
+    # fail-closed receipt coverage for the changed operational tooling module.
+    "test_harvest_terminal_job.py",
+    # The artifact transfer verifier (issue #8825) is deterministic fixture and
+    # fail-closed custody coverage for the changed operational tooling module.
+    "test_verify_artifact_transfer.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",
@@ -943,10 +967,10 @@ def pytest_collection_modifyitems(config, items):  # type: ignore[missing-type-d
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):  # type: ignore[missing-type-doc]
-    """TODO docstring. Document this function.
+    """Wrap test call execution to record measured duration for the slow report.
 
     Args:
-        item: TODO docstring.
+        item: Pytest test item being executed.
     """
     start = time.perf_counter()
     try:

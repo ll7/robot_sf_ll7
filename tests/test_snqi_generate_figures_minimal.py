@@ -31,11 +31,11 @@ SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 
 @pytest.mark.parametrize("success_vals", [[1.0, 0.0]])
 def test_snqi_minimal_generate_figures(tmp_path: Path, success_vals):
-    """TODO docstring. Document this function.
+    """Run the figure orchestrator with SNQI flags and check it writes a meta.json output.
 
     Args:
-        tmp_path: TODO docstring.
-        success_vals: TODO docstring.
+        tmp_path: Temporary directory for synthetic episodes, weights, baseline, and figures.
+        success_vals: Parametrized list of per-episode success values written to the JSONL.
     """
     episodes_path = tmp_path / "episodes_test.jsonl"
     weights_path = tmp_path / "weights.json"

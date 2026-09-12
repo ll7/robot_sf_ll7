@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import yaml
@@ -19,6 +20,10 @@ from scripts.validation.research_answerability_preflight import (
     AnswerabilityProofError,
     apply_proof_results,
     collect_answerability_proof,
+)
+from scripts.validation.research_answerability_receipts import (
+    ANALYSIS_VALIDATOR_ID,
+    PRODUCER_VALIDATOR_ID,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -34,6 +39,25 @@ def _manifest() -> dict[str, object]:
     payload = yaml.safe_load(EXAMPLE_MANIFEST.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
+
+
+def _decision_manifest() -> dict[str, Any]:
+    """Return a manifest configured for strict receipt validation fixtures."""
+    manifest = _manifest()
+    manifest["answerability"]["design"]["mode"] = "decision_capable"
+    manifest["answerability"]["artifacts"]["durability_status"] = "ready"
+    return manifest
+
+
+def _receipt_identity(manifest: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    """Build the common identity required by a strict proof declaration."""
+    identity = {
+        "campaign_id": manifest["campaign"]["id"],
+        "question": manifest["answerability"]["question"]["research_question"],
+        "estimand": manifest["answerability"]["estimand"]["primary"],
+    }
+    identity.update(extra)
+    return identity
 
 
 def test_unexecuted_proof_is_not_promoted() -> None:
@@ -187,7 +211,123 @@ def test_required_receipt_canonical_owner_verification_fails_closed(tmp_path: Pa
 
     result = report["surfaces"]["producer"]
     assert result["status"] == "failed"
-    assert "receipt-aware validator" in result["reason"]
+    assert "validator_id" in result["reason"]
+
+
+def test_required_producer_receipt_uses_registered_validator(tmp_path: Path) -> None:
+    """The canonical producer validator consumes rows and committed sources."""
+    manifest = _decision_manifest()
+    owner_path = tmp_path / "producer_owner.py"
+    owner_path.write_text("def build_rows(manifest):\n    return manifest\n", encoding="utf-8")
+    source_sha256 = hashlib.sha256(owner_path.read_bytes()).hexdigest()
+    for producer in manifest["answerability"]["producers"]:
+        producer["source"] = owner_path.name
+    producer_fields = sorted(
+        producer["field"]
+        for producer in manifest["answerability"]["producers"]
+        if producer.get("required", True)
+    )
+    receipt = {
+        "schema_version": "research_answerability_producer_receipt.v1",
+        **_receipt_identity(manifest, producer_fields=producer_fields),
+        "producer_rows": [
+            {
+                "field": producer["field"],
+                "producer": producer["producer"],
+                "source": producer["source"],
+                "source_sha256": source_sha256,
+                "status": "available",
+                "execution_mode": "native",
+            }
+            for producer in manifest["answerability"]["producers"]
+            if producer.get("required", True)
+        ],
+        "status": "passed",
+    }
+    receipt_path = tmp_path / "producer_receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    manifest["validation"]["answerability_proof"] = {
+        "producer": {
+            "kind": "producer_receipt",
+            "proof_class": "decision_capable",
+            "path": receipt_path.name,
+            "sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+            "identity": _receipt_identity(manifest, producer_fields=producer_fields),
+            "verification": {
+                "kind": "canonical_owner",
+                "validator_id": PRODUCER_VALIDATOR_ID,
+            },
+        }
+    }
+
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=tmp_path,
+        execute=True,
+        build_rows=lambda _: [{"row": 1}],
+    )
+
+    result = report["surfaces"]["producer"]
+    assert result["status"] == "passed"
+    assert result["verification"]["validator_id"] == PRODUCER_VALIDATOR_ID
+    assert result["verification"]["checked_fields"] == producer_fields
+
+
+def test_required_producer_receipt_rejects_source_digest_mismatch(tmp_path: Path) -> None:
+    """A producer receipt cannot pass when its source digest is forged."""
+    manifest = _decision_manifest()
+    owner_path = tmp_path / "producer_owner.py"
+    owner_path.write_text("def build_rows(manifest):\n    return manifest\n", encoding="utf-8")
+    for producer in manifest["answerability"]["producers"]:
+        producer["source"] = owner_path.name
+    producer_fields = sorted(
+        producer["field"]
+        for producer in manifest["answerability"]["producers"]
+        if producer.get("required", True)
+    )
+    receipt = {
+        "schema_version": "research_answerability_producer_receipt.v1",
+        **_receipt_identity(manifest, producer_fields=producer_fields),
+        "producer_rows": [
+            {
+                "field": producer["field"],
+                "producer": producer["producer"],
+                "source": producer["source"],
+                "source_sha256": "0" * 64,
+                "status": "available",
+                "execution_mode": "native",
+            }
+            for producer in manifest["answerability"]["producers"]
+            if producer.get("required", True)
+        ],
+        "status": "passed",
+    }
+    receipt_path = tmp_path / "producer_receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    manifest["validation"]["answerability_proof"] = {
+        "producer": {
+            "kind": "producer_receipt",
+            "proof_class": "decision_capable",
+            "path": receipt_path.name,
+            "sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+            "identity": _receipt_identity(manifest, producer_fields=producer_fields),
+            "verification": {
+                "kind": "canonical_owner",
+                "validator_id": PRODUCER_VALIDATOR_ID,
+            },
+        }
+    }
+
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=tmp_path,
+        execute=True,
+        build_rows=lambda _: [{"row": 1}],
+    )
+
+    result = report["surfaces"]["producer"]
+    assert result["status"] == "failed"
+    assert "does not match committed source bytes" in result["reason"]
 
 
 def test_strict_proof_rejects_matching_untracked_output_file(tmp_path: Path) -> None:
@@ -288,10 +428,63 @@ def test_required_analysis_receipt_canonical_owner_verification_fails_closed(
 
     result = report["surfaces"]["analysis"]
     assert result["status"] == "failed"
-    assert "receipt-aware validator" in result["reason"]
+    assert "validator_id" in result["reason"]
 
 
-def test_required_receipt_command_verification_fails_closed_without_canonical_validator(
+def test_required_analysis_receipt_uses_registered_validator(tmp_path: Path) -> None:
+    """The canonical analysis validator consumes checks and its source owner."""
+    manifest = _decision_manifest()
+    owner_path = tmp_path / "analysis_owner.py"
+    owner_path.write_text("def run_analysis(manifest):\n    return manifest\n", encoding="utf-8")
+    manifest["answerability"]["analysis"].update(
+        {"analysis_id": "analysis_fixture", "source": owner_path.name}
+    )
+    receipt = {
+        "schema_version": "research_answerability_analysis_receipt.v1",
+        **_receipt_identity(manifest, analysis_id="analysis_fixture"),
+        "command": manifest["answerability"]["analysis"]["command"],
+        "dry_run_status": "passed",
+        "comparability_status": "passed",
+        "checks": {
+            "dry_run": {"status": "passed"},
+            "comparability": {"status": "passed"},
+        },
+        "analysis_source": {
+            "path": owner_path.name,
+            "sha256": hashlib.sha256(owner_path.read_bytes()).hexdigest(),
+        },
+        "status": "passed",
+    }
+    receipt_path = tmp_path / "analysis_receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    manifest["validation"]["answerability_proof"] = {
+        "analysis": {
+            "kind": "analysis_receipt",
+            "proof_class": "decision_capable",
+            "path": receipt_path.name,
+            "sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+            "identity": _receipt_identity(manifest, analysis_id="analysis_fixture"),
+            "verification": {
+                "kind": "canonical_owner",
+                "validator_id": ANALYSIS_VALIDATOR_ID,
+            },
+        }
+    }
+
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=tmp_path,
+        execute=True,
+        build_rows=lambda _: [{"row": 1}],
+    )
+
+    result = report["surfaces"]["analysis"]
+    assert result["status"] == "passed"
+    assert result["verification"]["validator_id"] == ANALYSIS_VALIDATOR_ID
+    assert result["verification"]["checked_checks"] == ["comparability", "dry_run"]
+
+
+def test_required_receipt_command_verification_cannot_substitute_canonical_validator(
     tmp_path: Path, monkeypatch
 ) -> None:
     """A green unrelated pytest file cannot authorize a strict producer receipt."""
@@ -356,7 +549,7 @@ def test_required_receipt_command_verification_fails_closed_without_canonical_va
 
     result = report["surfaces"]["producer"]
     assert result["status"] == "failed"
-    assert "receipt-aware validator" in result["reason"]
+    assert "caller-selected commands" in result["reason"]
     assert calls == []
 
 

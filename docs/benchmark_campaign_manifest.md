@@ -83,24 +83,26 @@ surface-specific map: `producer_receipt`, the public `preregistration` checker,
 the public `evidence_contract` checker, `analysis_receipt`, the public
 `artifact_catalog` checker, and the public `result_packet` loader. A generic
 pytest result cannot substitute for a producer or analysis receipt. Strict
-receipts must also declare an independent `verification`; in this checkout no
-checked-in, receipt-aware validator is registered for those receipts, so
-caller-selected commands, arbitrary `tests/*.py` files, and AST-only
-`canonical_owner` symbols fail closed. A receipt's own `status: passed` is
-never sufficient. Future receipt-aware validators must be checked in,
-executable, and consume the receipt they verify. Strict receipts and
-file-backed validators bind the campaign, question, estimand, and surface
-identity; artifact proofs additionally bind the catalog's own `claim_identity`,
-selected artifact IDs, and complete source/output/caption digest sets. A
-decision-capable evidence-contract proof must supply a checked-in canonical
-evidence row whose structured `claim_identity` is derived by the public
-checker; caller-supplied CLI identity text is not evidence. Result packets must
-expose a matching top-level `claim_identity`, and their packet
-question/estimand fields are checked separately. Registered diagnostic
-commands are argv-only, restricted to repository `tests/*.py` paths, and
-bounded by a 120-second timeout. A missing generic result-packet validator is
-recorded as `unavailable`; it is not replaced by an issue-specific or
-heuristic checker.
+receipts must also declare the fixed `canonical_owner` validator for their
+surface: `research_answerability.producer_receipt.v1` or
+`research_answerability.analysis_receipt.v1`. These checked-in validators
+consume the receipt, bind its campaign/question/estimand identity to the
+manifest, require complete passed producer rows or analysis checks, and verify
+every referenced owner source against its current committed SHA-256. A
+receipt's own `status: passed` is never sufficient. Caller-selected commands,
+arbitrary `tests/*.py` files, and AST-only `canonical_owner` symbols fail
+closed. Strict receipts and file-backed validators bind the campaign,
+question, estimand, and surface identity; artifact proofs additionally bind the
+catalog's own `claim_identity`, selected artifact IDs, and complete
+source/output/caption digest sets. A decision-capable evidence-contract proof
+must supply a checked-in canonical evidence row whose structured
+`claim_identity` is derived by the public checker; caller-supplied CLI identity
+text is not evidence. Result packets must expose a matching top-level
+`claim_identity`, and their packet question/estimand fields are checked
+separately. Registered diagnostic commands are argv-only, restricted to
+repository `tests/*.py` paths, and bounded by a 120-second timeout. A missing
+generic result-packet validator is recorded as `unavailable`; it is not
+replaced by an issue-specific or heuristic checker.
 
 Strict admission attaches `answerability.proof_binding` with the declared
 campaign/question/estimand identity, repository-relative tracked source

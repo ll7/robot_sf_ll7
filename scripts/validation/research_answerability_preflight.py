@@ -1014,19 +1014,26 @@ def _run_receipt_verification(
     surface: str,
     spec: Mapping[str, Any],
     *,
+    path: Path,
     repo_root: Path,
     manifest: Mapping[str, Any],
     required: bool,
 ) -> dict[str, Any]:
-    """Fail closed until a checked-in, receipt-aware validator is registered.
+    """Run the fixed, checked-in validator for one strict receipt surface.
 
-    The previous implementation treated a manifest-selected test file or an
-    AST symbol in an answerability owner as independent proof. Neither path
-    consumed the receipt, so a green unrelated test could authorize a strict
-    producer or analysis surface. There is currently no canonical
-    receipt-aware validator in this checkout; keeping the surface unavailable
-    is safer than accepting self-attested or caller-selected proof.
+    A strict receipt may select only the canonical validator registered for its
+    surface.  The validator consumes the receipt and binds every checked field
+    to the manifest and committed source bytes; arbitrary commands or AST
+    symbols are intentionally not accepted as substitutes.
     """
+    from scripts.validation.research_answerability_receipts import (
+        ANALYSIS_VALIDATOR_ID,
+        PRODUCER_VALIDATOR_ID,
+        ReceiptValidationError,
+        validate_analysis_receipt,
+        validate_producer_receipt,
+    )
+
     verification = spec.get("verification")
     if not isinstance(verification, Mapping):
         return _result(
@@ -1039,23 +1046,76 @@ def _run_receipt_verification(
             ),
         )
     verification_kind = verification.get("kind")
-    if verification_kind not in {"command", "canonical_owner"}:
+    if verification_kind != "canonical_owner":
         return _result(
             status="failed",
             required=required,
             kind=f"{surface}_receipt",
-            reason=(f"{surface} receipt verification.kind must be command or canonical_owner"),
+            reason=(
+                f"{surface} receipt verification.kind must be canonical_owner; "
+                "caller-selected commands cannot authorize a strict receipt"
+            ),
+            verification_kind=verification_kind,
+        )
+    validator_id = verification.get("validator_id")
+    expected_validator_id = (
+        PRODUCER_VALIDATOR_ID if surface == "producer" else ANALYSIS_VALIDATOR_ID
+    )
+    if validator_id != expected_validator_id:
+        return _result(
+            status="failed",
+            required=required,
+            kind=f"{surface}_receipt",
+            reason=(
+                f"{surface} receipt verification.validator_id must be "
+                f"{expected_validator_id!r}; AST-only owner declarations are not validators"
+            ),
+            verification_kind=verification_kind,
+            validator_id=validator_id,
+        )
+    if set(verification) != {"kind", "validator_id"}:
+        return _result(
+            status="failed",
+            required=required,
+            kind=f"{surface}_receipt",
+            reason=(
+                f"{surface} receipt canonical_owner verification accepts only kind and "
+                "validator_id; source/symbol declarations are not receipt-aware validators"
+            ),
+            verification_kind=verification_kind,
+            validator_id=validator_id,
+        )
+    identity = spec.get("identity")
+    if not isinstance(identity, Mapping):
+        return _result(
+            status="failed",
+            required=required,
+            kind=f"{surface}_receipt",
+            reason=f"{surface} receipt identity must be a mapping",
+        )
+    validator = validate_producer_receipt if surface == "producer" else validate_analysis_receipt
+    try:
+        details = validator(
+            path,
+            manifest=manifest,
+            identity=identity,
+            repo_root=repo_root,
+        )
+    except (OSError, ReceiptValidationError, ValueError) as exc:
+        return _result(
+            status="failed",
+            required=required,
+            kind=f"{surface}_receipt",
+            reason=f"{surface} canonical receipt validation failed: {exc}",
+            verification_kind=verification_kind,
+            validator_id=validator_id,
         )
     return _result(
-        status="failed",
+        status="passed",
         required=required,
         kind=f"{surface}_receipt",
-        reason=(
-            f"{surface} receipt verification is blocked: no checked-in, receipt-aware "
-            "validator is registered; caller-selected commands and canonical_owner symbols "
-            "cannot authorize admission"
-        ),
         verification_kind=verification_kind,
+        **details,
     )
 
 
@@ -1204,6 +1264,7 @@ def _run_receipt(  # noqa: C901, PLR0912
         verification_result = _run_receipt_verification(
             surface,
             spec,
+            path=path,
             repo_root=repo_root,
             manifest=manifest,
             required=required,

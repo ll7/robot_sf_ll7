@@ -555,4 +555,29 @@ duplicate identities, underspecified dimensions, unresolved aliases, mutable pat
 Observed rows (`--observed path/to/rows.jsonl`) verify completion across 9 row states (`present`, `missing`,
 `duplicate`, `unexpected`, `conflict`, `fallback`, `degraded`, `failed`, `provenance_invalid`).
 
+## Campaign recovery and retry verification (check-only)
+
+Before resuming an interrupted campaign or resubmitting uncompleted cells, verify recovery and retry
+behavior under fail-closed contracts:
+
+```bash
+uv run python scripts/validation/verify_campaign_recovery.py \
+  --fixture path/to/campaign_recovery_packet.json \
+  --output path/to/campaign_recovery_receipt.json \
+  --format json \
+  --check
+```
+
+The verifier enforces schema `campaign_recovery_receipt.v1.schema.json` and evaluates:
+- **Preservation of valid completed identities**: completed rows are never rerun or overwritten.
+- **Fail-closed retry admission**: outcome-driven failures (collisions, task failure) cannot be retried
+  away under infrastructure labels; retries are admitted only for documented infrastructure interruptions.
+- **Authority input drift**: commit, config SHA-256, and model digest must match across attempts.
+- **Degraded/fallback protection**: fallback executions cannot become clean successes through resume.
+- **Lineage tracking**: scheduler job IDs and attempt indices are recorded across executions.
+- **Supported runners**: canonical runners (`benchmark_matrix`, `slurm_array`) are verified; unknown runners
+  report `status: "unsupported"`.
+- **Ledger reconciliation**: final reconciled rows must match the expected-row ledger 1-to-1.
+
+
 

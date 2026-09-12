@@ -690,8 +690,10 @@ def test_check_successor_discipline(mock_run: MagicMock) -> None:
     body_no_stmt = "some description"
     body_ok = "This is a successor slice; does not duplicate PR #12"
 
-    # Merge exists
-    mock_run.return_value = MagicMock(returncode=0, stdout='[{"number": 12}]')
+    # Merge exists and canonically references the issue
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout='[{"number": 12, "title": "Fix", "body": "Closes #123."}]'
+    )
 
     warnings = pr_contract_check.check_successor_discipline(title, body_no_stmt, "ll7/robot_sf_ll7")
     assert len(warnings) == 1
@@ -699,6 +701,83 @@ def test_check_successor_discipline(mock_run: MagicMock) -> None:
 
     warnings = pr_contract_check.check_successor_discipline(title, body_ok, "ll7/robot_sf_ll7")
     assert not warnings
+
+
+@patch("subprocess.run")
+def test_check_successor_discipline_requires_canonical_issue_reference(
+    mock_run: MagicMock,
+) -> None:
+    """A broad numeric search hit without a canonical reference is not a successor."""
+    title = "Issue #8818: title"
+
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout='[{"number": 3364, "title": "planner policy-builder refactor", "body": "unrelated"}]',
+    )
+
+    warnings = pr_contract_check.check_successor_discipline(
+        title, "some description", "ll7/robot_sf_ll7"
+    )
+
+    assert not warnings
+
+
+@pytest.mark.parametrize(
+    ("candidate_text", "expected"),
+    [
+        ("Closes #123.", True),
+        ("ll7/robot_sf_ll7#123", True),
+        ("https://github.com/ll7/robot_sf_ll7/issues/123", True),
+        ("issue 123 was discussed", False),
+        ("Fixes #123.5 rounding", False),
+        ("hash fragment #123abc", False),
+        ("other/repo#123", False),
+        ("cross-reference 18818", False),
+    ],
+)
+@patch("subprocess.run")
+def test_successor_discipline_reference_forms(
+    mock_run: MagicMock, candidate_text: str, expected: bool
+) -> None:
+    """Only canonical references to the specific repository issue count."""
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps([{"number": 42, "title": "candidate", "body": candidate_text}]),
+    )
+
+    warnings = pr_contract_check.check_successor_discipline(
+        "Issue #123: title", "some description", "ll7/robot_sf_ll7"
+    )
+
+    assert bool(warnings) is expected
+    if expected:
+        assert "referenced in 1 merged PR(s)" in warnings[0]
+
+
+@patch("subprocess.run")
+def test_successor_discipline_counts_only_confirmed_references(mock_run: MagicMock) -> None:
+    """The warning count reflects only canonically confirmed merged PRs."""
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            [
+                {"number": 1, "title": "Fix", "body": "Closes #123."},
+                {"number": 2, "title": "Other", "body": "plain 123 mention"},
+                {
+                    "number": 3,
+                    "title": "Again",
+                    "body": "https://github.com/ll7/robot_sf_ll7/issues/123",
+                },
+            ]
+        ),
+    )
+
+    warnings = pr_contract_check.check_successor_discipline(
+        "Issue #123: title", "some description", "ll7/robot_sf_ll7"
+    )
+
+    assert len(warnings) == 1
+    assert "referenced in 2 merged PR(s)" in warnings[0]
 
 
 @patch("scripts.ci.pr_contract_check.add_label")

@@ -1538,9 +1538,6 @@ uv run python -m scripts.dev.snapshot_issue_batch 2665 2675 --json
 uv run python -m scripts.dev.snapshot_issue_batch 2665 2675 --json \
   --capsule-dir "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
 uv run python -m scripts.dev.snapshot_issue_batch --claimable --json
-# Incomplete claimable scans exit non-zero: page/raise --limit, or pass --allow-incomplete only for
-# the literal `queue_completeness: incomplete` bounded-discovery state. Unavailable or unknown
-# authority remains non-zero; conclude zero eligible work only when `zero_work_authoritative` is true.
 uv run python -m scripts.dev.snapshot_issue_batch --blocked-external-report \
   --report-path "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/blocked-external-assets.md"
 uv run python -m scripts.dev.snapshot_issue_batch --active-portfolio \

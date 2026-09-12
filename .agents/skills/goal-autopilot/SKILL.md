@@ -389,11 +389,7 @@ Before each phase, run a delegation checkpoint:
   discovery scout.
 - Before broad issue or PR queue review, prefer compact parent-thread snapshots:
   `uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json` for a
-  no-arg candidate queue (use only its live-admitted `claimable_issues`). The command fails closed
-  (non-zero exit plus a stderr note) when `queue_completeness` is not `complete`; the
-  `--allow-incomplete` opt-out applies only to the literal `incomplete` state, never to
-  `unavailable` or unknown authority, and never concludes zero eligible work unless
-  `zero_work_authoritative` is `true`.
+  no-arg candidate queue (use only its live-admitted `claimable_issues`),
   `uv run python -m scripts.dev.snapshot_issue_batch <first> <last> --json`
   for explicit issue batches, `uv run python -m scripts.dev.snapshot_pr_queue --active --limit <n>
   --json` for the active PR queue, and `uv run python -m scripts.dev.snapshot_pr_queue --prs <pr>
@@ -507,9 +503,6 @@ uv run python -m scripts.dev.compact_ci_snapshot <pr> [<pr> ...] \
 # Compact no-arg next-issue queue and explicit issue batch snapshots
 uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json
 # The command is a candidate queue; only its live-admitted `claimable_issues` are claimable.
-# It exits non-zero while `queue_completeness` is not `complete`; use `--allow-incomplete` only
-# for the literal `queue_completeness: incomplete` bounded-discovery state. Unavailable or unknown
-# authority remains non-zero, and `zero_work_authoritative: true` is required before any zero-work claim.
 uv run python -m scripts.dev.snapshot_issue_batch <first> <last> \
   --json --capsule-dir <artifact-dir>
 

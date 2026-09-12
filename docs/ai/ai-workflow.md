@@ -28,6 +28,8 @@ Read these first when working in this workflow:
 - [docs/ai/author_trust_gate.md](author_trust_gate.md)
 - [docs/ai/label-taxonomy.md](label-taxonomy.md)
 - [docs/ai/issue_dependency_packets.md](issue_dependency_packets.md)
+- [docs/ai/open-issue-contract-audit.md](open-issue-contract-audit.md)
+- [docs/ai/open-issue-contract-preparation.md](open-issue-contract-preparation.md)
 - [docs/context/README.md](../context/README.md)
 - [docs/context/issue_713_batch_first_issue_workflow.md](../context/issue_713_batch_first_issue_workflow.md)
 - [docs/context/issue_audit_contract.md](../context/issue_audit_contract.md)

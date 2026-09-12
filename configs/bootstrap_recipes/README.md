@@ -34,12 +34,15 @@ separators, escaping directories, and protected environment overrides (`PATH`, `
 or uncertain probes propagate `host_mutation: null` to the enclosing report rather than asserting
 zero mutation; the report claims `host_mutation: false` only when all executed probes run in verified isolation.
 In executed mode (`--execute-safe-checks`), verification cannot be satisfied by skipped probes
-or absent executables: missing probe executables, unresolved required private substitutions, or zero
-executed required probes yield `status: unavailable` with explicit reason tags rather than retaining
-unproven verification. Recipes with `verification_status: unavailable` preserve their unavailable state
-during execution and never imply native availability. Declared lockfiles in `source_identity` require
-valid 64-character SHA-256 digests and verify presence, readability, and checksum matching when
-`--project-root` is supplied. Output is deterministic (recipes sorted by `recipe_id`, JSON keys sorted).
+or absent executables: missing probe executables, unresolved required private substitutions across
+any executed field (`argv`, `workdir`, and `env` keys or values), or zero executed required probes
+yield `status: unavailable` with explicit reason tags rather than retaining unproven verification.
+Unresolved or malformed placeholders fail closed before probe execution. Recipes with
+`verification_status: unavailable` preserve their unavailable state during execution and never imply
+native availability. Declared lockfiles in `source_identity` require valid 64-character SHA-256 digests,
+must resolve to regular files strictly contained within `--project-root`, and reject directory traversal
+(`..`), absolute paths, and symlinks targeting outside the project root even with matching digests.
+Output is deterministic (recipes sorted by `recipe_id`, JSON keys sorted).
 Blocking findings include credential or private-path leaks, source-host access, stale absolute paths,
 unresolved placeholders, mutable container tags without a digest, unpinned module or package aliases,
 destructive cleanup targets, unsafe safe-check definitions, and shell-string steps that hide ordering.

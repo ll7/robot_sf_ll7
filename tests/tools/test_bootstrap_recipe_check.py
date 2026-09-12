@@ -4,6 +4,7 @@ overlay, mutable tag, unavailable recipe."""
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -871,3 +872,221 @@ def test_skipped_or_uncertain_probe_propagates_null_host_mutation_to_report(
         execute_safe_checks=False,
     )
     assert report_structural["host_mutation"] is False
+
+
+def test_lockfile_rejects_traversal_absolute_and_symlink_escapes(tmp_path: Path) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    outside_root = tmp_path / "outside"
+    outside_root.mkdir()
+    outside_lock = outside_root / "target.lock"
+    content = b"pinned dependencies lockfile content\n"
+    outside_lock.write_bytes(content)
+    checksum = hashlib.sha256(content).hexdigest()
+
+    # 1. Traversal: ../outside/target.lock is rejected even with matching digest
+    recipe_traversal = _base_recipe()
+    recipe_traversal["recipe_id"] = "lock-traversal"
+    recipe_traversal["source_identity"]["lockfile"] = "../outside/target.lock"
+    recipe_traversal["source_identity"]["lockfile_sha256"] = checksum
+    report_traversal = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "case_trav", recipe_traversal),
+        project_root=project_root,
+    )
+    assert report_traversal["recipes"][0]["status"] == "invalid"
+    assert "lockfile_escape" in report_traversal["recipes"][0]["reasons"]
+    assert report_traversal["verdict"] == "fail"
+
+    # 2. Absolute path: /.../target.lock is rejected even with matching digest
+    recipe_abs = _base_recipe()
+    recipe_abs["recipe_id"] = "lock-abs"
+    recipe_abs["source_identity"]["lockfile"] = str(outside_lock)
+    recipe_abs["source_identity"]["lockfile_sha256"] = checksum
+    report_abs = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "case_abs", recipe_abs),
+        project_root=project_root,
+    )
+    assert report_abs["recipes"][0]["status"] == "invalid"
+    assert "lockfile_escape" in report_abs["recipes"][0]["reasons"]
+    assert report_abs["verdict"] == "fail"
+
+    # 3. Project-root symlink targeting outside file is rejected even with matching digest
+    escape_link = project_root / "escaped.lock"
+    escape_link.symlink_to(outside_lock)
+    recipe_symlink = _base_recipe()
+    recipe_symlink["recipe_id"] = "lock-symlink-escape"
+    recipe_symlink["source_identity"]["lockfile"] = "escaped.lock"
+    recipe_symlink["source_identity"]["lockfile_sha256"] = checksum
+    report_symlink = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "case_sym", recipe_symlink),
+        project_root=project_root,
+    )
+    assert report_symlink["recipes"][0]["status"] == "invalid"
+    assert "lockfile_escape" in report_symlink["recipes"][0]["reasons"]
+    assert report_symlink["verdict"] == "fail"
+
+    # 4. Valid in-root regular lockfile passes verification
+    valid_lock = project_root / "uv.lock"
+    valid_lock.write_bytes(content)
+    recipe_valid = _base_recipe()
+    recipe_valid["recipe_id"] = "lock-valid-in-root"
+    recipe_valid["source_identity"]["lockfile"] = "uv.lock"
+    recipe_valid["source_identity"]["lockfile_sha256"] = checksum
+    report_valid = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "case_valid", recipe_valid),
+        project_root=project_root,
+    )
+    assert report_valid["recipes"][0]["status"] == "verified"
+    assert "lockfile_escape" not in report_valid["recipes"][0]["reasons"]
+
+
+def test_safe_check_unresolved_private_placeholder_in_workdir_or_env(tmp_path: Path) -> None:
+    # 1. Unresolved private placeholder in safe-step workdir fails closed without executing
+    recipe_workdir = _base_recipe()
+    recipe_workdir["recipe_id"] = "unresolved-workdir-sub"
+    recipe_workdir["private_substitutions"] = [
+        {"placeholder": "$CUSTOM_DIR", "capability_class": "storage"}
+    ]
+    recipe_workdir["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "probe-workdir",
+            "phase": "probe",
+            "argv": ["python3", "--version"],
+            "workdir": "$RECIPE_ROOT/$CUSTOM_DIR",
+            "safe_check": True,
+        },
+    ]
+    report_workdir = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "case_workdir", recipe_workdir),
+        execute_safe_checks=True,
+        require_verified=True,
+    )
+    assert report_workdir["recipes"][0]["status"] == "unavailable"
+    assert "unresolved_required_substitution" in report_workdir["recipes"][0]["reasons"]
+    assert report_workdir["verdict"] == "fail"
+
+    # 2. Unresolved private placeholder in safe-step env fails closed without executing
+    recipe_env = _base_recipe()
+    recipe_env["recipe_id"] = "unresolved-env-sub"
+    recipe_env["private_substitutions"] = [
+        {"placeholder": "$CUSTOM_SECRET", "capability_class": "credential"}
+    ]
+    recipe_env["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "probe-env",
+            "phase": "probe",
+            "argv": ["python3", "--version"],
+            "workdir": "$RECIPE_ROOT",
+            "env": {"STEP_SECRET": "$CUSTOM_SECRET"},
+            "safe_check": True,
+        },
+    ]
+    report_env = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "case_env", recipe_env),
+        execute_safe_checks=True,
+        require_verified=True,
+    )
+    assert report_env["recipes"][0]["status"] == "unavailable"
+    assert "unresolved_required_substitution" in report_env["recipes"][0]["reasons"]
+    assert report_env["verdict"] == "fail"
+
+    # 3. Resolved private placeholders in workdir and env allow safe-checks to pass
+    overlay_path = tmp_path / "valid_overlay.json"
+    overlay_payload = {
+        "schema": "bootstrap_recipe_private_overlay.v1",
+        "placeholders": {
+            "CUSTOM_DIR": {"capability_class": "storage", "value": "subfolder"},
+            "CUSTOM_SECRET": {"capability_class": "credential", "value": "safe_val"},
+        },
+    }
+    overlay_path.write_text(json.dumps(overlay_payload), encoding="utf-8")
+    both_recipe = _base_recipe()
+    both_recipe["recipe_id"] = "resolved-both-sub"
+    both_recipe["private_substitutions"] = [
+        {"placeholder": "$CUSTOM_DIR", "capability_class": "storage", "value": "subfolder"},
+        {"placeholder": "$CUSTOM_SECRET", "capability_class": "credential", "value": "safe_val"},
+    ]
+    both_recipe["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "probe-both",
+            "phase": "probe",
+            "argv": ["python3", "--version"],
+            "workdir": "$RECIPE_ROOT/$CUSTOM_DIR",
+            "env": {"STEP_SECRET": "$CUSTOM_SECRET"},
+            "safe_check": True,
+        },
+    ]
+    report_both = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "case_both", both_recipe),
+        overlay_path=overlay_path,
+        execute_safe_checks=True,
+    )
+    assert report_both["recipes"][0]["status"] == "verified"
+    assert report_both["verdict"] == "pass"
+
+
+def test_safe_check_malformed_placeholders_in_workdir_or_env(tmp_path: Path) -> None:
+    # 1. Lowercase / malformed placeholder in workdir returns non-verified before execution
+    bad_workdir = _base_recipe()
+    bad_workdir["recipe_id"] = "bad-workdir-ph"
+    bad_workdir["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "probe-bad-workdir",
+            "phase": "probe",
+            "argv": ["python3", "--version"],
+            "workdir": "$RECIPE_ROOT/$invalid_lower",
+            "safe_check": True,
+        },
+    ]
+    report_workdir = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "bad_workdir", bad_workdir),
+        execute_safe_checks=True,
+    )
+    assert report_workdir["recipes"][0]["status"] in {"blocked", "invalid"}
+    assert report_workdir["verdict"] in {"blocked", "fail"}
+
+    # 2. Lowercase / malformed placeholder in env value returns non-verified before execution
+    bad_env = _base_recipe()
+    bad_env["recipe_id"] = "bad-env-ph"
+    bad_env["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "probe-bad-env",
+            "phase": "probe",
+            "argv": ["python3", "--version"],
+            "workdir": "$RECIPE_ROOT",
+            "env": {"STEP_VAR": "$invalid_lower"},
+            "safe_check": True,
+        },
+    ]
+    report_env = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "bad_env", bad_env),
+        execute_safe_checks=True,
+    )
+    assert report_env["recipes"][0]["status"] in {"blocked", "invalid"}
+    assert report_env["verdict"] in {"blocked", "fail"}
+
+    # 3. Invalid env key in safe check returns non-verified before execution
+    bad_env_key = _base_recipe()
+    bad_env_key["recipe_id"] = "bad-env-key"
+    bad_env_key["steps"] = [
+        {"id": "sync", "phase": "setup", "argv": ["python3", "-V"]},
+        {
+            "id": "probe-bad-key",
+            "phase": "probe",
+            "argv": ["python3", "--version"],
+            "workdir": "$RECIPE_ROOT",
+            "env": {"$INVALID_KEY": "val"},
+            "safe_check": True,
+        },
+    ]
+    report_key = check_recipes(
+        recipes_path=_write_recipe(tmp_path / "bad_key", bad_env_key),
+        execute_safe_checks=True,
+    )
+    assert report_key["recipes"][0]["status"] in {"blocked", "invalid"}
+    assert report_key["verdict"] in {"blocked", "fail"}

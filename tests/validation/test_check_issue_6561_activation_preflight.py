@@ -475,15 +475,15 @@ def test_error_result_is_structured_failed_and_not_admitted() -> None:
     assert result["registered_seed_overlap"] is None
 
 
-def test_cli_rejects_oversized_json_integer_as_structured_failure(
+def test_cli_rejects_oversized_transient_steps_as_structured_failure(
     tmp_path,
     monkeypatch,
     capsys,
 ) -> None:
-    """An integer too large for float conversion must not escape as a traceback."""
+    """An oversized transient-step integer must not escape as a traceback."""
     payload, protocol = preflight.load_preflight()
     diagnostics = _diagnostics(payload, protocol)
-    diagnostics["rows"][0]["diagnostics"]["time_to_desired_speed_target_seconds"] = 10**1000
+    diagnostics["rows"][0]["diagnostics"]["acceleration_transient_steps"] = 10**1000
     diagnostics_path = tmp_path / "oversized.json"
     diagnostics_path.write_text(json.dumps(diagnostics), encoding="utf-8")
     monkeypatch.setattr(
@@ -501,5 +501,9 @@ def test_cli_rejects_oversized_json_integer_as_structured_failure(
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "failed"
     assert result["reason_code"] == "invalid_diagnostics_contract"
+    assert result["admission_status"] == "not_admitted"
+    assert result["benchmark_success"] is False
+    assert result["canonical_native_diagnostics_owner"] == "unavailable"
+    assert result["canonical_native_diagnostics_status"] == "blocked"
     assert result["registered_seed_overlap"] is None
-    assert "must be a finite number" in result["reason"]
+    assert "int too large to convert to float" in result["reason"]

@@ -1272,7 +1272,7 @@ def main() -> int:
         summary = {key: value for key, value in manifest.items() if key != "identities"}
         _emit(summary, args.format)
         return 0
-    except (OSError, ValueError) as exc:
+    except (OSError, OverflowError, ValueError) as exc:
         _emit(_error_result(exc), args.format)
         return 2
 

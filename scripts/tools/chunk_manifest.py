@@ -97,8 +97,12 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
+    try:
         os.replace(temporary, path)
-    except BaseException:
+    except OSError:
         temporary.unlink(missing_ok=True)
         raise
     try:

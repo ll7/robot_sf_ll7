@@ -870,13 +870,21 @@ def _lock_anchor(tmp_path: Path, repo: Path) -> Path:
 
 
 def _stop_process_group(process: subprocess.Popen[str], signum: signal.Signals) -> None:
-    """Terminate a controlled readiness process and any lane child it owns."""
+    """Terminate a controlled readiness process and any lane child it owns.
+
+    The process group is signaled even after the direct child exits: a lane
+    descendant can outlive it while keeping the inherited pipes open, which
+    otherwise stalls xdist teardown (issue #9144).
+    """
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signum)
+            return
+        except ProcessLookupError:
+            pass
     if process.poll() is None:
         try:
-            if os.name == "posix":
-                os.killpg(process.pid, signum)
-            else:
-                process.send_signal(signum)
+            process.send_signal(signum)
         except ProcessLookupError:
             pass
 
@@ -2371,3 +2379,36 @@ def test_pr_ready_check_regression_shapes_classification(preflight_repo: Path) -
         "core --lane core",
         "optional --lane optional",
     ]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group assertion is POSIX-specific")
+def test_stop_process_group_kills_descendants_after_parent_exit(tmp_path: Path) -> None:
+    """A lane descendant cannot outlive its exited parent and hold xdist pipes."""
+    marker = tmp_path / "descendant.pid"
+    process = subprocess.Popen(
+        ["bash", "-c", 'sleep 60 & echo $! > "$1"; exit 0', "_", str(marker)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        process.wait(timeout=10)
+        assert process.poll() is not None
+        deadline = time.monotonic() + 10
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        descendant = int(marker.read_text(encoding="utf-8").strip())
+        _stop_process_group(process, signal.SIGKILL)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                os.kill(descendant, 0)
+            except ProcessLookupError:
+                return
+            time.sleep(0.05)
+        pytest.fail("lane descendant survived the process-group kill")
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.communicate()

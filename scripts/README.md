@@ -89,7 +89,7 @@ compatibility entry has neither replacement nor rationale.
 | `run_classic_interactions.py` | canonical | Classic interaction scenario matrix runner. |
 | `run_social_navigation_benchmark.py` | compatibility | Older all-in-one social navigation benchmark runner. Prefer config-driven tools like classic_benchmark_full.py. |
 | `save-codex-token-checkpoint.py` | canonical | Build a compact token-saving checkpoint without duplicating route policy. |
-| `scale_svgs_to_50m.py` | debug-only | One-off SVG coordinate scaling utility. |
+| `scale_svgs_to_50m.py` | debug-only | One-off SVG coordinate scaling utility; requires explicit input paths (`--dry-run`/`--output-dir` available). |
 | `seed_variance.py` | canonical | SNQI seed-variance analysis across benchmark episodes. |
 | `select_exemplar_episodes.py` | canonical | Select median/best/worst exemplar episodes from campaign JSONL into a manifest. |
 | `snqi_sensitivity_analysis.py` | canonical | Full SNQI sensitivity analysis with visualizations. |

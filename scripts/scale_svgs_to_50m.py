@@ -1,10 +1,14 @@
-"""
-Scale SVG scenario files to have dimensions < 50m.
-Converts 400x400 viewBox to 40x40 and scales all coordinates accordingly.
+"""Scale SVG scenario files to have dimensions < 50m.
+
+Converts a 400x400 viewBox to 40x40 and scales all coordinates accordingly.
+Every input path is explicit: a bare invocation fails instead of rewriting the
+tracked maps that originally motivated this one-off utility.
 """
 
+import argparse
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from pathlib import Path
 
 
@@ -95,18 +99,60 @@ def scale_svg_file(input_path: str, output_path: str, scale_factor: float = 0.1)
         f.write(content)
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI. Inputs are always explicit; a bare run never rewrites tracked maps."""
+    parser = argparse.ArgumentParser(
+        prog="scale_svgs_to_50m",
+        description=(
+            "Scale SVG scenario files below 50 m (400x400 viewBox to 40x40). "
+            "Every input path must be named explicitly."
+        ),
+    )
+    parser.add_argument("inputs", type=Path, nargs="+", help="SVG files to scale.")
+    parser.add_argument(
+        "--scale-factor",
+        type=float,
+        default=0.1,
+        help="Multiplier applied to coordinates and the viewBox (default: 0.1).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Write scaled copies here instead of overwriting each input in place.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report the planned writes without touching any file.",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Scale the explicitly named SVGs and return the process exit code."""
+    args = _build_parser().parse_args(argv)
+    if not args.scale_factor:
+        raise SystemExit("--scale-factor must be non-zero")
+    if args.output_dir is not None:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for input_path in args.inputs:
+        if not input_path.is_file():
+            raise SystemExit(f"input is not a file: {input_path}")
+        target = input_path if args.output_dir is None else args.output_dir / input_path.name
+        if args.dry_run:
+            print(f"would scale {input_path} -> {target}")
+            continue
+        scale_svg_file(str(input_path), str(target), scale_factor=args.scale_factor)
+        written.append(target)
+        print(f"scaled {input_path} -> {target}")
+    if args.dry_run:
+        print(f"dry run: {len(args.inputs)} input(s) unchanged")
+    else:
+        print(f"scaled {len(written)} file(s)")
+    return 0
+
+
 if __name__ == "__main__":
-    files = [
-        "maps/svg_maps/static_humans.svg",
-        "maps/svg_maps/overtaking.svg",
-        "maps/svg_maps/crossing.svg",
-        "maps/svg_maps/door_passing.svg",
-    ]
-
-    for filepath in files:
-        print(f"Scaling {filepath}...")
-        scale_svg_file(filepath, filepath, scale_factor=0.1)
-        print("  ✓ Scaled to < 50m dimensions")
-
-    print("\nAll scenarios scaled successfully!")
-    print("Dimensions are now 40m × 40m (< 50m requirement met)")
+    raise SystemExit(main())

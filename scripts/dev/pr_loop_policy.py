@@ -993,20 +993,8 @@ def _projected_gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str | N
     return status
 
 
-def current_gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
-    """Return the deterministic current-head gate verdict status.
-
-    The result is ``accepted``, ``hold``, ``missing``, ``malformed``, or
-    ``ambiguous``. Only trusted carriers whose SHA and optional review commit
-    bind to the live head participate. A current verdict is admitted only when
-    one uniquely latest event can be proven from publication timestamps,
-    same-entry text order, or timestamp-free order within one collection.
-    """
-    if not isinstance(pr, dict) or not head_sha:
-        return "missing"
-    projected = _projected_gate_verdict_status(pr, head_sha)
-    if projected is not None:
-        return projected
+def _recompute_gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
+    """Recompute the exact-head gate verdict status from trusted carrier bodies and fields."""
     events = _gate_verdict_events(pr)
     if any(not event.valid for event in events):
         return "malformed"
@@ -1034,6 +1022,44 @@ def current_gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
     ]
     verdicts = {event.verdict for event in latest}
     return next(iter(verdicts)) if len(verdicts) == 1 else "ambiguous"
+
+
+def current_gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
+    """Return the deterministic current-head gate verdict status.
+
+    The result is ``accepted``, ``hold``, ``missing``, ``malformed``, or
+    ``ambiguous``. Only trusted carriers whose SHA and optional review commit
+    bind to the live head participate. A current verdict is admitted only when
+    one uniquely latest event can be proven from publication timestamps,
+    same-entry text order, or timestamp-free order within one collection.
+
+    The verdict is always recomputed from trusted carrier bodies and fields.
+    Projection fields provide head-bound diagnostic and routing context, but
+    never manufacture admission authority. If projection fields are present,
+    forged or mismatched projections cannot admit a head, and trusted carrier
+    evidence always governs.
+    """
+    if not isinstance(pr, dict) or not head_sha:
+        return "missing"
+
+    recomputed = _recompute_gate_verdict_status(pr, head_sha)
+    projected = _projected_gate_verdict_status(pr, head_sha)
+    if projected is None:
+        return recomputed
+
+    if recomputed == "hold" or projected == "hold":
+        return "hold"
+    if recomputed == "malformed" or projected == "malformed":
+        return "malformed"
+    if recomputed == "ambiguous":
+        return "ambiguous"
+    if recomputed == "missing":
+        return "missing"
+
+    # recomputed == "accepted"
+    if projected == "accepted":
+        return "accepted"
+    return "malformed"
 
 
 def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool:

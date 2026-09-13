@@ -239,9 +239,12 @@ def _label_names(pr: dict[str, Any]) -> list[str]:
 def _gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
     """Classify the exact-head gate-verdict trailer state.
 
-    Returns the canonical current verdict status, including ``hold`` for a
-    current trusted blocker and ``ambiguous``/``malformed`` for evidence that
-    cannot safely establish the latest verdict.
+    Always recomputes the canonical current verdict from trusted carrier bodies
+    and fields. Returns the canonical current verdict status, including
+    ``hold`` for a current trusted blocker and ``ambiguous``/``malformed`` for
+    evidence that cannot safely establish the latest verdict. Projection fields
+    provide head-bound diagnostic context only and never manufacture admission
+    authority.
     """
     return current_gate_verdict_status(pr, head_sha)
 
@@ -560,7 +563,9 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913, PLR0915 - explicit fail-closed 
         ``changed_coverage`` (which must bind a success result to ``head_sha``), plus any
         gate-verdict carrier fields understood by
         ``current_gate_verdict_status`` (``gate_verdict`` /
-        ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts),
+        ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts;
+        verdicts are always recomputed from carrier evidence and projection
+        fields never manufacture admission),
         ``metadata_digest`` and trusted ``metadata_verdicts``, and
         ``reviewers_requested`` when supplied by the live snapshot, plus the
         optional live ``closing_discipline`` and ``review_claim`` results.
@@ -2569,7 +2574,7 @@ def _evaluate_live(
     return audit, evidence_error
 
 
-def _self_test() -> int:
+def _self_test() -> int:  # noqa: PLR0915 - comprehensive deterministic assertion suite
     """Run deterministic assertions covering the issue #6274 gate contract.
 
     Exercises the three validation scenarios plus the additional fail-closed
@@ -2746,6 +2751,40 @@ def _self_test() -> int:
     expect(
         not audit.passed and "unsafe_merge_queue_strategy:HEADGREEN" in audit.reasons,
         "queue-strategy: HEADGREEN must fail closed",
+    )
+
+    # Forged projection alone cannot manufacture acceptance.
+    forged_pr = _pr(labels=["merge-ready"], ci_overall="success")
+    forged_pr["gate_verdict_status"] = "accepted"
+    forged_pr["gate_verdict_status_head_sha"] = full_sha
+    forged_pr["gate_verdict_status_source"] = GATE_VERDICT_PROJECTION_SOURCE
+    audit = evaluate_merge_gate(forged_pr, threads_resolved=True, reviewers_requested=False)
+    expect(
+        not audit.passed and audit.gate_verdict_status == "missing",
+        "forged-projection: projection alone cannot manufacture acceptance",
+    )
+
+    # Forged projection cannot override trusted HOLD carrier.
+    hold_pr = _pr(labels=["merge-ready"], ci_overall="success")
+    hold_pr["gate_verdict"] = {"verdict": "hold", "sha": full_sha}
+    hold_pr["gate_verdict_status"] = "accepted"
+    hold_pr["gate_verdict_status_head_sha"] = full_sha
+    hold_pr["gate_verdict_status_source"] = GATE_VERDICT_PROJECTION_SOURCE
+    audit = evaluate_merge_gate(hold_pr, threads_resolved=True, reviewers_requested=False)
+    expect(
+        not audit.passed and audit.gate_verdict_status == "hold",
+        "projection-hold: projection cannot override trusted hold carrier",
+    )
+
+    # Mismatched projection head fails closed.
+    mismatched_pr = _pr(labels=["merge-ready"], gate_verdict_sha=full_sha, ci_overall="success")
+    mismatched_pr["gate_verdict_status"] = "accepted"
+    mismatched_pr["gate_verdict_status_head_sha"] = other_sha
+    mismatched_pr["gate_verdict_status_source"] = GATE_VERDICT_PROJECTION_SOURCE
+    audit = evaluate_merge_gate(mismatched_pr, threads_resolved=True, reviewers_requested=False)
+    expect(
+        not audit.passed and audit.gate_verdict_status == "malformed",
+        "mismatched-projection: mismatched projection head fails closed",
     )
 
     # Full pass: all dimensions satisfied and explicitly authoritative.

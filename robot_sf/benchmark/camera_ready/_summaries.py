@@ -47,7 +47,7 @@ def _validate_archetype_tag(value: str, *, source: str = "archetype") -> str:
         Stripped archetype tag, or ``""`` when the value is empty.
     """
     if not isinstance(value, str):
-        raise TypeError(f"{source} must be a string, got {type(value).__name__}")
+        raise ValueError(f"{source} must be a string, got {type(value).__name__}")
 
     normalized = value.strip()
     if not normalized:
@@ -297,10 +297,13 @@ def _extract_archetype(scenario: dict[str, Any]) -> str:
         str: Stripped archetype tag, or ``""`` when the scenario declares none.
     """
     for container in (scenario.get("metadata"), scenario):
-        if isinstance(container, dict):
-            value = container.get("archetype")
-            if isinstance(value, str) and value.strip():
-                return _validate_archetype_tag(value, source="scenario archetype")
+        if isinstance(container, dict) and "archetype" in container:
+            value = container["archetype"]
+            if value is None:
+                continue
+            normalized = _validate_archetype_tag(value, source="scenario archetype")
+            if normalized:
+                return normalized
     return ""
 
 

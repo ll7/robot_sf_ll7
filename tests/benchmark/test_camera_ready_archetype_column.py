@@ -40,6 +40,29 @@ def test_extract_archetype_prefers_metadata_and_strips() -> None:
     assert _extract_archetype({}) == ""
 
 
+@pytest.mark.parametrize("invalid", [42, ["crossing"], {"tag": "crossing"}])
+def test_extract_archetype_rejects_non_string_metadata_before_flat_fallback(
+    invalid: object,
+) -> None:
+    """Malformed nested declarations must not be hidden by a valid flat fallback."""
+    with pytest.raises(ValueError) as exc_info:
+        _extract_archetype({"metadata": {"archetype": invalid}, "archetype": "crossing"})
+
+    assert str(exc_info.value) == (
+        f"scenario archetype must be a string, got {type(invalid).__name__}"
+    )
+
+
+@pytest.mark.parametrize("nested", [None, "", "  "])
+def test_extract_archetype_keeps_absent_nested_values_on_flat_fallback(
+    nested: object,
+) -> None:
+    """Null and untagged nested values retain the existing flat-fallback behavior."""
+    assert _extract_archetype({"metadata": {"archetype": nested}, "archetype": "crossing"}) == (
+        "crossing"
+    )
+
+
 @pytest.mark.parametrize("tag", ["crossing;legacy", "Crossing", "crossing legacy"])
 def test_extract_archetype_rejects_ambiguous_or_noncanonical_tags(tag: str) -> None:
     with pytest.raises(ValueError, match="archetype"):

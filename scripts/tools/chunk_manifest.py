@@ -405,9 +405,17 @@ def _validate_state_payload(
     chunking = payload.get("chunking")
     if not isinstance(chunking, Mapping) or chunking.get("algorithm") != ALGORITHM:
         raise ChunkManifestError("state_invalid", "state chunking is malformed")
-    if int(chunking.get("chunk_size_bytes", 0)) != int(chunk_size_bytes):
+    stored_chunk_size = chunking.get("chunk_size_bytes")
+    if not _is_int(stored_chunk_size, minimum=1):
+        raise ChunkManifestError("state_invalid", "state chunk size must be a positive integer")
+    if stored_chunk_size != int(chunk_size_bytes):
         raise ChunkManifestError("state_policy_mismatch", "state chunk size differs")
-    if int(chunking.get("full_digest_threshold_bytes", -1)) != int(full_digest_threshold_bytes):
+    stored_threshold = chunking.get("full_digest_threshold_bytes")
+    if not _is_int(stored_threshold, minimum=0):
+        raise ChunkManifestError(
+            "state_invalid", "state full digest threshold must be a non-negative integer"
+        )
+    if stored_threshold != int(full_digest_threshold_bytes):
         raise ChunkManifestError("state_policy_mismatch", "state digest threshold differs")
     if payload.get("root_identity") != root_identity:
         raise ChunkManifestError("state_root_mismatch", "state belongs to another root")

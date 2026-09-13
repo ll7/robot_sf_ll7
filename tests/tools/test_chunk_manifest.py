@@ -405,6 +405,60 @@ def test_resume_state_fails_closed_when_untrusted(tmp_path: Path) -> None:
     assert policy.value.code == "state_policy_mismatch"
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        (field, value)
+        for field in ("chunk_size_bytes", "full_digest_threshold_bytes")
+        for value in (True, float("nan"), float("inf"), -1, "not-an-int")
+    ],
+)
+def test_invalid_state_geometry_returns_state_invalid_receipt(
+    tmp_path: Path, capsys, field: str, value
+) -> None:
+    """Malformed persisted geometry returns the documented fail-closed receipt."""
+    root = tmp_path / "root"
+    root.mkdir()
+    state_path = tmp_path / "state.json"
+    output_path = tmp_path / "manifest.json"
+    chunking = {
+        "algorithm": cm.ALGORITHM,
+        "chunk_size_bytes": 1024,
+        "full_digest_threshold_bytes": 1024,
+    }
+    chunking[field] = value
+    state_path.write_text(
+        json.dumps(
+            {
+                "schema_version": cm.STATE_SCHEMA_VERSION,
+                "root_identity": cm._default_root_identity(root),
+                "chunking": chunking,
+                "files": [],
+                "state_id": "not-reached",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = cm.main(
+        [
+            "resume",
+            "--root",
+            str(root),
+            "--output",
+            str(output_path),
+            "--state",
+            str(state_path),
+            "--chunk-size",
+            "1024",
+            "--json",
+        ]
+    )
+
+    assert result == cm.EXIT_FAILED
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == "state_invalid"
+
+
 def test_resume_state_root_mismatch_fails_closed(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()

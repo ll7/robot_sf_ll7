@@ -23,6 +23,7 @@ from robot_sf.training.orca_residual_lineage_packet import (
 from scripts.validation.preflight_evidence_contract import (
     _CONTRACT_REGISTRY,
     _evaluate,
+    derive_claim_identity,
     main,
 )
 
@@ -43,11 +44,96 @@ def test_representative_row_passes_contract() -> None:
         assert report["evidence"].get(field) is not None
 
 
+def test_unbound_claim_identity_cannot_be_added_by_caller() -> None:
+    """Caller text cannot turn an unbound representative row into claim evidence."""
+    identity = {
+        "campaign_id": "campaign_fixture",
+        "question": "Which contract is checked?",
+        "estimand": "Required evidence fields",
+    }
+
+    report = _evaluate(
+        _CONTRACT_REGISTRY["orca_residual_smoke"],
+        _representative_row(),
+        claim_identity=identity,
+    )
+
+    assert report["conforms"] is False
+    assert "not bound to canonical evidence" in report["claim_identity_error"]
+    assert "claim_identity" not in report
+
+
+def test_claim_identity_is_derived_from_canonical_row() -> None:
+    """A matching identity is accepted only when the evidence row carries it."""
+    identity = {
+        "campaign_id": "campaign_fixture",
+        "question": "Which contract is checked?",
+        "estimand": "Required evidence fields",
+    }
+    row = _representative_row()
+    row["claim_identity"] = identity
+
+    assert derive_claim_identity(row) == identity
+    report = _evaluate(
+        _CONTRACT_REGISTRY["orca_residual_smoke"],
+        row,
+        claim_identity=identity,
+    )
+
+    assert report["conforms"] is True
+    assert report["claim_identity"] == identity
+
+
+def test_mismatched_claim_identity_is_rejected() -> None:
+    """A canonical row cannot be attributed to a different caller identity."""
+    row = _representative_row()
+    row["claim_identity"] = {
+        "campaign_id": "canonical_campaign",
+        "question": "Canonical question",
+        "estimand": "Canonical estimand",
+    }
+
+    report = _evaluate(
+        _CONTRACT_REGISTRY["orca_residual_smoke"],
+        row,
+        claim_identity={
+            "campaign_id": "forged_campaign",
+            "question": "Unrelated question",
+            "estimand": "Unrelated estimand",
+        },
+    )
+
+    assert report["conforms"] is False
+    assert "does not match the canonical evidence row" in report["claim_identity_error"]
+
+
 def test_cli_exit_zero_on_pass(capsys) -> None:
     """The CLI exits 0 (safe to submit) on the default representative row."""
     exit_code = main(["orca_residual_smoke"])
     assert exit_code == 0
     assert "PASS" in capsys.readouterr().out
+
+
+def test_cli_rejects_forged_claim_identity(capsys) -> None:
+    """The public checker fails closed when CLI identity has no canonical row binding."""
+    exit_code = main(
+        [
+            "orca_residual_smoke",
+            "--json",
+            "--campaign-id",
+            "forged_campaign",
+            "--question",
+            "Unrelated question",
+            "--estimand",
+            "Unrelated estimand",
+        ]
+    )
+
+    assert exit_code == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["conforms"] is False
+    assert "claim_identity" not in report
+    assert "not bound to canonical evidence" in report["claim_identity_error"]
 
 
 def test_row_missing_signal_fails_closed(tmp_path) -> None:

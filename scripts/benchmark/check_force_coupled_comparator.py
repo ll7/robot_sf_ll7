@@ -120,10 +120,14 @@ def main(argv: list[str] | None = None) -> int:
         Exit code: 0 on success, non-zero on failure.
     """
     args = parse_args(argv)
-    receipt = run_force_coupled_comparator(
-        config_path=args.config if args.config.exists() else None,
-        repo_root=args.repo_root,
-    )
+    try:
+        receipt = run_force_coupled_comparator(
+            config_path=args.config if args.config.exists() else None,
+            repo_root=args.repo_root,
+        )
+    except ValueError as exc:
+        print(f"FAIL: force-coupled comparator could not produce a receipt: {exc}", file=sys.stderr)
+        return 1
 
     text = json.dumps(receipt, indent=2, sort_keys=True)
     if args.output:

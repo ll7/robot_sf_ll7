@@ -810,6 +810,8 @@ def run_force_coupled_comparator(
 
     scenarios = get_canonical_comparison_scenarios()
     planners = build_planner_registry(planner_cfg)
+    if not planners:
+        raise ValueError("force-coupled comparator planner registry must not be empty")
 
     all_results: list[ComparatorRunResult] = []
     for scenario in scenarios:

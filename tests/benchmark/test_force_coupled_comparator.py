@@ -648,6 +648,16 @@ def test_comparator_receipt_schema_rejects_root_ok_without_results() -> None:
         )
 
 
+def test_comparator_rejects_empty_planner_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty planner registry is rejected before an invalid receipt can be returned."""
+    monkeypatch.setattr(comparator, "build_planner_registry", lambda _config: {})
+
+    with pytest.raises(ValueError, match="planner registry must not be empty"):
+        run_force_coupled_comparator()
+
+
 def test_comparator_receipt_schema_rejects_root_ok_with_legacy_simulator_reason() -> None:
     """Legacy simulator reason text cannot hide under root status ``ok``."""
     receipt = run_force_coupled_comparator()
@@ -729,6 +739,23 @@ def test_cli_smoke_rejects_root_ok_with_generic_error_row(
     captured = capsys.readouterr()
     assert "error rows under root status=ok" in captured.err
     assert "PASS" not in captured.out
+
+
+def test_cli_rejects_empty_registry_without_printing_invalid_receipt(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Normal CLI mode fails closed when receipt production rejects an empty registry."""
+
+    def raise_empty_registry(**_: object) -> dict[str, object]:
+        raise ValueError("force-coupled comparator planner registry must not be empty")
+
+    monkeypatch.setattr(checker, "run_force_coupled_comparator", raise_empty_registry)
+
+    assert checker.main([]) == 1
+    captured = capsys.readouterr()
+    assert "could not produce a receipt" in captured.err
+    assert "planner registry must not be empty" in captured.err
+    assert captured.out == ""
 
 
 @pytest.mark.parametrize(

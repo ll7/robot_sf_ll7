@@ -10,13 +10,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from scripts.tools.check_prune_eligibility import APPROVED_DURABLE
+from scripts.tools.check_prune_eligibility import APPROVED_DURABLE, MUTABLE_SUFFIXES
 from scripts.tools.chunk_manifest import ChunkManifestError, normalize_relative_path
 
 INPUT_SCHEMA = "log_retention_manifest.v1"
@@ -68,6 +69,26 @@ TOPOLOGY_RE = re.compile(
 HOST_RE = re.compile(
     r"(?i)\b(?:[a-z0-9-]+\.)+(?:internal|local|cluster|example\.com)\b|\b(?:node|login|gpu|cn|host)[-_]?\d+\b"
 )
+STRUCTURED_KEY_COLON_RE = re.compile(r"""["'][^"'\n]*["']\s*:""")
+STRUCTURED_ESCAPED_KEY_RE = re.compile(r"""["'][^"'\n]*\\[^"'\n]*["']\s*:""")
+IDENTITY_KEY_TOKENS = frozenset({"user", "username", "account"})
+SECRET_KEY_TOKENS = frozenset(
+    {
+        "password",
+        "passwd",
+        "token",
+        "secret",
+        "authorization",
+        "bearer",
+        "apikey",
+        "api_key",
+        "privatekey",
+        "private_key",
+    }
+)
+KEY_SEPARATOR_RE = re.compile(r"[._\-/:\s]+")
+CONSUMER_REVIEW_STATES = frozenset("reviewed accepted consumed verified".split())
+CONTAINMENT_MODEL = "static_single_writer"
 
 
 def _problem(code: str, location: str, message: str = "") -> dict[str, str]:
@@ -203,8 +224,14 @@ def _scan_file(path: Path, encoding: str | None) -> dict[str, Any]:
     last_byte: int | None = None
     binary = False
     raw = bytearray()
+    descriptor: int | None = None
     try:
-        with path.open("rb") as handle:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
+        return {"error": "source_unreadable", "message": str(exc)}
+    try:
+        with os.fdopen(descriptor, "rb") as handle:
+            descriptor = None
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
                 size += len(chunk)
@@ -215,6 +242,9 @@ def _scan_file(path: Path, encoding: str | None) -> dict[str, Any]:
                     raw.extend(chunk[: max(0, MAX_INSPECT_BYTES - len(raw))])
     except OSError as exc:
         return {"error": "source_unreadable", "message": str(exc)}
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
     if size and last_byte != 10:
         lines += 1
     text = None
@@ -287,7 +317,117 @@ def _sanitize_structured_identity(  # noqa: C901, PLR0912 - fail-closed parser b
     return "".join(rendered)
 
 
+def _span_end(value: str, start: int) -> int | None:
+    """Return the index after a balanced brace/bracket span, or ``None`` when unbalanced."""
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index in range(start, len(value)):
+        current = value[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif current == "\\":
+                escaped = True
+            elif current == quote:
+                quote = None
+            continue
+        if current in "\"'":
+            quote = current
+        elif current in "{[":
+            depth += 1
+        elif current in "}]":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return None
+
+
+def _structured_segments(value: str) -> list[tuple[int, int]]:
+    """Return balanced brace/bracket spans that look like structured values.
+
+    A span qualifies when it contains a quoted key followed by a colon. Balanced
+    spans are preferred; an unbalanced opening that still looks structured is
+    returned whole so the proof can fail closed on it.
+    """
+    segments: list[tuple[int, int]] = []
+    cursor = 0
+    while cursor < len(value):
+        if value[cursor] not in "{[":
+            cursor += 1
+            continue
+        end = _span_end(value, cursor)
+        span = value[cursor : end if end is not None else len(value)]
+        if STRUCTURED_KEY_COLON_RE.search(span):
+            segments.append((cursor, end if end is not None else len(value)))
+        if end is None:
+            break
+        cursor = end
+    return segments
+
+
+def _key_tokens(key: str) -> tuple[tuple[str, ...], str]:
+    """Return normalized key tokens and the separator-free key form."""
+    normalized = key.strip().lower()
+    tokens = tuple(token for token in KEY_SEPARATOR_RE.split(normalized) if token)
+    return tokens, "".join(tokens)
+
+
+def _structured_findings(value: Any, depth: int = 0) -> frozenset[str]:
+    """Classify a parsed structured value without assuming a key shape."""
+    if depth > 8:
+        return frozenset({"oversize"})
+    findings: set[str] = set()
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                findings.add("oversize")
+                continue
+            tokens, joined = _key_tokens(key)
+            identity = any(token in IDENTITY_KEY_TOKENS for token in tokens)
+            secret = (
+                any(token in SECRET_KEY_TOKENS for token in tokens) or joined in SECRET_KEY_TOKENS
+            )
+            if len(tokens) > 1 and (identity or secret):
+                findings.add("composite")
+            if identity:
+                findings.add("identity")
+            if secret:
+                findings.add("secret")
+            findings |= _structured_findings(item, depth + 1)
+    elif isinstance(value, list):
+        for item in value:
+            findings |= _structured_findings(item, depth + 1)
+    return frozenset(findings)
+
+
+def _prove_structured_values(value: str) -> None:
+    """Raise ``ValueError`` unless every structured-looking span is provably clean.
+
+    A span is admitted only when it parses and no nested, composite, or escaped
+    key can hide identity or secret material. Unparsable, escaped, composite,
+    secret-bearing, or oversized spans fail closed so the excerpt is suppressed
+    instead of emitting a partially understood value.
+    """
+    for start, end in _structured_segments(value):
+        segment = value[start:end]
+        if STRUCTURED_ESCAPED_KEY_RE.search(segment):
+            raise ValueError("structured key escape is unsupported")
+        try:
+            parsed = json.loads(segment)
+        except ValueError as exc:
+            raise ValueError("structured value is unparsable") from exc
+        findings = _structured_findings(parsed)
+        if "oversize" in findings:
+            raise ValueError("structured value is too deep")
+        if "composite" in findings:
+            raise ValueError("composite structured key is unsupported")
+        if "secret" in findings:
+            raise ValueError("structured secret is unsupported")
+
+
 def _sanitize(value: str) -> str:
+    _prove_structured_values(value)
     value = URL_RE.sub("<redacted-url>", value)
     value = SECRET_ASSIGN_RE.sub(lambda match: f"{match.group(1)}=<redacted-secret>", value)
     value = STRUCTURED_SECRET_RE.sub(r"\1<redacted-secret>", value)
@@ -339,8 +479,48 @@ def _excerpt(text: str, policy: Mapping[str, Any]) -> dict[str, Any]:
     return {"ranges": ranges, "text": _bounded("\n".join(rendered), policy["max_bytes"])}
 
 
+def _custody_bindings(
+    raw: Mapping[str, Any], job_id: str | None, problems: list[dict[str, str]]
+) -> bool:
+    """Verify custody identity, immutable destination, and consumer bindings."""
+    bound = True
+    custody_job_id = _safe_id(raw.get("job_id", raw.get("manifest_id")))
+    if custody_job_id is None:
+        problems.append(_problem("custody_identity_missing", "custody.job_id"))
+        bound = False
+    elif job_id is not None and custody_job_id != job_id:
+        problems.append(_problem("custody_identity_mismatch", "custody.job_id"))
+        bound = False
+    destination = raw.get("destination")
+    locator: Any = None
+    if isinstance(destination, Mapping):
+        locator = destination.get("locator", destination.get("destination_locator"))
+    if locator is None:
+        locator = raw.get("destination_locator", raw.get("locator"))
+    if not isinstance(locator, str) or not locator.strip():
+        problems.append(_problem("durable_destination_missing", "custody.destination"))
+        bound = False
+    elif any(locator.strip().endswith(suffix) for suffix in MUTABLE_SUFFIXES):
+        problems.append(_problem("mutable_destination_rejected", "custody.destination.locator"))
+        bound = False
+    consumer = raw.get("consumer")
+    if isinstance(consumer, Mapping):
+        consumer_id = _safe_id(consumer.get("identity", consumer.get("consumer_id")))
+        review_state = _member(consumer.get("review_state"), CONSUMER_REVIEW_STATES)
+    else:
+        consumer_id = _safe_id(raw.get("consumer_identity"))
+        review_state = _member(raw.get("consumer_review_state"), CONSUMER_REVIEW_STATES)
+    if consumer_id is None or review_state is None:
+        problems.append(_problem("custody_consumer_missing", "custody.consumer"))
+        bound = False
+    return bound
+
+
 def _custody(  # noqa: C901, PLR0912
-    raw: Any, entries: list[dict[str, Any]], problems: list[dict[str, str]]
+    raw: Any,
+    entries: list[dict[str, Any]],
+    problems: list[dict[str, str]],
+    job_id: str | None,
 ) -> bool:
     if not isinstance(raw, Mapping):
         problems.append(_problem("durable_custody_missing", "custody"))
@@ -353,6 +533,8 @@ def _custody(  # noqa: C901, PLR0912
         or raw.get("durability_class") not in APPROVED_DURABLE
     ):
         problems.append(_problem("durable_custody_unapproved", "custody.durability_class"))
+        verified = False
+    if not _custody_bindings(raw, job_id, problems):
         verified = False
     for name, aliases in (
         ("independent_verification", ("independent_verification",)),
@@ -406,6 +588,11 @@ def _custody(  # noqa: C901, PLR0912
             "size_bytes"
         ):
             problems.append(_problem("custody_mismatch", location))
+            verified = False
+    declared = {entry["path"] for entry in entries if entry["path"]}
+    for path in sorted(by_path):
+        if path not in declared:
+            problems.append(_problem("custody_member_undeclared", f"custody.files[{path}]"))
             verified = False
     return verified
 
@@ -610,7 +797,7 @@ def build_report(  # noqa: C901, PLR0912, PLR0915
                     entry["reasons"].append("excerpt_unavailable")
         entries.append(entry)
 
-    custody_ok = _custody(manifest.get("custody"), entries, problems)
+    custody_ok = _custody(manifest.get("custody"), entries, problems, job_id)
     full_hold = state in {"failed", "unknown"} and (not custody_ok or diagnosis != "complete")
     global_blocked = bool(problems)
     for entry in entries:
@@ -651,6 +838,16 @@ def build_report(  # noqa: C901, PLR0912, PLR0915
         "status": "blocked" if problems else "eligible",
         "check_only": True,
         "claim_boundary": CLAIM_BOUNDARY,
+        "containment": {
+            "model": CONTAINMENT_MODEL,
+            "atomic": False,
+            "message": (
+                "Source containment is verified at check time with symlink-free final "
+                "components; concurrent mutation of parent directories is outside the "
+                "static single-writer threat model documented in "
+                "docs/context/artifact_retention_and_cleanup.md."
+            ),
+        },
         "job": {"job_id": job_id, "state": state, "diagnosis": diagnosis},
         "policy": policy,
         "custody": {

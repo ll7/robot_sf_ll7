@@ -40,7 +40,11 @@ def _case(
     manifest["job"].update(state="completed", diagnosis="not_required")
     manifest["logs"].append(entry)
     manifest["custody"] = json.loads(
-        '{"status":"verified","durability_class":"cloud_durable","independent_verification":true,"transfer_verification":true,"consumer_review":true,"files":[{"relative_path":"task-0.log","state":"verified"}]}'
+        '{"status":"verified","durability_class":"cloud_durable","job_id":"job-1",'
+        '"independent_verification":true,"transfer_verification":true,"consumer_review":true,'
+        '"destination":{"locator":"s3://robot-sf-durable/logs/2026-09-13/job-1"},'
+        '"consumer":{"identity":"review-bot","review_state":"reviewed"},'
+        '"files":[{"relative_path":"task-0.log","state":"verified"}]}'
     )
     manifest["custody"]["files"][0].update(sha256=entry["sha256"], byte_size=entry["size_bytes"])
     return manifest, root
@@ -321,6 +325,87 @@ def test_structured_credentials_are_not_exposed(tmp_path: Path, data: bytes) -> 
     assert (report["logs"][0]["excerpt"], "supersecret" in json.dumps(report)) == (None, False)
 
 
+@pytest.mark.parametrize(
+    "data",
+    (
+        b'ERROR {"db.user":"alice"}\n',
+        b'ERROR {"user_name":"alice"}\n',
+        b'ERROR {"meta":{"account.id":"alice"}}\n',
+        b'ERROR [{"user.name":"alice"}]\n',
+    ),
+)
+def test_composite_structured_identity_keys_block_excerpt(tmp_path: Path, data: bytes) -> None:
+    manifest, root = _case(tmp_path, data=data)
+    report = build_report(manifest, root)
+
+    _assert_blocked(report, "redaction_failed")
+    assert report["logs"][0]["excerpt"] is None
+    assert "alice" not in json.dumps(report)
+
+
+@pytest.mark.parametrize(
+    "data",
+    (
+        b'ERROR {"us\\u0065r":"alice"}\n',
+        b'ERROR {"tok\\u0065n":"supersecret"}\n',
+        b'ERROR {"a\\u0062":{"username":"alice"}}\n',
+    ),
+)
+def test_unicode_escaped_structured_keys_block_excerpt(tmp_path: Path, data: bytes) -> None:
+    manifest, root = _case(tmp_path, data=data)
+    report = build_report(manifest, root)
+
+    _assert_blocked(report, "redaction_failed")
+    assert report["logs"][0]["excerpt"] is None
+    assert all(value not in json.dumps(report) for value in ("alice", "supersecret"))
+
+
+def test_nested_structured_identity_is_redacted(tmp_path: Path) -> None:
+    data = b'ERROR {"meta":{"username":"alice"},"items":[{"account":"bob"}]}\n'
+    manifest, root = _case(tmp_path, data=data)
+    report = build_report(manifest, root)
+
+    assert report["logs"][0]["excerpt"] is not None
+    assert all(value not in json.dumps(report) for value in ("alice", "bob"))
+
+
+def test_nested_structured_secret_blocks_excerpt(tmp_path: Path) -> None:
+    data = b'ERROR {"meta":{"token":"supersecret"}}\n'
+    manifest, root = _case(tmp_path, data=data)
+    report = build_report(manifest, root)
+
+    _assert_blocked(report)
+    assert {"secret_like_log", "redaction_failed"} & set(report["logs"][0]["reasons"])
+    assert report["logs"][0]["excerpt"] is None
+    assert "supersecret" not in json.dumps(report)
+
+
+def test_unparsable_structured_value_blocks_excerpt(tmp_path: Path) -> None:
+    data = b'ERROR {"message": "unterminated}\n'
+    manifest, root = _case(tmp_path, data=data)
+    report = build_report(manifest, root)
+
+    _assert_blocked(report, "redaction_failed")
+    assert report["logs"][0]["excerpt"] is None
+
+
+def test_plain_structured_values_remain_excerptable(tmp_path: Path) -> None:
+    data = b'ERROR {"level":"error","code":500,"attempt":3}\n'
+    manifest, root = _case(tmp_path, data=data)
+    report = build_report(manifest, root)
+
+    assert report["status"] == "eligible"
+    assert report["logs"][0]["excerpt"] is not None
+
+
+def test_report_exposes_static_single_writer_containment_model(tmp_path: Path) -> None:
+    manifest, root = _case(tmp_path)
+    report = build_report(manifest, root)
+
+    assert report["containment"]["model"] == "static_single_writer"
+    assert report["containment"]["atomic"] is False
+
+
 @pytest.mark.parametrize("case", ("missing_source", "missing_custody", "invalid_member"))
 def test_custody_requires_source_and_valid_member_metadata(tmp_path: Path, case: str) -> None:
     manifest, root = _case(tmp_path)
@@ -332,6 +417,44 @@ def test_custody_requires_source_and_valid_member_metadata(tmp_path: Path, case:
         manifest["custody"]["files"][0].update(sha256=None, byte_size=None)
     _assert_blocked(report := build_report(manifest, root))
     assert report["custody"]["verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("change", "code"),
+    [
+        ({"job_id": "other-job"}, "custody_identity_mismatch"),
+        ({"destination": {"locator": "s3://bucket/logs/latest"}}, "mutable_destination_rejected"),
+        ({"destination": {}}, "durable_destination_missing"),
+        ({"consumer": {"identity": "review-bot"}}, "custody_consumer_missing"),
+        (
+            {"consumer": {"identity": "review-bot", "review_state": "pending"}},
+            "custody_consumer_missing",
+        ),
+        ({"consumer": {"review_state": "reviewed"}}, "custody_consumer_missing"),
+    ],
+)
+def test_custody_binding_failures_block_pruning(
+    tmp_path: Path, change: dict[str, object], code: str
+) -> None:
+    manifest, root = _case(tmp_path)
+    manifest["custody"].update(change)
+    report = build_report(manifest, root)
+
+    _assert_blocked(report)
+    assert report["custody"]["verified"] is False
+    assert any(problem["code"] == code for problem in report["problems"])
+
+
+def test_undeclared_custody_member_blocks_pruning(tmp_path: Path) -> None:
+    manifest, root = _case(tmp_path)
+    extra = deepcopy(manifest["custody"]["files"][0])
+    extra.update(relative_path="extra.log", sha256="a" * 64, byte_size=1)
+    manifest["custody"]["files"].append(extra)
+    report = build_report(manifest, root)
+
+    _assert_blocked(report)
+    assert report["custody"]["verified"] is False
+    assert any(problem["code"] == "custody_member_undeclared" for problem in report["problems"])
 
 
 def test_duplicate_and_malformed_logs_block_all_pruning(tmp_path: Path) -> None:

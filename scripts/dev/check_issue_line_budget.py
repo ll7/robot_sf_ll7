@@ -34,10 +34,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 SCHEMA = "issue_line_budget.v1"
 STATUS_NO_CAP = "no_declared_cap"
@@ -67,7 +63,7 @@ class BudgetParseError(ValueError):
 
 
 class DiffstatParseError(ValueError):
-    """Raised when numstat text or PR file metadata contains malformed or unparseable lines."""
+    """Raised when numstat text contains malformed or unparseable rows."""
 
 
 def _first_cap(patterns: tuple[re.Pattern[str], ...], body: str) -> int | None:
@@ -128,37 +124,6 @@ def measure_diffstat(numstat_text: str) -> dict[str, int]:
             added += int(insertions)
             deleted += int(deletions)
     return {"files": files, "added": added, "deleted": deleted, "net": max(added - deleted, 0)}
-
-
-def format_pr_files_as_numstat(files: Sequence[dict[str, Any]]) -> str:
-    """Format GitHub PR file metadata dictionaries into git diff --numstat text.
-
-    Each item must be a mapping with a non-empty string 'filename', and non-negative
-    integer 'additions' and 'deletions'.
-    """
-    rows: list[str] = []
-    for idx, item in enumerate(files):
-        if not isinstance(item, dict):
-            raise DiffstatParseError(f"malformed PR file entry at index {idx}: {item!r}")
-        filename = item.get("filename")
-        if not filename or not isinstance(filename, str) or not filename.strip():
-            raise DiffstatParseError(
-                f"missing or invalid filename in PR file entry at index {idx}: {item!r}"
-            )
-        additions = item.get("additions", 0)
-        deletions = item.get("deletions", 0)
-        if (
-            not isinstance(additions, int)
-            or not isinstance(deletions, int)
-            or additions < 0
-            or deletions < 0
-        ):
-            raise DiffstatParseError(
-                f"invalid additions/deletions in PR file entry at index {idx} ({filename!r}): "
-                f"additions={additions!r}, deletions={deletions!r}"
-            )
-        rows.append(f"{additions}\t{deletions}\t{filename.strip()}")
-    return "\n".join(rows) + ("\n" if rows else "")
 
 
 def find_override_reason(pr_body: str) -> str | None:

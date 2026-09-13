@@ -15,7 +15,6 @@ from scripts.dev.check_issue_line_budget import (
     DiffstatParseError,
     evaluate_budget,
     find_override_reason,
-    format_pr_files_as_numstat,
     main,
     measure_diffstat,
     parse_declared_caps,
@@ -193,6 +192,22 @@ def test_main_exit_codes_and_json_output(tmp_path: Path, capsys) -> None:
     )
     assert '"status": "over_budget"' in capsys.readouterr().out
 
+    numstat_file.write_text("malformed row without tabs\n", encoding="utf-8")
+    assert (
+        main(
+            [
+                "--issue-body-file",
+                str(issue_file),
+                "--pr-body-file",
+                str(pr_file),
+                "--numstat-file",
+                str(numstat_file),
+            ]
+        )
+        == 1
+    )
+    assert '"status": "invalid_cap"' in capsys.readouterr().out
+
 
 @pytest.mark.parametrize(
     "bad_line",
@@ -221,26 +236,3 @@ def test_evaluate_budget_rejects_malformed_numstat() -> None:
     assert result["status"] == STATUS_INVALID
     assert result["ok"] is False
     assert any("malformed numstat line" in breach for breach in result["breaches"])
-
-
-def test_format_pr_files_as_numstat() -> None:
-    """GitHub API file objects format cleanly into git diff --numstat lines."""
-    files = [
-        {"filename": "scripts/tools/check.py", "additions": 120, "deletions": 10},
-        {"filename": "tests/test_check.py", "additions": 45, "deletions": 0},
-    ]
-    numstat = format_pr_files_as_numstat(files)
-    assert numstat == "120\t10\tscripts/tools/check.py\n45\t0\ttests/test_check.py\n"
-
-    # Empty list yields empty string
-    assert format_pr_files_as_numstat([]) == ""
-
-    # Malformed list raises DiffstatParseError
-    with pytest.raises(DiffstatParseError, match="malformed PR file entry"):
-        format_pr_files_as_numstat(["not-a-dict"])  # type: ignore[list-item]
-
-    with pytest.raises(DiffstatParseError, match="missing or invalid filename"):
-        format_pr_files_as_numstat([{"additions": 1, "deletions": 1}])
-
-    with pytest.raises(DiffstatParseError, match="invalid additions/deletions"):
-        format_pr_files_as_numstat([{"filename": "a.py", "additions": "10", "deletions": 0}])

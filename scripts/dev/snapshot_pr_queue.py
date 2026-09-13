@@ -1840,7 +1840,9 @@ def _snapshot_active_rest_fallback(
     )
 
 
-def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
+def snapshot_active_prs(
+    *, repo: str, limit: int, include_review_threads: bool = False
+) -> dict[str, Any]:
     """Return a compact active PR queue snapshot."""
     current_main_sha = _fetch_current_main_sha(repo=repo)
     retry = run_with_retry(
@@ -1942,6 +1944,16 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
         for pr in listed
         if isinstance(pr, dict)
     ]
+    if include_review_threads:
+        for pr in prs:
+            if pr.get("status") == "ok" and isinstance(pr.get("number"), int):
+                review_thread_snapshot = _review_thread_snapshot(
+                    int(pr["number"]),
+                    repo=repo,
+                )
+                pr["review_thread_snapshot"] = review_thread_snapshot
+                _project_review_thread_state(pr, review_thread_snapshot.get("status"))
+                _refresh_route_hint(pr)
     truncated = is_likely_truncated(len(listed), limit=limit)
     return _active_snapshot_envelope(
         repo=repo,
@@ -2091,7 +2103,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--review-threads",
         action="store_true",
-        help="Include bounded review-thread excerpts without diff hunks or full bodies.",
+        help=(
+            "Include bounded review-thread excerpts without diff hunks or full bodies; "
+            "valid with explicit PR numbers and with --active (bounded by --limit)."
+        ),
     )
     parser.add_argument(
         "--raw-review-comments-artifact",
@@ -2116,9 +2131,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.active and (args.prs_option is not None or args.prs):
         print("--active cannot be combined with explicit PR numbers", file=sys.stderr)
         return 1
-    if args.active and args.review_threads:
-        print("--review-threads is only supported with explicit PR numbers", file=sys.stderr)
-        return 1
     if args.active and args.raw_review_comments_artifact:
         print(
             "--raw-review-comments-artifact is only supported with explicit PR numbers",
@@ -2134,7 +2146,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         if args.active:
-            payload = snapshot_active_prs(repo=args.repo, limit=max(args.limit, 1))
+            payload = snapshot_active_prs(
+                repo=args.repo,
+                limit=max(args.limit, 1),
+                include_review_threads=args.review_threads,
+            )
         elif not numbers:
             print("at least one PR number is required", file=sys.stderr)
             return 1

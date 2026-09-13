@@ -1385,6 +1385,13 @@ def test_create_worktree_without_flock_cli_cleans_failed_task_lease(
         "):\n"
         "    print('injected lease release failure', file=sys.stderr)\n"
         "    raise SystemExit(74)\n"
+        "if (\n"
+        "    len(sys.argv) > 2\n"
+        "    and sys.argv[1].endswith('/worktree_receipt.py')\n"
+        "    and sys.argv[2] == 'create'\n"
+        "):\n"
+        "    print('injected receipt creation failure', file=sys.stderr)\n"
+        "    raise SystemExit(1)\n"
         f"os.execv({sys.executable!r}, [{sys.executable!r}, '-S', *sys.argv[1:]])\n",
         encoding="utf-8",
     )
@@ -1395,9 +1402,7 @@ def test_create_worktree_without_flock_cli_cleans_failed_task_lease(
     branch = _unique_branch(tmp_path, "no-flock-failed-task-lease")
     target = _worktree_target(tmp_path, branch)
     lease_file = lease_path(target)
-    receipt_parent = tmp_path / "receipt-parent-file"
-    receipt_parent.write_text("not a directory\n", encoding="utf-8")
-    receipt_path = receipt_parent / "receipt.json"
+    receipt_path = tmp_path / "receipt.json"
     environment = {**git_identity_environment(os.environ), "PATH": str(stub_bin)}
     try:
         result = subprocess.run(

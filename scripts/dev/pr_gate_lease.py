@@ -84,7 +84,7 @@ class PRGateLease:
 def _git_common_dir() -> Path:
     """Get the Git common directory for the current repository."""
     result = subprocess.run(
-        ["git", "rev-parse", "--git-common-dir"],
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
         capture_output=True,
         text=True,
         check=False,

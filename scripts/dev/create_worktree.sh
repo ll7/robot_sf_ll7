@@ -158,7 +158,9 @@ if [[ -n "$receipt_path" && -z "$task_id" ]]; then
 fi
 
 if [[ -n "$receipt_path" ]]; then
-  receipt_path="$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$receipt_path")"
+  if ! receipt_path="$(python3 "$SCRIPT_DIR/worktree_receipt.py" resolve-path --receipt "$receipt_path")"; then
+    exit 2
+  fi
 fi
 
 validate_target_preflight() {
@@ -182,9 +184,16 @@ validate_target_preflight() {
   python3 "$SCRIPT_DIR/check_worktree_capacity.py" "${capacity_args[@]}"
 }
 
+if [[ "$dry_run" -eq 1 ]]; then
+  validate_target_preflight
+  echo "create_worktree: dry-run passed; git worktree add was not invoked."
+  exit 0
+fi
+
+git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
+
 if [[ "$locked_transaction" -eq 1 ]]; then
-  git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
-  worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
   lock_fd="${ROBOT_SF_WORKTREE_LOCK_FD:-}"
   if ! [[ "$lock_fd" =~ ^[0-9]+$ ]]; then
     echo "create_worktree: --__locked-transaction is an internal mode" >&2
@@ -196,15 +205,6 @@ if [[ "$locked_transaction" -eq 1 ]]; then
     exit 2
   fi
 fi
-
-if [[ "$dry_run" -eq 1 ]]; then
-  validate_target_preflight
-  echo "create_worktree: dry-run passed; git worktree add was not invoked."
-  exit 0
-fi
-
-git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
-worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
 
 # Git derives linked-worktree administrative directory names from the target
 # basename. Independent callers with distinct full paths but the same basename
@@ -292,6 +292,13 @@ cleanup_failed_creation() {
 
   if [[ "$created_worktree" -ne 1 ]]; then
     return "$failure_rc"
+  fi
+
+  if [[ -n "$receipt_path" && ( -f "$receipt_path" || -L "$receipt_path" ) ]]; then
+    if ! remove_file "$receipt_path"; then
+      echo "create_worktree: failed to remove receipt during rollback: $receipt_path" >&2
+      cleanup_failed=1
+    fi
   fi
 
   if ! release_task_lease; then
@@ -523,6 +530,11 @@ else
   fi
   if [[ -n "$receipt_path" ]]; then
     locked_args+=(--receipt "$receipt_path")
+  fi
+  if [[ "${#allowed_path_args[@]}" -gt 0 ]]; then
+    for scope_glob in "${allowed_path_args[@]}"; do
+      locked_args+=(--allowed-path "$scope_glob")
+    done
   fi
   python_lock_rc=0
   python3 "$SCRIPT_DIR/worktree_creation_lock.py" "$worktree_lock_path" -- \

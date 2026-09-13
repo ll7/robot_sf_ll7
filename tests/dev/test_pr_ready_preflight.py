@@ -831,14 +831,20 @@ def _wait_for_marker(
     deadline = time.monotonic() + timeout
     while not marker.exists():
         if process.poll() is not None:
-            stdout, stderr = process.communicate()
+            try:
+                stdout, stderr = _collect_process(process, timeout=1.0)
+            except AssertionError:
+                stdout, stderr = "", "<output pipes remained open after process exit>"
             raise AssertionError(
                 f"readiness exited before marker: rc={process.returncode}\n"
                 f"stdout={stdout}\nstderr={stderr}"
             )
         if time.monotonic() >= deadline:
             _stop_process_group(process, signal.SIGKILL)
-            stdout, stderr = process.communicate()
+            try:
+                stdout, stderr = _collect_process(process, timeout=1.5)
+            except AssertionError:
+                stdout, stderr = "", "<output pipes remained open after SIGKILL>"
             raise AssertionError(
                 f"readiness did not reach marker within {timeout}s\n"
                 f"stdout={stdout}\nstderr={stderr}"
@@ -1371,6 +1377,33 @@ def test_pr_ready_sigterm_exit_during_registration_cleans_lane(
             _collect_process(process, timeout=3.0)
         except AssertionError:
             pass
+
+
+def test_wait_for_marker_bounds_escaped_descendant_pipe_holders(tmp_path: Path) -> None:
+    """An escaped descendant holding the output pipes must not stall the marker wait."""
+    descendant_pid = tmp_path / "escaped-descendant.pid"
+    process = subprocess.Popen(
+        ["bash", "-c", f"setsid sleep 30 & echo $! > {descendant_pid}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    started = time.monotonic()
+    try:
+        with pytest.raises(AssertionError):
+            _wait_for_marker(tmp_path / "never-created", process, timeout=0.1)
+        assert time.monotonic() - started < 5.0, "the marker wait must remain bounded"
+    finally:
+        if descendant_pid.exists():
+            try:
+                os.kill(
+                    int(descendant_pid.read_text(encoding="utf-8").strip()),
+                    signal.SIGKILL,
+                )
+            except (OSError, ValueError):
+                pass
+        _stop_process_group(process, signal.SIGKILL)
 
 
 @pytest.mark.skipif(

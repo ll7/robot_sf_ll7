@@ -15,6 +15,7 @@ from scripts.dev import check_pr_ci_status as ci_status
 from scripts.dev import merge_queue_gate as merge_queue_gate_module
 from scripts.dev.merge_queue_gate import (
     CI_PATHS_IGNORE_PATTERNS,
+    GATE_VERDICT_PROJECTION_SOURCE,
     _format_summary,
     _rest_check_rollup,
     _rest_requested_reviewers,
@@ -2468,6 +2469,183 @@ def test_equal_publication_times_make_conflicting_gate_carriers_ambiguous() -> N
     assert "ambiguous_exact_head_gate_verdict" in audit.reasons
 
 
+def test_forged_accepted_projection_without_carrier_fails_closed() -> None:
+    """A forged accepted projection without carrier evidence cannot admit the head."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            gate_verdict_status="accepted",
+            gate_verdict_status_head_sha=FULL_SHA,
+            gate_verdict_status_source=GATE_VERDICT_PROJECTION_SOURCE,
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "missing"
+    assert "missing_exact_head_gate_verdict" in audit.reasons
+
+
+def test_forged_accepted_projection_cannot_override_newer_hold() -> None:
+    """A caller-supplied accepted projection cannot override a trusted newer HOLD."""
+    accepted = f"gate-verdict: accepted @ {FULL_SHA}"
+    hold = f"gate-verdict: hold @ {FULL_SHA}"
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            reviews=[
+                _gate_review_carrier(
+                    accepted,
+                    submitted_at="2026-09-12T12:33:51Z",
+                ),
+                _gate_review_carrier(
+                    hold,
+                    submitted_at="2026-09-12T12:33:57Z",
+                ),
+            ],
+            gate_verdict_status="accepted",
+            gate_verdict_status_head_sha=FULL_SHA,
+            gate_verdict_status_source=GATE_VERDICT_PROJECTION_SOURCE,
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "hold"
+    assert "exact_head_gate_hold" in audit.reasons
+
+
+def test_forged_accepted_projection_cannot_override_malformed_carrier() -> None:
+    """A caller-supplied accepted projection cannot bypass a malformed carrier."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            reviews=[
+                _gate_review_carrier(
+                    f"gate-verdict: accepted @ {FULL_SHA}_suffix",
+                    submitted_at="2026-09-12T12:34:07Z",
+                )
+            ],
+            gate_verdict_status="accepted",
+            gate_verdict_status_head_sha=FULL_SHA,
+            gate_verdict_status_source=GATE_VERDICT_PROJECTION_SOURCE,
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "malformed"
+    assert "malformed_exact_head_gate_verdict" in audit.reasons
+
+
+def test_forged_accepted_projection_cannot_override_untrusted_carrier() -> None:
+    """A caller-supplied accepted projection cannot bypass author trust requirements."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[],
+            reviews=[
+                _gate_review_carrier(
+                    f"gate-verdict: accepted @ {FULL_SHA}",
+                    submitted_at="2026-09-12T12:34:07Z",
+                    association="CONTRIBUTOR",
+                )
+            ],
+            gate_verdict_status="accepted",
+            gate_verdict_status_head_sha=FULL_SHA,
+            gate_verdict_status_source=GATE_VERDICT_PROJECTION_SOURCE,
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "missing"
+    assert "missing_exact_head_gate_verdict" in audit.reasons
+
+
+def test_mismatched_projection_head_fails_closed() -> None:
+    """A projection bound to a different head cannot admit the evaluated head."""
+    other_head = "0" * 40
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[f"gate-verdict: accepted @ {FULL_SHA}"],
+            gate_verdict_status="accepted",
+            gate_verdict_status_head_sha=other_head,
+            gate_verdict_status_source=GATE_VERDICT_PROJECTION_SOURCE,
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "malformed"
+    assert "malformed_exact_head_gate_verdict" in audit.reasons
+
+
+def test_untrusted_projection_source_fails_closed() -> None:
+    """A projection with an untrusted source marker fails closed."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[f"gate-verdict: accepted @ {FULL_SHA}"],
+            gate_verdict_status="accepted",
+            gate_verdict_status_head_sha=FULL_SHA,
+            gate_verdict_status_source="untrusted-projection-source",
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "malformed"
+    assert "malformed_exact_head_gate_verdict" in audit.reasons
+
+
+def test_mismatched_hold_projection_blocks_accepted_carrier() -> None:
+    """A projection stating HOLD blocks admission even if an accepted carrier is present."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[f"gate-verdict: accepted @ {FULL_SHA}"],
+            gate_verdict_status="hold",
+            gate_verdict_status_head_sha=FULL_SHA,
+            gate_verdict_status_source=GATE_VERDICT_PROJECTION_SOURCE,
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.gate_verdict_status == "hold"
+    assert "exact_head_gate_hold" in audit.reasons
+
+
+def test_matching_trusted_projection_and_carrier_admits_head() -> None:
+    """When trusted carriers and valid projection both agree on accepted, admission passes."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(
+            gate_verdicts=[f"gate-verdict: accepted @ {FULL_SHA}"],
+            gate_verdict_status="accepted",
+            gate_verdict_status_head_sha=FULL_SHA,
+            gate_verdict_status_source=GATE_VERDICT_PROJECTION_SOURCE,
+        ),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.gate_verdict_status == "accepted"
+
+
 def test_native_merge_group_fails_closed_on_current_hold(tmp_path, capsys) -> None:
     """The native merge-group command must return nonzero for the #9116 ordering."""
     synthetic_head = "9" * 40
@@ -2495,6 +2673,74 @@ def test_native_merge_group_fails_closed_on_current_hold(tmp_path, capsys) -> No
             submitted_at="2026-09-12T12:33:57Z",
         ),
     ]
+    threads = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
+
+    with (
+        patch("scripts.dev.merge_queue_gate._gh") as mock_gh,
+        patch.object(
+            merge_queue_gate_module,
+            "get_pr_commit_messages",
+            return_value="repair commit\n",
+        ),
+    ):
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _exact_changed_coverage_response(),
+            _exact_evidence_registry_response(head_sha=synthetic_head),
+            _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
+            _gh_response(stdout=json.dumps(threads)),
+        ]
+        exit_code = main(
+            [
+                "--from-event",
+                str(event_path),
+                "--repo",
+                "owner/repo",
+                "--merge-group-evidence-head",
+                synthetic_head,
+            ]
+        )
+
+    audit = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert audit["passed"] is False
+    assert audit["gate_verdict_status"] == "hold"
+    assert "exact_head_gate_hold" in audit["reasons"]
+
+
+def test_native_merge_group_ignores_forged_accepted_projection_when_hold_exists(
+    tmp_path, capsys
+) -> None:
+    """The native merge group recomputes verdict from carriers, ignoring forged projection."""
+    synthetic_head = "9" * 40
+    event_path = tmp_path / "merge_group.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "event_name": "merge_group",
+                "merge_group": {
+                    "head_ref": f"refs/heads/gh-readonly-queue/main/pr-42-{FULL_SHA[:12]}",
+                    "base_sha": "queue_base_sha",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    raw_pr = _raw_pr()
+    raw_pr["reviews"] = [
+        _gate_review_carrier(
+            f"gate-verdict: accepted @ {FULL_SHA}",
+            submitted_at="2026-09-12T12:33:51Z",
+        ),
+        _gate_review_carrier(
+            f"gate-verdict: hold @ {FULL_SHA}",
+            submitted_at="2026-09-12T12:33:57Z",
+        ),
+    ]
+    raw_pr["gate_verdict_status"] = "accepted"
+    raw_pr["gate_verdict_status_head_sha"] = FULL_SHA
+    raw_pr["gate_verdict_status_source"] = GATE_VERDICT_PROJECTION_SOURCE
     threads = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
 
     with (

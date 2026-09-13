@@ -737,7 +737,10 @@ before the queue auto-merges a PR:
   `gate-verdict: accepted @ <head_sha>` trailer, and a current
   `pr-metadata: reconciled @ <digest>` trailer binding the exact final PR title/body pair
   (the gate reuses
-  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`) authored by a repository owner,
+  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict` and `current_gate_verdict_status`,
+  which always recompute the exact-head verdict from trusted carrier bodies and fields at every admission consumer;
+  compact snapshot projection fields provide head-bound diagnostic and routing context, but a projection alone
+  never manufactures acceptance, and forged or mismatched projections fail closed) authored by a repository owner,
   member, or collaborator; verdict-like text from an untrusted contributor is ignored. The metadata
   digest is computed from the live title/body through the REST-backed snapshot and stale or missing
   metadata evidence fails closed. The gate also requires no unresolved actionable review threads and no outstanding explicitly requested

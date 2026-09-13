@@ -34,7 +34,9 @@ external/parallel auto-merge dispatcher that routes through it cannot bypass
 PR metadata digest, unresolved
 threads, or an explicitly requested reviewer. Comment or review verdict trailers count only when
 GitHub reports the author as a repository owner, member, or collaborator; an untrusted contributor
-cannot self-approve a new head under a retained label. The queue gate also fails closed
+cannot self-approve a new head under a retained label. The exact-head gate verdict is recomputed from
+trusted carrier bodies and fields at every admission consumer; caller-supplied or forged projection fields
+cannot manufacture admission or override a newer trusted hold. The queue gate also fails closed
 unless the live queue uses GitHub's `ALLGREEN` ("Only merge non-failing pull
 requests") strategy, which prevents a
 passing tail entry from carrying an earlier ungated entry through a grouped

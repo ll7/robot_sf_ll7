@@ -83,6 +83,11 @@ from scripts.ci.pr_contract_check import (  # noqa: E402
     check_closes_discipline,
     get_pr_commit_messages,
 )
+from scripts.dev.check_ci_needs import (  # noqa: E402
+    CI_PATHS_IGNORE_PATTERNS,
+    docs_only_changed_files,
+    is_ci_path_ignored,
+)
 from scripts.dev.check_pr_ci_status import (  # noqa: E402
     _enrich_rest_check_runs,
     _latest_check_runs,
@@ -135,10 +140,6 @@ CHANGED_COVERAGE_CHECK_NAME = "changed-coverage-gate"
 EVIDENCE_REGISTRY_WORKFLOW_NAME = "Evidence-registry ratchet"
 EVIDENCE_REGISTRY_CHECK_NAME = "evidence-registry-ratchet"
 SNAPSHOT_PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
-# Keep this list in lockstep with the top-level ``paths-ignore`` filters in
-# ``.github/workflows/ci.yml``.  The merge gate may need to explain why that
-# workflow did not create an exact-head changed-coverage check for a PR.
-CI_PATHS_IGNORE_PATTERNS = ("**/*.md", "docs/**")
 CHANGED_COVERAGE_NOT_REQUIRED = "not_required"
 _CHANGED_FILES_PAGE_SIZE = 100
 _MAX_CHANGED_FILES_PAGES = 100
@@ -465,36 +466,13 @@ def _fail_closed_reasons(  # noqa: C901, PLR0913
 
 
 def _is_ci_paths_ignored(path: str) -> bool:
-    """Return whether ``path`` matches the CI workflow's ignored path set.
-
-    GitHub's ``**/*.md`` filter covers Markdown at any repository depth,
-    including a root-level README or changelog.  The explicit checks below
-    mirror that contract without making the admission gate depend on a local
-    glob implementation with subtly different ``**`` semantics.
-    """
-    normalized = path.strip()
-    if (
-        not normalized
-        or normalized != path
-        or normalized.startswith(("/", "./", "../"))
-        or "\\" in normalized
-        or any(part in {"", ".", ".."} for part in normalized.split("/"))
-    ):
-        return False
-    markdown_pattern, docs_pattern = CI_PATHS_IGNORE_PATTERNS
-    return bool(normalized) and (
-        (markdown_pattern == "**/*.md" and normalized.endswith(".md"))
-        or (docs_pattern == "docs/**" and (normalized == "docs" or normalized.startswith("docs/")))
-    )
+    """Return whether ``path`` matches the canonical CI ignore manifest."""
+    return bool(CI_PATHS_IGNORE_PATTERNS) and is_ci_path_ignored(path)
 
 
 def _docs_only_changed_files(changed_files: Any, *, complete: bool) -> bool:
     """Prove that a complete, non-empty changed-file set is CI-ignored."""
-    if not complete or not isinstance(changed_files, list) or not changed_files:
-        return False
-    if any(not isinstance(path, str) or not path.strip() for path in changed_files):
-        return False
-    return all(_is_ci_paths_ignored(path) for path in changed_files)
+    return docs_only_changed_files(changed_files, complete=complete)
 
 
 def _proven_docs_only_scope(changed_coverage: Any) -> bool:

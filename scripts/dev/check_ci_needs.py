@@ -17,6 +17,7 @@ Event-specific rules preserved from the workflow:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import sys
 from typing import Any
@@ -39,6 +40,47 @@ CHANGED_COVERAGE_EVENTS = ("pull_request", "merge_group")
 # ``ci`` job is the workflow's own enforcement point for ``REQUIRED_JOBS`` and the event-specific
 # coverage gates, so a green aggregate check proves every required need passed.
 AGGREGATE_JOB = "ci"
+# This is the checked-in projection of the top-level ``paths-ignore`` filters
+# in ``.github/workflows/ci.yml``.  Both the CI monitor and merge-queue gate use
+# this manifest so a skipped workflow has one auditable path contract.
+CI_PATHS_IGNORE_PATTERNS = ("**/*.md", "docs/**")
+
+
+def is_ci_path_ignored(path: str) -> bool:
+    """Return whether *path* matches the checked-in CI ``paths-ignore`` contract.
+
+    GitHub's ``**/*.md`` filter includes root-level Markdown.  The small
+    normalization layer below keeps that behavior explicit while rejecting
+    malformed or path-traversal-like file names before matching.
+    """
+    normalized = path.strip()
+    if (
+        not normalized
+        or normalized != path
+        or normalized.startswith(("/", "./", "../"))
+        or "\\" in normalized
+        or any(part in {"", ".", ".."} for part in normalized.split("/"))
+    ):
+        return False
+    for pattern in CI_PATHS_IGNORE_PATTERNS:
+        if pattern == "**/*.md":
+            if normalized.endswith(".md"):
+                return True
+        elif pattern == "docs/**":
+            if normalized == "docs" or normalized.startswith("docs/"):
+                return True
+        elif fnmatch.fnmatchcase(normalized, pattern):
+            return True
+    return False
+
+
+def docs_only_changed_files(changed_files: Any, *, complete: bool) -> bool:
+    """Prove that a complete, non-empty changed-file set is CI-ignored."""
+    if not complete or not isinstance(changed_files, list) or not changed_files:
+        return False
+    if any(not isinstance(path, str) or not path.strip() for path in changed_files):
+        return False
+    return all(is_ci_path_ignored(path) for path in changed_files)
 
 
 def required_check_identities() -> tuple[str, ...]:

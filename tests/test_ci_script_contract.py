@@ -42,6 +42,7 @@ import yaml
 
 from scripts.dev.check_ci_needs import (
     AGGREGATE_JOB,
+    CI_PATHS_IGNORE_PATTERNS,
     REQUIRED_JOBS,
     required_check_identities,
 )
@@ -465,6 +466,17 @@ def test_required_check_identities_bind_to_aggregate_ci_contract() -> None:
     aggregate = workflow["jobs"][AGGREGATE_JOB]
     assert set(REQUIRED_JOBS) <= set(aggregate["needs"])
     assert required_check_identities() == REQUIRED_JOBS
+
+
+def test_ci_paths_ignore_manifest_matches_workflow_triggers() -> None:
+    """The checked-in ignore manifest must match both CI skip declarations."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    triggers = workflow.get(True, workflow.get("on", {}))
+
+    assert isinstance(triggers, dict)
+    expected = list(CI_PATHS_IGNORE_PATTERNS)
+    assert triggers["push"]["paths-ignore"] == expected
+    assert triggers["pull_request"]["paths-ignore"] == expected
 
 
 def test_ci_aggregate_uses_declarative_needs_checker() -> None:

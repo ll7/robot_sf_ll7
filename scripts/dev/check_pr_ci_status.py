@@ -38,6 +38,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 from scripts.dev.check_ci_needs import (  # noqa: E402
     AGGREGATE_JOB,
+    CI_PATHS_IGNORE_PATTERNS,
+    docs_only_changed_files,
     required_check_identities,
 )
 from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
@@ -57,6 +59,8 @@ QUEUE_STATUSES = {"queued", "requested", "waiting"}
 REQUIRED_CHECKS_SOURCE = "check_ci_needs.REQUIRED_JOBS"
 REQUIRED_CHECKS_ABSENT = "required_checks_absent"
 NO_REQUIRED_CHECKS_CONFIGURED = "no_required_checks_configured"
+DOCS_ONLY_SUCCESS_REASON = "ci_not_required_docs_only"
+DOCS_ONLY_SOURCE = "check_ci_needs.CI_PATHS_IGNORE_PATTERNS"
 _GREEN_REQUIRED_CONCLUSIONS = {"success", "neutral"}
 DEFAULT_QUEUE_STARVATION_SECONDS = 300.0
 _ACTIONS_JOB_URL_RE = re.compile(
@@ -71,6 +75,9 @@ _RESUME_MONITOR_ARGS = "--poll-attempts 40 --poll-interval 30 --max-wall-seconds
 DEFAULT_ACTIONS_STALE_AFTER_SECONDS = 900
 _ACTIVE_WALL_DEADLINE: float | None = None
 _GH_TERMINATION_GRACE_SECONDS = 0.25
+_CHANGED_FILES_PAGE_SIZE = 100
+_MAX_CHANGED_FILES_PAGES = 100
+_MAX_GITHUB_PR_FILES = 3000
 
 
 class _WallClockBudgetExpired(subprocess.TimeoutExpired):
@@ -648,6 +655,165 @@ def _rest_api_get_for_repo(path: str, repo: str) -> Any:
     if repo:
         return _rest_api_get(path, repo=repo)
     return _rest_api_get(path)
+
+
+def _fetch_pr_changed_file_page(
+    pr_number: str | int,
+    page: int,
+    *,
+    repo: str,
+) -> tuple[list[str] | None, str | None]:
+    """Fetch and validate one changed-file page."""
+    payload = _rest_api_get_for_repo(
+        f"pulls/{pr_number}/files?per_page={_CHANGED_FILES_PAGE_SIZE}&page={page}",
+        repo,
+    )
+    if not isinstance(payload, list):
+        return None, "changed-file response is unavailable or not a JSON array"
+    page_files: list[str] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            return None, "changed-file response contains a malformed entry"
+        filename = item.get("filename")
+        if not isinstance(filename, str) or not filename.strip():
+            return None, "changed-file response contains an invalid filename"
+        page_files.append(filename)
+    return page_files, None
+
+
+def _verify_pr_changed_files_head(
+    pr_number: str | int,
+    *,
+    repo: str,
+    expected_head_sha: str,
+) -> str | None:
+    """Verify that the PR head did not move while its changed files were read."""
+    if not expected_head_sha:
+        return "changed-file inventory head verification is unavailable"
+    payload = _rest_api_get_for_repo(f"pulls/{pr_number}", repo)
+    if not isinstance(payload, dict):
+        return "changed-file inventory head verification is unavailable"
+    head = payload.get("head")
+    if not isinstance(head, dict):
+        return "changed-file inventory head verification has no PR head"
+    observed_head_sha = head.get("sha")
+    if not isinstance(observed_head_sha, str) or not observed_head_sha:
+        return "changed-file inventory head verification has no head SHA"
+    if observed_head_sha.lower() != expected_head_sha.lower():
+        return "PR head changed during changed-file inventory"
+    return None
+
+
+def _fetch_pr_changed_files(
+    pr_number: str | int,
+    *,
+    repo: str = "",
+    head_sha: str = "",
+    cache: dict[tuple[str, str], tuple[list[str] | None, str | None]] | None = None,
+) -> tuple[list[str] | None, str | None]:
+    """Fetch a complete bounded changed-file inventory for one pull request.
+
+    GitHub's files endpoint is paginated and does not provide a trustworthy
+    total in the response body. A short page is therefore required to prove
+    completeness; malformed, unavailable, or cap-exhausting responses fail
+    closed. The optional cache is owned by one monitor invocation so polling
+    does not repeat this scope read.
+    """
+    key = (repo or "<derived-remote>", f"{pr_number}:{head_sha}")
+    if cache is not None and key in cache:
+        return cache[key]
+
+    changed_files: list[str] = []
+    result: tuple[list[str] | None, str | None]
+    for page in range(1, _MAX_CHANGED_FILES_PAGES + 1):
+        page_files, page_error = _fetch_pr_changed_file_page(pr_number, page, repo=repo)
+        if page_error or page_files is None:
+            result = None, page_error or "changed-file page was unavailable"
+            break
+        changed_files.extend(page_files)
+        if len(changed_files) >= _MAX_GITHUB_PR_FILES:
+            result = (
+                None,
+                f"changed-file inventory reached GitHub's {_MAX_GITHUB_PR_FILES}-file cap",
+            )
+            break
+        if len(page_files) < _CHANGED_FILES_PAGE_SIZE:
+            if not changed_files:
+                result = None, "changed-file response is empty"
+            else:
+                result = changed_files, None
+            break
+    else:
+        result = None, "changed-file response exceeded the bounded pagination limit"
+
+    if result[0] is not None:
+        head_error = _verify_pr_changed_files_head(
+            pr_number,
+            repo=repo,
+            expected_head_sha=head_sha,
+        )
+        if head_error:
+            result = None, head_error
+
+    if cache is not None:
+        cache[key] = result
+    return result
+
+
+def _docs_only_scope_evidence(
+    changed_files: list[str] | None,
+    error: str | None,
+) -> dict[str, Any]:
+    """Build machine-readable evidence for the docs-only required-check ruling."""
+    evidence: dict[str, Any] = {
+        "source": DOCS_ONLY_SOURCE,
+        "patterns": list(CI_PATHS_IGNORE_PATTERNS),
+        "changed_file_count": len(changed_files) if changed_files is not None else None,
+    }
+    if error or changed_files is None:
+        evidence.update({"status": "unavailable", "error": error or "changed-file proof missing"})
+    elif docs_only_changed_files(changed_files, complete=True):
+        evidence.update({"status": "proven", "reason": DOCS_ONLY_SUCCESS_REASON})
+    else:
+        evidence.update({"status": "not_applicable", "reason": "ci_required_for_changed_files"})
+    return evidence
+
+
+def _apply_docs_only_exception(
+    checks: dict[str, Any],
+    rollup: list[dict[str, Any]],
+    pr_number: str | int,
+    *,
+    repo: str,
+    head_sha: str = "",
+    changed_files_cache: dict[tuple[str, str], tuple[list[str] | None, str | None]] | None = None,
+) -> dict[str, Any]:
+    """Accept a proven docs-only scope when required CI was correctly skipped."""
+    required_checks = checks.get("required_checks")
+    if (
+        checks.get("overall") != "pending"
+        or not isinstance(required_checks, dict)
+        or not required_checks.get("missing")
+        or not head_sha
+        or required_checks.get("not_green") != []
+        or any(_rollup_status(check) in PENDING_STATUSES for check in rollup)
+    ):
+        return checks
+
+    changed_files, error = _fetch_pr_changed_files(
+        pr_number,
+        repo=repo,
+        head_sha=head_sha,
+        cache=changed_files_cache,
+    )
+    evidence = _docs_only_scope_evidence(changed_files, error)
+    checks["docs_only"] = evidence
+    if evidence.get("status") == "proven":
+        checks["overall"] = "success"
+        checks["success_reason"] = DOCS_ONLY_SUCCESS_REASON
+        if checks.get("pending_reason") == REQUIRED_CHECKS_ABSENT:
+            checks.pop("pending_reason")
+    return checks
 
 
 def _rest_api_get_detailed(path: str, *, timeout: int = 45) -> tuple[Any, str]:
@@ -1361,6 +1527,7 @@ def _fetch_ci_status_rest(
     fallback_diagnostic: str = "",
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
     starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
+    changed_files_cache: dict[tuple[str, str], tuple[list[str] | None, str | None]] | None = None,
 ) -> dict[str, Any]:
     """Build a route-evidence-only CI payload after a GraphQL read fails.
 
@@ -1407,6 +1574,14 @@ def _fetch_ci_status_rest(
         actions_payloads=actions_payloads,
         repo=repo,
     )
+    _apply_docs_only_exception(
+        checks,
+        effective_rest_rollup,
+        pr_number,
+        repo=repo,
+        head_sha=head_sha,
+        changed_files_cache=changed_files_cache,
+    )
     reviews_raw = _rest_api_get_for_repo(f"pulls/{pr_number}/reviews", repo)
     review_states: dict[str, int] = {}
     for review in reviews_raw if isinstance(reviews_raw, list) else []:
@@ -1429,7 +1604,7 @@ def _fetch_ci_status_rest(
     }
 
 
-def _gh_view_error_payload(
+def _gh_view_error_payload(  # noqa: PLR0913 - fallback policy is explicit at each call site.
     pr_number: str,
     stderr: str,
     returncode: int,
@@ -1439,6 +1614,7 @@ def _gh_view_error_payload(
     allow_rest_fallback: bool = True,
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
     starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
+    changed_files_cache: dict[tuple[str, str], tuple[list[str] | None, str | None]] | None = None,
 ) -> dict[str, Any]:
     """Map a failed GraphQL-backed PR read to a truthful payload."""
     quota_exhausted = _is_graphql_quota_error(stderr) or (
@@ -1463,6 +1639,7 @@ def _gh_view_error_payload(
             fallback_diagnostic=stderr,
             actions_stale_after_seconds=actions_stale_after_seconds,
             starvation_seconds=starvation_seconds,
+            changed_files_cache=changed_files_cache,
         )
     if retry is not None and retry.exhausted:
         return _fetch_ci_status_rest(
@@ -1472,6 +1649,7 @@ def _gh_view_error_payload(
             fallback_diagnostic=retry.terminal_diagnostic,
             actions_stale_after_seconds=actions_stale_after_seconds,
             starvation_seconds=starvation_seconds,
+            changed_files_cache=changed_files_cache,
         )
     return {"status": "error", "error": stderr or f"gh returned exit code {returncode}"}
 
@@ -1492,6 +1670,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
     allow_rest_fallback: bool = True,
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
     starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
+    changed_files_cache: dict[tuple[str, str], tuple[list[str] | None, str | None]] | None = None,
 ) -> dict[str, Any]:
     """Fetch combined CI status for a PR.
 
@@ -1534,6 +1713,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
             allow_rest_fallback=allow_rest_fallback,
             actions_stale_after_seconds=actions_stale_after_seconds,
             starvation_seconds=starvation_seconds,
+            changed_files_cache=changed_files_cache,
         )
     if result.returncode != 0:
         stderr = result.stderr.strip()
@@ -1546,6 +1726,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
             allow_rest_fallback=allow_rest_fallback,
             actions_stale_after_seconds=actions_stale_after_seconds,
             starvation_seconds=starvation_seconds,
+            changed_files_cache=changed_files_cache,
         )
 
     data, parse_error = _parse_pr_view_json(result.stdout)
@@ -1630,6 +1811,14 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
         repo=repo,
     )
     _apply_required_check_gate(checks, rollup)
+    _apply_docs_only_exception(
+        checks,
+        rollup,
+        pr_number,
+        repo=repo,
+        head_sha=str(data.get("headRefOid", "") or ""),
+        changed_files_cache=changed_files_cache,
+    )
 
     return {
         "status": "ok",
@@ -1682,6 +1871,12 @@ def _add_monitor_metadata(
     required_checks = data.get("checks", {}).get("required_checks")
     if isinstance(required_checks, dict) and required_checks.get("reason"):
         data["monitor"]["required_checks"] = required_checks
+    success_reason = data.get("checks", {}).get("success_reason")
+    if success_reason:
+        data["monitor"]["success_reason"] = success_reason
+    docs_only = data.get("checks", {}).get("docs_only")
+    if isinstance(docs_only, dict):
+        data["monitor"]["docs_only"] = docs_only
 
 
 def _append_pending_reason(  # noqa: C901 - explicit pending-reason branches.
@@ -1783,6 +1978,12 @@ def _format_human(data: dict[str, Any]) -> str:  # noqa: C901 - compact diagnost
         and required_checks.get("reason") == NO_REQUIRED_CHECKS_CONFIGURED
     ):
         lines.append(f"  required_checks: {NO_REQUIRED_CHECKS_CONFIGURED}  |  fail-closed: true")
+    success_reason = checks.get("success_reason")
+    if success_reason:
+        lines.append(f"  disposition: {success_reason}")
+    docs_only = checks.get("docs_only")
+    if isinstance(docs_only, dict) and docs_only.get("status") == "unavailable":
+        lines.append("  docs_only: unavailable  |  fail-closed: true")
     diagnostic = checks.get("diagnostic")
     if diagnostic:
         lines.append(f"  diagnostic: {diagnostic}  |  fail-closed: true")
@@ -2442,6 +2643,7 @@ def _poll_ci_status(  # noqa: C901 - explicit bounded deadline/error branches.
     """Fetch CI status once or poll until checks settle or the budget expires."""
     options = poll_options or _CIPollOptions()
     data: dict[str, Any] = {}
+    changed_files_cache: dict[tuple[str, str], tuple[list[str] | None, str | None]] = {}
     wait_budget_seconds = max(0.0, float(attempts - 1) * max(0.0, poll_interval))
     effective_wait_budget = wait_budget_seconds
     if max_wall_seconds is not None:
@@ -2462,6 +2664,7 @@ def _poll_ci_status(  # noqa: C901 - explicit bounded deadline/error branches.
                     repo=options.repo,
                     actions_stale_after_seconds=options.actions_stale_after_seconds,
                     starvation_seconds=options.starvation_seconds,
+                    changed_files_cache=changed_files_cache,
                 )
             except subprocess.TimeoutExpired:
                 data = _wall_timeout_payload(pr, expected_head_sha)

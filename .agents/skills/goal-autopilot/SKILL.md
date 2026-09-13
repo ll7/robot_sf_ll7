@@ -644,6 +644,9 @@ Apply these rules instead of rediscovering the same leaks each cycle:
   campaign lanes unless the user prioritized them; record the exclusion from the snapshot alone.
 - **Recheck merged coverage before claiming.** A queue row can be stale: run the exact merged-fix
   guard (named symbol, failing test, or file/line against `origin/main`) before claim or branch.
+- **Record parked work from a live read.** A parked PR, job, or delegate entry needs the head SHA
+  and state read at record time; re-read them before resume or admission, and name compute-gated
+  work with the canonical `resource:*` labels. Copied handoff claims are not freshness evidence.
 
 ### Usage Pause Guard
 

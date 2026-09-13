@@ -34,6 +34,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 from contextlib import contextmanager
@@ -113,51 +114,134 @@ def _decode_object(
     return response, None
 
 
-def _looks_like_not_found(error: str) -> bool:
-    """Return whether an error text is a GitHub 404 / Not Found response."""
-    lowered = error.lower()
-    return "not found" in lowered or "404" in lowered
+_PR_ENDPOINT_ERROR_PREFIXES = (
+    "PR body update failed:",
+    "PR live-head read failed:",
+    "PR metadata read failed:",
+    "PR metadata update failed:",
+    "PR metadata post-update verification failed:",
+)
+
+_HTTP_404_PATTERN = re.compile(
+    r"(?:\(\s*HTTP\s+404\s*\)|\bHTTP\s+404\b|\b404\s+Not\s+Found\b)",
+    re.IGNORECASE,
+)
+
+_TIMELINE_PAGE_SIZE = 100
+_TIMELINE_PAGE_LIMIT = 10
 
 
-def _linked_pull_request(repo: str, number: int) -> int | None:
-    """Return a PR number cross-referenced from an issue timeline, when present."""
-    result = _gh_api_get(f"repos/{repo}/issues/{number}/timeline?per_page=100")
+def _confirmed_pr_endpoint_404(error: str) -> bool:
+    """Return whether *error* is a confirmed HTTP 404 from a pull-request endpoint.
+
+    The issue-number diagnostic only helps when the failure is provably a 404
+    from a pull-request endpoint, so both the failing operation and the HTTP
+    status must be readable from the error text. Unrelated failures that merely
+    contain the digits ``404`` (a commit SHA or a byte count) or that came from
+    another endpoint do not qualify.
+    """
+    if not any(prefix in error for prefix in _PR_ENDPOINT_ERROR_PREFIXES):
+        return False
+    return _HTTP_404_PATTERN.search(error) is not None
+
+
+def _repository_qualified_source(repo: str, issue: dict[str, Any]) -> bool:
+    """Return whether a timeline source issue provably belongs to *repo*."""
+    repository_url = issue.get("repository_url")
+    if isinstance(repository_url, str) and repository_url:
+        return repository_url.rstrip("/").lower().endswith(f"/repos/{repo}".lower())
+    html_url = issue.get("html_url")
+    if isinstance(html_url, str) and html_url:
+        return html_url.lower().startswith(f"https://github.com/{repo.lower()}/")
+    return False
+
+
+def _timeline_page_entries(
+    repo: str, number: int, page: int
+) -> tuple[list[Any] | None, str | None]:
+    """Read one bounded timeline page, returning entries or a fail-closed reason."""
+    result = _gh_api_get(
+        f"repos/{repo}/issues/{number}/timeline?per_page={_TIMELINE_PAGE_SIZE}&page={page}"
+    )
     if result.returncode != 0:
-        return None
+        detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+        return None, f"timeline page {page} read failed: {detail}"
     try:
         entries = json.loads(result.stdout)
     except json.JSONDecodeError:
-        return None
+        return None, f"timeline page {page} returned invalid JSON"
     if not isinstance(entries, list):
+        return None, f"timeline page {page} was not a list"
+    return entries, None
+
+
+def _qualified_linked_number(repo: str, entry: Any) -> int | None:
+    """Return the PR number of one repository-qualified cross-referenced event."""
+    if not isinstance(entry, dict) or entry.get("event") != "cross-referenced":
         return None
-    for entry in entries:
-        if not isinstance(entry, dict) or entry.get("event") != "cross-referenced":
-            continue
-        source = entry.get("source")
-        issue = source.get("issue") if isinstance(source, dict) else None
-        if isinstance(issue, dict) and issue.get("pull_request") is not None:
-            candidate = issue.get("number")
-            if isinstance(candidate, int):
-                return candidate
+    source = entry.get("source")
+    issue = source.get("issue") if isinstance(source, dict) else None
+    if not isinstance(issue, dict) or issue.get("pull_request") is None:
+        return None
+    candidate = issue.get("number")
+    if isinstance(candidate, int) and _repository_qualified_source(repo, issue):
+        return candidate
     return None
+
+
+def _scan_linked_pull_requests(repo: str, number: int) -> tuple[tuple[int, ...], str | None]:
+    """Return repository-qualified linked PR numbers from a complete timeline scan.
+
+    The scan fails closed: an unreadable page, malformed payload, or a timeline
+    longer than the bounded scan returns no numbers plus a reason instead of a
+    partially observed set. Only cross-references that are provably qualified to
+    *repo* are collected, so an external reference is never suggested as the
+    linked PR.
+    """
+    numbers: list[int] = []
+    for page in range(1, _TIMELINE_PAGE_LIMIT + 1):
+        entries, page_error = _timeline_page_entries(repo, number, page)
+        if page_error:
+            return (), page_error
+        assert entries is not None
+        for entry in entries:
+            candidate = _qualified_linked_number(repo, entry)
+            if candidate is not None and candidate not in numbers:
+                numbers.append(candidate)
+        if len(entries) < _TIMELINE_PAGE_SIZE:
+            return tuple(numbers), None
+    return (), f"timeline scan exceeded {_TIMELINE_PAGE_LIMIT} pages"
 
 
 def _issue_number_diagnostic(repo: str, number: int) -> str | None:
     """Explain an issue-number mixup when *number* is not a pull request.
 
-    Only used after a 404 from a pull-request endpoint: when the number resolves
-    to an issue, point the caller at the linked PR (or at the missing PR
-    linkage) instead of leaving a bare ``Not Found``.
+    Only used after a confirmed 404 from a pull-request endpoint: when the
+    number resolves to an issue, point the caller at exactly one
+    repository-qualified linked PR, or state that no unique reference could be
+    proven, instead of leaving a bare ``Not Found`` or suggesting an unrelated
+    number.
     """
     issue_result = _gh_api_get(f"repos/{repo}/issues/{number}")
     issue, error = _decode_object(issue_result, operation="issue diagnostic read")
     if error or issue is None or issue.get("pull_request") is not None:
         return None
-    linked = _linked_pull_request(repo, number)
-    if linked is not None:
+    linked, scan_error = _scan_linked_pull_requests(repo, number)
+    if scan_error:
         return (
-            f"number {number} is an issue, not a pull request; its linked PR is #{linked} - "
+            f"number {number} is an issue, not a pull request; the linked-PR lookup "
+            f"was incomplete ({scan_error}) - pass the PR number"
+        )
+    if len(linked) == 1:
+        return (
+            f"number {number} is an issue, not a pull request; its linked PR is #{linked[0]} - "
             "pass the PR number"
+        )
+    if len(linked) > 1:
+        return (
+            f"number {number} is an issue, not a pull request; linked PR references are "
+            f"ambiguous ({len(linked)} repository-qualified candidates) - pass the PR "
+            "number explicitly"
         )
     return f"number {number} is an issue, not a pull request - pass the PR number"
 
@@ -496,7 +580,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         result = update_pr_body(args.number, args.body_file, repo=args.repo)
-    if result.get("status") not in {"ok", "unchanged"} and _looks_like_not_found(
+    if result.get("status") not in {"ok", "unchanged"} and _confirmed_pr_endpoint_404(
         str(result.get("error", ""))
     ):
         diagnostic = _issue_number_diagnostic(args.repo, args.number)

@@ -149,6 +149,7 @@ def _breakdown_row_signature(row: dict[str, Any], key_fields: tuple[str, ...]) -
             metrics[metric] = value
     return {
         "key": {field: str(row.get(field) or "") for field in key_fields},
+        "archetype": str(row.get("archetype") or ""),
         "episodes": _row_episodes(row),
         "metrics": metrics,
     }

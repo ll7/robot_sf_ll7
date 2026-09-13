@@ -248,6 +248,58 @@ def test_reconcile_pr_metadata_fails_closed_on_malformed_current_response(
     mock_patch.assert_not_called()
 
 
+def test_reconcile_pr_metadata_classifies_http_500_empty_body_without_retry(
+    tmp_path: Path,
+) -> None:
+    """A server error stays unverified and exposes a retry-safe transport class."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
+        mock_patch.return_value = _proc(stderr="gh: Server Error (HTTP 500)")
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "error"
+    assert result["transport"] == {
+        "schema": "github_transport_error.v1",
+        "phase": "PR metadata update",
+        "error_class": "http_5xx",
+        "http_status": 500,
+        "response_body": "empty",
+        "verified": False,
+        "retry_policy": "no_automatic_retry",
+        "next_action": "fresh_metadata_read_before_any_retry",
+    }
+    assert mock_get.call_count == 1
+    mock_patch.assert_called_once()
+
+
+def test_reconcile_pr_metadata_distinguishes_empty_malformed_json_from_http_500(
+    tmp_path: Path,
+) -> None:
+    """An empty successful response is malformed JSON, not an HTTP server error."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
+        mock_patch.return_value = _proc()
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "error"
+    assert result["transport"]["error_class"] == "malformed_json"
+    assert result["transport"]["http_status"] is None
+    assert result["transport"]["response_body"] == "empty"
+    assert result["transport"]["retry_policy"] == "no_automatic_retry"
+    assert mock_get.call_count == 1
+    mock_patch.assert_called_once()
+
+
 def test_reconcile_pr_metadata_rejects_invalid_title_before_reading_remote(
     tmp_path: Path,
 ) -> None:

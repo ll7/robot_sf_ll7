@@ -928,6 +928,14 @@ live PR metadata, rebuild the final review evidence, and obtain a new exact-head
 retrying. Do not overwrite the newer metadata automatically or treat this result as an ordinary
 successful reconciliation.
 
+Transport failures are reported separately from metadata conflicts. A non-zero REST result that
+contains an HTTP 5xx status is classified as `http_5xx`; an empty or malformed successful response
+is classified as `malformed_json`. Both remain unverified and include a safe `transport` diagnostic
+with no response payload. The helper does not retry PATCH requests automatically, because GitHub
+may have applied a write before returning an error. Refresh the live metadata first, and only retry
+after an exact read has established that the desired title/body pair is not already present; a
+successful reconciliation still requires the normal post-update exact read.
+
 ### Exact-head stability snapshot (issue #7523)
 
 Final exact-head handoffs need repeated manual refreshes whenever `main` moves during local proof

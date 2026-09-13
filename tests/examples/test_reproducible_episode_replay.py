@@ -75,9 +75,17 @@ def test_report_distinguishes_same_and_changed_seed(
         "configs/scenarios/single/quickstart_demo.yaml"
     )
     assert len(report["input_identity"]["source_sha256"]) == 64
+    assert report["input_identity"]["map_source"] == (
+        "maps/svg_maps/francis2023/francis2023_circular_crossing.svg"
+    )
+    assert len(report["input_identity"]["map_sha256"]) == 64
     assert len(report["input_identity"]["config_digest"]) == 64
     assert all(
         artifact["identity"]["source_sha256"] == report["input_identity"]["source_sha256"]
+        for artifact in report["artifacts"]
+    )
+    assert all(
+        artifact["identity"]["map_sha256"] == report["input_identity"]["map_sha256"]
         for artifact in report["artifacts"]
     )
     assert report["canonical_policy"]["excluded_runtime_fields"] == ["raw", "timing"]
@@ -119,3 +127,22 @@ def test_report_distinguishes_same_and_changed_seed(
     assert persisted == report
     assert module.main(["--output-dir", str(tmp_path / "cli-json"), "--format", "json"]) == 0
     assert module.main(["--output-dir", str(tmp_path / "cli-text"), "--format", "text"]) == 0
+
+
+def test_input_identity_binds_resolved_map_asset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The effective map asset is included in the input identity, not just its config path."""
+    module = _load_example()
+    hashed_paths: list[Path] = []
+
+    def fake_sha256_file(path: Path) -> str:
+        hashed_paths.append(path)
+        return "a" * 64 if path.suffix == ".yaml" else "b" * 64
+
+    monkeypatch.setattr(module, "sha256_file", fake_sha256_file)
+
+    identity = module._input_identity()
+
+    assert identity["source_sha256"] == "a" * 64
+    assert identity["map_sha256"] == "b" * 64
+    assert identity["map_source"] == "maps/svg_maps/francis2023/francis2023_circular_crossing.svg"
+    assert any(path.name == "francis2023_circular_crossing.svg" for path in hashed_paths)

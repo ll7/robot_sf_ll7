@@ -125,6 +125,12 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 ## Current Bundles
 
+- `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
+  #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:
+  job-13512 bytes are checksum-covered for custody but have conflicting execution lineage and no
+  materialized SNQI, while the older slice is rank-non-identifiable. No ranking, benchmark,
+  realism, sim-to-real, safety, paper, or dissertation claim is promoted.
+
 - `issue_7322_ch7_evidence_package_v2/`: deterministic, collision-excluded Chapter 7 v2 package
   built from the frozen #6792 source and exact v2 portfolio. The package is durable and
   checksum-covered, but remains `blocked_pending_domain_approval` / `not_admitted`; see the

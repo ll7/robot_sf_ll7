@@ -524,7 +524,7 @@ def _run_preregistration(
     if identity_failure is not None:
         return identity_failure
     initial_sha256 = None
-    if decision_capable and required:
+    if decision_capable:
         try:
             initial_sha256 = _stable_sha256_file(path)
         except OSError as exc:
@@ -613,7 +613,7 @@ def _run_artifact_catalog(  # noqa: C901, PLR0912
     if identity_failure is not None:
         return identity_failure
     initial_sha256 = None
-    if decision_capable and required:
+    if decision_capable:
         try:
             initial_sha256 = _stable_sha256_file(path)
         except OSError as exc:
@@ -802,7 +802,7 @@ def _run_result_packet(  # noqa: C901, PLR0912
     if identity_failure is not None:
         return identity_failure
     initial_sha256 = None
-    if decision_capable and required:
+    if decision_capable:
         try:
             initial_sha256 = _stable_sha256_file(path)
         except OSError as exc:
@@ -1141,7 +1141,7 @@ def _run_receipt(  # noqa: C901, PLR0912
     if identity_failure is not None:
         return identity_failure
     initial_sha256 = None
-    if decision_capable and required:
+    if decision_capable:
         try:
             initial_sha256 = _stable_sha256_file(path)
             payload = json.loads(_stable_file_bytes(path).decode("utf-8"))

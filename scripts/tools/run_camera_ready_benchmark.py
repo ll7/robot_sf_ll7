@@ -356,8 +356,10 @@ def _research_answerability_block(  # noqa: C901
                     expected_execution_inventory=expected_execution_inventory,
                 )
                 if proof_error is None:
+                    # The admission receipt is shared by preflight and run invocations
+                    # for one campaign.  Keep the launcher mode out of its stable identity;
+                    # mode is a property of the invocation, not of the proof identity.
                     return {
-                        "mode": mode,
                         "status": "research_answerability_admitted",
                         "status_reason": "exact manifest/config/proof binding passed",
                         "research_manifest": str(manifest_path),

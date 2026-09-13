@@ -479,6 +479,82 @@ def test_main_persists_exact_answerability_admission_receipt(
     assert receipt["admission_sha256"] == sidecar["admission_sha256"]
 
 
+def test_main_reuses_one_admission_receipt_across_preflight_and_run(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Preflight and run modes share one stable admission identity per campaign."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    research_manifest = tmp_path / "research.yaml"
+    research_manifest.write_text("campaign: test\n", encoding="utf-8")
+    campaign_root = tmp_path / "out" / "fixed-campaign"
+    campaign_root.mkdir(parents=True)
+
+    def _evaluate(path: Path, **kwargs):
+        return _valid_admission_report(
+            manifest_path=path,
+            campaign_id="fixed-campaign",
+            config_sha256=kwargs["expected_config_sha256"],
+        )
+
+    def _prepare(*args, **kwargs):
+        del args, kwargs
+        return {
+            "campaign_id": "fixed-campaign",
+            "campaign_root": campaign_root,
+            "validate_config_path": tmp_path / "validate.json",
+            "preview_scenarios_path": tmp_path / "preview.json",
+            "matrix_summary_json_path": tmp_path / "matrix.json",
+            "matrix_summary_csv_path": tmp_path / "matrix.csv",
+            "amv_coverage_json_path": tmp_path / "amv.json",
+            "amv_coverage_md_path": tmp_path / "amv.md",
+            "comparability_json_path": None,
+            "comparability_md_path": None,
+        }
+
+    def _run(*args, **kwargs):
+        del args, kwargs
+        return {
+            "campaign_id": "fixed-campaign",
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "status": "benchmark_success",
+            "exit_code": 0,
+        }
+
+    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(run_camera_ready_benchmark, "prepare_campaign_preflight", _prepare)
+    monkeypatch.setattr(run_camera_ready_benchmark, "run_campaign", _run)
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        _evaluate,
+    )
+
+    common_args = [
+        "--config",
+        str(config_path),
+        "--research-manifest",
+        str(research_manifest),
+        "--require-answerable",
+        "--campaign-id",
+        "fixed-campaign",
+    ]
+    assert run_camera_ready_benchmark.main([*common_args, "--mode", "preflight"]) == 0
+    preflight_payload = json.loads(capsys.readouterr().out)
+
+    assert run_camera_ready_benchmark.main([*common_args, "--mode", "run"]) == 0
+    run_payload = json.loads(capsys.readouterr().out)
+
+    assert (
+        preflight_payload["research_answerability_admission"]
+        == run_payload["research_answerability_admission"]
+    )
+    sidecar_path = campaign_root / "reports" / "research_answerability_admission.json"
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["admission"] == run_payload["research_answerability_admission"]
+
+
 def test_main_preflight_fails_closed_when_answerability_receipt_persistence_fails(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:

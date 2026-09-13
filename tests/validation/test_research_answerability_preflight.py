@@ -576,6 +576,73 @@ def test_manifest_row_and_command_checks_execute_without_shell() -> None:
     assert report["surfaces"]["analysis"]["returncode"] == 0
 
 
+@pytest.mark.parametrize(
+    ("surface", "kind", "path", "identity_extra"),
+    [
+        (
+            "preregistration",
+            "preregistration",
+            "configs/benchmarks/issue_6942_orca_adapter_hedge_preregistration.yaml",
+            {},
+        ),
+        (
+            "artifact",
+            "artifact_catalog",
+            "tests/fixtures/artifact_catalog/v1/valid_catalog.yaml",
+            {
+                "catalog_id": "fixture_camera_ready_artifacts",
+                "artifact_ids": [
+                    "fig_benchmark_outcome_matrix",
+                    "tab_planner_execution_modes",
+                ],
+                "artifact_digests": {},
+            },
+        ),
+        (
+            "result_packet",
+            "result_packet",
+            "tests/fixtures/result_interpretation_packet/v1/issue_6944_brne_candidate_transition_diagnostic.json",
+            {
+                "packet_id": "optional_fixture_packet",
+                "evidence_id": "optional_fixture_evidence",
+                "evidence_tier": "smoke_diagnostic",
+                "admission_state": "diagnostic_only",
+                "question_id": "optional_fixture_question",
+                "estimand_id": "optional_fixture_estimand",
+                "source_digests": {},
+            },
+        ),
+    ],
+)
+def test_optional_file_backed_proof_records_input_identity(
+    surface: str,
+    kind: str,
+    path: str,
+    identity_extra: dict[str, Any],
+) -> None:
+    """Optional passed file checks retain the bytes they actually validated."""
+    manifest = _manifest()
+    manifest["answerability"]["design"]["mode"] = "decision_capable"
+    manifest["answerability"]["proof_surfaces"][surface]["required"] = False
+    identity = _receipt_identity(manifest, **identity_extra)
+    manifest["validation"]["answerability_proof"] = {
+        surface: {"kind": kind, "path": path, "identity": identity}
+    }
+
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=REPO_ROOT,
+        execute=True,
+    )
+
+    result = report["surfaces"][surface]
+    assert result["status"] == "passed"
+    assert result["proof_input_path"] == path
+    assert (
+        result["proof_input_sha256"] == hashlib.sha256((REPO_ROOT / path).read_bytes()).hexdigest()
+    )
+
+
 def test_command_proof_rejects_unregistered_shell_validator() -> None:
     """Proof admission cannot execute an arbitrary shell or campaign command."""
     manifest = _manifest()

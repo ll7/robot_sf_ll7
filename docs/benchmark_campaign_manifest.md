@@ -148,9 +148,12 @@ summary fails closed instead of overwriting prior admission state. This
 persistence records launch authorization only; it is not benchmark or
 scientific evidence. The issue #3425 wrapper carries `--research-manifest` and
 `--require-answerable` on both preflight and actual run commands, so the gate
-is re-evaluated after any intervening manifest/config mutation. Readiness-only
-callers may omit `--require-answerable`; the existing packet runner remains
-the owner of packet generation.
+is re-evaluated after any intervening manifest/config mutation. The successful
+admission payload has one stable identity across those two invocations and does
+not include the launcher mode; mode remains a property of the launcher
+invocation rather than proof identity. Readiness-only callers may omit
+`--require-answerable`; the existing packet runner remains the owner of packet
+generation.
 
 ## Research-Yield Snapshot
 

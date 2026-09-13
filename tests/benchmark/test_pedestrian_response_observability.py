@@ -210,6 +210,16 @@ def test_direct_record_rejects_unhashable_vocabulary_values(field_name: str, val
         PedestrianResponseObservation(encounter_id="invalid-vocabulary", **{field_name: value})  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("field_name", ["missing_fields", "unavailable_fields"])
+def test_direct_record_rejects_unhashable_field_names(field_name: str) -> None:
+    """Unhashable field-name values cannot escape the stable validation error."""
+    with pytest.raises(ValueError, match="unknown required field"):
+        PedestrianResponseObservation(
+            encounter_id="unhashable-field-name",
+            **{field_name: (_UnhashableString("offered_side"),)},
+        )  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize("goal_delta", [0.0, 0.025, 0.05])
 def test_route_reference_rejects_zero_or_near_zero_start_goal(goal_delta: float) -> None:
     """The route contract's tolerance gate rejects degenerate reference axes."""
@@ -425,6 +435,35 @@ def test_invalid_unavailable_route_reference_fails_closed() -> None:
     )
     assert "route_reference:invalid_reference" in (record.unavailable_reason or "")
     assert "route_reference:explicitly_unavailable" not in (record.unavailable_reason or "")
+
+
+def test_unhashable_invalid_reference_reason_fails_closed() -> None:
+    """An invalid route reason with an unhashable string subtype stays unavailable."""
+    routes = generate_corridor_homotopy_routes(build_corridor_fixture(), num_points=24)
+    malformed_route = replace(
+        routes["left"].side_report,
+        coordinate_frame="",
+        reason=_UnhashableString("invalid_reference"),
+    )
+
+    record = build_pedestrian_response_observation(
+        encounter_id="unhashable-invalid-reference-reason",
+        offered_route=malformed_route,
+        taken_route=routes["right"].side_report,
+        minimum_passing_clearance_m=0.8,
+        response_present=True,
+    )
+
+    assert record.status == "not_available"
+    assert record.route_reference is None
+    assert record.offered_side == "unavailable"
+    assert record.taken_side == "unavailable"
+    assert record.unavailable_fields == (
+        "offered_side",
+        "route_reference",
+        "taken_side",
+    )
+    assert "offered_side:invalid_reference" in (record.unavailable_reason or "")
 
 
 def test_caller_unavailable_route_reference_retains_explicit_reason() -> None:

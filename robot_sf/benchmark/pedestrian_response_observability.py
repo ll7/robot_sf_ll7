@@ -490,8 +490,15 @@ def _field_names(value: Iterable[str], field_name: str) -> tuple[str, ...]:
         values = tuple(value)
     except TypeError as exc:
         raise ValueError(f"{field_name} must be an iterable of field names") from exc
-    if any(not isinstance(item, str) or item not in _REQUIRED_FIELD_SET for item in values):
-        raise ValueError(f"{field_name} contains an unknown required field")
+    for item in values:
+        if not isinstance(item, str):
+            raise ValueError(f"{field_name} contains an unknown required field")
+        try:
+            is_required_field = item in _REQUIRED_FIELD_SET
+        except TypeError:
+            is_required_field = False
+        if not is_required_field:
+            raise ValueError(f"{field_name} contains an unknown required field")
     return tuple(sorted(set(values)))
 
 
@@ -519,7 +526,12 @@ def _validate_sides(observation: PedestrianResponseObservation, unavailable: set
 
 def _is_invalid_reference_reason(reason: object) -> bool:
     """Return whether an upstream route report invalidates its reference."""
-    return isinstance(reason, str) and reason in _REFERENCE_INVALID_REASONS
+    if not isinstance(reason, str):
+        return False
+    try:
+        return reason in _REFERENCE_INVALID_REASONS
+    except TypeError:
+        return False
 
 
 def _normalize_sides_without_reference(

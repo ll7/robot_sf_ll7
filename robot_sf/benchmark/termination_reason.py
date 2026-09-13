@@ -14,6 +14,17 @@ TERMINATION_REASONS: tuple[str, ...] = (
     "error",
 )
 
+# ``terminated`` is the Gymnasium terminal signal used by older episode
+# writers for horizon exhaustion. Keep it aligned with the explicit timeout
+# labels used by benchmark consumers.
+TIMEOUT_TERMINATION_REASONS: tuple[str, ...] = (
+    "horizon",
+    "max_steps",
+    "terminated",
+    "timeout",
+    "truncated",
+)
+
 
 def canonical_outcome_flags(outcome: Mapping[str, Any] | None) -> tuple[bool, bool]:
     """Return route-complete and collision flags with canonical-key precedence.

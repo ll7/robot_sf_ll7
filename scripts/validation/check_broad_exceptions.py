@@ -9,6 +9,7 @@ import fnmatch
 import hashlib
 import json
 import sys
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -223,13 +224,18 @@ def check_against_baseline(
         for entry in baseline_entries
     ):
         return failures + ["Broad exception baseline entries lack fingerprints; regenerate."]
-    baseline_fingerprints = {entry["fingerprint"] for entry in baseline_entries}
-    current_fingerprints = {entry.fingerprint for entry in current}
+    baseline_fingerprints = Counter(entry["fingerprint"] for entry in baseline_entries)
+    current_fingerprints = Counter(entry.fingerprint for entry in current)
     if len(current) > len(baseline_entries):
         failures.append(
             f"Broad exception count increased from {len(baseline_entries)} to {len(current)}."
         )
-    new_entries = [entry for entry in current if entry.fingerprint not in baseline_fingerprints]
+    new_fingerprints = current_fingerprints - baseline_fingerprints
+    new_entries = []
+    for entry in current:
+        if new_fingerprints[entry.fingerprint] > 0:
+            new_entries.append(entry)
+            new_fingerprints[entry.fingerprint] -= 1
     if new_entries:
         failures.append("Unapproved broad exception handlers were added:")
         failures.extend(

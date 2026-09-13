@@ -49,6 +49,7 @@ VALID_FAILURE_CLASSES: tuple[str, ...] = (
     FAILURE_CLASS_SOCIAL_COMPLIANCE,
     FAILURE_CLASS_SIMULATOR,
 )
+VALID_ROLLOUT_STATUSES: tuple[str, ...] = ("ok", "error", "degraded")
 
 
 def classify_failure(
@@ -81,8 +82,14 @@ def classify_failure(
         simulator_error: Whether an error occurred in the simulation/environment.
 
     Returns:
-        One of the four failure classes if the rollout is non-ok, or None if rollout succeeded (status=='ok').
+        One of the four failure classes if the rollout is non-ok, or None if rollout succeeded.
+
+    Raises:
+        ValueError: If the rollout status is unsupported.
     """
+    if status not in VALID_ROLLOUT_STATUSES:
+        raise ValueError(f"unknown rollout status: {status!r}")
+
     if (
         status == "ok"
         and not degraded
@@ -91,11 +98,15 @@ def classify_failure(
         and completed
         and not plan_exception
         and not simulator_error
+        and not degradation_reasons
     ):
         return None
 
     reasons_str = " ".join(degradation_reasons).lower()
 
+    # Preserve the base taxonomy precedence for combined signals.  An explicit simulator flag
+    # and simulator reason text win before social, tracking, or path-generation signals.
+    #
     # 1. Simulator errors
     if simulator_error or "simulator" in reasons_str or "sim_error" in reasons_str:
         return FAILURE_CLASS_SIMULATOR
@@ -128,7 +139,8 @@ def classify_failure(
     ):
         return FAILURE_CLASS_PATH_GENERATION
 
-    # Fallback for remaining non-ok conditions
+    # Preserve the established compatibility fallback for recognized non-ok statuses.  Summary
+    # aggregation still requires the returned class, so this cannot disappear from the taxonomy.
     return FAILURE_CLASS_PATH_GENERATION
 
 
@@ -419,20 +431,46 @@ def _update_clearance(
     return new_min, collision, near_miss
 
 
+def _diagnostic_degradation_reasons(diag: dict[str, Any]) -> list[str]:
+    """Return diagnostic degradation reasons without masking malformed signals.
+
+    A few legacy planner adapters emitted one reason as a string rather than a JSON-like list.
+    Treat that value as one reason so a simulator signal cannot be split into characters and lose
+    simulator-first classification. Other non-string reason payloads are invalid planner output
+    and must fail through the existing planner-exception boundary.
+    """
+    if "degradation_reasons" not in diag:
+        return []
+
+    raw_reasons = diag["degradation_reasons"]
+    if isinstance(raw_reasons, str):
+        return [raw_reasons]
+    if isinstance(raw_reasons, (list, tuple)) and all(
+        isinstance(reason, str) for reason in raw_reasons
+    ):
+        return list(raw_reasons)
+    raise ValueError(
+        "planner diagnostic degradation_reasons must be a string or a sequence of strings"
+    )
+
+
 def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     planner: LocalPlannerProtocol,
     scenario: ComparatorScenarioSpec,
+    *,
+    planner_id: str | None = None,
 ) -> ComparatorRunResult:
     """Execute one deterministic kinematic rollout in an analytic scenario.
 
     Args:
         planner: Local planner instance to evaluate.
         scenario: Scenario specification with start, goal, obstacles, and limits.
+        planner_id: Canonical registry ID, when available. Direct callers default to the planner
+            class name for compatibility.
 
     Returns:
         Structured rollout outcome containing trajectory metrics and collision status.
     """
-    planner.reset(seed=scenario.seed)
     rx, ry, rtheta = scenario.robot_start
     gx, gy = scenario.goal
     dt = scenario.control_dt
@@ -449,99 +487,162 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     degraded = False
     degradation_reasons: list[str] = []
     status = "ok"
-    planner_id = type(planner).__name__
+    rollout_planner_id = planner_id if planner_id is not None else type(planner).__name__
     col_obs_occurred = False
     col_ped_occurred = False
     plan_exception_occurred = False
     simulator_error_occurred = False
+
+    def record_plan_exception(exc: Exception) -> None:
+        """Record a planner-owned lifecycle or output failure for taxonomy classification."""
+        nonlocal degraded, plan_exception_occurred, status
+        status = "error"
+        degraded = True
+        plan_exception_occurred = True
+        degradation_reasons.append(f"plan_exception: {exc}")
+
+    def record_simulator_error(phase: str, exc: Exception) -> None:
+        """Record a simulator-side failure without allowing it to escape the rollout."""
+        nonlocal degraded, simulator_error_occurred, status
+        status = "error"
+        degraded = True
+        simulator_error_occurred = True
+        degradation_reasons.append(f"simulator_{phase}_failure: {type(exc).__name__}: {exc}")
+
+    try:
+        planner.reset(seed=scenario.seed)
+    except Exception as exc:  # noqa: BLE001 - planner lifecycle failures are path-generation results
+        record_plan_exception(exc)
 
     last_v = 0.0
     last_a = 0.0
     jerk_accum = 0.0
 
     step = 0
-    while step < scenario.max_steps:
-        dist_to_goal = math.hypot(gx - rx, gy - ry)
-        if dist_to_goal <= scenario.goal_tolerance:
-            completed = True
+    while step < scenario.max_steps and status == "ok":
+        try:
+            dist_to_goal = math.hypot(gx - rx, gy - ry)
+            if dist_to_goal <= scenario.goal_tolerance:
+                completed = True
+                break
+        except Exception as exc:  # noqa: BLE001 - analytic simulator state failures are structured
+            record_simulator_error("state", exc)
             break
 
-        if scenario.obstacles:
-            min_obs_dist, col_obs, nm_obs = _update_clearance(
-                scenario.obstacles,
-                rx,
-                ry,
-                min_obs_dist,
-                scenario.robot_radius,
-                scenario.near_miss_radius,
-            )
-            collision = collision or col_obs
-            near_miss = near_miss or nm_obs
-            if col_obs:
-                col_obs_occurred = True
-
-        if scenario.pedestrians:
-            min_ped_dist, col_ped, nm_ped = _update_clearance(
-                scenario.pedestrians,
-                rx,
-                ry,
-                min_ped_dist,
-                scenario.robot_radius,
-                scenario.near_miss_radius,
-            )
-            collision = collision or col_ped
-            near_miss = near_miss or nm_ped
-            if col_ped:
-                col_ped_occurred = True
-
-        obs = {
-            "robot": [rx, ry, rtheta],
-            "goal": [gx, gy],
-            "obstacles": {"positions": [list(p) for p in scenario.obstacles]},
-            "pedestrians": {
-                "positions": [list(p) for p in scenario.pedestrians],
-                "count": [len(scenario.pedestrians)],
-            },
-            "sim": {"timestep": dt},
-        }
-
-        t0 = time.perf_counter()
         try:
-            linear_cmd, angular_cmd = planner.plan(obs)
+            if scenario.obstacles:
+                min_obs_dist, col_obs, nm_obs = _update_clearance(
+                    scenario.obstacles,
+                    rx,
+                    ry,
+                    min_obs_dist,
+                    scenario.robot_radius,
+                    scenario.near_miss_radius,
+                )
+                collision = collision or col_obs
+                near_miss = near_miss or nm_obs
+                if col_obs:
+                    col_obs_occurred = True
+
+            if scenario.pedestrians:
+                min_ped_dist, col_ped, nm_ped = _update_clearance(
+                    scenario.pedestrians,
+                    rx,
+                    ry,
+                    min_ped_dist,
+                    scenario.robot_radius,
+                    scenario.near_miss_radius,
+                )
+                collision = collision or col_ped
+                near_miss = near_miss or nm_ped
+                if col_ped:
+                    col_ped_occurred = True
+        except Exception as exc:  # noqa: BLE001 - analytic clearance failures are structured
+            record_simulator_error("clearance", exc)
+            break
+
+        try:
+            obs = {
+                "robot": [rx, ry, rtheta],
+                "goal": [gx, gy],
+                "obstacles": {"positions": [list(p) for p in scenario.obstacles]},
+                "pedestrians": {
+                    "positions": [list(p) for p in scenario.pedestrians],
+                    "count": [len(scenario.pedestrians)],
+                },
+                "sim": {"timestep": dt},
+            }
+        except Exception as exc:  # noqa: BLE001 - analytic simulator-state failures are structured
+            record_simulator_error("state", exc)
+            break
+
+        try:
+            t0 = time.perf_counter()
+            planned_command = planner.plan(obs)
             t1 = time.perf_counter()
             latencies_ms.append((t1 - t0) * 1000.0)
-        except (ArithmeticError, IndexError, KeyError, TypeError, ValueError) as exc:
-            status = "error"
-            degraded = True
-            plan_exception_occurred = True
-            degradation_reasons.append(f"plan_exception: {exc}")
+        except Exception as exc:  # noqa: BLE001 - planner failures become structured diagnostics
+            record_plan_exception(exc)
             break
 
-        diag = planner.diagnostics()
-        planner_id = str(diag.get("planner_type", planner_id))
-        if diag.get("status") == "degraded":
-            degraded = True
-            for reason in diag.get("degradation_reasons", []):
-                if reason not in degradation_reasons:
-                    degradation_reasons.append(str(reason))
+        try:
+            linear_cmd, angular_cmd = planned_command
+            diag = planner.diagnostics()
+            diag_status = diag.get("status")
+            if diag_status not in (None, "ok", "degraded"):
+                raise ValueError(f"unsupported planner diagnostic status: {diag_status!r}")
+            if planner_id is None:
+                diagnostic_planner_id = diag.get("planner_type")
+                if isinstance(diagnostic_planner_id, str) and diagnostic_planner_id.strip():
+                    rollout_planner_id = diagnostic_planner_id
 
-        linear_speeds.append(float(linear_cmd))
-        angular_rates.append(float(angular_cmd))
+            diagnostic_reasons = _diagnostic_degradation_reasons(diag)
+            if diag_status == "degraded" or diag.get("degraded") is True or diagnostic_reasons:
+                degraded = True
+                if not diagnostic_reasons:
+                    diagnostic_reasons = ["degraded_without_reason"]
+                for reason in diagnostic_reasons:
+                    planner_reason = f"planner_diagnostic: {reason}"
+                    if planner_reason not in degradation_reasons:
+                        degradation_reasons.append(planner_reason)
+            if diag.get("fallback") is True:
+                degraded = True
+                fallback_reason = "planner_diagnostic: fallback_execution"
+                if fallback_reason not in degradation_reasons:
+                    degradation_reasons.append(fallback_reason)
 
-        accel = (linear_cmd - last_v) / dt
-        if step > 0:
-            jerk = (accel - last_a) / dt
-            jerk_accum += jerk * jerk
-        last_v = linear_cmd
-        last_a = accel
+            linear_cmd = float(linear_cmd)
+            angular_cmd = float(angular_cmd)
+            if not (math.isfinite(linear_cmd) and math.isfinite(angular_cmd)):
+                raise ValueError(
+                    f"non-finite command: linear={linear_cmd!r}, angular={angular_cmd!r}"
+                )
+            linear_speeds.append(linear_cmd)
+            angular_rates.append(angular_cmd)
+        except Exception as exc:  # noqa: BLE001 - planner output-boundary failures are path-generation results
+            record_plan_exception(exc)
+            break
 
-        dx = linear_cmd * math.cos(rtheta) * dt
-        dy = linear_cmd * math.sin(rtheta) * dt
-        rx += dx
-        ry += dy
-        rtheta = wrap_angle_pi(rtheta + angular_cmd * dt)
-        path_length += math.hypot(dx, dy)
-        step += 1
+        try:
+            accel = (linear_cmd - last_v) / dt
+            if step > 0:
+                jerk = (accel - last_a) / dt
+                jerk_accum += jerk * jerk
+            last_v = linear_cmd
+            last_a = accel
+
+            dx = linear_cmd * math.cos(rtheta) * dt
+            dy = linear_cmd * math.sin(rtheta) * dt
+            rx += dx
+            ry += dy
+            rtheta = wrap_angle_pi(rtheta + angular_cmd * dt)
+            path_length += math.hypot(dx, dy)
+            if not all(math.isfinite(value) for value in (rx, ry, rtheta, path_length)):
+                raise ValueError("non-finite simulator state")
+            step += 1
+        except Exception as exc:  # noqa: BLE001 - analytic kinematic integration failures are structured
+            record_simulator_error("integration", exc)
+            break
 
     mean_linear = float(np.mean(linear_speeds)) if linear_speeds else 0.0
     max_linear = float(np.max(np.abs(linear_speeds))) if linear_speeds else 0.0
@@ -575,7 +676,7 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     )
 
     return ComparatorRunResult(
-        planner_id=planner_id,
+        planner_id=rollout_planner_id,
         scenario_id=scenario.scenario_id,
         seed=scenario.seed,
         steps=step,
@@ -598,6 +699,30 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
     )
 
 
+def _validate_summary_run(result: ComparatorRunResult) -> None:
+    """Validate one rollout before including it in taxonomy aggregation."""
+    if result.status not in VALID_ROLLOUT_STATUSES:
+        raise ValueError(f"unknown rollout status: {result.status!r}")
+    if result.status == "ok":
+        if (
+            result.degraded
+            or result.collision
+            or not result.completed
+            or result.degradation_reasons
+            or result.failure_class is not None
+        ):
+            raise ValueError("ok rollout has an inconsistent failure or degradation state")
+        return
+    if not result.degraded:
+        raise ValueError(f"non-ok rollout is not marked degraded: {result.planner_id!r}")
+    if not result.degradation_reasons:
+        raise ValueError(f"missing degradation reason for non-ok rollout: {result.planner_id!r}")
+    if result.failure_class is None:
+        raise ValueError(f"missing failure class for non-ok rollout: {result.planner_id!r}")
+    if result.failure_class not in VALID_FAILURE_CLASSES:
+        raise ValueError(f"unknown failure class: {result.failure_class!r}")
+
+
 def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, Any]]:
     """Compute per-planner aggregated summary statistics across runs.
 
@@ -615,6 +740,8 @@ def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, 
     for pid in sorted(by_planner.keys()):
         runs = by_planner[pid]
         n = len(runs)
+        # Preserve the established v1 success-rate contract; status, degradation, and near-miss
+        # caveats remain separately reported rather than changing this aggregate.
         successes = sum(1 for r in runs if r.completed and not r.collision)
         collisions = sum(1 for r in runs if r.collision)
         near_misses = sum(1 for r in runs if r.near_miss and not r.collision)
@@ -624,13 +751,12 @@ def compute_summary_table(results: list[ComparatorRunResult]) -> list[dict[str, 
 
         status_counts: dict[str, int] = {}
         for r in runs:
+            _validate_summary_run(r)
             status_counts[r.status] = status_counts.get(r.status, 0) + 1
 
         failure_class_counts: dict[str, int] = dict.fromkeys(VALID_FAILURE_CLASSES, 0)
         for r in runs:
             if r.failure_class is not None:
-                if r.failure_class not in failure_class_counts:
-                    raise ValueError(f"unknown failure class: {r.failure_class!r}")
                 failure_class_counts[r.failure_class] += 1
 
         summary.append(
@@ -682,11 +808,19 @@ def run_force_coupled_comparator(
 
     all_results: list[ComparatorRunResult] = []
     for scenario in scenarios:
-        for planner in planners.values():
-            result = execute_rollout(planner, scenario)
+        for planner_id, planner in planners.items():
+            result = execute_rollout(planner, scenario, planner_id=planner_id)
             all_results.append(result)
 
     summary_table = compute_summary_table(all_results)
+    receipt_status = (
+        "failed"
+        if any(
+            result.status == "error" or result.failure_class == FAILURE_CLASS_SIMULATOR
+            for result in all_results
+        )
+        else "ok"
+    )
 
     env_info = {
         "python_version": sys.version.split()[0],
@@ -697,7 +831,7 @@ def run_force_coupled_comparator(
     # Deterministic receipt body for digest computation (excluding wall-clock latency)
     digest_payload = {
         "schema_version": SCHEMA_VERSION,
-        "status": "ok",
+        "status": receipt_status,
         "claim_boundary": CLAIM_BOUNDARY,
         "config_digest": config_digest,
         "config_sha256": config_sha256,
@@ -717,7 +851,7 @@ def run_force_coupled_comparator(
     receipt: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "receipt_digest": receipt_digest,
-        "status": "ok",
+        "status": receipt_status,
         "claim_boundary": CLAIM_BOUNDARY,
         "config_digest": config_digest,
         "config_sha256": config_sha256,

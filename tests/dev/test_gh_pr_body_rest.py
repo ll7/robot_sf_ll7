@@ -250,8 +250,9 @@ def test_reconcile_pr_metadata_fails_closed_on_malformed_current_response(
 
 def test_reconcile_pr_metadata_classifies_http_500_empty_body_without_retry(
     tmp_path: Path,
+    capsys: pytest.CaptureFixture,
 ) -> None:
-    """A server error stays unverified and exposes a retry-safe transport class."""
+    """The CLI keeps a nonzero HTTP 500 unverified and on stderr without retry."""
     body_file = tmp_path / "body.md"
     body_file.write_text("final body", encoding="utf-8")
     with (
@@ -259,9 +260,27 @@ def test_reconcile_pr_metadata_classifies_http_500_empty_body_without_retry(
         patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
     ):
         mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
-        mock_patch.return_value = _proc(stderr="gh: Server Error (HTTP 500)")
-        result = reconcile_pr_metadata(5220, "final title", body_file)
+        mock_patch.return_value = _proc(
+            returncode=1,
+            stderr="gh: Server Error (HTTP 500)",
+        )
+        rc = main(
+            [
+                "5220",
+                "--repo",
+                "ll7/robot_sf_ll7",
+                "--body-file",
+                str(body_file),
+                "--reconcile",
+                "--title",
+                "final title",
+            ]
+        )
 
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    result = json.loads(captured.err)
     assert result["status"] == "error"
     assert result["transport"] == {
         "schema": "github_transport_error.v1",

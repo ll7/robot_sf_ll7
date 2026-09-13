@@ -15,6 +15,8 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from robot_sf.common.math_utils import wrap_angle_pi
+
 DEFAULT_WEIGHTS: dict[str, float] = {
     "min_dist_severity": 0.20,
     "collapse_rate": 0.15,
@@ -612,7 +614,7 @@ def _stddev(values: Sequence[float]) -> float:
 
 def _angle_delta(current: float, previous: float) -> float:
     """Return the signed smallest angular difference between two headings (radians)."""
-    return (current - previous + math.pi) % (2.0 * math.pi) - math.pi
+    return wrap_angle_pi(current - previous)
 
 
 def _effective_weights(overrides: Mapping[str, float] | None) -> dict[str, float]:

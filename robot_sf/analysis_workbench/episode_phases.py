@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import math
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
+
+from robot_sf.common.math_utils import wrap_angle_pi
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -212,7 +213,7 @@ def _run_duration(frames: Sequence[Mapping[str, Any]], start: int, end: int) -> 
 
 
 def _wrapped_angle_delta(current: float, previous: float) -> float:
-    return (current - previous + math.pi) % (2.0 * math.pi) - math.pi
+    return wrap_angle_pi(current - previous)
 
 
 def _nonzero_sign_reversals(signs: Sequence[int]) -> int:

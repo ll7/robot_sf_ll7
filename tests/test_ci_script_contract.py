@@ -40,6 +40,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.dev.check_ci_needs import (
+    AGGREGATE_JOB,
+    REQUIRED_JOBS,
+    required_check_identities,
+)
 from tests.support.environment_guards import configure_git_identity
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -452,6 +457,14 @@ def test_determinism_gate_reuses_the_model_preflight_cache() -> None:
         "path": "output/model_cache",
         "key": "model-cache-exact-repeat-ppo-${{ steps.model-cache-key.outputs.key }}",
     }
+
+
+def test_required_check_identities_bind_to_aggregate_ci_contract() -> None:
+    """The monitor's required identities must stay bound to the aggregate CI job."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    aggregate = workflow["jobs"][AGGREGATE_JOB]
+    assert set(REQUIRED_JOBS) <= set(aggregate["needs"])
+    assert required_check_identities() == REQUIRED_JOBS
 
 
 def test_ci_aggregate_uses_declarative_needs_checker() -> None:

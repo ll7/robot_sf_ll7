@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scripts.dev import check_pr_ci_status as ci_status
 from scripts.dev.check_pr_ci_status import _latest_check_runs_with_evidence
 from scripts.dev.watch_pr_ci_status import (
     DEFAULT_BASELINE_SECONDS,
@@ -238,9 +239,18 @@ def test_fetch_exact_commit_ci_status_orders_materialization_by_run_id_when_time
     ids=["pending", "success", "failure"],
 )
 def test_fetch_exact_commit_ci_status_preserves_materialized_replacement_authority(
-    check_status: str, check_conclusion: str | None, expected_overall: str
+    check_status: str,
+    check_conclusion: str | None,
+    expected_overall: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A visible replacement keeps run-ID authority and its own terminal outcome."""
+    # Scope required-identity enforcement to the replacement job; the
+    # required-check gate itself is covered by dedicated issue #9174 fixtures.
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status.required_check_identities",
+        lambda: ("coverage-gate",),
+    )
     replacement_job_url = "https://github.com/ll7/robot_sf_ll7/actions/runs/91002/job/92002"
     fetch_check_runs = MagicMock(
         return_value={
@@ -672,6 +682,37 @@ def test_once_returns_pending_without_sleep_or_drift_sampling() -> None:
     assert result.drift_sample is None
     fetch_durations.assert_not_called()
     sleep.assert_not_called()
+
+
+def test_once_on_partial_bot_only_rollup_is_pending(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #9174: watch --once must not report success on a bot-only rollup."""
+    payload = {
+        "number": 9174,
+        "title": "partial rollup",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "partial-rollup",
+        "headRefOid": "a6640d7141e8f7c3b2a5d9049f1c6e3a8b7d5f2e",
+        "statusCheckRollup": [
+            {"name": "CodeRabbit", "status": "completed", "conclusion": "success"},
+            {"name": "route-coderabbit", "status": "completed", "conclusion": "success"},
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+
+    result = watch_pr_ci_status(
+        pr_number="9174",
+        once=True,
+        fetch_status=ci_status._fetch_ci_status,
+    )
+
+    assert result.final_status == "pending"
+    assert result.checks["required_checks"]["reason"] == "required_checks_absent"
+    assert "fast-feedback" in result.checks["required_checks"]["missing"]
 
 
 def test_progress_json_is_emitted_to_stream() -> None:

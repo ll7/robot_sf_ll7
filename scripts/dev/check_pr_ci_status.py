@@ -3,6 +3,17 @@
 
 Output is compact and cache-friendly.  Use --json for machine-readable output.
 Run `--help` for the worktree-safe invocation used by agent workflows.
+
+Required-check boundary (issue #9174): an overall ``success`` is only reported
+when the effective rollup proves every declared required CI identity present and
+green.  The declaration is ``scripts/dev/check_ci_needs.py``
+(``REQUIRED_JOBS`` / ``AGGREGATE_JOB``): the manifest the aggregate ``CI / ci``
+job enforces, which this module projects into ``checks.overall`` for guarded
+merge preflight.  Branch rulesets for this repository currently declare no
+required status checks, and a live ruleset read would add an API call to every
+poll, so the checked-in manifest is the monitor source;
+``check_merge_queue_protection.py`` remains the live branch-protection reader if
+required contexts are activated there later.
 """
 
 from __future__ import annotations
@@ -25,6 +36,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.dev.check_ci_needs import (  # noqa: E402
+    AGGREGATE_JOB,
+    required_check_identities,
+)
 from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
 from scripts.dev.github_quota import parse_rate_limit_payload  # noqa: E402
 from scripts.dev.pr_metadata import metadata_digest, validate_pr_title  # noqa: E402
@@ -39,6 +54,10 @@ FAILURE_CONCLUSIONS = {
 }
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
 QUEUE_STATUSES = {"queued", "requested", "waiting"}
+REQUIRED_CHECKS_SOURCE = "check_ci_needs.REQUIRED_JOBS"
+REQUIRED_CHECKS_ABSENT = "required_checks_absent"
+NO_REQUIRED_CHECKS_CONFIGURED = "no_required_checks_configured"
+_GREEN_REQUIRED_CONCLUSIONS = {"success", "neutral"}
 DEFAULT_QUEUE_STARVATION_SECONDS = 300.0
 _ACTIONS_JOB_URL_RE = re.compile(
     r"/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)(?:$|[/?#])"
@@ -215,6 +234,106 @@ def _rollup_status(check: dict[str, Any]) -> str:
 def _rollup_name(check: dict[str, Any]) -> str:
     """Return a display name for check-run and legacy-status rollup entries."""
     return str(check.get("name") or check.get("context") or "unknown")
+
+
+def _required_identity_matches(check_name: str, identity: str) -> bool:
+    """Match an observed rollup name to a required job identity, matrix suffixes included."""
+    normalized = check_name.strip()
+    return normalized == identity or normalized.startswith(f"{identity} (")
+
+
+def _required_check_is_green(check: dict[str, Any]) -> bool:
+    """Return whether one check run/job proves a required identity green."""
+    return (
+        _rollup_status(check) == "completed"
+        and _rollup_conclusion(check) in _GREEN_REQUIRED_CONCLUSIONS
+    )
+
+
+def _classify_required_checks(
+    rollup: list[dict[str, Any]],
+    *,
+    required_identities: tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """Compare an effective rollup against the declared required-check identities.
+
+    A green aggregate ``ci`` check is accepted as proof for every required job
+    identity because that job is the workflow's own enforcement of the required
+    needs manifest.  Without it, each identity must be present and green on its
+    own (matrix jobs match their ``<job> (<params>)`` display names).  An empty
+    identity set means no required CI contract is configured and is reported as
+    such instead of as a silent success.
+    """
+    identities = (
+        tuple(required_identities)
+        if required_identities is not None
+        else required_check_identities()
+    )
+    observed = [_rollup_name(check) for check in rollup]
+    if not identities:
+        return {
+            "source": REQUIRED_CHECKS_SOURCE,
+            "expected": [],
+            "observed": observed,
+            "present": [],
+            "missing": [],
+            "not_green": [],
+            "reason": NO_REQUIRED_CHECKS_CONFIGURED,
+        }
+    aggregate_green = any(
+        _required_identity_matches(_rollup_name(check), AGGREGATE_JOB)
+        and _required_check_is_green(check)
+        for check in rollup
+    )
+    present: list[str] = []
+    missing: list[str] = []
+    not_green: list[str] = []
+    for identity in identities:
+        matches = [
+            check for check in rollup if _required_identity_matches(_rollup_name(check), identity)
+        ]
+        if aggregate_green or any(_required_check_is_green(check) for check in matches):
+            present.append(identity)
+        elif matches:
+            not_green.append(identity)
+        else:
+            missing.append(identity)
+    return {
+        "source": REQUIRED_CHECKS_SOURCE,
+        "expected": list(identities),
+        "observed": observed,
+        "present": present,
+        "missing": missing,
+        "not_green": not_green,
+        "reason": REQUIRED_CHECKS_ABSENT if missing else None,
+    }
+
+
+def _apply_required_check_gate(
+    checks: dict[str, Any],
+    rollup: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Downgrade a summary that cannot prove the required-check identities green.
+
+    Fail closed: missing or non-green required identities force ``pending`` and
+    an unresolved identity set forces ``unknown``; neither can report success.
+    A real failure keeps precedence over both.
+    """
+    classification = _classify_required_checks(rollup)
+    checks["required_checks"] = classification
+    if classification["reason"] == NO_REQUIRED_CHECKS_CONFIGURED:
+        if checks.get("overall") != "failure":
+            checks["overall"] = "unknown"
+        return checks
+    if classification["missing"] or classification["not_green"]:
+        if checks.get("overall") != "failure":
+            checks["overall"] = "pending"
+        # A more specific observed blocker (starvation, setup starvation, queue age,
+        # propagation lag) keeps its pending_reason; the required-check reason code
+        # stays available under ``required_checks.reason``.
+        if classification["missing"] and not checks.get("pending_reason"):
+            checks["pending_reason"] = REQUIRED_CHECKS_ABSENT
+    return checks
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -1230,6 +1349,7 @@ def _summarize_check_runs(
         actions_payloads=actions_payloads,
         repo=repo,
     )
+    _apply_required_check_gate(checks, effective)
     return checks, superseded_count
 
 
@@ -1509,6 +1629,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
         actions_payloads=actions_payloads,
         repo=repo,
     )
+    _apply_required_check_gate(checks, rollup)
 
     return {
         "status": "ok",
@@ -1558,14 +1679,26 @@ def _add_monitor_metadata(
     diagnostic = data.get("checks", {}).get("diagnostic")
     if diagnostic:
         data["monitor"]["diagnostic"] = diagnostic
+    required_checks = data.get("checks", {}).get("required_checks")
+    if isinstance(required_checks, dict) and required_checks.get("reason"):
+        data["monitor"]["required_checks"] = required_checks
 
 
-def _append_pending_reason(
+def _append_pending_reason(  # noqa: C901 - explicit pending-reason branches.
     lines: list[str],
     checks: dict[str, Any],
     pending_reason: str,
 ) -> None:
     """Append actionable detail for a known pending blocker."""
+    if pending_reason == REQUIRED_CHECKS_ABSENT:
+        required = checks.get("required_checks", {})
+        missing = required.get("missing", []) if isinstance(required, dict) else []
+        lines.append(
+            f"  pending_reason: {pending_reason}  |  missing required checks: "
+            + (", ".join(missing) if missing else "unknown")
+        )
+        return
+
     if pending_reason == "runner_queue_starvation":
         queue_state = checks.get("queue_state", {})
         queued_checks = queue_state.get("queued_checks", [])
@@ -1644,6 +1777,12 @@ def _format_human(data: dict[str, Any]) -> str:  # noqa: C901 - compact diagnost
     pending_reason = checks.get("pending_reason")
     if pending_reason:
         _append_pending_reason(lines, checks, pending_reason)
+    required_checks = checks.get("required_checks")
+    if (
+        isinstance(required_checks, dict)
+        and required_checks.get("reason") == NO_REQUIRED_CHECKS_CONFIGURED
+    ):
+        lines.append(f"  required_checks: {NO_REQUIRED_CHECKS_CONFIGURED}  |  fail-closed: true")
     diagnostic = checks.get("diagnostic")
     if diagnostic:
         lines.append(f"  diagnostic: {diagnostic}  |  fail-closed: true")

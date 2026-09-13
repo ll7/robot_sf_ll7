@@ -35,6 +35,21 @@ REQUIRED_JOBS = (
     "exact-repeat-model-preflight",
 )
 CHANGED_COVERAGE_EVENTS = ("pull_request", "merge_group")
+# GitHub reports each workflow job as a check identity named after the job key.  The aggregate
+# ``ci`` job is the workflow's own enforcement point for ``REQUIRED_JOBS`` and the event-specific
+# coverage gates, so a green aggregate check proves every required need passed.
+AGGREGATE_JOB = "ci"
+
+
+def required_check_identities() -> tuple[str, ...]:
+    """Return the declared required CI job identities monitors must see green.
+
+    The identities come from ``REQUIRED_JOBS``, the same manifest the aggregate
+    ``ci`` job evaluates through :func:`evaluate_needs`.  An empty manifest means
+    the repository declares no required CI contract, which monitors report as
+    ``no_required_checks_configured`` rather than success.
+    """
+    return tuple(REQUIRED_JOBS)
 
 
 def normalize_needs(raw_results: dict[str, Any]) -> dict[str, Any]:

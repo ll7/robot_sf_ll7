@@ -801,6 +801,11 @@ def format_human(result: WatchResult) -> str:
         pending_reason = result.checks.get("pending_reason")
         if pending_reason:
             lines.append(f"  pending_reason: {pending_reason}")
+        required_checks = result.checks.get("required_checks")
+        if isinstance(required_checks, dict) and required_checks.get("reason"):
+            missing = required_checks.get("missing") or []
+            suffix = f"  |  missing: {', '.join(missing)}" if missing else ""
+            lines.append(f"  required_checks: {required_checks['reason']}{suffix}")
         if result.checks.get("setup_starvation"):
             lines.append("  setup_starvation: detected on hosted runner")
     if result.error:

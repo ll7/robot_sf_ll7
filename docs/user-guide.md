@@ -10,6 +10,8 @@ internals or research methodology.
 
 ## 1. Install and first run
 
+- [Architecture Tour](./architecture_tour.md) — a source-linked map from the public API through
+  the environment, planner, simulator, benchmark record, and evidence layers.
 - [Adoption path](./adoption_path.md) — the shortest install → doctor → demo → examples → recipes
   → gallery journey.
 - [Quickstart Map](./quickstart.md) — first local checks, install, and one-command demos.

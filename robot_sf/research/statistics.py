@@ -118,10 +118,10 @@ def cohen_d(x: list[float], y: list[float]) -> float | None:
 
     Note:
         Effect size interpretation (Cohen 1988):
-            - |d| < 0.2: negligible
-            - 0.2 <= |d| < 0.5: small
-            - 0.5 <= |d| < 0.8: medium
-            - |d| >= 0.8: large
+            - abs(d) < 0.2: negligible
+            - 0.2 <= abs(d) < 0.5: small
+            - 0.5 <= abs(d) < 0.8: medium
+            - abs(d) >= 0.8: large
     """
     if len(x) != len(y) or len(x) < 2:
         return None

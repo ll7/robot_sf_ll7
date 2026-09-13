@@ -12,6 +12,7 @@
     "api/robot_sf.rst",
     "api/robot_sf.telemetry.rst",
     "api/stable_public_api.md",
+    "architecture_tour.md",
     "benchmark.md",
     "benchmark_artifact_publication.md",
     "benchmark_camera_ready.md",

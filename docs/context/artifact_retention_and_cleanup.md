@@ -281,6 +281,28 @@ and sizes, plus explicit `true` values for `independent_verification`, `transfer
 `transfer_verified`), and `consumer_review` (or `consumer_reviewed`). Malformed or contradictory
 inputs keep eligibility blocked, and malformed structured identity suppresses the excerpt entirely.
 
+Bounded excerpts now prove structured values instead of pattern-matching them. Every structured
+span (a balanced object or array with a quoted key) must parse, and the proof walks it recursively:
+an escaped key, an unparsable span, a composite key that carries an identity or secret token
+(`db.user`, `user_name`, `account.id`), or a nested secret blocks the excerpt with the stable
+`redaction_failed` reason. Nested plain identity keys are still redacted in place, so ordinary
+`{"username": ...}` payloads keep their excerpt with the value replaced.
+
+Custody evidence must bind the transfer, not just assert it. `custody.job_id` (or `manifest_id`)
+must match the manifest job, `custody.destination.locator` (or `destination_locator`/`locator`) must
+name a non-empty immutable destination (the mutable suffixes `:latest`, `/latest`, `:head`, `/head`,
+`:main`, and `/main` are rejected), and `custody.consumer.identity` plus
+`custody.consumer.review_state` (one of `reviewed`, `accepted`, `consumed`, `verified`) must identify
+the reviewing consumer. The custody member set must exactly match the manifest logs: an undeclared
+member blocks with `custody_member_undeclared`, and a missing, mismatched, or unapproved member
+keeps `custody.verified` false.
+
+Source containment is verified at check time with symlink-free final components (`O_NOFOLLOW` on
+the read) and resolved-root containment for every source; concurrent mutation of parent directories
+is outside the static single-writer threat model. Reports expose that boundary explicitly as
+`containment.model: static_single_writer` with `atomic: false` and a pointer to this section, so a
+consumer never mistakes the diagnostic for a hard race-free guarantee.
+
 ### Report a blocker
 
 When two current owners disagree, when a cleanup command is not stable, or when a lifecycle state is

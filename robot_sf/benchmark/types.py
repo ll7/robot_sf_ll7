@@ -12,6 +12,7 @@ Serialization: writing to JSONL will typically convert instances to
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import (
     Callable,
@@ -333,6 +334,24 @@ class MetricsBundle:
         return dict(self.values)
 
 
+# Stable episode fields used by the public same-input comparison contract.  The
+# omitted dataclass fields are runtime/debug surfaces rather than episode
+# identity or outcome semantics.
+CANONICAL_EPISODE_RECORD_FIELDS = (
+    "version",
+    "episode_id",
+    "scenario_id",
+    "seed",
+    "metrics",
+    "algo",
+    "horizon",
+    "tags",
+    "identity",
+)
+CANONICAL_EPISODE_RUNTIME_FIELDS = frozenset({"timing", "raw"})
+CANONICAL_EPISODE_RUNTIME_METRICS = frozenset({"duration_s"})
+
+
 @dataclass(slots=True)
 class EpisodeRecord:
     """High-level episode record suitable for JSONL persistence.
@@ -352,6 +371,42 @@ class EpisodeRecord:
     tags: list[str] | None = None
     identity: dict[str, Any] | None = None
     raw: dict[str, Any] | None = None
+
+    def canonical_payload(self) -> dict[str, Any]:
+        """Return the stable comparison payload for this episode record.
+
+        The canonical payload contains the episode identity, stable metrics,
+        algorithm, horizon, tags, and explicit identity metadata.  ``timing``
+        and ``raw`` are deliberately excluded because they may contain
+        wall-clock measurements or implementation-specific diagnostics.  The
+        runtime ``duration_s`` metric is excluded for the same reason.
+
+        Returns:
+            JSON-compatible payload suitable for deterministic comparison.
+        """
+        payload = self.to_dict()
+        return {
+            field: (
+                {
+                    key: value
+                    for key, value in payload[field].items()
+                    if key not in CANONICAL_EPISODE_RUNTIME_METRICS
+                }
+                if field == "metrics"
+                else payload[field]
+            )
+            for field in CANONICAL_EPISODE_RECORD_FIELDS
+        }
+
+    def canonical_digest(self) -> str:
+        """Return the stable SHA-256 digest of :meth:`canonical_payload`."""
+        encoded = json.dumps(
+            self.canonical_payload(),
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to a JSON-serializable dict.
@@ -546,6 +601,9 @@ class MapBatchConfig:
 
 
 __all__ = [
+    "CANONICAL_EPISODE_RECORD_FIELDS",
+    "CANONICAL_EPISODE_RUNTIME_FIELDS",
+    "CANONICAL_EPISODE_RUNTIME_METRICS",
     "AdapterImpact",
     "AlgoMeta",
     "EpisodeRecord",

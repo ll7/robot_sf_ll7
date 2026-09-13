@@ -6,6 +6,9 @@ from datetime import datetime
 from types import MappingProxyType
 
 from robot_sf.benchmark.types import (
+    CANONICAL_EPISODE_RECORD_FIELDS,
+    CANONICAL_EPISODE_RUNTIME_FIELDS,
+    CANONICAL_EPISODE_RUNTIME_METRICS,
     EpisodeRecord,
     MetricsBundle,
     ResumeManifest,
@@ -76,6 +79,68 @@ def test_episode_record_to_dict_flattens_metrics() -> None:
     assert payload["tags"] == ["smoke"]
     assert payload["identity"] == {"robot": "r1"}
     assert payload["raw"] == {"debug": True}
+
+
+def test_episode_record_canonical_digest_excludes_runtime_surfaces() -> None:
+    """Stable episode comparisons ignore timing/debug data, not semantic inputs."""
+    first = EpisodeRecord(
+        version="v1",
+        episode_id="ep-1",
+        scenario_id="scenario-1",
+        seed=42,
+        metrics=MetricsBundle(values={"steps": 4.0, "duration_s": 1.0}),
+        algo="zero_action",
+        horizon=4,
+        timing={"wall_time_s": 1.0},
+        tags=["smoke"],
+        identity={"scenario": "scenario-1"},
+        raw={"debug": "first"},
+    )
+    second = EpisodeRecord(
+        version="v1",
+        episode_id="ep-1",
+        scenario_id="scenario-1",
+        seed=42,
+        metrics=MetricsBundle(values={"steps": 4.0, "duration_s": 9.0}),
+        algo="zero_action",
+        horizon=4,
+        timing={"wall_time_s": 9.0},
+        tags=["smoke"],
+        identity={"scenario": "scenario-1"},
+        raw={"debug": "second"},
+    )
+
+    assert CANONICAL_EPISODE_RECORD_FIELDS == (
+        "version",
+        "episode_id",
+        "scenario_id",
+        "seed",
+        "metrics",
+        "algo",
+        "horizon",
+        "tags",
+        "identity",
+    )
+    assert CANONICAL_EPISODE_RUNTIME_FIELDS == frozenset({"timing", "raw"})
+    assert CANONICAL_EPISODE_RUNTIME_METRICS == frozenset({"duration_s"})
+    assert first.canonical_payload() == second.canonical_payload()
+    assert first.canonical_digest() == second.canonical_digest()
+    assert "timing" not in first.canonical_payload()
+    assert "raw" not in first.canonical_payload()
+    assert "duration_s" not in first.canonical_payload()["metrics"]
+
+    changed_seed = EpisodeRecord(
+        version="v1",
+        episode_id="ep-2",
+        scenario_id="scenario-1",
+        seed=43,
+        metrics=MetricsBundle(values={"steps": 4.0, "duration_s": 1.0}),
+        algo="zero_action",
+        horizon=4,
+        tags=["smoke"],
+        identity={"scenario": "scenario-1"},
+    )
+    assert changed_seed.canonical_digest() != first.canonical_digest()
 
 
 def test_snqi_weights_to_dict_handles_mapping_and_default_meta() -> None:

@@ -660,7 +660,18 @@ def _freeze_runtime_value(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return tuple(_freeze_runtime_value(nested) for nested in value)
     if isinstance(value, np.generic):
-        return value.item()
+        if np.issubdtype(value.dtype, np.bool_):
+            return bool(value)
+        if np.issubdtype(value.dtype, np.integer):
+            return int(value)
+        if np.issubdtype(value.dtype, np.floating):
+            return float(value)
+        if np.issubdtype(value.dtype, np.complexfloating):
+            return complex(value)
+        item = value.item()
+        if isinstance(item, np.generic):
+            raise ValueError("diagnostics contain an unsupported NumPy scalar")
+        return item
     return value
 
 
@@ -670,6 +681,8 @@ def _entity_float_array(value: np.ndarray) -> np.ndarray:
     Returns:
         A float64 entity array.
     """
+    if not np.issubdtype(value.dtype, np.number):
+        raise ValueError("entity state or covariance must use a numeric dtype")
     if np.iscomplexobj(value):
         raise ValueError("entity state or covariance must contain real-valued data")
     try:
@@ -708,6 +721,29 @@ def _runtime_value_is_finite(value: Any) -> bool:
     return True
 
 
+def _json_safe_numpy_scalar(value: np.generic) -> Any:
+    """Convert one NumPy scalar to a JSON-compatible Python value.
+
+    Returns:
+        A JSON-compatible Python primitive.
+    """
+    if np.issubdtype(value.dtype, np.bool_):
+        return bool(value)
+    if np.issubdtype(value.dtype, np.integer):
+        return int(value)
+    if np.issubdtype(value.dtype, np.floating):
+        normalized = float(value)
+        if not np.isfinite(normalized):
+            raise ValueError("JSON export cannot contain NaN or Inf")
+        return normalized
+    if np.issubdtype(value.dtype, np.complexfloating):
+        raise ValueError("JSON export cannot contain complex values")
+    item = value.item()
+    if isinstance(item, np.generic):
+        raise ValueError("JSON export cannot contain an unsupported NumPy scalar")
+    return _json_safe(item)
+
+
 def _json_safe(value: Any) -> Any:
     """Convert nested runtime values to JSON primitives, rejecting non-finite data.
 
@@ -717,7 +753,7 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, np.ndarray):
         return _json_safe(value.tolist())
     if isinstance(value, np.generic):
-        return _json_safe(value.item())
+        return _json_safe_numpy_scalar(value)
     if isinstance(value, Mapping):
         normalized: dict[str, Any] = {}
         for key, nested in value.items():

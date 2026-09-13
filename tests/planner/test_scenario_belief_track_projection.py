@@ -691,6 +691,14 @@ def test_typed_input_validation_and_json_edges() -> None:
     assert adapter._runtime_value_is_finite({"values": [1.0, (2.0,)]})
     assert not adapter._runtime_value_is_finite({"values": [float("nan")]})
     assert adapter._json_safe(np.float32(1.25)) == pytest.approx(1.25)
+    assert adapter._json_safe(np.longdouble(1.25)) == pytest.approx(1.25)
+    longdouble_wrapper = BeliefAwarePlannerInput(
+        legacy_observation={},
+        tracks={},
+        belief_step=0,
+        diagnostics={"longdouble": np.longdouble(1.25)},
+    )
+    assert longdouble_wrapper.to_dict()["diagnostics"]["longdouble"] == pytest.approx(1.25)
     with pytest.raises(ValueError, match="NaN or Inf"):
         adapter._json_safe(float("nan"))
 
@@ -891,6 +899,21 @@ def test_entity_projection_rejects_malformed_public_fields() -> None:
     )
     for field, value in complex_entity_values:
         with pytest.raises(ValueError, match="real-valued"):
+            project(replace(agent, **{field: value}))
+    non_numeric_entity_values = (
+        ("position", replace(agent.position, mean_xy=np.asarray(["1.0", "0.0"]))),
+        ("velocity", replace(agent.velocity, mean_xy=np.asarray(["1.0", "0.0"]))),
+        (
+            "position",
+            replace(agent.position, covariance_xy=np.asarray([["1.0", "0.0"], ["0.0", "1.0"]])),
+        ),
+        (
+            "velocity",
+            replace(agent.velocity, covariance_xy=np.asarray([["1.0", "0.0"], ["0.0", "1.0"]])),
+        ),
+    )
+    for field, value in non_numeric_entity_values:
+        with pytest.raises(ValueError, match="numeric dtype"):
             project(replace(agent, **{field: value}))
     with pytest.raises(ValueError, match="radius"):
         project(replace(agent, radius="bad"))

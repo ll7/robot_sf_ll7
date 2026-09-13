@@ -718,6 +718,34 @@ def test_non_green_required_identity_blocks_docs_only_exception(
     assert checks.get("success_reason") != "ci_not_required_docs_only"
 
 
+def test_docs_only_exception_requires_expected_head_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing PR head cannot authorize a changed-file scope exception."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (["README.md"], None),
+    )
+    checks: dict[str, Any] = {
+        "overall": "pending",
+        "required_checks": {"missing": ["fast-feedback"], "not_green": []},
+    }
+
+    result = ci_status._apply_docs_only_exception(
+        checks,
+        list(BOT_ONLY_ROLLUP),
+        "9198",
+        repo="ll7/robot_sf_ll7",
+        head_sha="",
+    )
+
+    assert result is checks
+    assert checks["overall"] == "pending"
+    assert "docs_only" not in checks
+    assert "success_reason" not in checks
+
+
 def test_docs_only_success_is_exposed_in_monitor_metadata(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
@@ -874,6 +902,25 @@ def test_changed_file_inventory_fails_closed_when_pr_head_moves_during_fetch(
     assert changed_files is None
     assert error == "PR head changed during changed-file inventory"
     assert observed_paths == ["pulls/9198"]
+
+
+def test_changed_file_inventory_requires_expected_head_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A complete inventory without a requested head is unavailable evidence."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_file_page",
+        lambda *args, **kwargs: (["README.md"], None),
+    )
+
+    changed_files, error = ci_status._fetch_pr_changed_files(
+        "9198",
+        repo="ll7/robot_sf_ll7",
+    )
+
+    assert changed_files is None
+    assert error == "changed-file inventory head verification is unavailable"
 
 
 def test_changed_file_inventory_rejects_malformed_entries(

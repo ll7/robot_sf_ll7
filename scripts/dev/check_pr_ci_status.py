@@ -689,7 +689,7 @@ def _verify_pr_changed_files_head(
 ) -> str | None:
     """Verify that the PR head did not move while its changed files were read."""
     if not expected_head_sha:
-        return None
+        return "changed-file inventory head verification is unavailable"
     payload = _rest_api_get_for_repo(f"pulls/{pr_number}", repo)
     if not isinstance(payload, dict):
         return "changed-file inventory head verification is unavailable"
@@ -794,6 +794,7 @@ def _apply_docs_only_exception(
         checks.get("overall") != "pending"
         or not isinstance(required_checks, dict)
         or not required_checks.get("missing")
+        or not head_sha
         or required_checks.get("not_green") != []
         or any(_rollup_status(check) in PENDING_STATUSES for check in rollup)
     ):

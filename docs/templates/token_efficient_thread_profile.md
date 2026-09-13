@@ -85,7 +85,8 @@ Start every resumed or user-pivoted phase with a five-minute startup gate:
 
 - `newest_request`: quote or paraphrase the latest user request in one line.
 - `parked_work`: list any previous PR, worktree, dirty state, active delegate,
-  or running job that is being preserved instead of continued.
+  or running job being preserved instead of continued, each with the head SHA
+  and state read at record time.
 - `next_mutation`: name the next branch, PR body edit, label, comment, merge,
   job submission, or issue mutation before doing it.
 - `freshness_key`: record the PR/issue head SHA, branch base, queue timestamp,
@@ -218,6 +219,18 @@ explicitly asks to resume it.
 - Create a fresh docs-or-workflow worktree from `origin/main`. Record parked
   PRs, jobs, dirty worktrees, and active delegates in the ledger, then keep the
   new branch limited to instruction changes.
+- Classify executable edits explicitly. A meta-workflow pull request that
+  changes executable helpers, tests, or validators is not docs-only: either
+  split that change into its own pull request or record `task_class: mixed`
+  with the executable validation tier, for example `focused-tests`, and run it
+  before publication.
+- Record parked work from a fresh read. A parked PR or job entry needs the
+  exact head SHA and state read at record time, incident references must be
+  verified against live issue or pull-request state before they are quoted, and
+  compute-gated jobs use the canonical `resource:*` labels from
+  `docs/ai/label-taxonomy.md` instead of ad-hoc names. Before resuming or
+  admitting parked work, re-read the live head and confirm the active admission
+  order instead of trusting copied handoff claims.
 - Use compact evidence first. For thread history, write summaries to a
   common-Git-dir artifact; for worktrees, use filtered snapshot helpers; for
   skills, reuse the loaded-context cache and reread only the directly edited

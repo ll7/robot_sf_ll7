@@ -119,9 +119,22 @@ def _find_closed_references(text: str) -> list[tuple[str | None, str]]:
     return references
 
 
-def find_closed_issues(body: str) -> list[str]:
-    """Extract issue numbers that this PR claims to close."""
-    return sorted({issue for _, issue in _find_closed_references(body)}, key=int)
+def find_closed_issues(body: str, repo: str | None = None) -> list[str]:
+    """Extract issue numbers that this PR claims to close.
+
+    When *repo* is supplied, unqualified references and references qualified for
+    that exact repository are retained; qualified references to other
+    repositories are ignored.
+    """
+    references = _find_closed_references(body)
+    if repo is not None:
+        normalized_repo = repo.casefold()
+        references = [
+            (target_repo, issue)
+            for target_repo, issue in references
+            if target_repo is None or target_repo.casefold() == normalized_repo
+        ]
+    return sorted({issue for _, issue in references}, key=int)
 
 
 def find_title_issues(title: str) -> list[str]:
@@ -1122,7 +1135,7 @@ def check_line_budget_discipline(
     """
     blockers: list[str] = []
     resolved_numstat = numstat_text
-    for issue in find_closed_issues(body):
+    for issue in find_closed_issues(body, repo):
         metadata = get_issue_metadata(issue, repo)
         if metadata is None:
             continue

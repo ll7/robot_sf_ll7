@@ -62,6 +62,10 @@ class BudgetParseError(ValueError):
     """Raised when a matched budget number cannot be represented safely."""
 
 
+class DiffstatParseError(ValueError):
+    """Raised when numstat text contains malformed or unparseable rows."""
+
+
 def _first_cap(patterns: tuple[re.Pattern[str], ...], body: str) -> int | None:
     """Return the first declared cap in *body*, or None."""
     for pattern in patterns:
@@ -95,10 +99,26 @@ def measure_diffstat(numstat_text: str) -> dict[str, int]:
     """Return ``files``/``added``/``deleted``/``net`` from ``git diff --numstat`` output."""
     files = added = deleted = 0
     for line in numstat_text.splitlines():
+        trimmed = line.strip()
+        if not trimmed:
+            continue
         parts = line.split("\t")
         if len(parts) < 3:
-            continue
+            raise DiffstatParseError(
+                f"malformed numstat line (expected tab-separated fields): {line!r}"
+            )
         insertions, deletions = parts[0].strip(), parts[1].strip()
+        path = "\t".join(parts[2:]).strip()
+        if not path:
+            raise DiffstatParseError(f"malformed numstat line (empty file path): {line!r}")
+        if not (insertions.isdigit() or insertions == "-"):
+            raise DiffstatParseError(
+                f"malformed numstat line (invalid insertions {insertions!r}): {line!r}"
+            )
+        if not (deletions.isdigit() or deletions == "-"):
+            raise DiffstatParseError(
+                f"malformed numstat line (invalid deletions {deletions!r}): {line!r}"
+            )
         files += 1
         if insertions.isdigit() and deletions.isdigit():
             added += int(insertions)
@@ -117,8 +137,21 @@ def find_override_reason(pr_body: str) -> str | None:
 
 def evaluate_budget(*, issue_body: str, pr_body: str, numstat_text: str) -> dict[str, object]:
     """Evaluate the declared budget and return a stable result payload."""
-    measured = measure_diffstat(numstat_text)
     override_reason = find_override_reason(pr_body)
+    try:
+        measured = measure_diffstat(numstat_text)
+    except DiffstatParseError as error:
+        message = str(error)
+        return {
+            "schema": SCHEMA,
+            "caps": {"files": None, "lines": None},
+            "measured": {"files": 0, "added": 0, "deleted": 0, "net": 0},
+            "override_reason": override_reason,
+            "status": STATUS_INVALID,
+            "ok": False,
+            "message": message,
+            "breaches": [message],
+        }
     try:
         caps = parse_declared_caps(issue_body)
     except BudgetParseError as error:

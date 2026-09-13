@@ -163,7 +163,9 @@ def _is_expected_historical_budget_blocker(
     if match is None:
         return False
     issue_number = int(match.group("issue"))
-    closed_issue_numbers = {int(issue) for issue in pr_contract_check.find_closed_issues(body)}
+    closed_issue_numbers = {
+        int(issue) for issue in pr_contract_check.find_closed_issues(body, "ll7/robot_sf_ll7")
+    }
     if issue_number not in closed_issue_numbers:
         return False
     return _matches_historical_budget_exception(
@@ -423,6 +425,7 @@ def test_find_closed_issues_keeps_cross_repository_references_parseable() -> Non
     """Qualified references are parsed so the discipline rule can ignore other repos."""
     body = "Closes other-org/other-repo#123 and closes ll7/robot_sf_ll7#456"
     assert pr_contract_check.find_closed_issues(body) == ["123", "456"]
+    assert pr_contract_check.find_closed_issues(body, "ll7/robot_sf_ll7") == ["456"]
 
 
 def test_find_title_issues() -> None:
@@ -753,6 +756,20 @@ def test_check_line_budget_discipline_is_inert_without_cap(
     )
 
 
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_ignores_other_repository(
+    mock_metadata: MagicMock,
+) -> None:
+    """A qualified close for another repository cannot select a local budget issue."""
+    assert (
+        pr_contract_check.check_line_budget_discipline(
+            "Closes other-org/other-repo#9094\n", "origin/main", "ll7/robot_sf_ll7"
+        )
+        == []
+    )
+    mock_metadata.assert_not_called()
+
+
 @patch("scripts.ci.pr_contract_check.get_issue_metadata", return_value=None)
 def test_check_line_budget_discipline_skips_unreadable_issue(
     _mock_metadata: MagicMock,
@@ -986,6 +1003,18 @@ def test_historical_budget_exception_requires_exact_evidence() -> None:
         assert _is_expected_historical_budget_blocker(
             evidence,
             "Closes #8000",
+            "BLOCKER: PR exceeds the budget declared in issue #8000 "
+            "(825 net new lines > 800-line cap).",
+        )
+        assert not _is_expected_historical_budget_blocker(
+            evidence,
+            "Closes other-org/other-repo#8000",
+            "BLOCKER: PR exceeds the budget declared in issue #8000 "
+            "(825 net new lines > 800-line cap).",
+        )
+        assert _is_expected_historical_budget_blocker(
+            evidence,
+            "Closes ll7/robot_sf_ll7#8000",
             "BLOCKER: PR exceeds the budget declared in issue #8000 "
             "(825 net new lines > 800-line cap).",
         )

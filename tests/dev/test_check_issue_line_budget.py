@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from scripts.dev.check_issue_line_budget import (
     STATUS_INVALID,
     STATUS_NO_CAP,
     STATUS_OVER,
     STATUS_OVERRIDE,
     STATUS_WITHIN,
+    DiffstatParseError,
     evaluate_budget,
     find_override_reason,
     main,
@@ -188,3 +191,48 @@ def test_main_exit_codes_and_json_output(tmp_path: Path, capsys) -> None:
         == 1
     )
     assert '"status": "over_budget"' in capsys.readouterr().out
+
+    numstat_file.write_text("malformed row without tabs\n", encoding="utf-8")
+    assert (
+        main(
+            [
+                "--issue-body-file",
+                str(issue_file),
+                "--pr-body-file",
+                str(pr_file),
+                "--numstat-file",
+                str(numstat_file),
+            ]
+        )
+        == 1
+    )
+    assert '"status": "invalid_cap"' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "bad_line",
+    [
+        "malformed row without tabs",
+        "10\t2",  # missing path
+        "10\t2\t",  # empty path
+        "invalid\t0\tscripts/dev/a.py",  # non-numeric additions
+        "0\tinvalid\tscripts/dev/a.py",  # non-numeric deletions
+    ],
+)
+def test_measure_diffstat_rejects_malformed_lines(bad_line: str) -> None:
+    """Non-empty lines that fail git numstat structure raise DiffstatParseError."""
+    with pytest.raises(DiffstatParseError, match="malformed numstat line"):
+        measure_diffstat(bad_line + "\n")
+
+
+def test_evaluate_budget_rejects_malformed_numstat() -> None:
+    """A corrupt numstat text produces a fail-closed STATUS_INVALID result."""
+    result = evaluate_budget(
+        issue_body=ISSUE_WITH_CAP,
+        pr_body="Refs #1\n",
+        numstat_text="not a valid numstat line\n",
+    )
+
+    assert result["status"] == STATUS_INVALID
+    assert result["ok"] is False
+    assert any("malformed numstat line" in breach for breach in result["breaches"])

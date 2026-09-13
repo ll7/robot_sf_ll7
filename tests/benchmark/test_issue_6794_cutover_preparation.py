@@ -221,6 +221,11 @@ def _strict_comparison_args() -> dict:
         "expected_execution_modes": {"ppo": "native"},
         "expected_algorithms": {"ppo": "ppo"},
         "expected_adapter_names": {},
+        "required_benchmark_success_basis": protocol["comparison"][
+            "required_benchmark_success_basis"
+        ],
+        "expected_config_hashes": {"ppo": "a" * 16},
+        "expected_git_hash": "b" * 40,
         "required_provenance_fields": protocol["required_provenance_fields"],
         "expected_provenance": {
             "before": {"ppo": dict(protocol["expected_provenance"]["before"]["ppo"])},
@@ -242,6 +247,8 @@ def _row(  # noqa: PLR0913
     readiness_status: str = "native",
     availability_status: str = "available",
     benchmark_success: object = True,
+    config_hash: str = "a" * 16,
+    git_hash: str = "b" * 40,
     provenance: dict | None = None,
 ) -> dict:
     """Return one complete synthetic canonical parity row."""
@@ -282,8 +289,8 @@ def _row(  # noqa: PLR0913
             "snqi": 0.2,
         },
         "algorithm_metadata": algorithm_metadata,
-        "config_hash": "a" * 16,
-        "git_hash": "b" * 40,
+        "config_hash": config_hash,
+        "git_hash": git_hash,
         "outcome": {
             "route_complete": True,
             "collision_event": False,
@@ -307,7 +314,6 @@ def _row(  # noqa: PLR0913
                 assert isinstance(nested, dict)
                 cursor = nested
             cursor[parts[-1]] = value
-        parity_provenance.setdefault("resolution_receipt_sha256", "c" * 64)
         receipt = parity_provenance.setdefault("resolution_receipt", {})
         assert isinstance(receipt, dict)
         receipt.setdefault("cache_path", "output/fixture-cache")
@@ -318,6 +324,9 @@ def _row(  # noqa: PLR0913
                 if parity_provenance.get("resolution_mode") == "in_tree_checkpoint"
                 else "output/fixture-cache/resolved-checkpoint"
             ),
+        )
+        parity_provenance["resolution_receipt_sha256"] = preparation_module._canonical_sha256(
+            receipt
         )
         row["parity_provenance"] = parity_provenance
     return row
@@ -492,6 +501,63 @@ def test_compare_parity_rows_rejects_nested_preflight_fallback(
     assert any("not canonically benchmark-available" in blocker for blocker in report["blockers"])
 
 
+def test_compare_parity_rows_rejects_semantic_success_forgery(tmp_path: Path) -> None:
+    """Error, fallback-basis, and nested runtime statuses cannot hide behind success labels."""
+    before = tmp_path / "before.jsonl"
+    after = tmp_path / "after.jsonl"
+    args = _strict_comparison_args()
+    before_row = _row(111, provenance=args["expected_provenance"]["before"]["ppo"])
+    after_row = _row(111, provenance=args["expected_provenance"]["after"]["ppo"])
+    after_row["benchmark_success_basis"] = "fallback"
+    after_row["termination_reason"] = "error"
+    after_row["planner_runtime"] = {"status": "error"}
+    _write_rows(before, [before_row])
+    _write_rows(after, [after_row])
+
+    report = compare_parity_rows(before, after, **args)
+
+    assert report["status"] == "failed"
+    assert any("benchmark_success_basis" in blocker for blocker in report["blockers"])
+    assert any("termination_reason" in blocker for blocker in report["blockers"])
+    assert any("nested runtime failure status" in blocker for blocker in report["blockers"])
+
+
+def test_compare_parity_rows_binds_config_and_execution_commit(tmp_path: Path) -> None:
+    """Equal but arbitrary row hashes cannot replace the frozen config and execution bindings."""
+    before = tmp_path / "before.jsonl"
+    after = tmp_path / "after.jsonl"
+    args = _strict_comparison_args()
+    before_row = _row(111, provenance=args["expected_provenance"]["before"]["ppo"])
+    after_row = _row(111, provenance=args["expected_provenance"]["after"]["ppo"])
+    before_row["config_hash"] = after_row["config_hash"] = "f" * 16
+    before_row["git_hash"] = after_row["git_hash"] = "e" * 40
+    _write_rows(before, [before_row])
+    _write_rows(after, [after_row])
+
+    report = compare_parity_rows(before, after, **args)
+
+    assert report["status"] == "failed"
+    assert any("config_hash drift" in blocker for blocker in report["blockers"])
+    assert any("git_hash drift" in blocker for blocker in report["blockers"])
+
+
+def test_compare_parity_rows_recomputes_resolution_receipt_digest(tmp_path: Path) -> None:
+    """A self-asserted receipt digest must match the canonical receipt payload."""
+    before = tmp_path / "before.jsonl"
+    after = tmp_path / "after.jsonl"
+    args = _strict_comparison_args()
+    before_row = _row(111, provenance=args["expected_provenance"]["before"]["ppo"])
+    after_row = _row(111, provenance=args["expected_provenance"]["after"]["ppo"])
+    after_row["parity_provenance"]["resolution_receipt_sha256"] = "d" * 64
+    _write_rows(before, [before_row])
+    _write_rows(after, [after_row])
+
+    report = compare_parity_rows(before, after, **args)
+
+    assert report["status"] == "failed"
+    assert any("resolution receipt digest mismatch" in blocker for blocker in report["blockers"])
+
+
 def test_compare_parity_rows_accepts_sacadrl_only_as_an_adapter(
     tmp_path: Path,
 ) -> None:
@@ -504,6 +570,11 @@ def test_compare_parity_rows_accepts_sacadrl_only_as_an_adapter(
         "expected_execution_modes": {"sacadrl": "adapter"},
         "expected_algorithms": {"sacadrl": "sacadrl"},
         "expected_adapter_names": {"sacadrl": "SACADRLPlannerAdapter"},
+        "required_benchmark_success_basis": protocol["comparison"][
+            "required_benchmark_success_basis"
+        ],
+        "expected_config_hashes": {"sacadrl": "a" * 16},
+        "expected_git_hash": "b" * 40,
         "required_provenance_fields": protocol["required_provenance_fields"],
         "expected_provenance": {
             "before": {"sacadrl": dict(protocol["expected_provenance"]["before"]["sacadrl"])},
@@ -606,6 +677,8 @@ def _full_protocol_rows(protocol: dict, side: str) -> list[dict]:
                         readiness_status=(
                             "adapter" if arm["execution_mode"] == "adapter" else "native"
                         ),
+                        config_hash=protocol["expected_config_hashes"][arm_key],
+                        git_hash=protocol["execution_git_hash"],
                         provenance=protocol["expected_provenance"][side][arm_key],
                     )
                 )

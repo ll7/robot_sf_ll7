@@ -89,6 +89,10 @@ _PARITY_PROVENANCE_FIELDS = (
 )
 _BEFORE_RESOLUTION_MODE = "in_tree_checkpoint"
 _AFTER_RESOLUTION_MODE = "registry_release_hydrated_checkpoint"
+_SUCCESS_BENCHMARK_BASIS = "all"
+_RUNTIME_FAILURE_STATUSES = frozenset(
+    {"aborted", "error", "failed", "failure", "partial_failure", "partial-failure"}
+)
 
 
 class _UniqueKeySafeLoader(yaml.SafeLoader):
@@ -148,6 +152,26 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _canonical_sha256(value: Any) -> str:
+    """Return a SHA-256 digest for one canonical JSON value.
+
+    The canonical serialization is deliberately shared by the resolution-receipt
+    integrity check and its producers so a self-asserted digest cannot make an
+    otherwise malformed receipt admissible.
+
+    Returns:
+        Lowercase SHA-256 digest of the canonical JSON representation.
+    """
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -220,6 +244,14 @@ def _digest(value: Any, *, name: str) -> str:
     if len(digest) != _HEX_DIGEST_LENGTH or any(char not in "0123456789abcdef" for char in digest):
         raise ValueError(f"{name} must be a {_HEX_DIGEST_LENGTH}-character SHA-256 digest")
     return digest
+
+
+def _git_commit(value: Any, *, name: str) -> str:
+    """Return a lowercase full Git commit SHA or raise a contract error."""
+    commit = _string(value, name=name).lower()
+    if len(commit) != 40 or any(char not in "0123456789abcdef" for char in commit):
+        raise ValueError(f"{name} must be a 40-character Git commit SHA")
+    return commit
 
 
 def _strict_integer(value: Any, *, name: str) -> int:
@@ -709,6 +741,10 @@ def _validate_protocol(repo_root: Path, protocol: Mapping[str, Any]) -> dict[str
     _validate_protocol_shape(protocol)
     _validate_protocol_arms(protocol)
     config_identity_digests = _validate_config_identities(repo_root, protocol)
+    execution_git_hash = _git_commit(
+        protocol.get("execution_git_hash"), name="parity_protocol.execution_git_hash"
+    )
+    expected_config_hashes = _expected_config_hashes(protocol, config_identity_digests)
     comparison = _mapping(protocol.get("comparison"), name="parity_protocol.comparison")
     _validate_comparison_contract(comparison)
     output_paths = _validate_output_paths(protocol)
@@ -736,6 +772,8 @@ def _validate_protocol(repo_root: Path, protocol: Mapping[str, Any]) -> dict[str
         "required_metrics": protocol.get("required_metrics"),
         "required_provenance_fields": protocol.get("required_provenance_fields"),
         "config_identity_sha256": config_identity_digests,
+        "expected_config_hashes": expected_config_hashes,
+        "execution_git_hash": execution_git_hash,
         "comparison": dict(comparison),
         "output_paths": output_paths,
     }
@@ -809,6 +847,34 @@ def _validate_config_identities(repo_root: Path, protocol: Mapping[str, Any]) ->
             "parity protocol config_identity_sha256 keys must match file-backed arm identities"
         )
     return observed
+
+
+def _expected_config_hashes(
+    protocol: Mapping[str, Any], config_identity_digests: Mapping[str, str]
+) -> dict[str, str]:
+    """Build short row-config bindings from the frozen arm identities.
+
+    File-backed identities use the first 16 characters of their checked-in raw
+    SHA-256. Built-in identities use the first 16 characters of the canonical
+    JSON digest of the identity string. Both rules make the row's legacy
+    ``config_hash`` a derived value instead of an arbitrary equal pair.
+
+    Returns:
+        Expected 16-character config hashes keyed by planner arm.
+    """
+    expected: dict[str, str] = {}
+    for index, raw_arm in enumerate(protocol.get("planner_arms", [])):
+        arm = _mapping(raw_arm, name=f"parity_protocol.planner_arms[{index}]")
+        arm_key = _string(arm.get("key"), name=f"parity_protocol.planner_arms[{index}].key")
+        identity = _string(
+            arm.get("config_identity"),
+            name=f"parity_protocol.planner_arms[{index}].config_identity",
+        )
+        digest = config_identity_digests.get(identity)
+        expected[arm_key] = digest[:16] if digest is not None else _canonical_sha256(identity)[:16]
+    if not expected:
+        raise ValueError("parity protocol must declare expected config hashes for every arm")
+    return expected
 
 
 def _validate_digest_map(repo_root: Path, value: Any, *, name: str) -> None:
@@ -960,6 +1026,7 @@ def _validate_comparison_contract(comparison: Mapping[str, Any]) -> None:
         "missing_metric_policy",
         "float_abs_tolerance",
         "float_rel_tolerance",
+        "required_benchmark_success_basis",
     }:
         raise ValueError("parity comparison contract contains unexpected or missing fields")
     for field in expected_boolean_flags:
@@ -967,6 +1034,10 @@ def _validate_comparison_contract(comparison: Mapping[str, Any]) -> None:
             raise ValueError(f"parity comparison must enable {field}")
     if comparison.get("missing_metric_policy") != "fail":
         raise ValueError("parity comparison must fail on missing metrics")
+    if comparison.get("required_benchmark_success_basis") != _SUCCESS_BENCHMARK_BASIS:
+        raise ValueError(
+            "parity comparison must require benchmark_success_basis=all for success evidence"
+        )
     abs_tolerance = comparison.get("float_abs_tolerance")
     rel_tolerance = comparison.get("float_rel_tolerance")
     if _strict_number(abs_tolerance, name="parity float_abs_tolerance") != 1e-12:
@@ -1296,6 +1367,15 @@ def _compare_row_provenance(  # noqa: C901
             blockers.append(
                 f"{label} provenance drift for {field!r} at {key!r}: {observed!r} != {expected!r}"
             )
+    receipt = _dotted_value(row, "parity_provenance.resolution_receipt")
+    declared_receipt_digest = _dotted_value(row, "parity_provenance.resolution_receipt_sha256")
+    if isinstance(receipt, Mapping) and isinstance(declared_receipt_digest, str):
+        computed_receipt_digest = _canonical_sha256(dict(receipt))
+        if declared_receipt_digest.strip().lower() != computed_receipt_digest:
+            blockers.append(
+                f"{label} resolution receipt digest mismatch at {key!r}: "
+                f"{declared_receipt_digest!r} != {computed_receipt_digest!r}"
+            )
     source_paths = expected_fields.get("parity_provenance.source_sha256")
     resolution_mode = expected_fields.get("parity_provenance.resolution_mode")
     if isinstance(source_paths, Mapping) and resolution_mode in {
@@ -1345,7 +1425,92 @@ def _canonical_row_availability(row: Mapping[str, Any]) -> Any:
     return summarize_benchmark_availability(summary)
 
 
-def _validate_row_runtime_contract(  # noqa: C901, PLR0912
+def _runtime_failure_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C901
+    """Return the first nested runtime failure status, if present.
+
+    The shared fallback policy intentionally distinguishes availability from
+    ordinary error reporting. The parity contract is stricter: a row declared
+    successful must not hide an error or partial-failure status in a nested
+    planner/runtime receipt.
+
+    Returns:
+        ``(path, normalized_value)`` for the first failure status, otherwise
+        ``None``.
+    """
+
+    def _visit(value: Any, path: str) -> tuple[str, str] | None:
+        if isinstance(value, Mapping):
+            for raw_key, item in value.items():
+                key = str(raw_key)
+                item_path = f"{path}.{key}" if path else key
+                if key in {"status", "runtime_status", "planner_status", "execution_status"}:
+                    if isinstance(item, str):
+                        normalized = item.strip().lower().replace("-", "_")
+                        if normalized in {
+                            status.replace("-", "_") for status in _RUNTIME_FAILURE_STATUSES
+                        }:
+                            return item_path, normalized
+                nested = _visit(item, item_path)
+                if nested is not None:
+                    return nested
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                nested = _visit(item, f"{path}[{index}]")
+                if nested is not None:
+                    return nested
+        return None
+
+    return _visit(payload, "")
+
+
+def _validate_success_semantics(
+    label: str,
+    key: tuple[Any, ...],
+    row: Mapping[str, Any],
+    *,
+    required_benchmark_success_basis: str,
+) -> list[str]:
+    """Reject rows whose success labels contradict terminal/runtime evidence.
+
+    Returns:
+        Semantic blockers for one parity row.
+    """
+    blockers: list[str] = []
+    basis = row.get("benchmark_success_basis")
+    if basis != required_benchmark_success_basis:
+        blockers.append(
+            f"{label} row {key!r} has inadmissible benchmark_success_basis {basis!r}; "
+            f"expected {required_benchmark_success_basis!r}"
+        )
+    termination_reason = row.get("termination_reason")
+    if row.get("benchmark_success") is True and termination_reason != "success":
+        blockers.append(
+            f"{label} row {key!r} claims benchmark success with termination_reason="
+            f"{termination_reason!r}"
+        )
+    outcome = row.get("outcome")
+    if isinstance(outcome, Mapping) and row.get("benchmark_success") is True:
+        if outcome.get("route_complete") is not True:
+            blockers.append(f"{label} row {key!r} claims success without route completion")
+        if outcome.get("collision_event") is True:
+            blockers.append(f"{label} row {key!r} claims success with a collision event")
+        if outcome.get("timeout_event") is True:
+            blockers.append(f"{label} row {key!r} claims success with a timeout event")
+    integrity = row.get("integrity")
+    if isinstance(integrity, Mapping):
+        contradictions = integrity.get("contradictions")
+        if isinstance(contradictions, list) and contradictions:
+            blockers.append(f"{label} row {key!r} contains canonical integrity contradictions")
+    marker = _runtime_failure_marker(row)
+    if marker is not None:
+        marker_path, marker_value = marker
+        blockers.append(
+            f"{label} row {key!r} has nested runtime failure status {marker_path}={marker_value}"
+        )
+    return blockers
+
+
+def _validate_row_runtime_contract(  # noqa: C901, PLR0912, PLR0913, PLR0915
     label: str,
     key: tuple[Any, ...],
     row: Mapping[str, Any],
@@ -1353,6 +1518,9 @@ def _validate_row_runtime_contract(  # noqa: C901, PLR0912
     expected_execution_modes: Mapping[str, str],
     expected_algorithms: Mapping[str, str],
     expected_adapter_names: Mapping[str, str],
+    required_benchmark_success_basis: str,
+    expected_config_hashes: Mapping[str, str],
+    expected_git_hash: str | None,
 ) -> list[str]:
     """Validate canonical algorithm metadata and reject fallback/degraded rows.
 
@@ -1365,6 +1533,20 @@ def _validate_row_runtime_contract(  # noqa: C901, PLR0912
     expected_algorithm = expected_algorithms.get(planner_key)
     if expected_mode is None or expected_algorithm is None:
         return [f"{label} row {key!r} has no expected planner-arm binding"]
+    expected_config_hash = expected_config_hashes.get(str(planner_key))
+    if expected_config_hash is None:
+        blockers = [f"{label} row {key!r} has no expected config_hash binding"]
+    else:
+        blockers = []
+        if row.get("config_hash") != expected_config_hash:
+            blockers.append(
+                f"{label} config_hash drift at {key!r}: "
+                f"{row.get('config_hash')!r} != {expected_config_hash!r}"
+            )
+    if expected_git_hash is not None and row.get("git_hash") != expected_git_hash:
+        blockers.append(
+            f"{label} git_hash drift at {key!r}: {row.get('git_hash')!r} != {expected_git_hash!r}"
+        )
 
     metadata = row.get("algorithm_metadata")
     if not isinstance(metadata, Mapping):
@@ -1378,6 +1560,14 @@ def _validate_row_runtime_contract(  # noqa: C901, PLR0912
         blockers.append(
             f"{label} row {key!r} has non-success episode status: {row.get('status')!r}"
         )
+    blockers.extend(
+        _validate_success_semantics(
+            label,
+            key,
+            row,
+            required_benchmark_success_basis=required_benchmark_success_basis,
+        )
+    )
     observed_algorithm = metadata.get("canonical_algorithm")
     if observed_algorithm != expected_algorithm:
         blockers.append(
@@ -1465,7 +1655,7 @@ def _validate_row_runtime_contract(  # noqa: C901, PLR0912
     return blockers
 
 
-def _validate_side_rows(
+def _validate_side_rows(  # noqa: PLR0913
     label: str,
     indexed: Mapping[tuple[Any, ...], Mapping[str, Any]],
     *,
@@ -1475,6 +1665,9 @@ def _validate_side_rows(
     expected_execution_modes: Mapping[str, str],
     expected_algorithms: Mapping[str, str],
     expected_adapter_names: Mapping[str, str],
+    required_benchmark_success_basis: str,
+    expected_config_hashes: Mapping[str, str],
+    expected_git_hash: str | None,
 ) -> list[str]:
     """Validate every row on one side before comparing paired values.
 
@@ -1511,6 +1704,9 @@ def _validate_side_rows(
                 expected_execution_modes=expected_execution_modes,
                 expected_algorithms=expected_algorithms,
                 expected_adapter_names=expected_adapter_names,
+                required_benchmark_success_basis=required_benchmark_success_basis,
+                expected_config_hashes=expected_config_hashes,
+                expected_git_hash=expected_git_hash,
             )
         )
         expected_for_arm = expected_provenance.get(str(key[0])) if expected_provenance else None
@@ -1626,6 +1822,9 @@ def compare_parity_rows(  # noqa: C901, PLR0912, PLR0913, PLR0915
     expected_execution_modes: Mapping[str, str] | None = None,
     expected_algorithms: Mapping[str, str] | None = None,
     expected_adapter_names: Mapping[str, str] | None = None,
+    required_benchmark_success_basis: str = _SUCCESS_BENCHMARK_BASIS,
+    expected_config_hashes: Mapping[str, str] | None = None,
+    expected_git_hash: str | None = None,
     required_provenance_fields: Sequence[str] = _PARITY_PROVENANCE_FIELDS,
     expected_provenance: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
     episode_schema_path: Path | None = None,
@@ -1633,8 +1832,9 @@ def compare_parity_rows(  # noqa: C901, PLR0912, PLR0913, PLR0915
     """Compare two future JSONL campaign outputs under the frozen row contract.
 
     The caller must provide the expected matrix, canonical episode schema, arm
-    metadata, and side-specific checkpoint provenance. Without those bindings,
-    a self-consistent subset is not admissible as parity evidence.
+    metadata, side-specific checkpoint provenance, per-arm config hashes, and
+    the exact execution commit. Without those bindings, a self-consistent
+    subset is not admissible as parity evidence.
 
     Returns:
         A fail-closed parity comparison report.
@@ -1646,6 +1846,33 @@ def compare_parity_rows(  # noqa: C901, PLR0912, PLR0913, PLR0915
     before = _read_jsonl(before_path)
     after = _read_jsonl(after_path)
     blockers: list[str] = []
+    if required_benchmark_success_basis != _SUCCESS_BENCHMARK_BASIS:
+        blockers.append(
+            "parity comparison must require benchmark_success_basis=all for success evidence"
+        )
+    config_hash_bindings: dict[str, str] = {}
+    if expected_config_hashes is None:
+        blockers.append("expected planner-arm config_hash bindings are required")
+    elif not isinstance(expected_config_hashes, Mapping):
+        blockers.append("expected planner-arm config_hash bindings must be a mapping")
+    else:
+        for planner_key, expected_hash in expected_config_hashes.items():
+            shape_error = _validate_provenance_value("config_hash", expected_hash)
+            if shape_error is not None:
+                blockers.append(f"expected config_hash for {planner_key!r}: {shape_error}")
+            elif isinstance(planner_key, str):
+                config_hash_bindings[planner_key] = expected_hash.strip().lower()
+            else:
+                blockers.append("expected config_hash binding keys must be strings")
+    normalized_expected_git_hash: str | None = None
+    if expected_git_hash is None:
+        blockers.append("expected execution git_hash binding is required")
+    else:
+        shape_error = _validate_provenance_value("git_hash", expected_git_hash)
+        if shape_error is not None:
+            blockers.append(f"expected execution git_hash: {shape_error}")
+        else:
+            normalized_expected_git_hash = expected_git_hash.strip().lower()
     if episode_schema_path is None:
         blockers.append("canonical episode schema binding is required")
         episode_schema: Mapping[str, Any] | None = None
@@ -1719,6 +1946,9 @@ def compare_parity_rows(  # noqa: C901, PLR0912, PLR0913, PLR0915
             expected_execution_modes=mode_bindings,
             expected_algorithms=algorithm_bindings,
             expected_adapter_names=adapter_bindings,
+            required_benchmark_success_basis=required_benchmark_success_basis,
+            expected_config_hashes=config_hash_bindings,
+            expected_git_hash=normalized_expected_git_hash,
         )
     )
     blockers.extend(
@@ -1731,6 +1961,9 @@ def compare_parity_rows(  # noqa: C901, PLR0912, PLR0913, PLR0915
             expected_execution_modes=mode_bindings,
             expected_algorithms=algorithm_bindings,
             expected_adapter_names=adapter_bindings,
+            required_benchmark_success_basis=required_benchmark_success_basis,
+            expected_config_hashes=config_hash_bindings,
+            expected_git_hash=normalized_expected_git_hash,
         )
     )
     metric_deltas: list[dict[str, Any]] = []
@@ -1766,6 +1999,9 @@ def compare_parity_rows(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "canonical_episode_schema": str(episode_schema_path) if episode_schema_path else None,
             "expected_identity_set": expected_keys is not None,
             "expected_execution_modes": dict(mode_bindings),
+            "expected_config_hashes": dict(config_hash_bindings),
+            "expected_git_hash": normalized_expected_git_hash,
+            "required_benchmark_success_basis": required_benchmark_success_basis,
             "provenance_bound": expected_provenance is not None
             and before_side_provenance is not None
             and after_side_provenance is not None,
@@ -1821,6 +2057,9 @@ def main(argv: list[str] | None = None) -> int:
                 expected_execution_modes=protocol["expected_execution_modes"],
                 expected_algorithms=protocol["expected_algorithms"],
                 expected_adapter_names=protocol["expected_adapter_names"],
+                required_benchmark_success_basis=comparison["required_benchmark_success_basis"],
+                expected_config_hashes=protocol["expected_config_hashes"],
+                expected_git_hash=protocol["execution_git_hash"],
                 required_provenance_fields=protocol["required_provenance_fields"],
                 expected_provenance=protocol["expected_provenance"],
                 episode_schema_path=repo_root / protocol["episode_schema"],

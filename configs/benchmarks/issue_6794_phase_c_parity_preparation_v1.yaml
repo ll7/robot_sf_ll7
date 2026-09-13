@@ -110,6 +110,9 @@ parity_protocol:
   seeds: [111, 112, 113]
   config_identity_sha256:
     configs/baselines/ppo.yaml: e35188df7d72312d8c41fbd375d8625c2006013f1505b050a2f1aeb8cf8441ea
+  # Future parity rows must identify the exact reviewed execution tree. A later
+  # authorized cutover must update this binding in a separately reviewed packet.
+  execution_git_hash: 2d41c51f8c453b57ae9e26387f00e0b2ad22fc86
   horizon: 100
   dt: 0.1
   workers: 1
@@ -192,6 +195,7 @@ parity_protocol:
     require_canonical_availability: true
     require_expected_execution_modes: true
     require_provenance_binding: true
+    required_benchmark_success_basis: all
     missing_metric_policy: fail
     float_abs_tolerance: 0.000000000001
     float_rel_tolerance: 0.0

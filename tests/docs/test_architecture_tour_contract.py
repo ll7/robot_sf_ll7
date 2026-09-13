@@ -25,6 +25,11 @@ REQUIRED_SOURCES = (
     "robot_sf/benchmark/types.py",
     "robot_sf/benchmark/runner.py",
     "robot_sf/evidence/writers.py",
+    "robot_sf/render/",
+    "robot_sf/training/",
+    "robot_sf_carla_bridge/",
+    "docs/external_data_setup.md",
+    "context/issue_928_carla_t0_t1_replay_contract.md",
     "configs/scenarios",
     "maps",
     "fast-pysf",
@@ -52,10 +57,23 @@ def test_tour_has_stable_sections_and_source_boundaries() -> None:
         assert source in text, source
     for phrase in (
         "not a benchmark claim",
-        "does not establish planner quality or benchmark evidence",
+        "planner quality or benchmark evidence",
         "Missing assets must remain unavailable",
+        "robot_sf.api.run_episode(env, planner=...)",
+        "benchmark.runner.run_episode(scenario_params, seed)",
+        "Visualization and rendering",
+        "CARLA integration",
+        "not a CARLA fallback",
     ):
         assert phrase in text
+
+    assert text.index("robot_sf.api.run_episode(env, planner=...") < text.index(
+        "env.reset(seed=..."
+    )
+    assert text.index("env.reset(seed=...") < text.index("env.step(action)")
+    assert text.index("benchmark.runner.run_episode(scenario_params, seed)") < text.index(
+        "benchmark.runner.validate_and_write(...)"
+    )
 
 
 def test_tour_links_resolve_to_repository_paths() -> None:

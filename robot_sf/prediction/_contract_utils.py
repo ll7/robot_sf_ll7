@@ -4,11 +4,92 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from collections.abc import Mapping, Sequence
 from numbers import Real
 from typing import Any
 
 import rfc8785
+
+FORBIDDEN_EVIDENCE_SOURCE_NAMES = frozenset(
+    {
+        "scenario_assigned_route",
+        "assigned_route",
+        "true_goal",
+        "goal_truth",
+        "waypoint_truth",
+        "future_trajectory",
+        "simulator_goal",
+        "simulator_route",
+    }
+)
+FORBIDDEN_EVIDENCE_SOURCE_TOKENS = frozenset(
+    {
+        "oracle",
+        "simulator",
+        "sim_truth",
+        "true_goal",
+        "true_force",
+        "true_route",
+        "true_waypoint",
+        "route_truth",
+        "waypoint_truth",
+        "force_component",
+        "assigned_goal",
+        "assigned_route",
+        "ground_truth",
+        "goal_after_behavior",
+        "goal_before_behavior",
+        "route_assignment",
+        "route_after_behavior",
+        "route_before_behavior",
+        "truth_label",
+        "waypoint_after_behavior",
+        "waypoint_before_behavior",
+        "waypoint_assignment",
+        "sim_pedestrian_id",
+        "simulator_pedestrian_id",
+        "oracle_speed_cap_active",
+        "speed_cap_truth",
+        "uncapped_velocity_xy",
+    }
+)
+FORBIDDEN_ACTOR_PROVENANCE_MARKERS = frozenset(
+    {
+        *FORBIDDEN_EVIDENCE_SOURCE_NAMES,
+        *FORBIDDEN_EVIDENCE_SOURCE_TOKENS,
+    }
+)
+
+
+def canonicalize_contract_label(value: str) -> str:
+    """Return one separator- and camel-case-insensitive contract label.
+
+    Contract metadata is often assembled from enum values, configuration keys, or
+    JSON-like labels.  Splitting camel case before replacing separators keeps
+    spelling variants such as ``trueRoute`` and ``true_route`` on one validation
+    path.
+    """
+    raw_value = getattr(value, "value", value)
+    text = str(raw_value).strip()
+    text = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", text)
+    return re.sub(r"[^a-zA-Z0-9]+", "_", text).strip("_").lower()
+
+
+def is_forbidden_evidence_source(value: str) -> bool:
+    """Return whether one source label is reserved for privileged evidence."""
+    normalized = canonicalize_contract_label(value)
+    return normalized in FORBIDDEN_EVIDENCE_SOURCE_NAMES or any(
+        token in normalized for token in FORBIDDEN_EVIDENCE_SOURCE_TOKENS
+    )
+
+
+def is_forbidden_actor_text(value: str) -> bool:
+    """Return whether text can encode privileged actor-side provenance."""
+    normalized = canonicalize_contract_label(value)
+    return is_forbidden_evidence_source(normalized) or any(
+        marker in normalized for marker in FORBIDDEN_ACTOR_PROVENANCE_MARKERS
+    )
 
 
 def require_text(value: Any, field_name: str) -> str:
@@ -132,7 +213,13 @@ def stable_config_hash(config: Mapping[str, Any]) -> str:
 
 
 __all__ = [
+    "FORBIDDEN_ACTOR_PROVENANCE_MARKERS",
+    "FORBIDDEN_EVIDENCE_SOURCE_NAMES",
+    "FORBIDDEN_EVIDENCE_SOURCE_TOKENS",
     "canonical_json",
+    "canonicalize_contract_label",
+    "is_forbidden_actor_text",
+    "is_forbidden_evidence_source",
     "reject_unknown_keys",
     "require_covariance",
     "require_digest",

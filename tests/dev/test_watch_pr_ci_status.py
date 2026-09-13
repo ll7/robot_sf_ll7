@@ -715,6 +715,45 @@ def test_once_on_partial_bot_only_rollup_is_pending(monkeypatch: pytest.MonkeyPa
     assert "fast-feedback" in result.checks["required_checks"]["missing"]
 
 
+def test_once_on_complete_docs_only_scope_reports_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The long-running watcher shares the docs-only success disposition with the checker."""
+    payload = {
+        "number": 9198,
+        "title": "docs-only monitor",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "docs-only",
+        "headRefOid": "a6640d7141e8f7c3b2a5d9049f1c6e3a8b7d5f2e",
+        "statusCheckRollup": [
+            {"name": "CodeRabbit", "status": "completed", "conclusion": "success"},
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        ci_status,
+        "_gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_files",
+        lambda *args, **kwargs: (["README.md", "docs/monitor.md"], None),
+    )
+
+    result = watch_pr_ci_status(
+        pr_number="9198",
+        once=True,
+        fetch_status=ci_status._fetch_ci_status,
+    )
+
+    assert result.final_status == "success"
+    assert result.checks["success_reason"] == "ci_not_required_docs_only"
+    assert result.checks["docs_only"]["reason"] == "ci_not_required_docs_only"
+    assert "disposition: ci_not_required_docs_only" in format_human(result)
+
+
 def test_progress_json_is_emitted_to_stream() -> None:
     """Long waits can emit compact progress evidence without poll-only silence."""
     now = iter([0.0, 0.0, 1.0, 1.0])

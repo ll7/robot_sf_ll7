@@ -1071,6 +1071,12 @@ the payload instead records `checks.pending_reason: "runner_queue_starvation"`, 
 age, queued check names, and their actionable run URLs. Use `--queue-starvation-seconds` to tune
 that diagnostic threshold for a known environment. This is an external queue blocker only:
 `checks.overall` remains `pending`, and neither the monitor nor merge admission treats it as success.
+For a pull request whose required CI identities are absent because the complete changed-file
+inventory matches the checked-in `.github/workflows/ci.yml` `paths-ignore` manifest, the monitor
+reports `checks.overall: "success"` with `checks.success_reason: "ci_not_required_docs_only"` and
+the same `monitor.success_reason`. The inventory is bounded and must end with a short page; mixed,
+malformed, truncated, or unavailable file evidence remains fail-closed as
+`required_checks_absent`/pending.
 For Actions lifecycle age warnings, queued and setup phases prefer the current job's
 `created_at`, then fall back to the workflow timestamp; this avoids aging a newly queued job from
 an older parent workflow. The human `actions_gate_age` summary counts the corresponding

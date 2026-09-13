@@ -1191,3 +1191,37 @@ def test_classic_interactions_francis2023_manifest_resolves_all_maps() -> None:
         f"The following scenarios in classic_interactions_francis2023.yaml could not "
         f"resolve their map_file from '{manifest}':\n" + "\n".join(missing)
     )
+
+
+_TRANSFORMED_SVG = Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_bottleneck.svg"
+
+
+def test_scenario_geometry_contract_reaches_the_map_pool(tmp_path: Path) -> None:
+    """A corrected scenario selects a corrected map definition end to end."""
+    scenario = {
+        "name": "corrected_svg",
+        "map_file": str(_TRANSFORMED_SVG),
+        "map_geometry_contract": "corrected",
+    }
+
+    config = build_robot_config_from_scenario(scenario, scenario_path=tmp_path / "scenario.yaml")
+
+    assert config.map_pool is not None
+    (map_def,) = config.map_pool.map_defs.values()
+    assert map_def.svg_geometry_contract == "corrected"
+    assert config.map_id == "classic_bottleneck"
+
+
+def test_map_definition_cache_separates_geometry_contracts() -> None:
+    """Legacy and corrected loads of one SVG never share a cache entry."""
+    scenario_loader._load_map_definition.cache_clear()
+    legacy = scenario_loader._load_map_definition(str(_TRANSFORMED_SVG), "legacy")
+    corrected = scenario_loader._load_map_definition(str(_TRANSFORMED_SVG), "corrected")
+
+    assert legacy is not None and corrected is not None
+    assert legacy.svg_geometry_contract == "legacy"
+    assert corrected.svg_geometry_contract == "corrected"
+    assert scenario_loader.map_cache_info()["currsize"] == 2
+    assert scenario_loader._load_map_definition(str(_TRANSFORMED_SVG), "legacy") is legacy
+    assert scenario_loader._load_map_definition(str(_TRANSFORMED_SVG), "corrected") is corrected
+    scenario_loader._load_map_definition.cache_clear()

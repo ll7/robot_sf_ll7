@@ -370,7 +370,7 @@
       "dangling_commit": 1
     }
   },
-  "generated_at": "2026-09-13T09:32:57Z",
+  "generated_at": "2026-09-13T09:44:41Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {

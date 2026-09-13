@@ -188,6 +188,20 @@ def test_direct_record_requires_route_reference_for_available_status() -> None:
     assert record.unavailable_reason == "missing_and_unavailable_fields"
 
 
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("offered_side", ["left"]),
+        ("taken_side", {"side": "right"}),
+        ("status", []),
+    ],
+)
+def test_direct_record_rejects_unhashable_vocabulary_values(field_name: str, value: object) -> None:
+    """Malformed direct vocabulary values use the stable validation error."""
+    with pytest.raises(ValueError, match="route-side vocabulary|status must"):
+        PedestrianResponseObservation(encounter_id="invalid-vocabulary", **{field_name: value})  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize("goal_delta", [0.0, 0.025, 0.05])
 def test_route_reference_rejects_zero_or_near_zero_start_goal(goal_delta: float) -> None:
     """The route contract's tolerance gate rejects degenerate reference axes."""

@@ -12,8 +12,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from robot_sf.benchmark.aggregate import flatten_metrics
-
 METRIC_LAYER_SCHEMA_VERSION = "metric-layers.v1"
 MISSING_METRIC_REASON = "metric_not_present_in_episode_records"
 METRIC_BINDING_OWNER = "robot_sf.benchmark.metric_layers.CANONICAL_METRICS"
@@ -416,6 +414,10 @@ def get_nested(record: Mapping[str, Any], path: str) -> Any:
 def _episode_view(record: Mapping[str, Any]) -> dict[str, Any]:
     """Return flattened metric and selected top-level aliases for one episode."""
 
+    # Keep aggregate -> metric-layer imports cycle-free. The aggregate module imports the binding
+    # type at runtime so public provenance annotations remain introspectable.
+    from robot_sf.benchmark.aggregate import flatten_metrics  # noqa: PLC0415
+
     record_dict = dict(record)
     flattened = flatten_metrics(record_dict)
     view: dict[str, Any] = {f"metrics.{key}": value for key, value in flattened.items()}
@@ -578,6 +580,23 @@ def _resolve_metric_value(
     return None, None
 
 
+def resolve_canonical_metric_value(
+    metric_id: str,
+    record: Mapping[str, Any],
+) -> tuple[float | None, str | None]:
+    """Resolve one stable metric ID through the canonical metric-layer implementation.
+
+    Returns:
+        ``(value, selected_source_key)`` for the episode, or ``(None, None)`` when the canonical
+        metric is unavailable for that row.
+    """
+    binding = resolve_metric_source_binding(metric_id)
+    if binding.status != "available":
+        raise MetricBindingError("unsupported_metric_source", metric_id)
+    definition = CANONICAL_METRICS[metric_id]
+    return _resolve_metric_value(definition, _episode_view(record))
+
+
 def _reduce(values: Sequence[float], reduction: str) -> float | None:
     """Reduce available episode values according to the metric contract.
 
@@ -736,5 +755,6 @@ __all__ = [
     "MetricSourceBinding",
     "build_metric_layer_summary",
     "get_nested",
+    "resolve_canonical_metric_value",
     "resolve_metric_source_binding",
 ]

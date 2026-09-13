@@ -32,13 +32,12 @@ from robot_sf.benchmark.errors import (
     EpisodeRecordInputError,
 )
 from robot_sf.benchmark.grouping import EFFECTIVE_REPORT_GROUP_KEY, resolve_report_group_key
+from robot_sf.benchmark.metric_layers import MetricSourceBinding  # noqa: TC001
 from robot_sf.benchmark.metrics import snqi as snqi_fn
 from robot_sf.benchmark.thresholds import validate_threshold_parameter_consistency
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-
-    from robot_sf.benchmark.metric_layers import MetricSourceBinding
 
 
 AggregateStatistic = Literal["mean", "median", "p95"]
@@ -803,6 +802,78 @@ def _numeric_items(d: dict[str, Any]) -> dict[str, float]:
     return out
 
 
+def _aggregate_numeric_values(values: Sequence[float]) -> dict[str, float]:
+    """Apply the canonical aggregate statistics to one numeric value column.
+
+    Returns:
+        Mean, median, and p95 values using the existing aggregation contract.
+    """
+    arr = np.asarray(values, dtype=float)
+    return {
+        "mean": float(np.nanmean(arr)),
+        "median": float(np.nanmedian(arr)),
+        "p95": float(np.nanpercentile(arr, 95)),
+    }
+
+
+def _canonical_metric_contributors(
+    records: Sequence[dict[str, Any]],
+    metric_id: str | None,
+) -> tuple[list[float], list[Any]]:
+    """Resolve canonical metric values and identities through the metric-layer owner.
+
+    Returns:
+        Numeric canonical values and the episode identities that supplied them.
+    """
+    if metric_id is None:
+        return [], []
+
+    from robot_sf.benchmark.metric_layers import resolve_canonical_metric_value  # noqa: PLC0415
+
+    values: list[float] = []
+    contributor_ids: list[Any] = []
+    for record in records:
+        value, _ = resolve_canonical_metric_value(metric_id, record)
+        if value is None:
+            continue
+        values.append(value)
+        contributor_ids.append(record.get("episode_id"))
+    return values, contributor_ids
+
+
+def _aggregate_group_rows(
+    rows: Sequence[dict[str, Any]],
+    records: Sequence[dict[str, Any]],
+    canonical_metric_id: str | None,
+) -> tuple[dict[str, dict[str, float]], dict[str, list[Any]]]:
+    """Aggregate one canonical group and retain its raw and canonical contributors.
+
+    Returns:
+        Aggregate rows and contributor identities keyed by metric column.
+    """
+    cols: dict[str, list[float]] = defaultdict(list)
+    contributor_ids: dict[str, list[Any]] = defaultdict(list)
+    for row in rows:
+        num = _numeric_items(row)
+        for key, value in num.items():
+            cols[key].append(value)
+            contributor_ids[key].append(row.get("episode_id"))
+
+    agg = {key: _aggregate_numeric_values(values) for key, values in cols.items()}
+    canonical_values, canonical_contributors = _canonical_metric_contributors(
+        records, canonical_metric_id
+    )
+    if canonical_values:
+        canonical_key = cast("str", canonical_metric_id)
+        agg[canonical_key] = _aggregate_numeric_values(canonical_values)
+        contributor_ids[canonical_key] = canonical_contributors
+
+    social_summary = _social_compliance_group_summary(rows)
+    if social_summary is not None:
+        agg["social_compliance"] = social_summary
+    return agg, dict(contributor_ids)
+
+
 def _compute_aggregates_and_contributors(  # noqa: PLR0913
     records: list[dict[str, Any]],
     *,
@@ -814,12 +885,17 @@ def _compute_aggregates_and_contributors(  # noqa: PLR0913
     expected_algorithms: set[str] | None = None,
     observation_track_mode: str = "strict",
     logger_ctx=None,
+    canonical_metric_id: str | None = None,
 ) -> tuple[
     dict[str, dict[str, dict[str, float]]],
     dict[str, dict[str, list[Any]]],
     list[dict[str, Any]],
 ]:
     """Run canonical aggregation and retain the row identities used by each numeric column.
+
+    When ``canonical_metric_id`` is supplied, the existing metric-layer resolver supplies a
+    canonical per-episode value for that metric. Those values are added only to this in-memory
+    provenance view; ``compute_aggregates`` keeps its serialized raw-column output unchanged.
 
     Returns:
         Aggregate summary, contributor IDs by group/metric, and eligible episode records.
@@ -840,6 +916,7 @@ def _compute_aggregates_and_contributors(  # noqa: PLR0913
     threshold_meta = validate_threshold_parameter_consistency(records)
 
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    group_records: dict[str, list[dict[str, Any]]] = defaultdict(list)
     present_algorithms: set[str] = set()
     for rec in records:
         key = _resolve_group_key(rec, group_by=group_by, fallback_group_by=fallback_group_by)
@@ -850,31 +927,18 @@ def _compute_aggregates_and_contributors(  # noqa: PLR0913
             mode=observation_track_meta["mode"],
         )
         groups[key_str].append(flatten_metrics(rec))
+        group_records[key_str].append(rec)
 
     summary: dict[str, dict[str, dict[str, float]]] = {}
     contributors: dict[str, dict[str, list[Any]]] = {}
     for g, rows in groups.items():
-        # collect numeric columns
-        cols: dict[str, list[float]] = defaultdict(list)
-        contributor_ids: dict[str, list[Any]] = defaultdict(list)
-        for row in rows:
-            num = _numeric_items(row)
-            for k, v in num.items():
-                cols[k].append(v)
-                contributor_ids[k].append(row.get("episode_id"))
-        agg: dict[str, dict[str, float]] = {}
-        for k, vals in cols.items():
-            arr = np.asarray(vals, dtype=float)
-            agg[k] = {
-                "mean": float(np.nanmean(arr)),
-                "median": float(np.nanmedian(arr)),
-                "p95": float(np.nanpercentile(arr, 95)),
-            }
-        social_summary = _social_compliance_group_summary(rows)
-        if social_summary is not None:
-            agg["social_compliance"] = social_summary
+        agg, contributor_ids = _aggregate_group_rows(
+            rows,
+            group_records[g],
+            canonical_metric_id,
+        )
         summary[g] = agg
-        contributors[g] = dict(contributor_ids)
+        contributors[g] = contributor_ids
 
     meta: dict[str, Any] = {
         "group_by": group_by,
@@ -996,6 +1060,7 @@ def resolve_aggregate_cell_provenance(  # noqa: C901, PLR0913
         snqi_baseline=snqi_baseline,
         recompute_snqi=recompute_snqi,
         observation_track_mode=observation_track_mode,
+        canonical_metric_id=identity.metric_id,
     )
 
     episode_ids: list[str] = []

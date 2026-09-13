@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from robot_sf.benchmark.aggregate import (
     AggregateCellIdentity,
+    AggregateCellProvenance,
     AggregateProvenanceError,
     compute_aggregates,
+    read_jsonl,
     resolve_aggregate_cell_provenance,
 )
 from robot_sf.benchmark.metric_layers import (
@@ -17,6 +21,7 @@ from robot_sf.benchmark.metric_layers import (
     METRIC_BINDING_OWNER,
     MetricBindingError,
     MetricDefinition,
+    MetricSourceBinding,
     resolve_metric_source_binding,
 )
 
@@ -62,6 +67,55 @@ def test_aggregate_cell_provenance_uses_exact_canonical_numeric_contributors() -
     assert provenance.value == aggregate["planner_a"]["collision_rate"]["mean"] == 0.5
     assert provenance.contributor_episode_ids == ("ep-1", "ep-2")
     assert provenance.metric_binding.metric_id == "collision_rate"
+
+
+def test_golden_fixture_alias_source_resolves_to_actual_aggregate_contributors() -> None:
+    """A canonical ID resolves through the metric-layer alias on the real aggregate fixture."""
+    fixture = Path(__file__).parents[2] / "tests/fixtures/benchmark/golden/aggregate_episodes.jsonl"
+    records = read_jsonl(fixture)
+
+    aggregate = compute_aggregates(records)
+    provenance = resolve_aggregate_cell_provenance(records, _identity(group="orca"))
+
+    assert aggregate["orca"]["collisions"]["mean"] == pytest.approx(0.5)
+    assert provenance.value == pytest.approx(0.5)
+    assert provenance.contributor_episode_ids == (
+        "golden-orca-corridor-17",
+        "golden-orca-crossing-23",
+    )
+    assert provenance.metric_binding.source_field_paths == (
+        "metrics.collision_rate",
+        "metrics.collisions",
+        "outcome.collision_event",
+    )
+
+
+def test_derived_metric_source_resolves_without_serialized_aggregate_changes() -> None:
+    """A metric-layer outcome derivation supplies a provenance-only canonical cell."""
+    records = [
+        {
+            **_episode("derived-safe", collision_rate=None),
+            "outcome": {"collision_event": False},
+        },
+        {
+            **_episode("derived-collision", collision_rate=None),
+            "outcome": {"collision_event": True},
+        },
+    ]
+
+    aggregate = compute_aggregates(records)
+    provenance = resolve_aggregate_cell_provenance(records, _identity())
+
+    assert aggregate["planner_a"] == {}
+    assert provenance.value == pytest.approx(0.5)
+    assert provenance.contributor_episode_ids == ("derived-collision", "derived-safe")
+
+
+def test_aggregate_cell_provenance_annotations_are_runtime_resolvable() -> None:
+    """The public provenance dataclass can be inspected by runtime consumers."""
+    hints = typing.get_type_hints(AggregateCellProvenance)
+
+    assert hints["metric_binding"] is MetricSourceBinding
 
 
 def test_eligibility_and_grouping_changes_flow_through_canonical_aggregation() -> None:

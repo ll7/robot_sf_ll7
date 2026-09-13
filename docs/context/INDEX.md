@@ -19,6 +19,13 @@ explicitly unavailable #7980/September source-complete coverage. It is diagnosti
 not establish empirical, benchmark, safety, causal, planner-ranking, release, or paper claims:
 [evidence/issue_8566_source_bound_component_contrasts_2026-09-10/README.md](evidence/issue_8566_source_bound_component_contrasts_2026-09-10/README.md).
 
+Issue #6151 simulator-dependence synthesis: the bounded negative verdict is
+`invalid_missing_evidence` because the recovered job-13512 bundle has conflicting execution
+lineage and no materialized SNQI, while the older slice is rank-non-identifiable. The synthesis
+preserves checksum-covered custody and contradiction records without promoting ranking,
+benchmark, realism, sim-to-real, safety, or paper-facing claims:
+[evidence/issue_6151_simulator_dependence_synthesis_2026-09-13/README.md](evidence/issue_6151_simulator_dependence_synthesis_2026-09-13/README.md).
+
 Issue #8222 obstacle-force compatibility boundary: preserves frozen/unversioned historical laws,
 separates the fast-pysf segment kernel from the vectorized planner point site, and defines the
 opt-in, domain-gated runtime correction boundary. This is a compatibility and implementation-context

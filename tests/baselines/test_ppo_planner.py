@@ -97,6 +97,47 @@ def test_build_model_obs_dict_reshapes_to_model_space():
     assert converted["occupancy_grid"].dtype == np.float32
 
 
+def test_build_model_obs_dict_accepts_values_inside_bounded_model_space() -> None:
+    """Model-space validation should preserve in-bounds nested observations."""
+    planner = PPOPlanner(_planner_config(obs_mode="dict"))
+    planner._model = SimpleNamespace(
+        observation_space=SimpleNamespace(
+            spaces={"bounded": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)},
+        ),
+    )
+
+    converted = planner._build_model_obs_dict({"bounded": [0.25, -0.5]})
+
+    np.testing.assert_allclose(converted["bounded"], [0.25, -0.5])
+
+
+def test_build_model_obs_dict_rejects_values_outside_bounded_model_space() -> None:
+    """Model-space validation should reject an out-of-bounds nested observation."""
+    planner = PPOPlanner(_planner_config(obs_mode="dict"))
+    planner._model = SimpleNamespace(
+        observation_space=SimpleNamespace(
+            spaces={"bounded": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)},
+        ),
+    )
+
+    with pytest.raises(ValueError, match="Observation key 'bounded' is outside"):
+        planner._build_model_obs_dict({"bounded": [0.25, 1.5]})
+
+
+def test_model_observation_validation_fails_closed_when_space_contains_errors() -> None:
+    """A model space that cannot validate a value must not admit it."""
+
+    class _BrokenSpace:
+        """Space double whose contains implementation raises a validation error."""
+
+        def contains(self, _value: object) -> bool:
+            """Raise the same kind of error a malformed third-party space may emit."""
+            raise ValueError("broken contains")
+
+    with pytest.raises(ValueError, match="Observation key 'broken' is outside"):
+        PPOPlanner._validate_model_observation_value("broken", [0.0], _BrokenSpace())
+
+
 def test_build_model_obs_dict_flattens_structured_socnav_observation() -> None:
     """PPO dict mode should align structured SocNav observations to flat SB3 keys."""
     planner = PPOPlanner(_planner_config(obs_mode="dict"))
@@ -305,6 +346,7 @@ def test_configure_rebuilds_predictive_foresight_encoder(monkeypatch) -> None:
             predictive_foresight_horizon_steps=8,
         )
     )
+    planner._resolved_model_path = Path("/tmp/old-model.zip")
     planner.configure(
         _planner_config(
             predictive_foresight_enabled=True,
@@ -313,6 +355,7 @@ def test_configure_rebuilds_predictive_foresight_encoder(monkeypatch) -> None:
         )
     )
     assert built == [("predictive_a", 8), ("predictive_b", 12)]
+    assert planner._resolved_model_path is None
 
 
 def test_get_metadata_redacts_predictive_checkpoint_path() -> None:
@@ -384,6 +427,45 @@ def test_build_model_obs_image_requires_payload():
     assert image.shape == (4, 4, 3)
 
 
+@pytest.mark.parametrize("action_space", ("velocity", "unicycle"))
+def test_step_raw_preserves_model_action_before_runtime_projection(action_space: str) -> None:
+    """Raw and projected PPO steps keep separate action-space representations."""
+    planner = PPOPlanner(
+        _planner_config(
+            action_space=action_space,
+            v_max=2.0,
+            omega_max=1.0,
+        ),
+        defer_model_loading=True,
+    )
+
+    class _Model:
+        """Model double that emits an intentionally out-of-bounds action."""
+
+        def predict(self, _obs, deterministic: bool = True):
+            """Return the same raw action for both contract paths."""
+            _ = deterministic
+            return np.array([3.0, 2.0]), None
+
+    planner._model = _Model()
+    planner._status = "ok"
+    planner._fallback_reason = None
+
+    raw_action = planner.step_raw(_obs())
+    projected_action = planner.step(_obs())
+
+    if action_space == "unicycle":
+        assert raw_action == {"v": 3.0, "omega": 2.0}
+        assert projected_action == {"v": 2.0, "omega": 1.0}
+    else:
+        scale = 2.0 / (np.hypot(3.0, 2.0) + planner.EPS)
+        assert raw_action == {"vx": 3.0, "vy": 2.0}
+        assert projected_action == {
+            "vx": pytest.approx(3.0 * scale),
+            "vy": pytest.approx(2.0 * scale),
+        }
+
+
 def test_vectorize_and_action_mapping_paths():
     """Vectorization and action mapping should work for both action spaces."""
     planner = PPOPlanner(_planner_config(obs_mode="vector", nearest_k=2, action_space="velocity"))
@@ -437,6 +519,22 @@ def test_load_model_resolves_registry_model_id(monkeypatch, tmp_path):
     planner = PPOPlanner(_planner_config(model_id="ppo_demo", model_path="unused.zip"))
     assert called["model_id"] == "ppo_demo"
     assert planner._model["path"] == str(resolved_model)
+    assert planner._resolved_model_path == resolved_model
+
+
+def test_load_model_clears_stale_resolved_path_on_fallback(tmp_path) -> None:
+    """A failed reload must not retain provenance for a checkpoint that was not loaded."""
+    missing_model = tmp_path / "missing.zip"
+    planner = PPOPlanner(
+        _planner_config(model_path=str(missing_model)),
+        defer_model_loading=True,
+    )
+    planner._resolved_model_path = tmp_path / "stale.zip"
+
+    planner._load_model()
+
+    assert planner._resolved_model_path is None
+    assert planner.get_metadata()["status"] == "fallback"
 
 
 def test_issue_791_portable_baseline_uses_registry_and_auto_device(monkeypatch, tmp_path):

@@ -15,6 +15,7 @@ class _DummyPPOPlanner:
     """Test double for PPO planner integration in map runner."""
 
     test_action: ClassVar[dict[str, float]] = {"v": 0.5, "omega": 0.0}
+    test_raw_action: ClassVar[dict[str, float]] = {"v": 0.5, "omega": 0.0}
 
     def __init__(self, config, *, seed=None):
         self.config = dict(config)
@@ -27,6 +28,11 @@ class _DummyPPOPlanner:
         """Return the configured action and retain the received observation."""
         self.last_obs = _obs
         return dict(self.test_action)
+
+    def step_raw(self, _obs):
+        """Return the pre-projection action used by the map-runner contract."""
+        self.last_obs = _obs
+        return dict(self.test_raw_action)
 
     def close(self):
         """Mark the dummy planner as closed."""
@@ -103,6 +109,7 @@ def _sample_obs(heading: float = 0.0) -> dict:
 def _patch_ppo(monkeypatch, action: dict[str, float]) -> None:
     """Patch the PPO double and its deterministic action for one test."""
     monkeypatch.setattr(_DummyPPOPlanner, "test_action", action)
+    monkeypatch.setattr(_DummyPPOPlanner, "test_raw_action", action)
     monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
 
 
@@ -154,7 +161,7 @@ def test_build_policy_ppo_strips_benchmark_metadata_before_planner(monkeypatch):
 
 def test_build_policy_ppo_converts_velocity_to_unicycle(monkeypatch):
     """Ensure velocity-vector PPO outputs are converted to unicycle commands."""
-    _patch_ppo(monkeypatch, {"vx": 1.0, "vy": 0.0})
+    _patch_ppo(monkeypatch, {"vx": 0.8, "vy": 0.0})
     policy, _ = map_runner._build_policy(
         "ppo",
         {
@@ -177,6 +184,44 @@ def test_build_policy_ppo_rejects_unknown_action_payload(monkeypatch):
     )
 
     with pytest.raises(ValueError, match="Unsupported PPO action payload"):
+        policy(_sample_obs())
+
+
+@pytest.mark.parametrize(
+    ("action_space", "raw_action", "message"),
+    (
+        ("velocity", {"vx": 1.8, "vy": 1.2}, "speed=.*exceeds"),
+        ("unicycle", {"v": 2.5, "omega": 0.0}, "field 'v'.*outside"),
+    ),
+)
+def test_build_policy_ppo_validates_raw_action_before_projection(
+    monkeypatch,
+    action_space: str,
+    raw_action: dict[str, float],
+    message: str,
+) -> None:
+    """A projected runtime action cannot hide a policy-space violation."""
+    _patch_ppo(monkeypatch, {"v": 0.5, "omega": 0.0})
+    monkeypatch.setattr(_DummyPPOPlanner, "test_raw_action", raw_action)
+    policy, _ = map_runner._build_policy(
+        "ppo",
+        {
+            "action_space": action_space,
+            "v_max": 2.0,
+            "omega_max": 1.0,
+        },
+    )
+
+    with pytest.raises(ValueError, match=message):
+        policy(_sample_obs())
+
+
+def test_build_policy_ppo_validates_inferred_velocity_action_space(monkeypatch) -> None:
+    """Legacy configs without action_space still validate recognizable raw velocity output."""
+    _patch_ppo(monkeypatch, {"vx": 1.8, "vy": 1.2})
+    policy, _ = map_runner._build_policy("ppo", {"v_max": 2.0, "omega_max": 1.0})
+
+    with pytest.raises(ValueError, match="speed=.*exceeds"):
         policy(_sample_obs())
 
 

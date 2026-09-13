@@ -243,5 +243,58 @@
         "platform": {"type": "string"}
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"status": {"const": "ok"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "results": {
+            "items": {
+              "not": {
+                "anyOf": [
+                  {
+                    "properties": {"status": {"const": "error"}},
+                    "required": ["status"]
+                  },
+                  {
+                    "properties": {"failure_class": {"const": "simulator"}},
+                    "required": ["failure_class"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"status": {"const": "failed"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "results": {
+            "contains": {
+              "anyOf": [
+                {
+                  "properties": {"status": {"const": "error"}},
+                  "required": ["status"]
+                },
+                {
+                  "properties": {"failure_class": {"const": "simulator"}},
+                  "required": ["failure_class"]
+                }
+              ]
+            },
+            "minContains": 1
+          }
+        }
+      }
+    }
+  ]
 }

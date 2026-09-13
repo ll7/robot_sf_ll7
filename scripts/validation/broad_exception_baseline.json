@@ -121,7 +121,7 @@
       "context": "_execute_campaign_planner_batch",
       "fingerprint": "e53eb792397aafba",
       "handler": "Exception",
-      "lineno": 578,
+      "lineno": 597,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:  # noqa: BLE001 - campaign fault isolation: failed arm, not crash"
     },
@@ -220,7 +220,7 @@
       "context": "execute_rollout",
       "fingerprint": "f84506689cdcd3dc",
       "handler": "Exception",
-      "lineno": 622,
+      "lineno": 627,
       "path": "robot_sf/benchmark/force_coupled_comparator.py",
       "source": "except Exception as exc:  # noqa: BLE001 - planner output-boundary failures are path-generation results"
     },
@@ -229,7 +229,7 @@
       "context": "execute_rollout",
       "fingerprint": "096d584c7efe6758",
       "handler": "Exception",
-      "lineno": 643,
+      "lineno": 648,
       "path": "robot_sf/benchmark/force_coupled_comparator.py",
       "source": "except Exception as exc:  # noqa: BLE001 - analytic kinematic integration failures are structured"
     },
@@ -778,7 +778,7 @@
       "context": "main",
       "fingerprint": "54d81d337d560e63",
       "handler": "Exception",
-      "lineno": 538,
+      "lineno": 517,
       "path": "scripts/dev/compact_ci_snapshot.py",
       "source": "except Exception as exc:"
     },

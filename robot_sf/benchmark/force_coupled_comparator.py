@@ -588,6 +588,11 @@ def execute_rollout(  # noqa: C901, PLR0912, PLR0915
         try:
             linear_cmd, angular_cmd = planned_command
             diag = planner.diagnostics()
+            for flag_name in ("degraded", "fallback"):
+                if flag_name in diag and not isinstance(diag[flag_name], bool):
+                    raise ValueError(
+                        f"planner diagnostic {flag_name} must be a boolean when present"
+                    )
             diag_status = diag.get("status")
             if diag_status not in (None, "ok", "degraded"):
                 raise ValueError(f"unsupported planner diagnostic status: {diag_status!r}")

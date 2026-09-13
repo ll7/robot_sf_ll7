@@ -87,6 +87,29 @@ def _simulator_error_row_labels(receipt: dict[str, Any]) -> list[str]:
     return labels
 
 
+def _root_status_error_row_labels(receipt: dict[str, Any]) -> list[str]:
+    """Return rows that make a root ``ok`` receipt internally inconsistent.
+
+    The versioned receipt contract treats any handled error row or simulator-class row as a
+    failed comparator invocation. This check mirrors that root-level invariant for callers that
+    use smoke mode without separately validating the JSON schema.
+    """
+    if receipt.get("status") != "ok":
+        return []
+
+    results = receipt.get("results")
+    if not isinstance(results, list):
+        return []
+
+    labels: list[str] = []
+    for index, row in enumerate(results):
+        if not isinstance(row, dict):
+            continue
+        if row.get("status") == "error" or row.get("failure_class") == FAILURE_CLASS_SIMULATOR:
+            labels.append(f"{row.get('planner_id', '<unknown>')}/{row.get('scenario_id', index)}")
+    return labels
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run comparator and report results.
 
@@ -126,6 +149,14 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 "FAIL: force-coupled comparator check found simulator-error rows "
                 f"({', '.join(simulator_rows)})",
+                file=sys.stderr,
+            )
+            return 1
+        inconsistent_rows = _root_status_error_row_labels(receipt)
+        if inconsistent_rows:
+            print(
+                "FAIL: force-coupled comparator check found error rows under root status=ok "
+                f"({', '.join(inconsistent_rows)})",
                 file=sys.stderr,
             )
             return 1

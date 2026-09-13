@@ -102,7 +102,15 @@ class _SimulatorBoundaryFailurePlanner:
                 "status": "ok",
                 "fallback": True,
             }
-        return {"planner_type": "simulator_boundary_fixture", "status": "ok"}
+        invalid_flags = {
+            "invalid_degraded_flag": {"degraded": 1},
+            "invalid_fallback_flag": {"fallback": "true"},
+        }
+        return {
+            "planner_type": "simulator_boundary_fixture",
+            "status": "ok",
+            **invalid_flags.get(self.failure_phase, {}),
+        }
 
     def close(self) -> None:
         """Release no resources; this fixture only exercises rollout boundaries."""
@@ -277,6 +285,23 @@ def test_execute_rollout_rejects_non_string_diagnostic_reasons() -> None:
     assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
     assert result.degradation_reasons[0].startswith(
         "plan_exception: planner diagnostic degradation_reasons"
+    )
+
+
+@pytest.mark.parametrize("failure_phase", ["invalid_degraded_flag", "invalid_fallback_flag"])
+def test_execute_rollout_rejects_non_boolean_diagnostic_flags(failure_phase: str) -> None:
+    """Malformed degradation flags fail closed instead of being silently ignored."""
+    result = execute_rollout(
+        _SimulatorBoundaryFailurePlanner(failure_phase),
+        get_canonical_comparison_scenarios()[0],
+    )
+
+    assert result.status == "error"
+    assert result.failure_class == FAILURE_CLASS_PATH_GENERATION
+    assert result.degradation_reasons[0] == (
+        "plan_exception: planner diagnostic "
+        f"{('degraded' if failure_phase == 'invalid_degraded_flag' else 'fallback')} "
+        "must be a boolean when present"
     )
 
 
@@ -579,6 +604,32 @@ def test_comparator_receipt_fails_closed_on_simulator_error_rows(
     )
 
 
+def test_comparator_receipt_schema_rejects_root_ok_with_error_row() -> None:
+    """The receipt schema binds root success to the absence of error/simulator rows."""
+    receipt = run_force_coupled_comparator()
+    receipt["status"] = "ok"
+    receipt["results"][0].update(
+        {
+            "status": "error",
+            "degraded": True,
+            "degradation_reasons": ["plan_exception: fixture failure"],
+            "failure_class": FAILURE_CLASS_PATH_GENERATION,
+        }
+    )
+
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    with pytest.raises(jsonschema.ValidationError, match="error"):
+        jsonschema.validate(
+            instance=receipt, schema=json.loads(schema_path.read_text(encoding="utf-8"))
+        )
+
+
 def test_comparator_receipt_fails_on_simulator_diagnostic_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -617,6 +668,23 @@ def test_cli_smoke_rejects_simulator_error_rows(
     assert checker.main(["--smoke"]) == 1
     captured = capsys.readouterr()
     assert "simulator-error rows" in captured.err
+    assert "PASS" not in captured.out
+
+
+def test_cli_smoke_rejects_root_ok_with_generic_error_row(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Smoke mode rejects any error row that contradicts root status=ok."""
+    receipt = run_force_coupled_comparator()
+    receipt["status"] = "ok"
+    receipt["results"][0].update(
+        {"status": "error", "failure_class": FAILURE_CLASS_PATH_GENERATION}
+    )
+    monkeypatch.setattr(checker, "run_force_coupled_comparator", lambda **_: receipt)
+
+    assert checker.main(["--smoke"]) == 1
+    captured = capsys.readouterr()
+    assert "error rows under root status=ok" in captured.err
     assert "PASS" not in captured.out
 
 

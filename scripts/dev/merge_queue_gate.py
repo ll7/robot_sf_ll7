@@ -89,6 +89,7 @@ from scripts.dev.check_ci_needs import (  # noqa: E402
     is_ci_path_ignored,
 )
 from scripts.dev.check_pr_ci_status import (  # noqa: E402
+    _check_run_order_key,
     _enrich_rest_check_runs,
     _latest_check_runs,
     _rest_check_runs_to_rollup,
@@ -777,7 +778,33 @@ def _parse_json(stdout: str) -> tuple[Any, str | None]:
         return None, f"Failed to parse JSON: {exc}"
 
 
-def _rollup_overall(rollup: list[dict[str, Any]]) -> str:
+def _select_current_gate(gate_checks: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Select the newest gate while retaining fail-closed handling for a current malformed row.
+
+    Timestamped records are ordered by the shared check-run key.  For records that have no
+    usable ``startedAt``, the rollup's response order is the only remaining evidence about whether
+    they precede or follow an orderable record.  An unorderable row before the newest orderable row
+    is therefore historical noise; an unorderable row after it is treated as current and validated
+    by the caller instead of being allowed to hide behind older green evidence.
+    """
+    if not gate_checks:
+        return None
+    orderable = [
+        (index, check) for index, check in enumerate(gate_checks) if _check_run_order_key(check)[-1]
+    ]
+    if not orderable:
+        return gate_checks[-1]
+    current_index, current_gate = max(
+        orderable,
+        key=lambda item: (_check_run_order_key(item[1]), item[0]),
+    )
+    unorderable_after = [
+        check for check in gate_checks[current_index + 1 :] if not _check_run_order_key(check)[-1]
+    ]
+    return unorderable_after[-1] if unorderable_after else current_gate
+
+
+def _rollup_overall(rollup: list[dict[str, Any]]) -> str:  # noqa: C901
     """Classify a PR ``statusCheckRollup`` into an overall CI conclusion.
 
     Returns ``failure`` if any check failed, ``pending`` if any check is
@@ -789,6 +816,26 @@ def _rollup_overall(rollup: list[dict[str, Any]]) -> str:
     if any(not isinstance(check, dict) for check in rollup):
         return "pending"
     effective_rollup, _superseded_count = _latest_check_runs(rollup)
+    gate_checks = [check for check in rollup if check.get("name") == GATE_JOB_NAME]
+    current_gate = _select_current_gate(gate_checks)
+    if current_gate is not None:
+        if not _check_run_order_key(current_gate)[-1]:
+            # A current gate without the shared startedAt ordering key cannot establish CI.
+            return "unknown"
+        # ``_latest_check_runs`` intentionally keeps malformed identity records
+        # fail-closed, so select the newest gate by timestamp before validating
+        # its workflow identity. This still drops an older malformed predecessor
+        # when a newer identity-bound rerun exists.
+        effective_rollup = [
+            check for check in effective_rollup if check.get("name") != GATE_JOB_NAME
+        ]
+        effective_rollup.append(current_gate)
+    if current_gate is not None and current_gate.get("workflowName") != GATE_WORKFLOW_NAME:
+        # A current job name without its workflow identity cannot prove whether
+        # this is the required Merge Queue Gate context or an unrelated check.
+        # Superseded historical records are ignored before this validation so a
+        # malformed predecessor cannot mask a newer, identity-bound rerun.
+        return "unknown"
     without_current_gate = [
         check
         for check in effective_rollup

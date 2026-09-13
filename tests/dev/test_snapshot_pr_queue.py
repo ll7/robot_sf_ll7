@@ -1277,11 +1277,56 @@ def test_main_rejects_expected_head_sha_for_batch(capsys) -> None:  # type: igno
     assert "--expected-head-sha requires exactly one PR" in capsys.readouterr().err
 
 
-def test_main_rejects_active_review_thread_mode(capsys) -> None:  # type: ignore[no-untyped-def]
-    """Review-thread mode should stay explicit instead of broad active discovery."""
-    rc = main(["--active", "--review-threads", "--json"])
-    assert rc == 1
-    assert "--review-threads is only supported" in capsys.readouterr().err
+def test_main_active_review_thread_mode_enriches_rows() -> None:
+    """Active review-thread mode enriches each discovered PR with a bounded thread snapshot."""
+    pr_payload = [
+        {
+            "number": 2681,
+            "title": "active PR",
+            "state": "OPEN",
+            "isDraft": False,
+            "url": "https://github.test/pull/2681",
+            "labels": [{"name": "merge-ready"}],
+            "headRefName": "feature",
+            "headRefOid": "cafe00",
+            "mergeable": "MERGEABLE",
+            "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+            "reviews": [],
+            "comments": [],
+        }
+    ]
+    thread_snapshot = {"status": "ok", "threads": [], "unresolved": 0}
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh_active,
+        patch("scripts.dev.snapshot_pr_queue._review_thread_snapshot") as mock_threads,
+    ):
+        mock_gh_active.return_value = MagicMock(
+            returncode=0, stdout=json.dumps(pr_payload), stderr=""
+        )
+        mock_threads.return_value = thread_snapshot
+        active_queue = snapshot_active_prs(
+            repo="ll7/robot_sf_ll7", limit=1, include_review_threads=True
+        )
+
+    assert active_queue["prs"][0]["review_thread_snapshot"] == thread_snapshot
+    mock_threads.assert_called_once_with(2681, repo="ll7/robot_sf_ll7")
+
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_main,
+        patch("scripts.dev.snapshot_pr_queue._review_thread_snapshot") as mock_threads_main,
+    ):
+        mock_main.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        mock_threads_main.return_value = thread_snapshot
+        rc = main(["--active", "--review-threads", "--json", "--limit", "1"])
+    assert rc == 0
+
+
+def test_help_documents_active_review_threads(capsys) -> None:  # type: ignore[no-untyped-def]
+    """Help must state that --review-threads works with --active up to --limit."""
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    out = capsys.readouterr().out
+    assert "--active" in out and "bounded by --limit" in out
 
 
 def test_main_active_mode_discovers_open_prs() -> None:

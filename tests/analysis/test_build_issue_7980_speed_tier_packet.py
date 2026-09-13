@@ -544,6 +544,33 @@ def test_validation_rejects_non_integral_scenario_count() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("pooled_delta_mean", 1.01),
+        ("pooled_delta_se", -0.01),
+        ("harm_bound", -1.01),
+        ("p_value_harm_raw", 1.01),
+        ("p_value_noninferiority_holm", -0.01),
+        ("harm_adjusted_confidence_level", 1.0),
+        ("directional_family_alpha", 0.0),
+    ],
+)
+def test_validation_rejects_out_of_domain_synthesis_statistics(field: str, value: float) -> None:
+    """Reject finite values outside the registered rate and statistical domains."""
+
+    synthesis, synthesis_sha, recovery, preregistration = _validation_inputs()
+    synthesis["decision_table"][0][field] = value
+
+    with pytest.raises(ValueError, match=field):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256=synthesis_sha,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )
+
+
 @pytest.mark.parametrize("mutation", ["value", "duplicate"])
 def test_validation_rejects_seed_value_or_uniqueness_mutation(mutation: str) -> None:
     """Do not derive paired support from lengths when the frozen seeds are changed."""

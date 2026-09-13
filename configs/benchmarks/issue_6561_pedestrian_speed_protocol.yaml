@@ -247,6 +247,8 @@ activation_contract:
   target_tolerance_m_s: 0.2
   minimum_activation_fraction: 0.8
   maximum_spawn_transient_seconds: 2.0
+  maximum_realized_desired_speed_mean_m_s: 3.0
+  maximum_realized_desired_speed_std_m_s: 3.0
   transient_exclusion: >-
     Record the first time each pedestrian enters the target tolerance and the
     acceleration transient; exclude only the declared transient window from

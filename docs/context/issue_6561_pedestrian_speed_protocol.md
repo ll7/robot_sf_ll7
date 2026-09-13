@@ -21,12 +21,38 @@ The checker must report 2,160 identities and manifest hash `371f1a0160ec7faf1ade
 - Seeds `111–140`, horizon `600`, timestep `0.1 s`, native execution, and robot speed cap `2.0 m/s`.
 - Three pedestrian regimes: released `legacy_default` with the speed tier unset; `slow_distributed` with mean `0.65 m/s`, standard deviation `0.2 m/s`; and `typical_distributed` with mean `1.3 m/s`, standard deviation `0.2 m/s`. Explicit regimes derive the desired-speed sampling seed from the episode seed.
 - Spawn speed remains the released `0.5 m/s`; only desired speed changes. The protocol records configured and realized distributions, initial spawn speed, time-to-target, acceleration transient, and activation fraction.
+- The activation diagnostics contract bounds `realized_desired_speed_std_m_s` to `0–3.0 m/s`, using the existing inclusive `3.0 m/s` upper clip of the shared pedestrian desired-speed sampler. This is a conservative structural/arithmetic bound, not a runtime or benchmark result.
 
 The primary metrics are success, collision, and near-miss rates. Exposure and clearance metrics, typed collision rates, paired scenario-seed inference, one-sided harm margins, Holm–Bonferroni multiplicity, and the 2,000-replicate paired-seed-block bootstrap are frozen in the YAML. Ranking is descriptive only; collision frequency is not a physical-impact or real-world safety claim.
 
 For non-reference regimes, activation requires at least 80% of pedestrians to reach the configured desired-speed mean within `0.20 m/s`, with a p95 time-to-target no greater than `2.0 s`. The declared transient window is recorded and excluded only as specified; failure is `intervention_not_activated`, which blocks a no-harm conclusion.
 
 The required turnaround ledger is also frozen from decision through dissertation evidence-admission decision. Private scheduler topology, credentials, scratch paths, and job IDs do not belong in this tracked protocol note.
+
+## Activation-preflight classifier boundary (#9031)
+
+The disjoint activation-preflight checker is a structural gate over the frozen protocol, not a native
+diagnostics producer. It now requires the exact `192`-identity preflight manifest, reserved seeds
+`311–314`, frozen scenario/planner/config/runtime hashes, the checker-owned diagnostics envelope
+`robot_sf.issue_6561_pedestrian_speed_activation_diagnostics.v2`, finite bounded values, and
+explicit row status. Partial, duplicate, unknown, adapter, degraded, fallback, failed, unavailable,
+provenance-invalid, schema-invalid, or mutated-input rows fail closed.
+
+The repository does not currently contain a canonical native pedestrian activation-diagnostics owner or
+schema. Consequently, a complete synthetic payload may report `activation_ok` and an activation
+verdict as a structural diagnostic, but the overall result is always `ok: false` with
+`status: blocked`, `admission_status: not_admitted`, and
+`reason_code: canonical_native_activation_diagnostics_owner_unavailable`. Explicit top-level
+`not_available` and `failed` outcomes are preserved as non-admitted terminal results. This boundary
+does not establish native execution, runtime activation, benchmark evidence, or dissertation admission;
+the downstream native canary and #6102 integrity gates remain required.
+
+Validate the boundary without executing a campaign:
+
+```bash
+uv run python scripts/validation/check_issue_6561_activation_preflight.py --check-only --format json
+uv run pytest -q tests/validation/test_check_issue_6561_activation_preflight.py
+```
 
 ## Validation
 

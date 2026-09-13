@@ -19,7 +19,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml"
 SCHEMA_VERSION = "robot_sf.issue_6561_pedestrian_speed_protocol.v1"
-EXPECTED_PROTOCOL_SEMANTIC_HASH = "6dca14e2021394fcfc9116418d23ebd351cba5ffd135abfe84d6c140ee1ced3d"
+EXPECTED_PROTOCOL_SEMANTIC_HASH = "a71c85604222fbe5ee4c794dfda30b641ac3a1c268f146a65c7bf746105031fd"
 EXPECTED_PROTOCOL_TOP_LEVEL_KEYS = frozenset(
     {
         "schema_version",
@@ -387,6 +387,10 @@ def _validate_activation_and_ledger(payload: dict[str, Any]) -> None:
     )
     _require(
         activation.get("maximum_spawn_transient_seconds") == 2.0, "spawn transient bound drifted"
+    )
+    _require(
+        activation.get("maximum_realized_desired_speed_std_m_s") == 3.0,
+        "realized desired-speed std bound drifted",
     )
     ledger = _mapping(payload.get("turnaround_ledger"), "turnaround_ledger")
     _require(

@@ -2,8 +2,9 @@
 #
 # Copy this template into a private operations packet, fill every placeholder, and
 # run the exact check-only commands before any registered submission. The protocol
-# PR and this template never execute rows; production submission stays gated on
-# #6102 bundle retrieval/integrity and a passing activation preflight.
+# PR and this template never execute rows; submission stays gated on #6102
+# bundle retrieval/integrity, canonical native diagnostics ownership, and a
+# passing activation preflight.
 
 schema_version: robot_sf.issue_6561_pedestrian_speed_launch_packet.template.v1
 issue: 6561
@@ -18,6 +19,18 @@ required_inputs:
   activation_preflight_diagnostics: "<path to disjoint-seed diagnostics JSON>"
   private_submit_host: "<private; never tracked>"
   private_worktree: "<private; never tracked>"
+
+# The current repository has no canonical native activation-diagnostics producer
+# or schema owner. A structurally valid checker result therefore remains a
+# blocked, not-admitted preflight until that owner is supplied by the downstream
+# native canary contract.
+canonical_native_diagnostics_contract:
+  owner: unavailable
+  schema_version: unavailable
+  status: blocked
+  admission: not_admitted
+  availability_status: not_available
+  reason_code: canonical_native_activation_diagnostics_owner_unavailable
 
 check_only_commands:
   - uv run python scripts/validation/check_issue_6561_pedestrian_speed_protocol.py
@@ -37,11 +50,16 @@ submission_gates:
     required: true
   - id: activation_preflight_passed
     required: true
+    current_status: blocked_not_admitted
   - id: no_forbidden_row_status
     required: true
+  - id: canonical_native_diagnostics_contract_available
+    required: true
+    current_status: not_available
 
 forbidden:
   - registered_rows_before_all_gates
   - fallback_or_degraded_success
+  - checker_only_activation_result_as_native_evidence
   - private_host_or_scratch_paths_in_tracked_files
   - post_outcome_protocol_edits

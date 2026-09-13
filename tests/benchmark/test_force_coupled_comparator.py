@@ -630,6 +630,49 @@ def test_comparator_receipt_schema_rejects_root_ok_with_error_row() -> None:
         )
 
 
+def test_comparator_receipt_schema_rejects_root_ok_without_results() -> None:
+    """A successful versioned receipt must contain at least one result row."""
+    receipt = run_force_coupled_comparator()
+    receipt["results"] = []
+
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            instance=receipt, schema=json.loads(schema_path.read_text(encoding="utf-8"))
+        )
+
+
+def test_comparator_receipt_schema_rejects_root_ok_with_legacy_simulator_reason() -> None:
+    """Legacy simulator reason text cannot hide under root status ``ok``."""
+    receipt = run_force_coupled_comparator()
+    receipt["results"][0].update(
+        {
+            "status": "degraded",
+            "degraded": True,
+            "degradation_reasons": ["simulator backend unavailable"],
+        }
+    )
+    receipt["results"][0].pop("failure_class", None)
+
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "schemas"
+        / "force_coupled_comparator_receipt.v1.json"
+    )
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            instance=receipt, schema=json.loads(schema_path.read_text(encoding="utf-8"))
+        )
+
+
 def test_comparator_receipt_fails_on_simulator_diagnostic_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

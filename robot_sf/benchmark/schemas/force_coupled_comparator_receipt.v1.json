@@ -85,6 +85,7 @@
     },
     "results": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -263,6 +264,17 @@
                   {
                     "properties": {"failure_class": {"const": "simulator"}},
                     "required": ["failure_class"]
+                  },
+                  {
+                    "properties": {
+                      "degradation_reasons": {
+                        "contains": {
+                          "type": "string",
+                          "pattern": "[Ss][Ii][Mm][Uu][Ll][Aa][Tt][Oo][Rr]|[Ss][Ii][Mm]_[Ee][Rr][Rr][Oo][Rr]"
+                        }
+                      }
+                    },
+                    "required": ["degradation_reasons"]
                   }
                 ]
               }

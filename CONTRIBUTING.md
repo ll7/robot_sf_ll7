@@ -4,6 +4,9 @@ Thank you for your interest in contributing. This document gives the public cont
 Robot SF. For deeper development details, use [`docs/dev_guide.md`](docs/dev_guide.md); for
 agent-assisted work, use [`AGENTS.md`](AGENTS.md).
 
+Before changing code, skim the [Architecture Tour](docs/architecture_tour.md) to locate the
+canonical owner for environment, planner, simulator, benchmark, evidence, and documentation work.
+
 ## What Kind of Contributions Are Welcome?
 
 ### 1. Bug Reports and Issue Tracking

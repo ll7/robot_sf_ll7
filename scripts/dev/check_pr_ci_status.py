@@ -681,6 +681,29 @@ def _fetch_pr_changed_file_page(
     return page_files, None
 
 
+def _verify_pr_changed_files_head(
+    pr_number: str | int,
+    *,
+    repo: str,
+    expected_head_sha: str,
+) -> str | None:
+    """Verify that the PR head did not move while its changed files were read."""
+    if not expected_head_sha:
+        return None
+    payload = _rest_api_get_for_repo(f"pulls/{pr_number}", repo)
+    if not isinstance(payload, dict):
+        return "changed-file inventory head verification is unavailable"
+    head = payload.get("head")
+    if not isinstance(head, dict):
+        return "changed-file inventory head verification has no PR head"
+    observed_head_sha = head.get("sha")
+    if not isinstance(observed_head_sha, str) or not observed_head_sha:
+        return "changed-file inventory head verification has no head SHA"
+    if observed_head_sha.lower() != expected_head_sha.lower():
+        return "PR head changed during changed-file inventory"
+    return None
+
+
 def _fetch_pr_changed_files(
     pr_number: str | int,
     *,
@@ -723,6 +746,15 @@ def _fetch_pr_changed_files(
     else:
         result = None, "changed-file response exceeded the bounded pagination limit"
 
+    if result[0] is not None:
+        head_error = _verify_pr_changed_files_head(
+            pr_number,
+            repo=repo,
+            expected_head_sha=head_sha,
+        )
+        if head_error:
+            result = None, head_error
+
     if cache is not None:
         cache[key] = result
     return result
@@ -762,6 +794,7 @@ def _apply_docs_only_exception(
         checks.get("overall") != "pending"
         or not isinstance(required_checks, dict)
         or not required_checks.get("missing")
+        or required_checks.get("not_green") != []
         or any(_rollup_status(check) in PENDING_STATUSES for check in rollup)
     ):
         return checks

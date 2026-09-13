@@ -700,6 +700,24 @@ def test_complete_docs_only_scope_converts_absent_required_checks_to_success(
     assert "disposition: ci_not_required_docs_only" in _format_human(data)
 
 
+@pytest.mark.parametrize("conclusion", ["skipped", "cancelled", "failure"])
+def test_non_green_required_identity_blocks_docs_only_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    conclusion: str,
+) -> None:
+    """A non-green required identity cannot be hidden by docs-only scope."""
+    rollup = [
+        *BOT_ONLY_ROLLUP,
+        {"name": "fast-feedback (1)", "status": "completed", "conclusion": conclusion},
+    ]
+    data = _fetch_with_rollup(monkeypatch, rollup)
+
+    checks = data["checks"]
+    assert checks["required_checks"]["not_green"] == ["fast-feedback"]
+    assert checks["overall"] in {"pending", "failure"}
+    assert checks.get("success_reason") != "ci_not_required_docs_only"
+
+
 def test_docs_only_success_is_exposed_in_monitor_metadata(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
@@ -828,6 +846,34 @@ def test_changed_file_inventory_requires_a_short_terminal_page(
 
     assert changed_files is None
     assert error == "changed-file response exceeded the bounded pagination limit"
+
+
+def test_changed_file_inventory_fails_closed_when_pr_head_moves_during_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A changed PR head invalidates the inventory used for docs-only evidence."""
+    monkeypatch.setattr(
+        ci_status,
+        "_fetch_pr_changed_file_page",
+        lambda *args, **kwargs: (["README.md"], None),
+    )
+    observed_paths: list[str] = []
+
+    def read_pr(path: str, repo: str) -> dict[str, object]:
+        observed_paths.append(path)
+        return {"head": {"sha": "b" * 40}}
+
+    monkeypatch.setattr(ci_status, "_rest_api_get_for_repo", read_pr)
+
+    changed_files, error = ci_status._fetch_pr_changed_files(
+        "9198",
+        repo="ll7/robot_sf_ll7",
+        head_sha=FULL_SHA,
+    )
+
+    assert changed_files is None
+    assert error == "PR head changed during changed-file inventory"
+    assert observed_paths == ["pulls/9198"]
 
 
 def test_changed_file_inventory_rejects_malformed_entries(

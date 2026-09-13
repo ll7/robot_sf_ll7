@@ -17,11 +17,9 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
+from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 # Best-effort helpers below shell out to git/gh, parse JSON, and read files; these
 # are the only errors those operations realistically raise. Catching this explicit
@@ -47,9 +45,7 @@ from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
     check_changed_files as check_evidence_writer_usage,
 )
 from scripts.dev.check_issue_line_budget import (  # noqa: E402
-    DiffstatParseError,
     evaluate_budget,
-    format_pr_files_as_numstat,
     has_declared_cap,
 )
 from scripts.dev.gh_pr_label_rest import add_label  # noqa: E402
@@ -1022,14 +1018,100 @@ def _diff_numstat(base_ref: str) -> str | None:
     return None
 
 
+def _parse_strict_numstat(numstat_text: object) -> tuple[tuple[str, ...], int, int]:
+    """Parse complete, unambiguous Git numstat rows for budget evidence."""
+    if not isinstance(numstat_text, str) or not numstat_text.strip():
+        raise ValueError("historical numstat is empty or is not text")
+
+    lines = numstat_text.splitlines()
+    if not lines or any(not line.strip() for line in lines):
+        raise ValueError("historical numstat contains no complete rows")
+
+    filenames: list[str] = []
+    added = deleted = 0
+    for line_number, line in enumerate(lines, start=1):
+        fields = line.split("\t")
+        if len(fields) != 3:
+            raise ValueError(f"historical numstat row {line_number} is ambiguous")
+        added_text, deleted_text, filename = fields
+        if re.fullmatch(r"[0-9]+", added_text) is None:
+            raise ValueError(f"historical numstat row {line_number} has invalid additions")
+        if re.fullmatch(r"[0-9]+", deleted_text) is None:
+            raise ValueError(f"historical numstat row {line_number} has invalid deletions")
+        if not filename.strip() or any(
+            unicodedata.category(character) == "Cc" for character in filename
+        ):
+            raise ValueError(f"historical numstat row {line_number} has an invalid filename")
+        if filename in filenames:
+            raise ValueError(f"historical numstat repeats filename {filename!r}")
+        filenames.append(filename)
+        added += int(added_text)
+        deleted += int(deleted_text)
+    return tuple(filenames), added, deleted
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalNumstatEvidence:
+    """Immutable, fully validated file-stat evidence for budget evaluation."""
+
+    numstat: str
+    changed_files: tuple[str, ...]
+    added: int
+    deleted: int
+
+    def __post_init__(self) -> None:
+        """Reject any mismatch between the payload and its derived totals."""
+        filenames, added, deleted = _parse_strict_numstat(self.numstat)
+        if not isinstance(self.changed_files, tuple) or self.changed_files != filenames:
+            raise ValueError("historical numstat filenames do not match immutable evidence")
+        if (
+            not isinstance(self.added, int)
+            or isinstance(self.added, bool)
+            or self.added != added
+            or not isinstance(self.deleted, int)
+            or isinstance(self.deleted, bool)
+            or self.deleted != deleted
+        ):
+            raise ValueError("historical numstat totals do not match immutable evidence")
+
+    @classmethod
+    def from_numstat(cls, numstat: str) -> HistoricalNumstatEvidence:
+        """Construct immutable evidence from a complete numstat payload."""
+        filenames, added, deleted = _parse_strict_numstat(numstat)
+        return cls(numstat, filenames, added, deleted)
+
+    @property
+    def files(self) -> int:
+        """Return the number of unique changed files represented by the rows."""
+        return len(self.changed_files)
+
+    @property
+    def net(self) -> int:
+        """Return net new lines using the budget check's existing convention."""
+        return max(self.added - self.deleted, 0)
+
+
+_UNSET_NUMSTAT = object()
+
+
+def _coerce_historical_numstat(value: object) -> HistoricalNumstatEvidence | None:
+    """Return validated historical stats, rejecting malformed injected payloads."""
+    if isinstance(value, HistoricalNumstatEvidence):
+        return value
+    if isinstance(value, str):
+        try:
+            return HistoricalNumstatEvidence.from_numstat(value)
+        except ValueError:
+            return None
+    return None
+
+
 def check_line_budget_discipline(
     body: str,
     base_ref: str,
     repo: str,
-    numstat_text: str | None = None,
     *,
-    diff_unavailable: bool = False,
-    pr_files: Sequence[dict[str, Any]] | None = None,
+    numstat_text: object = _UNSET_NUMSTAT,
 ) -> list[str]:
     """Fail when the linked issue's declared line/file budget is exceeded (issue #9094).
 
@@ -1039,17 +1121,7 @@ def check_line_budget_discipline(
     opted into a budget.
     """
     blockers: list[str] = []
-    measured_numstat = numstat_text
-
-    if pr_files is not None:
-        try:
-            measured_numstat = format_pr_files_as_numstat(pr_files)
-        except DiffstatParseError as e:
-            return [
-                f"BLOCKER: historical file evidence is malformed ({e}); "
-                "budget enforcement remains fail-closed (issue #9094)."
-            ]
-
+    resolved_numstat = numstat_text
     for issue in find_closed_issues(body):
         metadata = get_issue_metadata(issue, repo)
         if metadata is None:
@@ -1057,23 +1129,22 @@ def check_line_budget_discipline(
         _labels, issue_body = metadata
         if not has_declared_cap(issue_body):
             continue
-        if diff_unavailable:
+        if resolved_numstat is _UNSET_NUMSTAT:
+            resolved_numstat = _diff_numstat(base_ref)
+        historical_evidence = _coerce_historical_numstat(resolved_numstat)
+        if historical_evidence is None:
             blockers.append(
                 f"BLOCKER: cannot measure the PR diff against base ref {base_ref!r}; "
-                f"budget enforcement for issue #{issue} is unavailable and remains "
-                "fail-closed (issue #9094)."
+                f"budget enforcement for issue #{issue} is unavailable, malformed, or "
+                "ambiguous and remains fail-closed (issue #9094)."
             )
             break
-        if measured_numstat is None:
-            measured_numstat = _diff_numstat(base_ref)
-            if measured_numstat is None:
-                blockers.append(
-                    f"BLOCKER: cannot measure the PR diff against base ref {base_ref!r}; "
-                    f"budget enforcement for issue #{issue} is unavailable and remains "
-                    "fail-closed (issue #9094)."
-                )
-                break
-        result = evaluate_budget(issue_body=issue_body, pr_body=body, numstat_text=measured_numstat)
+        resolved_numstat = historical_evidence
+        result = evaluate_budget(
+            issue_body=issue_body,
+            pr_body=body,
+            numstat_text=historical_evidence.numstat,
+        )
         if not result.get("ok", True):
             blockers.append(
                 f"BLOCKER: PR exceeds the budget declared in issue #{issue} "
@@ -1151,7 +1222,7 @@ def check_placeholder_docstrings(base_ref: str, repo_root: str | None = None) ->
     return blockers
 
 
-def run_all_checks(  # noqa: PLR0913
+def run_all_checks(
     title: str,
     body: str,
     changed_files: list[str],
@@ -1159,10 +1230,7 @@ def run_all_checks(  # noqa: PLR0913
     base_ref: str,
     pr_number: str | None,
     added_files: set[str] | None = None,
-    numstat_text: str | None = None,
-    *,
-    diff_unavailable: bool = False,
-    pr_files: Sequence[dict[str, Any]] | None = None,
+    historical_numstat: object = _UNSET_NUMSTAT,
 ) -> tuple[list[str], list[str], list[str]]:
     """Run all 9 contract checks."""
     blockers = []
@@ -1212,14 +1280,7 @@ def run_all_checks(  # noqa: PLR0913
     # 9. Issue line/file budget (issue #9094): enforce declared caps unless a
     # reasoned `budget-override:` line records an explicit exception.
     blockers.extend(
-        check_line_budget_discipline(
-            body,
-            base_ref,
-            repo,
-            numstat_text=numstat_text,
-            diff_unavailable=diff_unavailable,
-            pr_files=pr_files,
-        )
+        check_line_budget_discipline(body, base_ref, repo, numstat_text=historical_numstat)
     )
 
     return blockers, warnings, infos

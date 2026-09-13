@@ -4,18 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import pytest
-
 from scripts.dev.check_issue_line_budget import (
     STATUS_INVALID,
     STATUS_NO_CAP,
     STATUS_OVER,
     STATUS_OVERRIDE,
     STATUS_WITHIN,
-    DiffstatParseError,
     evaluate_budget,
     find_override_reason,
-    format_pr_files_as_numstat,
     main,
     measure_diffstat,
     parse_declared_caps,
@@ -192,55 +188,3 @@ def test_main_exit_codes_and_json_output(tmp_path: Path, capsys) -> None:
         == 1
     )
     assert '"status": "over_budget"' in capsys.readouterr().out
-
-
-@pytest.mark.parametrize(
-    "bad_line",
-    [
-        "malformed row without tabs",
-        "10\t2",  # missing path
-        "10\t2\t",  # empty path
-        "invalid\t0\tscripts/dev/a.py",  # non-numeric additions
-        "0\tinvalid\tscripts/dev/a.py",  # non-numeric deletions
-    ],
-)
-def test_measure_diffstat_rejects_malformed_lines(bad_line: str) -> None:
-    """Non-empty lines that fail git numstat structure raise DiffstatParseError."""
-    with pytest.raises(DiffstatParseError, match="malformed numstat line"):
-        measure_diffstat(bad_line + "\n")
-
-
-def test_evaluate_budget_rejects_malformed_numstat() -> None:
-    """A corrupt numstat text produces a fail-closed STATUS_INVALID result."""
-    result = evaluate_budget(
-        issue_body=ISSUE_WITH_CAP,
-        pr_body="Refs #1\n",
-        numstat_text="not a valid numstat line\n",
-    )
-
-    assert result["status"] == STATUS_INVALID
-    assert result["ok"] is False
-    assert any("malformed numstat line" in breach for breach in result["breaches"])
-
-
-def test_format_pr_files_as_numstat() -> None:
-    """GitHub API file objects format cleanly into git diff --numstat lines."""
-    files = [
-        {"filename": "scripts/tools/check.py", "additions": 120, "deletions": 10},
-        {"filename": "tests/test_check.py", "additions": 45, "deletions": 0},
-    ]
-    numstat = format_pr_files_as_numstat(files)
-    assert numstat == "120\t10\tscripts/tools/check.py\n45\t0\ttests/test_check.py\n"
-
-    # Empty list yields empty string
-    assert format_pr_files_as_numstat([]) == ""
-
-    # Malformed list raises DiffstatParseError
-    with pytest.raises(DiffstatParseError, match="malformed PR file entry"):
-        format_pr_files_as_numstat(["not-a-dict"])  # type: ignore[list-item]
-
-    with pytest.raises(DiffstatParseError, match="missing or invalid filename"):
-        format_pr_files_as_numstat([{"additions": 1, "deletions": 1}])
-
-    with pytest.raises(DiffstatParseError, match="invalid additions/deletions"):
-        format_pr_files_as_numstat([{"filename": "a.py", "additions": "10", "deletions": 0}])

@@ -18,9 +18,9 @@ METRIC_LAYER_SCHEMA_VERSION = "metric-layers.v1"
 MISSING_METRIC_REASON = "metric_not_present_in_episode_records"
 METRIC_BINDING_OWNER = "robot_sf.benchmark.metric_layers.CANONICAL_METRICS"
 
-type MetricBindingStatus = Literal["available", "unsupported"]
-type MetricMetadataStatus = Literal["available", "unavailable"]
-type MetricDirection = Literal["higher_is_better", "lower_is_better"]
+MetricBindingStatus = Literal["available", "unsupported"]
+MetricMetadataStatus = Literal["available", "unavailable"]
+MetricDirection = Literal["higher_is_better", "lower_is_better"]
 
 LAYER_ORDER = (
     "safety_gate",

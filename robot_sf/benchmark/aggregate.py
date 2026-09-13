@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from robot_sf.benchmark.metric_layers import MetricSourceBinding
 
 
-type AggregateStatistic = Literal["mean", "median", "p95"]
+AggregateStatistic = Literal["mean", "median", "p95"]
 _AGGREGATE_STATISTICS: frozenset[AggregateStatistic] = frozenset({"mean", "median", "p95"})
 
 

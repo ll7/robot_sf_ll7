@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#6151, 2026-09-13) - NEEDS-REVIEW -->
+
 # Issue #6151 simulator-dependence synthesis (2026-09-13)
 
 Plain-language summary: the only defensible overall verdict is

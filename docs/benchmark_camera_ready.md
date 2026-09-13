@@ -663,7 +663,9 @@ after compatibility or config fixes. When `scenario_breakdown.csv` and
 `scenario_family_breakdown.csv` are present in both campaigns, the JSON comparison also includes
 complete scenario-level and scenario-family deltas. The helper reports `unfinished_mean` as
 `1 - success_mean`; treat that as a route-incomplete comparison metric, not raw timeout
-attribution.
+attribution. Breakdown row identity remains keyed by planner, family, and (for scenario rows)
+scenario ID; the exact signature also includes `archetype`, so an archetype-only metadata change is
+reported as drift without becoming a missing or extra row.
 
 Seed-schedule comparison helper:
 
@@ -736,10 +738,25 @@ Additional diagnostics generated per campaign:
   + tracks explicit provenance for model checkpoints and control adapters to prevent ambiguity across learned models and non-learned baselines
 * `reports/scenario_breakdown.csv` and `reports/scenario_breakdown.md`
   + per-planner, per-scenario metric means
+  + `archetype` publishes the archetype tag declared by the scenario config
+    (`metadata.archetype`) beside `scenario_family`, so the published campaign
+    declares the grouping instead of leaving downstream consumers to count include
+    files
+  + archetype tags use lowercase `snake_case` tokens; `;` is reserved for family-level
+    aggregation, and invalid or delimiter-bearing tags fail closed
+  + when both are non-empty, an explicitly recorded family/archetype must agree with the
+    config-declared archetype; config-declared absence remains an empty placeholder
   + AMV taxonomy columns (`use_case`, `context`, `speed_regime`, `maneuver_type`)
     carry the direct source scenario metadata when present
 * `reports/scenario_family_breakdown.csv` and `reports/scenario_family_breakdown.md`
   + per-planner, per-family (archetype) metric means
+  + `archetype` aggregates the distinct tags of the contributing scenarios, sorted and
+    joined with semicolons. Include files can deliberately share one tag, so the number
+    of distinct archetypes is smaller than the number of include files:
+    the `classic_bottleneck.yaml` and `classic_realworld_bottleneck.yaml` includes in
+    `configs/scenarios/classic_interactions.yaml` both declare `archetype: bottleneck`.
+    The derived `classic_density_tier_index.yaml` is not a matrix include. Count the
+    published column, never the include files
   + AMV taxonomy columns aggregate the distinct non-empty values from contributing
     scenarios per dimension, sorted and joined with semicolons
 

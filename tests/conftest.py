@@ -428,6 +428,10 @@ _FAST_FILES = {
     # in the exact-head changed-coverage gate.
     "test_check_cuda_runtime.py",
     "test_gpu_telemetry.py",
+    # The published scenario archetype column is deterministic metadata coverage
+    # for the changed camera-ready reporting lines; keep it in the exact-head fast
+    # lane (issue #9107).
+    "test_camera_ready_archetype_column.py",
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",

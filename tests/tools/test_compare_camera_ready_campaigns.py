@@ -195,6 +195,75 @@ def test_compare_campaigns_reports_scenario_and_family_deltas(tmp_path: Path) ->
     assert "## Scenario Family Deltas" in markdown
 
 
+def test_compare_campaigns_detects_archetype_only_breakdown_drift(tmp_path: Path) -> None:
+    """Archetype changes should drift without changing breakdown row identity."""
+    base_root = tmp_path / "base_campaign"
+    candidate_root = tmp_path / "candidate_campaign"
+    _write_summary(
+        base_root / "reports" / "campaign_summary.json",
+        {"campaign": {"campaign_id": "base"}, "planner_rows": []},
+    )
+    _write_summary(
+        candidate_root / "reports" / "campaign_summary.json",
+        {"campaign": {"campaign_id": "candidate"}, "planner_rows": []},
+    )
+    _write_csv(
+        base_root / "reports" / "scenario_breakdown.csv",
+        "\n".join(
+            [
+                "planner_key,scenario_family,scenario_id,archetype,episodes",
+                "goal,crossing,scenario_1,crossing,1",
+                "",
+            ]
+        ),
+    )
+    _write_csv(
+        candidate_root / "reports" / "scenario_breakdown.csv",
+        "\n".join(
+            [
+                "planner_key,scenario_family,scenario_id,archetype,episodes",
+                "goal,crossing,scenario_1,bottleneck,1",
+                "",
+            ]
+        ),
+    )
+    _write_csv(
+        base_root / "reports" / "scenario_family_breakdown.csv",
+        "\n".join(
+            [
+                "planner_key,scenario_family,archetype,episodes",
+                "goal,crossing,crossing,1",
+                "",
+            ]
+        ),
+    )
+    _write_csv(
+        candidate_root / "reports" / "scenario_family_breakdown.csv",
+        "\n".join(
+            [
+                "planner_key,scenario_family,archetype,episodes",
+                "goal,crossing,bottleneck,1",
+                "",
+            ]
+        ),
+    )
+
+    payload = compare_campaigns(base_root, candidate_root)
+
+    scenario = payload["scenario_deltas"][0]
+    assert scenario["exact_match"] is False
+    assert scenario["planner_key"] == "goal"
+    assert scenario["scenario_family"] == "crossing"
+    assert scenario["scenario_id"] == "scenario_1"
+    assert scenario["base_signature_sha256"] != scenario["candidate_signature_sha256"]
+
+    family = payload["scenario_family_deltas"][0]
+    assert family["exact_match"] is False
+    assert family["planner_key"] == "goal"
+    assert family["scenario_family"] == "crossing"
+    assert family["base_signature_sha256"] != family["candidate_signature_sha256"]
+
+
 def test_resolve_safe_output_path_rejects_escape(tmp_path: Path) -> None:
     """Output path validation should reject writes outside safe root."""
     safe_root = tmp_path / "safe"

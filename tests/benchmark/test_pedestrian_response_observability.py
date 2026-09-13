@@ -188,12 +188,20 @@ def test_direct_record_requires_route_reference_for_available_status() -> None:
     assert record.unavailable_reason == "missing_and_unavailable_fields"
 
 
+class _UnhashableString(str):
+    """String-shaped input that must not leak a set-membership ``TypeError``."""
+
+    __hash__ = None
+
+
 @pytest.mark.parametrize(
     ("field_name", "value"),
     [
         ("offered_side", ["left"]),
         ("taken_side", {"side": "right"}),
         ("status", []),
+        ("offered_side", _UnhashableString("left")),
+        ("status", _UnhashableString("available")),
     ],
 )
 def test_direct_record_rejects_unhashable_vocabulary_values(field_name: str, value: object) -> None:

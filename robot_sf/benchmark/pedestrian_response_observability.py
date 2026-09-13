@@ -506,8 +506,13 @@ def _validate_sides(observation: PedestrianResponseObservation, unavailable: set
     """Validate route-side values and retain explicit unavailable sides."""
     for field_name in ("offered_side", "taken_side"):
         value = getattr(observation, field_name)
-        if value is not None and (not isinstance(value, str) or value not in ROUTE_SIDES):
-            raise ValueError(f"{field_name} must use the route-side vocabulary")
+        if value is not None:
+            try:
+                is_valid = isinstance(value, str) and value in ROUTE_SIDES
+            except TypeError:
+                is_valid = False
+            if not is_valid:
+                raise ValueError(f"{field_name} must use the route-side vocabulary")
         if value == "unavailable":
             unavailable.add(field_name)
 
@@ -598,10 +603,15 @@ def _set_status(
 ) -> None:
     """Set and validate the derived availability status."""
     expected: ResponseStatus = "available" if not missing and not unavailable else "not_available"
-    if observation.status is not None and (
-        not isinstance(observation.status, str) or observation.status not in _RESPONSE_STATUSES
-    ):
-        raise ValueError("status must be available or not_available")
+    if observation.status is not None:
+        try:
+            is_valid = (
+                isinstance(observation.status, str) and observation.status in _RESPONSE_STATUSES
+            )
+        except TypeError:
+            is_valid = False
+        if not is_valid:
+            raise ValueError("status must be available or not_available")
     if observation.status is not None and observation.status != expected:
         raise ValueError(f"status must be {expected!r} for the supplied fields")
     object.__setattr__(observation, "status", expected)

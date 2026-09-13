@@ -119,6 +119,7 @@ Feature-focused demos for developers exploring capabilities.
 | [40 Restore Campaign Capsule](./advanced/40_restore_campaign_capsule.py) | Restore and validate one preserved campaign capsule without running simulation. | _None_ | campaign, offline, fixtures, provenance, validation | ✅ |
 | [41 Artifact Preservation](./advanced/41_artifact_preservation.py) | Convert a task-owned fixture tree into a verified preservation manifest. | _None_ | artifacts, provenance, fixture | ✅ |
 | [42 Offline Checkpoint Cold Load](./advanced/42_offline_checkpoint_cold_load.py) | Load one preserved synthetic Proximal Policy Optimization (PPO) checkpoint for a loader-contract smoke; source/config lineage is unavailable. | uv sync --all-extras | offline, checkpoint, validation | ✅ |
+| [43 Reproducible Episode Replay](./advanced/43_reproducible_episode_replay.py) | Compare same-seed episode records and a changed-seed input. | configs/scenarios/single/quickstart_demo.yaml | reproducibility, determinism, episode-record | ✅ |
 
 ## Benchmarks
 

@@ -97,6 +97,17 @@ preservation and transfer receipts reference without rewriting producer manifest
 closed with exact file/chunk locations on mutation, truncation, sparse/symlink/hardlink/special
 file, path, collision, and partial-manifest conditions.
 
+New manifests also carry per-file `digest_kind`, a `summary` block, and
+`chunking.read_size_bytes`; validation checks each extra when present and older manifests without
+them remain valid. `resume` and `verify --state` reuse cached digests from a
+`chunk_manifest.state.v1` file only while a member's size, mtime, ctime, inode, and device identity
+are unchanged, so an interrupted very large file continues from its last completed chunk instead of
+restarting. Malformed, tampered, wrong-root, or wrong-geometry state fails closed with
+`state_invalid`, `state_schema_unsupported`, `state_root_mismatch`, or `state_policy_mismatch`, and
+`compare` diffs two manifests without a root scan. Manifests and state files are written with
+`fsync` plus `os.replace`, and `verify` caps its failure list at `MAX_FAILURES` while reporting the
+true `failure_count` and `failures_truncated`.
+
 ## Compute-Window Readiness Dashboard
 
 [`scripts/tools/compute_window_readiness_dashboard.py`](../../scripts/tools/compute_window_readiness_dashboard.py)

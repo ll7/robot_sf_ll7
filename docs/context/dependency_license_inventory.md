@@ -146,6 +146,51 @@ to arbitrary SPDX `WITH` expressions. Its durable notice and provenance
 references are recorded in
 `docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md`.
 
+
+The `sb3-contrib` 2.9.0 row records the exact-row review decision for the
+`external_dependency_not_redistributed` surface. It is limited to the current
+`all` profile and the exact identity
+`sb3-contrib@2.9.0#d0ac0e722c73f77d`. The selected PyPI artifacts are
+`sb3_contrib-2.9.0.tar.gz` (SHA-256
+`6e839c669552ecb3deb616a42ea98ed5e6c599eb5ac5f86232415b87a3873699`, 90,312
+bytes) and `sb3_contrib-2.9.0-py3-none-any.whl` (SHA-256
+`b492b2be792f8f8214ff6b984e94812dc877f809ae82302cbe00626442ae316a`, 93,042
+bytes). Each selected archive has the 1,078-byte MIT `LICENSE` with SHA-256
+`b76bbab0bd3d0182611f19ed6a4593408787084e9b024c7d9dd1d0295c2bf3a8`; the
+wheel member is RECORD-verified and the wheel/sdist license bytes are equal.
+
+The upstream `v2.9.0` tag resolves to commit
+`075bd5be8d43848b0f0cd3bc8a32f6892d0d58fb`. The immutable upstream references
+are [`LICENSE`](https://github.com/Stable-Baselines-Team/stable-baselines3-contrib/blob/075bd5be8d43848b0f0cd3bc8a32f6892d0d58fb/LICENSE)
+and the [tag tree](https://github.com/Stable-Baselines-Team/stable-baselines3-contrib/tree/075bd5be8d43848b0f0cd3bc8a32f6892d0d58fb).
+The inspected tree contains `LICENSE` only; no `NOTICE` member is asserted.
+The source registry is `https://pypi.org/simple`, with metadata at
+`https://pypi.org/pypi/sb3-contrib/2.9.0/json`.
+
+This row is bound to the reviewed diagnostic candidate source
+`fb6896576a9240838901f2b0994f288ec510c827`, candidate commit
+`f537fa5661b2d3adba3acf9ee7564bcadbcc406e`, candidate tree
+`1ca7f58207e7425942498d27368c3fd4ade2047b`, candidate lock SHA-256
+`d01cbbf7fb7215d140b3c78f66202e0c48e449601f809036f5e02e9a9bfb79c7`, and
+raw candidate manifest SHA-256
+`d1ed5ca826eff94123b5e781173df7e67026d3db31e8a334ee10e96aaef992d0`.
+The candidate source inventory SHA-256 is
+`4360f56472a72fbbd97d46621fff7322331ff4764be4e13cd0fae175151083d8`, and the
+candidate provenance SHA-256 is
+`68e82d94b44f341db8249d3b568a460d9fd1dad6112da3ae63ff97875b31052a`.
+Neither inspected Robot SF candidate payload contains an `sb3-contrib` path.
+`candidate_archive_shipped` remains unrecorded; this exact policy row preserves
+the reviewed external/non-redistributed boundary and does not claim legal
+permission, rights clearance, custody, or whole-release admission. The review
+input bytes are identified by SHA-256
+`b0c74e18ef4294d17a0dab8d89136125e8da2bcfb93db1064e773b93cfbd5075`. It was
+recorded at `2026-09-10T17:49:07Z` by `/root/p00_runtime` on the
+`gpt-5.6-luna/max` factual route; no human or legal identity is claimed.
+Version, source, artifact, profile, candidate, or packaging-surface changes
+reopen this row. `bundled_source`, `built_companion`, mirrored, vendored,
+container-bundled, unknown, unavailable, and conflicting surfaces remain
+blocked.
+
 This is release-compliance evidence, not a legal opinion. Closing #7298 still
 requires reviewed dispositions for release-relevant blocked rows and a separate
 proof that each supported profile was resolved with its pinned lock.

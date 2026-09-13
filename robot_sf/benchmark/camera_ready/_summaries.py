@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -30,6 +31,47 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
+
+
+_ARCHETYPE_TAG_PATTERN = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*")
+
+
+def _validate_archetype_tag(value: str, *, source: str = "archetype") -> str:
+    """Validate and normalize one scenario archetype tag.
+
+    Archetype values are later joined with ``;`` in family-level summaries, so
+    the delimiter is reserved and tags use the lowercase snake-case vocabulary
+    used by the current scenario manifests.
+
+    Returns:
+        Stripped archetype tag, or ``""`` when the value is empty.
+    """
+    if not isinstance(value, str):
+        raise TypeError(f"{source} must be a string, got {type(value).__name__}")
+
+    normalized = value.strip()
+    if not normalized:
+        return ""
+    if ";" in normalized:
+        raise ValueError(
+            f"{source} contains reserved ';' aggregation delimiter; "
+            f"use one lowercase snake_case tag per value, got {value!r}"
+        )
+    if _ARCHETYPE_TAG_PATTERN.fullmatch(normalized) is None:
+        raise ValueError(
+            f"{source} must be a lowercase snake_case token "
+            f"(letters/digits separated by underscores), got {value!r}"
+        )
+    return normalized
+
+
+def _join_archetype_tags(tags: set[str]) -> str:
+    """Return deterministic, delimiter-safe family archetype text."""
+    validated = {
+        _validate_archetype_tag(tag, source="archetype aggregation") for tag in tags if tag
+    }
+    return ";".join(sorted(validated))
+
 
 _SEED_VARIABILITY_METRICS: tuple[str, ...] = (
     "success",
@@ -212,6 +254,8 @@ def _scenario_family_from_scenario(scenario: dict[str, Any]) -> str:
     for key in ("archetype", "scenario_family", "family"):
         value = metadata.get(key) or scenario.get(key)
         if isinstance(value, str) and value.strip():
+            if key == "archetype":
+                return _validate_archetype_tag(value, source="scenario archetype")
             return value.strip()
     for key in ("scenario_id", "name", "id"):
         value = scenario.get(key)
@@ -256,7 +300,7 @@ def _extract_archetype(scenario: dict[str, Any]) -> str:
         if isinstance(container, dict):
             value = container.get("archetype")
             if isinstance(value, str) and value.strip():
-                return value.strip()
+                return _validate_archetype_tag(value, source="scenario archetype")
     return ""
 
 

@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
 from robot_sf.benchmark.camera_ready._reporting import (
     _build_breakdown_rows,
     _build_scenario_archetype_lookup,
@@ -38,6 +40,12 @@ def test_extract_archetype_prefers_metadata_and_strips() -> None:
     assert _extract_archetype({}) == ""
 
 
+@pytest.mark.parametrize("tag", ["crossing;legacy", "Crossing", "crossing legacy"])
+def test_extract_archetype_rejects_ambiguous_or_noncanonical_tags(tag: str) -> None:
+    with pytest.raises(ValueError, match="archetype"):
+        _extract_archetype({"metadata": {"archetype": tag}})
+
+
 def test_build_scenario_archetype_lookup_retains_undeclared_scenarios() -> None:
     lookup = _build_scenario_archetype_lookup(
         [
@@ -51,6 +59,34 @@ def test_build_scenario_archetype_lookup_retains_undeclared_scenarios() -> None:
         "classic_crossing": "crossing",
         "no_tag": "",
     }
+
+
+def test_build_scenario_archetype_lookup_rejects_conflicts_regardless_of_order() -> None:
+    scenarios = [
+        {"name": " shared ", "metadata": {"archetype": "bottleneck"}},
+        {"name": "shared", "metadata": {"archetype": "crossing"}},
+    ]
+
+    with pytest.raises(ValueError, match="conflicting archetypes") as exc_info:
+        _build_scenario_archetype_lookup(scenarios)
+    first_message = str(exc_info.value)
+    assert "shared" in first_message
+    assert "bottleneck" in first_message
+    assert "crossing" in first_message
+
+    with pytest.raises(ValueError, match="conflicting archetypes") as exc_info:
+        _build_scenario_archetype_lookup(list(reversed(scenarios)))
+    assert str(exc_info.value) == first_message
+
+
+def test_build_scenario_archetype_lookup_rejects_tagged_and_untagged_duplicates() -> None:
+    scenarios = [
+        {"name": "shared", "metadata": {"archetype": "bottleneck"}},
+        {"name": " shared "},
+    ]
+
+    with pytest.raises(ValueError, match="conflicting archetypes"):
+        _build_scenario_archetype_lookup(scenarios)
 
 
 def test_breakdown_headers_place_archetype_beside_scenario_family() -> None:
@@ -149,6 +185,57 @@ def test_breakdown_rows_join_whitespace_bearing_record_to_config_id(tmp_path: Pa
         scenario_archetype_lookup={"classic_crossing": "crossing"},
     )
     assert padded_rows[0]["scenario_family"] == "classic"
+
+
+def test_breakdown_rows_reject_record_family_conflict_with_config_archetype(
+    tmp_path: Path,
+) -> None:
+    episodes_path = _episodes(
+        tmp_path,
+        "conflict.jsonl",
+        [
+            {
+                "scenario_id": "classic_bottleneck",
+                "scenario_params": {"metadata": {"scenario_family": "crossing"}},
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="scenario_family.*config archetype"):
+        _build_breakdown_rows(
+            [{"planner": {"key": "orca", "algo": "orca"}, "episodes_path": episodes_path}],
+            scenario_archetype_lookup={"classic_bottleneck": "bottleneck"},
+        )
+
+
+def test_breakdown_rows_reject_delimiter_bearing_lookup_archetype(tmp_path: Path) -> None:
+    episodes_path = _episodes(
+        tmp_path, "invalid-lookup.jsonl", [{"scenario_id": "classic_bottleneck"}]
+    )
+
+    with pytest.raises(ValueError, match="reserved.*delimiter"):
+        _build_breakdown_rows(
+            [{"planner": {"key": "orca", "algo": "orca"}, "episodes_path": episodes_path}],
+            scenario_archetype_lookup={"classic_bottleneck": "bottleneck;crossing"},
+        )
+
+
+def test_breakdown_rows_reject_delimiter_bearing_record_archetype(tmp_path: Path) -> None:
+    episodes_path = _episodes(
+        tmp_path,
+        "invalid-record.jsonl",
+        [
+            {
+                "scenario_id": "classic_bottleneck",
+                "scenario_params": {"metadata": {"archetype": "bottleneck;crossing"}},
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="reserved.*delimiter"):
+        _build_breakdown_rows(
+            [{"planner": {"key": "orca", "algo": "orca"}, "episodes_path": episodes_path}]
+        )
 
 
 def test_breakdown_rows_collapse_shared_archetype_and_join_distinct_tags(tmp_path: Path) -> None:

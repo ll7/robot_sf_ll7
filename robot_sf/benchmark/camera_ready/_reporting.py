@@ -21,7 +21,12 @@ from robot_sf.benchmark.algorithm_metadata import (
 )
 from robot_sf.benchmark.camera_ready._artifacts import _escape_markdown_cell
 from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS, PlannerSpec
-from robot_sf.benchmark.camera_ready._summaries import _extract_amv_taxonomy, _extract_archetype
+from robot_sf.benchmark.camera_ready._summaries import (
+    _extract_amv_taxonomy,
+    _extract_archetype,
+    _join_archetype_tags,
+    _validate_archetype_tag,
+)
 from robot_sf.benchmark.camera_ready._util import _repo_relative
 from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     _DEFAULT_SACADRL_MODEL_ID,
@@ -1019,6 +1024,18 @@ def _scenario_family(record: dict[str, Any], *, scenario_id: str | None = None) 
     Returns:
         Best-effort scenario family label.
     """
+    declared_family = _record_declared_scenario_family(record)
+    if declared_family:
+        return declared_family
+
+    resolved_scenario_id = scenario_id or record.get("scenario_id")
+    if isinstance(resolved_scenario_id, str) and resolved_scenario_id.strip():
+        return resolved_scenario_id.strip().split("_", 1)[0]
+    return "unknown"
+
+
+def _record_declared_scenario_family(record: dict[str, Any]) -> str:
+    """Return an explicitly declared record family, excluding ID fallback."""
     scenario_params = record.get("scenario_params")
     if not isinstance(scenario_params, dict):
         scenario_params = {}
@@ -1028,11 +1045,10 @@ def _scenario_family(record: dict[str, Any], *, scenario_id: str | None = None) 
     for key in ("archetype", "scenario_family", "family"):
         value = metadata.get(key) or scenario_params.get(key) or record.get(key)
         if isinstance(value, str) and value.strip():
+            if key == "archetype":
+                return _validate_archetype_tag(value, source="episode record archetype")
             return value.strip()
-    resolved_scenario_id = scenario_id or record.get("scenario_id")
-    if isinstance(resolved_scenario_id, str) and resolved_scenario_id.strip():
-        return resolved_scenario_id.strip().split("_", 1)[0]
-    return "unknown"
+    return ""
 
 
 def _campaign_scenario_id(scenario: dict[str, Any]) -> str:
@@ -1117,7 +1133,7 @@ def _scenario_archetype(record: dict[str, Any]) -> str:
     return _extract_archetype(scenario_params) or _extract_archetype(record)
 
 
-def _build_breakdown_rows(  # noqa: C901, PLR0915
+def _build_breakdown_rows(  # noqa: C901, PLR0912, PLR0915
     run_entries: list[dict[str, Any]],
     *,
     scenario_amv_lookup: dict[str, dict[str, str]] | None = None,
@@ -1139,13 +1155,22 @@ def _build_breakdown_rows(  # noqa: C901, PLR0915
     the scenario config the campaign loaded (falling back to the episode record's
     embedded scenario metadata), and per-family rows join the distinct tags with
     semicolons. Include files that deliberately share one tag therefore collapse to
-    a single published value rather than an include-file count.
+    a single published value rather than an include-file count. Archetype values are
+    validated against the canonical tag vocabulary. If a record explicitly declares
+    a non-empty family/archetype that conflicts with a non-empty config tag for the
+    same scenario, row construction fails closed with a deterministic diagnostic.
 
     Returns:
         Tuple of per-scenario rows and per-family rows.
     """
     amv_lookup = scenario_amv_lookup if scenario_amv_lookup is not None else {}
-    archetype_lookup = scenario_archetype_lookup if scenario_archetype_lookup is not None else {}
+    archetype_lookup = {
+        scenario_id: _validate_archetype_tag(
+            archetype,
+            source=f"scenario archetype lookup[{scenario_id!r}]",
+        )
+        for scenario_id, archetype in (scenario_archetype_lookup or {}).items()
+    }
     per_scenario: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     per_family: dict[tuple[str, str, str], dict[str, Any]] = {}
 
@@ -1153,6 +1178,7 @@ def _build_breakdown_rows(  # noqa: C901, PLR0915
         lambda: defaultdict(set)
     )
     family_archetypes: defaultdict[tuple[str, str, str], set[str]] = defaultdict(set)
+    archetype_mismatches: set[tuple[str, str, str]] = set()
 
     def _add_metric(bucket: dict[str, Any], metric: str, value: float | None) -> None:
         """Append one finite metric sample to an aggregation bucket."""
@@ -1185,12 +1211,20 @@ def _build_breakdown_rows(  # noqa: C901, PLR0915
             if not isinstance(record, dict):
                 continue
             scenario_id = str(record.get("scenario_id", "unknown")).strip()
-            family = _scenario_family(record, scenario_id=scenario_id)
+            declared_family = _record_declared_scenario_family(record)
+            family = declared_family or _scenario_family(record, scenario_id=scenario_id)
             archetype = (
                 archetype_lookup[scenario_id]
                 if scenario_id in archetype_lookup
                 else _scenario_archetype(record)
             )
+            if (
+                scenario_id in archetype_lookup
+                and declared_family
+                and archetype
+                and declared_family != archetype
+            ):
+                archetype_mismatches.add((scenario_id, declared_family, archetype))
             scenario_key = (planner_key, algo, scenario_id, family)
             family_key = (planner_key, algo, family)
 
@@ -1268,7 +1302,7 @@ def _build_breakdown_rows(  # noqa: C901, PLR0915
             else:
                 finalized[dimension] = ""
         archetypes = family_archetypes.get(family_key)
-        finalized["archetype"] = ";".join(sorted(archetypes)) if archetypes else ""
+        finalized["archetype"] = _join_archetype_tags(archetypes) if archetypes else ""
         family_rows_data.append(finalized)
 
     family_rows_data.sort(
@@ -1277,6 +1311,16 @@ def _build_breakdown_rows(  # noqa: C901, PLR0915
             row.get("scenario_family", ""),
         ),
     )
+    if archetype_mismatches:
+        details = "; ".join(
+            f"{scenario_id!r}: record scenario_family={record_family!r}, "
+            f"config archetype={config_archetype!r}"
+            for scenario_id, record_family, config_archetype in sorted(archetype_mismatches)
+        )
+        raise ValueError(
+            "Camera-ready scenario metadata has conflicting record scenario_family "
+            f"and config archetype values: {details}"
+        )
     return scenario_rows, family_rows_data
 
 

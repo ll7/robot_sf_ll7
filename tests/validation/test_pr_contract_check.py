@@ -24,6 +24,11 @@ ROOT = Path(__file__).resolve().parents[2]
 # incident in #8414 before the two-green reconciler criterion was established.
 KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS = {8440: {"8414"}}
 
+# Historical PRs with known budget overruns that merged before issue-budget discipline
+# was introduced (issue #9094). Bound to exact PR number and closed issue number.
+# No exceptions are currently needed for the active last-20 inventory (issue #9161).
+KNOWN_HISTORICAL_BUDGET_OVERRUNS: dict[int, set[str]] = {}
+
 
 def _valid_review_sidecar(artifact: Path, artifact_path: str) -> dict[str, object]:
     """Build a valid immutable-evidence review sidecar payload for a fixture artifact."""
@@ -409,6 +414,172 @@ def test_check_line_budget_discipline_fails_closed_when_diff_unavailable(
     assert "cannot measure the PR diff" in blockers[0]
     assert "fail-closed" in blockers[0]
     mock_numstat.assert_called_once_with("missing-base")
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat")
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_uses_injected_historical_numstat(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """Injected numstat text is evaluated without consulting ambient git diff."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+    mock_numstat.return_value = "9999\t0\tambient_huge.py\n"
+
+    # Injected numstat is within budget (100 net lines <= 800 cap)
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        numstat_text="100\t0\tscripts/dev/a.py\n",
+    )
+
+    assert blockers == []
+    mock_numstat.assert_not_called()
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat")
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_uses_injected_pr_files(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """Injected PR file objects are formatted and evaluated without ambient git diff."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    pr_files = [
+        {"filename": "scripts/tools/foo.py", "additions": 200, "deletions": 50},
+        {"filename": "tests/tools/test_foo.py", "additions": 100, "deletions": 0},
+    ]
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        pr_files=pr_files,
+    )
+
+    assert blockers == []
+    mock_numstat.assert_not_called()
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_fails_closed_when_pr_files_malformed(
+    mock_metadata: MagicMock,
+) -> None:
+    """Malformed PR file entries fail closed as a blocker."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    bad_files = [{"filename": "bad.py", "additions": "not-int", "deletions": 0}]
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        pr_files=bad_files,
+    )
+
+    assert len(blockers) == 1
+    assert "historical file evidence is malformed" in blockers[0]
+    assert "fail-closed" in blockers[0]
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat")
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_fails_closed_when_diff_unavailable_flag_set(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """Explicit diff_unavailable=True blocks without running git diff."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        diff_unavailable=True,
+    )
+
+    assert len(blockers) == 1
+    assert "cannot measure the PR diff" in blockers[0]
+    assert "fail-closed" in blockers[0]
+    mock_numstat.assert_not_called()
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat")
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_fails_closed_when_numstat_malformed(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """Malformed numstat text fails closed instead of being treated as empty diff."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        numstat_text="malformed non-numstat row\n",
+    )
+
+    assert len(blockers) == 1
+    assert "malformed numstat line" in blockers[0]
+    mock_numstat.assert_not_called()
+
+
+@patch("scripts.ci.pr_contract_check._diff_numstat")
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_candidate_diff_independence(
+    mock_metadata: MagicMock, mock_numstat: MagicMock
+) -> None:
+    """Simulating PR #9118: candidate diff has 791 lines, but historical numstat has 749 lines."""
+    # Issue #8856 capped at 750 lines:
+    mock_metadata.return_value = (
+        ["technical-debt"],
+        "Reviewability budget: Maximum 10 files and 750 net new lines.\n",
+    )
+    # Ambient candidate diff is over budget (791 lines > 750)
+    mock_numstat.return_value = "791\t0\tcandidate_feature.py\n"
+
+    # 1. With historical PR #9118 immutable stats (750 additions, 1 deletion -> 749 net):
+    hist_files = [
+        {
+            "filename": "docs/context/artifact_retention_and_cleanup.md",
+            "additions": 12,
+            "deletions": 1,
+        },
+        {"filename": "scripts/tools/check_log_retention.py", "additions": 562, "deletions": 0},
+        {"filename": "tests/tools/test_check_log_retention.py", "additions": 176, "deletions": 0},
+    ]
+    hist_numstat = pr_contract_check.format_pr_files_as_numstat(hist_files)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #8856\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        numstat_text=hist_numstat,
+    )
+    assert blockers == []
+    mock_numstat.assert_not_called()
+
+    # 2. Without historical numstat, the ambient candidate diff is checked and fails:
+    ambient_blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #8856\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+    )
+    assert len(ambient_blockers) == 1
+    assert "791 net new lines > 750-line cap" in ambient_blockers[0]
+    mock_numstat.assert_called_once_with("origin/main")
+
+
+def test_historical_budget_overrun_exact_matching() -> None:
+    """Historical budget exceptions match only exact PR numbers and closed issues."""
+    overrun_map = {9999: {"8856"}}
+    blocker = (
+        "BLOCKER: PR exceeds the budget declared in issue #8856 (800 net new lines > 750-line cap)."
+    )
+    expected = overrun_map.get(9999, set())
+    assert any(f"issue #{issue}" in blocker for issue in expected)
+
+    # Different PR number: not exempted
+    assert 9998 not in overrun_map
+    # Different issue number: not exempted
+    assert "8857" not in overrun_map.get(9999, set())
 
 
 @patch("subprocess.run")
@@ -1033,24 +1204,41 @@ def test_regression_last_20_merged_prs() -> None:
                 [
                     "gh",
                     "api",
+                    "--paginate",
                     f"repos/ll7/robot_sf_ll7/pulls/{number}/files?per_page=100",
                     "--jq",
-                    ".[].filename",
+                    r'.[] | "\(.additions)\t\(.deletions)\t\(.filename)"',
                 ],
                 capture_output=True,
                 text=True,
                 check=True,
             )
-            changed_files = [line.strip() for line in res_files.stdout.splitlines() if line.strip()]
-        except Exception:
-            changed_files = []
+            numstat_text = res_files.stdout
+            changed_files = [
+                line.split("\t", 2)[2].strip()
+                for line in numstat_text.splitlines()
+                if len(line.split("\t", 2)) >= 3
+            ]
+        except (subprocess.SubprocessError, OSError, ValueError) as e:
+            pytest.skip(
+                f"Skipping live PR regression sweep because PR #{number} files could not be fetched: {e}"
+            )
+            return
 
         # Pass pr_number=None: this regression test only asserts on blockers, and
         # supplying a real PR number would make Rule 6 (worker-lane provenance) run a
         # live `gh pr edit --add-label cheap-lane` against real merged PRs as a test
         # side-effect. None exercises the same blocker paths without mutating GitHub.
+        # Pass numstat_text derived from the PR's own immutable file statistics (issue #9161)
+        # so historical checks do not drift when the candidate worktree changes.
         blockers, _, _ = pr_contract_check.run_all_checks(
-            title, body, changed_files, "ll7/robot_sf_ll7", "origin/main", None
+            title,
+            body,
+            changed_files,
+            "ll7/robot_sf_ll7",
+            "origin/main",
+            None,
+            numstat_text=numstat_text,
         )
         metadata_unavailable = next(
             (blocker for blocker in blockers if "Could not verify issue" in blocker), None
@@ -1064,10 +1252,21 @@ def test_regression_last_20_merged_prs() -> None:
             assert any(f"incident issue #{issue}" in blocker for blocker in blockers), (
                 f"PR #{number} no longer exposes its known historical guard hit"
             )
+        expected_budget_issues = KNOWN_HISTORICAL_BUDGET_OVERRUNS.get(number, set())
+        for issue in expected_budget_issues:
+            assert any(
+                f"PR exceeds the budget declared in issue #{issue}" in blocker
+                for blocker in blockers
+            ), f"PR #{number} no longer exposes its known historical budget overrun for #{issue}"
+
         unexpected_blockers = [
             blocker
             for blocker in blockers
             if not any(f"incident issue #{issue}" in blocker for issue in expected_incident_issues)
+            and not any(
+                f"PR exceeds the budget declared in issue #{issue}" in blocker
+                for issue in expected_budget_issues
+            )
         ]
         assert not unexpected_blockers, (
             f"PR #{number} ('{title}') triggered unexpected blockers: {unexpected_blockers}"

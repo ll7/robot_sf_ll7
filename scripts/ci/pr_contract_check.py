@@ -18,6 +18,10 @@ import re
 import subprocess
 import sys
 from pathlib import Path, PureWindowsPath
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # Best-effort helpers below shell out to git/gh, parse JSON, and read files; these
 # are the only errors those operations realistically raise. Catching this explicit
@@ -43,7 +47,9 @@ from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
     check_changed_files as check_evidence_writer_usage,
 )
 from scripts.dev.check_issue_line_budget import (  # noqa: E402
+    DiffstatParseError,
     evaluate_budget,
+    format_pr_files_as_numstat,
     has_declared_cap,
 )
 from scripts.dev.gh_pr_label_rest import add_label  # noqa: E402
@@ -1016,7 +1022,15 @@ def _diff_numstat(base_ref: str) -> str | None:
     return None
 
 
-def check_line_budget_discipline(body: str, base_ref: str, repo: str) -> list[str]:
+def check_line_budget_discipline(
+    body: str,
+    base_ref: str,
+    repo: str,
+    numstat_text: str | None = None,
+    *,
+    diff_unavailable: bool = False,
+    pr_files: Sequence[dict[str, Any]] | None = None,
+) -> list[str]:
     """Fail when the linked issue's declared line/file budget is exceeded (issue #9094).
 
     The issue body declares the cap; the PR body may carry an explicit
@@ -1025,7 +1039,17 @@ def check_line_budget_discipline(body: str, base_ref: str, repo: str) -> list[st
     opted into a budget.
     """
     blockers: list[str] = []
-    numstat_text: str | None = None
+    measured_numstat = numstat_text
+
+    if pr_files is not None:
+        try:
+            measured_numstat = format_pr_files_as_numstat(pr_files)
+        except DiffstatParseError as e:
+            return [
+                f"BLOCKER: historical file evidence is malformed ({e}); "
+                "budget enforcement remains fail-closed (issue #9094)."
+            ]
+
     for issue in find_closed_issues(body):
         metadata = get_issue_metadata(issue, repo)
         if metadata is None:
@@ -1033,16 +1057,23 @@ def check_line_budget_discipline(body: str, base_ref: str, repo: str) -> list[st
         _labels, issue_body = metadata
         if not has_declared_cap(issue_body):
             continue
-        if numstat_text is None:
-            numstat_text = _diff_numstat(base_ref)
-            if numstat_text is None:
+        if diff_unavailable:
+            blockers.append(
+                f"BLOCKER: cannot measure the PR diff against base ref {base_ref!r}; "
+                f"budget enforcement for issue #{issue} is unavailable and remains "
+                "fail-closed (issue #9094)."
+            )
+            break
+        if measured_numstat is None:
+            measured_numstat = _diff_numstat(base_ref)
+            if measured_numstat is None:
                 blockers.append(
                     f"BLOCKER: cannot measure the PR diff against base ref {base_ref!r}; "
                     f"budget enforcement for issue #{issue} is unavailable and remains "
                     "fail-closed (issue #9094)."
                 )
                 break
-        result = evaluate_budget(issue_body=issue_body, pr_body=body, numstat_text=numstat_text)
+        result = evaluate_budget(issue_body=issue_body, pr_body=body, numstat_text=measured_numstat)
         if not result.get("ok", True):
             blockers.append(
                 f"BLOCKER: PR exceeds the budget declared in issue #{issue} "
@@ -1120,7 +1151,7 @@ def check_placeholder_docstrings(base_ref: str, repo_root: str | None = None) ->
     return blockers
 
 
-def run_all_checks(
+def run_all_checks(  # noqa: PLR0913
     title: str,
     body: str,
     changed_files: list[str],
@@ -1128,6 +1159,10 @@ def run_all_checks(
     base_ref: str,
     pr_number: str | None,
     added_files: set[str] | None = None,
+    numstat_text: str | None = None,
+    *,
+    diff_unavailable: bool = False,
+    pr_files: Sequence[dict[str, Any]] | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     """Run all 9 contract checks."""
     blockers = []
@@ -1176,7 +1211,16 @@ def run_all_checks(
 
     # 9. Issue line/file budget (issue #9094): enforce declared caps unless a
     # reasoned `budget-override:` line records an explicit exception.
-    blockers.extend(check_line_budget_discipline(body, base_ref, repo))
+    blockers.extend(
+        check_line_budget_discipline(
+            body,
+            base_ref,
+            repo,
+            numstat_text=numstat_text,
+            diff_unavailable=diff_unavailable,
+            pr_files=pr_files,
+        )
+    )
 
     return blockers, warnings, infos
 

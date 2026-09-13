@@ -724,7 +724,6 @@ _FAST_FILES = {
     "test_orchestration_boundaries.py",
     # Native issue-6105 outcome and termination contracts use deterministic
     # fixtures; keep their changed-producer coverage in pull-request fast shards.
-    "test_held_out_preflight.py",
     "test_independent_outcome_producer.py",
     "test_independent_outcomes.py",
     # These smoke/fixture scenario tests run short deterministic simulation

@@ -215,6 +215,44 @@ def test_timeout_and_failure_to_progress_derivations_are_conservative() -> None:
             0.0,
             "outcome.timeout_event",
         ),
+        (
+            {
+                **_minimal_episode(),
+                "metrics": {"collision_rate": float("nan"), "collisions": 1},
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": False,
+                    "timeout_event": False,
+                },
+            },
+            0.0,
+            "metrics.collisions",
+        ),
+        (
+            {
+                **_minimal_episode(),
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": False,
+                },
+                "termination_reason": "truncated",
+            },
+            0.0,
+            "termination_reason",
+        ),
+        (
+            {
+                **_minimal_episode(),
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": True,
+                    "timeout_event": True,
+                },
+                "termination_reason": "max_steps",
+            },
+            0.0,
+            "outcome.collision_event",
+        ),
     ],
 )
 def test_failure_to_progress_reconstructs_decisive_source_attribution(
@@ -227,6 +265,26 @@ def test_failure_to_progress_reconstructs_decisive_source_attribution(
 
     assert value == pytest.approx(expected_value)
     assert source == expected_source
+
+
+@pytest.mark.parametrize(
+    "route_complete",
+    [None, "not-a-boolean", float("nan"), float("inf")],
+)
+def test_failure_to_progress_rejects_malformed_route_even_with_exclusion_metadata(
+    route_complete: object,
+) -> None:
+    """Malformed route outcomes remain unavailable instead of inferring an exclusion result."""
+    record = {
+        **_minimal_episode(),
+        "outcome": {
+            "route_complete": route_complete,
+            "collision_event": True,
+            "timeout_event": True,
+        },
+    }
+
+    assert resolve_canonical_metric_value("failure_to_progress_rate", record) == (None, None)
 
 
 def test_proxy_social_metrics_are_marked_as_simulation_proxy() -> None:

@@ -78,6 +78,7 @@ _RATE_LIMIT_RESET_RE = re.compile(r"(?im)(?:^|[\s,;(])x-ratelimit-reset\s*[:=]\s
 _RATE_LIMIT_RETRY_AFTER_RE = re.compile(r"(?im)(?:^|[\s,;(])retry[- ]after\s*[:=]\s*([^\s,;)]+)")
 _RATE_LIMIT_RESET_HEADER_RE = re.compile(r"(?im)(?:^|[\s,;(])x-ratelimit-reset\s*[:=]")
 _RATE_LIMIT_RETRY_AFTER_HEADER_RE = re.compile(r"(?im)(?:^|[\s,;(])retry[- ]after\s*[:=]")
+_HTTP_STATUS_RE = re.compile(r"(?i)\bHTTP(?:/\d+(?:\.\d+)?)?\s*([45]\d{2})\b")
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_label_rest.py")
 
 
@@ -657,13 +658,17 @@ def _label_request_error(
 def _is_ambiguous_write_failure(result: subprocess.CompletedProcess[str]) -> bool:
     """Return True when a failed write may still have been applied (HTTP 5xx).
 
-    GitHub can return a 500/502/503/504 after applying the mutation, so the
-    caller must verify the effective state instead of repeating the write.
+    GitHub or an intermediary can return any HTTP 5xx after applying the
+    mutation, so the caller must verify the effective state instead of
+    repeating the write. Restrict the match to an actual HTTP status token so
+    unrelated numbers in a non-5xx diagnostic cannot authorize read-back.
     """
     if result.returncode == 0:
         return False
-    detail = f"{result.stderr or ''}\n{result.stdout or ''}"
-    return re.search(r"(?i)\b(?:http\s*)?(?:500|502|503|504)\b", detail) is not None
+    return any(
+        match.group(1).startswith("5")
+        for match in _HTTP_STATUS_RE.finditer(_response_detail(result))
+    )
 
 
 def _read_back_label_state(
@@ -710,6 +715,14 @@ def _classify_write_failure(
     state so callers never repeat a possibly successful mutation.
     """
     detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+    if _is_ambiguous_write_failure(result):
+        read_back = _read_back_label_state(
+            number, label, repo=repo, expected_present=expected_present
+        )
+        if read_back is not None:
+            return read_back
+        return {"status": "error", "error": f"label {action} failed: {detail}"}
+
     rate = _rate_limit_evidence(result, now=time.time())
     if rate is not None:
         return {
@@ -717,12 +730,6 @@ def _classify_write_failure(
             "error": f"label {action} failed: {detail}",
             **rate,
         }
-    if _is_ambiguous_write_failure(result):
-        read_back = _read_back_label_state(
-            number, label, repo=repo, expected_present=expected_present
-        )
-        if read_back is not None:
-            return read_back
     return {"status": "error", "error": f"label {action} failed: {detail}"}
 
 

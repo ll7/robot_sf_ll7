@@ -172,15 +172,11 @@ def test_read_simulator_ped_headings_fails_closed() -> None:
     """Missing, short, or non-finite heading state stays unavailable, never guessed."""
     assert _read_simulator_ped_headings(SimpleNamespace(), 1, initial=True) is None
     assert (
-        _read_simulator_ped_headings(
-            SimpleNamespace(_initial_ped_headings=[0.0]), 2, initial=True
-        )
+        _read_simulator_ped_headings(SimpleNamespace(_initial_ped_headings=[0.0]), 2, initial=True)
         is None
     )
     assert (
-        _read_simulator_ped_headings(
-            SimpleNamespace(ped_headings=[float("nan")]), 1, initial=False
-        )
+        _read_simulator_ped_headings(SimpleNamespace(ped_headings=[float("nan")]), 1, initial=False)
         is None
     )
 

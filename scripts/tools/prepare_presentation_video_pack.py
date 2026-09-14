@@ -257,6 +257,30 @@ def _video_meta(row: dict[str, Any]) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _resolve_legacy_video_path(row: dict[str, Any], videos_root: Path) -> Path | None:
+    """Resolve a legacy filename only when its planner identity is unambiguous."""
+    scenario_id = str(row.get("scenario_id") or row.get("scenario") or "unknown-scenario")
+    seed = _seed_value(row)
+    if seed is None:
+        return None
+    matches = sorted(videos_root.glob(f"{scenario_id}_seed{seed}_*.mp4"))
+    if not matches:
+        return None
+    policy = _policy_name(row)
+    # Legacy recording directories do not carry a structured index.  Refuse a
+    # lexicographic first result when multiple planners are present.
+    if policy == "unknown-policy":
+        return matches[0].resolve() if len(matches) == 1 else None
+
+    outcome = _normalize_outcome(row)
+    prefix = f"{scenario_id}_seed{seed}_"
+    outcome_match = [path for path in matches if path.stem == f"{prefix}{policy}_{outcome}"]
+    if len(outcome_match) == 1:
+        return outcome_match[0].resolve()
+    policy_match = [path for path in matches if path.stem == f"{prefix}{policy}"]
+    return policy_match[0].resolve() if len(policy_match) == 1 else None
+
+
 def _resolve_video_path(
     row: dict[str, Any],
     episodes_path: Path,
@@ -283,16 +307,7 @@ def _resolve_video_path(
 
     if videos_root is None:
         return None
-    scenario_id = str(row.get("scenario_id") or row.get("scenario") or "unknown-scenario")
-    seed = _seed_value(row)
-    if seed is None:
-        return None
-    matches = sorted(videos_root.glob(f"{scenario_id}_seed{seed}_*.mp4"))
-    if not matches:
-        return None
-    outcome = _normalize_outcome(row)
-    exact = [path for path in matches if path.name.endswith(f"_{outcome}.mp4")]
-    return (exact[0] if exact else matches[0]).resolve()
+    return _resolve_legacy_video_path(row, videos_root)
 
 
 def _is_url(value: str) -> bool:
@@ -368,10 +383,15 @@ def select_candidates(candidates: list[Candidate], limit: int = 3) -> list[Candi
     return selected
 
 
-def _git_root() -> Path | None:
-    """Return the current Git root when the command runs inside a checkout."""
+def _git_root(path: Path | None = None) -> Path | None:
+    """Return the Git root containing ``path`` without relying on process cwd."""
+    probe = (path or Path.cwd()).resolve()
+    if not probe.is_dir():
+        probe = probe.parent
+    while not probe.is_dir() and probe != probe.parent:
+        probe = probe.parent
     result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
+        ["git", "-C", str(probe), "rev-parse", "--show-toplevel"],
         capture_output=True,
         text=True,
         check=False,
@@ -407,13 +427,21 @@ def _git_ignored(path: Path, repo_root: Path | None) -> bool:
 
 def _ensure_safe_output(output_dir: Path, repo_root: Path | None) -> bool:
     """Reject an in-repository output path that could become tracked media."""
-    if repo_root is None or not _path_inside(output_dir, repo_root):
-        return False
-    if not _git_ignored(output_dir, repo_root):
-        raise VideoPackError(
-            f"Refusing to write generated media into a non-ignored repository path: {output_dir}"
-        )
-    return True
+    roots: list[Path] = []
+    output_repo_root = _git_root(output_dir)
+    for candidate in (output_repo_root, repo_root):
+        if candidate is not None and candidate not in roots:
+            roots.append(candidate)
+    for root in roots:
+        if not _path_inside(output_dir, root):
+            continue
+        if not _git_ignored(output_dir, root):
+            raise VideoPackError(
+                "Refusing to write generated media into a non-ignored repository path: "
+                f"{output_dir}"
+            )
+        return True
+    return False
 
 
 def _run_command(command: list[str]) -> tuple[bool, str]:
@@ -473,7 +501,7 @@ def _probe_video(path: Path, ffprobe: str) -> dict[str, Any]:
         "v:0",
         "-count_frames",
         "-show_entries",
-        "stream=codec_name,width,height,nb_read_frames,nb_frames,r_frame_rate,avg_frame_rate,duration:format=duration,size",
+        "stream=codec_name,width,height,nb_read_frames,nb_frames,r_frame_rate,avg_frame_rate,duration:format=duration,size,format_name",
         "-of",
         "json",
         str(path),
@@ -509,6 +537,7 @@ def _probe_video(path: Path, ffprobe: str) -> dict[str, Any]:
         "frame_rate": frame_rate,
         "duration_s": duration,
         "size_bytes": size_bytes,
+        "format_name": format_meta.get("format_name"),
     }
 
 
@@ -737,18 +766,36 @@ def _presentation_filter(candidate: Candidate, *, with_overlay: bool) -> str:
     )
 
 
+def _is_verified_mp4_probe(probe: dict[str, Any] | None) -> bool:
+    """Return whether ffprobe identified a real MP4 container and video stream."""
+    if not isinstance(probe, dict):
+        return False
+    format_name = probe.get("format_name")
+    codec = probe.get("codec")
+    if not isinstance(format_name, str) or not format_name.strip():
+        return False
+    if not isinstance(codec, str) or not codec.strip():
+        return False
+    return "mp4" in {name.strip().lower() for name in format_name.split(",")}
+
+
 def _polish_video(
     candidate: Candidate,
     output_path: Path,
     ffmpeg: str,
     *,
     no_polish: bool,
+    source_probe: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write a presentation copy with stable dimensions and labels."""
     if no_polish:
         if candidate.source_path.suffix.lower() != ".mp4":
             raise VideoPackError(
                 "--no-polish requires an .mp4 source; omit it to encode non-MP4 videos safely"
+            )
+        if not _is_verified_mp4_probe(source_probe):
+            raise VideoPackError(
+                "--no-polish requires ffprobe to verify an MP4 container with a video stream"
             )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(candidate.source_path, output_path)
@@ -1068,7 +1115,13 @@ def _process_candidate(  # noqa: PLR0913 - explicit media-processing context
     stem = _slug(f"{candidate.scenario_id}_seed{candidate.seed}_{candidate.outcome}")
     presentation_path = clips_dir / f"{index:02d}_{stem}.mp4"
     try:
-        encoding = _polish_video(candidate, presentation_path, ffmpeg, no_polish=no_polish)
+        encoding = _polish_video(
+            candidate,
+            presentation_path,
+            ffmpeg,
+            no_polish=no_polish,
+            source_probe=source_qa.get("probe"),
+        )
     except VideoPackError as exc:
         return None, _failure_record(
             candidate,
@@ -1236,7 +1289,7 @@ def prepare_pack(
     if min_duration < 0:
         raise ValueError("min_duration cannot be negative")
     episodes_path = episodes_path.resolve()
-    repo_root = _git_root()
+    repo_root = _git_root(episodes_path)
     if output_dir is None:
         if repo_root is not None:
             output_dir = repo_root / "output" / "presentation_video_pack" / episodes_path.stem

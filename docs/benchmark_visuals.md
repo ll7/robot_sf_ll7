@@ -115,9 +115,16 @@ fallback or synthetic videos should remain clearly labeled as illustrative.
 The contact-sheet input is temporary and removed after generation, so no source
 JSONL cache is left in the output directory. A clip must decode end-to-end and
 show visible content in at least two of the three deterministic samples.
-The optional `--no-polish` mode is limited to sources with an `.mp4` suffix; it
-fails closed for `.mov`, `.webm`, and `.mkv` instead of relabeling their bytes as
-MP4. Omit that option to encode non-MP4 sources into a presentation MP4.
+Filename fallback resolution also requires an unambiguous scenario/seed/policy
+identity; when multiple planner recordings could match, the tool leaves the row
+unresolved instead of choosing a lexicographic first result. The optional
+`--no-polish` mode requires both an `.mp4` suffix and ffprobe confirmation of an
+MP4 container with a video stream. It fails closed for mislabeled or non-MP4
+sources instead of relabeling their bytes as MP4. Omit that option to encode
+non-MP4 sources into a presentation MP4. If an output path is inside a Git
+checkout, it must be covered by that checkout's ignore rules; this check is
+based on the input/output paths and does not depend on the process working
+directory. External output paths are allowed and remain caller-owned.
 
 ## Troubleshooting
 

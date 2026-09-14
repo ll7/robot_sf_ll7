@@ -21,6 +21,7 @@ from scripts.tools.prepare_presentation_video_pack import (
     _portable_qa,
     _qa_video,
     _resolve_video_path,
+    prepare_pack,
     select_candidates,
 )
 
@@ -102,6 +103,28 @@ def test_video_path_fallback_matches_scenario_seed_and_outcome(tmp_path: Path) -
     }
 
     assert _resolve_video_path(row, tmp_path / "episodes.jsonl", videos) == expected.resolve()
+
+
+def test_video_path_fallback_refuses_ambiguous_planner_matches(tmp_path: Path) -> None:
+    """Filename fallback must not choose a planner when the episode is ambiguous."""
+    videos = tmp_path / "videos"
+    videos.mkdir()
+    (videos / "classic_doorway_seed112_ppo_collision.mp4").write_bytes(b"ppo")
+    (videos / "classic_doorway_seed112_socnav_orca_collision.mp4").write_bytes(b"orca")
+    row = {
+        "scenario_id": "classic_doorway",
+        "seed": 112,
+        "status": "collision",
+        "video": {},
+    }
+
+    assert _resolve_video_path(row, tmp_path / "episodes.jsonl", videos) is None
+
+    row["algo"] = "ppo"
+    assert (
+        _resolve_video_path(row, tmp_path / "episodes.jsonl", videos)
+        == (videos / "classic_doorway_seed112_ppo_collision.mp4").resolve()
+    )
 
 
 def test_video_url_reference_is_rejected_without_network_access(tmp_path: Path) -> None:
@@ -214,6 +237,46 @@ def test_no_polish_rejects_non_mp4_sources(tmp_path: Path, suffix: str) -> None:
         _polish_video(candidate, destination, "ffmpeg", no_polish=True)
 
     assert not destination.exists()
+
+
+def test_no_polish_rejects_mp4_suffix_with_non_mp4_container(tmp_path: Path) -> None:
+    """An MP4 filename is insufficient when ffprobe identifies another container."""
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"webm container bytes")
+    candidate = _candidate(
+        tmp_path,
+        episode_id="mislabeled",
+        scenario_id="fixture",
+        outcome="success",
+        score=1,
+    )
+    candidate = replace(candidate, source_path=source)
+    destination = tmp_path / "clips" / "01_fixture.mp4"
+
+    with pytest.raises(VideoPackError, match="verify an MP4 container"):
+        _polish_video(
+            candidate,
+            destination,
+            "ffmpeg",
+            no_polish=True,
+            source_probe={"codec": "vp9", "format_name": "matroska,webm"},
+        )
+
+    assert not destination.exists()
+
+
+def test_output_guard_does_not_depend_on_process_cwd(tmp_path: Path, monkeypatch) -> None:
+    """An unignored output inside the checkout is rejected from another cwd."""
+    episodes = tmp_path / "episodes.jsonl"
+    episodes.write_text("", encoding="utf-8")
+    repo_root = Path(__file__).resolve().parents[2]
+    output = repo_root / "presentation-pack-unignored-test-fixture"
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(VideoPackError, match="non-ignored repository path"):
+        prepare_pack(episodes, output_dir=output)
+
+    assert not output.exists()
 
 
 @pytest.mark.skipif(

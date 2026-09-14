@@ -776,6 +776,7 @@ def test_repository_identity_is_case_insensitive_like_github(monkeypatch, capsys
 def test_json_classifies_repeated_runner_acquisition_exhaustion(monkeypatch, capsys):
     """A repeated-acquisition annotation is hosted-capacity evidence, not a code failure."""
     message = "The job was not started because it repeatedly failed to be acquired (5 attempts)."
+    calls: list[list[str]] = []
     results = iter(
         [
             _result(0, json.dumps(_job())),
@@ -783,7 +784,12 @@ def test_json_classifies_repeated_runner_acquisition_exhaustion(monkeypatch, cap
             _result(0, _include_page(json.dumps([{"message": message}]))),
         ]
     )
-    monkeypatch.setattr(diagnose_actions_job, "_gh", lambda _args: next(results))
+
+    def fake_gh(args):
+        calls.append(args)
+        return next(results)
+
+    monkeypatch.setattr(diagnose_actions_job, "_gh", fake_gh)
 
     assert diagnose_actions_job.main(["123", "--repo", "owner/repo", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -792,11 +798,13 @@ def test_json_classifies_repeated_runner_acquisition_exhaustion(monkeypatch, cap
     assert payload["job_conclusion"] == "failure"
     assert payload["evidence"]["source"] == "check_run_annotations"
     assert payload["evidence"]["excerpt"] == message
+    assert len(calls) == 3
 
 
 def test_json_does_not_classify_non_repeated_runner_acquisition(monkeypatch, capsys):
     """A single non-repeated acquisition message remains unmatched evidence."""
     message = "The job was queued because it failed to be acquired."
+    calls: list[list[str]] = []
     results = iter(
         [
             _result(0, json.dumps(_job())),
@@ -804,10 +812,16 @@ def test_json_does_not_classify_non_repeated_runner_acquisition(monkeypatch, cap
             _result(0, _include_page(json.dumps([{"message": message}]))),
         ]
     )
-    monkeypatch.setattr(diagnose_actions_job, "_gh", lambda _args: next(results))
+
+    def fake_gh(args):
+        calls.append(args)
+        return next(results)
+
+    monkeypatch.setattr(diagnose_actions_job, "_gh", fake_gh)
 
     assert diagnose_actions_job.main(["123", "--repo", "owner/repo", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["diagnostic_status"] == "unmatched"
     assert payload["classification"] is None
     assert payload["job_conclusion"] == "failure"
+    assert len(calls) == 3

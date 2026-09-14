@@ -540,6 +540,46 @@ def _admission_reason(admission: dict[str, Any]) -> str:
     }.get(str(classification), str(classification or "unknown"))
 
 
+def _row_claimable_signal(issue: dict[str, Any]) -> tuple[bool, str]:
+    """Return the machine-readable claimable flag and stable reason for one row.
+
+    Single source of truth for both the per-row ``claimable``/``claimable_reason``
+    fields and the ``claimable_issues`` filter, so the flag and the list can never
+    disagree. A row is actionable only when dispatch is allowed and the canonical
+    admission resolved to the claimable reason; the ``ok``/``outcome`` checks stay
+    in the predicate so a future gate that emits ``ready_check_only`` with a
+    non-claimable classification still fails closed to ``False``.
+    """
+    if issue.get("dispatch_allowed") is False:
+        reason = issue.get("classification")
+        return False, reason if isinstance(reason, str) and reason else "dispatch_blocked"
+    admission = issue.get("admission")
+    if not isinstance(admission, dict):
+        return False, "admission_unavailable"
+    reason = _admission_reason(admission)
+    if (
+        admission.get("ok") is True
+        and admission.get("outcome") == "ready_check_only"
+        and reason == "claimable"
+    ):
+        return True, reason
+    return False, reason
+
+
+def _attach_row_signals(snapshots: list[dict[str, Any]]) -> None:
+    """Attach classification and claimable signals to every snapshot row in place."""
+    for issue in snapshots:
+        admission = issue.get("admission")
+        if isinstance(admission, dict) and "blocker_decision" not in issue:
+            issue["classification"] = admission.get("classification") or "error"
+            reasons = admission.get("reasons")
+            if isinstance(reasons, list) and reasons:
+                issue["reason"] = str(reasons[0])
+        claimable, claimable_reason = _row_claimable_signal(issue)
+        issue["claimable"] = claimable
+        issue["claimable_reason"] = claimable_reason
+
+
 def _admission_result_is_complete(admission: object) -> bool:
     """Return whether an admission result has the fields needed for queue truth."""
     if not isinstance(admission, dict):
@@ -1214,13 +1254,7 @@ def snapshot_claimable_issues(
         for issue in listed
     ]
     snapshots = [_apply_blocker_decision(issue, blocker_decisions) for issue in snapshots]
-    for issue in snapshots:
-        admission = issue.get("admission")
-        if isinstance(admission, dict) and "blocker_decision" not in issue:
-            issue["classification"] = admission.get("classification") or "error"
-            reasons = admission.get("reasons")
-            if isinstance(reasons, list) and reasons:
-                issue["reason"] = str(reasons[0])
+    _attach_row_signals(snapshots)
     issues = [
         issue
         for issue in snapshots
@@ -1241,14 +1275,7 @@ def snapshot_claimable_issues(
         )
     else:
         truncation_note = ""
-    claimable_issues = [
-        issue
-        for issue in issues
-        if isinstance(issue.get("admission"), dict)
-        and issue["admission"].get("ok") is True
-        and issue["admission"].get("outcome") == "ready_check_only"
-        and issue.get("dispatch_allowed", True) is not False
-    ]
+    claimable_issues = [issue for issue in issues if issue.get("claimable") is True]
     admission_results_complete = all(
         _admission_result_is_complete(issue.get("admission")) for issue in snapshots
     )

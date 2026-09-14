@@ -78,6 +78,7 @@ _MAX_CLASSIFICATIONS = frozenset(
         "already_claimed",
         "working",
         "review",
+        "covering_pr_open",
         "closed",
         "error",
     }
@@ -99,6 +100,7 @@ _EXECUTION_MODE = {
     "already_claimed": "active-handoff",
     "working": "active-handoff",
     "review": "active-handoff",
+    "covering_pr_open": "active-handoff",
     "closed": "stale-closure",
     "error": "error-repair",
 }
@@ -395,7 +397,14 @@ def _preparation_action(item: Mapping[str, Any]) -> str:
     authority_action = _authority_preparation_action(item)
     if authority_action is not None:
         return authority_action
-    if classification in {"assigned", "already_claimed", "working", "review", "stale_running"}:
+    if classification in {
+        "assigned",
+        "already_claimed",
+        "working",
+        "review",
+        "stale_running",
+        "covering_pr_open",
+    }:
         return "active_handoff"
     missing_fields = item.get("missing_fields")
     if isinstance(missing_fields, list) and missing_fields:
@@ -625,7 +634,14 @@ def _skip_reason(item: Mapping[str, Any]) -> str:
     classification = item.get("classification")
     if item.get("listing_drift"):
         return "listing_drift"
-    if classification in ("assigned", "already_claimed", "working", "review", "stale_running"):
+    if classification in (
+        "assigned",
+        "already_claimed",
+        "working",
+        "review",
+        "stale_running",
+        "covering_pr_open",
+    ):
         return "active_owner"
     if classification in ("closed",):
         return "closed"

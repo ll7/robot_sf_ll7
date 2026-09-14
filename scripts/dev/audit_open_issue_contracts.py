@@ -54,6 +54,7 @@ NEXT_ACTIONS: dict[str, str] = {
     "already_claimed": "do_not_duplicate_active_work",
     "working": "do_not_duplicate_active_work",
     "review": "do_not_duplicate_active_work",
+    "covering_pr_open": "do_not_duplicate_active_work",
     "closed": "exclude_non_open_item",
     "error": "repair_or_repeat_exact_read",
 }
@@ -74,6 +75,7 @@ AUTHORITIES: dict[str, str] = {
     "already_claimed": "current_owner",
     "working": "current_owner",
     "review": "current_owner",
+    "covering_pr_open": "current_owner",
     "closed": "terminal_reconciliation",
     "error": "audit_operator",
 }

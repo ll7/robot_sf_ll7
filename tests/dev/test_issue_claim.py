@@ -1546,6 +1546,59 @@ def test_exact_sha_stale_claim_protection(monkeypatch: pytest.MonkeyPatch) -> No
     assert calls[-1][-1] == ":refs/heads/agent-claims/issue-123"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Refs #123", True),
+        ("Relates to #123", True),
+        ("Related to #123", True),
+        ("Closes #123", True),
+        ("This does not close #123", False),
+        ("It does not fix #123", False),
+        ("Never resolves #123", False),
+        ("Relates to #456", False),
+        ("Use `--limit 123`", False),
+    ],
+)
+def test_issue_coverage_reference_shapes(text: str, expected: bool) -> None:
+    """Reference-only coverage blocks; explicitly non-covering prose does not."""
+    result = issue_claim.CommandResult(
+        command=("gh", "pr", "list"),
+        returncode=0,
+        stdout=json.dumps([{"number": 456, "body": text, "title": ""}]),
+        stderr="",
+    )
+
+    payload = issue_claim._open_prs_covering_issue(result, issue_number=123)
+
+    assert payload["ok"] is True
+    assert (payload["covering_prs"] == [456]) is expected
+
+
+def test_public_open_pr_coverage_wrapper_matches_canonical_detector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Admission and release share the same open-PR coverage read."""
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        return issue_claim.CommandResult(
+            command=tuple(command),
+            returncode=0,
+            stdout='[{"number": 8450, "body": "Refs #8449; relates to #8314", "title": ""}]',
+            stderr="",
+        )
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.open_prs_covering_issue(repo="ll7/robot_sf_ll7", issue_number=8449)
+
+    assert payload["ok"] is True
+    assert payload["covering_prs"] == [8450]
+    assert calls and calls[0][0:3] == ["gh", "pr", "list"]
+
+
 def test_release_does_not_infer_coverage_from_unrelated_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

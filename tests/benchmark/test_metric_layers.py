@@ -13,6 +13,7 @@ from robot_sf.benchmark.metric_layers import (
     LAYER_ORDER,
     METRIC_LAYER_SCHEMA_VERSION,
     build_metric_layer_summary,
+    resolve_canonical_metric_value,
 )
 
 EXPECTED_METRICS = {
@@ -170,6 +171,62 @@ def test_timeout_and_failure_to_progress_derivations_are_conservative() -> None:
 
     assert liveness["timeout_rate"]["value"] == pytest.approx(2 / 5)
     assert liveness["failure_to_progress_rate"]["value"] == pytest.approx(1 / 5)
+
+
+@pytest.mark.parametrize(
+    ("record", "expected_value", "expected_source"),
+    [
+        (
+            {
+                **_minimal_episode(),
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": False,
+                    "timeout_event": False,
+                },
+                "termination_reason": "stalled_without_progress",
+            },
+            1.0,
+            "outcome.route_complete",
+        ),
+        (
+            {
+                **_minimal_episode(),
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": True,
+                    "timeout_event": False,
+                },
+                "termination_reason": "collision",
+            },
+            0.0,
+            "outcome.collision_event",
+        ),
+        (
+            {
+                **_minimal_episode(),
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": False,
+                    "timeout_event": True,
+                },
+                "termination_reason": "max_steps",
+            },
+            0.0,
+            "outcome.timeout_event",
+        ),
+    ],
+)
+def test_failure_to_progress_reconstructs_decisive_source_attribution(
+    record: dict[str, object],
+    expected_value: float,
+    expected_source: str,
+) -> None:
+    """Route, collision, and timeout cases retain their decisive source attribution."""
+    value, source = resolve_canonical_metric_value("failure_to_progress_rate", record)
+
+    assert value == pytest.approx(expected_value)
+    assert source == expected_source
 
 
 def test_proxy_social_metrics_are_marked_as_simulation_proxy() -> None:

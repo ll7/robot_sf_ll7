@@ -212,7 +212,14 @@ CANONICAL_METRICS: dict[str, MetricDefinition] = dict(
         _metric(
             "failure_to_progress_rate",
             "liveness",
-            ("outcome.route_complete",),
+            (
+                "outcome.route_complete",
+                "metrics.collision_rate",
+                "metrics.collisions",
+                "outcome.collision_event",
+                "outcome.timeout_event",
+                "termination_reason",
+            ),
             "episode_rate",
             False,
             "Non-completion rate excluding collision and timeout episodes when outcomes exist.",
@@ -507,20 +514,27 @@ def _resolve_timeout_rate(view: Mapping[str, Any]) -> tuple[float | None, str | 
 def _resolve_failure_to_progress_rate(
     view: Mapping[str, Any],
 ) -> tuple[float | None, str | None]:
-    """Resolve failure-to-progress rate when explicit route outcome exists.
+    """Resolve failure-to-progress rate and identify its decisive outcome input.
+
+    Collision takes precedence over timeout when both outcomes are positive, matching the
+    existing value formula while keeping the selected source useful for per-episode attribution.
 
     Returns:
-        ``(value, source_key)`` when available, else ``(None, None)``.
+        ``(value, decisive_source_key)`` when available, else ``(None, None)``.
     """
 
     if "outcome.route_complete" not in view:
         return None, None
-    collision_value, _ = _resolve_collision_rate(CANONICAL_METRICS["collision_rate"], view)
-    timeout_value, _ = _resolve_timeout_rate(view)
+    collision_value, collision_source = _resolve_collision_rate(
+        CANONICAL_METRICS["collision_rate"], view
+    )
+    timeout_value, timeout_source = _resolve_timeout_rate(view)
     if (collision_value is not None and collision_value > 0.0) or (
         timeout_value is not None and timeout_value > 0.0
     ):
-        return 0.0, "outcome.route_complete"
+        if collision_value is not None and collision_value > 0.0:
+            return 0.0, collision_source
+        return 0.0, timeout_source
     route_complete = _as_flag(view["outcome.route_complete"])
     if route_complete is None:
         return None, None

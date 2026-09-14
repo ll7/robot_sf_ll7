@@ -95,20 +95,39 @@ def test_derived_metric_source_resolves_without_serialized_aggregate_changes() -
     records = [
         {
             **_episode("derived-safe", collision_rate=None),
-            "outcome": {"collision_event": False},
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+                "timeout_event": False,
+            },
         },
         {
             **_episode("derived-collision", collision_rate=None),
-            "outcome": {"collision_event": True},
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
         },
     ]
 
     aggregate = compute_aggregates(records)
-    provenance = resolve_aggregate_cell_provenance(records, _identity())
+    provenance = resolve_aggregate_cell_provenance(
+        records,
+        _identity(metric="failure_to_progress_rate"),
+    )
 
     assert aggregate["planner_a"] == {}
     assert provenance.value == pytest.approx(0.5)
     assert provenance.contributor_episode_ids == ("derived-collision", "derived-safe")
+    assert provenance.metric_binding.source_field_paths == (
+        "outcome.route_complete",
+        "metrics.collision_rate",
+        "metrics.collisions",
+        "outcome.collision_event",
+        "outcome.timeout_event",
+        "termination_reason",
+    )
 
 
 def test_aggregate_cell_provenance_annotations_are_runtime_resolvable() -> None:
@@ -195,6 +214,20 @@ def test_metric_binding_returns_existing_metadata_and_explicit_missing_unit() ->
     assert binding.direction_status == "available"
     assert binding.unit is None
     assert binding.unit_status == "unavailable"
+
+
+def test_failure_to_progress_binding_lists_all_derived_resolver_inputs() -> None:
+    """Derived provenance lists route, collision, and timeout inputs consulted by the resolver."""
+    binding = resolve_metric_source_binding("failure_to_progress_rate")
+
+    assert binding.source_field_paths == (
+        "outcome.route_complete",
+        "metrics.collision_rate",
+        "metrics.collisions",
+        "outcome.collision_event",
+        "outcome.timeout_event",
+        "termination_reason",
+    )
 
 
 def test_metric_binding_rejects_stale_and_conflicting_registry_identity(

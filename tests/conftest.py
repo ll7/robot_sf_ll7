@@ -436,6 +436,10 @@ _FAST_FILES = {
     # coverage for the changed receipt verifier; keep it in the exact-head fast
     # lane (issue #9218).
     "test_merge_receipt_verify_remedy.py",
+    # The helper-consolidation contracts are deterministic no-duplicate-def
+    # coverage for the delegated helper families; keep them in the exact-head
+    # fast lane (issue #9250).
+    "test_helper_consolidation_issue_9250.py",
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",

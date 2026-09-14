@@ -25,6 +25,7 @@ from robot_sf.benchmark.candidate_trace_resolution import (
     WORKED_EXAMPLE_OUTCOMES,
     load_episode_mapping,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.trace_reexport_packaging import (
     EXPECTED_OUTCOMES_SCHEMA as _CANONICAL_EXPECTED_OUTCOMES_SCHEMA,
 )
@@ -81,14 +82,6 @@ def _canonical_bytes(payload: Any, *, newline: bool = False) -> bytes:
 
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _canonical_sha256(payload: Any) -> str:

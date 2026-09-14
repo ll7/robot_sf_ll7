@@ -44,7 +44,13 @@ _DEFAULT_EVIDENCE_CATALOG_AREA = "benchmark_evidence"
 
 
 def _repo_root() -> Path:
-    """Return the current git worktree root."""
+    """Return the current git worktree root.
+
+    This intentionally stays git-anchored instead of delegating to
+    :func:`robot_sf.common.artifact_paths.get_repository_root`: evidence writers
+    run inside linked worktrees, where the worktree root and the file-anchored
+    repository root differ (issue #9250, family 1 contract decision).
+    """
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         check=True,

@@ -13,8 +13,10 @@ from robot_sf.benchmark.rare_event_sampling import (
     RareEventSamplingSpec,
     SampledScenarioRow,
     apply_sampled_scenario_mutation,
+    build_sampling_summary,
     estimate_failure_probability,
     parameter_vector_hash,
+    proposal_support_status,
     sample_scenario_rows,
 )
 
@@ -326,3 +328,96 @@ def test_smoke_runner_rejects_available_reference_with_empty_evidence_path(
                 str(tmp_path / "evidence"),
             ]
         )
+
+
+def _restricted_spec_payload() -> dict:
+    """Base uniform[0, 1] with a proposal that cannot see the event mass."""
+    return {
+        "schema_version": "rare_event_sampling.v1",
+        "proposal": "tilted_distribution",
+        "parameters": {
+            "x": {
+                "base": "uniform",
+                "low": 0.0,
+                "high": 1.0,
+                "proposal_low": 0.8,
+                "proposal_high": 1.0,
+            }
+        },
+        "objective_event": "x_below_0_1",
+        "samples": 500,
+        "seed": 4163,
+    }
+
+
+def test_uncovered_event_estimates_zero_with_restricted_support_warning() -> None:
+    """A proposal missing the event mass estimates 0 and says so loudly."""
+    spec = RareEventSamplingSpec.from_payload(_restricted_spec_payload())
+    rows = sample_scenario_rows(spec)
+    assert rows and all(0.8 <= row.parameters["x"] <= 1.0 for row in rows)
+    events = [row.parameters["x"] < 0.1 for row in rows]
+    assert not any(events)
+    estimate = estimate_failure_probability(rows, events, objective_event=spec.objective_event)
+    assert estimate.estimate == 0.0
+    assert estimate.confidence_interval == (0.0, 0.0)
+    assert estimate.variance_ratio_vs_naive is None
+    assert any(w.startswith("zero_weighted_events") for w in estimate.warnings)
+    assert any(w.startswith("variance_ratio_undefined") for w in estimate.warnings)
+    status, detail = proposal_support_status(spec)
+    assert status == "restricted_support"
+    assert "x" in detail
+    summary = build_sampling_summary(spec=spec, rows=rows, events=events)
+    assert summary["support_status"]["status"] == "restricted_support"
+    assert summary["estimator"]["warnings"] == list(estimate.warnings)
+
+
+def test_zero_observed_events_flag_collapsed_interval() -> None:
+    """Zero events under full support still warn instead of certifying impossibility."""
+    payload = _restricted_spec_payload()
+    payload["parameters"] = {"x": {"base": "uniform", "low": 0.0, "high": 1.0}}
+    payload["objective_event"] = "x_below_0_001"
+    spec = RareEventSamplingSpec.from_payload(payload)
+    assert proposal_support_status(spec)[0] == "full_support"
+    rows = sample_scenario_rows(spec)
+    events = [False] * len(rows)
+    estimate = estimate_failure_probability(rows, events, objective_event=spec.objective_event)
+    assert estimate.estimate == 0.0
+    assert estimate.confidence_interval == (0.0, 0.0)
+    assert any(w.startswith("zero_weighted_events") for w in estimate.warnings)
+
+
+def test_single_dominant_weight_flags_degeneracy() -> None:
+    """One nonzero weight is a single effective sample, not a measurement."""
+    rows = [
+        SampledScenarioRow(
+            sample_index=index,
+            seed=7,
+            parameters={"x": 0.9},
+            base_probability=1.0,
+            proposal_probability=1.0,
+            likelihood_ratio=weight,
+            parameter_vector_hash=f"row-{index}",
+        )
+        for index, weight in enumerate([1.0, 0.0, 0.0, 0.0])
+    ]
+    estimate = estimate_failure_probability(
+        rows, [True, False, False, False], objective_event="x_below_0_1"
+    )
+    assert estimate.estimate == pytest.approx(0.25)
+    assert estimate.effective_sample_size == pytest.approx(1.0)
+    assert len(estimate.warnings) == 1
+    assert estimate.warnings[0].startswith("weight_degeneracy")
+
+
+def test_proposal_event_frequency_names_the_naive_value_honestly() -> None:
+    """The honestly named field matches the legacy value on a covered event."""
+    spec = RareEventSamplingSpec.from_payload(_toy_spec_payload(samples=500))
+    rows = sample_scenario_rows(spec)
+    estimate = estimate_failure_probability(
+        rows,
+        [row.parameters["x"] >= 0.95 for row in rows],
+        objective_event=spec.objective_event,
+    )
+    assert estimate.estimate == pytest.approx(0.05, abs=0.015)
+    assert estimate.proposal_event_frequency == estimate.naive_monte_carlo_estimate
+    assert estimate.warnings == ()

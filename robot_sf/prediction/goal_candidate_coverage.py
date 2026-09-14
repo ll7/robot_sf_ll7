@@ -14,6 +14,11 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from robot_sf.common.math_utils import (
+    angle_between_unit,
+    point_distance,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -48,18 +53,6 @@ def _unit(value: Point | Sequence[float] | None, field_name: str) -> Point | Non
     if norm <= 0.0:
         raise ValueError(f"{field_name} must be non-zero")
     return (point[0] / norm, point[1] / norm)
-
-
-def _distance(left: Point, right: Point) -> float:
-    """Return Euclidean distance."""
-
-    return math.hypot(left[0] - right[0], left[1] - right[1])
-
-
-def _angle(left: Point, right: Point) -> float:
-    """Return the unsigned angle between unit directions."""
-
-    return math.acos(max(-1.0, min(1.0, left[0] * right[0] + left[1] * right[1])))
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,10 +175,11 @@ def evaluate_goal_candidate_coverage(
     active = _point_candidates(candidate_set, GoalCandidateRole.ACTIVE_WAYPOINT)
     final = _point_candidates(candidate_set, GoalCandidateRole.FINAL_DESTINATION)
     active_covered = truth.active_position is not None and any(
-        _distance(candidate.position, truth.active_position) <= tolerance for candidate in active
+        point_distance(candidate.position, truth.active_position) <= tolerance
+        for candidate in active
     )
     final_covered = truth.final_position is not None and any(
-        _distance(candidate.position, truth.final_position) <= tolerance for candidate in final
+        point_distance(candidate.position, truth.final_position) <= tolerance for candidate in final
     )
     route_covered = truth.route_signature is not None and any(
         candidate.route_signature == truth.route_signature for candidate in final
@@ -199,7 +193,7 @@ def evaluate_goal_candidate_coverage(
             if candidate.direction is not None or candidate.path_tangent is not None
         )
         direction_covered = any(
-            _angle(
+            angle_between_unit(
                 candidate.direction or candidate.path_tangent,  # type: ignore[arg-type]
                 truth.direction,
             )
@@ -209,13 +203,13 @@ def evaluate_goal_candidate_coverage(
         if not direction_covered and truth.observed_position_global is not None:
             direction_covered = any(
                 candidate.position is not None
-                and _distance(candidate.position, truth.observed_position_global) > 0.0
-                and _angle(
+                and point_distance(candidate.position, truth.observed_position_global) > 0.0
+                and angle_between_unit(
                     (
                         (candidate.position[0] - truth.observed_position_global[0])
-                        / _distance(candidate.position, truth.observed_position_global),
+                        / point_distance(candidate.position, truth.observed_position_global),
                         (candidate.position[1] - truth.observed_position_global[1])
-                        / _distance(candidate.position, truth.observed_position_global),
+                        / point_distance(candidate.position, truth.observed_position_global),
                     ),
                     truth.direction,
                 )
@@ -244,12 +238,12 @@ def evaluate_goal_candidate_coverage(
             (
                 truth.active_position is not None
                 and candidate.position is not None
-                and _distance(candidate.position, truth.active_position) <= tolerance
+                and point_distance(candidate.position, truth.active_position) <= tolerance
             )
             or (
                 truth.final_position is not None
                 and candidate.position is not None
-                and _distance(candidate.position, truth.final_position) <= tolerance
+                and point_distance(candidate.position, truth.final_position) <= tolerance
             )
             or (
                 truth.route_signature is not None
@@ -267,7 +261,7 @@ def evaluate_goal_candidate_coverage(
         )
         direct_unit = _unit(direct, "direct_line")
         tangent_errors = [
-            _angle(candidate.path_tangent, direct_unit)  # type: ignore[arg-type]
+            angle_between_unit(candidate.path_tangent, direct_unit)  # type: ignore[arg-type]
             for candidate in final
             if candidate.path_tangent is not None and direct_unit is not None
         ]

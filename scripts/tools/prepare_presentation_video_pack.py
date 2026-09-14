@@ -40,6 +40,8 @@ except ImportError:  # pragma: no cover - only relevant outside the repository r
 
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
+PAD_RGB = (16, 24, 32)
+PAD_TOLERANCE = 8
 KNOWN_METRICS = (
     "near_misses",
     "min_distance",
@@ -554,7 +556,15 @@ def _frame_content_stats(path: Path) -> dict[str, float]:
         pixels = list(image.getdata())
         if not pixels:
             return {"mean_brightness": 0.0, "nonblack_ratio": 0.0}
-        nonblack = sum(1 for pixel in pixels if max(pixel) > 12)
+        nonblack = sum(
+            1
+            for pixel in pixels
+            if max(pixel) > 12
+            and any(
+                abs(channel - pad_channel) > PAD_TOLERANCE
+                for channel, pad_channel in zip(pixel, PAD_RGB, strict=True)
+            )
+        )
         mean_brightness = sum(ImageStat.Stat(image).mean) / 3.0
         return {
             "mean_brightness": round(mean_brightness, 3),
@@ -1164,14 +1174,14 @@ def _make_contact_sheet(output_dir: Path, clips: list[dict[str, Any]]) -> Path |
             "\n".join(json.dumps(source_row) for source_row in sources) + "\n", encoding="utf-8"
         )
         generate_contact_sheet(sources_path, contact_sheet_path, columns=min(3, len(clips)))
-    return contact_sheet_path
+    return contact_sheet_path if contact_sheet_path.is_file() else None
 
 
 def _build_report(data: _ReportData) -> dict[str, Any]:
     """Create the machine-readable presentation handoff manifest."""
     status = (
         "ready"
-        if len(data.selected_clips) == data.max_clips
+        if len(data.selected_clips) == data.max_clips and data.contact_sheet_path is not None
         else "partial"
         if data.selected_clips
         else "blocked"
@@ -1263,7 +1273,7 @@ def prepare_pack(
     )
     contact_sheet_path = _make_contact_sheet(output_dir, selected_clips)
     if selected_clips and contact_sheet_path is None:
-        warnings.append("contact-sheet helper could not be imported")
+        warnings.append("contact sheet could not be generated")
     report = _build_report(
         _ReportData(
             output_dir=output_dir,

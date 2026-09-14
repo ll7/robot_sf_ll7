@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PIL import Image
+
 from scripts.tools.prepare_presentation_video_pack import (
     Candidate,
     VideoPackError,
     _candidate_from_row,
+    _frame_content_stats,
     _portable_qa,
     _qa_video,
     _resolve_video_path,
@@ -173,3 +176,11 @@ def test_video_qa_rejects_all_blank_samples(tmp_path: Path, monkeypatch) -> None
     assert result["status"] == "failed"
     assert "all_sampled_frames_are_blank_or_dark" in result["reasons"]
     assert "insufficient_visible_samples<2_of_3" in result["reasons"]
+
+
+def test_frame_stats_do_not_count_aspect_ratio_padding_as_visible_content(tmp_path: Path) -> None:
+    """Blank letterboxed content must fail instead of passing on the pad color."""
+    frame = Image.new("RGB", (640, 360), color=(16, 24, 32))
+    frame.save(tmp_path / "letterboxed.png")
+
+    assert _frame_content_stats(tmp_path / "letterboxed.png")["nonblack_ratio"] == 0.0

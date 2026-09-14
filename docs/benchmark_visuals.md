@@ -115,6 +115,9 @@ fallback or synthetic videos should remain clearly labeled as illustrative.
 The contact-sheet input is temporary and removed after generation, so no source
 JSONL cache is left in the output directory. A clip must decode end-to-end and
 show visible content in at least two of the three deterministic samples.
+The optional `--no-polish` mode is limited to sources with an `.mp4` suffix; it
+fails closed for `.mov`, `.webm`, and `.mkv` instead of relabeling their bytes as
+MP4. Omit that option to encode non-MP4 sources into a presentation MP4.
 
 ## Troubleshooting
 

@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
+import sys
+from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from scripts.tools.prepare_presentation_video_pack import (
@@ -11,6 +17,7 @@ from scripts.tools.prepare_presentation_video_pack import (
     VideoPackError,
     _candidate_from_row,
     _frame_content_stats,
+    _polish_video,
     _portable_qa,
     _qa_video,
     _resolve_video_path,
@@ -184,3 +191,129 @@ def test_frame_stats_do_not_count_aspect_ratio_padding_as_visible_content(tmp_pa
     frame.save(tmp_path / "letterboxed.png")
 
     assert _frame_content_stats(tmp_path / "letterboxed.png")["nonblack_ratio"] == 0.0
+
+
+@pytest.mark.parametrize("suffix", [".mov", ".webm", ".mkv"])
+def test_no_polish_rejects_non_mp4_sources(tmp_path: Path, suffix: str) -> None:
+    """Never relabel non-MP4 source bytes as an MP4 presentation artifact."""
+    source = tmp_path / f"source{suffix}"
+    source.write_bytes(b"source bytes")
+    candidate = replace(
+        _candidate(
+            tmp_path,
+            episode_id="non-mp4",
+            scenario_id="fixture",
+            outcome="success",
+            score=1,
+        ),
+        source_path=source,
+    )
+    destination = tmp_path / "clips" / "01_fixture.mp4"
+
+    with pytest.raises(VideoPackError, match=r"--no-polish requires an \.mp4 source"):
+        _polish_video(candidate, destination, "ffmpeg", no_polish=True)
+
+    assert not destination.exists()
+
+
+@pytest.mark.skipif(
+    shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
+    reason="requires local ffmpeg and ffprobe binaries",
+)
+def test_prepare_pack_cli_runs_real_local_subprocess_path(tmp_path: Path) -> None:
+    """Exercise the production CLI with local synthetic media and no network access."""
+    ffmpeg = shutil.which("ffmpeg")
+    assert ffmpeg is not None
+    source = tmp_path / "native-fixture.mp4"
+    media_result = subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=0x3498db:s=320x180:r=10:d=2",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-y",
+            str(source),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert media_result.returncode == 0, media_result.stderr
+
+    episodes = tmp_path / "episodes.jsonl"
+    episodes.write_text(
+        json.dumps(
+            {
+                "episode_id": "local-fixture",
+                "scenario_id": "classic_fixture",
+                "seed": 111,
+                "algo": "ppo",
+                "status": "success",
+                "steps": 3,
+                "metrics": {"near_misses": 1},
+                "video": {
+                    "path": str(source),
+                    "renderer": "native",
+                    "frames": 3,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "presentation-pack"
+    script = (
+        Path(__file__).resolve().parents[2] / "scripts/tools/prepare_presentation_video_pack.py"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--episodes",
+            str(episodes),
+            "--output",
+            str(output),
+            "--max-clips",
+            "1",
+            "--min-duration",
+            "0.5",
+            "--no-polish",
+        ],
+        cwd=script.parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    summary = json.loads(result.stdout.strip().splitlines()[-1])
+    manifest_path = Path(summary["manifest"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert summary["status"] == "ready"
+    assert manifest["status"] == "ready"
+    assert manifest["artifact_policy"] == {
+        "claim_scope": "presentation_only_not_benchmark_evidence",
+        "media_disposition": "local_presentation_only",
+        "output_dir_git_ignored": False,
+        "videos_tracked": False,
+    }
+    assert manifest["source"]["rights"]["status"] == "redistribution-unknown"
+    assert manifest["source"]["rights"]["basis"] == "local-only-byo"
+    clip = manifest["clips"][0]
+    assert clip["source_file"] == source.name
+    assert clip["encoding"] == {"overlay": False, "status": "copied"}
+    presentation_path = output / clip["presentation_path"]
+    assert presentation_path.read_bytes() == source.read_bytes()
+    assert (output / manifest["contact_sheet"]).is_file()

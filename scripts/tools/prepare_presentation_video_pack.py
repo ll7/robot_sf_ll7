@@ -745,10 +745,16 @@ def _polish_video(
     no_polish: bool,
 ) -> dict[str, Any]:
     """Write a presentation copy with stable dimensions and labels."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     if no_polish:
+        if candidate.source_path.suffix.lower() != ".mp4":
+            raise VideoPackError(
+                "--no-polish requires an .mp4 source; omit it to encode non-MP4 videos safely"
+            )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(candidate.source_path, output_path)
         return {"status": "copied", "overlay": False}
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     def encode(with_overlay: bool) -> tuple[bool, str]:
         command = [
@@ -1324,7 +1330,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-polish",
         action="store_true",
-        help="Copy accepted source videos without scale/pad/label re-encoding",
+        help="Copy accepted MP4 sources without scale/pad/label re-encoding",
     )
     return parser
 

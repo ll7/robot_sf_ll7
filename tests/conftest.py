@@ -695,6 +695,10 @@ _FAST_FILES = {
     # Rare-event estimator tests are deterministic analytic contracts for the
     # estimator honesty metadata; keep them in the exact-head fast lane (issue #9303).
     "test_rare_event_sampling.py",
+    # Pedestrian-population tests are deterministic sampler contracts for the
+    # spawn-capture owners; keep them in the exact-head fast lane (issue #9312).
+    "test_ped_population.py",
+    "test_spawn_sampler_capture.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",
     "test_zenodo_publisher.py",

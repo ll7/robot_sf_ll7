@@ -1805,6 +1805,7 @@ class _EpisodeStepLoopResult:
     view_integrity: dict[str, Any] | None
     planner_runtime_snapshot: dict[str, Any] | None
     obstacle_force_law_metadata: dict[str, Any] | None
+    sampler_capture: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -1860,6 +1861,7 @@ class _StepLoopState:
     planner_runtime_snapshot: dict[str, Any] | None = None
     simulator_obstacle_force_law_metadata: dict[str, Any] | None = None
     planner_obstacle_force_law_metadata: dict[str, Any] | None = None
+    sampler_capture: dict[str, Any] | None = None
 
 
 def _read_obstacle_force_law_metadata(env: Any) -> dict[str, Any] | None:
@@ -1873,6 +1875,25 @@ def _read_obstacle_force_law_metadata(env: Any) -> dict[str, Any] | None:
     if not callable(metadata_fn):
         return None
     payload = metadata_fn()
+    return dict(payload) if isinstance(payload, Mapping) else None
+
+
+def _read_sampler_capture(env: Any) -> dict[str, Any] | None:
+    """Read the opt-in spawn-sampler capture mapping from the active simulator.
+
+    Returns:
+        JSON-safe capture mapping, or ``None`` when capture is disabled or
+        the simulator does not expose a well-formed record.
+    """
+    simulator = getattr(env, "simulator", None)
+    capture = getattr(simulator, "sampler_capture", None)
+    to_mapping = getattr(capture, "to_mapping", None)
+    if not callable(to_mapping):
+        return None
+    try:
+        payload = to_mapping()
+    except (AttributeError, TypeError, ValueError):
+        return None
     return dict(payload) if isinstance(payload, Mapping) else None
 
 
@@ -2114,6 +2135,7 @@ def _init_step_loop_state(
     state.initial_ped_headings = initial_ped_headings
     state.trace_actor_ids = trace_actor_ids
     state.initial_goal_distance = initial_goal_distance
+    state.sampler_capture = _read_sampler_capture(env)
     return state
 
 
@@ -3175,6 +3197,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
             planner_metadata=state.planner_obstacle_force_law_metadata,
             planner_runtime_snapshot=state.planner_runtime_snapshot,
         ),
+        sampler_capture=state.sampler_capture,
     )
 
 
@@ -3677,6 +3700,65 @@ def _reset_pedestrian_frames(
     return pedestrians, finite_clearances
 
 
+def _reset_spawn_edge(
+    sampler_capture: dict[str, Any] | None, scenario_echo: dict[str, Any]
+) -> dict[str, Any]:
+    """Return the reset spawn-sampler edge, available only with a capture record."""
+    if not isinstance(sampler_capture, dict):
+        return {
+            "status": "unavailable",
+            "reason": "spawn_sampler_decision_not_retained",
+            "owner": _RESET_SPAWN_OWNER,
+            "scenario_echo": scenario_echo,
+        }
+    try:
+        counters = {
+            key: int(sampler_capture.get(key, 0))
+            for key in (
+                "route_anchor_attempts",
+                "route_anchor_failures",
+                "obstacle_rejections",
+                "separation_rejections",
+                "accepted_samples",
+            )
+        }
+    except (TypeError, ValueError):
+        return {
+            "status": "unavailable",
+            "reason": "spawn_sampler_decision_not_retained",
+            "owner": _RESET_SPAWN_OWNER,
+            "scenario_echo": scenario_echo,
+        }
+    return {
+        "status": "available",
+        "owner": _RESET_SPAWN_OWNER,
+        **counters,
+        "scenario_echo": scenario_echo,
+    }
+
+
+def _reset_routes_edge(sampler_capture: dict[str, Any] | None) -> dict[str, Any]:
+    """Return the reset assigned-routes edge, available only with a capture record."""
+    if not isinstance(sampler_capture, dict):
+        return {
+            "status": "unavailable",
+            "reason": "route_objects_not_retained_per_episode",
+            "owner": _RESET_ROUTES_OWNER,
+        }
+    assigned = sampler_capture.get("assigned_routes")
+    if not isinstance(assigned, list) or not all(isinstance(row, dict) for row in assigned):
+        return {
+            "status": "unavailable",
+            "reason": "route_objects_not_retained_per_episode",
+            "owner": _RESET_ROUTES_OWNER,
+        }
+    return {
+        "status": "available",
+        "owner": _RESET_ROUTES_OWNER,
+        "assigned_routes": assigned,
+    }
+
+
 def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep provenance auditable.
     *,
     initial_robot_pos: np.ndarray,
@@ -3689,15 +3771,16 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
     robot_radius: float,
     ped_radius: float,
     scenario: dict[str, Any] | None,
+    sampler_capture: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the reset-time provenance block for the simulation step trace.
 
     Records the pre-command reset state (poses, velocities, simulator-tracked
     headings) plus the minimum robot-surface to pedestrian-surface clearance and
     whether the reset state already collides. Spawn-sampler decisions and route
-    objects are not retained per episode at runtime, so those edges report
-    explicit ``unavailable`` provenance with their build-time owners instead of
-    reconstructed guesses.
+    objects are exposed only when an opt-in capture record is provided; without
+    one those edges report explicit ``unavailable`` provenance with their
+    build-time owners instead of reconstructed guesses.
 
     Returns:
         JSON-serializable reset provenance block.
@@ -3764,17 +3847,8 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
             if headings_available
             else "unavailable: simulator heading state not exposed"
         ),
-        "spawn": {
-            "status": "unavailable",
-            "reason": "spawn_sampler_decision_not_retained",
-            "owner": _RESET_SPAWN_OWNER,
-            "scenario_echo": scenario_echo,
-        },
-        "routes": {
-            "status": "unavailable",
-            "reason": "route_objects_not_retained_per_episode",
-            "owner": _RESET_ROUTES_OWNER,
-        },
+        "spawn": _reset_spawn_edge(sampler_capture, scenario_echo),
+        "routes": _reset_routes_edge(sampler_capture),
     }
 
 
@@ -3803,6 +3877,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     horizon_val: int,
     termination_reason: str,
     safety_events: list[dict[str, Any]],
+    sampler_capture: dict[str, Any] | None = None,
 ) -> None:
     """Attach planner-decision and simulation-step traces to algorithm metadata."""
     if record_planner_decision_trace:
@@ -3834,6 +3909,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 robot_radius=reset_robot_radius_m,
                 ped_radius=reset_ped_radius_m,
                 scenario=scenario,
+                sampler_capture=sampler_capture,
             ),
         }
         attach_pedestrian_control_trace(
@@ -4263,6 +4339,7 @@ def _finalize_metadata_outputs(
         horizon_val=ctx.horizon_val,
         termination_reason=loop_result.termination_reason,
         safety_events=loop_result.collision_events,
+        sampler_capture=loop_result.sampler_capture,
     )
     tp_summary, sw_summary, cbf_summary = _finalize_safety_summaries(
         algo_meta,

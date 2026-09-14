@@ -404,6 +404,19 @@ def test_build_robot_config_applies_oracle_force_trace_override(tmp_path: Path) 
     assert config.sim_config.oracle_force_trace_enabled is True
 
 
+def test_build_robot_config_applies_sampler_capture_override(tmp_path: Path) -> None:
+    """Scenario YAML can explicitly opt into spawn-sampler capture."""
+    config = build_robot_config_from_scenario(
+        {
+            "name": "sampler-capture-runtime-smoke",
+            "simulation_config": {"sampler_capture_enabled": True},
+        },
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+
+    assert config.sim_config.sampler_capture_enabled is True
+
+
 def test_build_robot_config_rejects_ambiguous_action_latency_overrides(tmp_path: Path) -> None:
     """A scenario cannot choose both step and millisecond delay representations."""
     scenario = {

@@ -383,6 +383,9 @@ _FAST_FILES = {
     # Differential-drive kinematics tests are deterministic unit coverage for
     # the changed robot motion module; keep them in the exact-head fast lane.
     "differential_drive_test.py",
+    # Deterministic spawn-sampler contract for the changed population module
+    # (issue #9312); the fast lane needs it for exact-head changed-line coverage.
+    "test_ped_population.py",
     # Native replay adapter and engine tests are deterministic fixture contracts
     # for the exact-head changed-coverage gate (issue #5442).
     "test_simulator_counterfactual_adapter_issue_5442.py",

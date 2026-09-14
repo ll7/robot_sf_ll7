@@ -526,10 +526,16 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             {
                 "fallback": bool(fallback_count),
                 "fallback_count": fallback_count,
-                "fallback_reason": next(iter(fallback_reasons), None),
-                "fallback_reasons": fallback_reasons,
+                "fallback_triggered": bool(fallback_count),
             }
         )
+        if fallback_count:
+            metadata.update(
+                {
+                    "fallback_reason": next(iter(fallback_reasons), None),
+                    "fallback_reasons": fallback_reasons,
+                }
+            )
         return metadata
 
 

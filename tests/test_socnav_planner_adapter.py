@@ -11,6 +11,7 @@ from pysocialforce.config import (
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
 )
 
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.planner import socnav as _socnav_module
 from robot_sf.planner import socnav_social_force as _social_force_module
 from robot_sf.planner.socnav import (
@@ -1646,6 +1647,9 @@ def test_social_force_obstacle_no_grid_returns_zero():
     robot_pos = np.array([0.0, 0.0])
     got = adapter._compute_obstacle_force(obs, robot_pos, 0.0, np.array([1.0, 0.0]), obs["robot"])
     assert np.array_equal(got, np.zeros(2))
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert metadata["fallback_triggered"] is False
+    assert runtime_fallback_or_degraded_marker({"planner_runtime": metadata}) is None
 
 
 @_sf_available

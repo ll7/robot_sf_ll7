@@ -962,6 +962,36 @@ def test_classified_review_source_preserves_primary_failure(
     assert "review_carrier_kind_invalid" not in normalized["reason_codes"]
 
 
+def test_normalize_kind_bearing_source_still_classifies_direct() -> None:
+    """A raw kind-bearing source must use direct validation, not classified preservation."""
+    normalized = receipt_module._normalize_review_source(
+        {
+            "status": "accepted",
+            "kind": "static_report",
+            "carrier": None,
+            "reason_codes": [],
+            "identity": "independent-reviewer",
+            "head_sha": HEAD_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "evidence_digest": REVIEW_DIGEST,
+        },
+        head_sha=HEAD_SHA,
+        metadata_digest=METADATA_DIGEST,
+    )
+
+    assert normalized["status"] == "accepted"
+    assert normalized["carrier"] == {
+        "identity": "independent-reviewer",
+        "kind": "static_report",
+        "head_sha": HEAD_SHA,
+        "metadata_digest": METADATA_DIGEST,
+        "evidence_digest": REVIEW_DIGEST,
+        "verdict": "accepted",
+    }
+    assert normalized["reason_codes"] == []
+    assert normalized["precedence"] == 2
+
+
 @pytest.mark.parametrize(
     ("status", "reason_codes"),
     [

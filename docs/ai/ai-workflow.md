@@ -324,7 +324,8 @@ benchmark notes, issue notes, and PR text should reinforce the same traceability
 
 ## Mermaid Overview
 
-```mermaid
+<!-- Renders as a Mermaid diagram on GitHub; fenced as text so the strict Sphinx build stays warning-clean. -->
+```text
 flowchart TD
   A[Prompt or idea] --> B{Need routing help?}
   B -->|yes| C[skill-picker or what-context-needed]

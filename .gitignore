@@ -112,3 +112,8 @@ mutants/
 
 # Local linked worktrees
 .worktrees/
+
+# Built GitHub Pages staging output (only site/index.html is a source file).
+site/docs/
+site/docs*/
+site/.nojekyll

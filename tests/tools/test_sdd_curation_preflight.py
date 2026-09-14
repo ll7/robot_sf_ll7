@@ -418,6 +418,48 @@ def test_cli_binds_dataset_backed_promotion_to_license_receipt(
         assert any("license acknowledgment" in blocker for blocker in report["blockers"])
 
 
+def test_cli_rejects_satisfiable_annotation_outside_canonical_staging(
+    tmp_path: Path, capsys
+) -> None:
+    """A parseable annotation outside the validated manifest tree cannot be promoted."""
+    staging_dir = tmp_path / "sdd"
+    canonical = staging_dir / "annotations" / "deathCircle" / "video0" / "annotations.txt"
+    canonical.parent.mkdir(parents=True)
+    _write_sdd_fixture(canonical)
+    outside = tmp_path / "outside" / "annotations.txt"
+    outside.parent.mkdir()
+    _write_sdd_fixture(outside)
+    checksum = manage_external_data._tree_checksum(staging_dir, [canonical])["tree_sha256"]
+    manifest = tmp_path / "sdd_staging_manifest.yaml"
+    _write_sdd_manifest(
+        manifest,
+        staging_dir=staging_dir,
+        acknowledged=True,
+        expected_tree_sha256=checksum,
+    )
+
+    exit_code = sdd_curation_preflight.main(
+        [
+            "--manifest",
+            str(manifest),
+            "--annotation",
+            str(outside),
+            "--min-track-points",
+            "4",
+            "--require-benchmark-ready",
+            "--json",
+        ]
+    )
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 3
+    assert report["benchmark_promotion_allowed"] is False
+    assert report["canonical_annotation_paths"] == [str(canonical.resolve())]
+    assert report["annotation_probe"]["canonical_paths"] == [str(canonical.resolve())]
+    assert report["annotation_probe"]["selection_satisfiable"] is False
+    assert any("canonical manifest-matched" in blocker for blocker in report["blockers"])
+
+
 def test_decision_packet_preserves_proxy_blocker(tmp_path: Path) -> None:
     """Decision packet records proxy-only ceiling, not benchmark readiness."""
     annotations = tmp_path / "annotations.txt"
@@ -995,6 +1037,49 @@ def test_integration_report_closes_only_with_benchmark_ready_smoke(tmp_path: Pat
     assert report["smoke_summary"]["classification"] == sdd_curation_preflight.SMOKE_BENCHMARK_READY
     assert report["remaining_blockers"] == []
     assert all(row["status"] == "met" for row in report["acceptance_criteria"])
+
+
+def test_integration_report_requires_ready_staging_preflight_receipt(tmp_path: Path) -> None:
+    """Dataset-backed state alone cannot satisfy the canonical #1497 staging criterion."""
+    annotations = tmp_path / "annotations.txt"
+    _write_sdd_fixture(annotations)
+    readiness = sdd_curation_preflight.classify_curation_readiness(
+        {
+            "mode": manage_external_data.SDD_MODE_DATASET_BACKED,
+            "dataset_backed": True,
+            "availability": {"state": "dataset_backed"},
+            "reason": "SDD staged validated.",
+            "staging_dir": str(tmp_path),
+        },
+        sdd_curation_preflight.probe_annotation_file(
+            annotations, label="Pedestrian", min_track_points=4, max_pedestrians=4
+        ),
+        staging_preflight={
+            "ready": False,
+            "license_acknowledgment": {
+                "required": True,
+                "acknowledged": False,
+                "satisfied": False,
+            },
+        },
+    )
+
+    report = sdd_curation_preflight.build_integration_report(readiness)
+
+    assert report["closure_status"] == "blocked_external_input"
+    assert report["next_empirical_action"] == (
+        "stage_or_restore_licensed_sdd_annotations_then_rerun_preflight"
+    )
+    assert report["readiness_summary"]["dataset_backed"] is True
+    assert report["readiness_summary"]["staging_preflight_ready"] is False
+    assert report["readiness_summary"]["staging_ready"] is False
+    criteria = {row["criterion"]: row for row in report["acceptance_criteria"]}
+    assert (
+        criteria[
+            "#1497 staged official/BYO SDD source annotations locally or recorded failure keeps issue blocked."
+        ]["status"]
+        == "blocked"
+    )
 
 
 def test_cli_writes_integration_report_without_raw_outputs(tmp_path: Path, monkeypatch) -> None:

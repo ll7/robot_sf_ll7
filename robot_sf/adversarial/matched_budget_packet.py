@@ -54,7 +54,7 @@ EXPECTED_EVIDENCE_TIER = "preflight_valid"
 CONFIRMATION_THRESHOLD = 3
 
 _REQUIRED_INPUTS = set(
-    "parent_manifest scenario_template search_space objective_registry robustness runner certification replay confirmation".split()
+    "parent_manifest scenario_template search_space objective_registry robustness samplers runner benchmark_runner certification replay confirmation".split()
 )
 _FORBIDDEN_FIELDS = set(
     "outcome objective_value observed_value result_rows simulator_output slurm_job_id job_id target_host submitted_at".split()
@@ -129,7 +129,7 @@ _PACKET_ALLOWED_KEYS = {
     "validation",
 }
 _SOURCE_ALLOWED_KEYS = {"base_ref", "base_commit", "hash_algorithm", "inputs"}
-_INPUT_ALLOWED_KEYS = {"path", "sha256"}
+_INPUT_ALLOWED_KEYS = {"path", "sha256", "working_tree_sha256"}
 _EXECUTION_KEYS = "run_campaign run_simulator submit_slurm registered_search admit_evidence".split()
 _BUDGET_KEYS = (
     "budgets run_count search_attempt_slots simulator_call_budget"
@@ -317,9 +317,17 @@ def _input_paths(packet: Mapping[str, Any], root: Path, *, source_commit: str) -
             digest,
             f"immutable source hash {input_id}",
         )
+        working_tree_digest = item.get("working_tree_sha256", digest)
+        _require(
+            isinstance(working_tree_digest, str)
+            and len(working_tree_digest) == 64
+            and working_tree_digest == working_tree_digest.lower()
+            and not set(working_tree_digest) - set("0123456789abcdef"),
+            f"working-tree source hash {input_id} must be SHA-256",
+        )
         _expect(
             hashlib.sha256(path.read_bytes()).hexdigest(),
-            digest,
+            working_tree_digest,
             f"working-tree source hash {input_id}",
         )
         paths[str(input_id)] = path

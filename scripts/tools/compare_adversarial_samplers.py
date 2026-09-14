@@ -26,6 +26,7 @@ from robot_sf.adversarial.config import (
 from robot_sf.adversarial.objectives import constraints_first_outcome_projection
 from robot_sf.adversarial.samplers import build_sampler
 from robot_sf.adversarial.search import run_adversarial_search
+from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.issue_5303_search_promotion_preregistration import (
     DEFAULT_CONTRACT_PATH,
     preflight_issue_5303_contract,
@@ -967,10 +968,20 @@ def _synthetic_evaluator(
         "seed": int(candidate.scenario_seed),
         "status": "success",
         "steps": 1,
+        "dt_s": 0.1,
         "termination_reason": "success",
         "outcome": {"route_complete": True, "collision": False, "timeout": False},
-        "metrics": {"snqi": float(synthetic_snqi), "success": 1.0},
+        "metrics": {
+            "snqi": float(synthetic_snqi),
+            "success": 1.0,
+            "min_clearance": 1.0,
+            "time_to_collision_min": 5.0,
+            "time_to_goal_norm": 0.5,
+            "failure_to_progress": 0.0,
+            "total_collision_count": 0.0,
+        },
     }
+    record["event_ledger"] = build_event_ledger(record)
     episode_path = candidate_dir / "episode_records.jsonl"
     episode_path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
     trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)

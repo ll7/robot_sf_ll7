@@ -2418,6 +2418,9 @@ def run_episode(  # noqa: PLR0913
         outcome,
         provenance=provenance,
     )
+    # Preserve the evaluator's physical timestep in the episode artifact so diagnostic
+    # objectives can bind temporal margins to the actual simulation configuration.
+    record["dt_s"] = float(dt)
 
     telemetry_payload = dict(scenario_params_record)
     if telemetry is not None:

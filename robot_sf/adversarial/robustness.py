@@ -31,22 +31,44 @@ from typing import TYPE_CHECKING, Any
 
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.benchmark.constants import NEAR_MISS_DIST
+from robot_sf.benchmark.event_ledger import (
+    EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
+    reconcile_event_ledger,
+)
 from robot_sf.benchmark.near_miss_ttc import DIAGNOSTIC_TTC_THRESHOLD_S
 
 if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateEvaluation
 
 _ROBUSTNESS_SCHEMA_VERSION = "robustness-report.v1"
+_TIMING_KEYS = ("dt_s", "dt")
+_SCENARIO_TIMING_KEYS = ("run_dt", "dt_s", "dt")
+_NESTED_SCENARIO_TIMING_KEYS = ("time_per_step_in_secs", "dt_s", "dt")
+_TRACE_NAMES = (
+    "paired_effect_native_trace",
+    "analysis_trace",
+    "simulation_step_trace",
+)
+_DURATION_KEYS = (
+    "physical_time_sec",
+    "physical_time_s",
+    "simulation_time_sec",
+    "simulation_time_s",
+    "sim_time_sec",
+    "sim_time_s",
+)
 
 
-def _metric(metrics: dict[str, Any], key: str, default: float = 0.0) -> float:
-    """Read a finite metric scalar with a default."""
-    value = metrics.get(key, default)
+def _metric(metrics: dict[str, Any], key: str) -> float | None:
+    """Read a finite metric scalar, preserving missingness as unavailable."""
+    value = metrics.get(key)
+    if value is None:
+        return None
     try:
         parsed = float(value)
     except (TypeError, ValueError):
-        return default
-    return parsed if math.isfinite(parsed) else default
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _positive_int(value: Any, default: int) -> int:
@@ -58,15 +80,165 @@ def _positive_int(value: Any, default: int) -> int:
     return parsed if parsed > 0 else default
 
 
-def _derived_dt(record: dict[str, Any]) -> float:
-    """Derive a finite positive timestep from optional episode metadata."""
+def _positive_recorded_float(value: Any) -> float | None:
+    """Parse a positive recorded timing value without accepting booleans."""
+    if isinstance(value, bool):
+        return None
     try:
-        wall_time = float(record.get("wall_time_sec"))
-        steps = float(record.get("steps"))
+        parsed = float(value)
     except (TypeError, ValueError):
-        return 0.1
-    dt = wall_time / steps if wall_time > 0.0 and steps > 0.0 else 0.1
-    return dt if math.isfinite(dt) and dt > 0.0 else 0.1
+        return None
+    return parsed if math.isfinite(parsed) and parsed > 0.0 else None
+
+
+def _positive_recorded_int(value: Any) -> int | None:
+    """Parse a strictly positive JSON integer from recorded episode metadata."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value > 0 else None
+
+
+def _nonnegative_recorded_float(value: Any) -> float | None:
+    """Parse a finite non-negative recorded value without accepting booleans."""
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) and parsed >= 0.0 else None
+
+
+def _consistent_timing_value(values: list[float]) -> float | None:
+    """Return one timing value when all recorded sources agree."""
+    if not values:
+        return None
+    first = values[0]
+    return (
+        first
+        if all(math.isclose(value, first, rel_tol=0.0, abs_tol=1.0e-12) for value in values[1:])
+        else None
+    )
+
+
+def _mapping_dt_values(container: Any, keys: tuple[str, ...]) -> tuple[list[float], bool]:
+    """Read positive timestep fields from one mapping."""
+    if not isinstance(container, dict):
+        return [], True
+    values: list[float] = []
+    malformed = False
+    for key in keys:
+        if key not in container:
+            continue
+        parsed = _positive_recorded_float(container[key])
+        if parsed is None:
+            malformed = True
+        else:
+            values.append(parsed)
+    return values, malformed
+
+
+def _declared_dt_candidates(record: dict[str, Any]) -> tuple[list[float], bool]:
+    """Collect declared evaluation timesteps and report malformed declarations."""
+    sources: list[tuple[Any, tuple[str, ...]]] = [(record, _TIMING_KEYS)]
+    if "timing" in record:
+        sources.append((record["timing"], _TIMING_KEYS))
+
+    algorithm_sources, algorithm_malformed = _algorithm_dt_sources(record)
+    sources.extend(algorithm_sources)
+    scenario_sources, scenario_malformed = _scenario_dt_sources(record)
+    sources.extend(scenario_sources)
+
+    candidates: list[float] = []
+    malformed = algorithm_malformed or scenario_malformed
+    for container, keys in sources:
+        values, source_malformed = _mapping_dt_values(container, keys)
+        candidates.extend(values)
+        malformed |= source_malformed
+    return candidates, malformed
+
+
+def _algorithm_dt_sources(record: dict[str, Any]) -> tuple[list[tuple[Any, tuple[str, ...]]], bool]:
+    """Return present trace timing mappings and flag malformed metadata containers."""
+    if "algorithm_metadata" not in record:
+        return [], False
+    algorithm_metadata = record["algorithm_metadata"]
+    if not isinstance(algorithm_metadata, dict):
+        return [], True
+    return [
+        (algorithm_metadata[name], _TIMING_KEYS)
+        for name in _TRACE_NAMES
+        if name in algorithm_metadata
+    ], False
+
+
+def _scenario_dt_sources(record: dict[str, Any]) -> tuple[list[tuple[Any, tuple[str, ...]]], bool]:
+    """Return direct and nested scenario timing mappings without hiding conflicts."""
+    if "scenario_params" not in record:
+        return [], False
+    scenario_params = record["scenario_params"]
+    if not isinstance(scenario_params, dict):
+        return [], True
+
+    sources: list[tuple[Any, tuple[str, ...]]] = []
+    if any(key in scenario_params for key in _SCENARIO_TIMING_KEYS):
+        sources.append((scenario_params, _SCENARIO_TIMING_KEYS))
+    if "simulation_config" in scenario_params:
+        sources.append((scenario_params["simulation_config"], _NESTED_SCENARIO_TIMING_KEYS))
+    return sources, False
+
+
+def _resolve_dt_candidates(candidates: list[float]) -> tuple[float | None, bool]:
+    """Resolve recorded timestep candidates and flag conflicting values."""
+    if not candidates:
+        return None, False
+    recorded_dt = _consistent_timing_value(candidates)
+    return recorded_dt, recorded_dt is None
+
+
+def _derived_duration_candidates(
+    record: dict[str, Any], steps_value: int
+) -> tuple[list[float], bool]:
+    """Derive timestep candidates from physical durations and a valid step count."""
+    candidates: list[float] = []
+    for key in _DURATION_KEYS:
+        if key not in record:
+            continue
+        duration = _positive_recorded_float(record[key])
+        if duration is None:
+            return [], True
+        derived = duration / steps_value
+        if not math.isfinite(derived) or derived <= 0.0:
+            return [], True
+        candidates.append(derived)
+    return candidates, False
+
+
+def _derived_dt_status(record: dict[str, Any]) -> tuple[float | None, bool]:
+    """Derive the evaluation timestep and flag malformed recorded timing."""
+    candidates, malformed = _declared_dt_candidates(record)
+    if malformed:
+        return None, True
+
+    steps_value = None
+    if "steps" in record:
+        steps_value = _positive_recorded_int(record["steps"])
+        if steps_value is None:
+            return None, True
+    if steps_value is not None:
+        derived_candidates, malformed_duration = _derived_duration_candidates(record, steps_value)
+        if malformed_duration:
+            return None, True
+        candidates.extend(derived_candidates)
+    elif any(key in record for key in _DURATION_KEYS):
+        return None, True
+
+    return _resolve_dt_candidates(candidates)
+
+
+def _derived_dt(record: dict[str, Any]) -> float | None:
+    """Derive the evaluation timestep from recorded simulation timing, never wall time."""
+    return _derived_dt_status(record)[0]
 
 
 def _validated_positive_float(value: float, *, name: str) -> float:
@@ -99,7 +271,7 @@ class PropertyRobustness:
     """
 
     property_name: str
-    robustness: float
+    robustness: float | None
     critical_time_s: float | None = None
     violated: bool = False
     detail: str = ""
@@ -128,8 +300,8 @@ class RobustnessReport:
 
     schema_version: str = _ROBUSTNESS_SCHEMA_VERSION
     properties: tuple[PropertyRobustness, ...] = ()
-    overall_robustness: float = 0.0
-    objective_value: float = 0.0
+    overall_robustness: float | None = 0.0
+    objective_value: float | None = 0.0
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serialisable report payload."""
@@ -147,8 +319,16 @@ class RobustnessReport:
         return cls(
             schema_version=payload.get("schema_version", _ROBUSTNESS_SCHEMA_VERSION),
             properties=properties,
-            overall_robustness=float(payload.get("overall_robustness", 0.0)),
-            objective_value=float(payload.get("objective_value", 0.0)),
+            overall_robustness=(
+                float(payload["overall_robustness"])
+                if payload.get("overall_robustness") is not None
+                else None
+            ),
+            objective_value=(
+                float(payload["objective_value"])
+                if payload.get("objective_value") is not None
+                else None
+            ),
         )
 
 
@@ -157,7 +337,9 @@ def _clearance_robustness(
     event_ledger: dict[str, Any],
 ) -> PropertyRobustness:
     """Always maintain clearance: rho = min_clearance - NEAR_MISS_DIST."""
-    min_clearance = _metric(metrics, "min_clearance", NEAR_MISS_DIST)
+    min_clearance = _metric(metrics, "min_clearance")
+    if min_clearance is None:
+        return PropertyRobustness("clearance", None, detail="unavailable: min_clearance")
     rho = min_clearance - NEAR_MISS_DIST
     critical_time = _first_collision_time(event_ledger) if rho < 0 else None
     return PropertyRobustness(
@@ -175,7 +357,9 @@ def _ttc_robustness(
     event_ledger: dict[str, Any],
 ) -> PropertyRobustness:
     """Always maintain TTC > tau while closing: rho = min_ttc - tau."""
-    min_ttc = _metric(metrics, "time_to_collision_min", tau + 1.0)
+    min_ttc = _metric(metrics, "time_to_collision_min")
+    if min_ttc is None:
+        return PropertyRobustness("ttc", None, detail="unavailable: time_to_collision_min")
     rho = min_ttc - tau
     critical_time = _first_collision_time(event_ledger) if rho < 0 else None
     return PropertyRobustness(
@@ -191,7 +375,8 @@ def _goal_robustness(
     metrics: dict[str, Any],
     outcome: dict[str, Any],
     horizon: int,
-    dt: float,
+    dt: float | None,
+    event_ledger: dict[str, Any] | None = None,
 ) -> PropertyRobustness:
     """Eventually reach goal within T: rho = T - T_actual.
 
@@ -200,22 +385,39 @@ def _goal_robustness(
     the horizon. This keeps the signed contract intact: non-completion is a
     negative violation rather than a zero-valued tie with a boundary success.
     """
+    if dt is None:
+        return PropertyRobustness("goal", None, detail="unavailable: evaluation dt")
     t_total = horizon * dt
-    route_complete = bool(outcome.get("route_complete"))
-    time_to_goal_norm = _metric(metrics, "time_to_goal_norm", 1.0)
+    route_complete, malformed_route = _strict_bool_field(outcome, "route_complete")
+    if malformed_route or route_complete is None:
+        return PropertyRobustness("goal", None, detail="unavailable: route_complete")
+    if event_ledger is not None:
+        exact_events = event_ledger.get("exact_events")
+        if isinstance(exact_events, dict):
+            ledger_goal, malformed_ledger_goal = _strict_bool_field(exact_events, "goal_reached")
+            if malformed_ledger_goal or (ledger_goal is not None and ledger_goal != route_complete):
+                return PropertyRobustness(
+                    "goal", None, detail="unavailable: contradictory goal completion evidence"
+                )
+    time_to_goal_norm = _metric(metrics, "time_to_goal_norm")
+    if time_to_goal_norm is not None and not 0.0 <= time_to_goal_norm <= 1.0:
+        return PropertyRobustness("goal", None, detail="unavailable: time_to_goal_norm range")
     if route_complete:
+        if time_to_goal_norm is None:
+            return PropertyRobustness("goal", None, detail="unavailable: time_to_goal_norm")
         t_actual = time_to_goal_norm * t_total
         rho = t_total - t_actual
         critical_time = t_actual
     else:
         rho = -dt
         critical_time = t_total
+    time_to_goal_detail = "unavailable" if time_to_goal_norm is None else f"{time_to_goal_norm:.4f}"
     return PropertyRobustness(
         property_name="goal",
         robustness=rho,
         critical_time_s=critical_time,
         violated=rho < 0,
-        detail=f"route_complete={route_complete}, time_to_goal_norm={time_to_goal_norm:.4f}",
+        detail=f"route_complete={route_complete}, time_to_goal_norm={time_to_goal_detail}",
     )
 
 
@@ -223,7 +425,9 @@ def _progress_robustness(
     metrics: dict[str, Any],
 ) -> PropertyRobustness:
     """Avoid sustained low-progress intervals: rho = -failure_to_progress."""
-    ftp = _metric(metrics, "failure_to_progress", 0.0)
+    ftp = _metric(metrics, "failure_to_progress")
+    if ftp is None:
+        return PropertyRobustness("progress", None, detail="unavailable: failure_to_progress")
     rho = -ftp
     return PropertyRobustness(
         property_name="progress",
@@ -234,16 +438,160 @@ def _progress_robustness(
     )
 
 
+def _strict_bool_field(container: Any, key: str) -> tuple[bool | None, bool]:
+    """Return ``(value, malformed)`` for a present boolean field."""
+    if not isinstance(container, dict) or key not in container:
+        return None, False
+    value = container[key]
+    return (value, False) if isinstance(value, bool) else (None, True)
+
+
+def _collision_count_value(metrics: dict[str, Any]) -> tuple[float | None, bool]:
+    """Read a non-negative integer collision count and report malformed values."""
+    counts: list[float] = []
+    for key in ("collisions", "total_collision_count"):
+        if key not in metrics:
+            continue
+        value = metrics.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None, True
+        try:
+            count = float(value)
+        except (OverflowError, TypeError, ValueError):
+            return None, True
+        if (
+            not math.isfinite(count)
+            or count < 0.0
+            or not math.isclose(count, round(count), rel_tol=0.0, abs_tol=1.0e-12)
+        ):
+            return None, True
+        counts.append(count)
+    if not counts:
+        return None, False
+    return (_consistent_timing_value(counts), False) if len(set(counts)) == 1 else (None, True)
+
+
+def _collision_flag_value(container: Any) -> tuple[bool | None, bool]:
+    """Reconcile legacy and canonical collision flags."""
+    flags = [_strict_bool_field(container, key) for key in ("collision_event", "collision")]
+    if any(malformed for _value, malformed in flags):
+        return None, True
+    values = [value for value, _malformed in flags if value is not None]
+    if values and any(value != values[0] for value in values[1:]):
+        return None, True
+    return (values[0], False) if values else (None, False)
+
+
+def _typed_collision_count(event_ledger: dict[str, Any]) -> tuple[int | None, bool]:
+    """Read positive evidence from a typed collision-event ledger."""
+    if "collision_events" not in event_ledger:
+        return None, False
+    collision_events = event_ledger["collision_events"]
+    if not isinstance(collision_events, list):
+        return None, True
+    for event in collision_events:
+        if (
+            not isinstance(event, dict)
+            or _nonnegative_recorded_float(event.get("collision_time")) is None
+        ):
+            return None, True
+    # An empty list means that no typed event detail was retained; it is not an
+    # authoritative negative collision assertion.
+    return (len(collision_events), False) if collision_events else (None, False)
+
+
+def _collision_ledger_status(event_ledger: Any) -> str | None:
+    """Require a reconciled canonical ledger before using collision evidence."""
+    if not isinstance(event_ledger, dict):
+        return "unavailable: missing canonical collision event ledger"
+    if event_ledger.get("schema_version") != EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
+        return "unavailable: noncanonical collision event ledger"
+    exact_events = event_ledger.get("exact_events")
+    if not isinstance(exact_events, dict):
+        return "unavailable: malformed exact events"
+    _exact_collision, exact_malformed = _strict_bool_field(exact_events, "collision")
+    if exact_malformed or _exact_collision is None:
+        return "unavailable: malformed exact events"
+    if not isinstance(event_ledger.get("collision_events"), list):
+        return "unavailable: malformed collision event ledger"
+    reconciliation = event_ledger.get("reconciliation")
+    if not isinstance(reconciliation, dict) or reconciliation.get("audit_result") != "pass":
+        return "unavailable: unreconciled collision event ledger"
+    violations = reconcile_event_ledger(event_ledger)
+    if violations:
+        return "unavailable: unreconciled collision event ledger"
+    return None
+
+
+def _reconciled_collision_count(
+    collision_count: float | None,
+    outcome_collision: bool | None,
+    ledger_count: int | None,
+    exact_collision: bool | None,
+) -> tuple[float | None, str | None]:
+    """Reconcile collision evidence and return a count or an unavailable reason."""
+    if (
+        collision_count is not None
+        and ledger_count is not None
+        and not math.isclose(collision_count, ledger_count, rel_tol=0.0, abs_tol=1.0e-12)
+    ):
+        return None, "unavailable: collision count/event mismatch"
+
+    evidence = [value > 0.0 for value in (collision_count,) if value is not None]
+    evidence.extend(value for value in (outcome_collision, exact_collision) if value is not None)
+    if ledger_count is not None:
+        evidence.append(ledger_count > 0)
+    if not evidence:
+        return None, "unavailable: collision evidence"
+    if any(value != evidence[0] for value in evidence[1:]):
+        return None, "unavailable: contradictory collision evidence"
+
+    if collision_count is None:
+        collision_count = float(
+            ledger_count if ledger_count is not None else (1 if evidence[0] else 0)
+        )
+    return collision_count, None
+
+
 def _collision_robustness(
     metrics: dict[str, Any],
     outcome: dict[str, Any],
     event_ledger: dict[str, Any],
 ) -> PropertyRobustness:
-    """Never collide: rho = -collision_count."""
-    collision_count = _metric(metrics, "total_collision_count", 0.0)
-    if collision_count == 0.0:
-        collision_flag = bool(outcome.get("collision") or outcome.get("collision_event"))
-        collision_count = 1.0 if collision_flag else 0.0
+    """Never collide: rho = -collision_count, with fail-closed reconciliation."""
+
+    ledger_status = _collision_ledger_status(event_ledger)
+    if ledger_status is not None:
+        return PropertyRobustness("collision", None, detail=ledger_status)
+
+    collision_count, malformed_count = _collision_count_value(metrics)
+    if malformed_count:
+        return PropertyRobustness(
+            "collision", None, detail="unavailable: malformed collision count"
+        )
+
+    outcome_collision, malformed_outcome = _collision_flag_value(outcome)
+    if malformed_outcome:
+        return PropertyRobustness("collision", None, detail="unavailable: malformed collision flag")
+
+    ledger_count, malformed_ledger = _typed_collision_count(event_ledger)
+    if malformed_ledger:
+        return PropertyRobustness(
+            "collision", None, detail="unavailable: malformed collision event ledger"
+        )
+
+    exact_events = event_ledger.get("exact_events")
+    if "exact_events" in event_ledger and not isinstance(exact_events, dict):
+        return PropertyRobustness("collision", None, detail="unavailable: malformed exact events")
+    exact_collision, exact_malformed = _strict_bool_field(exact_events, "collision")
+    if exact_malformed:
+        return PropertyRobustness("collision", None, detail="unavailable: malformed exact events")
+
+    collision_count, unavailable_detail = _reconciled_collision_count(
+        collision_count, outcome_collision, ledger_count, exact_collision
+    )
+    if unavailable_detail is not None:
+        return PropertyRobustness("collision", None, detail=unavailable_detail)
     rho = -collision_count
     critical_time = _first_collision_time(event_ledger) if rho < 0 else None
     return PropertyRobustness(
@@ -287,8 +635,9 @@ def compute_robustness_report(
     tau : float
         TTC safety threshold in seconds.  Defaults to the diagnostic placeholder.
     dt : float | None
-        Timestep in seconds.  If ``None``, derived from ``horizon`` and
-        ``timestamps`` or defaults to 0.1.
+        Timestep in seconds. If ``None``, it must be present in recorded
+        simulation timing or the goal property is unavailable. An explicit
+        value must agree with a recorded evaluation timestep when one exists.
 
     Returns
     -------
@@ -303,23 +652,34 @@ def compute_robustness_report(
     )
     horizon = _positive_int(record.get("horizon"), 200)
 
+    recorded_dt, malformed_timing = _derived_dt_status(record)
     if dt is None:
-        dt = _derived_dt(record)
+        dt = recorded_dt
     else:
         dt = _validated_positive_float(dt, name="dt")
+        if malformed_timing:
+            raise ValueError("dt cannot override malformed or conflicting recorded timing")
+        if recorded_dt is not None and not math.isclose(
+            dt, recorded_dt, rel_tol=0.0, abs_tol=1.0e-12
+        ):
+            raise ValueError("dt does not match the recorded evaluation timestep")
     tau = _validated_positive_float(tau, name="tau")
 
     properties = (
         _clearance_robustness(metrics, event_ledger),
         _ttc_robustness(metrics, tau, event_ledger),
-        _goal_robustness(metrics, outcome, horizon, dt),
+        _goal_robustness(metrics, outcome, horizon, dt, event_ledger),
         _progress_robustness(metrics),
         _collision_robustness(metrics, outcome, event_ledger),
     )
 
     robustness_values = [p.robustness for p in properties]
-    overall = min(robustness_values) if robustness_values else 0.0
-    objective = -overall
+    overall = (
+        min(robustness_values)
+        if robustness_values and all(value is not None for value in robustness_values)
+        else None
+    )
+    objective = -overall if overall is not None else None
 
     return RobustnessReport(
         properties=properties,

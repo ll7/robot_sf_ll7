@@ -926,7 +926,9 @@ def _normalize_review_source(value: Any, *, head_sha: str, metadata_digest: str)
     if (
         isinstance(value, Mapping)
         and value.get("status") in EVIDENCE_STATES
-        and isinstance(value.get("carrier"), Mapping)
+        and "carrier" in value
+        and (value.get("carrier") is None or isinstance(value.get("carrier"), Mapping))
+        and isinstance(value.get("reason_codes"), list)
     ):
         return {
             "status": _string(value.get("status")).lower(),

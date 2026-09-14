@@ -688,6 +688,9 @@ _FAST_FILES = {
     # map-runner trace writer; keep them in the exact-head fast lane (issue #9262).
     "test_step_trace_reset_provenance.py",
     "test_wrapped_angle_delta.py",
+    # Rare-event estimator tests are deterministic analytic contracts for the
+    # estimator honesty metadata; keep them in the exact-head fast lane (issue #9303).
+    "test_rare_event_sampling.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",
     "test_zenodo_publisher.py",

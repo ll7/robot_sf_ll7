@@ -513,6 +513,10 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # The search-to-trace eligibility fixtures are deterministic gate and
+    # round-trip coverage for the changed search loop; keep them in the
+    # exact-head fast lane (issue #9304).
+    "test_search_trace_eligibility_issue_9304.py",
     # The issue #8891 packet tests are deterministic diagnostic-only contract
     # checks; keep them in pull-request fast shards so the repaired producer
     # participates in the exact-head changed-coverage gate.

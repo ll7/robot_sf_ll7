@@ -4,6 +4,13 @@ Status: diagnostic, outcome-free, source-bound planning only. The [YAML manifest
 The packet does not run a simulator, sampler, search, replay, SLURM job,
 registered campaign, or result admission. It makes no benchmark, publication,
 empirical-evidence, or scientific-result claim.
+
+Source provenance has two explicit layers. Each `sha256` is immutable historical
+source identity resolved from `source.base_commit`. An optional
+`working_tree_sha256` records the current implementation bytes when a diagnostic
+feature branch intentionally differs before merge; omitting it retains the
+legacy exact working-tree binding. This split does not authorize execution or
+change the frozen planning boundary.
 ## Frozen contract
 
 Inherited #5326/#5304 values are objectives `worst_case_snqi` and

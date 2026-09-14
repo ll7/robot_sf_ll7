@@ -42,6 +42,30 @@ def test_packet_is_source_bound_and_diagnostic_only(packet: dict) -> None:
     assert packet["source"]["base_commit"] == "69580e4837ac96e9f658da92eb19e8b1a3a76950"
 
 
+def test_packet_separates_immutable_and_working_tree_source_hashes(packet: dict) -> None:
+    result = validate_packet(packet, repo_root=ROOT)
+    assert result["status"] == "ok"
+    for input_id in ("robustness", "runner"):
+        source_input = packet["source"]["inputs"][input_id]
+        assert source_input["sha256"] != source_input["working_tree_sha256"]
+
+
+def test_missing_working_tree_refresh_hash_keeps_exact_binding_fail_closed(packet: dict) -> None:
+    del packet["source"]["inputs"]["robustness"]["working_tree_sha256"]
+    _bad(
+        lambda: validate_packet(packet, repo_root=ROOT),
+        "working-tree source hash robustness",
+    )
+
+
+def test_working_tree_refresh_hash_format_is_fail_closed(packet: dict) -> None:
+    packet["source"]["inputs"]["robustness"]["working_tree_sha256"] = "not-a-sha256"
+    _bad(
+        lambda: validate_packet(packet, repo_root=ROOT),
+        "working-tree source hash robustness must be SHA-256",
+    )
+
+
 def test_identity_builder_is_deterministic_and_complete(packet: dict) -> None:
     first = build_expected_identities(packet, repo_root=ROOT)
     assert first == build_expected_identities(packet, repo_root=ROOT)

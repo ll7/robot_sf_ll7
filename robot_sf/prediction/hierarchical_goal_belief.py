@@ -727,6 +727,9 @@ class HierarchicalGoalPosteriorV1:
         Returns:
             The canonical state fields excluding the derived digest.
         """
+        receipt = self.evidence_receipt
+        if receipt is None:
+            raise RuntimeError("validated posterior is missing its evidence receipt")
         return {
             "schema_version": self.schema_version,
             "track_id": self.track_id,
@@ -740,7 +743,7 @@ class HierarchicalGoalPosteriorV1:
             "waypoint_conditionals": [value.to_dict() for value in self.waypoint_conditionals],
             "waypoint_parent_destination": dict(self.waypoint_parent_destination),
             "evidence_source": self.evidence_source,
-            "evidence_receipt": self.evidence_receipt.to_dict(),
+            "evidence_receipt": receipt.to_dict(),
             "innovation": self.innovation,
             "blockers": list(self.blockers),
             "config_hash": self.config_hash,

@@ -524,6 +524,9 @@ _FAST_FILES = {
     # checks; keep them in pull-request fast shards so the repaired producer
     # participates in the exact-head changed-coverage gate.
     "test_issue_8891_temporal_robustness_packet.py",
+    # Temporal-robustness objective and provenance tests are deterministic
+    # metric contracts; keep their changed-line coverage in PR fast shards.
+    "test_adversarial_robustness.py",
     # The bounded answerability packet uses deterministic schema, digest, and
     # provenance fixtures; keep its changed-module coverage in fast shards.
     "test_research_answerability.py",

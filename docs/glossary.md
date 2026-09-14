@@ -36,6 +36,7 @@ converge on it.
 | **Fail-closed** | When a planner/dependency cannot meet the benchmark contract, the run reports an explicit `not available` / `failed` status instead of silently substituting something else and calling it success. |
 | **Erratum** | A published correction to derived release metadata that supersedes (but retains) the original record. The September 2026 S30/H600 erratum is frozen in `configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`. |
 | **S30/H600** | The current benchmark-data release shape: 30 seeds (S30) on the H600 scenario set — 14 planner arms × 48 scenarios × 30 seeds (20,160 episode rows). |
+| **H500 / H600** | Fixed episode-horizon surfaces: H500 evaluates 500-step episodes and H600 evaluates 600-step episodes; H600 is the horizon used by the current S30 benchmark-data release. |
 | **Concept / version DOI** | A Zenodo concept DOI names the record family across versions; a version DOI names one immutable deposit. Live S30/H600 pair: concept `10.5281/zenodo.22227034`, version `10.5281/zenodo.22265925`. |
 | **Draft vs published release** | A GitHub draft release is mutable pre-publication staging; a published release (with its tag and Zenodo version DOI) is immutable. Drafts are admitted before tag materialization so checks run on the staged content. |
 | **Orchestration SHA** | The commit hash of the orchestration code that derived a release (here `09f6b1beeff71b4ee30deae7cc2504c0c7310729`), pinned so the derivation is reproducible without rerunning the simulation. |
@@ -81,6 +82,6 @@ Robot SF grades every claim by how strong its evidence is. Always label results 
 
 ---
 
-**Last updated**: 2026-09-09
+**Last updated**: 2026-09-14
 **Source of truth for**: acronyms and project-specific terms on human-facing surfaces (see the
 human-facing clarity guidance in [`AGENTS.md`](../AGENTS.md)).

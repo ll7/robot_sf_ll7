@@ -76,9 +76,9 @@ DEFAULT_CONFIG = (
 SCHEMA_VERSION = "robot_sf.issue_6561_pedestrian_speed_activation_preflight.v1"
 DIAGNOSTICS_SCHEMA_VERSION = "robot_sf.issue_6561_pedestrian_speed_activation_diagnostics.v2"
 RESULT_SCHEMA_VERSION = "robot_sf.issue_6561_pedestrian_speed_activation_result.v2"
-EXPECTED_PROTOCOL_SEMANTIC_HASH = "a71c85604222fbe5ee4c794dfda30b641ac3a1c268f146a65c7bf746105031fd"
+EXPECTED_PROTOCOL_SEMANTIC_HASH = "e0212821b5511efb9e2e63ad678a24396709f41b587c903c36dea320cf3c09c7"
 EXPECTED_PREFLIGHT_CONFIG_SEMANTIC_HASH = (
-    "d81347ba77f5272652d69031506a5501decfbf5f236d4ca37ddfc9a1ddcb5406"
+    "660eadeac41b089454ecfa6e97c933b663f1cb721a1d91523f493d38b436595f"
 )
 EXPECTED_PREFLIGHT_MANIFEST_HASH = (
     "4a5ccdfd2502da4b9033bdd0a5a3141c86b0c12ca94e3ee613a7b526d9815fa9"
@@ -534,6 +534,9 @@ def validate_preflight(  # noqa: PLR0915 - linear validation of frozen contract 
             "target_tolerance_m_s",
             "minimum_activation_fraction",
             "maximum_spawn_transient_seconds",
+            "time_to_target_statistic",
+            "time_to_target_unit",
+            "time_to_target_semantics",
             "maximum_realized_desired_speed_mean_m_s",
             "maximum_realized_desired_speed_std_m_s",
             "initial_spawn_speed_expected_m_s",
@@ -571,6 +574,20 @@ def validate_preflight(  # noqa: PLR0915 - linear validation of frozen contract 
         )
         == 2.0,
         "spawn transient threshold drifted from the protocol",
+    )
+    _require(
+        rule.get("time_to_target_statistic")
+        == protocol_rule.get("time_to_target_statistic")
+        == "p95",
+        "time-to-target statistic must be row-level p95",
+    )
+    _require(
+        rule.get("time_to_target_unit") == protocol_rule.get("time_to_target_unit") == "seconds",
+        "time-to-target unit must be seconds",
+    )
+    _require(
+        rule.get("time_to_target_semantics") == protocol_rule.get("time_to_target_semantics"),
+        "time-to-target semantics drifted from the protocol",
     )
     _require(
         _finite_float(

@@ -11,8 +11,8 @@ issue: 6561
 child_issue: 8888
 status: preflight_only
 protocol_config: configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml
-protocol_semantic_hash: a71c85604222fbe5ee4c794dfda30b641ac3a1c268f146a65c7bf746105031fd
-preflight_config_semantic_hash: d81347ba77f5272652d69031506a5501decfbf5f236d4ca37ddfc9a1ddcb5406
+protocol_semantic_hash: e0212821b5511efb9e2e63ad678a24396709f41b587c903c36dea320cf3c09c7
+preflight_config_semantic_hash: 660eadeac41b089454ecfa6e97c933b663f1cb721a1d91523f493d38b436595f
 preflight_manifest_hash: 4a5ccdfd2502da4b9033bdd0a5a3141c86b0c12ca94e3ee613a7b526d9815fa9
 
 claim_boundary: >-
@@ -60,6 +60,12 @@ activation_rule:
   target_tolerance_m_s: 0.2
   minimum_activation_fraction: 0.8
   maximum_spawn_transient_seconds: 2.0
+  time_to_target_statistic: p95
+  time_to_target_unit: seconds
+  time_to_target_semantics: >-
+    Row-level p95 elapsed seconds from first target-tolerance entry across
+    pedestrians, after the declared transient exclusion; this scalar is not a
+    mean, maximum, or per-pedestrian sample.
   maximum_realized_desired_speed_mean_m_s: 3.0
   maximum_realized_desired_speed_std_m_s: 3.0
   initial_spawn_speed_expected_m_s: 0.5

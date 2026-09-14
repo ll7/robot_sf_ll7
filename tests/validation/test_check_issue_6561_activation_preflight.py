@@ -215,6 +215,26 @@ def test_classify_activation_flags_inactive_intervention() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("time_to_target", "expected_classification"),
+    [(2.0, "intervention_activated"), (2.0001, "intervention_inactive")],
+)
+def test_classify_uses_row_level_p95_time_to_target_boundary(
+    time_to_target: float,
+    expected_classification: str,
+) -> None:
+    """The activation threshold is inclusive and applies to the row-level p95 scalar."""
+    payload, protocol = preflight.load_preflight()
+    diagnostics = _diagnostics(payload, protocol, time_to_target=time_to_target)
+
+    result = preflight.classify_activation(payload, protocol, diagnostics)
+
+    assert all(
+        entry["classification"] == expected_classification
+        for entry in result["per_regime"].values()
+    )
+
+
 def test_classify_activation_flags_invalid_transient() -> None:
     """A spawn transient beyond the frozen window must be invalid."""
     payload, protocol = preflight.load_preflight()

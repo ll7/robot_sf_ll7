@@ -19,7 +19,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml"
 SCHEMA_VERSION = "robot_sf.issue_6561_pedestrian_speed_protocol.v1"
-EXPECTED_PROTOCOL_SEMANTIC_HASH = "a71c85604222fbe5ee4c794dfda30b641ac3a1c268f146a65c7bf746105031fd"
+EXPECTED_PROTOCOL_SEMANTIC_HASH = "e0212821b5511efb9e2e63ad678a24396709f41b587c903c36dea320cf3c09c7"
 EXPECTED_PROTOCOL_TOP_LEVEL_KEYS = frozenset(
     {
         "schema_version",

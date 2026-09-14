@@ -247,6 +247,12 @@ activation_contract:
   target_tolerance_m_s: 0.2
   minimum_activation_fraction: 0.8
   maximum_spawn_transient_seconds: 2.0
+  time_to_target_statistic: p95
+  time_to_target_unit: seconds
+  time_to_target_semantics: >-
+    Row-level p95 elapsed seconds from first target-tolerance entry across
+    pedestrians, after the declared transient exclusion; this scalar is not a
+    mean, maximum, or per-pedestrian sample.
   maximum_realized_desired_speed_mean_m_s: 3.0
   maximum_realized_desired_speed_std_m_s: 3.0
   transient_exclusion: >-

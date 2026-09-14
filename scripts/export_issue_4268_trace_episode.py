@@ -32,6 +32,7 @@ from robot_sf.evidence.writers import (
     write_sha256sums,
     write_text,
 )
+from scripts.dev.git_common import resolve_repo_root
 
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_4253_trace_episode_2026-07")
 DEFAULT_SCENARIO_MATRIX = Path("configs/scenarios/classic_interactions.yaml")
@@ -53,14 +54,7 @@ class TraceRows:
 
 def _repo_root() -> Path:
     """Return the current git worktree root."""
-
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return Path(result.stdout.strip())
+    return resolve_repo_root()
 
 
 def _git_commit() -> str:

@@ -13,6 +13,8 @@ import tokenize
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from scripts.dev.git_common import resolve_repo_root
+
 EVIDENCE_PATH_FRAGMENT = "docs/context/evidence"
 EXEMPTION_PATTERN = re.compile(r"#\s*evidence-writer-exempt:\s*(.*)$", re.IGNORECASE)
 WRITE_METHODS = frozenset({"write_bytes", "write_text"})
@@ -707,14 +709,7 @@ def _exemption(source: str) -> tuple[bool, str | None]:
 
 def _repo_root() -> Path:
     """Return the current Git repository root."""
-    return Path(
-        subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    )
+    return resolve_repo_root()
 
 
 def _repo_relative_path(path: Path, repo_root: Path) -> str:

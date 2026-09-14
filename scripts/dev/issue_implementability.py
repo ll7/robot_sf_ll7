@@ -617,7 +617,65 @@ def _missing_execution_state_is_conflict(labels: set[str]) -> bool:
     return not bool(state_qualifier_labels(labels))
 
 
-def _classify_issue(
+def _normalize_open_pr_coverage(
+    raw: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Normalize one canonical open-PR coverage snapshot for classification.
+
+    ``None`` means the caller supplied no coverage evidence, so the coverage
+    gate stays inactive for offline evaluation. An unreadable snapshot stays
+    explicit so the live preflight can fail closed instead of inferring that
+    no open PR covers the issue.
+    """
+    if raw is None:
+        return None
+    covering = raw.get("covering_prs")
+    numbers: list[int] = []
+    if isinstance(covering, (list, tuple, set, frozenset)):
+        for value in covering:
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int) and value > 0:
+                numbers.append(value)
+            elif isinstance(value, str) and value.isdigit() and int(value) > 0:
+                numbers.append(int(value))
+    return {
+        "ok": raw.get("ok") is True,
+        "covering_prs": sorted(set(numbers)),
+        "truncated": raw.get("truncated") is True,
+        "source": raw.get("source"),
+        "error": raw.get("error"),
+    }
+
+
+def _coverage_rule(
+    open_pr_coverage: Mapping[str, Any] | None,
+) -> tuple[bool, str, str, str] | None:
+    """Return the open-PR coverage gate rule for the live classification order."""
+    if open_pr_coverage is None:
+        return None
+    if open_pr_coverage.get("ok") is not True:
+        return (
+            True,
+            "error",
+            "open PR coverage state is unavailable: "
+            + str(open_pr_coverage.get("error") or "unknown error"),
+            "coverage_unavailable",
+        )
+    covering_prs = open_pr_coverage.get("covering_prs") or []
+    if not covering_prs:
+        return None
+    numbers = ", ".join(f"#{number}" for number in covering_prs)
+    return (
+        True,
+        "covering_pr_open",
+        f"open PR(s) {numbers} already reference this issue; refuse a duplicate "
+        "implementation claim",
+        "covering_pr_open",
+    )
+
+
+def _classify_issue(  # noqa: PLR0913 - explicit gate inputs keep precedence auditable.
     normalized: dict[str, Any],
     claim: dict[str, Any],
     contract: dict[str, Any],
@@ -627,8 +685,16 @@ def _classify_issue(
     repository: str,
     route_preflight: Mapping[str, Any] | None,
     now: dt.datetime | None,
+    open_pr_coverage: Mapping[str, Any] | None,
 ) -> tuple[str, list[str], str]:
-    """Classify one normalized issue using the documented precedence order."""
+    """Classify one normalized issue using the documented precedence order.
+
+    Live open-PR coverage outranks label-derived classifications: an open PR
+    that references the issue is ownership-grade evidence of active work, while
+    a work-state label is only a proxy. Closed state, claim availability, claim
+    ownership, and assignee facts still take precedence, and an unreadable
+    coverage snapshot fails closed as an ``error``.
+    """
     execution_status = {
         "status": "not_required",
         "reason": "single-repository local execution",
@@ -690,6 +756,7 @@ def _classify_issue(
     blocking_present = sorted(
         label for label in labels if label in BLOCKING_LABELS or label.startswith("blocked:")
     )
+    coverage_rule = _coverage_rule(open_pr_coverage)
     rules = [
         (
             normalized["state"] != "OPEN",
@@ -710,6 +777,7 @@ def _classify_issue(
             "the issue already has an assignee",
             "assigned",
         ),
+        *([coverage_rule] if coverage_rule is not None else []),
         (
             bool(unknown_state_labels(labels)),
             "state_conflict",
@@ -816,8 +884,14 @@ def evaluate_issue(
     repository: str = DEFAULT_REPO,
     route_preflight: Mapping[str, Any] | None = None,
     now: dt.datetime | None = None,
+    open_pr_coverage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return a deterministic, fail-closed issue implementability report."""
+    """Return a deterministic, fail-closed issue implementability report.
+
+    ``open_pr_coverage`` is the canonical open-PR coverage snapshot from the
+    live preflight. Offline callers omit it, which keeps the coverage gate
+    inactive instead of implying that no PR covers the issue.
+    """
     normalized = normalize_issue(issue)
     contract = inspect_contract(normalized["body"])
     execution_contract = inspect_execution_contract(normalized["body"], repository=repository)
@@ -832,6 +906,7 @@ def evaluate_issue(
             "reason": "single-repository local execution",
         }
     labels = set(normalized["labels"])
+    coverage = _normalize_open_pr_coverage(open_pr_coverage)
     classification, reasons, admission_reason = _classify_issue(
         normalized,
         claim,
@@ -841,6 +916,7 @@ def evaluate_issue(
         repository=repository,
         route_preflight=route_preflight,
         now=now,
+        open_pr_coverage=coverage,
     )
 
     report = {
@@ -861,6 +937,7 @@ def evaluate_issue(
         },
         "contract": contract,
         "execution_contract": execution_contract,
+        "open_pr_coverage": coverage,
         "classification": classification,
         "admission_reason": admission_reason,
         "reasons": reasons,
@@ -911,14 +988,19 @@ def live_issue_report(
     route_preflight: Mapping[str, Any] | None = None,
     prospective_ready: bool = False,
 ) -> dict[str, Any]:
-    """Read one live issue and gate claimability on any explicit dependency packet.
+    """Read one live issue and gate claimability on dependency and PR coverage.
 
-    When ``prospective_ready`` is true, evaluate a private copy of the issue as if
-    ``state:ready`` had already been added. This supports the post-create readiness
-    gate without writing a transient label before the complete admission check passes.
+    "Live" means the report consults the canonical atomic-claim state and the
+    canonical open-PR coverage read, so an issue whose implementation PR is
+    already open (even when the PR only references it) is refused before any
+    duplicate claim.  When ``prospective_ready`` is true, evaluate a private
+    copy of the issue as if ``state:ready`` had already been added. This
+    supports the post-create readiness gate without writing a transient label
+    before the complete admission check passes.
     """
     issue = fetch_live_issue(number, repo=repo)
     claim = issue_claim.status_issue(number, remote=remote)
+    open_pr_coverage = issue_claim.open_prs_covering_issue(repo=repo, issue_number=number)
     dependency_evaluation = _resolve_issue_dependency_packet(
         issue, repo=repo, repo_root=repo_root or Path.cwd()
     )
@@ -933,6 +1015,7 @@ def live_issue_report(
         dependency_evaluation=dependency_evaluation,
         repository=repo,
         route_preflight=route_preflight,
+        open_pr_coverage=open_pr_coverage,
     )
 
 

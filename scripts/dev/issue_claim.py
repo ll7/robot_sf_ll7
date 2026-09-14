@@ -26,8 +26,14 @@ CLAIM_PREFIX = "agent-claims"
 ISSUE_RE = re.compile(r"^[1-9][0-9]*$")
 ISSUE_COVERAGE_REFERENCE = re.compile(
     r"(?i)\b(?P<verb>refs?|references?|close(?:s|d)?|fix(?:es|ed)?|"
-    r"resolve(?:s|d)?|implement(?:s|ed)?)\s*:?[ \t]*`?#(?P<issue>\d+)\b`?"
+    r"resolve(?:s|d)?|implement(?:s|ed)?|relat(?:es?|ed|ing)\s+to)\s*:?[ \t]*"
+    r"`?#(?P<issue>\d+)\b`?"
 )
+COVERAGE_NEGATION_PATTERN = re.compile(
+    r"(?i)\b(?:cannot|can'?t|won'?t|doesn'?t|don'?t|didn'?t|isn'?t|not|never|without|"
+    r"no longer|nor)\s*$"
+)
+COVERAGE_NEGATION_WINDOW = 16
 CLAIM_REF_RE = re.compile(r"^refs/heads/agent-claims/issue-(?P<issue>[1-9][0-9]*)$")
 TERMINAL_RELEASE_REASONS = frozenset({"merged", "closed", "abandoned"})
 RECONCILIATION_LIMIT = 100
@@ -311,6 +317,24 @@ def _run_bounded_pr_rest_snapshot(
     )
 
 
+def _specifies_issue_coverage(*texts: str, issue_number: int) -> bool:
+    """Return whether any text explicitly claims coverage of one issue.
+
+    A coverage verb immediately preceded by a negation (for example
+    ``does not close #123``) is an explicitly non-covering reference and must
+    not count as coverage even though the verb matcher fires.
+    """
+    for text in texts:
+        for match in ISSUE_COVERAGE_REFERENCE.finditer(text):
+            if int(match.group("issue")) != issue_number:
+                continue
+            prefix = text[max(0, match.start() - COVERAGE_NEGATION_WINDOW) : match.start()]
+            if COVERAGE_NEGATION_PATTERN.search(prefix.rstrip()):
+                continue
+            return True
+    return False
+
+
 def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
     """Parse one authoritative open-PR response for explicit issue coverage."""
     payload, decode_error = _decode_pr_pages(result, empty_error="open PR response is empty")
@@ -333,10 +357,7 @@ def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dic
                 "error": validated["error"],
             }
         number = validated["number"]
-        text = f"{validated['body']} {validated['title']}"
-        if any(
-            int(match.group("issue")) == target for match in ISSUE_COVERAGE_REFERENCE.finditer(text)
-        ):
+        if _specifies_issue_coverage(validated["body"], validated["title"], issue_number=target):
             covering.add(number)
     return {
         "ok": True,
@@ -365,6 +386,17 @@ def _open_prs_covering_issue_with_fallback(*, repo: str, issue_number: int) -> d
     fallback["source"] = "rest_fallback"
     fallback["fallback_reason"] = (primary.stderr or primary.stdout).strip()
     return fallback
+
+
+def open_prs_covering_issue(*, repo: str, issue_number: int) -> dict[str, Any]:
+    """Return open PRs that explicitly reference one issue.
+
+    This is the canonical coverage read shared by the terminal claim-release
+    guard and the live admission preflight. Reference-only prose such as
+    ``Refs #N`` or ``Relates to #N`` counts as coverage, while an explicitly
+    non-covering statement such as ``does not close #N`` does not.
+    """
+    return _open_prs_covering_issue_with_fallback(repo=repo, issue_number=issue_number)
 
 
 def _parse_claim_snapshot(
@@ -527,10 +559,8 @@ def _all_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict
                 "truncated": False,
                 "error": validated["error"],
             }
-        text = f"{validated['body']} {validated['title']}"
-        if not any(
-            int(match.group("issue")) == issue_number
-            for match in ISSUE_COVERAGE_REFERENCE.finditer(text)
+        if not _specifies_issue_coverage(
+            validated["body"], validated["title"], issue_number=issue_number
         ):
             continue
         if validated["state"] == "OPEN":

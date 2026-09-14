@@ -2895,7 +2895,16 @@ def _active_records(
     worktrees: Iterable[Mapping[str, Any]],
     jobs: Iterable[Mapping[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
-    """Correlate active execution records with one issue number."""
+    """Correlate active execution records with one issue number.
+
+    Reference-only open PRs (for example ``Refs #8449`` or ``Relates to
+    #8449``) already count as active coverage here: ``_issue_ref_numbers``
+    accepts any explicit ``#N``/``issue N`` reference, which is broader than the
+    verb-qualified matcher in the claim/admission path. Live admission now
+    consumes ``issue_claim.open_prs_covering_issue`` and reports the linked
+    ``covering_pr_open`` classification, so this audit path already covers the
+    reference-only shape from #9208 and has no separate matcher to extend.
+    """
     prs = [
         dict(pr)
         for pr in open_prs

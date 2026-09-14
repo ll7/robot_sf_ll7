@@ -346,6 +346,17 @@ def _claim(*, claimed: bool = False, ok: bool = True) -> dict[str, object]:
     }
 
 
+def _coverage(*, covering: list[int] | None = None, ok: bool = True) -> dict[str, object]:
+    """Return one canonical open-PR coverage snapshot fixture."""
+    return {
+        "ok": ok,
+        "covering_prs": covering or [],
+        "truncated": False,
+        "source": "graphql",
+        "error": None if ok else "open PR snapshot failed",
+    }
+
+
 def test_complete_ready_issue_is_admitted() -> None:
     report = evaluate_issue(_issue(), _claim())
 
@@ -689,6 +700,10 @@ def test_live_issue_report_applies_explicit_dependency_packet_gate(tmp_path: Pat
         patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=issue),
         patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
         patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(),
+        ),
+        patch(
             "scripts.dev.issue_implementability.issue_dependency_packet.resolve_packet",
             return_value=dependency_evaluation,
         ) as resolve_packet,
@@ -714,6 +729,10 @@ def test_live_issue_report_can_evaluate_prospective_ready_without_mutating_issue
     with (
         patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=issue),
         patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(),
+        ),
     ):
         report = live_issue_report(
             7611,
@@ -734,6 +753,10 @@ def test_live_issue_report_does_not_override_existing_state_with_prospective_rea
     with (
         patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=issue),
         patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(),
+        ),
     ):
         report = live_issue_report(
             7611,
@@ -745,6 +768,62 @@ def test_live_issue_report_does_not_override_existing_state_with_prospective_rea
     assert report["classification"] == "state_conflict"
     assert report["admission_reason"] == "state_label_conflict"
     assert issue["labels"] == ["state:blocked"]
+
+
+def test_live_issue_report_blocks_reference_only_open_pr_coverage() -> None:
+    """An open PR that only references the issue refuses a duplicate claim (#9208)."""
+    with (
+        patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=_issue()),
+        patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(covering=[8450]),
+        ),
+    ):
+        report = live_issue_report(7611, repo=REPOSITORY, remote="origin")
+
+    assert report["classification"] == "covering_pr_open"
+    assert report["admission_reason"] == "covering_pr_open"
+    assert report["ready"] is False
+    assert report["write_allowed"] is False
+    assert "#8450" in " ".join(report["reasons"])
+    assert report["open_pr_coverage"]["covering_prs"] == [8450]
+
+
+def test_live_issue_report_ignores_closed_covering_pr() -> None:
+    """Closed coverage is not an open covering PR and keeps the issue admissible."""
+    with (
+        patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=_issue()),
+        patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(covering=[]),
+        ),
+    ):
+        report = live_issue_report(7611, repo=REPOSITORY, remote="origin")
+
+    assert report["classification"] == "ready"
+    assert report["ready"] is True
+    assert report["write_allowed"] is True
+    assert report["open_pr_coverage"]["covering_prs"] == []
+
+
+def test_live_issue_report_fails_closed_when_coverage_snapshot_is_unavailable() -> None:
+    """An unreadable open-PR snapshot must not silently admit a possibly covered issue."""
+    with (
+        patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=_issue()),
+        patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_claim.open_prs_covering_issue",
+            return_value=_coverage(ok=False),
+        ),
+    ):
+        report = live_issue_report(7611, repo=REPOSITORY, remote="origin")
+
+    assert report["classification"] == "error"
+    assert report["admission_reason"] == "coverage_unavailable"
+    assert report["ready"] is False
+    assert report["write_allowed"] is False
 
 
 def test_decision_heading_is_ignored_after_ruling() -> None:

@@ -528,6 +528,7 @@ def _admission_reason(admission: dict[str, Any]) -> str:
         "parent": "parent_not_leaf",
         "blocked": "blocked",
         "review": "covering_pr_open",
+        "covering_pr_open": "covering_pr_open",
         "needs_ready_label": "needs_ready_label",
         "needs_spec": "needs_spec",
         "needs_dependency": "dependency_missing",

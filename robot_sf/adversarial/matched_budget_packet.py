@@ -1058,7 +1058,7 @@ def validate_call_ledger(
         len(slots) <= budget["search_attempt_slots"],
         "search-slot budget exceeded",
     )
-    for run_id in search_slots_by_run:
+    for run_id in search_slots_by_run.keys() | simulator_invocations_by_run.keys():
         search_limit, simulator_limit = run_budget_limits[run_id]
         _require(
             search_slots_by_run[run_id] <= search_limit,

@@ -304,6 +304,17 @@ def test_ledger_rejects_per_run_budget_overruns(packet: dict) -> None:
         "per-run simulator call budget",
     )
 
+    replay_only_limits = dict(run_budget_limits)
+    replay_only_limits[run["run_id"]] = (0, 1)
+    _bad(
+        lambda: validate_call_ledger(
+            packet,
+            replay_rows[:2],
+            run_budget_limits=replay_only_limits,
+        ),
+        "per-run simulator call budget",
+    )
+
 
 def _result_row(packet: dict, identities: dict) -> dict:
     run = next(item for item in identities["runs"] if item["objective_id"] == "temporal_robustness")

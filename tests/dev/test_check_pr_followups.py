@@ -72,6 +72,7 @@ def standalone_checkout(tmp_path: Path) -> Path:
     for name in (
         "check_pr_followups.py",
         "pr_contract_v2.py",
+        "lane_markers.py",
         "pr_loop_policy.py",
         "pr_metadata.py",
         "route_efficiency_report.py",

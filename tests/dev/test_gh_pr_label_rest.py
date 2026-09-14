@@ -181,10 +181,10 @@ def test_direct_entrypoint_rejects_hostile_checkout_shadowing(
     assert [json.loads(line) for line in log.read_text().splitlines()] == [_LABEL_GET_ARGS]
 
 
-def test_isolated_merge_ready_missing_carrier_dependency_prevents_post(
+def test_isolated_merge_ready_missing_body_prevents_post(
     tmp_path: Path, offline_cli: tuple[dict[str, str], Path]
 ) -> None:
-    """A real no-site invocation cannot write when the canonical carrier import fails."""
+    """A bodyless PR response fails closed before any carrier-dependent write."""
     env, log = offline_cli
     head, base = "a" * 40, "b" * 40
     read_args = ["api", "repos/ll7/robot_sf_ll7/pulls/5220"]
@@ -214,8 +214,8 @@ def test_isolated_merge_ready_missing_carrier_dependency_prevents_post(
     payload = json.loads(result.stderr)
     assert payload["status"] == "error"
     assert "carrier" in payload["error"]
-    assert "No module named 'yaml'" in payload["error"]
-    assert [json.loads(line) for line in log.read_text().splitlines()] == [read_args]
+    assert payload["error"] == "PR carrier payload has no body"
+    assert [json.loads(line) for line in log.read_text().splitlines()] == [read_args, read_args]
 
 
 @pytest.mark.parametrize("status", ["ok", "error"])

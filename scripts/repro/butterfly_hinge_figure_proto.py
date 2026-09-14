@@ -1467,7 +1467,9 @@ def _format_contrast_gutter_lines(gutter: dict[str, Any]) -> list[str]:
     # tick labels (a cross-axes overlap figure_qa.lint_figure does not check, caught by
     # visual review of the first contrast render).
     lines = ["A | B", ""]
-    lines.append(f"min centre-to-centre distance\n(focal ped)\nA {clear_a:.2f} m\nB {clear_b:.2f} m")
+    lines.append(
+        f"min centre-to-centre distance\n(focal ped)\nA {clear_a:.2f} m\nB {clear_b:.2f} m"
+    )
     lines.append("")
     lines.append(f"exposure steps\nA {near_a} / B {near_b}")
     lines.append("")

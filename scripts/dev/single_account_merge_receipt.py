@@ -28,6 +28,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -1604,9 +1605,13 @@ def _verification_remedy(receipt: Mapping[str, Any], reasons: list[str]) -> dict
     callers do not have to infer it from reason codes. Every other block stays a
     fail-closed inspection with no blanket remedy.
     """
-    if reasons and set(reasons) <= BASE_DRIFT_REASONS:
+    # ``live_gate_audit_changed`` also covers non-base audit fields (for example
+    # labels or an exact-head review claim).  The current-main comparison is the
+    # decisive evidence that this is the concurrent-base recovery.
+    if "live_current_base_sha_changed" in reasons and set(reasons) <= BASE_DRIFT_REASONS:
         head_sha = _string(receipt.get("head_sha"))
         pr_number = receipt.get("pr_number")
+        repository = shlex.quote(_string(receipt.get("repository")))
         receipt_path = f"/tmp/merge-receipt-{pr_number or 'pr'}.json"
         applied_path = f"/tmp/merge-receipt-applied-{pr_number or 'pr'}.json"
         return {
@@ -1620,10 +1625,10 @@ def _verification_remedy(receipt: Mapping[str, Any], reasons: list[str]) -> dict
             "head_sha": head_sha,
             "commands": [
                 "uv run python scripts/dev/single_account_merge_receipt.py "
-                f"--pr {pr_number} --repo <owner/repo> --expected-head {head_sha} "
+                f"--pr {pr_number} --repo {repository} --expected-head {head_sha} "
                 f"--mode report-only --output {receipt_path}",
                 "uv run python scripts/dev/single_account_merge_receipt.py "
-                f"--pr {pr_number} --repo <owner/repo> --expected-head {head_sha} "
+                f"--pr {pr_number} --repo {repository} --expected-head {head_sha} "
                 f"--mode apply --receipt-file {receipt_path} --output {applied_path}",
             ],
         }

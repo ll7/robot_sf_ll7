@@ -10,12 +10,15 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
-
-from robot_sf.benchmark.aggregate import flatten_metrics
+from typing import Any, Literal
 
 METRIC_LAYER_SCHEMA_VERSION = "metric-layers.v1"
 MISSING_METRIC_REASON = "metric_not_present_in_episode_records"
+METRIC_BINDING_OWNER = "robot_sf.benchmark.metric_layers.CANONICAL_METRICS"
+
+MetricBindingStatus = Literal["available", "unsupported"]
+MetricMetadataStatus = Literal["available", "unavailable"]
+MetricDirection = Literal["higher_is_better", "lower_is_better"]
 
 LAYER_ORDER = (
     "safety_gate",
@@ -48,6 +51,33 @@ class MetricDefinition:
     description: str
     unavailable_reason_if_missing: str = MISSING_METRIC_REASON
     source_kind: str = "episode_metric"
+
+
+class MetricBindingError(ValueError):
+    """Raised when a stable metric binding cannot be resolved safely."""
+
+    def __init__(self, reason: str, metric_id: str) -> None:
+        """Store a stable machine-readable reason and metric identity."""
+        self.reason = reason
+        self.metric_id = metric_id
+        super().__init__(f"{reason}: {metric_id}")
+
+
+@dataclass(frozen=True, slots=True)
+class MetricSourceBinding:
+    """Canonical source binding and existing metadata for one stable metric ID."""
+
+    metric_id: str
+    source_field_paths: tuple[str, ...]
+    owner: str
+    status: MetricBindingStatus
+    source_kind: str
+    reduction: str
+    higher_is_better: bool | None
+    direction: MetricDirection | None
+    direction_status: MetricMetadataStatus
+    unit: str | None
+    unit_status: MetricMetadataStatus
 
 
 CANONICAL_METRIC_LAYERS: tuple[MetricLayerDefinition, ...] = (
@@ -314,6 +344,57 @@ CANONICAL_METRICS: dict[str, MetricDefinition] = dict(
 )
 
 
+def resolve_metric_source_binding(
+    metric_id: str,
+    *,
+    expected: MetricSourceBinding | None = None,
+) -> MetricSourceBinding:
+    """Resolve one stable metric ID to its canonical episode-field binding.
+
+    Display labels and unregistered aggregate column names are deliberately not aliases. Passing
+    ``expected`` turns the resolver into a fail-closed drift check for a previously recorded
+    binding.
+
+    Returns:
+        Current canonical binding, including explicit unavailable unit/direction metadata.
+    """
+    definition = CANONICAL_METRICS.get(metric_id)
+    if definition is None:
+        raise MetricBindingError("unknown_metric_id", metric_id)
+    if definition.name != metric_id:
+        raise MetricBindingError("conflicting_metric_identity", metric_id)
+
+    source_paths = definition.source_keys
+    if any(not isinstance(path, str) or not path for path in source_paths) or len(
+        set(source_paths)
+    ) != len(source_paths):
+        raise MetricBindingError("conflicting_source_binding", metric_id)
+
+    if definition.higher_is_better is None:
+        direction: MetricDirection | None = None
+        direction_status: MetricMetadataStatus = "unavailable"
+    else:
+        direction = "higher_is_better" if definition.higher_is_better else "lower_is_better"
+        direction_status = "available"
+
+    binding = MetricSourceBinding(
+        metric_id=metric_id,
+        source_field_paths=source_paths,
+        owner=METRIC_BINDING_OWNER,
+        status="available" if source_paths else "unsupported",
+        source_kind=definition.source_kind,
+        reduction=definition.reduction,
+        higher_is_better=definition.higher_is_better,
+        direction=direction,
+        direction_status=direction_status,
+        unit=None,
+        unit_status="unavailable",
+    )
+    if expected is not None and binding != expected:
+        raise MetricBindingError("metric_binding_drift", metric_id)
+    return binding
+
+
 def get_nested(record: Mapping[str, Any], path: str) -> Any:
     """Resolve a dotted path from a mapping.
 
@@ -332,6 +413,10 @@ def get_nested(record: Mapping[str, Any], path: str) -> Any:
 
 def _episode_view(record: Mapping[str, Any]) -> dict[str, Any]:
     """Return flattened metric and selected top-level aliases for one episode."""
+
+    # Keep aggregate -> metric-layer imports cycle-free. The aggregate module imports the binding
+    # type at runtime so public provenance annotations remain introspectable.
+    from robot_sf.benchmark.aggregate import flatten_metrics  # noqa: PLC0415
 
     record_dict = dict(record)
     flattened = flatten_metrics(record_dict)
@@ -495,6 +580,23 @@ def _resolve_metric_value(
     return None, None
 
 
+def resolve_canonical_metric_value(
+    metric_id: str,
+    record: Mapping[str, Any],
+) -> tuple[float | None, str | None]:
+    """Resolve one stable metric ID through the canonical metric-layer implementation.
+
+    Returns:
+        ``(value, selected_source_key)`` for the episode, or ``(None, None)`` when the canonical
+        metric is unavailable for that row.
+    """
+    binding = resolve_metric_source_binding(metric_id)
+    if binding.status != "available":
+        raise MetricBindingError("unsupported_metric_source", metric_id)
+    definition = CANONICAL_METRICS[metric_id]
+    return _resolve_metric_value(definition, _episode_view(record))
+
+
 def _reduce(values: Sequence[float], reduction: str) -> float | None:
     """Reduce available episode values according to the metric contract.
 
@@ -641,10 +743,18 @@ __all__ = [
     "CANONICAL_METRICS",
     "CANONICAL_METRIC_LAYERS",
     "LAYER_ORDER",
+    "METRIC_BINDING_OWNER",
     "METRIC_LAYER_SCHEMA_VERSION",
     "MISSING_METRIC_REASON",
+    "MetricBindingError",
+    "MetricBindingStatus",
     "MetricDefinition",
+    "MetricDirection",
     "MetricLayerDefinition",
+    "MetricMetadataStatus",
+    "MetricSourceBinding",
     "build_metric_layer_summary",
     "get_nested",
+    "resolve_canonical_metric_value",
+    "resolve_metric_source_binding",
 ]

@@ -219,7 +219,9 @@ Record at start:
   need manual review.
 - Coordination: implementation selection must use the canonical `goal_issue_admission.py`
   check-then-claim protocol before branching so concurrent runs on different PCs do not implement
-  the same issue.
+  the same issue. Snapshots go stale within minutes at peak hours, so re-run single-issue admission
+  check-only immediately before the write-mode claim with no intervening reads; treat "ready in
+  snapshot" as stale-by-default when the fleet is active.
 
 Do not ask for extra confirmation after this preflight.
 

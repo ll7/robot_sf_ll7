@@ -23,6 +23,7 @@ from robot_sf.adversarial.robustness import (
     write_robustness_report,
 )
 from robot_sf.benchmark.constants import NEAR_MISS_DIST
+from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.near_miss_ttc import DIAGNOSTIC_TTC_THRESHOLD_S
 
 if TYPE_CHECKING:
@@ -62,9 +63,6 @@ def _make_episode_record(  # noqa: PLR0913
             "collision_event": collision_event,
             "route_complete": route_complete,
         },
-        "event_ledger": {
-            "collision_events": collision_events or [],
-        },
     }
     if wall_time_sec is not None:
         record["wall_time_sec"] = wall_time_sec
@@ -74,6 +72,18 @@ def _make_episode_record(  # noqa: PLR0913
         record["physical_time_sec"] = physical_time_sec
     if dt_s is not None:
         record["dt_s"] = dt_s
+    typed_collision_events = [
+        {
+            "collision_partner_type": "pedestrian",
+            "collision_partner_id": "ped-1",
+            "collision_time": event["collision_time"],
+            "relative_speed_at_contact": event.get("relative_speed_at_contact"),
+            "clearance_series_source": "metrics.min_clearance",
+            "exact_event_source": "outcome.collision_event",
+        }
+        for event in collision_events or []
+    ]
+    record["event_ledger"] = build_event_ledger(record, collision_events=typed_collision_events)
     return record
 
 
@@ -231,11 +241,11 @@ class TestCollisionRobustness:
         assert collision.violated
 
     def test_collision_event_flag_used_when_count_missing(self) -> None:
-        record = _make_episode_record(total_collision_count=0.0, collision_event=True)
+        record = _make_episode_record(total_collision_count=1.0, collision_event=True)
         metrics = record["metrics"]
         del metrics["collisions"]
         del metrics["total_collision_count"]
-        del record["event_ledger"]["collision_events"]
+        record["event_ledger"]["collision_events"] = []
         report = compute_robustness_report(record)
         collision = next(p for p in report.properties if p.property_name == "collision")
         assert collision.robustness == pytest.approx(-1.0)
@@ -243,7 +253,7 @@ class TestCollisionRobustness:
 
     def test_canonical_collision_metric_is_used(self) -> None:
         record = _make_episode_record(
-            total_collision_count=0.0,
+            total_collision_count=2.0,
             collision_event=True,
             collisions=2.0,
         )
@@ -345,6 +355,26 @@ class TestCollisionRobustness:
             collision_event=True,
             collision_events=[{"collision_time": 1.0}, {"collision_time": 2.0}],
         )
+        collision = next(
+            p
+            for p in compute_robustness_report(record).properties
+            if p.property_name == "collision"
+        )
+        assert collision.robustness is None
+
+    def test_noncanonical_collision_ledger_is_unavailable(self) -> None:
+        record = _make_episode_record(total_collision_count=1.0, collision_event=True)
+        record["event_ledger"] = {"collision_events": [{"collision_time": 1.0}]}
+        collision = next(
+            p
+            for p in compute_robustness_report(record).properties
+            if p.property_name == "collision"
+        )
+        assert collision.robustness is None
+
+    def test_unreconciled_collision_ledger_is_unavailable(self) -> None:
+        record = _make_episode_record(total_collision_count=1.0, collision_event=True)
+        record["event_ledger"]["reconciliation"]["audit_result"] = "fail"
         collision = next(
             p
             for p in compute_robustness_report(record).properties
@@ -687,7 +717,9 @@ class TestDtDerivation:
         [
             {"dt_s": "bad"},
             {"steps": 0},
+            {"steps": 0.5},
             {"steps": "bad"},
+            {"steps": "200"},
             {"timing": []},
             {"algorithm_metadata": {"analysis_trace": []}},
             {
@@ -718,6 +750,14 @@ class TestDtDerivation:
     def test_missing_route_complete_is_unavailable(self) -> None:
         record = _make_episode_record()
         del record["outcome"]["route_complete"]
+        goal = next(
+            p for p in compute_robustness_report(record).properties if p.property_name == "goal"
+        )
+        assert goal.robustness is None
+
+    @pytest.mark.parametrize("time_to_goal_norm", [-0.1, 1.1])
+    def test_out_of_range_goal_time_is_unavailable(self, time_to_goal_norm: float) -> None:
+        record = _make_episode_record(time_to_goal_norm=time_to_goal_norm)
         goal = next(
             p for p in compute_robustness_report(record).properties if p.property_name == "goal"
         )

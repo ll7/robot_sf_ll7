@@ -5,7 +5,7 @@
   "contract_check_cli_sha256": "112a4c5ff0b8fd19f43ba34bc750344c193a218c8d1903a0eb837359b53f4bd5",
   "contract_path": "configs/adversarial/issue_5303_search_promotion_contract.yaml",
   "contract_schema_version": "issue_5303_search_promotion_contract.v1",
-  "contract_sha256": "e9524c03efde7ac33d1f80004203e5e08993ae5d21da6a115b60cf064a505b34",
+  "contract_sha256": "9f06f1bffc600ef228111b42f58986895be64247fd7abe8112d9186343dc6e93",
   "eligible_count": 8,
   "evidence_boundary": "proposal_preflight_only",
   "fit_family": "classic_cross_trap_medium",

@@ -31,6 +31,10 @@ from typing import TYPE_CHECKING, Any
 
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.benchmark.constants import NEAR_MISS_DIST
+from robot_sf.benchmark.event_ledger import (
+    EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
+    reconcile_event_ledger,
+)
 from robot_sf.benchmark.near_miss_ttc import DIAGNOSTIC_TTC_THRESHOLD_S
 
 if TYPE_CHECKING:
@@ -85,6 +89,13 @@ def _positive_recorded_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if math.isfinite(parsed) and parsed > 0.0 else None
+
+
+def _positive_recorded_int(value: Any) -> int | None:
+    """Parse a strictly positive JSON integer from recorded episode metadata."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value > 0 else None
 
 
 def _nonnegative_recorded_float(value: Any) -> float | None:
@@ -186,7 +197,7 @@ def _resolve_dt_candidates(candidates: list[float]) -> tuple[float | None, bool]
 
 
 def _derived_duration_candidates(
-    record: dict[str, Any], steps_value: float
+    record: dict[str, Any], steps_value: int
 ) -> tuple[list[float], bool]:
     """Derive timestep candidates from physical durations and a valid step count."""
     candidates: list[float] = []
@@ -211,7 +222,7 @@ def _derived_dt_status(record: dict[str, Any]) -> tuple[float | None, bool]:
 
     steps_value = None
     if "steps" in record:
-        steps_value = _positive_recorded_float(record["steps"])
+        steps_value = _positive_recorded_int(record["steps"])
         if steps_value is None:
             return None, True
     if steps_value is not None:
@@ -365,6 +376,7 @@ def _goal_robustness(
     outcome: dict[str, Any],
     horizon: int,
     dt: float | None,
+    event_ledger: dict[str, Any] | None = None,
 ) -> PropertyRobustness:
     """Eventually reach goal within T: rho = T - T_actual.
 
@@ -379,7 +391,17 @@ def _goal_robustness(
     route_complete, malformed_route = _strict_bool_field(outcome, "route_complete")
     if malformed_route or route_complete is None:
         return PropertyRobustness("goal", None, detail="unavailable: route_complete")
+    if event_ledger is not None:
+        exact_events = event_ledger.get("exact_events")
+        if isinstance(exact_events, dict):
+            ledger_goal, malformed_ledger_goal = _strict_bool_field(exact_events, "goal_reached")
+            if malformed_ledger_goal or (ledger_goal is not None and ledger_goal != route_complete):
+                return PropertyRobustness(
+                    "goal", None, detail="unavailable: contradictory goal completion evidence"
+                )
     time_to_goal_norm = _metric(metrics, "time_to_goal_norm")
+    if time_to_goal_norm is not None and not 0.0 <= time_to_goal_norm <= 1.0:
+        return PropertyRobustness("goal", None, detail="unavailable: time_to_goal_norm range")
     if route_complete:
         if time_to_goal_norm is None:
             return PropertyRobustness("goal", None, detail="unavailable: time_to_goal_norm")
@@ -478,6 +500,29 @@ def _typed_collision_count(event_ledger: dict[str, Any]) -> tuple[int | None, bo
     return (len(collision_events), False) if collision_events else (None, False)
 
 
+def _collision_ledger_status(event_ledger: Any) -> str | None:
+    """Require a reconciled canonical ledger before using collision evidence."""
+    if not isinstance(event_ledger, dict):
+        return "unavailable: missing canonical collision event ledger"
+    if event_ledger.get("schema_version") != EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
+        return "unavailable: noncanonical collision event ledger"
+    exact_events = event_ledger.get("exact_events")
+    if not isinstance(exact_events, dict):
+        return "unavailable: malformed exact events"
+    _exact_collision, exact_malformed = _strict_bool_field(exact_events, "collision")
+    if exact_malformed or _exact_collision is None:
+        return "unavailable: malformed exact events"
+    if not isinstance(event_ledger.get("collision_events"), list):
+        return "unavailable: malformed collision event ledger"
+    reconciliation = event_ledger.get("reconciliation")
+    if not isinstance(reconciliation, dict) or reconciliation.get("audit_result") != "pass":
+        return "unavailable: unreconciled collision event ledger"
+    violations = reconcile_event_ledger(event_ledger)
+    if violations:
+        return "unavailable: unreconciled collision event ledger"
+    return None
+
+
 def _reconciled_collision_count(
     collision_count: float | None,
     outcome_collision: bool | None,
@@ -514,6 +559,10 @@ def _collision_robustness(
     event_ledger: dict[str, Any],
 ) -> PropertyRobustness:
     """Never collide: rho = -collision_count, with fail-closed reconciliation."""
+
+    ledger_status = _collision_ledger_status(event_ledger)
+    if ledger_status is not None:
+        return PropertyRobustness("collision", None, detail=ledger_status)
 
     collision_count, malformed_count = _collision_count_value(metrics)
     if malformed_count:
@@ -619,7 +668,7 @@ def compute_robustness_report(
     properties = (
         _clearance_robustness(metrics, event_ledger),
         _ttc_robustness(metrics, tau, event_ledger),
-        _goal_robustness(metrics, outcome, horizon, dt),
+        _goal_robustness(metrics, outcome, horizon, dt, event_ledger),
         _progress_robustness(metrics),
         _collision_robustness(metrics, outcome, event_ledger),
     )

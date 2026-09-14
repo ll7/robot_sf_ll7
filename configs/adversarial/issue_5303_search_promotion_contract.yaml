@@ -109,7 +109,7 @@ input_provenance:
       path: scripts/tools/compare_adversarial_samplers.py
       # Refreshed after the additive synthetic temporal-robustness fixture
       # fields; the frozen #5303 objective and promotion boundary are unchanged.
-      sha256: 5df9d2fb3dd15e241226362d2825b5be600a1a1fc9e1c0300c3ad13feab09cd1
+      sha256: e06e27c9cd2811797e6f96dc9c9e9a2273dcc72a2398f22bcb054deda7b0d0cd
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
       # Refreshed after the additive issue #9304 evidence-trace bridge; the

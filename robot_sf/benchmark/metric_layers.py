@@ -525,6 +525,9 @@ def _resolve_failure_to_progress_rate(
 
     if "outcome.route_complete" not in view:
         return None, None
+    route_complete = _as_flag(view["outcome.route_complete"])
+    if route_complete is None:
+        return None, None
     collision_value, collision_source = _resolve_collision_rate(
         CANONICAL_METRICS["collision_rate"], view
     )
@@ -535,9 +538,6 @@ def _resolve_failure_to_progress_rate(
         if collision_value is not None and collision_value > 0.0:
             return 0.0, collision_source
         return 0.0, timeout_source
-    route_complete = _as_flag(view["outcome.route_complete"])
-    if route_complete is None:
-        return None, None
     return (0.0 if route_complete > 0.0 else 1.0), "outcome.route_complete"
 
 

@@ -7,10 +7,17 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.dev.pr_ready_artifact_contract import reconcile_readiness_artifacts  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -114,6 +121,45 @@ def validation_status(run_dir: Path, metrics: dict[str, Any], validation: dict[s
     return "not_run"
 
 
+def readiness_machine_artifacts(run_dir: Path) -> list[Path]:
+    """Return optional PR-readiness JSON artifacts in a worker bundle."""
+    artifacts: list[Path] = []
+    for path in sorted(run_dir.glob("*.json")):
+        if path.name in {"result.json", "validation.json", "metrics.json"}:
+            continue
+        lowered = path.name.lower()
+        if (
+            "pr_ready" in lowered
+            or "pr-ready" in lowered
+            or "readiness" in lowered
+            or "termination" in lowered
+        ):
+            artifacts.append(path)
+    return artifacts
+
+
+def readiness_consistency_status(run_dir: Path) -> str | None:
+    """Return a non-passing status when optional readiness evidence conflicts."""
+    machine = readiness_machine_artifacts(run_dir)
+    if not machine:
+        return None
+    log_candidates = sorted(
+        path
+        for path in run_dir.iterdir()
+        if path.is_file()
+        and path.suffix.lower() == ".log"
+        and any(token in path.name.lower() for token in ("pr_ready", "pr-ready", "readiness"))
+    )
+    result = reconcile_readiness_artifacts(
+        machine,
+        human_summary=run_dir / "RESULT.md" if (run_dir / "RESULT.md").is_file() else None,
+        command_log=log_candidates[0] if log_candidates else None,
+    )
+    if result["passed"]:
+        return None
+    return f"readiness_{result['status']}"
+
+
 def changed_file_count(run_dir: Path, data: dict[str, Any]) -> int | None:
     """Read changed-file counts from canonical files or result metadata."""
     count = nonblank_count(run_dir / "changed_files.txt")
@@ -146,6 +192,9 @@ def read_run(run_dir: Path) -> RunSummary:
     status = normalized_result_status(data) if result_valid else "malformed_json"
     if not artifact_complete:
         status = "incomplete_artifact" if result_valid else "malformed_json"
+    readiness_status = readiness_consistency_status(run_dir)
+    if readiness_status is not None:
+        status = readiness_status
     return RunSummary(
         run_id=str(metrics.get("run_id") or data.get("run_id") or run_dir.name),
         provider=str(metrics.get("provider") or data.get("provider") or "unknown"),

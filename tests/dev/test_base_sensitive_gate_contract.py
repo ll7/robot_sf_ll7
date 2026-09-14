@@ -254,6 +254,24 @@ class TestChangedFileEnumeration:
         assert payload["pr_check"]["base_sensitivity"] == "unknown"
         assert payload["error"] == "changed-file response exceeded the bounded pagination limit"
 
+    def test_json_mode_has_no_human_prefix_when_gate_is_not_required(self, capsys) -> None:
+        """Machine-readable output remains valid JSON from its first byte."""
+        with patch.object(
+            gate,
+            "check_pr_touches_base_sensitive",
+            return_value={
+                "needs_gate": False,
+                "base_sensitivity": "ordinary",
+                "changed_sensitive_files": [],
+                "changed_files": ["scripts/example.py"],
+            },
+        ):
+            assert gate.main(["--pr", "9236", "--json"]) == 0
+
+        output = capsys.readouterr().out
+        payload = json.loads(output)
+        assert payload == {"gate_required": False, "pr": "9236"}
+
 
 class TestSimulatedStaleBase:
     """Simulate a stale-base merge race scenario and verify gate catches it.

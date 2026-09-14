@@ -11,6 +11,9 @@ source identity resolved from `source.base_commit`. An optional
 feature branch intentionally differs before merge; omitting it retains the
 legacy exact working-tree binding. This split does not authorize execution or
 change the frozen planning boundary.
+The source-bound input roster also pins the sampler implementation, including
+the CMA-ES builder named by the search-family contract.
+
 ## Frozen contract
 
 Inherited #5326/#5304 values are objectives `worst_case_snqi` and

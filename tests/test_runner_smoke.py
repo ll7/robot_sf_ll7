@@ -89,6 +89,7 @@ def test_runner_single_episode_tmp(tmp_path: Path):
     record = run_episode(scenario, seed=123, horizon=15, dt=0.1, record_forces=False)
     # Basic field presence
     assert record["scenario_id"] == scenario["id"]
+    assert record["dt_s"] == 0.1
     assert "metrics" in record
     assert "metric_parameters" in record
     assert "threshold_signature" in record["metric_parameters"]

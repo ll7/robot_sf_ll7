@@ -29,6 +29,8 @@ has its own index so you never fall straight into issue-specific context notes.
   rejection accounting and deterministic risk-feature ordering for adversarial research.
 - 🔎 **[Provenance-first case workbench](./case_workbench.md)** — deterministic case discovery,
   author admission, synchronized review, and reduced publication figures.
+- 📝 **[Scenario review contracts](./scenario_review/README.md)** — versioned review bundles,
+  visualization specs, component envelopes, and experiment recipes.
 - 🛠️ **[Developer Guide](./developer-guide.md)** — architecture, contribution workflow, validation
   gates, CI, and internals.
 

@@ -83,6 +83,7 @@ from robot_sf.ped_npc.residual_adversary import (
     ResidualAdversaryConfig,
     build_default_residual_adversary,
 )
+from robot_sf.ped_npc.spawn_capture import SpawnSamplerCapture
 from robot_sf.prediction.oracle_transition_trace import (
     ORACLE_TRANSITION_TRACE_SCHEMA_VERSION,
     ControllerMutationFlags,
@@ -351,6 +352,7 @@ def _build_pysf_simulation(  # noqa: PLR0913
     response_law_composition: dict[str, float] | None = None,
     response_law_seed: int | None = None,
     force_population_size: int | None = None,
+    capture: SpawnSamplerCapture | None = None,
 ) -> tuple[
     PySFSimulator,
     PedestrianStates,
@@ -404,6 +406,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
             forwarded to :class:`PedSpawnConfig` only when provided.
         response_law_seed: Optional spawn-config response-law seed.
         force_population_size: Optional exact pedestrian count for spawn config.
+        capture: Optional opt-in spawn-decision capture sink filled in place during
+            :func:`populate_simulation`. ``None`` (default) leaves spawning unchanged.
 
     Returns:
         Tuple of ``(pysf_sim, pysf_state, groups, peds_behaviors,
@@ -450,6 +454,7 @@ def _build_pysf_simulation(  # noqa: PLR0913
             (float(robot.config.radius) for robot in robots),
             default=0.0,
         ),
+        capture=capture,
     )
     for behavior in peds_behaviors:
         if isinstance(behavior, SinglePedestrianBehavior):
@@ -556,6 +561,7 @@ class Simulator:
     _last_model_variant_stage: _ForceStageArrays | None = field(
         init=False, repr=False, default=None
     )
+    spawn_capture: SpawnSamplerCapture | None = field(init=False, repr=False, default=None)
 
     def __post_init__(self):
         """Initialize simulator components after dataclass construction.
@@ -576,6 +582,14 @@ class Simulator:
             )
             self.peds_have_obstacle_forces = False
 
+        # Opt-in spawn-decision capture (issue #9312): created before spawning so the
+        # samplers can fill it in place; ``None`` keeps the default spawn path unchanged.
+        self.spawn_capture = (
+            SpawnSamplerCapture()
+            if bool(getattr(self.config, "record_spawn_sampler_capture", False))
+            else None
+        )
+
         (
             self.pysf_sim,
             self.pysf_state,
@@ -593,6 +607,7 @@ class Simulator:
             response_law_composition=self.config.response_law_composition,
             response_law_seed=self.config.response_law_seed,
             force_population_size=self.config.population_size,
+            capture=self.spawn_capture,
         )
 
         # Cache the SocialForce component once instead of scanning forces every step (#6493)
@@ -1804,6 +1819,11 @@ class PedSimulator(Simulator):
         # heterogeneous-population ablation targets the robot-only benchmark
         # simulator; the appended ego-pedestrian row would otherwise misalign the
         # per-pedestrian multiplier vector.
+        self.spawn_capture = (
+            SpawnSamplerCapture()
+            if bool(getattr(self.config, "record_spawn_sampler_capture", False))
+            else None
+        )
         (
             self.pysf_sim,
             self.pysf_state,
@@ -1818,6 +1838,7 @@ class PedSimulator(Simulator):
             peds_have_obstacle_forces=self.peds_have_obstacle_forces,
             add_ego_state=True,
             include_response_law_multipliers=False,
+            capture=self.spawn_capture,
         )
 
         # Cache the SocialForce component once instead of scanning forces every step (#6493)

@@ -49,6 +49,7 @@ from robot_sf.ped_npc.ped_behavior import (
 )
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_zone import prepare_obstacle_polygons, sample_zone
+from robot_sf.ped_npc.spawn_capture import SpawnSamplerCapture
 
 
 def _route_point_at_offset(route: GlobalRoute, offset: float) -> tuple[Vec2D, int]:
@@ -78,14 +79,30 @@ def _sample_points_near_anchor(
     sidewalk_width: float,
     rng_local,
     prepared_obstacles: list[PreparedGeometry],
+    *,
+    capture: SpawnSamplerCapture | None = None,
+    ped_ids: list[int] | None = None,
+    source: str = "route",
 ) -> list[Vec2D]:
     """Sample points near an anchor while avoiding obstacles.
+
+    Args:
+        anchor: Route point the samples are drawn around.
+        num_samples: Number of points to produce.
+        sidewalk_width: Lateral spread bound.
+        rng_local: Local random generator.
+        prepared_obstacles: Prepared obstacle geometry to avoid.
+        capture: Optional :class:`~robot_sf.ped_npc.spawn_capture.SpawnSamplerCapture`.
+        ped_ids: Optional pedestrian ids matching the produced samples, used for capture.
+        source: Capture source label for the produced records.
 
     Returns:
         list[Vec2D]: Sampled points near the anchor.
     """
     samples: list[Vec2D] = []
     attempts = 0
+    attempts_since_accept = 0
+    obstacle_rejections_since_accept = 0
     max_attempts = num_samples * 50
 
     def clip_spread(v) -> np.ndarray | np.floating:
@@ -104,9 +121,22 @@ def _sample_points_near_anchor(
         y_offset = float(clip_spread(rng_local.normal(0.0, std_dev, (1,))[0]))
         pt = (anchor[0] + x_offset, anchor[1] + y_offset)
         attempts += 1
+        attempts_since_accept += 1
         if prepared_obstacles and _point_in_any_obstacle(pt, prepared_obstacles):
+            obstacle_rejections_since_accept += 1
             continue
         samples.append(pt)
+        if capture is not None and ped_ids is not None and len(samples) <= len(ped_ids):
+            ped_id = ped_ids[len(samples) - 1]
+            capture.record_attempts(
+                ped_id,
+                source=source,
+                attempts=attempts_since_accept,
+                obstacle_rejections=obstacle_rejections_since_accept,
+            )
+            capture.record_spawn_point(ped_id, source=source, point=pt)
+            attempts_since_accept = 0
+            obstacle_rejections_since_accept = 0
 
     return samples
 
@@ -192,6 +222,8 @@ def sample_route(
     *,
     offset: float | None = None,
     rng: np.random.Generator | None = None,
+    capture: SpawnSamplerCapture | None = None,
+    ped_ids: list[int] | None = None,
 ) -> tuple[list[Vec2D], int]:
     """
     Samples points along a given route within the bounds of a sidewalk.
@@ -204,6 +236,8 @@ def sample_route(
         obstacle_polygons: Optional prepared or raw obstacle polygons to avoid spawning inside.
         offset: Optional fixed offset along the route length to anchor sampling.
         rng: Optional RNG for deterministic sampling; defaults to NumPy global RNG.
+        capture: Optional spawn-decision capture sink filled in place.
+        ped_ids: Optional pedestrian ids matching the produced samples, used for capture.
 
     Returns:
         A tuple containing:
@@ -243,6 +277,8 @@ def sample_route(
             sidewalk_width,
             rng_local,
             prepared_obstacles,
+            capture=capture,
+            ped_ids=ped_ids,
         )
         if len(samples) == num_samples:
             return samples, sec_id
@@ -390,6 +426,8 @@ class RoutePointsGenerator:
         *,
         rng: np.random.Generator | None = None,
         offset: float | None = None,
+        capture: SpawnSamplerCapture | None = None,
+        ped_ids: list[int] | None = None,
     ) -> tuple[list[Vec2D], int, int]:
         """
         Generates sample points within a randomly selected route.
@@ -398,6 +436,8 @@ class RoutePointsGenerator:
             num_samples: The number of sample points to generate.
             rng: Optional RNG for deterministic sampling; defaults to NumPy global RNG.
             offset: Optional fixed offset along the route length to anchor sampling.
+            capture: Optional spawn-decision capture sink filled in place.
+            ped_ids: Optional pedestrian ids matching the produced samples.
 
         Returns:
             A tuple containing:
@@ -417,14 +457,38 @@ class RoutePointsGenerator:
             obstacle_polygons=self.obstacle_polygons,
             offset=offset,
             rng=rng_local if isinstance(rng_local, np.random.Generator) else None,
+            capture=capture,
+            ped_ids=ped_ids,
         )
         return spawn_pos, route_id, sec_id
+
+
+def _record_route_spawns(
+    capture: SpawnSamplerCapture | None,
+    ped_ids: list[int],
+    route_index: int,
+    route: GlobalRoute,
+    spawn_points: list[Vec2D] | None = None,
+) -> None:
+    """Record per-pedestrian route assignment (and optional spawn points) in the capture."""
+    if capture is None:
+        return
+    for index, ped_id in enumerate(ped_ids):
+        capture.record_route_assignment(
+            ped_id,
+            source="route",
+            route_index=int(route_index),
+            waypoints=route.sections,
+        )
+        if spawn_points is not None and index < len(spawn_points):
+            capture.record_spawn_point(ped_id, source="route", point=spawn_points[index])
 
 
 def populate_ped_routes(  # noqa: C901,PLR0915
     config: PedSpawnConfig,
     routes: list[GlobalRoute],
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
+    capture: SpawnSamplerCapture | None = None,
 ) -> tuple[np.ndarray, list[PedGrouping], dict[int, GlobalRoute], list[int]]:
     """
     Populate routes with pedestrian groups according to the configuration.
@@ -433,6 +497,7 @@ def populate_ped_routes(  # noqa: C901,PLR0915
         config: A `PedSpawnConfig` object containing pedestrian spawn specifications.
         routes: A list of `GlobalRoute` objects representing various pathways.
         obstacle_polygons: Optional obstacle polygons used to avoid spawning inside obstacles.
+        capture: Optional spawn-decision capture sink filled in place.
 
     Returns:
         A tuple consisting of:
@@ -508,10 +573,13 @@ def populate_ped_routes(  # noqa: C901,PLR0915
                     obstacle_polygons=obstacle_polygons,
                     offset=base_offset,
                     rng=rng,
+                    capture=capture,
+                    ped_ids=ped_ids,
                 )
                 group_goal = route.sections[sec_id][1]
                 initial_sections.append(sec_id)
                 route_assignments[len(groups) - 1] = route
+                _record_route_spawns(capture, ped_ids, route_id, route)
 
                 centroid = np.mean(spawn_points, axis=0)
                 rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
@@ -533,13 +601,18 @@ def populate_ped_routes(  # noqa: C901,PLR0915
 
             # spawn all group members along a uniformly sampled route with respect to the route's length
             # Generate spawn points for current group, route ID, and section ID
-            spawn_points, route_id, sec_id = proportional_spawn_gen.generate(num_peds_in_group)
+            spawn_points, route_id, sec_id = proportional_spawn_gen.generate(
+                num_peds_in_group,
+                capture=capture,
+                ped_ids=ped_ids,
+            )
             # Determine group's goal point from the selected route and section
             group_goal = routes[route_id].sections[sec_id][1]
             # Record initial section ID for this group
             initial_sections.append(sec_id)
             # Assign current route to the latest group
             route_assignments[len(groups) - 1] = routes[route_id]
+            _record_route_spawns(capture, ped_ids, route_id, routes[route_id], spawn_points)
 
             centroid = np.mean(spawn_points, axis=0)
             rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
@@ -571,6 +644,7 @@ def populate_crowded_zones(
     config: PedSpawnConfig,
     crowded_zones: list[Zone],
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
+    capture: SpawnSamplerCapture | None = None,
 ) -> tuple[PedState, list[PedGrouping], ZoneAssignments]:
     """Spawn pedestrian groups within crowded zones (open areas).
 
@@ -584,6 +658,7 @@ def populate_crowded_zones(
         crowded_zones: List of Zone geometries where pedestrians spawn.
         obstacle_polygons: Optional obstacle geometries to avoid during spawning.
             Can be raw coordinate lists or Shapely PreparedGeometry objects.
+        capture: Optional spawn-decision capture sink filled in place.
 
     Returns:
         Tuple of (pedestrian_states, groups, zone_assignments):
@@ -623,6 +698,10 @@ def populate_crowded_zones(
         ped_states[ped_ids, 4:6] = group_goal
         for pid in ped_ids:
             zone_assignments[pid] = zone_id
+        if capture is not None:
+            for pid, spawn_point in zip(ped_ids, spawn_points, strict=False):
+                capture.record_zone_assignment(pid, zone_id=int(zone_id))
+                capture.record_spawn_point(pid, source="crowded_zone", point=spawn_point)
 
         num_unassigned_peds -= num_peds_in_group
 
@@ -825,13 +904,29 @@ def _sample_scatter_point(
     ped_radius: float,
     *,
     max_attempts: int = 1000,
+    capture: SpawnSamplerCapture | None = None,
+    ped_id: int | None = None,
 ) -> Vec2D:
     """Sample one seeded free-space point clear of all occupied geometry.
+
+    Args:
+        zone: Triangle zone to sample inside.
+        rng: Seeded random generator.
+        exclusions: Prepared geometry the candidate must not intersect.
+        accepted_positions: Positions already taken, kept apart by ``2 * ped_radius``.
+        ped_radius: Pedestrian collision radius.
+        max_attempts: Candidate cap before failing closed.
+        capture: Optional spawn-decision capture sink filled in place.
+        ped_id: Optional pedestrian id used for the capture record.
 
     Returns:
         A collision-free point inside ``zone``.
     """
     a, b, c = (np.asarray(vertex, dtype=float) for vertex in zone)
+    attempts = 0
+    exclusion_rejections = 0
+    separation_checks = 0
+    separation_rejections = 0
     for _attempt in range(max_attempts):
         rel_width, rel_height = rng.uniform(0.0, 1.0, 2)
         if rel_width + rel_height > 1.0:
@@ -839,11 +934,25 @@ def _sample_scatter_point(
             rel_height = 1.0 - rel_height
         candidate_array = b + rel_width * (a - b) + rel_height * (c - b)
         candidate = (float(candidate_array[0]), float(candidate_array[1]))
+        attempts += 1
         point = _ShapelyPoint(candidate)
         if any(exclusion.intersects(point) for exclusion in exclusions):
+            exclusion_rejections += 1
             continue
         if any(dist(candidate, occupied) < 2 * ped_radius for occupied in accepted_positions):
+            separation_checks += len(accepted_positions)
+            separation_rejections += 1
             continue
+        if capture is not None and ped_id is not None:
+            capture.record_attempts(
+                ped_id,
+                source="synthesized",
+                attempts=attempts,
+                obstacle_rejections=exclusion_rejections,
+                separation_checks=separation_checks,
+                separation_rejections=separation_rejections,
+            )
+            capture.record_spawn_point(ped_id, source="synthesized", point=candidate)
         return candidate
     raise RuntimeError(
         "Failed to scatter-spawn a forced background pedestrian after "
@@ -858,6 +967,7 @@ def _populate_scattered_background(
     map_bounds: tuple[float, float, float, float],
     exclusions: list[PreparedGeometry],
     ped_radius: float,
+    capture: SpawnSamplerCapture | None = None,
 ) -> tuple[PedState, list[PedGrouping], ZoneAssignments, list[Zone], np.random.Generator]:
     """Create seeded collision-free background groups using standard crowded-zone behavior.
 
@@ -892,7 +1002,7 @@ def _populate_scattered_background(
             candidate_zone = zones[int(candidate_zone_id)]
             candidate_points: list[Vec2D] = []
             try:
-                for _ped_id in ped_ids:
+                for ped_id in ped_ids:
                     candidate_points.append(
                         _sample_scatter_point(
                             candidate_zone,
@@ -900,8 +1010,14 @@ def _populate_scattered_background(
                             exclusions,
                             [*accepted_positions, *candidate_points],
                             ped_radius,
+                            capture=capture,
+                            ped_id=ped_id,
                         )
                     )
+                    if capture is not None:
+                        capture.record_zone_assignment(
+                            ped_id, zone_id=int(candidate_zone_id), source="synthesized"
+                        )
                 candidate_goal = _sample_scatter_point(
                     candidate_zone,
                     rng,
@@ -976,7 +1092,7 @@ class _BackgroundPopulation:
     synthesized: bool
 
 
-def _synthesize_background_population(
+def _synthesize_background_population(  # noqa: PLR0913 - explicit spawn inputs stay auditable.
     crowd_spawn_config: PedSpawnConfig,
     prepared_obstacles: list[PreparedGeometry],
     single_pedestrians: list,
@@ -985,6 +1101,7 @@ def _synthesize_background_population(
     ped_radius: float,
     reserved_zone_radius: float,
     background_size: int,
+    capture: SpawnSamplerCapture | None = None,
 ) -> _BackgroundPopulation:
     """Synthesize a seeded free-space background when maps lack spawn geometry.
 
@@ -1020,6 +1137,7 @@ def _synthesize_background_population(
         map_bounds,
         scatter_exclusions,
         ped_radius,
+        capture=capture,
     )
     return _BackgroundPopulation(
         crowd_states=crowd_ped_states_np,
@@ -1042,6 +1160,7 @@ def _spawn_zoned_background_population(
     ped_crowded_zones: list[Zone],
     ped_routes: list[GlobalRoute],
     prepared_obstacles: list[PreparedGeometry],
+    capture: SpawnSamplerCapture | None = None,
 ) -> _BackgroundPopulation:
     """Spawn background pedestrians from map-defined crowded zones and routes.
 
@@ -1052,11 +1171,13 @@ def _spawn_zoned_background_population(
         crowd_spawn_config,
         ped_crowded_zones,
         obstacle_polygons=prepared_obstacles,
+        capture=capture,
     )
     route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
         route_spawn_config,
         ped_routes,
         obstacle_polygons=prepared_obstacles,
+        capture=capture,
     )
     return _BackgroundPopulation(
         crowd_states=crowd_ped_states_np,
@@ -1223,6 +1344,7 @@ def populate_simulation(  # noqa: PLR0913
     reserved_zones: list[Zone] | None = None,
     ped_radius: float = 0.4,
     reserved_zone_radius: float = 0.0,
+    capture: SpawnSamplerCapture | None = None,
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     """Orchestrate complete pedestrian population initialization for simulation.
 
@@ -1243,6 +1365,8 @@ def populate_simulation(  # noqa: PLR0913
         reserved_zones: Robot zones excluded from synthesized background placement.
         ped_radius: Pedestrian collision radius used by synthesized placement.
         reserved_zone_radius: Additional agent radius applied around reserved zones.
+        capture: Optional spawn-decision capture sink filled in place. The default
+            ``None`` keeps the spawn path byte-identical to the uncaptured behavior.
 
     Returns:
         Tuple (pysf_state, groups, ped_behaviors) with the merged state view,
@@ -1263,16 +1387,25 @@ def populate_simulation(  # noqa: PLR0913
         background = _synthesize_background_population(
             crowd_spawn_config, prepared_obstacles, single_pedestrians, map_bounds,
             reserved_zones, ped_radius, reserved_zone_radius, int(background_size),
+            capture=capture,
         )
     else:
         background = _spawn_zoned_background_population(
             crowd_spawn_config, route_spawn_config, ped_crowded_zones, ped_routes,
-            prepared_obstacles,
+            prepared_obstacles, capture=capture,
         )
     ped_states, route_offset, single_offset = _merge_pedestrian_states(
         background, single_pedestrians, spawn_config, tau,
         apply_archetypes_to_forced_population,
     )
+    if capture is not None:
+        for local_index in range(int(single_offset), int(ped_states.shape[0])):
+            capture.record_spawn_point(
+                local_index - single_offset,
+                source="single",
+                point=ped_states[local_index, 0:2],
+            )
+        capture.apply_merged_offsets(route_offset=route_offset, single_offset=single_offset)
     pysf_state, crowd_pysf_state, route_pysf_state = _create_state_views(
         ped_states, tau, route_offset, single_offset, add_ego_state,
     )

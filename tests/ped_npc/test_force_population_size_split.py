@@ -89,12 +89,12 @@ def _captured_spawner_sizes(monkeypatch):
     """
     captured: dict[str, int | None] = {"crowd": None, "route": None}
 
-    def _fake_crowded(config, crowded_zones, *, obstacle_polygons=None):
+    def _fake_crowded(config, crowded_zones, *, obstacle_polygons=None, capture=None):
         captured["crowd"] = config.force_population_size
         count = int(config.force_population_size or 0) if crowded_zones else 0
         return np.zeros((count, 6)), [], {}
 
-    def _fake_routes(config, routes, *, obstacle_polygons=None):
+    def _fake_routes(config, routes, *, obstacle_polygons=None, capture=None):
         captured["route"] = config.force_population_size
         count = int(config.force_population_size or 0) if routes else 0
         return np.zeros((count, 6)), [], {}, {}

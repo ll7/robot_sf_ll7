@@ -203,6 +203,7 @@ from robot_sf.benchmark.utils import (
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
+from robot_sf.ped_npc.spawn_capture import reset_block_payload
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
 
@@ -1777,6 +1778,7 @@ class _EpisodeStepLoopResult:
     initial_ped_headings: np.ndarray | None
     trace_actor_ids: list[str] | None
     initial_goal_distance: float
+    spawn_capture: dict[str, Any] | None
     reached_goal_step: int | None
     termination_reason: str
     collision_seen: bool
@@ -1857,6 +1859,7 @@ class _StepLoopState:
     initial_ped_headings: np.ndarray | None = None
     trace_actor_ids: list[str] | None = field(default_factory=list)
     initial_goal_distance: float = 0.0
+    spawn_capture: dict[str, Any] | None = None
     planner_runtime_snapshot: dict[str, Any] | None = None
     simulator_obstacle_force_law_metadata: dict[str, Any] | None = None
     planner_obstacle_force_law_metadata: dict[str, Any] | None = None
@@ -2114,6 +2117,7 @@ def _init_step_loop_state(
     state.initial_ped_headings = initial_ped_headings
     state.trace_actor_ids = trace_actor_ids
     state.initial_goal_distance = initial_goal_distance
+    state.spawn_capture = reset_block_payload(getattr(env.simulator, "spawn_capture", None))
     return state
 
 
@@ -3143,6 +3147,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
             list(state.trace_actor_ids) if state.trace_actor_ids is not None else None
         ),
         initial_goal_distance=state.initial_goal_distance,
+        spawn_capture=state.spawn_capture,
         reached_goal_step=state.reached_goal_step,
         termination_reason=state.termination_reason,
         collision_seen=state.collision_seen,
@@ -3689,15 +3694,18 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
     robot_radius: float,
     ped_radius: float,
     scenario: dict[str, Any] | None,
+    spawn_capture: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the reset-time provenance block for the simulation step trace.
 
     Records the pre-command reset state (poses, velocities, simulator-tracked
     headings) plus the minimum robot-surface to pedestrian-surface clearance and
     whether the reset state already collides. Spawn-sampler decisions and route
-    objects are not retained per episode at runtime, so those edges report
-    explicit ``unavailable`` provenance with their build-time owners instead of
-    reconstructed guesses.
+    objects are not retained per episode at runtime unless the opt-in spawn
+    capture (issue #9312) recorded them; without it those edges report explicit
+    ``unavailable`` provenance with their build-time owners instead of
+    reconstructed guesses, and with it they report the captured per-pedestrian
+    sampler decisions and route/zone assignments.
 
     Returns:
         JSON-serializable reset provenance block.
@@ -3764,17 +3772,76 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
             if headings_available
             else "unavailable: simulator heading state not exposed"
         ),
-        "spawn": {
+        "spawn": _reset_spawn_block(scenario_echo, spawn_capture),
+        "routes": _reset_routes_block(spawn_capture),
+    }
+
+
+def _reset_spawn_block(
+    scenario_echo: dict[str, Any],
+    spawn_capture: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build the reset spawn edge from the opt-in capture, or report it unavailable.
+
+    Returns:
+        JSON-serializable spawn provenance block.
+    """
+    if spawn_capture is None:
+        return {
             "status": "unavailable",
             "reason": "spawn_sampler_decision_not_retained",
             "owner": _RESET_SPAWN_OWNER,
             "scenario_echo": scenario_echo,
-        },
-        "routes": {
+        }
+    return {
+        "status": "captured",
+        "owner": _RESET_SPAWN_OWNER,
+        "schema_version": spawn_capture.get("schema_version"),
+        "counts": spawn_capture.get("counts"),
+        "route_offset": spawn_capture.get("route_offset"),
+        "single_offset": spawn_capture.get("single_offset"),
+        "pedestrians": spawn_capture.get("pedestrians"),
+        "scenario_echo": scenario_echo,
+    }
+
+
+def _reset_routes_block(spawn_capture: dict[str, Any] | None) -> dict[str, Any]:
+    """Build the reset route edge from the opt-in capture, or report it unavailable.
+
+    Route assignments and crowded/synthetic zone placements are both reported here:
+    they are the two per-episode placement decisions the map definition alone cannot
+    answer (``map_def.ped_routes`` holds templates, not assignments).
+
+    Returns:
+        JSON-serializable route provenance block.
+    """
+    if spawn_capture is None:
+        return {
             "status": "unavailable",
             "reason": "route_objects_not_retained_per_episode",
             "owner": _RESET_ROUTES_OWNER,
-        },
+        }
+    records = spawn_capture.get("pedestrians") or []
+    assignments = [
+        {
+            "ped_id": record.get("ped_id"),
+            "route_index": record.get("route_index"),
+            "route_waypoints": record.get("route_waypoints"),
+        }
+        for record in records
+        if record.get("route_index") is not None
+    ]
+    zone_assignments = [
+        {"ped_id": record.get("ped_id"), "zone_index": record.get("zone_index")}
+        for record in records
+        if record.get("zone_index") is not None
+    ]
+    return {
+        "status": "captured",
+        "owner": _RESET_ROUTES_OWNER,
+        "schema_version": spawn_capture.get("schema_version"),
+        "assignments": assignments,
+        "zone_assignments": zone_assignments,
     }
 
 
@@ -3803,6 +3870,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     horizon_val: int,
     termination_reason: str,
     safety_events: list[dict[str, Any]],
+    spawn_capture: dict[str, Any] | None = None,
 ) -> None:
     """Attach planner-decision and simulation-step traces to algorithm metadata."""
     if record_planner_decision_trace:
@@ -3834,6 +3902,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 robot_radius=reset_robot_radius_m,
                 ped_radius=reset_ped_radius_m,
                 scenario=scenario,
+                spawn_capture=spawn_capture,
             ),
         }
         attach_pedestrian_control_trace(
@@ -4263,6 +4332,7 @@ def _finalize_metadata_outputs(
         horizon_val=ctx.horizon_val,
         termination_reason=loop_result.termination_reason,
         safety_events=loop_result.collision_events,
+        spawn_capture=loop_result.spawn_capture,
     )
     tp_summary, sw_summary, cbf_summary = _finalize_safety_summaries(
         algo_meta,

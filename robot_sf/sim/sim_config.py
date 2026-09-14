@@ -404,6 +404,18 @@ class SimulationSettings:
     obstacle_force_law: Any = None
     """Versioned pedestrian obstacle-force law; defaults to the historical law."""
 
+    record_spawn_sampler_capture: bool = False
+    """Opt-in capture of spawn-sampler decisions for reset provenance (issue #9312).
+
+    When enabled, the simulator retains a
+    :class:`~robot_sf.ped_npc.spawn_capture.SpawnSamplerCapture` covering sampler
+    attempts, obstacle/separation rejections, accepted spawn points, and the
+    per-episode route/zone assignments, and the ``simulation-step-trace.v1`` reset
+    block reports ``status: captured`` for the spawn and route edges. The default
+    ``False`` keeps the spawn path and the ``unavailable`` reset provenance
+    byte-identical to the uncaptured behavior.
+    """
+
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
         if name == "obstacle_force_law":

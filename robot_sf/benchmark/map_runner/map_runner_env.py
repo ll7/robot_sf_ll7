@@ -50,6 +50,11 @@ def build_env_config(
         config.sim_config.pedestrian_control_trace_labels = scenario[
             "pedestrian_control_trace_labels"
         ]
+    if bool(scenario.get("record_spawn_sampler_capture", False)):
+        # Opt-in spawn-sampler capture (issue #9312): the simulator retains the
+        # per-episode sampler decisions so the step-trace reset block can report
+        # them instead of the default ``unavailable`` provenance.
+        config.sim_config.record_spawn_sampler_capture = True
     return config
 
 

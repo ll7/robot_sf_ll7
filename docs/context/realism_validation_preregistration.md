@@ -77,11 +77,20 @@ not satisfy the condition:
 6. Annotation schema: required columns, accepted annotation labels, and the policy for lost,
    occluded, or interpolated tracks.
 7. Staging receipt: exact staging destination, the canonical repository manifest path
-   `configs/data/sdd_staging_manifest.yaml`, and the successful fail-closed
-   `uv run python scripts/tools/sdd_curation_preflight.py --require-benchmark-ready --json`
-   validation receipt. The receipt is valid only when this command exits zero and its JSON report
-   records `benchmark_promotion_allowed: true`; `--json` without `--require-benchmark-ready` is
-   report-only and must not be used as the gate.
+   `configs/data/sdd_staging_manifest.yaml`, and the successful fail-closed validation receipt from
+   the command below. The preregistered first candidate is the held-out `deathCircle/video0`
+   annotation at
+   `output/external_data/sdd/annotations/deathCircle/video0/annotations.txt`; a missing or
+   differently rooted file must fail closed rather than silently selecting another scene.
+
+   ```bash
+   uv run python scripts/tools/sdd_curation_preflight.py --manifest configs/data/sdd_staging_manifest.yaml --annotation output/external_data/sdd/annotations/deathCircle/video0/annotations.txt --require-benchmark-ready --json
+   ```
+
+   The receipt is valid only when this command exits zero and its JSON report records
+   `benchmark_promotion_allowed: true`; `--json` without `--require-benchmark-ready` is
+   report-only and must not be used as the gate. The command also binds promotion to the canonical
+   staging preflight's satisfied `license_acknowledgment` receipt.
 
 The revived run must additionally bind each evaluated arm to its baseline artifact/config hash,
 metric and analysis-version identifiers, and output receipt. It must state that no real-data or

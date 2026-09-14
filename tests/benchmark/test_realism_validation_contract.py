@@ -69,7 +69,12 @@ def test_preregistration_note_freezes_author_packet_and_external_boundary() -> N
         "exact staging destination",
         "canonical repository manifest path",
         "configs/data/sdd_staging_manifest.yaml",
-        "uv run python scripts/tools/sdd_curation_preflight.py --require-benchmark-ready --json",
+        (
+            "uv run python scripts/tools/sdd_curation_preflight.py --manifest "
+            "configs/data/sdd_staging_manifest.yaml --annotation "
+            "output/external_data/sdd/annotations/deathCircle/video0/annotations.txt "
+            "--require-benchmark-ready --json"
+        ),
         "benchmark_promotion_allowed: true",
         "--json` without `--require-benchmark-ready` is report-only",
         "metres-per-pixel",

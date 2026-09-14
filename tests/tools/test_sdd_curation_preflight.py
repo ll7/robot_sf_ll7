@@ -62,6 +62,53 @@ def _write_quoted_sdd_fixture(path: Path) -> None:
     )
 
 
+def _write_sdd_manifest(
+    path: Path,
+    *,
+    staging_dir: Path,
+    acknowledged: bool,
+    expected_tree_sha256: str,
+) -> None:
+    """Write a minimal real staging manifest for executable gate tests."""
+    path.write_text(
+        "\n".join(
+            [
+                "schema: robot_sf_sdd_staging_manifest.v1",
+                "asset_id: sdd",
+                "title: Synthetic SDD gate fixture",
+                "staging_dir: " + json.dumps(str(staging_dir)),
+                "expected_files:",
+                '  - pattern: "**/annotations.txt"',
+                "    kind: file",
+                "    description: Synthetic annotation fixture.",
+                "    min_count: 1",
+                "expected_total_size_bytes: 1",
+                "checksums:",
+                "  algorithm: SHA-256",
+                f"  expected_tree_sha256: {json.dumps(expected_tree_sha256)}",
+                "license_acknowledgment:",
+                "  required: true",
+                f"  acknowledged: {str(acknowledged).lower()}",
+                "  statement: Synthetic test acknowledgment.",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _acknowledged_staging_preflight() -> dict[str, object]:
+    """Return the canonical receipt shape used by direct classifier tests."""
+    return {
+        "ready": True,
+        "license_acknowledgment": {
+            "required": True,
+            "acknowledged": True,
+            "satisfied": True,
+        },
+    }
+
+
 def test_probe_accepts_user_facing_label_for_quoted_sdd_rows(tmp_path: Path) -> None:
     """Probe should accept unquoted labels for quoted SDD annotation rows."""
     annotations = tmp_path / "annotations.txt"
@@ -198,7 +245,11 @@ def test_dataset_backed_with_valid_probe_is_benchmark_candidate(tmp_path: Path) 
     probe = sdd_curation_preflight.probe_annotation_file(
         annotations, label="Pedestrian", min_track_points=4, max_pedestrians=4
     )
-    report = sdd_curation_preflight.classify_curation_readiness(backed_gate, probe)
+    report = sdd_curation_preflight.classify_curation_readiness(
+        backed_gate,
+        probe,
+        staging_preflight=_acknowledged_staging_preflight(),
+    )
 
     assert report["dataset_backed"] is True
     assert report["benchmark_promotion_allowed"] is True
@@ -207,6 +258,39 @@ def test_dataset_backed_with_valid_probe_is_benchmark_candidate(tmp_path: Path) 
         report["output_classification"] == sdd_curation_preflight.OUTPUT_BENCHMARK_READY_CANDIDATE
     )
     assert report["blockers"] == []
+
+
+def test_dataset_backed_requires_satisfied_canonical_license_receipt(tmp_path: Path) -> None:
+    """A checksum-backed gate cannot bypass the canonical license acknowledgment."""
+    annotations = tmp_path / "annotations.txt"
+    _write_sdd_fixture(annotations)
+    backed_gate = {
+        "mode": manage_external_data.SDD_MODE_DATASET_BACKED,
+        "dataset_backed": True,
+        "availability": {"state": "dataset_backed"},
+        "reason": "SDD is staged and validated.",
+        "staging_dir": str(tmp_path),
+    }
+    probe = sdd_curation_preflight.probe_annotation_file(
+        annotations, label="Pedestrian", min_track_points=4, max_pedestrians=4
+    )
+    report = sdd_curation_preflight.classify_curation_readiness(
+        backed_gate,
+        probe,
+        staging_preflight={
+            "ready": False,
+            "license_acknowledgment": {
+                "required": True,
+                "acknowledged": False,
+                "satisfied": False,
+            },
+        },
+    )
+
+    assert report["dataset_backed"] is True
+    assert report["benchmark_promotion_allowed"] is False
+    assert report["evidence_status"] == sdd_curation_preflight.EVIDENCE_BLOCKED
+    assert any("license acknowledgment" in blocker for blocker in report["blockers"])
 
 
 def test_dataset_backed_without_probe_is_not_benchmark_candidate(tmp_path: Path) -> None:
@@ -219,7 +303,11 @@ def test_dataset_backed_without_probe_is_not_benchmark_candidate(tmp_path: Path)
         "staging_dir": str(tmp_path),
     }
 
-    report = sdd_curation_preflight.classify_curation_readiness(backed_gate, None)
+    report = sdd_curation_preflight.classify_curation_readiness(
+        backed_gate,
+        None,
+        staging_preflight=_acknowledged_staging_preflight(),
+    )
 
     assert report["benchmark_promotion_allowed"] is False
     assert report["evidence_status"] == sdd_curation_preflight.EVIDENCE_BLOCKED
@@ -242,7 +330,11 @@ def test_dataset_backed_with_bad_probe_is_not_promotable(tmp_path: Path) -> None
     probe = sdd_curation_preflight.probe_annotation_file(
         annotations, label="Pedestrian", min_track_points=100, max_pedestrians=4
     )
-    report = sdd_curation_preflight.classify_curation_readiness(backed_gate, probe)
+    report = sdd_curation_preflight.classify_curation_readiness(
+        backed_gate,
+        probe,
+        staging_preflight=_acknowledged_staging_preflight(),
+    )
 
     assert report["dataset_backed"] is True
     assert report["benchmark_promotion_allowed"] is False
@@ -284,6 +376,46 @@ def test_cli_require_benchmark_ready_fails_closed_when_unstaged(
     assert exit_code == 3
     out = capsys.readouterr().out
     assert '"benchmark_promotion_allowed": false' in out
+
+
+@pytest.mark.parametrize(("acknowledged", "expected_exit"), [(False, 3), (True, 0)])
+def test_cli_binds_dataset_backed_promotion_to_license_receipt(
+    tmp_path: Path, acknowledged: bool, expected_exit: int, capsys
+) -> None:
+    """The executable gate accepts only a staged, checksummed, acknowledged manifest."""
+    staging_dir = tmp_path / "sdd"
+    annotations = staging_dir / "annotations" / "deathCircle" / "video0" / "annotations.txt"
+    annotations.parent.mkdir(parents=True)
+    _write_sdd_fixture(annotations)
+    checksum = manage_external_data._tree_checksum(staging_dir, [annotations])["tree_sha256"]
+    manifest = tmp_path / "sdd_staging_manifest.yaml"
+    _write_sdd_manifest(
+        manifest,
+        staging_dir=staging_dir,
+        acknowledged=acknowledged,
+        expected_tree_sha256=checksum,
+    )
+
+    exit_code = sdd_curation_preflight.main(
+        [
+            "--manifest",
+            str(manifest),
+            "--annotation",
+            str(annotations),
+            "--min-track-points",
+            "4",
+            "--require-benchmark-ready",
+            "--json",
+        ]
+    )
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == expected_exit
+    assert report["dataset_backed"] is True
+    assert report["staging_preflight"]["license_acknowledgment"]["satisfied"] is acknowledged
+    assert report["benchmark_promotion_allowed"] is acknowledged
+    if not acknowledged:
+        assert any("license acknowledgment" in blocker for blocker in report["blockers"])
 
 
 def test_decision_packet_preserves_proxy_blocker(tmp_path: Path) -> None:
@@ -838,6 +970,7 @@ def test_integration_report_closes_only_with_benchmark_ready_smoke(tmp_path: Pat
         sdd_curation_preflight.probe_annotation_file(
             annotations, label="Pedestrian", min_track_points=4, max_pedestrians=4
         ),
+        staging_preflight=_acknowledged_staging_preflight(),
     )
     smoke_decision = sdd_curation_preflight.classify_smoke_decision(
         readiness,

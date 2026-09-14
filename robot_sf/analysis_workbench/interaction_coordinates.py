@@ -47,6 +47,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     simulation_trace_export_from_dict,
 )
 from robot_sf.common.json_pointer import json_pointer
+from robot_sf.common.math_utils import point_distance
 from robot_sf.errors import RobotSfError
 
 WORKED_EXAMPLE_PROCESS_TRACE_SCHEMA_VERSION = "worked_example_process_trace.v1"
@@ -1318,7 +1319,7 @@ def _global_minimum_actor_from_source(frame: Mapping[str, Any]) -> dict[str, Any
             continue
         actor_pos = _vector2(actor.get("position"))
         if actor_pos is not None:
-            candidates.append((_distance(robot_pos, actor_pos), str(actor["actor_id"])))
+            candidates.append((point_distance(robot_pos, actor_pos), str(actor["actor_id"])))
     if not candidates:
         return {"status": "unavailable", "reason": "missing_pedestrian_position"}
     center_distance, actor_id = min(candidates, key=lambda item: (item[0], item[1]))
@@ -4224,7 +4225,7 @@ def _route_geometry_unavailable_reason(geometry: Mapping[str, Any]) -> str | Non
         expected_count = len(raw_points)
     if len(points) < 2 or len(points) != expected_count:
         return "registered_route_invalid_geometry"
-    if any(_distance(left, right) <= 1e-12 for left, right in pairwise(points)):
+    if any(point_distance(left, right) <= 1e-12 for left, right in pairwise(points)):
         return "registered_route_degenerate"
     if _polyline_has_adjacent_backtracking(points) or _polyline_has_nonlocal_intersection(points):
         return "registered_route_branching_or_ambiguous_geometry"
@@ -5165,7 +5166,7 @@ def _conflict_frame(
     if robot_pos is None:
         return {"status": "unavailable", "reason": "missing_robot_position"}
     focal_pos = _vector2(focal.get("position")) if focal is not None else None
-    robot_distance = _distance(robot_pos, conflict_zone.center)
+    robot_distance = point_distance(robot_pos, conflict_zone.center)
     result: dict[str, Any] = {
         "status": "available",
         "zone_id": conflict_zone.zone_id,
@@ -5185,7 +5186,7 @@ def _conflict_frame(
         result["focal_actor_reason"] = "missing_focal_actor_position"
     else:
         result["focal_actor_signed_distance_to_zone_m"] = (
-            _distance(focal_pos, conflict_zone.center) - conflict_zone.radius_m
+            point_distance(focal_pos, conflict_zone.center) - conflict_zone.radius_m
         )
         result["focal_actor_status"] = "available"
     return result
@@ -6294,7 +6295,7 @@ def _nearest_source_actor(frame: Mapping[str, Any]) -> dict[str, Any] | None:
         candidates.append(
             {
                 "actor_id": str(actor["actor_id"]),
-                "center_distance_m": _distance(robot_pos, actor_pos),
+                "center_distance_m": point_distance(robot_pos, actor_pos),
             }
         )
     return (
@@ -6366,7 +6367,7 @@ def _nearest_actor(
         ped_pos = _vector2(pedestrian.get("position"))
         if ped_pos is None or "id" not in pedestrian:
             continue
-        candidates.append((_distance(robot_pos, ped_pos), str(pedestrian["id"])))
+        candidates.append((point_distance(robot_pos, ped_pos), str(pedestrian["id"])))
     if not candidates:
         return {"status": "unavailable", "reason": "missing_pedestrian_position"}
     center_distance, actor_id = min(candidates, key=lambda item: (item[0], item[1]))
@@ -6424,10 +6425,6 @@ def _finite_float(value: Any) -> float | None:
 
 def _norm(value: tuple[float, float]) -> float:
     return math.hypot(value[0], value[1])
-
-
-def _distance(left: tuple[float, float], right: tuple[float, float]) -> float:
-    return math.hypot(left[0] - right[0], left[1] - right[1])
 
 
 def _dot(left: tuple[float, float], right: tuple[float, float]) -> float:

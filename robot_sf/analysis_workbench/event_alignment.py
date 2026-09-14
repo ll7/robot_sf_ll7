@@ -10,7 +10,7 @@ from robot_sf.analysis_workbench.process_trace_receipt import (
     build_simulation_trace_receipt,
     simulation_trace_receipt_sha256,
 )
-from robot_sf.common.math_utils import wrap_angle_pi
+from robot_sf.common.math_utils import point_distance, wrap_angle_pi
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -296,16 +296,16 @@ def _initial_equivalence(
             right_heading,
         )
     )
-    position_delta = _distance(left_pos, right_pos)
-    velocity_delta = _distance(left_vel, right_vel)
+    position_delta = point_distance(left_pos, right_pos)
+    velocity_delta = point_distance(left_vel, right_vel)
     robot_radius_delta = _nullable_delta(left_robot.get("radius"), right_robot.get("radius"))
     actor_ids_equal = set(left_actors) == set(right_actors)
     actor_position_deltas = {
-        actor_id: _distance(left_actors[actor_id]["position"], right_actors[actor_id]["position"])
+        actor_id: point_distance(left_actors[actor_id]["position"], right_actors[actor_id]["position"])
         for actor_id in sorted(set(left_actors) & set(right_actors))
     }
     actor_velocity_deltas = {
-        actor_id: _distance(left_actors[actor_id]["velocity"], right_actors[actor_id]["velocity"])
+        actor_id: point_distance(left_actors[actor_id]["velocity"], right_actors[actor_id]["velocity"])
         for actor_id in sorted(set(left_actors) & set(right_actors))
     }
     actor_radius_deltas = {
@@ -417,9 +417,9 @@ def _full_state_equal(  # noqa: C901
         return False, "missing_actor_state"
     if left_heading is None or right_heading is None:
         return False, "missing_robot_heading"
-    if _distance(left_pos, right_pos) > position_tolerance_m:
+    if point_distance(left_pos, right_pos) > position_tolerance_m:
         return False, "robot_position_diverged"
-    if _distance(left_vel, right_vel) > position_tolerance_m:
+    if point_distance(left_vel, right_vel) > position_tolerance_m:
         return False, "robot_velocity_diverged"
     if (
         abs(
@@ -437,12 +437,12 @@ def _full_state_equal(  # noqa: C901
         return False, "actor_id_set_diverged"
     for actor_id in sorted(left_actors):
         if (
-            _distance(left_actors[actor_id]["position"], right_actors[actor_id]["position"])
+            point_distance(left_actors[actor_id]["position"], right_actors[actor_id]["position"])
             > position_tolerance_m
         ):
             return False, "actor_position_diverged"
         if (
-            _distance(left_actors[actor_id]["velocity"], right_actors[actor_id]["velocity"])
+            point_distance(left_actors[actor_id]["velocity"], right_actors[actor_id]["velocity"])
             > position_tolerance_m
         ):
             return False, "actor_velocity_diverged"
@@ -482,10 +482,6 @@ def _vector2(value: Any) -> tuple[float, float] | None:
     if not math.isfinite(x) or not math.isfinite(y):
         return None
     return x, y
-
-
-def _distance(left: tuple[float, float], right: tuple[float, float]) -> float:
-    return math.hypot(left[0] - right[0], left[1] - right[1])
 
 
 def _wrapped_angle_delta(left: float, right: float) -> float:

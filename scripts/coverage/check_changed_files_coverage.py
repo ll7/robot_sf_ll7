@@ -23,6 +23,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict, cast
 
+from scripts.dev.git_common import resolve_repo_root
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -84,7 +86,7 @@ def _repo_root() -> Path:
     Returns:
         Absolute repository root path.
     """
-    return Path(_run(["git", "rev-parse", "--show-toplevel"]))
+    return resolve_repo_root()
 
 
 def _resolve_commit(ref: str, repo_root: Path) -> str:

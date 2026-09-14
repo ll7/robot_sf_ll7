@@ -50,12 +50,10 @@ precedence model was found in `AGENTS.md`, `.agents/README.md`,
 
 ## Residual
 
-The clean-room agent trial from the epic success criteria has not been run in
-this review; it needs an independent fresh agent session and is outside a
-docs/verification closeout. If the trial is still wanted, it should be a
-separate tracked follow-up owning only the trial — it does not block epic
-closure because every mechanically verifiable criterion above passes on
-current main.
+The clean-room agent trial from the epic success criteria is tracked as
+Issue #9232. It needs an independent fresh agent session and is outside a
+docs/verification closeout. It does not block epic closure because every
+mechanically verifiable criterion above passes on current main.
 
 ## Safeguards preserved
 

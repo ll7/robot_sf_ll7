@@ -301,11 +301,15 @@ def _initial_equivalence(
     robot_radius_delta = _nullable_delta(left_robot.get("radius"), right_robot.get("radius"))
     actor_ids_equal = set(left_actors) == set(right_actors)
     actor_position_deltas = {
-        actor_id: point_distance(left_actors[actor_id]["position"], right_actors[actor_id]["position"])
+        actor_id: point_distance(
+            left_actors[actor_id]["position"], right_actors[actor_id]["position"]
+        )
         for actor_id in sorted(set(left_actors) & set(right_actors))
     }
     actor_velocity_deltas = {
-        actor_id: point_distance(left_actors[actor_id]["velocity"], right_actors[actor_id]["velocity"])
+        actor_id: point_distance(
+            left_actors[actor_id]["velocity"], right_actors[actor_id]["velocity"]
+        )
         for actor_id in sorted(set(left_actors) & set(right_actors))
     }
     actor_radius_deltas = {

@@ -190,3 +190,43 @@ def test_search_loop_marks_excluded_attempts_with_reasons(tmp_path: Path) -> Non
     invalid_row = by_kind["invalid_candidate"]
     assert "certificate_not_allowed" in invalid_row["analysis_eligibility"]["reason_codes"]
     assert "trace_missing" in invalid_row["analysis_eligibility"]["reason_codes"]
+
+
+def test_single_candidate_path_binds_effective_hash(tmp_path: Path) -> None:
+    """The production single-candidate pipeline must bind the hash too (issue #9304)."""
+    config = _config(tmp_path)
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text('{"episode_id": "e1"}\n', encoding="utf-8")
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status(),
+            objective_value=None,
+            failure_attribution=FailureAttribution(
+                status="attributed",
+                primary_failure=None,
+                reasons=[],
+                details={"execution_mode": "native"},
+            ),
+            episode_record_path=episode_path,
+            trajectory_csv_path=None,
+            scenario_yaml_path=scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    run_one = search.production_candidate_evaluator(
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("test certifier"),
+    )
+    evaluation = run_one(config, _candidate(7), 0)
+
+    assert evaluation.objective_value is not None
+    assert evaluation.effective_scenario_hash is not None
+    receipt = analysis_eligibility(evaluation)
+    assert receipt.eligible

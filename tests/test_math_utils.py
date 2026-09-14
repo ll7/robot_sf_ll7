@@ -78,3 +78,12 @@ def test_clip_scalar_clips_bounds(
 def test_clip_scalar_preserves_nan() -> None:
     """Scalar clipping keeps np.clip scalar NaN behavior."""
     assert isnan(clip_scalar(float("nan"), -1.0, 1.0))
+
+
+def test_point_distance_and_angle_between_unit() -> None:
+    """Shared geometry helpers compute Euclidean distance and clamped unit angles."""
+    from robot_sf.common.math_utils import angle_between_unit, point_distance
+
+    assert point_distance((0.0, 0.0), (3.0, 4.0)) == 5.0
+    assert angle_between_unit((1.0, 0.0), (1.0, 0.0)) == 0.0
+    assert abs(angle_between_unit((1.0, 0.0), (0.0, 1.0)) - 1.5707963267948966) < 1e-12

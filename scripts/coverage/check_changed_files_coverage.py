@@ -49,6 +49,7 @@ class _CoverageResult(TypedDict):
     covered_changed_lines: list[int] | None
     missing_changed_lines: list[int] | None
     declaration_only_proof: bool
+    rename_only_proof: bool
 
 
 @dataclass(frozen=True)
@@ -590,6 +591,273 @@ def _has_declaration_only_test_proof(
     )
 
 
+def _callee_name(func: ast.expr) -> str | None:
+    """Return the terminal callee identifier for a call target, if it is a plain name."""
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+class _CalleeSwapCollector(ast.NodeVisitor):
+    """Collect callee identifiers at call sites in visitation order."""
+
+    def __init__(self) -> None:
+        self.callees: list[str | None] = []
+        self.call_lines: list[int] = []
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Record the callee name and line of one call site."""
+        self.callees.append(_callee_name(node.func))
+        self.call_lines.append(node.lineno)
+        self.generic_visit(node)
+
+
+def _normalized_callee_ast(tree: ast.Module, renamed: set[str]) -> str:
+    """Dump a tree with swapped call-site callees and their imports normalized away."""
+    cloned = ast.parse(ast.unparse(tree))
+
+    class _Swapper(ast.NodeTransformer):
+        def visit_Call(self, node: ast.Call) -> ast.Call:
+            if isinstance(node.func, ast.Name) and node.func.id in renamed:
+                node.func.id = "__renamed_callee__"
+            elif isinstance(node.func, ast.Attribute) and node.func.attr in renamed:
+                node.func.attr = "__renamed_callee__"
+            self.generic_visit(node)
+            return node
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom | None:
+            node.names = [
+                alias
+                for alias in node.names
+                if alias.name not in renamed and (alias.asname or "") not in renamed
+            ]
+            self.generic_visit(node)
+            if not node.names:
+                return None
+            return node
+
+    swapped = _Swapper().visit(cloned)
+    ast.fix_missing_locations(swapped)
+    return ast.dump(swapped, include_attributes=False)
+
+
+def _without_dead_callee_defs(tree: ast.Module, dead: set[str], live_source: str) -> ast.Module:
+    """Drop top-level defs of swapped-out callees that the new source never references."""
+    try:
+        live_tree = ast.parse(live_source)
+    except SyntaxError:
+        return tree
+    live_names = {node.id for node in ast.walk(live_tree) if isinstance(node, ast.Name)}
+    live_names.update(node.attr for node in ast.walk(live_tree) if isinstance(node, ast.Attribute))
+    removable = {name for name in dead if name not in live_names}
+    if not removable:
+        return tree
+    pruned = ast.parse(ast.unparse(tree))
+    pruned.body = [
+        node
+        for node in pruned.body
+        if not (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in removable
+        )
+    ]
+    return pruned
+
+
+def _rename_only_callee_swaps(before: str, after: str) -> tuple[dict[str, str], set[int]] | None:
+    """Return the old->new callee map when a change is a pure call-site rename.
+
+    The two sources must parse and be identical once every call-site callee is
+    replaced by a placeholder; import bindings may only gain the new callees.
+    The returned line set holds the after-file line numbers of swapped calls.
+
+    Returns:
+        ``None`` when any non-rename executable change is present.
+    """
+    try:
+        before_tree = ast.parse(before)
+        after_tree = ast.parse(after)
+    except SyntaxError:
+        return None
+    after_calls = _CalleeSwapCollector()
+    after_calls.visit(after_tree)
+    before_calls = _CalleeSwapCollector()
+    before_calls.visit(before_tree)
+    if len(before_calls.callees) != len(after_calls.callees):
+        # A removed dead helper (the swapped-out callee's own def) holds calls
+        # that no longer exist after the rename; prune it before comparing.
+        pruned = _without_dead_callee_defs(
+            before_tree,
+            {
+                old
+                for old, new in zip(before_calls.callees, after_calls.callees, strict=False)
+                if old != new and old is not None and new is not None
+            },
+            after,
+        )
+        recount = _CalleeSwapCollector()
+        recount.visit(pruned)
+        if len(recount.callees) != len(after_calls.callees):
+            return None
+        before_calls = recount
+        before_tree = pruned
+    swaps: dict[str, str] = {}
+    swapped_lines: set[int] = set()
+    for old, new, line in zip(
+        before_calls.callees, after_calls.callees, after_calls.call_lines, strict=True
+    ):
+        if old == new:
+            continue
+        if old is None or new is None:
+            return None
+        if old in swaps and swaps[old] != new:
+            return None
+        swaps[old] = new
+        swapped_lines.add(line)
+    if not swaps:
+        return None
+    renamed = set(swaps) | set(swaps.values())
+    pruned_before = _without_dead_callee_defs(before_tree, set(swaps), after)
+    if _normalized_callee_ast(pruned_before, renamed) != _normalized_callee_ast(
+        after_tree, renamed
+    ):
+        return None
+    return swaps, swapped_lines
+
+
+def _imported_module_for_name(tree: ast.Module, name: str) -> str | None:
+    """Resolve a directly imported name to its absolute source module."""
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.level != 0 or not node.module:
+            continue
+        for alias in node.names:
+            if alias.name == name and alias.asname is None:
+                return node.module
+            if alias.asname == name:
+                return node.module
+    return None
+
+
+def _resolve_module_path(module: str, repo_root: Path) -> Path | None:
+    """Resolve an absolute module name to its repository source file."""
+    module_path = repo_root / Path(*module.split(".")).with_suffix(".py")
+    if module_path.is_file():
+        return module_path
+    package_init = repo_root / Path(*module.split(".")) / "__init__.py"
+    return package_init if package_init.is_file() else None
+
+
+def _def_body_lines(source: str, callee: str) -> set[int] | None:
+    """Return the body line numbers of a named function, excluding its def line."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == callee:
+            lines = set()
+            for child in ast.walk(node):
+                lineno = getattr(child, "lineno", None)
+                if isinstance(lineno, int):
+                    lines.add(lineno)
+            return lines - {node.lineno}
+    return None
+
+
+def _executed_line_set(file_data: _CoverageFileData | None) -> set[int] | None:
+    """Return the executed line set from a coverage file payload."""
+    if file_data is None:
+        return None
+    executed = file_data.get("executed_lines")
+    if not isinstance(executed, list):
+        return None
+    try:
+        return {int(line) for line in executed}
+    except (TypeError, ValueError):
+        return None
+
+
+def _find_module_coverage(
+    key: str, coverage_file_data: dict[str, _CoverageFileData]
+) -> _CoverageFileData | None:
+    """Find a module's coverage payload by exact or suffix path match."""
+    file_data = coverage_file_data.get(key)
+    if file_data is not None:
+        return file_data
+    for candidate, data in coverage_file_data.items():
+        if candidate.endswith(key) or key.endswith(candidate):
+            return data
+    return None
+
+
+def _callee_def_executed(
+    module: str,
+    callee: str,
+    repo_root: Path,
+    coverage_file_data: dict[str, _CoverageFileData],
+) -> bool:
+    """Return whether a callee's definition body ran in the coverage artifact."""
+    module_path = _resolve_module_path(module, repo_root)
+    if module_path is None:
+        return False
+    try:
+        source = module_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    body_lines = _def_body_lines(source, callee)
+    if not body_lines:
+        return False
+    key = module_path.relative_to(repo_root).as_posix()
+    executed = _executed_line_set(_find_module_coverage(key, coverage_file_data))
+    return executed is not None and bool(body_lines & executed)
+
+
+def _has_rename_only_reuse_proof(
+    path: Path,
+    base: str,
+    repo_root: Path,
+    coverage_file_data: dict[str, _CoverageFileData],
+    missing_lines: list[int],
+    *,
+    head: str = "HEAD",
+) -> bool:
+    """Return whether missing changed lines are a rename onto covered callees.
+
+    Every missing line must sit on a swapped call site, the file change must be
+    a pure callee rename, and every new callee's definition body must have
+    executed in the coverage artifact. Any other executable change, an
+    unresolvable import, or an uncovered target fails closed with ``False``.
+    """
+    if head == "HEAD":
+        before = _file_at_ref(base, path, repo_root)
+    else:
+        before = _file_at_ref(base, path, repo_root, head=head)
+    if before is None:
+        return False
+    try:
+        after = (repo_root / path).read_text(encoding="utf-8")
+    except OSError:
+        return False
+    result = _rename_only_callee_swaps(before, after)
+    if result is None:
+        return False
+    swaps, swapped_lines = result
+    if not set(missing_lines) <= swapped_lines:
+        return False
+    try:
+        after_tree = ast.parse(after)
+    except SyntaxError:
+        return False
+    for new_callee in set(swaps.values()):
+        module = _imported_module_for_name(after_tree, new_callee)
+        if module is None:
+            return False
+        if not _callee_def_executed(module, new_callee, repo_root, coverage_file_data):
+            return False
+    return True
+
+
 def _normalize_path(path: Path, repo_root: Path) -> str:
     """Normalize an absolute or relative path to repository POSIX form.
 
@@ -1005,6 +1273,7 @@ def _build_results(
         covered_changed_lines: list[int] | None = None
         missing_changed_lines: list[int] | None = None
         declaration_only_proof = False
+        rename_only_proof = False
         if resolved is not None:
             (
                 changed_coverage,
@@ -1029,6 +1298,17 @@ def _build_results(
                 if declaration_only_proof:
                     coverage = 100.0
                     scope = "declaration-only proof"
+                elif (missing_changed_lines or []) and _has_rename_only_reuse_proof(
+                    Path(path_str),
+                    base,
+                    repo_root,
+                    coverage_file_data,
+                    missing_changed_lines or [],
+                    head=head,
+                ):
+                    rename_only_proof = True
+                    coverage = 100.0
+                    scope = "rename-only reuse proof"
         results.append(
             {
                 "file": path_str,
@@ -1040,6 +1320,7 @@ def _build_results(
                 "covered_changed_lines": covered_changed_lines,
                 "missing_changed_lines": missing_changed_lines,
                 "declaration_only_proof": declaration_only_proof,
+                "rename_only_proof": rename_only_proof,
             }
         )
     return results

@@ -417,6 +417,16 @@ def test_result_rows_reject_outcome_fields(packet: dict) -> None:
     )
 
 
+def test_result_rows_reject_admission_status_drift_from_sidecar(packet: dict) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    rows = _result_lineage_rows(packet, identities)
+    rows[0]["admission_status"] = "confirmed_failure"
+    _bad(
+        lambda: validate_result_rows(packet, rows, identities),
+        "result/sidecar admission status",
+    )
+
+
 def test_result_rows_reject_supplied_identity_drift(packet: dict) -> None:
     identities = copy.deepcopy(build_expected_identities(packet, repo_root=ROOT))
     run = next(item for item in identities["runs"] if item["objective_id"] == "temporal_robustness")

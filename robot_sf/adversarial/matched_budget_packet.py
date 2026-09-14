@@ -1200,11 +1200,14 @@ def validate_result_rows(
             run["objective_id"] == "temporal_robustness"
             and row.get("call_class") != "search_invalid_proposal"
         ):
-            validate_temporal_sidecar(
-                _mapping(row.get("temporal_sidecar"), "temporal_sidecar"),
-                packet,
-                candidate_id=candidate_id,
-            )
+            sidecar = _mapping(row.get("temporal_sidecar"), "temporal_sidecar")
+            validate_temporal_sidecar(sidecar, packet, candidate_id=candidate_id)
+            if row.get("admission_status") is not None:
+                _expect(
+                    row.get("admission_status"),
+                    sidecar.get("admission_status"),
+                    "result/sidecar admission status",
+                )
         groups.setdefault(candidate_id, []).append(row)
     _validate_result_lineage(packet, groups)
     run_budget_limits = {

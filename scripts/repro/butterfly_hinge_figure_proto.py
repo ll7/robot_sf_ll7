@@ -22,14 +22,15 @@ Implemented since the first cut:
   ``trace_scene_figure._focal_pedestrian_id`` -- fixes the first cut's "focal p3 floats
   disconnected from the interaction" bug (that bug was ``nearest_pedestrian_id[step=0]``).
 - ``compute_joint_state_divergence`` / ``find_persistence_onset``: the design spec's D(t)
-  normalized joint-state divergence detector (robot pose + commanded v/omega + clearance to
+  normalized joint-state divergence detector (robot pose + commanded v/omega + distance to
   the locked focal pedestrian, physically-scaled), replacing the first cut's threshold on
   raw robot-robot separation.
 - ``find_separator``: the design spec's tiered backward search (mode / command jump /
   braking onset / largest risk rise) for the pivot, with an honest "unavailable" report for
   the mode tier (this trace schema has no per-step categorical planner-mode field).
 - ``compute_delta_gutter`` / ``_draw_delta_gutter``: the design spec's central ``A | Delta |
-  B`` gutter (Delta t_brake, Delta v_cmd at pivot, min clearance over the following horizon,
+  B`` gutter (Delta t_brake, Delta v_cmd at pivot, min centre-to-centre distance over the
+  following horizon,
   first differing mode).
 - Map obstacles reused from ``trace_scene_figure`` (item 4); for this pair's tight
   trajectory-based crop the scenario's only obstacles are far-field corridor boundary walls
@@ -158,7 +159,7 @@ _LABEL_BBOX = {"facecolor": "white", "edgecolor": "none", "alpha": 0.72, "pad": 
 #: feedback 2026-07-16): minimum rendered font 7 pt; 8 pt for ticks/annotations; 9-10 pt
 #: panel titles; declutter -- drop the per-step "braking" marker+label and the dimmed
 #: context-pedestrian id labels (their roles move to the legend), keep collision marker,
-#: min-clearance point+value (compact "x.xx m" text), focal-pedestrian highlight, and
+#: min-distance point+value (compact "x.xx m" text), focal-pedestrian highlight, and
 #: start/end glyphs.
 #: --------------------------------------------------------------------------------------
 _SCREEN_PANEL_STYLE: dict[str, Any] = {
@@ -166,7 +167,7 @@ _SCREEN_PANEL_STYLE: dict[str, Any] = {
     "tick_fs": 7.5,
     "axis_fs": 8.0,
     "annot_fs": 7.0,  # focal label, collision/near-miss labels
-    "small_fs": 6.5,  # pivot + clearance labels, non-completion note
+    "small_fs": 6.5,  # pivot + distance labels, non-completion note
     "ped_fs": 6.5,  # context-pedestrian id labels
     "brake_fs": 6.0,
     "show_braking": True,
@@ -211,7 +212,7 @@ PRINT_FIG_WIDTH_IN: float = 5.906
 #:   - pose separation   -> DEFAULT_ROBOT_RADIUS (robot_sf/common/robot_defaults.py)
 #:   - commanded v        -> DifferentialDriveSettings.max_linear_speed (robot/differential_drive.py)
 #:   - commanded omega     -> DifferentialDriveSettings.max_angular_speed (robot/differential_drive.py)
-#:   - clearance-to-focal-ped -> DEFAULT_CLEARANCE_THRESHOLD_M (analysis_workbench/trace_failure_predicates.py)
+#:   - distance-to-focal-ped -> DEFAULT_CLEARANCE_THRESHOLD_M (analysis_workbench/trace_failure_predicates.py)
 #: --------------------------------------------------------------------------------------
 _ROBOT_DEFAULTS = DifferentialDriveSettings()
 
@@ -272,7 +273,8 @@ class EpisodeTrace:
     ped_xy: np.ndarray  # (T, N, 2), column order == ped_ids
     cmd_v: np.ndarray  # (T,) commanded linear velocity
     cmd_omega: np.ndarray  # (T,) commanded angular velocity
-    metrics: dict[str, np.ndarray]  # from compute_trace_metrics: speed/clearance/nearest id
+    metrics: dict[str, np.ndarray]  # from compute_trace_metrics: speed/distance/nearest id
+    # (distance stored under the retained ``clearance_m`` key)
 
 
 def load_episode(bundle_dir: Path, label: str, *, max_steps: int | None = None) -> EpisodeTrace:
@@ -406,7 +408,7 @@ def select_focal_pedestrian(episode_a_bundle: Path, ep_b: EpisodeTrace) -> dict[
     the near-miss and collision thresholds) before it teleports away to join the far
     pedestrian cluster the robot actually interacts with (respawn-at-goal artifact, see
     ``_draw_panel``'s teleport-segmenting note) -- so the "focal" label rendered on a
-    trajectory segment with no real interaction, while the clearance line (correctly)
+    trajectory segment with no real interaction, while the distance line (correctly)
     pointed at whichever pedestrian the *global closest approach* used instead. Hence:
     "focal p3 renders as a floating segment disconnected from the interaction."
 
@@ -417,7 +419,7 @@ def select_focal_pedestrian(episode_a_bundle: Path, ep_b: EpisodeTrace) -> dict[
     "success" / reference trajectory both episodes share an identical start with) as the
     anchor so both panels label the SAME pedestrian id, then verify that id is actually
     present -- and a genuine, non-trivial close approach -- in episode B too, so the
-    labelled focal pedestrian is provably the one every clearance line in the figure
+    labelled focal pedestrian is provably the one every distance line in the figure
     measures to.
 
     Returns:
@@ -469,7 +471,7 @@ def select_focal_pedestrian(episode_a_bundle: Path, ep_b: EpisodeTrace) -> dict[
 
 def clearance_to_ped(ep: EpisodeTrace, ped_id: int) -> np.ndarray:
     """Per-step robot-to-``ped_id`` center-to-center distance (not "nearest of any
-    pedestrian" -- a fixed single pedestrian's distance, used to lock the clearance line to
+    pedestrian" -- a fixed single pedestrian's distance, used to lock the distance line to
     the same pedestrian the figure labels as focal).
 
     Returns:
@@ -701,7 +703,7 @@ def closest_approach(ep: EpisodeTrace) -> dict[str, Any]:
     """Global closest robot-pedestrian approach within the (possibly truncated) episode,
     to WHICHEVER pedestrian is nearest at that step (may differ from the locked focal
     pedestrian -- kept for the report's cross-check, see ``select_focal_pedestrian``, not
-    used to draw the figure's clearance line).
+    used to draw the figure's distance line).
 
     Returns:
         Dict with ``step``, ``time_s``, ``distance_m``, ``ped_id``, ``robot_xy``, ``ped_xy``.
@@ -723,9 +725,9 @@ def closest_approach(ep: EpisodeTrace) -> dict[str, Any]:
 
 def closest_approach_to_focal_ped(ep: EpisodeTrace, focal_ped_id: int) -> dict[str, Any]:
     """Closest robot approach to the LOCKED focal pedestrian specifically (not "nearest of
-    any pedestrian" -- see ``closest_approach``). This is what the figure's clearance line
+    any pedestrian" -- see ``closest_approach``). This is what the figure's distance line
     and label are drawn from, so the labelled focal pedestrian is provably the one the
-    clearance line measures to (the task's item-1 verification requirement).
+    distance line measures to (the task's item-1 verification requirement).
 
     Returns:
         Dict with ``step``, ``time_s``, ``distance_m``, ``ped_id`` (== ``focal_ped_id``),
@@ -755,8 +757,8 @@ def compute_delta_gutter(
     horizon_s: float = 2.0,
 ) -> dict[str, Any]:
     """The hinge figure's central delta gutter (design spec: "A narrow central delta gutter
-    containing only: Delta t_brake, Delta v_cmd at the pivot, minimum clearance over the
-    following horizon, first differing planner mode").
+    containing only: Delta t_brake, Delta v_cmd at the pivot, minimum centre-to-centre distance
+    over the following horizon, first differing planner mode").
 
     All four quantities are computed directly from the traces at the pivot found by
     ``find_separator`` -- none are hand-tuned. ``first differing planner mode`` is reported
@@ -766,8 +768,9 @@ def compute_delta_gutter(
     Returns:
         Dict with ``dt_brake_s`` (B's first-braking time minus A's, ``None`` if either is
         unavailable), ``dv_cmd_at_pivot_mps`` / ``domega_cmd_at_pivot_rad_s`` (A minus B at
-        ``pivot_step``), ``min_clearance_horizon_m`` per episode (min clearance-to-focal-ped
-        over the ``horizon_s`` seconds following the pivot), and ``first_differing_mode``
+        ``pivot_step``), ``min_clearance_horizon_m`` per episode (min centre-to-centre
+        distance-to-focal-ped over the ``horizon_s`` seconds following the pivot), and
+        ``first_differing_mode``
         (``None`` with a ``reason``).
     """
     dt = float(ep_a.time_s[1] - ep_a.time_s[0]) if len(ep_a.time_s) > 1 else 0.1
@@ -845,8 +848,8 @@ def compute_contrast_gutter(
     well-defined regardless of differing starts, and every number is derived from the
     two loaded traces (or their bundle metadata) -- nothing is invented:
 
-    - minimum clearance to the locked focal pedestrian (center-to-center, the same
-      quantity the panels' clearance lines draw),
+    - minimum centre-to-centre distance to the locked focal pedestrian (the same
+      quantity the panels' distance lines draw),
     - near-miss step counts (benchmark definition, see ``count_near_miss_steps``),
     - steps to termination (``metadata.summary.step_count``, the full episode length),
     - first-braking time per episode (``critical_intervals.first_braking_event``,
@@ -942,7 +945,7 @@ def _text_overlaps_lines_or_markers(
     with it. Covers all three of the QA gate's text-adjacent defect types this script
     can trigger: ``text_line_overlap``, ``text_marker_overlap``, and
     ``text_text_overlap`` (this scenario's 6-pedestrian doorway congestion produces
-    enough simultaneous labels -- braking/collision/focal/context-ped/clearance -- that
+    enough simultaneous labels -- braking/collision/focal/context-ped/distance -- that
     label-vs-label collisions are as common as label-vs-geometry ones, unlike the
     sparser 4-pedestrian reference pair this closed-loop placer was first written for).
 
@@ -1004,7 +1007,7 @@ def _place_clear_label(  # noqa: PLR0913 - every argument is a distinct annotate
     to an anchor point sitting inside a dense pedestrian cluster, the reported bbox always
     reached back into that clutter regardless of how far the text itself was pushed away --
     so ``draw_leader=False`` is required for anchors in cluttered regions (the caller
-    already draws a separate, deliberate dotted clearance line for that visual link; the
+    already draws a separate, deliberate dotted distance line for that visual link; the
     text doesn't need its own second connector).
     """
     fig = ax.figure
@@ -1078,7 +1081,7 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     start): the whole robot trajectory is drawn in the episode's own color/linestyle
     (no gray "common prefix" segment -- there is none) and no pivot ring or pivot label
     is drawn (``divergence_step`` / ``common_prefix_end`` / ``pivot_label_text`` are
-    ignored). Everything else (pedestrians, braking/clearance/outcome markers,
+    ignored). Everything else (pedestrians, braking/distance/outcome markers,
     start/end glyphs) is unchanged. The default (hinge) mode is untouched for true
     shared-prefix pairs.
 
@@ -1087,7 +1090,7 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     ``_PRINT_PANEL_STYLE`` for the design-at-final-size print layout).
 
     When ``defer_labels`` is True, the two dynamically-placed labels (pivot ring,
-    clearance) are NOT placed here; instead their ``(anchor_xy, text, style_kwargs)``
+    distance) are NOT placed here; instead their ``(anchor_xy, text, style_kwargs)``
     specs are collected and returned, so the caller can place them AFTER
     ``fig.tight_layout()`` runs (tight_layout moves/rescales the axes, which invalidates
     any text-vs-line overlap check performed before it -- see ``render_hinge_figure`` for
@@ -1117,7 +1120,7 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     # line, reusing the repo's own established fix for this exact artifact
     # (robot_sf.benchmark.trace_scene_figure._contiguous_segments / _TELEPORT_STEP_M).
     # Context/focal pedestrian id labels use the same closed-loop figure_qa-driven
-    # placement as the pivot/clearance labels below (_place_clear_label): a fixed
+    # placement as the pivot/distance labels below (_place_clear_label): a fixed
     # offset (the first-cut approach, still applied here for the reference
     # head-on-corridor pair's sparser 4-pedestrian layout) collides routinely in a
     # denser scene -- this pair's 6-pedestrian doorway congestion is exactly such a
@@ -1225,7 +1228,7 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     # -- pivot ring (design spec: "a conspicuous pivot ring at the first persistent action
     # difference" -- the separator found by find_separator, not the raw geometric
     # divergence point). Label placement uses the same closed-loop figure_qa-driven search
-    # as the clearance label (_place_clear_label). Skipped entirely in contrast mode
+    # as the distance label (_place_clear_label). Skipped entirely in contrast mode
     # (no shared prefix -> no pivot to ring; the start diamond glyph marks the trace
     # start instead, named "trace start" in the contrast legend).
     if not contrast_mode and divergence_step is not None and divergence_step < len(xy):
@@ -1261,7 +1264,7 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
             continue
         px, py = xy[step]
         if anchor == "closest_approach":
-            continue  # drawn explicitly below with the labelled clearance line
+            continue  # drawn explicitly below with the labelled distance line
         if anchor == "first_braking_event":
             if not style["show_braking"]:
                 continue  # print declutter: braking marker+label dropped (author feedback)
@@ -1290,23 +1293,23 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
             else:
                 _place_clear_label(ax, *braking_label_spec[:2], **braking_label_spec[2])
 
-    # -- closest-approach line, labelled with clearance ----------------------------------
+    # -- closest-approach line, labelled with the distance --------------------------------
     # Label placement uses the closed-loop figure_qa-driven search (_place_clear_label,
     # see its docstring for the two heuristic attempts this replaced): the first cut's
-    # fixed diagonal offset put both clearance labels directly on their own dotted line
+    # fixed diagonal offset put both distance labels directly on their own dotted line
     # (figure_qa.lint_figure text_line_overlap / text_marker_overlap).
     if closest["ped_xy"] is not None:
         rx, ry = closest["robot_xy"]
         pxg, pyg = closest["ped_xy"]
         ax.plot([rx, pxg], [ry, pyg], color=color, linewidth=0.8, linestyle=":", zorder=5)
-        clearance_text = (
+        distance_text = (
             f"{closest['distance_m']:.2f} m"
             if style["clearance_compact"]
-            else f"clearance {closest['distance_m']:.2f} m\n@t={closest['time_s']:.1f}s"
+            else f"centre-to-centre {closest['distance_m']:.2f} m\n@t={closest['time_s']:.1f}s"
         )
-        clearance_label_spec = (
+        distance_label_spec = (
             (pxg, pyg),
-            clearance_text,
+            distance_text,
             {
                 "color": color,
                 "fontsize": style["small_fs"],
@@ -1315,9 +1318,9 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
             },
         )
         if defer_labels:
-            pending_labels.append(clearance_label_spec)
+            pending_labels.append(distance_label_spec)
         else:
-            _place_clear_label(ax, *clearance_label_spec[:2], **clearance_label_spec[2])
+            _place_clear_label(ax, *distance_label_spec[:2], **distance_label_spec[2])
 
     # -- outcome marker: collision (x) / near-miss (triangle) --------------------------
     if collision_or_near_miss_step is not None and collision_or_near_miss_step < len(xy):
@@ -1435,7 +1438,7 @@ def _format_gutter_lines(gutter: dict[str, Any]) -> list[str]:
     min_a = gutter["min_clearance_horizon_m"]["episode_a"]["distance_m"]
     min_b = gutter["min_clearance_horizon_m"]["episode_b"]["distance_m"]
     lines.append(
-        f"min clearance\n(+{gutter['horizon_s']:g}s horizon)\nA {min_a:.2f}m / B {min_b:.2f}m"
+        f"min centre-to-centre distance\n(+{gutter['horizon_s']:g}s horizon)\nA {min_a:.2f}m / B {min_b:.2f}m"
     )
     lines.append("")
     lines.append("first differing mode\nn/a (no per-step\nmode field)")
@@ -1464,7 +1467,7 @@ def _format_contrast_gutter_lines(gutter: dict[str, Any]) -> list[str]:
     # tick labels (a cross-axes overlap figure_qa.lint_figure does not check, caught by
     # visual review of the first contrast render).
     lines = ["A | B", ""]
-    lines.append(f"min clearance\n(focal ped)\nA {clear_a:.2f} m\nB {clear_b:.2f} m")
+    lines.append(f"min centre-to-centre distance\n(focal ped)\nA {clear_a:.2f} m\nB {clear_b:.2f} m")
     lines.append("")
     lines.append(f"exposure steps\nA {near_a} / B {near_b}")
     lines.append("")
@@ -1483,7 +1486,7 @@ def _format_contrast_gutter_lines(gutter: dict[str, Any]) -> list[str]:
 def _draw_delta_gutter(ax: plt.Axes, gutter: dict[str, Any]) -> None:
     """Draw the narrow central gutter panel: the hinge-mode delta gutter (design spec:
     "A narrow central delta gutter containing only: Delta t_brake, Delta v_cmd at the
-    pivot, minimum clearance over the following horizon, first differing planner mode")
+    pivot, minimum centre-to-centre distance over the following horizon, first differing planner mode")
     or, when ``gutter["mode"] == "contrast"``, the matched seed-pair contrast gutter
     (per-episode quantities that stay meaningful across different starts -- see
     ``compute_contrast_gutter``).
@@ -1524,7 +1527,7 @@ def _draw_delta_gutter(ax: plt.Axes, gutter: dict[str, Any]) -> None:
 def _draw_contrast_strip(ax: plt.Axes, gutter: dict[str, Any], *, fontsize: float) -> None:
     """Draw the print layout's compact single-row contrast strip (replaces the vertical
     central gutter below the panels): four cells, each a small dimmed header over its A/B
-    values -- min clearance to the focal pedestrian, exposure steps, steps to
+    values -- min centre-to-centre distance to the focal pedestrian, exposure steps, steps to
     termination, first braking. Same data source as the vertical contrast gutter
     (``compute_contrast_gutter``); only the arrangement changes.
     """
@@ -1547,13 +1550,13 @@ def _draw_contrast_strip(ax: plt.Axes, gutter: dict[str, Any], *, fontsize: floa
     else:
         brake_val = "n/a"
     cells = [
-        ("min clearance (focal ped)", f"A {clear_a:.2f} m / B {clear_b:.2f} m"),
+        ("min centre-to-centre (focal ped)", f"A {clear_a:.2f} m / B {clear_b:.2f} m"),
         ("exposure steps", f"A {near_a} / B {near_b}"),
         ("steps to termination", f"A {steps_a} / B {steps_b}"),
         ("first braking", brake_val),
     ]
     # Cell centers: NOT an even quarter-split. At the true (narrower) print width the
-    # even split puts the long "min clearance (focal ped)" / "exposure steps" headers
+    # even split puts the long "min centre-to-centre (focal ped)" / "exposure steps" headers
     # (cells 0/1) close enough to collide; cells 2/3's shorter headers have slack, so
     # centers are nudged left/right to borrow that slack for cells 0/1 (text unchanged).
     cell_x = (0.11, 0.40, 0.635, 0.87)
@@ -1778,7 +1781,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     common_prefix_end = pivot_step
 
     # defer_labels=True: draw geometry now, place the two dynamic labels (pivot,
-    # clearance) AFTER fig.tight_layout() below -- see _draw_panel's docstring for why a
+    # distance) AFTER fig.tight_layout() below -- see _draw_panel's docstring for why a
     # single-pass placement measurably cleared every line/marker at draw time yet still
     # showed up in figure_qa.lint_figure (tight_layout moves the axes afterward).
     pending_a = _draw_panel(
@@ -2025,7 +2028,7 @@ def _sha256_of_file(path: Path) -> str:
 #: Lint defect count from the first-cut prototype's output, captured for the record 2026-07-15
 #: (``output/butterfly_hinge_proto/butterfly_hinge_figure_proto.pdf``, commit 5124e9faf):
 #: 3x ``text_line_overlap`` + 1x ``text_marker_overlap``, all error-severity, all from the
-#: divergence/clearance annotation offsets. Kept as a literal here (not re-derived at
+#: divergence/distance annotation offsets. Kept as a literal here (not re-derived at
 #: runtime) so the before/after comparison in the report is against the actual prior
 #: artifact, not a re-run of deleted code.
 FIRST_CUT_LINT_ERROR_COUNT: int = 4
@@ -2177,7 +2180,7 @@ def _compose_hinge_headline(
     focal_closest_b: dict[str, Any],
 ) -> str:
     """Hinge-mode headline (original pivot grammar, unchanged behavior -- extracted from
-    ``main`` verbatim): separator clause per tier + D(t) persistence + clearance contrast.
+    ``main`` verbatim): separator clause per tier + D(t) persistence + distance contrast.
 
     Returns:
         Headline string.
@@ -2211,7 +2214,7 @@ def _compose_hinge_headline(
         f"D(t) becomes persistently divergent (threshold {onset['threshold']:.2f}, "
         f"{DIVERGENCE_THRESHOLD_MARGIN:g}x the {onset['floor']:.2f} pre-divergence floor) "
         f"by t={onset['time_s']:.2f} s. "
-        f"B's subsequent minimum clearance to the focal pedestrian "
+        f"B's subsequent minimum centre-to-centre distance to the focal pedestrian "
         f"({focal_closest_b['distance_m']:.2f} m at t={focal_closest_b['time_s']:.1f} s) "
         f"is {d_clearance:.2f} m lower than A's ({focal_closest_a['distance_m']:.2f} m at "
         f"t={focal_closest_a['time_s']:.1f} s)."

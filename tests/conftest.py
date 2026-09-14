@@ -796,6 +796,10 @@ _FAST_FILES = {
     # Typed simulator snapshots are deterministic serialization and compatibility
     # contracts for the preparation-only continuation prototype (issue #8620).
     "test_typed_snapshot.py",
+    # The nominated-case replay/no-op fidelity proof is deterministic snapshot,
+    # restore, and continuation-comparison coverage for the #8568 diagnostic
+    # slice; keep it in the exact-head fast lane (issue #8568).
+    "test_replay_noop_fidelity_issue_8568.py",
     # Continuation-plan tests are deterministic admission and cost-table
     # contracts for the preparation-only research scaffold (issue #8622).
     "test_continuation_experiment_plan.py",

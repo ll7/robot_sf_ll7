@@ -2689,7 +2689,7 @@ def _step_build_simulation_trace(
             sim.robot_pos,
             robot_velocity,
             state.trace_actor_ids,
-            headings=sim.ped_headings,
+            headings=getattr(sim, "ped_headings", None),
             surface_clearances=_surface_clearances_m(
                 sim.robot_pos,
                 sim.peds,

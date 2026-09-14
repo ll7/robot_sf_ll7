@@ -112,7 +112,9 @@ input_provenance:
       sha256: 5df9d2fb3dd15e241226362d2825b5be600a1a1fc9e1c0300c3ad13feab09cd1
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
-      sha256: 0a926d30f304bf7fa2e8065ba6e2f7bfdab31c7c46c1dfe85bb9ac8ec34a0160
+      # Refreshed after the additive issue #9304 evidence-trace bridge; the
+      # frozen #5303 objective and promotion boundary are unchanged.
+      sha256: c4636e29f4769a7f69649b2c7301d4a24e70cb203eef6c13af179501ff13c89c
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
       sha256: a8fe9e70249a924e2f4b6dd0334ad2ef34cfc10a11bc6d1e21e7d077d6146812

@@ -132,16 +132,18 @@ input_provenance:
       sha256: 5df9d2fb3dd15e241226362d2825b5be600a1a1fc9e1c0300c3ad13feab09cd1
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
-      sha256: 0a926d30f304bf7fa2e8065ba6e2f7bfdab31c7c46c1dfe85bb9ac8ec34a0160
+      # Refreshed after the additive issue #9304 evidence-trace bridge; the
+      # frozen #5303 objective and promotion boundary are unchanged.
+      sha256: c4636e29f4769a7f69649b2c7301d4a24e70cb203eef6c13af179501ff13c89c
     - id: adversarial_bundle
       path: robot_sf/adversarial/bundle.py
-      # Refreshed after additive template-route support for issue #7340; the
+      # Refreshed after the additive issue #9304 evidence-trace bridge; the
       # default candidate-route behavior and #5303 promotion controls are unchanged.
-      sha256: fe6e899c21d9318a2ccc646c4f2b9f4f721e4059a58a5636ed6e6e1743560263
+      sha256: 9d8372b7bb8a6bf2fcf79529ca502d4ce9046e59fa003d542360b6120db5b65e
     - id: adversarial_config
       path: robot_sf/adversarial/config.py
-      # Refreshed with the bundle hash for the same additive route-mode support.
-      sha256: 765ffc09d7dafdabe22fb2634e8a720e8f3e017033953f23f017f84bcb97f4a9
+      # Refreshed after the additive issue #9304 evidence-trace bridge.
+      sha256: bfe7e3871321b7e47f228fecc7928e3be7948dee343bb8a44a663f76e63bdeb2
     - id: timing_preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preflight.py
       # Refreshed after propagating the authored pedestrian route mode into the
@@ -183,8 +185,9 @@ input_provenance:
       sha256: 1f88149400e81284d37615814fe2e9b03a768cce7214e02ba7a210e1bb53b8db
     - id: historical_contract
       path: configs/adversarial/issue_5303_search_promotion_contract.yaml
-      # Tracks the v1 provenance refresh from the additive temporal-robustness fixture fields.
-      sha256: beea1382448ed6a856467f5b669242a67bd598fbd5cda063934606c2b03567d4
+      # Tracks the v1 provenance refresh from the additive temporal-robustness
+      # fixture fields and the current-base #9304 trace bridge pins.
+      sha256: e9524c03efde7ac33d1f80004203e5e08993ae5d21da6a115b60cf064a505b34
     - id: historical_search_space
       path: configs/adversarial/issue_5303_search_promotion_space.yaml
       sha256: 04906a154f88c17b5d2797a4d6d934f5b6b74cc25d7e99796bd603f9823f2106

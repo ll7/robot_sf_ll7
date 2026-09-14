@@ -432,6 +432,10 @@ _FAST_FILES = {
     # for the changed camera-ready reporting lines; keep it in the exact-head fast
     # lane (issue #9107).
     "test_camera_ready_archetype_column.py",
+    # The merge-receipt blocked-verification remedy is deterministic diagnostics
+    # coverage for the changed receipt verifier; keep it in the exact-head fast
+    # lane (issue #9218).
+    "test_merge_receipt_verify_remedy.py",
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",

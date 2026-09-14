@@ -37,6 +37,22 @@ if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateEvaluation
 
 _ROBUSTNESS_SCHEMA_VERSION = "robustness-report.v1"
+_TIMING_KEYS = ("dt_s", "dt")
+_SCENARIO_TIMING_KEYS = ("run_dt", "dt_s", "dt")
+_NESTED_SCENARIO_TIMING_KEYS = ("time_per_step_in_secs", "dt_s", "dt")
+_TRACE_NAMES = (
+    "paired_effect_native_trace",
+    "analysis_trace",
+    "simulation_step_trace",
+)
+_DURATION_KEYS = (
+    "physical_time_sec",
+    "physical_time_s",
+    "simulation_time_sec",
+    "simulation_time_s",
+    "sim_time_sec",
+    "sim_time_s",
+)
 
 
 def _metric(metrics: dict[str, Any], key: str) -> float | None:
@@ -97,7 +113,7 @@ def _consistent_timing_value(values: list[float]) -> float | None:
 def _mapping_dt_values(container: Any, keys: tuple[str, ...]) -> tuple[list[float], bool]:
     """Read positive timestep fields from one mapping."""
     if not isinstance(container, dict):
-        return [], False
+        return [], True
     values: list[float] = []
     malformed = False
     for key in keys:
@@ -113,50 +129,78 @@ def _mapping_dt_values(container: Any, keys: tuple[str, ...]) -> tuple[list[floa
 
 def _declared_dt_candidates(record: dict[str, Any]) -> tuple[list[float], bool]:
     """Collect declared evaluation timesteps and report malformed declarations."""
-    sources: list[tuple[Any, tuple[str, ...]]] = [
-        (record, ("dt_s", "dt")),
-        (record.get("timing"), ("dt_s", "dt")),
-    ]
+    sources: list[tuple[Any, tuple[str, ...]]] = [(record, _TIMING_KEYS)]
+    if "timing" in record:
+        sources.append((record["timing"], _TIMING_KEYS))
 
-    algorithm_metadata = record.get("algorithm_metadata")
-    if isinstance(algorithm_metadata, dict):
-        sources.extend(
-            (algorithm_metadata.get(trace_name), ("dt_s", "dt"))
-            for trace_name in (
-                "paired_effect_native_trace",
-                "analysis_trace",
-                "simulation_step_trace",
-            )
-        )
-
-    scenario_params = record.get("scenario_params")
-    if isinstance(scenario_params, dict):
-        direct_keys = ("run_dt", "dt_s", "dt")
-        keys = (
-            direct_keys
-            if any(key in scenario_params for key in direct_keys)
-            else (
-                "time_per_step_in_secs",
-                "dt_s",
-                "dt",
-            )
-        )
-        sources.append(
-            (
-                scenario_params
-                if keys is direct_keys
-                else scenario_params.get("simulation_config"),
-                keys,
-            )
-        )
+    algorithm_sources, algorithm_malformed = _algorithm_dt_sources(record)
+    sources.extend(algorithm_sources)
+    scenario_sources, scenario_malformed = _scenario_dt_sources(record)
+    sources.extend(scenario_sources)
 
     candidates: list[float] = []
-    malformed = False
+    malformed = algorithm_malformed or scenario_malformed
     for container, keys in sources:
         values, source_malformed = _mapping_dt_values(container, keys)
         candidates.extend(values)
         malformed |= source_malformed
     return candidates, malformed
+
+
+def _algorithm_dt_sources(record: dict[str, Any]) -> tuple[list[tuple[Any, tuple[str, ...]]], bool]:
+    """Return present trace timing mappings and flag malformed metadata containers."""
+    if "algorithm_metadata" not in record:
+        return [], False
+    algorithm_metadata = record["algorithm_metadata"]
+    if not isinstance(algorithm_metadata, dict):
+        return [], True
+    return [
+        (algorithm_metadata[name], _TIMING_KEYS)
+        for name in _TRACE_NAMES
+        if name in algorithm_metadata
+    ], False
+
+
+def _scenario_dt_sources(record: dict[str, Any]) -> tuple[list[tuple[Any, tuple[str, ...]]], bool]:
+    """Return direct and nested scenario timing mappings without hiding conflicts."""
+    if "scenario_params" not in record:
+        return [], False
+    scenario_params = record["scenario_params"]
+    if not isinstance(scenario_params, dict):
+        return [], True
+
+    sources: list[tuple[Any, tuple[str, ...]]] = []
+    if any(key in scenario_params for key in _SCENARIO_TIMING_KEYS):
+        sources.append((scenario_params, _SCENARIO_TIMING_KEYS))
+    if "simulation_config" in scenario_params:
+        sources.append((scenario_params["simulation_config"], _NESTED_SCENARIO_TIMING_KEYS))
+    return sources, False
+
+
+def _resolve_dt_candidates(candidates: list[float]) -> tuple[float | None, bool]:
+    """Resolve recorded timestep candidates and flag conflicting values."""
+    if not candidates:
+        return None, False
+    recorded_dt = _consistent_timing_value(candidates)
+    return recorded_dt, recorded_dt is None
+
+
+def _derived_duration_candidates(
+    record: dict[str, Any], steps_value: float
+) -> tuple[list[float], bool]:
+    """Derive timestep candidates from physical durations and a valid step count."""
+    candidates: list[float] = []
+    for key in _DURATION_KEYS:
+        if key not in record:
+            continue
+        duration = _positive_recorded_float(record[key])
+        if duration is None:
+            return [], True
+        derived = duration / steps_value
+        if not math.isfinite(derived) or derived <= 0.0:
+            return [], True
+        candidates.append(derived)
+    return candidates, False
 
 
 def _derived_dt_status(record: dict[str, Any]) -> tuple[float | None, bool]:
@@ -165,30 +209,20 @@ def _derived_dt_status(record: dict[str, Any]) -> tuple[float | None, bool]:
     if malformed:
         return None, True
 
-    steps_value = _positive_recorded_float(record.get("steps"))
+    steps_value = None
+    if "steps" in record:
+        steps_value = _positive_recorded_float(record["steps"])
+        if steps_value is None:
+            return None, True
     if steps_value is not None:
-        for key in (
-            "physical_time_sec",
-            "physical_time_s",
-            "simulation_time_sec",
-            "simulation_time_s",
-            "sim_time_sec",
-            "sim_time_s",
-        ):
-            if key not in record:
-                continue
-            duration = _positive_recorded_float(record[key])
-            if duration is None:
-                return None, True
-            derived = duration / steps_value
-            if not math.isfinite(derived) or derived <= 0.0:
-                return None, True
-            candidates.append(derived)
+        derived_candidates, malformed_duration = _derived_duration_candidates(record, steps_value)
+        if malformed_duration:
+            return None, True
+        candidates.extend(derived_candidates)
+    elif any(key in record for key in _DURATION_KEYS):
+        return None, True
 
-    if not candidates:
-        return None, False
-    recorded_dt = _consistent_timing_value(candidates)
-    return recorded_dt, recorded_dt is None
+    return _resolve_dt_candidates(candidates)
 
 
 def _derived_dt(record: dict[str, Any]) -> float | None:
@@ -397,14 +431,17 @@ def _collision_count_value(metrics: dict[str, Any]) -> tuple[float | None, bool]
         if key not in metrics:
             continue
         value = metrics.get(key)
-        count = _metric(metrics, key)
-        valid = (
-            not isinstance(value, bool)
-            and count is not None
-            and count >= 0.0
-            and math.isclose(count, round(count), rel_tol=0.0, abs_tol=1.0e-12)
-        )
-        if not valid:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None, True
+        try:
+            count = float(value)
+        except (OverflowError, TypeError, ValueError):
+            return None, True
+        if (
+            not math.isfinite(count)
+            or count < 0.0
+            or not math.isclose(count, round(count), rel_tol=0.0, abs_tol=1.0e-12)
+        ):
             return None, True
         counts.append(count)
     if not counts:

@@ -268,6 +268,16 @@ class TestCollisionRobustness:
         )
         assert collision.robustness is None
 
+    def test_non_numeric_collision_count_is_unavailable(self) -> None:
+        record = _make_episode_record()
+        record["metrics"]["collisions"] = "2"
+        collision = next(
+            p
+            for p in compute_robustness_report(record).properties
+            if p.property_name == "collision"
+        )
+        assert collision.robustness is None
+
     def test_critical_time_from_event_ledger(self) -> None:
         record = _make_episode_record(
             total_collision_count=1.0,
@@ -676,7 +686,16 @@ class TestDtDerivation:
         "record_update",
         [
             {"dt_s": "bad"},
-            {"scenario_params": {"run_dt": 0.2}},
+            {"steps": 0},
+            {"steps": "bad"},
+            {"timing": []},
+            {"algorithm_metadata": {"analysis_trace": []}},
+            {
+                "scenario_params": {
+                    "run_dt": 0.1,
+                    "simulation_config": {"time_per_step_in_secs": 0.2},
+                }
+            },
         ],
     )
     def test_explicit_timestep_cannot_override_bad_recorded_timing(

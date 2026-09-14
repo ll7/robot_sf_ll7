@@ -54,7 +54,7 @@ EXPECTED_EVIDENCE_TIER = "preflight_valid"
 CONFIRMATION_THRESHOLD = 3
 
 _REQUIRED_INPUTS = set(
-    "parent_manifest scenario_template search_space objective_registry robustness samplers runner certification replay confirmation".split()
+    "parent_manifest scenario_template search_space objective_registry robustness samplers runner benchmark_runner certification replay confirmation".split()
 )
 _FORBIDDEN_FIELDS = set(
     "outcome objective_value observed_value result_rows simulator_output slurm_job_id job_id target_host submitted_at".split()

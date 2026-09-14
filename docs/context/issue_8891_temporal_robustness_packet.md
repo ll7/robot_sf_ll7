@@ -12,7 +12,8 @@ feature branch intentionally differs before merge; omitting it retains the
 legacy exact working-tree binding. This split does not authorize execution or
 change the frozen planning boundary.
 The source-bound input roster also pins the sampler implementation, including
-the CMA-ES builder named by the search-family contract.
+the CMA-ES builder named by the search-family contract, and the benchmark
+runner that records the effective evaluation timestep in episode artifacts.
 
 ## Frozen contract
 

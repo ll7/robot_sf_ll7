@@ -44,8 +44,6 @@ from urllib.parse import unquote
 
 import yaml
 
-from scripts.dev.git_common import resolve_repo_root
-
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -118,7 +116,13 @@ _ARTIFACT_REGISTRY_SCHEMA_PREFIXES = ("research-package-registry",)
 
 def _repo_root() -> Path:
     """Return Git repository root."""
-    return resolve_repo_root()
+    out = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return Path(out.stdout.strip())
 
 
 def changed_files(base_ref: str, *, root: Path) -> list[str]:

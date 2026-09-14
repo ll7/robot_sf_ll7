@@ -441,6 +441,37 @@ def _direct_review_source(
     )
 
 
+def _is_classified_review_source(value: Any) -> bool:
+    """Return whether a mapping is already a classified review outcome.
+
+    Classified outcomes carry ``status``/``carrier``/``reason_codes`` and no direct-source
+    ``kind``. Re-classifying such a mapping as a direct source would overwrite its primary
+    status with a secondary ``review_carrier_kind_invalid`` code.
+    """
+    return (
+        isinstance(value, Mapping)
+        and _string(value.get("status")).lower() in EVIDENCE_STATES
+        and "carrier" in value
+        and (value.get("carrier") is None or isinstance(value.get("carrier"), Mapping))
+        and isinstance(value.get("reason_codes"), list)
+        and not _string(value.get("kind") or value.get("carrier_kind"))
+    )
+
+
+def _preserve_classified_review(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Preserve an already-classified review outcome without reclassification."""
+    preserved: dict[str, Any] = {
+        "status": _string(value.get("status")).lower(),
+        "carrier": copy.deepcopy(value.get("carrier"))
+        if isinstance(value.get("carrier"), Mapping)
+        else None,
+        "reason_codes": sorted(str(item) for item in value.get("reason_codes", []) if item),
+    }
+    if "precedence" in value:
+        preserved["precedence"] = value.get("precedence")
+    return preserved
+
+
 def classify_implementation_review(  # noqa: C901 - precedence and carrier states are explicit.
     evidence: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -464,6 +495,8 @@ def classify_implementation_review(  # noqa: C901 - precedence and carrier state
 
     direct = evidence.get("review_source")
     if isinstance(direct, Mapping):
+        if _is_classified_review_source(direct):
+            return _preserve_classified_review(direct)
         carrier, status, reasons = _direct_review_source(
             direct, head_sha=head_sha, metadata_digest=metadata_digest
         )
@@ -923,19 +956,8 @@ def receipt_digest(receipt: Mapping[str, Any]) -> str:
 
 def _normalize_review_source(value: Any, *, head_sha: str, metadata_digest: str) -> dict[str, Any]:
     """Normalize a classified implementation-review source."""
-    if (
-        isinstance(value, Mapping)
-        and value.get("status") in EVIDENCE_STATES
-        and isinstance(value.get("carrier"), Mapping)
-    ):
-        return {
-            "status": _string(value.get("status")).lower(),
-            "carrier": copy.deepcopy(value.get("carrier"))
-            if isinstance(value.get("carrier"), Mapping)
-            else None,
-            "reason_codes": sorted(str(item) for item in value.get("reason_codes", []) if item),
-            "precedence": value.get("precedence"),
-        }
+    if _is_classified_review_source(value):
+        return _preserve_classified_review(value)
     if isinstance(value, Mapping):
         return classify_implementation_review(
             {"head_sha": head_sha, "metadata_digest": metadata_digest, "review_source": value}

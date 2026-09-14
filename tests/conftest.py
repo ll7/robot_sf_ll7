@@ -586,6 +586,7 @@ _FAST_FILES = {
     # (issue #8073).
     "test_goal_candidate_provider.py",
     "test_goal_candidate_coverage.py",
+    "test_math_utils.py",
     # Inverse goal-force estimator tests are deterministic actor/oracle-boundary
     # contracts; keep their implementation-integrity coverage in PR fast shards.
     "test_goal_force_inverse_dynamics.py",

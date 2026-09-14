@@ -963,6 +963,49 @@ def test_classified_review_source_preserves_primary_failure(
 
 
 @pytest.mark.parametrize(
+    ("status", "reason_codes"),
+    [
+        ("malformed", ["machine_review_marker_malformed"]),
+        ("stale", ["review_carrier_stale_head"]),
+    ],
+)
+def test_classify_refed_classified_source_preserves_primary_failure(
+    status: str, reason_codes: list[str]
+) -> None:
+    """A re-fed classified mapping must keep its status, not gain kind_invalid."""
+    classified = classify_implementation_review(
+        {
+            "head_sha": HEAD_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "review_source": {
+                "status": status,
+                "carrier": None,
+                "reason_codes": reason_codes,
+            },
+        }
+    )
+
+    assert classified["status"] == status
+    assert classified["carrier"] is None
+    assert classified["reason_codes"] == reason_codes
+    assert "review_carrier_kind_invalid" not in classified["reason_codes"]
+
+
+def test_classify_kind_bearing_source_still_classifies_direct() -> None:
+    """A mapping with a direct-source kind is classified, never preserved blindly."""
+    classified = classify_implementation_review(
+        {
+            "head_sha": HEAD_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "review_source": {"kind": "not_a_kind"},
+        }
+    )
+
+    assert classified["status"] == "malformed"
+    assert classified["reason_codes"] == ["review_carrier_kind_invalid"]
+
+
+@pytest.mark.parametrize(
     ("raw", "expected"),
     [
         (None, "unavailable"),

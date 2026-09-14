@@ -407,6 +407,9 @@ _FAST_FILES = {
     "test_open_coverage_report.py",
     "test_route_geometry.py",
     "test_pytest_config_contract.py",
+    # Deterministic CMA-ES sampler contract tests provide exact-head coverage
+    # for the adversarial sampler implementation.
+    "test_samplers.py",
     # Canonical logging helper tests provide changed-line coverage when the
     # deprecated research logging shim is retired (issue #8378).
     "test_logging_config.py",

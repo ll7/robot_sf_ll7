@@ -156,6 +156,13 @@ Coverage collection and enforcement run automatically in CI (`.github/workflows/
    and nearby test path, leaves explicit simulation/campaign tests slow, and fails closed for an
    unregistered contract candidate or an ambiguous nearby test. It does not change coverage
    thresholds or admit benchmark evidence.
+3. **Rename-only reuse proof**: `scripts/coverage/check_changed_files_coverage.py` exempts missing
+   changed lines with scope `rename-only reuse proof` when the file change is a pure call-site
+   callee rename (same call structure and arguments, import-only additions, optional removal of
+   the swapped-out helper's own now-unreferenced def) **and** every new callee's definition body
+   executed in the coverage artifact. The row reports `rename_only_proof: true` with the missing
+   lines retained for audit. Any other executable change, unresolvable import, or uncovered
+   target stays gated. New logic keeps full protection (issue #9238).
 3. **Coverage Gate**: On non-PR events, after all `fast-feedback` shards pass, the `coverage-gate` job executes:
    - Downloads all shard databases (`coverage-shard-*`).
    - Combines them: `uv run coverage combine output/coverage`.

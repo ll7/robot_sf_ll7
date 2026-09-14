@@ -15,7 +15,7 @@ import json
 import time
 import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -25,6 +25,11 @@ from gymnasium import spaces
 from loguru import logger
 from shapely.geometry import Polygon as ShapelyPolygon
 
+from robot_sf.benchmark.obstacle_force_diagnostic_receipt import (
+    attach_obstacle_force_diagnostic_receipt,
+    obstacle_force_fallback_from_mapping,
+)
+from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.types import Line2D
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.env_config import EnvSettings
@@ -423,15 +428,24 @@ def _jsonl_runtime_metadata(
     info: dict[str, Any],
     config_hash: str,
 ) -> dict[str, Any] | None:
-    """Build JSONL runtime metadata with the episode configuration hash.
+    """Build JSONL runtime metadata with a diagnostic identity/fallback receipt.
 
     Returns:
         Runtime metadata for the obstacle-force site, or ``None`` when absent.
     """
-    if "obstacle_force_law" not in info:
+    raw_metadata = info.get("obstacle_force_law")
+    if not isinstance(raw_metadata, Mapping):
         return None
-    obstacle_metadata = dict(info["obstacle_force_law"])
+    obstacle_metadata = dict(raw_metadata)
     obstacle_metadata.setdefault("config_hash", config_hash)
+    obstacle_metadata.setdefault("source_commit", _git_hash_fallback())
+    fallback = obstacle_force_fallback_from_mapping(info.get("obstacle_force_law_diagnostics"))
+    obstacle_metadata = attach_obstacle_force_diagnostic_receipt(
+        obstacle_metadata,
+        config_hash=str(obstacle_metadata["config_hash"]),
+        source_commit=str(obstacle_metadata["source_commit"]),
+        fallback=fallback,
+    )
     return {"obstacle_force_law": obstacle_metadata}
 
 

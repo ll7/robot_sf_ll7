@@ -1,5 +1,6 @@
 """Occupancy-grid helpers shared by SocNav-family planner adapters."""
 
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -55,7 +56,7 @@ class OccupancyAwarePlannerMixin:
         if not meta:
             meta = observation.get("occupancy_grid_meta")
 
-        if meta is None or not meta:
+        if not isinstance(meta, Mapping) or not meta:
             return None
 
         try:
@@ -125,7 +126,7 @@ class OccupancyAwarePlannerMixin:
             if pos >= idx_arr.size:
                 return -1
             return int(idx_arr[pos])
-        except (ValueError, TypeError, IndexError):
+        except (OverflowError, ValueError, TypeError, IndexError):
             return -1
 
     def _preferred_channel(self, meta: dict[str, Any]) -> int:
@@ -223,15 +224,36 @@ class OccupancyAwarePlannerMixin:
         grid, meta = payload
         if grid.ndim < 3:
             return None
+        try:
+            channel_indices = meta.get("channel_indices")
+            if channel_indices is not None and not np.all(
+                np.isfinite(self._as_1d_float(channel_indices))
+            ):
+                return None
+        except (OverflowError, TypeError, ValueError):
+            return None
         channel_idx = self._grid_channel_index(meta, "obstacles")
         if channel_idx < 0:
             channel_idx = self._grid_channel_index(meta, "combined")
         if channel_idx < 0 or channel_idx >= grid.shape[0]:
             return None
-        resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]), pad=1)
-        resolution = float(resolution_arr[0])
-        if resolution <= 0.0:
+        try:
+            resolution_arr = self._as_1d_float(meta.get("resolution", [0.0]))
+            origin_arr = self._as_1d_float(meta.get("origin", [0.0, 0.0]))
+            use_ego_arr = self._as_1d_float(meta.get("use_ego_frame", [0.0]))
+        except (OverflowError, TypeError, ValueError):
             return None
+        if (
+            resolution_arr.size != 1
+            or not np.all(np.isfinite(resolution_arr))
+            or resolution_arr[0] <= 0.0
+            or origin_arr.size != 2
+            or not np.all(np.isfinite(origin_arr))
+            or use_ego_arr.size != 1
+            or not np.all(np.isfinite(use_ego_arr))
+        ):
+            return None
+        resolution = float(resolution_arr[0])
         return grid, meta, channel_idx, resolution
 
     def _path_penalty(

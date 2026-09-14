@@ -96,6 +96,16 @@ def test_jsonl_recording_basic():
         assert obstacle_metadata["site"] == "fast_pysf"
         assert obstacle_metadata["resolution_mode"] == "defaulted_missing"
         assert obstacle_metadata["config_hash"] == metadata["config_hash"]
+        receipt = obstacle_metadata["diagnostic_receipt"]
+        assert receipt["claim_boundary"] == "diagnostic_only"
+        assert receipt["input_identity"]["config_hash"] == metadata["config_hash"]
+        assert receipt["input_identity"]["source_commit"] == obstacle_metadata["source_commit"]
+        assert receipt["fallback"] == {
+            "used": False,
+            "count": 0,
+            "first_reason": None,
+            "reasons": {},
+        }
         assert isinstance(obstacle_metadata["enabled"], bool)
         assert isinstance(obstacle_metadata["applied"], bool)
 

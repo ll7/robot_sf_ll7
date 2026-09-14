@@ -32,6 +32,15 @@ sites. Map-runner episode records persist the site payloads under
 the record-level configuration hash and source commit. The ordinary robot-environment reset
 metadata and JSONL sidecar also persist the fast-pysf payload.
 
+Each emitted site payload also carries the validated nested
+`obstacle_force_law_diagnostic_receipt.v1` contract: resolved law and selection source, application
+state, fallback usage/count/reasons, and deterministic input identity bound to the configuration
+hash, source commit, site, selector, and parameter digest. The same diagnostic-only receipt is
+persisted by the JSONL sidecar path. The receipt is provenance/dispatch metadata only; it cannot
+establish numerical, physical, safety, social, benchmark, paper-facing, or domain-approval
+evidence. Its schema owner is
+`robot_sf/benchmark/schemas/obstacle_force_law_diagnostic_receipt.v1.json`.
+
 ## Current implementation boundary
 
 The two obstacle-force sites must not be conflated:

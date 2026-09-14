@@ -1,5 +1,6 @@
 """Tests for SocNavBench-inspired planner adapters."""
 
+import json
 from itertools import pairwise
 from pathlib import Path
 
@@ -1645,6 +1646,72 @@ def test_social_force_obstacle_no_grid_returns_zero():
     robot_pos = np.array([0.0, 0.0])
     got = adapter._compute_obstacle_force(obs, robot_pos, 0.0, np.array([1.0, 0.0]), obs["robot"])
     assert np.array_equal(got, np.zeros(2))
+
+
+@_sf_available
+@pytest.mark.parametrize(
+    ("metadata_key", "metadata_value"),
+    [
+        ("resolution", np.array([np.nan], dtype=np.float32)),
+        ("resolution", "not-a-number"),
+        ("origin", np.array([np.nan, 0.0], dtype=np.float32)),
+        ("origin", "malformed-origin"),
+        ("use_ego_frame", np.array([np.inf], dtype=np.float32)),
+        ("channel_indices", np.array([np.inf, 1.0, 2.0, 3.0], dtype=np.float32)),
+    ],
+)
+def test_social_force_malformed_grid_metadata_fails_closed(metadata_key, metadata_value):
+    """Malformed/non-finite grid metadata yields structured zero-force diagnostics."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    obs[f"occupancy_grid_meta_{metadata_key}"] = metadata_value
+    robot_pos = np.array([0.0, 0.0], dtype=float)
+
+    got = adapter._compute_obstacle_force(
+        obs,
+        robot_pos,
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    assert np.array_equal(got, np.zeros(2))
+    diagnostics = adapter.diagnostics()
+    metadata = diagnostics["obstacle_force_law"]
+    assert metadata["applied"] is False
+    assert metadata["parameters_sha256"]
+    json.dumps(metadata, allow_nan=False)
+
+
+@_sf_available
+def test_social_force_non_mapping_grid_metadata_fails_closed():
+    """A malformed nested metadata payload returns structured zero-force diagnostics."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    for key in tuple(obs):
+        if key.startswith("occupancy_grid_meta_"):
+            del obs[key]
+    obs["occupancy_grid_meta"] = "malformed-grid-metadata"
+    robot_pos = np.array([0.0, 0.0], dtype=float)
+
+    got = adapter._compute_obstacle_force(
+        obs,
+        robot_pos,
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    assert np.array_equal(got, np.zeros(2))
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert metadata["applied"] is False
+    json.dumps(metadata, allow_nan=False)
 
 
 @_sf_available

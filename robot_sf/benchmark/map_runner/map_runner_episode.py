@@ -126,6 +126,10 @@ from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
+from robot_sf.benchmark.obstacle_force_diagnostic_receipt import (
+    attach_obstacle_force_diagnostic_receipt,
+    obstacle_force_fallback_from_mapping,
+)
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.paired_effect_metric_contract import evaluate_paired_effect_metric_fields
 from robot_sf.benchmark.path_utils import compute_shortest_path_length
@@ -4822,10 +4826,27 @@ def _assemble_episode_record(  # noqa: PLR0913
     )
     runtime_law = record.get("algorithm_metadata", {}).get("obstacle_force_law")
     if isinstance(runtime_law, dict) and isinstance(runtime_law.get("sites"), dict):
-        for site_metadata in runtime_law["sites"].values():
+        snapshot_obstacle = (
+            loop_result.planner_runtime_snapshot.get("obstacle_force_law")
+            if isinstance(loop_result.planner_runtime_snapshot, Mapping)
+            else None
+        )
+        for site, site_metadata in runtime_law["sites"].items():
             if isinstance(site_metadata, dict):
                 site_metadata.setdefault("config_hash", record["config_hash"])
                 site_metadata.setdefault("source_commit", record["git_hash"])
+                fallback = obstacle_force_fallback_from_mapping(site_metadata)
+                if fallback is None and isinstance(snapshot_obstacle, Mapping):
+                    if snapshot_obstacle.get("site") == site:
+                        fallback = obstacle_force_fallback_from_mapping(
+                            loop_result.planner_runtime_snapshot
+                        )
+                runtime_law["sites"][site] = attach_obstacle_force_diagnostic_receipt(
+                    site_metadata,
+                    config_hash=str(record["config_hash"]),
+                    source_commit=str(record["git_hash"]),
+                    fallback=fallback,
+                )
     _finalize_assembled_record_provenance(
         record,
         ctx=ctx,

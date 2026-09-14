@@ -17,11 +17,11 @@ import re
 import sys
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from scripts.dev.git_common import resolve_agent_artifact_dir
+from scripts.dev.time_utils import utc_now_iso as _now_utc
 
 SCHEMA_VERSION = "goal_blocker_receipt.v1"
 FINGERPRINT_SCHEMA_VERSION = "goal_blocker_fingerprint.v1"
@@ -100,10 +100,6 @@ def _receipt_digest(receipt: Mapping[str, Any]) -> str:
     """Hash a receipt without its self-referential digest field."""
     payload = {key: value for key, value in receipt.items() if key != _RECEIPT_DIGEST}
     return hashlib.sha256(_canonical_json(payload)).hexdigest()
-
-
-def _now_utc() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def build_receipt(  # noqa: PLR0913 - the versioned contract names each receipt field explicitly.

@@ -436,6 +436,10 @@ _FAST_FILES = {
     # coverage for the changed receipt verifier; keep it in the exact-head fast
     # lane (issue #9218).
     "test_merge_receipt_verify_remedy.py",
+    # The helper-consolidation contracts are deterministic no-duplicate-def
+    # coverage for the delegated helper families; keep them in the exact-head
+    # fast lane (issue #9250).
+    "test_helper_consolidation_issue_9250.py",
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",
@@ -667,6 +671,13 @@ _FAST_FILES = {
     "test_submit_release_single_node_contract.py",
     "test_trace_dossier_package.py",
     "test_trace_dossier_renderer.py",
+    # Dossier-figure, reexport, preregistration, and denominator contract tests
+    # are deterministic schema/manifest coverage for modules touched by the
+    # helper consolidation; keep them in the exact-head fast lane (issue #9250).
+    "test_case_dossier_figure.py",
+    "test_issue_6412_real_reexport.py",
+    "test_issue_6971_safety_wrapper_preregistration.py",
+    "test_scenario_denominator_manifest.py",
     "test_trace_exemplar_interest.py",
     "test_trace_exemplar_interest_angle_delta.py",
     "test_wrapped_angle_delta.py",

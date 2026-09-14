@@ -23,6 +23,7 @@ from typing import Any, Literal
 from robot_sf.benchmark.scenario_generation.portfolio_selector import (
     compute_pareto_front as compute_5601_pareto_front,
 )
+from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.errors import RobotSfError
 
 SCHEMA_VERSION = "ch7_case_portfolio.v2"
@@ -261,10 +262,6 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
 
 
 def write_deterministic_json(payload: Mapping[str, Any], path: Any) -> None:
@@ -1222,7 +1219,7 @@ def _safe_source_digest(ref: Any) -> tuple[str, str]:
         path = Path(ref)
         if path.is_absolute() or ".." in path.parts:
             return "unavailable", f"unsafe source ref {ref!r}"
-        root = _repo_root()
+        root = get_repository_root()
         resolved = (root / path).resolve()
         if not resolved.is_relative_to(root):
             return "unavailable", f"source ref escapes repo {ref!r}"

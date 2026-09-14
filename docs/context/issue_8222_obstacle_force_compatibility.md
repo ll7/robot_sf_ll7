@@ -41,6 +41,10 @@ establish numerical, physical, safety, social, benchmark, paper-facing, or domai
 evidence. Its schema owner is
 `robot_sf/benchmark/schemas/obstacle_force_law_diagnostic_receipt.v1.json`.
 
+When SocNav occupancy metadata is malformed or non-finite, the planner returns the existing
+structured zero-force path and records the degraded reason in the fallback fields; this remains
+diagnostic metadata and is excluded from success evidence.
+
 ## Current implementation boundary
 
 The two obstacle-force sites must not be conflated:

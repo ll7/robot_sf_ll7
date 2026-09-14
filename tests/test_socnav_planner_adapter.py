@@ -1711,6 +1711,47 @@ def test_social_force_non_mapping_grid_metadata_fails_closed():
     assert np.array_equal(got, np.zeros(2))
     metadata = adapter.diagnostics()["obstacle_force_law"]
     assert metadata["applied"] is False
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reason"] == "malformed_or_nonfinite_occupancy_grid_metadata"
+    assert metadata["fallback_reasons"] == {"malformed_or_nonfinite_occupancy_grid_metadata": 1}
+    json.dumps(metadata, allow_nan=False)
+
+
+@_sf_available
+def test_social_force_malformed_metadata_records_degraded_fallback_after_valid_step():
+    """A later malformed grid remains visible after an earlier valid obstacle step."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 2)],
+        origin=(-2.0, -2.0),
+    )
+    valid_force = adapter._compute_obstacle_force(
+        obs,
+        np.array([0.0, 0.0]),
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+    assert np.all(np.isfinite(valid_force))
+
+    malformed = dict(obs)
+    malformed["occupancy_grid_meta_resolution"] = np.array([np.nan], dtype=np.float32)
+    degraded_force = adapter._compute_obstacle_force(
+        malformed,
+        np.array([0.0, 0.0]),
+        0.0,
+        np.zeros(2, dtype=float),
+        malformed["robot"],
+    )
+
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert np.array_equal(degraded_force, np.zeros(2))
+    assert metadata["applied"] is True
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reasons"] == {"malformed_or_nonfinite_occupancy_grid_metadata": 1}
     json.dumps(metadata, allow_nan=False)
 
 

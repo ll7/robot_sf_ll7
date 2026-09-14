@@ -35,12 +35,14 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             )
         self._obstacle_force_applied = False
         self._obstacle_force_runtime_parameters: dict[str, Any] = {}
+        self._obstacle_force_fallback_reasons: dict[str, int] = {}
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset episode-local obstacle-force application diagnostics."""
         del seed
         self._obstacle_force_applied = False
         self._obstacle_force_runtime_parameters = {}
+        self._obstacle_force_fallback_reasons = {}
 
     def plan_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame translational velocity using the social-force model.
@@ -210,6 +212,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             getattr(self.config, "social_force_obstacle_law", None)
         )
         centers, radii = self._extract_obstacles_from_grid(observation, robot_pos, robot_heading)
+        failure_reason = getattr(self, "_obstacle_grid_payload_failure_reason", None)
+        if isinstance(failure_reason, str) and failure_reason:
+            self._record_obstacle_force_fallback(failure_reason)
         if centers.size == 0:
             return np.zeros(2, dtype=float)
 
@@ -260,6 +265,12 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             return float(self.config.social_force_obstacle_factor) != 0.0
         except (AttributeError, TypeError, ValueError):
             return True
+
+    def _record_obstacle_force_fallback(self, reason: str) -> None:
+        """Record one diagnostic-only fallback/degraded obstacle-force path."""
+        self._obstacle_force_fallback_reasons[reason] = (
+            self._obstacle_force_fallback_reasons.get(reason, 0) + 1
+        )
 
     @staticmethod
     def _grid_cell_centers(
@@ -493,7 +504,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                 "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
             }
             parameters.update(getattr(self, "_obstacle_force_runtime_parameters", {}))
-        return obstacle_force_law_metadata(
+        metadata = obstacle_force_law_metadata(
             getattr(config, "social_force_obstacle_law", None),
             site="socnav_social_force",
             geometry_convention="occupancy_cell_centers",
@@ -507,6 +518,19 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             ),
             parameters=parameters,
         )
+        fallback_reasons = dict(
+            sorted(getattr(self, "_obstacle_force_fallback_reasons", {}).items())
+        )
+        fallback_count = sum(fallback_reasons.values())
+        metadata.update(
+            {
+                "fallback": bool(fallback_count),
+                "fallback_count": fallback_count,
+                "fallback_reason": next(iter(fallback_reasons), None),
+                "fallback_reasons": fallback_reasons,
+            }
+        )
+        return metadata
 
 
 def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:

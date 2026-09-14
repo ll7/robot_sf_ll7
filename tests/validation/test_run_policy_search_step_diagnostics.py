@@ -53,6 +53,27 @@ def test_json_ready_uses_strict_json_null_for_non_finite_values() -> None:
     assert json.loads(encoded) == payload
 
 
+def test_json_ready_maps_extended_precision_non_finite_values_to_null() -> None:
+    """Extended-precision NumPy diagnostics must preserve missingness recursively."""
+    payload = _json_ready(
+        {
+            "scalar_nan": np.longdouble(np.nan),
+            "scalar_infinity": np.longdouble(np.inf),
+            "array": np.asarray(
+                [np.longdouble(np.nan), np.longdouble(np.inf), np.longdouble(1.25)],
+                dtype=np.longdouble,
+            ),
+        }
+    )
+
+    assert payload == {
+        "scalar_nan": None,
+        "scalar_infinity": None,
+        "array": [None, None, 1.25],
+    }
+    assert json.loads(json.dumps(payload, allow_nan=False)) == payload
+
+
 def test_trace_progress_summary_exposes_progress_stagnation_and_risk() -> None:
     """Step diagnostics should summarize progress and clearance without scanning every row."""
     rows = [

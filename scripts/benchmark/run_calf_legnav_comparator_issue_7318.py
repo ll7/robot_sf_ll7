@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import subprocess
 import sys
@@ -36,6 +37,21 @@ DEFAULT_OUTPUT = REPO_ROOT / "output/benchmarks/issue_7318_calf_legnav_comparato
 def _reject_non_finite_json_constant(value: str) -> NoReturn:
     """Reject Python's non-standard NaN/Infinity JSON extensions at trace input."""
     raise ValueError(f"trace contains non-standard JSON number {value}")
+
+
+def _reject_non_finite_json_values(value: Any, *, path: str = "$") -> None:
+    """Reject parsed JSON numbers that overflow to non-finite Python floats."""
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"trace contains non-finite JSON number at {path}")
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _reject_non_finite_json_values(item, path=f"{path}.{key}")
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _reject_non_finite_json_values(item, path=f"{path}[{index}]")
 
 
 def _repo_path(value: str | Path) -> Path:
@@ -650,6 +666,7 @@ def _run_condition(
             trace_path.read_text(encoding="utf-8"),
             parse_constant=_reject_non_finite_json_constant,
         )
+        _reject_non_finite_json_values(trace)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         return _placeholder_trace(config), {
             "condition": condition,

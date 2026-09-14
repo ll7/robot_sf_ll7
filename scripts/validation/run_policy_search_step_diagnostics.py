@@ -43,14 +43,15 @@ from scripts.validation.run_policy_search_candidate import (
 
 def _json_ready_scalar(value: Any) -> Any:
     """Return a JSON-safe scalar, preserving missingness for non-finite floats."""
-    if isinstance(value, float) and not np.isfinite(value):
-        return None
+    if isinstance(value, (float, np.floating)):
+        number = float(value)
+        return number if np.isfinite(number) else None
     return value
 
 
 def _json_ready(value: Any) -> Any:
     """Convert nested values into JSON-serializable primitives."""
-    if value is None or isinstance(value, (str, int, float, bool)):
+    if value is None or isinstance(value, (str, int, bool, float, np.floating)):
         return _json_ready_scalar(value)
     if isinstance(value, Path):
         return str(value)

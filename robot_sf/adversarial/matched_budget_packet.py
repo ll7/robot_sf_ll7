@@ -832,6 +832,19 @@ def build_expected_identities(
     return payload
 
 
+def _expected_run_budget_limits(
+    packet: Mapping[str, Any], *, repo_root: Path
+) -> dict[str, tuple[int, int]]:
+    identity = build_expected_identities(packet, repo_root=repo_root)
+    return {
+        run["run_id"]: (
+            len(run["candidate_slots"]),
+            len(run["candidate_slots"]) * SIMULATOR_INVOCATIONS_PER_SLOT,
+        )
+        for run in identity["runs"]
+    }
+
+
 def validate_temporal_sidecar(
     sidecar: Mapping[str, Any], packet: Mapping[str, Any], *, candidate_id: str | None = None
 ) -> None:
@@ -948,6 +961,7 @@ def validate_call_ledger(
     rows: Sequence[Mapping[str, Any]],
     *,
     run_budget_limits: Mapping[str, tuple[int, int]],
+    repo_root: Path | None = None,
 ) -> dict[str, Any]:
     """Validate explicit per-cell simulator-call and search-slot accounting.
 
@@ -1058,6 +1072,13 @@ def validate_call_ledger(
         len(slots) <= budget["search_attempt_slots"],
         "search-slot budget exceeded",
     )
+    expected_limits = _expected_run_budget_limits(packet, repo_root=repo_root or Path.cwd())
+    for run_id, limits in run_budget_limits.items():
+        maximum = expected_limits.get(run_id, (1, SIMULATOR_INVOCATIONS_PER_SLOT))
+        _require(
+            limits[0] <= maximum[0] and limits[1] <= maximum[1],
+            f"derived budget limits for {run_id} exceed the permitted maximum",
+        )
     for run_id in search_slots_by_run.keys() | simulator_invocations_by_run.keys():
         search_limit, simulator_limit = run_budget_limits[run_id]
         _require(
@@ -1096,6 +1117,7 @@ def _validate_result_lineage(
                 search_rows[0].get("admission_status") in {"invalid", "excluded"},
                 f"invalid search proposals must be excluded for {candidate_id}",
             )
+            _expect(len(candidate_rows), 1, f"invalid search lineage for {candidate_id}")
             continue
         for phase, expected_count in (
             ("certification", 1),
@@ -1217,7 +1239,12 @@ def validate_result_rows(
         )
         for run in identity["runs"]
     }
-    ledger = validate_call_ledger(packet, rows, run_budget_limits=run_budget_limits)
+    ledger = validate_call_ledger(
+        packet,
+        rows,
+        run_budget_limits=run_budget_limits,
+        repo_root=repo_root or Path.cwd(),
+    )
     ledger["validated_candidate_rows"] = len({row.get("candidate_id") for row in rows})
     return ledger
 
@@ -1333,7 +1360,7 @@ def build_canary_packet(
     run_budget_limits = {
         candidate["candidate_id"]: (1, SIMULATOR_INVOCATIONS_PER_SLOT) for candidate in candidates
     }
-    ledger = validate_call_ledger(packet, rows, run_budget_limits=run_budget_limits)
+    ledger = validate_call_ledger(packet, rows, run_budget_limits=run_budget_limits, repo_root=root)
     return {
         "schema_version": CANARY_SCHEMA_VERSION,
         "packet_digest": digest,

@@ -293,7 +293,7 @@ def test_ledger_rejects_per_run_budget_overruns(packet: dict) -> None:
             seed=9_100_000 + index,
             index=index,
         )
-        for index in range(97)
+        for index in range(113)
     ]
     _bad(
         lambda: validate_call_ledger(
@@ -302,6 +302,18 @@ def test_ledger_rejects_per_run_budget_overruns(packet: dict) -> None:
             run_budget_limits=run_budget_limits,
         ),
         "per-run simulator call budget",
+    )
+
+    inflated_limits = dict(run_budget_limits)
+    inflated_limits[run["run_id"]] = (1000, 1000)
+    _bad(
+        lambda: validate_call_ledger(
+            packet,
+            replay_rows,
+            run_budget_limits=inflated_limits,
+            repo_root=ROOT,
+        ),
+        "derived budget limits",
     )
 
     replay_only_limits = dict(run_budget_limits)
@@ -485,6 +497,23 @@ def test_invalid_search_proposal_cannot_claim_confirmed_failure(packet: dict) ->
     _bad(
         lambda: validate_result_rows(packet, [row], identities),
         "invalid search proposals must be excluded",
+    )
+
+
+def test_invalid_search_proposal_rejects_additional_lineage(packet: dict) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    rows = _result_lineage_rows(packet, identities)
+    invalid_search = rows[0]
+    invalid_search.pop("temporal_sidecar")
+    invalid_search.update(
+        call_class="search_invalid_proposal",
+        simulator_invocations=0,
+        simulator_call_id=None,
+        admission_status="invalid",
+    )
+    _bad(
+        lambda: validate_result_rows(packet, rows, identities),
+        "invalid search lineage",
     )
 
 

@@ -704,6 +704,7 @@ def test_check_closes_discipline_allows_non_closing_reference() -> None:
 
 _OVERRIDE_NUMSTAT = "\n".join(f"300\t0\tscripts/dev/file_{index}.py" for index in range(5)) + "\n"
 _CAPPED_ISSUE_BODY = "Reviewability budget: Maximum 10 files and 800 net new lines.\n"
+_BINARY_NUMSTAT = "10\t2\tscripts/dev/a.py\n-\t-\texamples/fixtures/synthetic.zip\n"
 
 
 @patch("scripts.ci.pr_contract_check._diff_numstat", return_value=_OVERRIDE_NUMSTAT)
@@ -801,6 +802,32 @@ def test_check_line_budget_discipline_fails_closed_when_diff_unavailable(
     mock_numstat.assert_called_once_with("missing-base")
 
 
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_line_budget_discipline_accepts_canonical_binary_numstat_row(
+    mock_metadata: MagicMock,
+) -> None:
+    """A Git binary row counts as a file without inventing text-line totals."""
+    mock_metadata.return_value = (["technical-debt"], _CAPPED_ISSUE_BODY)
+
+    blockers = pr_contract_check.check_line_budget_discipline(
+        "Closes #9094\n",
+        "origin/main",
+        "ll7/robot_sf_ll7",
+        numstat_text=_BINARY_NUMSTAT,
+    )
+
+    assert blockers == []
+    evidence = pr_contract_check.HistoricalNumstatEvidence.from_numstat(_BINARY_NUMSTAT)
+    assert evidence.changed_files == (
+        "scripts/dev/a.py",
+        "examples/fixtures/synthetic.zip",
+    )
+    assert evidence.files == 2
+    assert evidence.added == 10
+    assert evidence.deleted == 2
+    assert evidence.net == 8
+
+
 @patch("scripts.ci.pr_contract_check._diff_numstat")
 @patch("scripts.ci.pr_contract_check.get_issue_metadata")
 def test_check_line_budget_discipline_uses_supplied_historical_numstat(
@@ -868,6 +895,8 @@ def test_supplied_unavailable_historical_numstat_fails_closed(
         "4\tbad\ta.py\n",
         "4\t0\ta.py\textra\n",
         "4\t0\ta.py\n5\t0\ta.py\n",
+        "-\t0\tbinary.zip\n",
+        "0\t-\tbinary.zip\n",
     ],
 )
 @patch("scripts.ci.pr_contract_check.get_issue_metadata")

@@ -8,12 +8,18 @@ import json
 import re
 from dataclasses import dataclass, field
 
-PR_TITLE_MAX_LENGTH = 256
-_PR_METADATA_RE = re.compile(
-    r"pr-metadata\s*:\s*reconciled\s*@\s*([0-9a-fA-F]{64})(?![0-9a-fA-F])",
-    re.IGNORECASE,
+# Lane-coordination marker primitives live in the canonical
+# ``scripts.dev.lane_markers`` module (issue #9254); this module re-exports them
+# so existing importers keep working. New code imports from lane_markers.
+from scripts.dev.lane_markers import (  # noqa: F401 - re-export shim
+    _PR_METADATA_RE,
+    PR_METADATA_RE,
+    extract_metadata_digests,
+    format_pr_metadata,
+    metadata_trailer,
 )
-PR_METADATA_RE = _PR_METADATA_RE
+
+PR_TITLE_MAX_LENGTH = 256
 
 
 def validate_pr_title(title: str) -> str | None:
@@ -43,18 +49,6 @@ def metadata_digest(title: str, body: str) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
-
-def metadata_trailer(digest: str) -> str:
-    """Return the canonical review-evidence trailer for *digest*."""
-    return f"pr-metadata: reconciled @ {digest.lower()}"
-
-
-def extract_metadata_digests(text: str) -> list[str]:
-    """Extract canonical metadata digests from a review/comment body."""
-    if not isinstance(text, str):
-        return []
-    return list(dict.fromkeys(match.group(1).lower() for match in _PR_METADATA_RE.finditer(text)))
 
 
 _NOT_READY_SENTINEL_PATTERNS: tuple[re.Pattern[str], ...] = (

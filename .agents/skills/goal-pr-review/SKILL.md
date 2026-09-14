@@ -106,6 +106,10 @@ and the owner. One writer per branch is the rule; the following make that rule o
   `review-claim: <lane-id> @ <head-sha> until <UTC>` (default 90 minutes) before pushing or editing
   the body. After publishing the exact-head review evidence, release it with
   `review-claim: released @ <head-sha>` and re-read the live state before applying `merge-ready`.
+  Produce both markers with the canonical formatters (`scripts/dev/lane_markers.py`:
+  `format_review_claim` / `format_review_claim_release`) — never hand-format them; producer
+  skew has already bitten twice (#9243, #9246). The same module owns the
+  `gate-verdict`, `base-policy`, and `pr-metadata: reconciled` spellings.
   An unexpired trusted claim covering the live head is an admission hold: the carrier and native
   queue gates withhold authorization until the review worker releases it.
 - **Content-identical head moves do not require a full re-review.** When the head advanced only by

@@ -11,7 +11,7 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import yaml
 from jsonschema import Draft202012Validator
@@ -31,6 +31,11 @@ SCHEMA_PATH = REPO_ROOT / "robot_sf/benchmark/schemas/calf_legnav_comparator.v1.
 CONFIG_SCHEMA_PATH = REPO_ROOT / "robot_sf/benchmark/schemas/calf_legnav_comparator_config.v1.json"
 DEFAULT_CONFIG = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"
 DEFAULT_OUTPUT = REPO_ROOT / "output/benchmarks/issue_7318_calf_legnav_comparator/latest"
+
+
+def _reject_non_finite_json_constant(value: str) -> NoReturn:
+    """Reject Python's non-standard NaN/Infinity JSON extensions at trace input."""
+    raise ValueError(f"trace contains non-standard JSON number {value}")
 
 
 def _repo_path(value: str | Path) -> Path:
@@ -641,8 +646,11 @@ def _run_condition(
             "command": command,
         }
     try:
-        trace = json.loads(trace_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        trace = json.loads(
+            trace_path.read_text(encoding="utf-8"),
+            parse_constant=_reject_non_finite_json_constant,
+        )
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
         return _placeholder_trace(config), {
             "condition": condition,
             "status": "blocked",
@@ -832,7 +840,10 @@ def main(argv: list[str] | None = None) -> int:
     if runner_errors:
         report["status"] = "blocked"
         report["runner_errors"] = runner_errors
-    (output_dir / "summary.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    (output_dir / "summary.json").write_text(
+        json.dumps(report, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
     (output_dir / "README.md").write_text(_markdown(report), encoding="utf-8")
     print(
         json.dumps(
@@ -845,6 +856,7 @@ def main(argv: list[str] | None = None) -> int:
                 "runner_error_count": len(runner_errors),
             },
             sort_keys=True,
+            allow_nan=False,
         )
     )
     return 0 if report["status"] == "available" else 2

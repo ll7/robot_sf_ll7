@@ -41,10 +41,17 @@ from scripts.validation.run_policy_search_candidate import (
 )
 
 
+def _json_ready_scalar(value: Any) -> Any:
+    """Return a JSON-safe scalar, preserving missingness for non-finite floats."""
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
+
 def _json_ready(value: Any) -> Any:
     """Convert nested values into JSON-serializable primitives."""
     if value is None or isinstance(value, (str, int, float, bool)):
-        return value
+        return _json_ready_scalar(value)
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, dict):
@@ -52,15 +59,15 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, (list, tuple, set)):
         return [_json_ready(item) for item in value]
     if isinstance(value, np.ndarray):
-        return value.tolist()
+        return _json_ready(value.tolist())
     if hasattr(value, "tolist"):
         try:
-            return value.tolist()
+            return _json_ready(value.tolist())
         except Exception:
             pass
     if hasattr(value, "item"):
         try:
-            return value.item()
+            return _json_ready(value.item())
         except Exception:
             pass
     return str(value)
@@ -446,7 +453,7 @@ def _format_planner_summary_lines(planner_summary: Any) -> list[str]:
         return [*lines, "- Planner summary: `{}`"]
     for key, value in sorted(summary.items()):
         if isinstance(value, (dict, list)):
-            rendered = json.dumps(value, sort_keys=True)
+            rendered = json.dumps(value, sort_keys=True, allow_nan=False)
         else:
             rendered = str(value)
         lines.append(f"- `{key}`: `{rendered}`")
@@ -1224,7 +1231,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         "steps": trace_rows,
     }
     trace_path = output_dir / "trace.json"
-    trace_path.write_text(json.dumps(trace_payload, indent=2), encoding="utf-8")
+    trace_path.write_text(
+        json.dumps(trace_payload, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
 
     decision_counter = Counter()
     selected_head_counter = Counter()
@@ -1313,7 +1323,7 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
         planner_summary=planner_summary,
         done_info=done_info,
     )
-    print(json.dumps(payload, indent=2))
+    print(json.dumps(payload, indent=2, allow_nan=False))
     return 0
 
 

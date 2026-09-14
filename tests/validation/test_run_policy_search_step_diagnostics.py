@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 import numpy as np
 import pytest
@@ -14,6 +15,7 @@ from scripts.validation.run_policy_search_step_diagnostics import (
     _fixture_first_visible_step,
     _fixture_visibility_mask,
     _format_planner_summary_lines,
+    _json_ready,
     _observation_perturbation_spec,
     _occlusion_mask_by_distance,
     _optional_trace_fields,
@@ -28,6 +30,27 @@ from scripts.validation.run_policy_search_step_diagnostics import (
     _trace_progress_summary,
     _validate_policy_command,
 )
+
+
+def test_json_ready_uses_strict_json_null_for_non_finite_values() -> None:
+    """Trace serialization must not emit Python's non-standard NaN/Infinity tokens."""
+    payload = _json_ready(
+        {
+            "nan": float("nan"),
+            "positive_infinity": float("inf"),
+            "negative_infinity": -float("inf"),
+            "array": np.asarray([float("nan"), 1.25]),
+        }
+    )
+
+    assert payload == {
+        "nan": None,
+        "positive_infinity": None,
+        "negative_infinity": None,
+        "array": [None, 1.25],
+    }
+    encoded = json.dumps(payload, allow_nan=False)
+    assert json.loads(encoded) == payload
 
 
 def test_trace_progress_summary_exposes_progress_stagnation_and_risk() -> None:

@@ -470,6 +470,34 @@ def test_runner_materializes_blocked_report_for_malformed_trace(
     assert report["runner_errors"][0]["condition"] == "paired"
 
 
+def test_runner_rejects_non_standard_json_trace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The comparator must reject trace files containing NaN/Infinity extensions."""
+    config_path = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    def stub_run(command: list[str], **_kwargs: Any) -> SimpleNamespace:
+        """Materialize a syntactically permissive but non-standard JSON trace."""
+        output_dir = Path(command[command.index("--output-dir") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "trace.json").write_text('{"value": NaN}', encoding="utf-8")
+        return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    monkeypatch.setattr(comparator_runner.subprocess, "run", stub_run)
+    trace, error = comparator_runner._run_condition(
+        config,
+        "perfect_perception",
+        funnel_path=tmp_path / "funnel.yaml",
+        output_dir=tmp_path,
+    )
+
+    assert trace == comparator_runner._placeholder_trace(config)
+    assert error is not None
+    assert error["status"] == "blocked"
+    assert "non-standard JSON number NaN" in error["reason"]
+
+
 def test_runner_stub_is_deterministic_end_to_end(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

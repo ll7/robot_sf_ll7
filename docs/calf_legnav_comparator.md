@@ -89,6 +89,9 @@ non-negative distance values. Violations block the condition or materialize a
 schema-valid blocked handoff. The configured observation perturbation profile is
 also checked against the trace before the paired contrast is admitted.
 
+Trace and report writers use strict JSON. Non-finite diagnostic values are represented as
+`null` or reject the handoff, so they remain unavailable rather than becoming measurements.
+
 One paired episode has no uncertainty estimate. Missing observations, runner errors,
 fallback/degraded execution, or an unrecognized observation contract produce `blocked`
 or `unavailable` fields rather than fabricated zeros.

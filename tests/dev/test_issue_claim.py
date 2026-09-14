@@ -1380,6 +1380,85 @@ def test_reconcile_release_proceeds_in_window_despite_truncation(
     assert any(command[0:2] == ["git", "push"] for command in calls)
 
 
+def test_reconcile_release_proceeds_despite_unrelated_row_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unrelated row's fetch failure must not veto a safe row's release.
+
+    Regression for #9286: the terminal-PR snapshot fails for every row, so the OPEN
+    issue classifies coverage_unknown (batch error), while the CLOSED issue stays
+    safe and must still release with the error reported.
+    """
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command == ["git", "ls-remote", "--heads", "origin", "refs/heads/agent-claims/issue-*"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="sha1\trefs/heads/agent-claims/issue-100\nsha2\trefs/heads/agent-claims/issue-200\n",
+                stderr="",
+            )
+        if command[0:2] == ["git", "config"]:
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=1, stdout="", stderr=""
+            )
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="sha1\trefs/heads/agent-claims/issue-100\nsha2\trefs/heads/agent-claims/issue-200\n",
+                stderr="",
+            )
+        if command[0:3] == ["gh", "pr", "list"]:
+            state_index = command.index("--state") + 1
+            if command[state_index] == "all":
+                return issue_claim.CommandResult(
+                    command=tuple(command),
+                    returncode=1,
+                    stdout="",
+                    stderr="terminal snapshot unavailable",
+                )
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=0, stdout="[]", stderr=""
+            )
+        if command[0:2] == ["gh", "api"]:
+            number = int(command[2].rsplit("/", 1)[-1])
+            state = "closed" if number == 100 else "open"
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout=f'{{"number":{number},"state":"{state}","title":"t","url":"u"}}',
+                stderr="",
+            )
+        if command[0:2] == ["git", "push"]:
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=0, stdout="", stderr=""
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.reconcile_claims(
+        remote="origin",
+        repo="ll7/robot_sf_ll7",
+        limit=10,
+        release_stale=True,
+        reason="closed",
+    )
+
+    by_issue = {row["issue"]: row for row in payload["claims"]}
+    assert by_issue[100]["classification"] == "stale_closed_issue"
+    assert by_issue[200]["classification"] == "coverage_unknown"
+    assert payload["errors"], "the unrelated row failure must stay reported"
+    assert payload["ok"] is False
+    assert len(payload["releases"]) == 1
+    assert payload["releases"][0]["ok"] is True
+    assert payload["releases"][0]["issue"] == 100
+    assert any(command[0:2] == ["git", "push"] for command in calls)
+
+
 def test_open_pr_coverage_detects_ref_in_body(monkeypatch: pytest.MonkeyPatch) -> None:
     """Explicit Refs #N in the PR body must block release."""
     calls: list[list[str]] = []

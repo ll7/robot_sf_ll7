@@ -93,6 +93,24 @@ the requested mode. Review-only push barriers therefore cannot leak into a newly
 implementation worktree, and implementation worktrees do not inherit arbitrary per-worktree
 settings from a protected review checkout.
 
+## Recurring TTL prune
+
+The fleet grows between manual reclaims, so run the TTL prune on a recurring cadence (for example
+weekly) instead of waiting for disk pressure:
+
+```bash
+uv run python scripts/dev/worktree_ttl_prune.py --ttl-days 7 --json          # dry run
+uv run python scripts/dev/worktree_ttl_prune.py --ttl-days 7 --apply --json  # prune
+```
+
+The helper composes the read-only hygiene retirement plan (`--hygiene-json` can reuse a prior scan
+snapshot) and selects a path only when the assessment already says `removeable`, no active claims or
+preservation evidence exist, and the worktree's newest activity is older than the TTL. Dirty,
+unpushed, claimed, review-only, and young worktrees are reported with stable skip reasons and are
+never touched. `--apply` delegates each selected path to `stale_worktree_reaper.py --apply --path`,
+so the reaper's fail-closed checks and lifecycle lock remain authoritative; this helper never
+removes a worktree itself.
+
 ## Protected review worktrees
 
 Review and synthetic-integration worktrees must opt into the protected mode explicitly:

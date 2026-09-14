@@ -126,7 +126,7 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 ## Current Bundles
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
-  #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:
+  Issue #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:
   job-13512 bytes are checksum-covered for custody but have conflicting execution lineage and no
   materialized SNQI, while the older slice is rank-non-identifiable. No ranking, benchmark,
   realism, sim-to-real, safety, paper, or dissertation claim is promoted.

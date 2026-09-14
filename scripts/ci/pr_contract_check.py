@@ -1032,7 +1032,7 @@ def _diff_numstat(base_ref: str) -> str | None:
 
 
 def _parse_strict_numstat(numstat_text: object) -> tuple[tuple[str, ...], int, int]:
-    """Parse complete, unambiguous Git numstat rows for budget evidence."""
+    """Parse complete Git numstat rows, including canonical binary-file rows."""
     if not isinstance(numstat_text, str) or not numstat_text.strip():
         raise ValueError("historical numstat is empty or is not text")
 
@@ -1047,9 +1047,10 @@ def _parse_strict_numstat(numstat_text: object) -> tuple[tuple[str, ...], int, i
         if len(fields) != 3:
             raise ValueError(f"historical numstat row {line_number} is ambiguous")
         added_text, deleted_text, filename = fields
-        if re.fullmatch(r"[0-9]+", added_text) is None:
+        is_binary = added_text == "-" and deleted_text == "-"
+        if not is_binary and re.fullmatch(r"[0-9]+", added_text) is None:
             raise ValueError(f"historical numstat row {line_number} has invalid additions")
-        if re.fullmatch(r"[0-9]+", deleted_text) is None:
+        if not is_binary and re.fullmatch(r"[0-9]+", deleted_text) is None:
             raise ValueError(f"historical numstat row {line_number} has invalid deletions")
         if not filename.strip() or any(
             unicodedata.category(character) == "Cc" for character in filename
@@ -1058,8 +1059,9 @@ def _parse_strict_numstat(numstat_text: object) -> tuple[tuple[str, ...], int, i
         if filename in filenames:
             raise ValueError(f"historical numstat repeats filename {filename!r}")
         filenames.append(filename)
-        added += int(added_text)
-        deleted += int(deleted_text)
+        if not is_binary:
+            added += int(added_text)
+            deleted += int(deleted_text)
     return tuple(filenames), added, deleted
 
 

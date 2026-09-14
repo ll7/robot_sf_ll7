@@ -78,6 +78,7 @@ _RATE_LIMIT_RESET_RE = re.compile(r"(?im)(?:^|[\s,;(])x-ratelimit-reset\s*[:=]\s
 _RATE_LIMIT_RETRY_AFTER_RE = re.compile(r"(?im)(?:^|[\s,;(])retry[- ]after\s*[:=]\s*([^\s,;)]+)")
 _RATE_LIMIT_RESET_HEADER_RE = re.compile(r"(?im)(?:^|[\s,;(])x-ratelimit-reset\s*[:=]")
 _RATE_LIMIT_RETRY_AFTER_HEADER_RE = re.compile(r"(?im)(?:^|[\s,;(])retry[- ]after\s*[:=]")
+_HTTP_STATUS_RE = re.compile(r"(?i)\bHTTP(?:/\d+(?:\.\d+)?)?\s*([45]\d{2})\b")
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_label_rest.py")
 
 
@@ -654,6 +655,84 @@ def _label_request_error(
     )
 
 
+def _is_ambiguous_write_failure(result: subprocess.CompletedProcess[str]) -> bool:
+    """Return True when a failed write may still have been applied (HTTP 5xx).
+
+    GitHub or an intermediary can return any HTTP 5xx after applying the
+    mutation, so the caller must verify the effective state instead of
+    repeating the write. Restrict the match to an actual HTTP status token so
+    unrelated numbers in a non-5xx diagnostic cannot authorize read-back.
+    """
+    if result.returncode == 0:
+        return False
+    return any(
+        match.group(1).startswith("5")
+        for match in _HTTP_STATUS_RE.finditer(_response_detail(result))
+    )
+
+
+def _read_back_label_state(
+    number: int,
+    label: str,
+    *,
+    repo: str,
+    expected_present: bool,
+) -> dict[str, Any] | None:
+    """Verify the effective label state after an ambiguous write.
+
+    Returns a success payload with explicit write/verification provenance when
+    the requested state is already effective, or ``None`` when it is not.
+    """
+    current = get_label_names(number, repo=repo)
+    if current.get("status") != "ok":
+        return None
+    present = label in current.get("labels", [])
+    if present != expected_present:
+        return None
+    return {
+        "status": "ok",
+        "number": number,
+        "label": label,
+        "action": "add" if expected_present else "remove",
+        "repo": repo,
+        "write_status": "ambiguous_transport_error",
+        "verification_status": "read_back_applied" if expected_present else "read_back_removed",
+    }
+
+
+def _classify_write_failure(
+    result: Any,
+    *,
+    number: int,
+    label: str,
+    repo: str,
+    action: str,
+    expected_present: bool,
+) -> dict[str, Any]:
+    """Return the failure payload, or a read-back success when the write applied.
+
+    Ambiguous HTTP 5xx responses are verified once against the effective label
+    state so callers never repeat a possibly successful mutation.
+    """
+    detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+    if _is_ambiguous_write_failure(result):
+        read_back = _read_back_label_state(
+            number, label, repo=repo, expected_present=expected_present
+        )
+        if read_back is not None:
+            return read_back
+        return {"status": "error", "error": f"label {action} failed: {detail}"}
+
+    rate = _rate_limit_evidence(result, now=time.time())
+    if rate is not None:
+        return {
+            "status": RATE_LIMIT_STATUS,
+            "error": f"label {action} failed: {detail}",
+            **rate,
+        }
+    return {"status": "error", "error": f"label {action} failed: {detail}"}
+
+
 def add_label(
     number: int,
     label: str,
@@ -684,14 +763,14 @@ def add_label(
         path = f"repos/{repo}/issues/{number}/labels"
         result = _gh_api_post(path, {"labels": [label]})
         if result.returncode != 0:
-            detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
-            if (rate := _rate_limit_evidence(result, now=time.time())) is not None:
-                return {
-                    "status": RATE_LIMIT_STATUS,
-                    "error": f"label add failed: {detail}",
-                    **rate,
-                }
-            return {"status": "error", "error": f"label add failed: {detail}"}
+            return _classify_write_failure(
+                result,
+                number=number,
+                label=label,
+                repo=repo,
+                action="add",
+                expected_present=True,
+            )
         try:
             json.loads(result.stdout)
         except json.JSONDecodeError as exc:
@@ -776,14 +855,14 @@ def remove_label(
         result = _gh_api_delete(path)
         idempotent = _is_absent_label_delete(result)
         if result.returncode != 0 and not idempotent:
-            detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
-            if (rate := _rate_limit_evidence(result, now=time.time())) is not None:
-                return {
-                    "status": RATE_LIMIT_STATUS,
-                    "error": f"label remove failed: {detail}",
-                    **rate,
-                }
-            return {"status": "error", "error": f"label remove failed: {detail}"}
+            return _classify_write_failure(
+                result,
+                number=number,
+                label=label,
+                repo=repo,
+                action="remove",
+                expected_present=False,
+            )
 
         # Verify the label was actually removed by re-reading labels.
         current = get_label_names(number, repo=repo)

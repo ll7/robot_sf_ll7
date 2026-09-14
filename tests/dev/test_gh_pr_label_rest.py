@@ -20,6 +20,7 @@ from scripts.dev.gh_pr_label_rest import (
     RATE_LIMIT_MAX_ATTEMPTS,
     RATE_LIMIT_MAX_WAIT_SECONDS,
     _get_label_names,
+    _is_ambiguous_write_failure,
     _is_rate_limit_failure,
     _is_secondary_rate_limit,
     _parse_rate_limit_reset_epoch,
@@ -1388,3 +1389,116 @@ class TestCli:
             rc = main(["remove", "5220", "--label", "cheap-lane", "--repo", "ll7/robot_sf_ll7"])
 
         assert rc == 0
+
+
+def test_issue_label_add_verifies_ambiguous_502_before_failing() -> None:
+    """A 502 after an applied add reports success with read-back provenance."""
+    with (
+        patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        patch("scripts.dev.gh_pr_label_rest.get_label_names") as mock_labels,
+    ):
+        mock_post.return_value = _proc(returncode=1, stderr="gh: Server Error (HTTP 502)")
+        mock_labels.return_value = {"status": "ok", "labels": ["cheap-lane"]}
+        result = add_label(5220, "cheap-lane")
+
+    assert result == {
+        "status": "ok",
+        "number": 5220,
+        "label": "cheap-lane",
+        "action": "add",
+        "repo": "ll7/robot_sf_ll7",
+        "write_status": "ambiguous_transport_error",
+        "verification_status": "read_back_applied",
+    }
+
+
+def test_issue_label_add_fails_when_ambiguous_502_left_no_effect() -> None:
+    """A 502 without the applied state still fails closed."""
+    with (
+        patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        patch("scripts.dev.gh_pr_label_rest.get_label_names") as mock_labels,
+    ):
+        mock_post.return_value = _proc(returncode=1, stderr="gh: Server Error (HTTP 502)")
+        mock_labels.return_value = {"status": "ok", "labels": []}
+        result = add_label(5220, "cheap-lane")
+
+    assert result["status"] == "error"
+    assert "label add failed" in result["error"]
+
+
+def test_issue_label_remove_verifies_ambiguous_502_before_failing() -> None:
+    """A 502 after an applied removal reports success with read-back provenance."""
+    with (
+        patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+        patch("scripts.dev.gh_pr_label_rest.get_label_names") as mock_labels,
+    ):
+        mock_delete.return_value = _proc(returncode=1, stderr="gh: Server Error (HTTP 502)")
+        mock_labels.return_value = {"status": "ok", "labels": []}
+        result = remove_label(5220, "cheap-lane")
+
+    assert result["status"] == "ok"
+    assert result["write_status"] == "ambiguous_transport_error"
+    assert result["verification_status"] == "read_back_removed"
+
+
+def test_issue_label_remove_fails_when_ambiguous_502_left_label_present() -> None:
+    """A 502 that did not remove the label still fails closed."""
+    with (
+        patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+        patch("scripts.dev.gh_pr_label_rest.get_label_names") as mock_labels,
+    ):
+        mock_delete.return_value = _proc(returncode=1, stderr="gh: Server Error (HTTP 502)")
+        mock_labels.return_value = {"status": "ok", "labels": ["cheap-lane"]}
+        result = remove_label(5220, "cheap-lane")
+
+    assert result["status"] == "error"
+    assert "label remove failed" in result["error"]
+
+
+@pytest.mark.parametrize("status", [500, 501, 502, 503, 504, 599])
+def test_all_http_5xx_statuses_are_ambiguous(status: int) -> None:
+    """Every HTTP 5xx response must enter the one-read verification path."""
+    assert _is_ambiguous_write_failure(
+        _proc(returncode=1, stderr=f"gh: Server Error (HTTP {status})")
+    )
+
+
+def test_non_5xx_numbers_do_not_trigger_ambiguous_readback() -> None:
+    """Numbers such as request IDs cannot turn a definite failure into success."""
+    with (
+        patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        patch("scripts.dev.gh_pr_label_rest.get_label_names") as mock_labels,
+    ):
+        mock_post.return_value = _proc(
+            returncode=1,
+            stderr="gh: HTTP 403: forbidden; upstream request id 502",
+        )
+        mock_labels.return_value = {"status": "ok", "labels": ["cheap-lane"]}
+        result = add_label(5220, "cheap-lane")
+
+    assert result["status"] == "error"
+    assert "label add failed" in result["error"]
+    mock_labels.assert_not_called()
+
+
+def test_ambiguous_5xx_with_rate_limit_wording_never_retries_mutation() -> None:
+    """A 5xx remains one-read ambiguous even when its detail mentions rate limits."""
+    with (
+        patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        patch("scripts.dev.gh_pr_label_rest.get_label_names") as mock_labels,
+        patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+    ):
+        mock_post.return_value = _proc(
+            returncode=1,
+            stderr="gh: Server Error (HTTP 502): rate limit exceeded; "
+            "X-RateLimit-Reset: 1000000000",
+        )
+        mock_labels.return_value = {"status": "ok", "labels": ["cheap-lane"]}
+        result = add_label(5220, "cheap-lane")
+
+    assert result["status"] == "ok"
+    assert result["write_status"] == "ambiguous_transport_error"
+    assert result["verification_status"] == "read_back_applied"
+    mock_post.assert_called_once()
+    mock_labels.assert_called_once_with(5220, repo="ll7/robot_sf_ll7")
+    mock_sleep.assert_not_called()

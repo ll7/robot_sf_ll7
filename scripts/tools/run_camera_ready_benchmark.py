@@ -272,6 +272,9 @@ def _research_admission_proof_error(  # noqa: C901, PLR0912 - ordered admission 
         result = surfaces[surface]
         if result.get("required") is not True or result.get("status") != "passed":
             return f"required answerability proof surface {surface} did not pass"
+    source_manifest = binding.get("source_manifest")
+    if not isinstance(source_manifest, str) or not source_manifest.strip():
+        return "answerability proof binding source_manifest is missing"
     return None
 
 
@@ -356,13 +359,16 @@ def _research_answerability_block(  # noqa: C901
                     expected_execution_inventory=expected_execution_inventory,
                 )
                 if proof_error is None:
+                    source_manifest = proof["binding"]["source_manifest"]
                     # The admission receipt is shared by preflight and run invocations
                     # for one campaign.  Keep the launcher mode out of its stable identity;
                     # mode is a property of the invocation, not of the proof identity.
                     return {
                         "status": "research_answerability_admitted",
                         "status_reason": "exact manifest/config/proof binding passed",
-                        "research_manifest": str(manifest_path),
+                        # Use the repository-relative identity from the validated binding so
+                        # equivalent caller path spellings produce the same receipt bytes.
+                        "research_manifest": source_manifest,
                         "answerability": answerability,
                         "answerability_proof": proof,
                         "benchmark_success": False,

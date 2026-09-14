@@ -555,6 +555,48 @@ def test_main_reuses_one_admission_receipt_across_preflight_and_run(
     assert sidecar["admission"] == run_payload["research_answerability_admission"]
 
 
+def test_strict_admission_uses_bound_manifest_identity_for_path_aliases(
+    monkeypatch,
+) -> None:
+    """Equivalent manifest path spellings must produce one stable admission identity."""
+    repo_root = Path(run_camera_ready_benchmark.__file__).resolve().parents[2]
+    manifest_path = repo_root / "configs/benchmarks/research_campaign_manifest.example.yaml"
+    relative_manifest_path = manifest_path.relative_to(repo_root)
+    report = _valid_admission_report(
+        manifest_path=manifest_path,
+        campaign_id="fixed-campaign",
+        config_sha256=None,
+    )
+    proof = report["answerability_proof"]
+    assert isinstance(proof, dict)
+    binding = proof["binding"]
+    assert isinstance(binding, dict)
+    binding["source_manifest"] = relative_manifest_path.as_posix()
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        lambda *_args, **_kwargs: report,
+    )
+
+    def _admit(path: Path) -> dict[str, object]:
+        admission = run_camera_ready_benchmark._research_answerability_block(
+            manifest_path=path,
+            require_answerable=True,
+            mode="preflight",
+            expected_campaign_config=repo_root
+            / "configs/benchmarks/research_campaign_manifest.example.yaml",
+            expected_campaign_id="fixed-campaign",
+        )
+        assert admission is not None
+        return admission
+
+    relative_admission = _admit(relative_manifest_path)
+    absolute_admission = _admit(manifest_path)
+
+    assert relative_admission["research_manifest"] == relative_manifest_path.as_posix()
+    assert absolute_admission["research_manifest"] == relative_admission["research_manifest"]
+
+
 def test_main_preflight_fails_closed_when_answerability_receipt_persistence_fails(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:

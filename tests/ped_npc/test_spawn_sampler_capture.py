@@ -10,13 +10,19 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
+from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.navigation import get_prepared_obstacles
 from robot_sf.nav.svg_map_parser import SvgMapConverter
 from robot_sf.ped_npc.ped_population import (
     PedSpawnConfig,
+    _sample_points_near_anchor,
+    _sample_scatter_point,
     populate_simulation,
+    sample_route,
 )
+from robot_sf.ped_npc.ped_zone import prepare_obstacle_polygons
 from robot_sf.ped_npc.spawn_capture import SpawnSamplerCapture
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -98,3 +104,88 @@ def test_capture_disabled_by_default_leaves_population_unchanged() -> None:
     fresh = SpawnSamplerCapture()
     assert fresh.to_mapping()["assigned_routes"] == []
     assert fresh.route_anchor_attempts == 0
+
+
+def _covering_obstacle() -> list:
+    """Return prepared obstacles covering a wide area around the origin."""
+    square = [(-10.0, -10.0), (10.0, -10.0), (10.0, 10.0), (-10.0, 10.0)]
+    return prepare_obstacle_polygons([square])
+
+
+def test_route_point_obstacle_rejections_recorded() -> None:
+    """Every obstacle-rejected route-point draw is counted deterministically."""
+    capture = SpawnSamplerCapture()
+    samples = _sample_points_near_anchor(
+        (0.0, 0.0),
+        3,
+        1.0,
+        np.random.default_rng(7),
+        _covering_obstacle(),
+        capture=capture,
+    )
+    assert samples == []
+    assert capture.obstacle_rejections == 3 * 50
+    assert capture.accepted_samples == 0
+
+
+def test_route_anchor_failure_records_attempts() -> None:
+    """An unplaceable route records exactly max_anchor_attempts plus one failure."""
+    route = GlobalRoute(
+        spawn_id=0,
+        goal_id=1,
+        waypoints=[(0.0, 0.0), (0.1, 0.0)],
+        spawn_zone=((0.0, 0.0), (0.0, 0.0), (0.0, 0.0)),
+        goal_zone=((0.0, 0.0), (0.0, 0.0), (0.0, 0.0)),
+    )
+    capture = SpawnSamplerCapture()
+    with pytest.raises(RuntimeError, match="Failed to sample"):
+        sample_route(
+            route,
+            3,
+            1.0,
+            obstacle_polygons=_covering_obstacle(),
+            rng=np.random.default_rng(11),
+            capture=capture,
+        )
+    assert capture.route_anchor_attempts == 5
+    assert capture.route_anchor_failures == 1
+
+
+def test_scatter_separation_and_exclusion_rejections_recorded() -> None:
+    """Scatter separation and exclusion rejections are counted by branch."""
+    tiny_zone = ((0.0, 0.0), (0.01, 0.0), (0.0, 0.01))
+    separated = SpawnSamplerCapture()
+    with pytest.raises(RuntimeError, match="Failed to scatter-spawn"):
+        _sample_scatter_point(
+            tiny_zone,
+            np.random.default_rng(13),
+            [],
+            [(0.0, 0.0)],
+            0.4,
+            max_attempts=4,
+            capture=separated,
+        )
+    assert separated.separation_rejections == 4
+    assert separated.obstacle_rejections == 0
+    assert separated.accepted_samples == 0
+
+    excluded = SpawnSamplerCapture()
+    with pytest.raises(RuntimeError, match="Failed to scatter-spawn"):
+        _sample_scatter_point(
+            tiny_zone,
+            np.random.default_rng(17),
+            _covering_obstacle(),
+            [],
+            0.4,
+            max_attempts=4,
+            capture=excluded,
+        )
+    assert excluded.obstacle_rejections == 4
+    assert excluded.separation_rejections == 0
+
+    accepted = SpawnSamplerCapture()
+    point = _sample_scatter_point(
+        tiny_zone, np.random.default_rng(19), [], [], 0.4, capture=accepted
+    )
+    assert accepted.accepted_samples == 1
+    assert point is not None

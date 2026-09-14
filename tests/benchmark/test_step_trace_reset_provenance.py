@@ -387,3 +387,59 @@ def test_reset_provenance_block_is_strict_json_serializable() -> None:
     )
 
     json.dumps(reset, allow_nan=False)
+
+
+def test_reset_provenance_rejects_ragged_velocity_rows() -> None:
+    """Ragged velocity rows must not reach asarray crashes (issue #9268)."""
+    velocities = np.empty(1, dtype=object)
+    velocities[0] = np.array([0.0])
+    reset = _build_reset_provenance(
+        **_reset_kwargs(
+            initial_ped_positions=np.array([[5.0, 5.0]]),
+            initial_ped_velocities=velocities,
+            trace_actor_ids=["p1"],
+        )
+    )
+
+    assert reset["pedestrians"][0]["velocity"] is None
+
+
+def test_reset_provenance_rejects_string_velocity_rows() -> None:
+    """Non-numeric velocity rows must record null (issue #9268)."""
+    velocities = np.empty(1, dtype=object)
+    velocities[0] = "fast"
+    reset = _build_reset_provenance(
+        **_reset_kwargs(
+            initial_ped_positions=np.array([[5.0, 5.0]]),
+            initial_ped_velocities=velocities,
+            trace_actor_ids=["p1"],
+        )
+    )
+
+    assert reset["pedestrians"][0]["velocity"] is None
+
+
+def test_reset_provenance_accepts_single_element_heading_array() -> None:
+    """A single-element heading array is an unambiguous scalar (issue #9268)."""
+    reset = _build_reset_provenance(
+        **_reset_kwargs(
+            initial_ped_positions=np.array([[5.0, 5.0]]),
+            initial_ped_headings=np.array([np.array([0.5])], dtype=object),
+            trace_actor_ids=["p1"],
+        )
+    )
+
+    assert reset["pedestrians"][0]["heading"] == 0.5
+
+
+def test_reset_provenance_rejects_nonfinite_scalar_heading() -> None:
+    """An infinite scalar heading must record null (issue #9268)."""
+    reset = _build_reset_provenance(
+        **_reset_kwargs(
+            initial_ped_positions=np.array([[5.0, 5.0]]),
+            initial_ped_headings=[float("inf")],
+            trace_actor_ids=["p1"],
+        )
+    )
+
+    assert reset["pedestrians"][0]["heading"] is None

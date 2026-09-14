@@ -674,6 +674,10 @@ _FAST_FILES = {
     "test_s30_h600_runtime_smoke_contract.py",
     "test_submit_release_single_node_contract.py",
     "test_trace_dossier_package.py",
+    # Reset-provenance fail-closed boundaries are deterministic serializer
+    # coverage for the changed trace helpers; keep them in the exact-head fast
+    # lane (issue #9268).
+    "test_step_trace_reset_provenance.py",
     "test_trace_dossier_renderer.py",
     # Dossier-figure, reexport, preregistration, and denominator contract tests
     # are deterministic schema/manifest coverage for modules touched by the

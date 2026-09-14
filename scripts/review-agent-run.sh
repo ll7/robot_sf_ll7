@@ -31,6 +31,8 @@ USAGE
 run_dir=""
 use_latest="0"
 include_logs="0"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+readiness_contract_script="$script_dir/dev/pr_ready_artifact_contract.py"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -288,18 +290,23 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-json_files=("$run_dir/result.json")
-if [[ "$artifact_contract" == "canonical" ]]; then
-  json_files+=("$run_dir/validation.json")
-fi
-if [[ -f "$run_dir/metrics.json" ]]; then
-  json_files+=("$run_dir/metrics.json")
-fi
+json_files=()
+while IFS= read -r -d '' json_file; do
+  json_files+=("$json_file")
+done < <(find "$run_dir" -maxdepth 1 -type f -name '*.json' -print0 | sort -z)
 invalid_json_files=()
 for json_file in "${json_files[@]}"; do
-  if ! jq -e 'type == "object"' "$json_file" >/dev/null 2>&1; then
+  if ! jq -e 'true' "$json_file" >/dev/null 2>&1; then
     invalid_json_files+=("$(basename "$json_file")")
+    continue
   fi
+  case "$(basename -- "$json_file")" in
+    result.json|validation.json|metrics.json)
+      if ! jq -e 'type == "object"' "$json_file" >/dev/null 2>&1; then
+        invalid_json_files+=("$(basename "$json_file")")
+      fi
+      ;;
+  esac
 done
 if [[ "${#invalid_json_files[@]}" -gt 0 ]]; then
   invalid_summary="$(printf '%s\n' "${invalid_json_files[@]}" | paste -sd ', ' -)"
@@ -310,6 +317,53 @@ if [[ "${#invalid_json_files[@]}" -gt 0 ]]; then
     "" \
     "$invalid_summary"
   exit 1
+fi
+
+# Readiness artifacts can be copied into a worker bundle alongside the compact
+# result. A terminated receipt, human summary, and command log must agree before
+# the bundle can be summarized as a successful run.
+readiness_machine_files=()
+while IFS= read -r -d '' candidate; do
+  case "$(basename -- "$candidate")" in
+    result.json|validation.json|metrics.json)
+      continue
+      ;;
+    *pr_ready*.json|*pr-ready*.json|*readiness*.json|*termination*.json)
+      readiness_machine_files+=("$candidate")
+      ;;
+  esac
+done < <(find "$run_dir" -maxdepth 1 -type f -name '*.json' -print0 | sort -z)
+if [[ "${#readiness_machine_files[@]}" -gt 0 ]]; then
+  readiness_args=()
+  for readiness_machine_file in "${readiness_machine_files[@]}"; do
+    readiness_args+=(--machine-json "$readiness_machine_file")
+  done
+  if [[ -f "$run_dir/RESULT.md" ]]; then
+    readiness_args+=(--human-summary "$run_dir/RESULT.md")
+  fi
+  readiness_log=""
+  while IFS= read -r -d '' candidate; do
+    readiness_log="$candidate"
+    break
+  done < <(
+    find "$run_dir" -maxdepth 1 -type f \( \
+      -iname '*pr_ready*.log' -o -iname '*pr-ready*.log' -o -iname '*readiness*.log' \
+    \) -print0 | sort -z
+  )
+  if [[ -n "$readiness_log" ]]; then
+    readiness_args+=(--command-log "$readiness_log")
+  fi
+  readiness_rc=0
+  readiness_output="$(python3 "$readiness_contract_script" "${readiness_args[@]}")" || readiness_rc=$?
+  if [[ "$readiness_rc" -ne 0 ]]; then
+    readiness_reason="readiness artifact consistency check failed"
+    if [[ -n "$readiness_output" ]]; then
+      readiness_reason+="; $(jq -r '.reason_codes | join(",")' <<<"$readiness_output" 2>/dev/null || printf 'malformed consistency output')"
+    fi
+    echo "$readiness_reason" >&2
+    write_failure_note "readiness-inconsistent" "$readiness_reason" "" ""
+    exit 1
+  fi
 fi
 
 json_value() {

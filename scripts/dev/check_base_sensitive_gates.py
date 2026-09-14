@@ -494,9 +494,10 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if not pr_check["needs_gate"]:
-            print(f"PR #{args.pr}: no base-sensitive files changed; gate not required.")
             if args.as_json:
                 _json_dump({"gate_required": False, "pr": args.pr})
+            else:
+                print(f"PR #{args.pr}: no base-sensitive files changed; gate not required.")
             return 0
 
         stale_exit = _check_pr_gate_staleness(

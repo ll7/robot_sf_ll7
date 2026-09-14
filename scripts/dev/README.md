@@ -23,6 +23,17 @@ When quoting readiness counts, use the named selectors in
 [`docs/dev/local_ci.md`](../../docs/dev/local_ci.md#readiness-count-selectors),
 including `--collect-only -q` when only the collected count is needed.
 
+[`pr_ready_artifact_contract.py`](pr_ready_artifact_contract.py) validates and
+reconciles machine-readable readiness receipts with an optional human summary
+and command log. It emits JSON from byte zero and exits non-zero when artifacts
+are malformed, terminated, interim, unavailable, or inconsistent:
+
+```bash
+python scripts/dev/pr_ready_artifact_contract.py \
+  --machine-json <readiness.json> \
+  [--human-summary RESULT.md] [--command-log readiness.log]
+```
+
 [`check_base_drift.py`](check_base_drift.py) backs the readiness gate's base-drift recheck (issue
 #5782). The gate captures the concrete base SHA before the expensive lanes and invokes this check
 immediately before recording the stamp, so it can tell whether `origin/main` moved during the run.

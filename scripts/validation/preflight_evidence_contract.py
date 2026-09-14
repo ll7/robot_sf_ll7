@@ -180,8 +180,51 @@ def _git_hash() -> str | None:
     return result.stdout.strip() or None
 
 
-def _evaluate(spec: _ContractSpec, row: Mapping[str, Any]) -> dict[str, Any]:
-    """Evaluate one contract against one row and return a structured report."""
+def derive_claim_identity(row: Mapping[str, Any]) -> dict[str, str] | None:
+    """Return the claim identity carried by a canonical evidence row.
+
+    Claim identity is deliberately read from one structured row field. It is
+    not inferred from command-line text or from the derived evidence block:
+    those values are caller-controlled and cannot authorize attribution to a
+    campaign, question, or estimand.
+    """
+    value = row.get("claim_identity")
+    if not isinstance(value, Mapping):
+        return None
+    identity: dict[str, str] = {}
+    for field in ("campaign_id", "question", "estimand"):
+        item = value.get(field)
+        if not isinstance(item, str) or not item.strip():
+            return None
+        identity[field] = item.strip()
+    return identity
+
+
+def _normalise_claim_identity(value: Mapping[str, Any] | None) -> dict[str, str] | None:
+    """Normalise a caller identity for comparison without treating it as proof."""
+    if not isinstance(value, Mapping):
+        return None
+    identity: dict[str, str] = {}
+    for field in ("campaign_id", "question", "estimand"):
+        item = value.get(field)
+        if not isinstance(item, str) or not item.strip():
+            return None
+        identity[field] = item.strip()
+    return identity
+
+
+def _evaluate(
+    spec: _ContractSpec,
+    row: Mapping[str, Any],
+    *,
+    claim_identity: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Evaluate one contract against one row and return a structured report.
+
+    A requested claim identity is only accepted when the canonical row carries
+    the same identity. An unbound or mismatched identity makes the report
+    non-conforming, even when every evidence field is present.
+    """
     evidence = spec.build_evidence(row)
     builder_missing = list(evidence.get("missing_required_fields", []))
     # Independent assertion: every required field is present and non-null in the block.
@@ -191,8 +234,24 @@ def _evaluate(spec: _ContractSpec, row: Mapping[str, Any]) -> dict[str, Any]:
         if evidence.get(field) is None or evidence.get(field) == ""
     ]
     missing = sorted(set(builder_missing) | set(field_missing))
-    conforms = not missing
-    return {
+    canonical_identity = derive_claim_identity(row)
+    requested_identity = _normalise_claim_identity(claim_identity)
+    identity_error: str | None = None
+    if claim_identity is not None:
+        if requested_identity is None:
+            identity_error = "requested claim identity is incomplete or invalid"
+        elif canonical_identity is None:
+            identity_error = (
+                "claim identity is not bound to canonical evidence; refusing caller-supplied "
+                "campaign/question/estimand attribution"
+            )
+        elif canonical_identity != requested_identity:
+            identity_error = (
+                "requested claim identity does not match the canonical evidence row; "
+                "refusing attribution"
+            )
+    conforms = not missing and identity_error is None
+    report = {
         "contract_id": spec.contract_id,
         "conforms": conforms,
         "required_fields": list(spec.required_fields),
@@ -201,6 +260,11 @@ def _evaluate(spec: _ContractSpec, row: Mapping[str, Any]) -> dict[str, Any]:
         "evidence": evidence,
         "git_head": _git_hash(),
     }
+    if canonical_identity is not None:
+        report["claim_identity"] = canonical_identity
+    if identity_error is not None:
+        report["claim_identity_error"] = identity_error
+    return report
 
 
 def _render_human(report: dict[str, Any]) -> str:
@@ -210,6 +274,10 @@ def _render_human(report: dict[str, Any]) -> str:
         f"git HEAD: {report.get('git_head') or 'unknown'}",
         f"required fields: {', '.join(report['required_fields'])}",
     ]
+    if report.get("claim_identity") is not None:
+        lines.append(f"claim identity: {report['claim_identity']}")
+    if report.get("claim_identity_error"):
+        lines.append(f"claim identity error: {report['claim_identity_error']}")
     if report["conforms"]:
         lines.append("result: PASS — contract conforms; safe to submit.")
     else:
@@ -246,6 +314,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Emit the machine-readable JSON report to stdout.",
     )
+    parser.add_argument(
+        "--campaign-id",
+        default=None,
+        help="Bind the report to one declared campaign identity.",
+    )
+    parser.add_argument(
+        "--question",
+        default=None,
+        help="Bind the report to one declared research question.",
+    )
+    parser.add_argument(
+        "--estimand",
+        default=None,
+        help="Bind the report to one declared estimand.",
+    )
     return parser.parse_args(argv)
 
 
@@ -279,7 +362,21 @@ def main(argv: list[str] | None = None) -> int:
             row = _load_row(args.row)
         else:
             row = spec.representative_row()
-        report = _evaluate(spec, row)
+        identity_values = (args.campaign_id, args.question, args.estimand)
+        if any(value is not None for value in identity_values) and not all(
+            isinstance(value, str) and value.strip() for value in identity_values
+        ):
+            raise ValueError("--campaign-id, --question, and --estimand must be supplied together")
+        claim_identity = (
+            {
+                "campaign_id": args.campaign_id.strip(),
+                "question": args.question.strip(),
+                "estimand": args.estimand.strip(),
+            }
+            if all(isinstance(value, str) and value.strip() for value in identity_values)
+            else None
+        )
+        report = _evaluate(spec, row, claim_identity=claim_identity)
     except (OSError, json.JSONDecodeError, ValueError, RuntimeError) as exc:
         message = f"preflight evaluation failed for {args.contract_id!r}: {exc}"
         if args.json:

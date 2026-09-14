@@ -61,5 +61,34 @@
     "checksums": ["source-manifest-sha256", "summary-sha256"],
     "durability_status": "ready",
     "incomplete_policy": "Unavailable optional metrics remain unavailable in every report."
+  },
+  "proof_surfaces": {
+    "producer": {
+      "status": "passed",
+      "required": true
+    },
+    "preregistration": {
+      "status": "unavailable",
+      "required": false,
+      "unavailable_reason": "The frozen fixture has no YAML inference-contract owner."
+    },
+    "evidence_contract": {
+      "status": "unavailable",
+      "required": false,
+      "unavailable_reason": "No reusable evidence-contract id is declared by the fixture."
+    },
+    "analysis": {
+      "status": "passed",
+      "required": true
+    },
+    "artifact": {
+      "status": "passed",
+      "required": true
+    },
+    "result_packet": {
+      "status": "unavailable",
+      "required": false,
+      "unavailable_reason": "The bounded fixture predates a generic result-packet validator."
+    }
   }
 }

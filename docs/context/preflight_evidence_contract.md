@@ -55,6 +55,15 @@ uv run python scripts/validation/preflight_evidence_contract.py orca_residual_sm
 No GPU, no SLURM, no network, no training. The report captures the git HEAD SHA so
 the result is pinned to a commit.
 
+For a decision-capable admission proof, `rows.json` must be a checked-in
+canonical evidence row carrying a complete structured `claim_identity` with
+`campaign_id`, `question`, and `estimand`. The checker derives that identity
+from the row and rejects caller-supplied identity text that is absent or does
+not match the row. The `--campaign-id`, `--question`, and `--estimand` options
+remain useful for checking an explicitly bound row, but they never create
+claim evidence by themselves; an unbound representative row fails closed when
+those options are supplied.
+
 ## Registry shape (how to add a contract)
 
 The registry is `_CONTRACT_REGISTRY: dict[str, _ContractSpec]`. Each `_ContractSpec`

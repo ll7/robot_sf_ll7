@@ -6,7 +6,9 @@ from pathlib import Path
 
 from scripts.tools.prepare_presentation_video_pack import (
     Candidate,
+    VideoPackError,
     _candidate_from_row,
+    _portable_qa,
     _qa_video,
     _resolve_video_path,
     select_candidates,
@@ -92,6 +94,30 @@ def test_video_path_fallback_matches_scenario_seed_and_outcome(tmp_path: Path) -
     assert _resolve_video_path(row, tmp_path / "episodes.jsonl", videos) == expected.resolve()
 
 
+def test_video_url_reference_is_rejected_without_network_access(tmp_path: Path) -> None:
+    """The local-only pack must reject URI references before any media command runs."""
+    row = {"video": {"path": "https://example.invalid/clip.mp4"}}
+
+    try:
+        _resolve_video_path(row, tmp_path / "episodes.jsonl", tmp_path)
+    except VideoPackError as exc:
+        assert "URL video references" in str(exc)
+    else:
+        raise AssertionError("URL video reference was accepted")
+
+
+def test_qa_paths_are_portable_and_path_free(tmp_path: Path) -> None:
+    """Manifest QA retains relative artifact names without machine-specific directories."""
+    qa = {
+        "path": str(tmp_path / "source.mp4"),
+        "samples": [{"path": str(tmp_path / "stills" / "middle.png")}],
+    }
+
+    portable = _portable_qa(qa, tmp_path)
+
+    assert portable == {"path": "source.mp4", "samples": [{"path": "stills/middle.png"}]}
+
+
 def test_selection_limit_one_uses_global_interest_order(tmp_path: Path) -> None:
     """A single requested clip should pick the highest-interest episode."""
     candidates = [
@@ -146,3 +172,4 @@ def test_video_qa_rejects_all_blank_samples(tmp_path: Path, monkeypatch) -> None
 
     assert result["status"] == "failed"
     assert "all_sampled_frames_are_blank_or_dark" in result["reasons"]
+    assert "insufficient_visible_samples<2_of_3" in result["reasons"]

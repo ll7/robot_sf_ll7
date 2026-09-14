@@ -16,11 +16,11 @@ Example::
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from PIL import Image, ImageDraw, ImageFont, ImageStat
 
@@ -263,6 +264,10 @@ def _resolve_video_path(
     raw_path = _video_meta(row).get("path")
     possible: list[Path] = []
     if isinstance(raw_path, str) and raw_path:
+        if _is_url(raw_path):
+            raise VideoPackError(
+                "URL video references are not supported; provide a local recording path"
+            )
         raw = Path(raw_path)
         possible.append(raw if raw.is_absolute() else episodes_path.parent / raw)
         if videos_root is not None:
@@ -288,12 +293,20 @@ def _resolve_video_path(
     return (exact[0] if exact else matches[0]).resolve()
 
 
-def _candidate_sort_key(candidate: Candidate) -> tuple[float, str, str, str]:
+def _is_url(value: str) -> bool:
+    """Return whether a recording reference is a URI rather than a local path."""
+    parsed = urlsplit(value)
+    return bool(parsed.scheme or value.startswith("//"))
+
+
+def _candidate_sort_key(candidate: Candidate) -> tuple[float, str, str, str, str, str]:
     """Return a deterministic descending-interest ordering key."""
     return (
         -candidate.score,
         candidate.scenario_id,
         str(candidate.seed),
+        candidate.policy,
+        candidate.episode_id,
         candidate.source_path.name,
     )
 
@@ -303,14 +316,17 @@ def _choose_novel_candidate(pool: list[Candidate], selected: list[Candidate]) ->
     used_scenarios = {candidate.scenario_id for candidate in selected}
     used_archetypes = {candidate.archetype for candidate in selected}
 
-    def key(candidate: Candidate) -> tuple[float, str, str, str]:
+    def key(candidate: Candidate) -> tuple[float, str, str, str, str, str]:
         novelty = (8.0 if candidate.scenario_id not in used_scenarios else 0.0) + (
             4.0 if candidate.archetype not in used_archetypes else 0.0
         )
         return (
             -(candidate.score + novelty),
             candidate.scenario_id,
+            candidate.archetype,
             str(candidate.seed),
+            candidate.episode_id,
+            candidate.policy,
             candidate.source_path.name,
         )
 
@@ -466,11 +482,11 @@ def _probe_video(path: Path, ffprobe: str) -> dict[str, Any]:
         raise VideoPackError(f"Could not run ffprobe: {exc}") from exc
     if result.returncode != 0:
         diagnostic = (result.stderr or result.stdout).strip()[-1200:]
-        raise VideoPackError(f"ffprobe failed for {path}: {diagnostic}")
+        raise VideoPackError(f"ffprobe failed for {path.name}: {diagnostic}")
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise VideoPackError(f"ffprobe returned invalid JSON for {path}: {exc}") from exc
+        raise VideoPackError(f"ffprobe returned invalid JSON for {path.name}: {exc}") from exc
     streams = payload.get("streams") if isinstance(payload, dict) else None
     stream = (
         streams[0] if isinstance(streams, list) and streams and isinstance(streams[0], dict) else {}
@@ -667,6 +683,13 @@ def _qa_video(
     ]
     if not visible_samples:
         result["reasons"].append("all_sampled_frames_are_blank_or_dark")
+    if any(sample.get("status") != "pass" for sample in result["samples"]):
+        result["reasons"].append("sampled_frame_decode_failed")
+    required_visible = max(1, math.ceil(len(result["samples"]) * 2 / 3))
+    if len(visible_samples) < required_visible:
+        result["reasons"].append(
+            f"insufficient_visible_samples<{required_visible}_of_{len(result['samples'])}"
+        )
     if not result["reasons"]:
         result["status"] = "pass"
     return result
@@ -754,7 +777,7 @@ def _polish_video(
             "warning": f"overlay_failed: {diagnostic or fallback_diagnostic}",
         }
     raise VideoPackError(
-        f"Could not encode presentation copy for {candidate.source_path}: {fallback_diagnostic}"
+        f"Could not encode presentation copy for {candidate.source_path.name}: {fallback_diagnostic}"
     )
 
 
@@ -828,7 +851,33 @@ def _slug(value: str) -> str:
     return (slug or "clip")[:96]
 
 
-def _candidate_record(candidate: Candidate) -> dict[str, Any]:
+def _portable_source_name(path: Path, videos_root: Path | None) -> str:
+    """Return a stable source label without exposing machine-specific directories."""
+    if videos_root is not None:
+        try:
+            return (Path("videos") / path.relative_to(videos_root)).as_posix()
+        except ValueError:
+            pass
+    return path.name
+
+
+def _portable_qa(qa: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+    """Remove absolute local paths from a QA record while retaining diagnostics."""
+    portable = copy.deepcopy(qa)
+    if "path" in portable:
+        portable["path"] = Path(str(portable["path"])).name
+    for sample in portable.get("samples", []):
+        if "path" in sample:
+            try:
+                sample["path"] = (
+                    Path(str(sample["path"])).resolve().relative_to(output_dir).as_posix()
+                )
+            except ValueError:
+                sample["path"] = Path(str(sample["path"])).name
+    return portable
+
+
+def _candidate_record(candidate: Candidate, videos_root: Path | None) -> dict[str, Any]:
     """Serialize the useful provenance and curation fields for one candidate."""
     video_meta = _video_meta(candidate.row)
     metrics = {key: candidate.metrics[key] for key in KNOWN_METRICS if key in candidate.metrics}
@@ -842,7 +891,7 @@ def _candidate_record(candidate: Candidate) -> dict[str, Any]:
         "selection_score": round(candidate.score, 3),
         "selection_reasons": list(candidate.reasons),
         "metrics": metrics,
-        "source_path": str(candidate.source_path),
+        "source_file": _portable_source_name(candidate.source_path, videos_root),
         "source_renderer": video_meta.get("renderer"),
         "recorded_frame_count": video_meta.get("frames"),
     }
@@ -853,11 +902,16 @@ def _source_provenance(rows: list[dict[str, Any]], episodes_path: Path) -> dict[
     git_hashes = sorted({str(row["git_hash"]) for row in rows if row.get("git_hash")})
     config_hashes = sorted({str(row["config_hash"]) for row in rows if row.get("config_hash")})
     return {
-        "episodes_jsonl": str(episodes_path.resolve()),
+        "episodes_file": episodes_path.name,
         "episode_count": len(rows),
         "source_git_hashes": git_hashes,
         "source_config_hashes": config_hashes,
         "source_git_hash_status": "complete" if git_hashes else "missing",
+        "rights": {
+            "status": "redistribution-unknown",
+            "basis": "local-only-byo",
+            "note": "Local staging and checksums do not establish redistribution or publication rights.",
+        },
     }
 
 
@@ -872,7 +926,7 @@ def _git_snapshot(repo_root: Path | None) -> dict[str, Any]:
         ["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True, check=False
     )
     return {
-        "repository": str(repo_root),
+        "repository": None,
         "head": head_result.stdout.strip() if head_result.returncode == 0 else None,
         "dirty": bool(status_result.stdout.strip()) if status_result.returncode == 0 else None,
     }
@@ -893,7 +947,7 @@ def _write_readme(path: Path, report: dict[str, Any]) -> None:
         "The videos are for presentation only, not benchmark or paper-facing evidence.",
         "",
         f"Status: **{report.get('status', 'unknown')}**",
-        f"Source episodes: `{report['source']['episodes_jsonl']}`",
+        f"Source episodes file: `{report['source']['episodes_file']}`",
         f"Source commit(s): `{', '.join(report['source'].get('source_git_hashes', [])) or 'missing'}`",
         "",
         "## Clips",
@@ -956,16 +1010,22 @@ def _build_warnings(
     return warnings
 
 
-def _failure_record(candidate: Candidate, qa: dict[str, Any]) -> dict[str, Any]:
+def _failure_record(
+    candidate: Candidate,
+    qa: dict[str, Any],
+    *,
+    output_dir: Path,
+    videos_root: Path | None,
+) -> dict[str, Any]:
     """Serialize one candidate that failed source or presentation QA."""
     return {
         "episode_id": candidate.episode_id,
-        "source_path": str(candidate.source_path),
-        "qa": qa,
+        "source_file": _portable_source_name(candidate.source_path, videos_root),
+        "qa": _portable_qa(qa, output_dir),
     }
 
 
-def _process_candidate(
+def _process_candidate(  # noqa: PLR0913 - explicit media-processing context
     candidate: Candidate,
     index: int,
     *,
@@ -975,6 +1035,7 @@ def _process_candidate(
     ffprobe: str,
     min_duration: float,
     no_polish: bool,
+    videos_root: Path | None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """QA, polish, and serialize one candidate, returning a failure if needed."""
     source_qa = _qa_video(
@@ -984,7 +1045,9 @@ def _process_candidate(
         min_duration=min_duration,
     )
     if source_qa["status"] != "pass":
-        return None, _failure_record(candidate, source_qa)
+        return None, _failure_record(
+            candidate, source_qa, output_dir=clips_dir.parent, videos_root=videos_root
+        )
 
     stem = _slug(f"{candidate.scenario_id}_seed{candidate.seed}_{candidate.outcome}")
     presentation_path = clips_dir / f"{index:02d}_{stem}.mp4"
@@ -994,6 +1057,8 @@ def _process_candidate(
         return None, _failure_record(
             candidate,
             {"status": "failed", "reasons": [str(exc)]},
+            output_dir=clips_dir.parent,
+            videos_root=videos_root,
         )
 
     prefix = f"{index:02d}_{stem}"
@@ -1006,8 +1071,10 @@ def _process_candidate(
         sample_prefix=prefix,
     )
     if presentation_qa["status"] != "pass":
-        failure = _failure_record(candidate, presentation_qa)
-        failure["presentation_path"] = str(presentation_path)
+        failure = _failure_record(
+            candidate, presentation_qa, output_dir=clips_dir.parent, videos_root=videos_root
+        )
+        failure["presentation_path"] = str(presentation_path.relative_to(clips_dir.parent))
         return None, failure
 
     middle_sample = next(
@@ -1022,18 +1089,20 @@ def _process_candidate(
         return None, _failure_record(
             candidate,
             {"status": "failed", "reasons": ["middle_sample_missing"]},
+            output_dir=clips_dir.parent,
+            videos_root=videos_root,
         )
     poster_path = stills_dir / f"{prefix}_poster.png"
     _annotate_poster(Path(middle_sample), poster_path, candidate, index)
-    clip_record = _candidate_record(candidate)
+    clip_record = _candidate_record(candidate, videos_root)
     clip_record.update(
         {
             "source_sha256": _sha256(candidate.source_path),
-            "source_qa": source_qa,
+            "source_qa": _portable_qa(source_qa, clips_dir.parent),
             "encoding": encoding,
             "presentation_path": str(presentation_path.relative_to(clips_dir.parent)),
             "presentation_sha256": _sha256(presentation_path),
-            "qa": presentation_qa,
+            "qa": _portable_qa(presentation_qa, clips_dir.parent),
             "poster_path": str(poster_path.relative_to(stills_dir.parent)),
         }
     )
@@ -1049,6 +1118,7 @@ def _process_candidates(
     no_polish: bool,
     ffmpeg: str | None,
     ffprobe: str | None,
+    videos_root: Path | None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Process preferred candidates and deterministic fallbacks until full."""
     selected_clips: list[dict[str, Any]] = []
@@ -1065,6 +1135,7 @@ def _process_candidates(
             stills_dir=output_dir / "stills",
             ffmpeg=ffmpeg,
             ffprobe=ffprobe,
+            videos_root=videos_root,
             min_duration=min_duration,
             no_polish=no_polish,
         )
@@ -1079,7 +1150,6 @@ def _make_contact_sheet(output_dir: Path, clips: list[dict[str, Any]]) -> Path |
     """Assemble the annotated posters with the canonical contact-sheet helper."""
     if not clips or generate_contact_sheet is None:
         return None
-    sources_path = output_dir / "contact_sheet_sources.jsonl"
     sources = [
         {
             "episode_id": clip["episode_id"],
@@ -1087,11 +1157,13 @@ def _make_contact_sheet(output_dir: Path, clips: list[dict[str, Any]]) -> Path |
         }
         for clip in clips
     ]
-    sources_path.write_text(
-        "\n".join(json.dumps(source_row) for source_row in sources) + "\n", encoding="utf-8"
-    )
     contact_sheet_path = output_dir / "contact_sheet.png"
-    generate_contact_sheet(sources_path, contact_sheet_path, columns=min(3, len(clips)))
+    with tempfile.TemporaryDirectory(prefix="robot-sf-contact-sheet-") as temp_dir:
+        sources_path = Path(temp_dir) / "sources.jsonl"
+        sources_path.write_text(
+            "\n".join(json.dumps(source_row) for source_row in sources) + "\n", encoding="utf-8"
+        )
+        generate_contact_sheet(sources_path, contact_sheet_path, columns=min(3, len(clips)))
     return contact_sheet_path
 
 
@@ -1107,7 +1179,7 @@ def _build_report(data: _ReportData) -> dict[str, Any]:
     return {
         "schema_version": "presentation-video-pack.v1",
         "generated_at": datetime.now(UTC).isoformat(),
-        "command": shlex.join(data.command or []),
+        "command": "prepare_presentation_video_pack",
         "status": status,
         "source": data.source,
         "current_checkout": data.snapshot,
@@ -1115,7 +1187,6 @@ def _build_report(data: _ReportData) -> dict[str, Any]:
             "claim_scope": "presentation_only_not_benchmark_evidence",
             "media_disposition": "local_presentation_only",
             "videos_tracked": False,
-            "output_dir": str(data.output_dir),
             "output_dir_git_ignored": data.ignored_output,
         },
         "selection": {
@@ -1188,6 +1259,7 @@ def prepare_pack(
         no_polish=no_polish,
         ffmpeg=ffmpeg,
         ffprobe=ffprobe,
+        videos_root=videos_root,
     )
     contact_sheet_path = _make_contact_sheet(output_dir, selected_clips)
     if selected_clips and contact_sheet_path is None:

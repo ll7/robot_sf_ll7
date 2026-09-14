@@ -107,8 +107,14 @@ clips, adds 16:9 labels, and writes a `contact_sheet.png` plus a
 `presentation_video_pack.json` provenance/QA manifest. The generated media is
 intentionally local and untracked under `output/`; the manifest marks the pack
 as `presentation_only_not_benchmark_evidence`. It does not rerun the benchmark
-or change episode records. Use the source run's native runtime videos; replay
+or change episode records. Selection accepts local paths only and rejects
+URL/URI references without network access. The manifest uses portable filenames,
+records `redistribution-unknown` with a `local-only-byo` basis, and does not
+claim rights clearance. Use the source run's native runtime videos; replay
 fallback or synthetic videos should remain clearly labeled as illustrative.
+The contact-sheet input is temporary and removed after generation, so no source
+JSONL cache is left in the output directory. A clip must decode end-to-end and
+show visible content in at least two of the three deterministic samples.
 
 ## Troubleshooting
 

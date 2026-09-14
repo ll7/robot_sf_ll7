@@ -130,6 +130,29 @@ _PACKET_ALLOWED_KEYS = {
 }
 _SOURCE_ALLOWED_KEYS = {"base_ref", "base_commit", "hash_algorithm", "inputs"}
 _INPUT_ALLOWED_KEYS = {"path", "sha256", "working_tree_sha256"}
+_OBJECTIVE_ALLOWED_KEYS = {"id", "role", "owner", "sidecar_schema"}
+_SEARCH_FAMILY_ALLOWED_KEYS = {"id", "role", "owner"}
+_INITIALIZATION_ALLOWED_KEYS = {
+    "mode",
+    "sampler_instance",
+    "proposal_order",
+    "warm_start",
+    "replacement_rows",
+    "optimizer_defaults",
+    "post_outcome_changes",
+}
+_SCENARIO_ALLOWED_KEYS = {
+    "template",
+    "search_space",
+    "policy",
+    "template_max_episode_steps",
+    "horizon_steps",
+    "dt_s",
+    "parameter_order",
+    "parameters",
+}
+_SCENARIO_PARAMETER_ALLOWED_KEYS = {"name", "bounds"}
+_SCENARIO_BOUNDS_ALLOWED_KEYS = {"min", "max"}
 _EXECUTION_KEYS = "run_campaign run_simulator submit_slurm registered_search admit_evidence".split()
 _BUDGET_KEYS = (
     "budgets run_count search_attempt_slots simulator_call_budget"
@@ -137,11 +160,40 @@ _BUDGET_KEYS = (
     " budget_unit simulator_call_budget_policy simulator_call_budget_is_separate"
     " no_post_outcome_budget_change"
 )
+_BUDGET_ALLOWED_KEYS = set(_BUDGET_KEYS.split()) | {"matched_across"}
 _ACCOUNTING_KEYS = (
     "schema_version authoritative_counter search_counter one_row_per_attempt_or_call hidden_retries"
 )
+_ACCOUNTING_ALLOWED_KEYS = set(_ACCOUNTING_KEYS.split()) | {"classes", "rule"}
 _LEDGER_KEYS = ("phase", "seed_role", "consumes_search_slot", "simulator_invocations")
+_SEED_ALLOWED_KEYS = {
+    "search_seeds",
+    "scenario_seed_domain",
+    "candidate_seed_mode",
+    "role_seed_base",
+    "canary_seed_base",
+    "replay",
+    "confirmation",
+    "disjointness",
+}
+_SEED_DOMAIN_ALLOWED_KEYS = {"min", "max"}
+_REPLAY_ALLOWED_KEYS = {"count_per_candidate", "derivation"}
+_CONFIRMATION_ALLOWED_KEYS = {
+    "count_per_candidate",
+    "threshold",
+    "derivation",
+    "source_rule",
+}
 _MONITOR_KEYS = "property_ids sidecar_schema monitor_only_excluded"
+_MONITOR_ALLOWED_KEYS = {
+    "property_ids",
+    "sidecar_schema",
+    "required_mechanism_fields",
+    "monitor_artifact_fields",
+    "discretization",
+    "monitor_only_excluded",
+    "source_semantics_unchanged",
+}
 _ANALYSIS_KEYS = "primary_estimand primary_unit numerator denominator"
 _ANALYSIS_EXPECTED = (
     "confirmed_failure_discovery_rate_by_simulator_call_budget",
@@ -149,6 +201,64 @@ _ANALYSIS_EXPECTED = (
     "candidate_slot_passing_certification_replay_and_independent_confirmation",
     "simulator_call_budget_per_cell",
 )
+_ANALYSIS_ALLOWED_KEYS = {
+    "primary_estimand",
+    "primary_unit",
+    "numerator",
+    "denominator",
+    "secondary_outcomes",
+    "uncertainty",
+    "multiplicity",
+    "deduplication_key",
+    "duplicate_policy",
+    "missingness_policy",
+    "result_classes",
+    "resampling_unit",
+    "raw_objective_values_are_failures",
+    "post_outcome_design_changes",
+}
+_UNCERTAINTY_ALLOWED_KEYS = {"interval", "confidence", "resampling_unit"}
+_GATES_ALLOWED_KEYS = {
+    "order",
+    "certification",
+    "deterministic_replay",
+    "independent_confirmation",
+    "combined_failure_rule",
+    "confirmation_threshold",
+}
+_GATE_ALLOWED_KEYS = {"owner", "criterion", "required"}
+_PRIVATE_OPS_ALLOWED_KEYS = {
+    "execution_authorized",
+    "scheduler_submission_allowed",
+    "stage_command",
+    "resource_estimate",
+    "storage_estimate",
+    "preservation",
+}
+_RESOURCE_ESTIMATE_ALLOWED_KEYS = {
+    "search_attempt_slots",
+    "certification_records",
+    "deterministic_replay_calls",
+    "confirmation_calls",
+    "max_simulator_invocations",
+    "max_trace_bytes_per_simulator_call",
+    "raw_trace_ceiling_bytes",
+    "estimate_basis",
+}
+_STORAGE_ESTIMATE_ALLOWED_KEYS = {
+    "raw_trace_ceiling_bytes",
+    "derived_summary_ceiling_bytes",
+    "total_planning_ceiling_bytes",
+}
+_PRESERVATION_ALLOWED_KEYS = {
+    "raw_out_of_git",
+    "raw_and_derived_separate",
+    "checksum_algorithm",
+    "retain_invalid_unavailable_failed_rows",
+    "promote_only_reviewed_compact_summary",
+    "local_output_is_disposable",
+}
+_VALIDATION_ALLOWED_KEYS = {"commands", "no_campaign"}
 _CALL_RULES = {
     "search_evaluation": ("search", "search", True, 1),
     "search_invalid_proposal": ("search", "search", True, 0),
@@ -371,6 +481,108 @@ def _validate_source_semantics(packet: Mapping[str, Any], paths: Mapping[str, Pa
     )
 
 
+def _validate_packet_nested_keys(packet: Mapping[str, Any]) -> None:
+    """Reject unversioned fields in packet sections with nested mappings."""
+    objectives = _list(packet.get("objectives"), "objectives")
+    for index, objective in enumerate(objectives):
+        _reject_unknown_keys(
+            _mapping(objective, f"objectives[{index}]"),
+            _OBJECTIVE_ALLOWED_KEYS,
+            f"objectives[{index}]",
+        )
+    search_families = _list(packet.get("search_families"), "search_families")
+    for index, family in enumerate(search_families):
+        _reject_unknown_keys(
+            _mapping(family, f"search_families[{index}]"),
+            _SEARCH_FAMILY_ALLOWED_KEYS,
+            f"search_families[{index}]",
+        )
+
+    scenario = _mapping(packet.get("scenario"), "scenario")
+    _reject_unknown_keys(scenario, _SCENARIO_ALLOWED_KEYS, "scenario")
+    for index, parameter in enumerate(_list(scenario.get("parameters"), "scenario.parameters")):
+        parameter_mapping = _mapping(parameter, f"scenario.parameters[{index}]")
+        _reject_unknown_keys(
+            parameter_mapping,
+            _SCENARIO_PARAMETER_ALLOWED_KEYS,
+            f"scenario.parameters[{index}]",
+        )
+        _reject_unknown_keys(
+            _mapping(parameter_mapping.get("bounds"), f"scenario.parameters[{index}].bounds"),
+            _SCENARIO_BOUNDS_ALLOWED_KEYS,
+            f"scenario.parameters[{index}].bounds",
+        )
+    _reject_unknown_keys(
+        _mapping(packet.get("initialization_policy"), "initialization_policy"),
+        _INITIALIZATION_ALLOWED_KEYS,
+        "initialization policy",
+    )
+
+    budget = _mapping(packet.get("budget"), "budget")
+    _reject_unknown_keys(budget, _BUDGET_ALLOWED_KEYS, "budget")
+    seed = _mapping(packet.get("seed_policy"), "seed_policy")
+    _reject_unknown_keys(seed, _SEED_ALLOWED_KEYS, "seed policy")
+    _reject_unknown_keys(
+        _mapping(seed.get("scenario_seed_domain"), "scenario seed domain"),
+        _SEED_DOMAIN_ALLOWED_KEYS,
+        "scenario seed domain",
+    )
+    _reject_unknown_keys(_mapping(seed.get("replay"), "replay"), _REPLAY_ALLOWED_KEYS, "replay")
+    _reject_unknown_keys(
+        _mapping(seed.get("confirmation"), "confirmation"),
+        _CONFIRMATION_ALLOWED_KEYS,
+        "confirmation",
+    )
+
+    accounting = _mapping(packet.get("call_accounting"), "call_accounting")
+    _reject_unknown_keys(accounting, _ACCOUNTING_ALLOWED_KEYS, "call accounting")
+    classes = _mapping(accounting.get("classes"), "call_accounting.classes")
+    for name in _CALL_RULES:
+        class_mapping = _mapping(classes.get(name), f"call class {name}")
+        _reject_unknown_keys(class_mapping, set(_LEDGER_KEYS), f"call class {name}")
+
+    gates = _mapping(packet.get("gates"), "gates")
+    _reject_unknown_keys(gates, _GATES_ALLOWED_KEYS, "gates")
+    for name in gates.get("order", ()):
+        _reject_unknown_keys(
+            _mapping(gates.get(name), f"gate.{name}"),
+            _GATE_ALLOWED_KEYS,
+            f"gate.{name}",
+        )
+    monitor = _mapping(packet.get("monitor_contract"), "monitor_contract")
+    _reject_unknown_keys(monitor, _MONITOR_ALLOWED_KEYS, "monitor contract")
+    analysis = _mapping(packet.get("analysis_contract"), "analysis_contract")
+    _reject_unknown_keys(analysis, _ANALYSIS_ALLOWED_KEYS, "analysis contract")
+    _reject_unknown_keys(
+        _mapping(analysis.get("uncertainty"), "uncertainty"),
+        _UNCERTAINTY_ALLOWED_KEYS,
+        "uncertainty",
+    )
+
+    ops = _mapping(packet.get("private_ops"), "private_ops")
+    _reject_unknown_keys(ops, _PRIVATE_OPS_ALLOWED_KEYS, "private_ops")
+    _reject_unknown_keys(
+        _mapping(ops.get("resource_estimate"), "resource estimate"),
+        _RESOURCE_ESTIMATE_ALLOWED_KEYS,
+        "resource estimate",
+    )
+    _reject_unknown_keys(
+        _mapping(ops.get("storage_estimate"), "storage estimate"),
+        _STORAGE_ESTIMATE_ALLOWED_KEYS,
+        "storage estimate",
+    )
+    _reject_unknown_keys(
+        _mapping(ops.get("preservation"), "preservation"),
+        _PRESERVATION_ALLOWED_KEYS,
+        "preservation",
+    )
+    _reject_unknown_keys(
+        _mapping(packet.get("validation"), "validation"),
+        _VALIDATION_ALLOWED_KEYS,
+        "validation",
+    )
+
+
 def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, Any]:
     """Validate the source-bound, non-executing packet."""
     _require(isinstance(packet, Mapping), "packet must be a mapping")
@@ -402,6 +614,7 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
     paths = _input_paths(packet, repo_root, source_commit=source_commit)
     _require(_REQUIRED_INPUTS.issubset(paths), "source inputs are incomplete")
     _validate_source_semantics(packet, paths)
+    _validate_packet_nested_keys(packet)
     _expect(
         (
             _ids(packet.get("objectives"), "objective"),
@@ -483,7 +696,8 @@ def validate_packet(packet: Mapping[str, Any], *, repo_root: Path) -> dict[str, 
     classes = _mapping(accounting.get("classes"), "call_accounting.classes")
     _require(set(classes) == set(_CALL_RULES), "call classes are incomplete")
     for name in _CALL_RULES:
-        _check(classes[name], _LEDGER_KEYS, _CALL_RULES[name], f"call class {name}")
+        class_mapping = _mapping(classes[name], f"call class {name}")
+        _check(class_mapping, _LEDGER_KEYS, _CALL_RULES[name], f"call class {name}")
     gates = _mapping(packet.get("gates"), "gates")
     _check_values(
         gates,
@@ -690,6 +904,18 @@ def validate_temporal_sidecar(
         type(sample_count) is int and sample_count >= 0 and (not observed or sample_count > 0),
         "monitor sample_count must be non-negative",
     )
+    if not observed:
+        _require(
+            sidecar.get("admission_status") == "not_admitted"
+            and all(
+                item["signed_margin"] is None
+                and item["activation_time_s"] is None
+                and item["execution_mode"] == "synthetic_fixture"
+                and all(item[state] == "not_run" for state in _GATE_STATES)
+                for item in properties
+            ),
+            "planned sidecar cannot contain observations",
+        )
     if sidecar.get("admission_status") == "confirmed_failure":
         _require(
             observed and sidecar.get("failure_basis") == "independent_confirmation",
@@ -707,19 +933,51 @@ def validate_temporal_sidecar(
             any(float(item["signed_margin"]) < 0.0 for item in properties),
             "confirmed sidecar requires a negative signed margin",
         )
+        _require(
+            all(
+                item["activation_time_s"] is not None
+                for item in properties
+                if float(item["signed_margin"]) < 0.0
+            ),
+            "confirmed sidecar requires activation time for each violated property",
+        )
 
 
 def validate_call_ledger(
-    packet: Mapping[str, Any], rows: Sequence[Mapping[str, Any]]
+    packet: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    run_budget_limits: Mapping[str, tuple[int, int]],
 ) -> dict[str, Any]:
-    """Validate explicit simulator-call and search-slot accounting."""
+    """Validate explicit per-cell simulator-call and search-slot accounting.
+
+    ``run_budget_limits`` is supplied by the deterministic identity builder (or
+    the disjoint canary builder) so a ledger cannot spend the packet-wide
+    ceiling in one cell while claiming a smaller per-cell budget.
+    """
+    _require(
+        isinstance(run_budget_limits, Mapping) and run_budget_limits,
+        "per-run budget limits are required",
+    )
+    for run_id, limits in run_budget_limits.items():
+        _require(
+            isinstance(run_id, str)
+            and isinstance(limits, tuple)
+            and len(limits) == 2
+            and all(isinstance(value, int) and not isinstance(value, bool) for value in limits)
+            and all(value >= 0 for value in limits),
+            f"invalid budget limits for {run_id!r}",
+        )
     slots: set[tuple[str, int]] = set()
     gates: set[tuple[str, str, Any]] = set()
     calls: set[str] = set()
     counts = dict.fromkeys(_CALL_RULES, 0)
+    search_slots_by_run: dict[str, int] = {}
+    simulator_invocations_by_run: dict[str, int] = {}
     simulator_invocations = 0
     for index, raw in enumerate(rows):
         row = _mapping(raw, f"ledger[{index}]")
+        _forbid_outcomes(row)
         class_name = str(row.get("call_class", ""))
         _require(class_name in _CALL_RULES, f"unknown call class: {class_name}")
         phase, role, consumes_slot, expected_calls = _CALL_RULES[class_name]
@@ -733,6 +991,8 @@ def validate_call_ledger(
             str(row.get("candidate_id", "")) and str(row.get("run_id", "")),
             "ledger identities are required",
         )
+        run_id = str(row["run_id"])
+        _require(run_id in run_budget_limits, f"unknown run budget identity: {run_id}")
         seed = row.get("seed")
         _require(
             (role == "none" and seed is None)
@@ -743,12 +1003,22 @@ def validate_call_ledger(
         _require(
             row.get("post_outcome_change") is False, "post-outcome packet changes are forbidden"
         )
+        if row.get("admission_status") is not None:
+            _require(
+                row.get("admission_status") in _ADMISSION_STATUSES,
+                "ledger admission status is invalid",
+            )
         mode = row.get("execution_mode")
         _require(mode in EXPECTED_MODES, f"invalid execution mode: {mode}")
         _require(
             mode == "native" or row.get("admission_status") == "excluded",
             "fallback/degraded rows must be excluded",
         )
+        if class_name == "search_invalid_proposal":
+            _require(
+                row.get("admission_status") in {"invalid", "excluded"},
+                "invalid search proposals must be excluded",
+            )
         attempt = row.get("attempt_index")
         _require(
             isinstance(attempt, int) and not isinstance(attempt, bool) and attempt >= 0,
@@ -767,11 +1037,15 @@ def validate_call_ledger(
         )
         _require(key not in target, duplicate_message)
         target.add(key)
+        search_slots_by_run[run_id] = search_slots_by_run.get(run_id, 0) + int(consumes_slot)
         if expected_calls:
             call_id = str(row.get("simulator_call_id", ""))
             _require(call_id and call_id not in calls, "simulator call IDs must be unique")
             calls.add(call_id)
             simulator_invocations += expected_calls
+            simulator_invocations_by_run[run_id] = (
+                simulator_invocations_by_run.get(run_id, 0) + expected_calls
+            )
         else:
             _expect(row.get("simulator_call_id"), None, f"simulator ID for {class_name}")
         counts[class_name] += 1
@@ -784,12 +1058,24 @@ def validate_call_ledger(
         len(slots) <= budget["search_attempt_slots"],
         "search-slot budget exceeded",
     )
+    for run_id in search_slots_by_run:
+        search_limit, simulator_limit = run_budget_limits[run_id]
+        _require(
+            search_slots_by_run[run_id] <= search_limit,
+            f"per-run search-slot budget exceeded for {run_id}",
+        )
+        _require(
+            simulator_invocations_by_run.get(run_id, 0) <= simulator_limit,
+            f"per-run simulator call budget exceeded for {run_id}",
+        )
     return {
         "status": "ok",
         "row_count": len(rows),
         "simulator_invocations": simulator_invocations,
         "class_counts": counts,
         "search_slots": len(slots),
+        "search_slots_by_run": search_slots_by_run,
+        "simulator_invocations_by_run": simulator_invocations_by_run,
     }
 
 
@@ -806,6 +1092,10 @@ def _validate_result_lineage(
         search_rows = [row for row in candidate_rows if row.get("phase") == "search"]
         _expect(len(search_rows), 1, f"search lineage for {candidate_id}")
         if search_rows[0].get("call_class") == "search_invalid_proposal":
+            _require(
+                search_rows[0].get("admission_status") in {"invalid", "excluded"},
+                f"invalid search proposals must be excluded for {candidate_id}",
+            )
             continue
         for phase, expected_count in (
             ("certification", 1),
@@ -824,17 +1114,31 @@ def _validate_result_lineage(
                 f"{phase} lineage state is missing for {candidate_id}",
             )
         confirmation_rows = [row for row in candidate_rows if row.get("phase") == "confirmation"]
+        confirmed = any(
+            row.get("admission_status") == "confirmed_failure"
+            or (
+                isinstance(row.get("temporal_sidecar"), Mapping)
+                and row["temporal_sidecar"].get("admission_status") == "confirmed_failure"
+            )
+            for row in candidate_rows
+        )
+        if confirmed:
+            for phase, state_key in (
+                ("certification", "certification_state"),
+                ("replay", "replay_state"),
+            ):
+                _require(
+                    all(
+                        row.get(state_key) == "passed"
+                        for row in candidate_rows
+                        if row.get("phase") == phase
+                    ),
+                    f"{phase} gate must pass before confirmed failure admission for {candidate_id}",
+                )
         _require(
             sum(row["independent_seed_state"] == "passed" for row in confirmation_rows)
             >= CONFIRMATION_THRESHOLD
-            or not any(
-                row.get("admission_status") == "confirmed_failure"
-                or (
-                    isinstance(row.get("temporal_sidecar"), Mapping)
-                    and row["temporal_sidecar"].get("admission_status") == "confirmed_failure"
-                )
-                for row in candidate_rows
-            ),
+            or not confirmed,
             f"confirmation lineage is below the 3-of-5 threshold for {candidate_id}",
         )
 
@@ -847,7 +1151,11 @@ def validate_result_rows(
     repo_root: Path | None = None,
 ) -> dict[str, Any]:
     """Validate result lineage before any result is admitted."""
-    identity = identities or build_expected_identities(packet, repo_root=repo_root)
+    expected_identity = build_expected_identities(packet, repo_root=repo_root or Path.cwd())
+    if identities is not None:
+        _require(isinstance(identities, Mapping), "identities must be a mapping")
+        _expect(identities, expected_identity, "deterministic identities")
+    identity = expected_identity
     index = {
         slot["candidate_id"]: (slot, run)
         for run in identity["runs"]
@@ -856,6 +1164,7 @@ def validate_result_rows(
     groups: dict[str, list[Mapping[str, Any]]] = {}
     for raw in rows:
         row = _mapping(raw, "result row")
+        _forbid_outcomes(row)
         candidate_id = str(row.get("candidate_id", ""))
         slot, run = index.get(candidate_id, (None, None))
         _require(slot is not None, "unknown or duplicate candidate identity")
@@ -898,7 +1207,14 @@ def validate_result_rows(
             )
         groups.setdefault(candidate_id, []).append(row)
     _validate_result_lineage(packet, groups)
-    ledger = validate_call_ledger(packet, rows)
+    run_budget_limits = {
+        run["run_id"]: (
+            len(run["candidate_slots"]),
+            len(run["candidate_slots"]) * SIMULATOR_INVOCATIONS_PER_SLOT,
+        )
+        for run in identity["runs"]
+    }
+    ledger = validate_call_ledger(packet, rows, run_budget_limits=run_budget_limits)
     ledger["validated_candidate_rows"] = len({row.get("candidate_id") for row in rows})
     return ledger
 
@@ -1011,7 +1327,10 @@ def build_canary_packet(
             )
             for offset, seed in enumerate(confirmation_seeds)
         )
-    ledger = validate_call_ledger(packet, rows)
+    run_budget_limits = {
+        candidate["candidate_id"]: (1, SIMULATOR_INVOCATIONS_PER_SLOT) for candidate in candidates
+    }
+    ledger = validate_call_ledger(packet, rows, run_budget_limits=run_budget_limits)
     return {
         "schema_version": CANARY_SCHEMA_VERSION,
         "packet_digest": digest,

@@ -400,14 +400,20 @@ def open_prs_covering_issue(*, repo: str, issue_number: int) -> dict[str, Any]:
 
 
 def _parse_claim_snapshot(
-    result: CommandResult, *, issue_number: int | None, limit: int
+    result: CommandResult, *, issue_number: int | None, limit: int, offset: int = 0
 ) -> dict[str, Any]:
-    """Parse a bounded claim-ref listing without treating malformed refs as absent."""
+    """Parse a bounded claim-ref window without treating malformed refs as absent.
+
+    The full remote listing is sorted, then sliced to ``[offset:offset + limit]``
+    so callers resume with a larger offset while ``truncated`` remains true.
+    Rows outside the window are never classified or released by this run.
+    """
     if result.returncode != 0:
         return {
             "ok": False,
             "claims": [],
             "truncated": False,
+            "offset": offset,
             "error": (result.stderr or result.stdout).strip() or "claim ref snapshot failed",
         }
 
@@ -437,20 +443,22 @@ def _parse_claim_snapshot(
         )
 
     claims.sort(key=lambda row: (row["issue"], row["claim_ref"]))
-    truncated = len(claims) > limit
-    if truncated:
-        claims = claims[:limit]
+    truncated = len(claims) > offset + limit
+    if truncated or offset:
+        claims = claims[offset : offset + limit]
     if malformed:
         return {
             "ok": False,
             "claims": claims,
             "truncated": truncated,
+            "offset": offset,
             "error": f"malformed claim ref row(s): {', '.join(malformed[:3])}",
         }
     return {
         "ok": True,
         "claims": claims,
         "truncated": truncated,
+        "offset": offset,
         "error": None,
     }
 
@@ -779,10 +787,18 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
     repo: str,
     issue_number: int | None = None,
     limit: int = RECONCILIATION_LIMIT,
+    offset: int = 0,
     release_stale: bool = False,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    """Report stale claim candidates and optionally release only revalidated rows."""
+    """Report stale claim candidates and optionally release only revalidated rows.
+
+    ``offset``/``limit`` select a resume window over the sorted claim listing;
+    resume with a larger offset while ``truncated`` remains true. Releases are
+    safe under truncation because every released row is revalidated
+    (claim SHA, issue state, PR coverage) inside ``_release_reconciled_claim``
+    immediately before the compare-and-delete.
+    """
     if limit <= 0:
         return {
             "schema": "issue_claim_reconciliation.v1",
@@ -791,7 +807,19 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
             "read_only": not release_stale,
             "claims": [],
             "candidate_count": 0,
+            "offset": offset,
             "errors": ["limit must be positive"],
+        }
+    if offset < 0:
+        return {
+            "schema": "issue_claim_reconciliation.v1",
+            "action": "reconcile",
+            "ok": False,
+            "read_only": not release_stale,
+            "claims": [],
+            "candidate_count": 0,
+            "offset": offset,
+            "errors": ["offset must be zero or positive"],
         }
     if release_stale and reason not in TERMINAL_RELEASE_REASONS:
         return {
@@ -801,6 +829,7 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
             "read_only": False,
             "claims": [],
             "candidate_count": 0,
+            "offset": offset,
             "errors": ["--release-stale requires an explicit terminal --reason"],
         }
 
@@ -808,6 +837,7 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
         _run(build_claim_snapshot_command(remote=remote)),
         issue_number=issue_number,
         limit=limit,
+        offset=offset,
     )
     errors = [snapshot["error"]] if snapshot.get("error") else []
     if snapshot.get("truncated"):
@@ -873,7 +903,11 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
         ]
 
     releases: list[dict[str, Any]] = []
-    if release_stale and not errors:
+    # Snapshot truncation only bounds which rows this window considers: every
+    # release revalidates its row (claim SHA, issue state, PR coverage) inside
+    # _release_reconciled_claim immediately before compare-and-delete, so
+    # in-window safe rows release while out-of-window rows stay retained.
+    if release_stale:
         for row in rows:
             if row.get("safe_to_release"):
                 releases.append(
@@ -888,6 +922,7 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
         "remote": remote,
         "repo": repo,
         "limit": limit,
+        "offset": snapshot.get("offset", offset),
         "truncated": bool(snapshot.get("truncated")),
         "claims": rows,
         "candidate_count": sum(1 for row in rows if row.get("safe_to_release")),
@@ -1258,6 +1293,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Maximum claim refs to inspect during reconciliation.",
     )
     parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help=(
+            "Claim refs to skip before the reconcile window. Resume with a "
+            "larger offset while the report stays truncated; rows outside the "
+            "window are retained, never classified or released."
+        ),
+    )
+    parser.add_argument(
         "--release-stale",
         action="store_true",
         help="Revalidate and compare-and-delete stale candidates; never delete blindly.",
@@ -1329,6 +1374,7 @@ def main(argv: list[str] | None = None) -> int:
             repo=args.repo,
             issue_number=args.issue,
             limit=args.limit,
+            offset=args.offset,
             release_stale=args.release_stale,
             reason=args.reason,
         )

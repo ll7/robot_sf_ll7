@@ -175,7 +175,9 @@ def test_route_spawn_capture_records_attempts_and_assigned_waypoints() -> None:
 def test_route_spawn_capture_leaves_default_path_byte_identical() -> None:
     """Passing no capture must not change the produced states."""
     config = _seeded_route_config()
-    captured_states, _, _, _ = populate_ped_routes(config, [_route()], capture=SpawnSamplerCapture())
+    captured_states, _, _, _ = populate_ped_routes(
+        config, [_route()], capture=SpawnSamplerCapture()
+    )
     default_states, _, _, _ = populate_ped_routes(config, [_route()])
 
     assert np.array_equal(captured_states, default_states)
@@ -245,9 +247,7 @@ def test_synthesized_background_capture_covers_every_pedestrian() -> None:
     assert payload["counts"]["by_source"] == {"synthesized": states.shape[0]}
     for record in payload["pedestrians"]:
         assert record["zone_index"] == zone_assignments[record["ped_id"]]
-        assert record["spawn_point"] == pytest.approx(
-            states[record["ped_id"], 0:2].tolist()
-        )
+        assert record["spawn_point"] == pytest.approx(states[record["ped_id"], 0:2].tolist())
 
 
 def test_reset_block_reports_captured_spawn_and_route_edges() -> None:
@@ -323,9 +323,7 @@ def test_env_capture_reaches_trace_reset_block() -> None:
     env = make_robot_env(config=config, seed=0)
     try:
         obs, _ = env.reset(seed=0)
-        state = _init_step_loop_state(
-            obs=obs, env=env, config=config, hybrid_source_field=None
-        )
+        state = _init_step_loop_state(obs=obs, env=env, config=config, hybrid_source_field=None)
         payload = state.spawn_capture
         assert payload is not None
         ped_count = int(np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0])

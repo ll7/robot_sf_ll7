@@ -645,6 +645,31 @@ class PlannerTrackBelief:
         return payload
 
 
+def _freeze_numpy_scalar(value: np.generic) -> Any:
+    """Convert one NumPy scalar to an immutable runtime primitive.
+
+    Returns:
+        A finite Python primitive suitable for immutable diagnostics.
+    """
+    if np.issubdtype(value.dtype, np.bool_):
+        return bool(value)
+    if np.issubdtype(value.dtype, np.integer):
+        return int(value)
+    if np.issubdtype(value.dtype, np.floating):
+        normalized = float(value)
+        if not np.isfinite(normalized):
+            raise ValueError(
+                "runtime floating values must be representable as finite Python floats"
+            )
+        return normalized
+    if np.issubdtype(value.dtype, np.complexfloating):
+        return complex(value)
+    item = value.item()
+    if isinstance(item, np.generic):
+        raise ValueError("diagnostics contain an unsupported NumPy scalar")
+    return item
+
+
 def _freeze_runtime_value(value: Any) -> Any:
     """Copy nested diagnostics into immutable containers with owned arrays.
 
@@ -660,18 +685,7 @@ def _freeze_runtime_value(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return tuple(_freeze_runtime_value(nested) for nested in value)
     if isinstance(value, np.generic):
-        if np.issubdtype(value.dtype, np.bool_):
-            return bool(value)
-        if np.issubdtype(value.dtype, np.integer):
-            return int(value)
-        if np.issubdtype(value.dtype, np.floating):
-            return float(value)
-        if np.issubdtype(value.dtype, np.complexfloating):
-            return complex(value)
-        item = value.item()
-        if isinstance(item, np.generic):
-            raise ValueError("diagnostics contain an unsupported NumPy scalar")
-        return item
+        return _freeze_numpy_scalar(value)
     return value
 
 

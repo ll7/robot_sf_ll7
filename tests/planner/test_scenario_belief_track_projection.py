@@ -699,6 +699,13 @@ def test_typed_input_validation_and_json_edges() -> None:
         diagnostics={"longdouble": np.longdouble(1.25)},
     )
     assert longdouble_wrapper.to_dict()["diagnostics"]["longdouble"] == pytest.approx(1.25)
+    with pytest.raises(ValueError, match="representable as finite Python floats"):
+        BeliefAwarePlannerInput(
+            legacy_observation={},
+            tracks={},
+            belief_step=0,
+            diagnostics={"longdouble": np.longdouble("1e400")},
+        )
     with pytest.raises(ValueError, match="NaN or Inf"):
         adapter._json_safe(float("nan"))
 

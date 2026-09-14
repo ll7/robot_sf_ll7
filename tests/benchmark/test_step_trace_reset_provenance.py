@@ -313,3 +313,77 @@ def test_finalize_attaches_reset_block_with_schema_version() -> None:
     assert trace["schema_version"] == "simulation-step-trace.v1"
     assert trace["reset"]["collision_at_reset"] is True
     assert trace["reset"]["min_surface_clearance_m"] == -0.4
+
+
+def test_reset_provenance_rejects_short_velocity_rows() -> None:
+    """A short velocity row must not reach positional indexing (issue #9268)."""
+    reset = _build_reset_provenance(
+        **_reset_kwargs(
+            initial_ped_positions=np.array([[5.0, 5.0]]),
+            initial_ped_velocities=np.array([[1.0]]),
+            initial_ped_headings=np.array([0.0]),
+            trace_actor_ids=["p1"],
+        )
+    )
+
+    assert reset["pedestrians"][0]["velocity"] is None
+    assert reset["pedestrians"][0]["heading"] == 0.0
+
+
+def test_reset_provenance_rejects_nonscalar_heading_entries() -> None:
+    """A non-scalar heading entry must not raise on float conversion (issue #9268)."""
+    reset = _build_reset_provenance(
+        **_reset_kwargs(
+            initial_ped_positions=np.array([[5.0, 5.0]]),
+            initial_ped_velocities=np.array([[0.0, 1.0]]),
+            initial_ped_headings=np.array([[0.0, 1.0]]),
+            trace_actor_ids=["p1"],
+        )
+    )
+
+    assert reset["pedestrians"][0]["velocity"] == [0.0, 1.0]
+    assert reset["pedestrians"][0]["heading"] is None
+
+
+def test_reset_provenance_rejects_nonfinite_velocity_rows() -> None:
+    """An infinite velocity row must record null instead of leaking (issue #9268)."""
+    reset = _build_reset_provenance(
+        **_reset_kwargs(
+            initial_ped_positions=np.array([[5.0, 5.0]]),
+            initial_ped_velocities=np.array([[float("inf"), 0.0]]),
+            trace_actor_ids=["p1"],
+        )
+    )
+
+    assert reset["pedestrians"][0]["velocity"] is None
+
+
+def test_reset_scenario_echo_nulls_nonfinite_floats() -> None:
+    """Non-finite scenario echoes become null for strict-JSON safety (issue #9268)."""
+    reset = _build_reset_provenance(
+        **_reset_kwargs(
+            scenario={"spawn_config": "dense", "routes": float("inf"), "waypoints": float("nan")}
+        )
+    )
+
+    assert reset["spawn"]["scenario_echo"] == {
+        "spawn_config": "dense",
+        "routes": None,
+        "waypoints": None,
+    }
+    json.dumps(reset, allow_nan=False)
+
+
+def test_reset_provenance_block_is_strict_json_serializable() -> None:
+    """The whole reset block must survive allow_nan=False (issue #9268)."""
+    reset = _build_reset_provenance(
+        **_reset_kwargs(
+            initial_ped_positions=np.array([[5.0, 5.0]]),
+            initial_ped_velocities=np.array([[0.0, 1.0]]),
+            initial_ped_headings=np.array([0.0]),
+            trace_actor_ids=["p1"],
+            scenario={"spawn_config": "dense", "horizon": 600.0},
+        )
+    )
+
+    json.dumps(reset, allow_nan=False)

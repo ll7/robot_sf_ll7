@@ -3567,6 +3567,9 @@ _RESET_SCENARIO_ECHO_KEYS = frozenset(
 def _reset_scenario_echo(scenario: dict[str, Any] | None) -> dict[str, Any]:
     """Echo JSON-scalar scenario spawn/route keys verbatim, if the record carries any.
 
+    Non-finite float echoes become explicit ``None`` so the block stays strict-
+    JSON serializable (``allow_nan=False``); every other scalar echoes verbatim.
+
     Returns:
         Mapping of echoed keys (possibly empty).
     """
@@ -3575,9 +3578,47 @@ def _reset_scenario_echo(scenario: dict[str, Any] | None) -> dict[str, Any]:
         return echoed
     for key in sorted(_RESET_SCENARIO_ECHO_KEYS):
         value = scenario.get(key, None)
-        if isinstance(value, (str, int, float, bool)) or (value is None and key in scenario):
+        if isinstance(value, float) and not math.isfinite(value):
+            echoed[key] = None
+        elif isinstance(value, (str, int, float, bool)) or (value is None and key in scenario):
             echoed[key] = value
     return echoed
+
+
+def _finite_pair_row(value: Any) -> np.ndarray | None:
+    """Return a finite length-2 row, or ``None`` for malformed input.
+
+    Ragged, short, non-numeric, or non-finite rows fail closed instead of
+    reaching positional indexing downstream.
+    """
+    try:
+        row = np.asarray(value, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        return None
+    if row.shape[0] < 2 or not np.isfinite(row[:2]).all():
+        return None
+    return row[:2]
+
+
+def _finite_scalar(value: Any) -> float | None:
+    """Return a finite scalar float, or ``None`` for malformed input.
+
+    Non-scalar entries (arrays, sequences) fail closed instead of raising on
+    ``float()`` conversion or silently reducing.
+    """
+    if isinstance(value, (list, tuple, dict, np.ndarray)):
+        try:
+            array = np.asarray(value, dtype=float).reshape(-1)
+        except (TypeError, ValueError):
+            return None
+        if array.shape[0] != 1 or not np.isfinite(array[0]):
+            return None
+        return float(array[0])
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
 
 
 def _reset_pedestrian_frames(
@@ -3615,21 +3656,14 @@ def _reset_pedestrian_frames(
             and isinstance(actor_ids[ped_idx], str)
         ):
             frame["actor_id"] = actor_ids[ped_idx]
-        if (
-            velocities is not None
-            and ped_idx < len(velocities)
-            and np.isfinite(np.asarray(velocities[ped_idx], dtype=float)).all()
-        ):
-            frame["velocity"] = [
-                float(velocities[ped_idx][0]),
-                float(velocities[ped_idx][1]),
-            ]
-        if (
-            headings is not None
-            and ped_idx < len(headings)
-            and np.isfinite(float(headings[ped_idx]))
-        ):
-            frame["heading"] = float(headings[ped_idx])
+        if velocities is not None and ped_idx < len(velocities):
+            row = _finite_pair_row(velocities[ped_idx])
+            if row is not None:
+                frame["velocity"] = [float(row[0]), float(row[1])]
+        if headings is not None and ped_idx < len(headings):
+            heading = _finite_scalar(headings[ped_idx])
+            if heading is not None:
+                frame["heading"] = heading
         if origin_ok:
             clearance = (
                 float(np.linalg.norm(np.asarray(ped_pos[:2], dtype=float) - origin))

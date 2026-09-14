@@ -467,3 +467,128 @@ def test_recording_scene_export_reuses_the_canonical_viewer(
     exported = {artifact["artifact_id"] for artifact in result.artifacts}
     assert "threejs/recording/index.html" in exported
     assert "threejs/recording/scene.json" in exported
+
+
+def test_source_outside_the_base_directory_is_refused(tmp_path: Path) -> None:
+    """A programmatically built request cannot make the component read outside its base.
+
+    The contract loader already rejects traversal in request URIs, so this exercises the
+    component's own containment guard against a request object built directly.
+    """
+    from robot_sf.analysis_workbench.review_contracts import ComponentRequest, SourceRef
+
+    _write(tmp_path / "trace-0000.json", {"step": 0})
+    _write(tmp_path / "bundle.json", _bundle(tmp_path))
+    request = ComponentRequest(
+        request_id="req-escape",
+        component_id=review_workbench.COMPONENT_ID,
+        sources=(
+            SourceRef(
+                artifact_id="bundle", uri="bundle.json", format=review_workbench.BUNDLE_FORMAT
+            ),
+            SourceRef(
+                artifact_id="escape", uri="../escape.json", format=review_workbench.SPEC_FORMAT
+            ),
+        ),
+        output_directory="out",
+    )
+
+    result = review_workbench.run(request, base=tmp_path)
+
+    assert result.status == "partial"
+    assert [diagnostic["reason_code"] for diagnostic in result.diagnostics] == [
+        "source_outside_base"
+    ]
+
+
+def test_invalid_bundle_payload_is_reported_as_a_contract_failure(tmp_path: Path) -> None:
+    """A bundle that violates the v1 schema is an invalid source, not a crash."""
+    _write(tmp_path / "bundle.json", {"schema_version": "review-bundle.v1", "bundle_id": "b"})
+    request = _request(
+        tmp_path,
+        sources=[
+            {
+                "artifact_id": "bundle",
+                "uri": "bundle.json",
+                "format": review_workbench.BUNDLE_FORMAT,
+            }
+        ],
+    )
+
+    result = review_workbench.run(request, base=tmp_path)
+
+    assert result.status == "unavailable"
+    assert result.diagnostics[0]["reason_code"] == "source_contract_invalid"
+    assert not (tmp_path / "out").exists()
+
+
+def test_invalid_visualization_spec_degrades_to_partial(tmp_path: Path) -> None:
+    """A malformed spec is reported while the bundle view is still produced."""
+    _write(tmp_path / "trace-0000.json", {"step": 0})
+    _write(tmp_path / "bundle.json", _bundle(tmp_path))
+    _write(tmp_path / "spec.json", {"schema_version": "visualization-spec.v1"})
+    request = _request(
+        tmp_path,
+        sources=[
+            {
+                "artifact_id": "bundle",
+                "uri": "bundle.json",
+                "format": review_workbench.BUNDLE_FORMAT,
+            },
+            {"artifact_id": "spec", "uri": "spec.json", "format": review_workbench.SPEC_FORMAT},
+        ],
+    )
+
+    result = review_workbench.run(request, base=tmp_path)
+
+    assert result.status == "partial"
+    assert [diagnostic["reason_code"] for diagnostic in result.diagnostics] == [
+        "source_contract_invalid"
+    ]
+    assert (tmp_path / "out" / "review-workbench.v1.json").is_file()
+
+
+def test_recording_without_the_scene_capability_is_not_exported(tmp_path: Path) -> None:
+    """A recording source stays inert unless the request requires the scene export."""
+    _write(tmp_path / "trace-0000.json", {"step": 0})
+    _write(tmp_path / "bundle.json", _bundle(tmp_path))
+    _write(tmp_path / "recording.jsonl", "")
+    request = _request(
+        tmp_path,
+        sources=[
+            {
+                "artifact_id": "bundle",
+                "uri": "bundle.json",
+                "format": review_workbench.BUNDLE_FORMAT,
+            },
+            {"artifact_id": "recording", "uri": "recording.jsonl", "format": "recording-jsonl.v1"},
+        ],
+    )
+
+    result = review_workbench.run(request, base=tmp_path)
+
+    document = json.loads((tmp_path / "out" / "review-workbench.v1.json").read_text("utf-8"))
+    assert result.status == "complete"
+    assert document["artifacts"][1]["scene_export"] == "not_requested"
+    assert not (tmp_path / "out" / "threejs").exists()
+
+
+def test_cli_failed_request_returns_one(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+    """A failed request is reported with exit code 1."""
+    (tmp_path / "out").mkdir()
+    _write(
+        tmp_path / "request.json",
+        {
+            "schema_version": COMPONENT_REQUEST_SCHEMA_VERSION,
+            "request_id": "req-cli-failed",
+            "component_id": review_workbench.COMPONENT_ID,
+            "sources": [{"artifact_id": "a", "uri": "a.json", "format": "x.v1"}],
+        },
+    )
+
+    rc = review_workbench.main(
+        ["--input", str(tmp_path / "request.json"), "--output", "out", "--base", str(tmp_path)]
+    )
+
+    assert rc == 1
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"

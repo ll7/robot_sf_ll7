@@ -47,7 +47,9 @@ REVIEW_FALLBACK_STATUS = "review_fallback_comment_recorded"
 FULL_METADATA_DIGEST_LENGTH = 64
 REVIEW_FALLBACK_MARKER = "<!-- exact-head-review-fallback:v1 -->"
 REVIEW_ENDPOINT_FAILURE_STATUSES = frozenset({422, 500, 502, 503, 504})
+REVIEW_AUTHORIZATION_STATUSES = frozenset({401, 403})
 _EXCERPT_LIMIT = 400
+_COMMENTS_PAGE_SIZE = 100
 _HTTP_STATUS_PATTERN = re.compile(r"\(HTTP (\d{3})\)|\bHTTP (\d{3})\b")
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_review_rest.py")
 
@@ -319,11 +321,29 @@ def _review_publication_failure(
     stderr = str(getattr(result, "stderr", "") or "")
     stdout = str(getattr(result, "stdout", "") or "")
     status = _http_status((stderr, stdout))
-    unavailable = status is None or status in REVIEW_ENDPOINT_FAILURE_STATUSES
+    validation_error = False
+    if status == 422:
+        try:
+            response = json.loads(stdout)
+        except json.JSONDecodeError:
+            response = None
+        validation_error = isinstance(response, dict) and bool(response.get("errors"))
+    authorization_error = status in REVIEW_AUTHORIZATION_STATUSES
+    unavailable = (
+        not authorization_error
+        and not validation_error
+        and (status is None or status in REVIEW_ENDPOINT_FAILURE_STATUSES)
+    )
+    if authorization_error:
+        error_class = "review_authorization_failed"
+    elif validation_error:
+        error_class = "review_validation_failed"
+    else:
+        error_class = "review_publication_failed"
     return {
         "status": "error",
         "error": f"PR {number} review publication failed: {_bounded_excerpt(stderr or stdout)}",
-        "error_class": "review_publication_failed",
+        "error_class": error_class,
         "endpoint": f"repos/{repo}/pulls/{number}/reviews",
         "http_status": status,
         "returncode": getattr(result, "returncode", None),
@@ -345,20 +365,27 @@ def _existing_fallback_comment(
     number: int, *, repo: str, expected_head_sha: str
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Return an existing fallback comment for this head, or a read error."""
-    result = _gh_api_comments_get(f"repos/{repo}/issues/{number}/comments?per_page=100")
-    payload, error = _parse_json(result, what=f"PR {number} fallback comment read")
-    if error:
-        return None, error
-    if not isinstance(payload, list):
-        return None, f"PR {number} fallback comment read was not a list"
     marker = _fallback_marker(expected_head_sha)
-    for comment in payload:
-        body = str((comment or {}).get("body") or "") if isinstance(comment, dict) else ""
-        if marker in body:
-            return {
-                "comment_id": comment.get("id"),
-                "url": str((comment or {}).get("html_url", "")),
-            }, None
+    page = 1
+    while True:
+        result = _gh_api_comments_get(
+            f"repos/{repo}/issues/{number}/comments?per_page={_COMMENTS_PAGE_SIZE}&page={page}"
+        )
+        payload, error = _parse_json(result, what=f"PR {number} fallback comment read")
+        if error:
+            return None, error
+        if not isinstance(payload, list):
+            return None, f"PR {number} fallback comment read was not a list"
+        for comment in payload:
+            body = str((comment or {}).get("body") or "") if isinstance(comment, dict) else ""
+            if marker in body:
+                return {
+                    "comment_id": comment.get("id"),
+                    "url": str((comment or {}).get("html_url", "")),
+                }, None
+        if len(payload) < _COMMENTS_PAGE_SIZE:
+            break
+        page += 1
     return None, None
 
 
@@ -396,6 +423,13 @@ def _record_fallback_comment(
             "error": "fallback comment response was not an object",
             "error_class": "fallback_publication_failed",
         }
+    comment_id = payload.get("id")
+    if isinstance(comment_id, bool) or not isinstance(comment_id, int) or comment_id < 1:
+        return {
+            "status": "error",
+            "error": "fallback comment response had no numeric id",
+            "error_class": "fallback_response_unrecognized",
+        }
     return {
         "status": REVIEW_FALLBACK_STATUS,
         "number": number,
@@ -403,7 +437,7 @@ def _record_fallback_comment(
         "expected_head_sha": expected_head_sha,
         "authoritative_for_review": False,
         "duplicate_prevented": False,
-        "comment_id": payload.get("id"),
+        "comment_id": comment_id,
         "url": str(payload.get("html_url", "")),
     }
 

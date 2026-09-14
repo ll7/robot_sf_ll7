@@ -483,6 +483,32 @@ def test_permission_failure_does_not_recommend_fallback(tmp_path: Path) -> None:
     assert result["fallback_recommended"] is False
 
 
+def test_validation_failure_does_not_recommend_fallback(tmp_path: Path) -> None:
+    """A 422 with actionable validation errors is not endpoint unavailability."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(
+                returncode=1,
+                stderr="gh: Validation Failed (HTTP 422)",
+                stdout=json.dumps(
+                    {"message": "Validation Failed", "errors": [{"code": "missing"}]}
+                ),
+            ),
+        ),
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA)
+
+    assert result["status"] == "error"
+    assert result["error_class"] == "review_validation_failed"
+    assert result["fallback_recommended"] is False
+
+
 def test_fallback_comment_is_explicit_and_marked(tmp_path: Path) -> None:
     """Only --fallback-comment records the fallback, and it carries the head marker."""
     body_file = _write_body(tmp_path)
@@ -550,6 +576,73 @@ def test_fallback_comment_is_idempotent_per_head(tmp_path: Path) -> None:
     assert result["fallback_result"]["duplicate_prevented"] is True
     assert result["fallback_result"]["comment_id"] == 99
     mock_post.assert_called_once()
+
+
+def test_fallback_comment_searches_all_comment_pages(tmp_path: Path) -> None:
+    """A marker on a later page prevents a duplicate fallback comment."""
+    body_file = _write_body(tmp_path)
+    first_page = [{"id": index, "body": "ordinary comment"} for index in range(100)]
+    second_page = json.dumps(
+        [
+            {
+                "id": 999,
+                "html_url": "https://example.test/c/999",
+                "body": f"<!-- exact-head-review-fallback:v1 --> head: {HEAD_SHA}\n\nold",
+            }
+        ]
+    )
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(returncode=1, stderr="gh: Server Error (HTTP 502)"),
+        ) as mock_post,
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_comments_get",
+            side_effect=[_proc(stdout=json.dumps(first_page)), _proc(stdout=second_page)],
+        ) as mock_comments,
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA, fallback_comment=True)
+
+    assert result["fallback_result"]["duplicate_prevented"] is True
+    assert result["fallback_result"]["comment_id"] == 999
+    assert [call.args[0] for call in mock_comments.call_args_list] == [
+        "repos/ll7/robot_sf_ll7/issues/7571/comments?per_page=100&page=1",
+        "repos/ll7/robot_sf_ll7/issues/7571/comments?per_page=100&page=2",
+    ]
+    mock_post.assert_called_once()
+
+
+def test_unknown_fallback_response_fails_closed(tmp_path: Path) -> None:
+    """A comment POST without a numeric identity is not treated as recorded."""
+    body_file = _write_body(tmp_path)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            side_effect=[
+                _proc(returncode=1, stderr="gh: Server Error (HTTP 503)"),
+                _proc(stdout=json.dumps({"message": "created"})),
+            ],
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_comments_get",
+            return_value=_proc(stdout="[]"),
+        ),
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA, fallback_comment=True)
+
+    assert result["fallback_result"] == {
+        "status": "error",
+        "error": "fallback comment response had no numeric id",
+        "error_class": "fallback_response_unrecognized",
+    }
 
 
 def test_fallback_comment_read_failure_fails_closed(tmp_path: Path) -> None:

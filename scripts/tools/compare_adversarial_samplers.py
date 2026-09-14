@@ -967,9 +967,18 @@ def _synthetic_evaluator(
         "seed": int(candidate.scenario_seed),
         "status": "success",
         "steps": 1,
+        "dt_s": 0.1,
         "termination_reason": "success",
         "outcome": {"route_complete": True, "collision": False, "timeout": False},
-        "metrics": {"snqi": float(synthetic_snqi), "success": 1.0},
+        "metrics": {
+            "snqi": float(synthetic_snqi),
+            "success": 1.0,
+            "min_clearance": 1.0,
+            "time_to_collision_min": 5.0,
+            "time_to_goal_norm": 0.5,
+            "failure_to_progress": 0.0,
+            "total_collision_count": 0.0,
+        },
     }
     episode_path = candidate_dir / "episode_records.jsonl"
     episode_path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")

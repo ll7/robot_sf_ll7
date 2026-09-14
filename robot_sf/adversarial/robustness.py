@@ -39,14 +39,16 @@ if TYPE_CHECKING:
 _ROBUSTNESS_SCHEMA_VERSION = "robustness-report.v1"
 
 
-def _metric(metrics: dict[str, Any], key: str, default: float = 0.0) -> float:
-    """Read a finite metric scalar with a default."""
-    value = metrics.get(key, default)
+def _metric(metrics: dict[str, Any], key: str) -> float | None:
+    """Read a finite metric scalar, preserving missingness as unavailable."""
+    value = metrics.get(key)
+    if value is None:
+        return None
     try:
         parsed = float(value)
     except (TypeError, ValueError):
-        return default
-    return parsed if math.isfinite(parsed) else default
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _positive_int(value: Any, default: int) -> int:
@@ -59,14 +61,48 @@ def _positive_int(value: Any, default: int) -> int:
 
 
 def _derived_dt(record: dict[str, Any]) -> float:
-    """Derive a finite positive timestep from optional episode metadata."""
+    """Derive a timestep from recorded physical/simulation time, never wall time."""
+    steps = record.get("steps")
     try:
-        wall_time = float(record.get("wall_time_sec"))
-        steps = float(record.get("steps"))
+        steps_value = float(steps)
     except (TypeError, ValueError):
         return 0.1
-    dt = wall_time / steps if wall_time > 0.0 and steps > 0.0 else 0.1
-    return dt if math.isfinite(dt) and dt > 0.0 else 0.1
+    if not math.isfinite(steps_value) or steps_value <= 0.0:
+        return 0.1
+
+    timing = record.get("timing") if isinstance(record.get("timing"), dict) else {}
+    trace = record.get("algorithm_metadata")
+    trace = trace.get("paired_effect_native_trace") if isinstance(trace, dict) else {}
+    candidates = (
+        record.get("dt_s"),
+        timing.get("dt_s"),
+        trace.get("dt_s"),
+    )
+    for value in candidates:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(parsed) and parsed > 0.0:
+            return parsed
+
+    for key in (
+        "physical_time_sec",
+        "physical_time_s",
+        "simulation_time_sec",
+        "simulation_time_s",
+        "sim_time_sec",
+        "sim_time_s",
+    ):
+        try:
+            duration = float(record.get(key))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(duration) and duration > 0.0:
+            dt = duration / steps_value
+            if math.isfinite(dt) and dt > 0.0:
+                return dt
+    return 0.1
 
 
 def _validated_positive_float(value: float, *, name: str) -> float:
@@ -99,7 +135,7 @@ class PropertyRobustness:
     """
 
     property_name: str
-    robustness: float
+    robustness: float | None
     critical_time_s: float | None = None
     violated: bool = False
     detail: str = ""
@@ -128,8 +164,8 @@ class RobustnessReport:
 
     schema_version: str = _ROBUSTNESS_SCHEMA_VERSION
     properties: tuple[PropertyRobustness, ...] = ()
-    overall_robustness: float = 0.0
-    objective_value: float = 0.0
+    overall_robustness: float | None = 0.0
+    objective_value: float | None = 0.0
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serialisable report payload."""
@@ -147,8 +183,16 @@ class RobustnessReport:
         return cls(
             schema_version=payload.get("schema_version", _ROBUSTNESS_SCHEMA_VERSION),
             properties=properties,
-            overall_robustness=float(payload.get("overall_robustness", 0.0)),
-            objective_value=float(payload.get("objective_value", 0.0)),
+            overall_robustness=(
+                float(payload["overall_robustness"])
+                if payload.get("overall_robustness") is not None
+                else None
+            ),
+            objective_value=(
+                float(payload["objective_value"])
+                if payload.get("objective_value") is not None
+                else None
+            ),
         )
 
 
@@ -157,7 +201,9 @@ def _clearance_robustness(
     event_ledger: dict[str, Any],
 ) -> PropertyRobustness:
     """Always maintain clearance: rho = min_clearance - NEAR_MISS_DIST."""
-    min_clearance = _metric(metrics, "min_clearance", NEAR_MISS_DIST)
+    min_clearance = _metric(metrics, "min_clearance")
+    if min_clearance is None:
+        return PropertyRobustness("clearance", None, detail="unavailable: min_clearance")
     rho = min_clearance - NEAR_MISS_DIST
     critical_time = _first_collision_time(event_ledger) if rho < 0 else None
     return PropertyRobustness(
@@ -175,7 +221,9 @@ def _ttc_robustness(
     event_ledger: dict[str, Any],
 ) -> PropertyRobustness:
     """Always maintain TTC > tau while closing: rho = min_ttc - tau."""
-    min_ttc = _metric(metrics, "time_to_collision_min", tau + 1.0)
+    min_ttc = _metric(metrics, "time_to_collision_min")
+    if min_ttc is None:
+        return PropertyRobustness("ttc", None, detail="unavailable: time_to_collision_min")
     rho = min_ttc - tau
     critical_time = _first_collision_time(event_ledger) if rho < 0 else None
     return PropertyRobustness(
@@ -202,20 +250,23 @@ def _goal_robustness(
     """
     t_total = horizon * dt
     route_complete = bool(outcome.get("route_complete"))
-    time_to_goal_norm = _metric(metrics, "time_to_goal_norm", 1.0)
+    time_to_goal_norm = _metric(metrics, "time_to_goal_norm")
     if route_complete:
+        if time_to_goal_norm is None:
+            return PropertyRobustness("goal", None, detail="unavailable: time_to_goal_norm")
         t_actual = time_to_goal_norm * t_total
         rho = t_total - t_actual
         critical_time = t_actual
     else:
         rho = -dt
         critical_time = t_total
+    time_to_goal_detail = "unavailable" if time_to_goal_norm is None else f"{time_to_goal_norm:.4f}"
     return PropertyRobustness(
         property_name="goal",
         robustness=rho,
         critical_time_s=critical_time,
         violated=rho < 0,
-        detail=f"route_complete={route_complete}, time_to_goal_norm={time_to_goal_norm:.4f}",
+        detail=f"route_complete={route_complete}, time_to_goal_norm={time_to_goal_detail}",
     )
 
 
@@ -223,7 +274,9 @@ def _progress_robustness(
     metrics: dict[str, Any],
 ) -> PropertyRobustness:
     """Avoid sustained low-progress intervals: rho = -failure_to_progress."""
-    ftp = _metric(metrics, "failure_to_progress", 0.0)
+    ftp = _metric(metrics, "failure_to_progress")
+    if ftp is None:
+        return PropertyRobustness("progress", None, detail="unavailable: failure_to_progress")
     rho = -ftp
     return PropertyRobustness(
         property_name="progress",
@@ -240,8 +293,10 @@ def _collision_robustness(
     event_ledger: dict[str, Any],
 ) -> PropertyRobustness:
     """Never collide: rho = -collision_count."""
-    collision_count = _metric(metrics, "total_collision_count", 0.0)
-    if collision_count == 0.0:
+    collision_count = _metric(metrics, "total_collision_count")
+    if collision_count is None:
+        if not any(name in outcome for name in ("collision", "collision_event")):
+            return PropertyRobustness("collision", None, detail="unavailable: collision evidence")
         collision_flag = bool(outcome.get("collision") or outcome.get("collision_event"))
         collision_count = 1.0 if collision_flag else 0.0
     rho = -collision_count
@@ -318,8 +373,12 @@ def compute_robustness_report(
     )
 
     robustness_values = [p.robustness for p in properties]
-    overall = min(robustness_values) if robustness_values else 0.0
-    objective = -overall
+    overall = (
+        min(robustness_values)
+        if robustness_values and all(value is not None for value in robustness_values)
+        else None
+    )
+    objective = -overall if overall is not None else None
 
     return RobustnessReport(
         properties=properties,

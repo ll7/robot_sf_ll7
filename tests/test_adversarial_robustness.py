@@ -42,6 +42,7 @@ def _make_episode_record(  # noqa: PLR0913
     collision_events: list[dict] | None = None,
     wall_time_sec: float | None = None,
     steps: int | None = None,
+    physical_time_sec: float | None = None,
 ) -> dict:
     """Build a minimal synthetic episode JSONL record."""
     record: dict = {
@@ -66,6 +67,8 @@ def _make_episode_record(  # noqa: PLR0913
         record["wall_time_sec"] = wall_time_sec
     if steps is not None:
         record["steps"] = steps
+    if physical_time_sec is not None:
+        record["physical_time_sec"] = physical_time_sec
     return record
 
 
@@ -154,6 +157,14 @@ class TestGoalRobustness:
         goal = next(p for p in report.properties if p.property_name == "goal")
         assert goal.robustness == pytest.approx(-0.1)
         assert goal.violated
+
+    def test_not_reached_without_goal_time_metric_remains_well_formed(self) -> None:
+        record = _make_episode_record(time_to_goal_norm=None, route_complete=False)
+        del record["metrics"]["time_to_goal_norm"]
+        report = compute_robustness_report(record, dt=0.1)
+        goal = next(p for p in report.properties if p.property_name == "goal")
+        assert goal.robustness == pytest.approx(-0.1)
+        assert goal.detail.endswith("time_to_goal_norm=unavailable")
 
     def test_completed_at_deadline_is_zero_margin_satisfaction(self) -> None:
         record = _make_episode_record(
@@ -526,11 +537,11 @@ class TestObjectiveRegistry:
 class TestDtDerivation:
     """Tests for automatic dt derivation from episode metadata."""
 
-    def test_dt_from_wall_time_and_steps(self) -> None:
-        record = _make_episode_record(wall_time_sec=20.0, steps=200)
+    def test_dt_from_recorded_physical_time_and_steps(self) -> None:
+        record = _make_episode_record(wall_time_sec=20.0, physical_time_sec=40.0, steps=200)
         report = compute_robustness_report(record)
         goal = next(p for p in report.properties if p.property_name == "goal")
-        expected_dt = 20.0 / 200.0
+        expected_dt = 40.0 / 200.0
         t_total = 200 * expected_dt
         t_actual = 0.3 * t_total
         assert goal.robustness == pytest.approx(t_total - t_actual)
@@ -542,6 +553,53 @@ class TestDtDerivation:
         t_total = 200 * 0.1
         t_actual = 0.3 * t_total
         assert goal.robustness == pytest.approx(t_total - t_actual)
+
+    def test_wall_clock_does_not_change_identical_record_score(self) -> None:
+        first = _make_episode_record(wall_time_sec=1.0, physical_time_sec=20.0, steps=200)
+        second = _make_episode_record(wall_time_sec=99.0, physical_time_sec=20.0, steps=200)
+        assert compute_robustness_report(first) == compute_robustness_report(second)
+
+    def test_recorded_timestep_is_preferred_to_wall_clock(self) -> None:
+        first = _make_episode_record(wall_time_sec=1.0, steps=200)
+        second = _make_episode_record(wall_time_sec=99.0, steps=200)
+        first["dt_s"] = second["dt_s"] = 0.2
+        assert compute_robustness_report(first) == compute_robustness_report(second)
+
+    @pytest.mark.parametrize(
+        "metric",
+        [
+            "min_clearance",
+            "time_to_collision_min",
+            "time_to_goal_norm",
+            "failure_to_progress",
+        ],
+    )
+    def test_missing_required_metric_is_unavailable(self, metric: str) -> None:
+        record = _make_episode_record()
+        del record["metrics"][metric]
+        report = compute_robustness_report(record)
+        property_report = next(
+            p
+            for p in report.properties
+            if p.property_name
+            == {
+                "min_clearance": "clearance",
+                "time_to_collision_min": "ttc",
+                "time_to_goal_norm": "goal",
+                "failure_to_progress": "progress",
+            }[metric]
+        )
+        assert property_report.robustness is None
+        assert report.overall_robustness is None
+        assert report.objective_value is None
+
+    def test_non_finite_required_metric_is_unavailable(self) -> None:
+        record = _make_episode_record()
+        record["metrics"]["time_to_collision_min"] = float("nan")
+        ttc = next(
+            p for p in compute_robustness_report(record).properties if p.property_name == "ttc"
+        )
+        assert ttc.robustness is None
 
     @pytest.mark.parametrize(
         ("horizon", "wall_time_sec", "steps"),

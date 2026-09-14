@@ -547,7 +547,11 @@ class CmaEsCandidateSampler:
             if candidate == evaluation.candidate:
                 self._in_flight.pop(index)
                 score = evaluation.objective_value
-                value = float(score) if score is not None and math.isfinite(float(score)) else -1e9
+                # The search objective maximizes scores, while CMA-ES minimizes costs.
+                # Invalid evaluations must be worse than every finite cost, not favourable.
+                value = (
+                    -float(score) if score is not None and math.isfinite(float(score)) else math.inf
+                )
                 self._observed.append((es, list(vec), value))
                 if not self._pending and not self._in_flight:
                     self._flush_generation()

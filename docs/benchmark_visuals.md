@@ -10,6 +10,7 @@
 
 ## Table of Contents
 - [Table of Contents](#table-of-contents)
+- [Presentation Video Packs](#presentation-video-packs)
 - [Real Visualization Generation (Feature 133)](#real-visualization-generation-feature-133)
   - [Plot Generation](#plot-generation)
   - [Video Generation](#video-generation)
@@ -87,6 +88,27 @@ but new code should migrate to the Full Classic pipeline.
 - Plot generation: < 30 seconds for typical benchmark sizes
 - Video generation: < 60 seconds per scenario
 - Memory usage: Scales with episode count and trajectory length
+
+## Presentation Video Packs
+
+For a talk or demo, prepare a small local pack from an existing native-runtime
+recording and its episode newline-delimited JSON (JSONL) file:
+
+```bash
+uv run python scripts/tools/prepare_presentation_video_pack.py \
+  --episodes output/benchmarks/<run>/episodes.jsonl \
+  --videos output/recordings/<run> \
+  --output output/presentation_video_pack/<run>
+```
+
+The tool deterministically selects a compact mixture of successful and
+collision episodes, decodes the source videos, rejects very short or blank
+clips, adds 16:9 labels, and writes a `contact_sheet.png` plus a
+`presentation_video_pack.json` provenance/QA manifest. The generated media is
+intentionally local and untracked under `output/`; the manifest marks the pack
+as `presentation_only_not_benchmark_evidence`. It does not rerun the benchmark
+or change episode records. Use the source run's native runtime videos; replay
+fallback or synthetic videos should remain clearly labeled as illustrative.
 
 ## Troubleshooting
 

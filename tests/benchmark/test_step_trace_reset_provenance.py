@@ -10,6 +10,7 @@ import numpy as np
 from robot_sf.benchmark.map_runner.map_runner_episode import (
     _build_reset_provenance,
     _finalize_trace_metadata,
+    _read_sampler_capture,
     _read_simulator_ped_headings,
     _step_build_simulation_trace,
     _StepLoopState,
@@ -20,6 +21,7 @@ from robot_sf.benchmark.map_runner.map_runner_trace import (
     _optional_trace_float,
     _trace_pedestrians,
 )
+from robot_sf.ped_npc.spawn_capture import SpawnSamplerCapture
 
 
 def _reset_kwargs(**overrides: object) -> dict[str, object]:
@@ -443,3 +445,74 @@ def test_reset_provenance_rejects_nonfinite_scalar_heading() -> None:
     )
 
     assert reset["pedestrians"][0]["heading"] is None
+
+
+def _capture_mapping() -> dict[str, object]:
+    """Return a fixed sampler-capture mapping shaped like the producer output."""
+    return {
+        "route_anchor_attempts": 7,
+        "route_anchor_failures": 1,
+        "obstacle_rejections": 12,
+        "separation_rejections": 3,
+        "accepted_samples": 42,
+        "assigned_routes": [
+            {
+                "group_index": 0,
+                "spawn_id": 2,
+                "goal_id": 5,
+                "source_path_id": "route-a",
+                "source_label": "",
+                "initial_section": 1,
+                "ped_offset": 0,
+                "waypoint_count": 2,
+                "waypoints": [[0.0, 0.0], [3.0, 4.0]],
+            }
+        ],
+    }
+
+
+def test_reset_provenance_exposes_sampler_capture_edges() -> None:
+    """A capture record flips the spawn/routes edges to available (issue #9312)."""
+    reset = _build_reset_provenance(
+        **_reset_kwargs(sampler_capture=_capture_mapping())  # type: ignore[arg-type]
+    )
+
+    assert reset["spawn"]["status"] == "available"
+    assert reset["spawn"]["owner"].endswith("populate_simulation")
+    assert reset["spawn"]["route_anchor_attempts"] == 7
+    assert reset["spawn"]["route_anchor_failures"] == 1
+    assert reset["spawn"]["obstacle_rejections"] == 12
+    assert reset["spawn"]["separation_rejections"] == 3
+    assert reset["spawn"]["accepted_samples"] == 42
+    assert reset["routes"]["status"] == "available"
+    assert reset["routes"]["assigned_routes"][0]["waypoints"] == [[0.0, 0.0], [3.0, 4.0]]
+    json.dumps(reset)
+
+
+def test_reset_provenance_malformed_capture_fails_closed() -> None:
+    """Malformed capture content must degrade to unavailable, never crash."""
+    reset = _build_reset_provenance(
+        **_reset_kwargs(  # type: ignore[arg-type]
+            sampler_capture={"route_anchor_attempts": "many", "assigned_routes": "nope"}
+        )
+    )
+
+    assert reset["spawn"]["status"] == "unavailable"
+    assert reset["spawn"]["reason"] == "spawn_sampler_decision_not_retained"
+    assert reset["routes"]["status"] == "unavailable"
+    assert reset["routes"]["reason"] == "route_objects_not_retained_per_episode"
+    json.dumps(reset)
+
+
+def test_read_sampler_capture_returns_mapping_only_for_well_formed_records() -> None:
+    """The trace-side reader accepts mappings and rejects everything else."""
+    capture = SpawnSamplerCapture(route_anchor_attempts=4, accepted_samples=9)
+    env = SimpleNamespace(simulator=SimpleNamespace(sampler_capture=capture))
+    assert _read_sampler_capture(env) == capture.to_mapping()
+
+    assert _read_sampler_capture(SimpleNamespace()) is None
+    assert _read_sampler_capture(SimpleNamespace(simulator=SimpleNamespace())) is None
+    broken = SimpleNamespace(
+        simulator=SimpleNamespace(sampler_capture=SimpleNamespace(to_mapping=None))
+    )
+    assert _read_sampler_capture(broken) is None

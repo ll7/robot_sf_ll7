@@ -50,6 +50,11 @@ jobs:
           migrate-artifacts: "false"
 
       - name: Strict curated Sphinx build
+        env:
+          # The build script parses Sphinx warning lines; force plain output so
+          # ANSI color codes can never leak into parsed file paths (issue #9085).
+          NO_COLOR: "1"
+          FORCE_COLOR: "0"
         run: |
           set -euo pipefail
           scripts/dev/sphinx_strict_build.sh --output-dir site/docs

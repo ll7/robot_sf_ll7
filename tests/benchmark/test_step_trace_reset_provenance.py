@@ -516,3 +516,11 @@ def test_read_sampler_capture_returns_mapping_only_for_well_formed_records() -> 
         simulator=SimpleNamespace(sampler_capture=SimpleNamespace(to_mapping=None))
     )
     assert _read_sampler_capture(broken) is None
+
+    def _boom() -> dict[str, object]:
+        raise ValueError("capture serialization failed")
+
+    raising = SimpleNamespace(
+        simulator=SimpleNamespace(sampler_capture=SimpleNamespace(to_mapping=_boom))
+    )
+    assert _read_sampler_capture(raising) is None

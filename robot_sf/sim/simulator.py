@@ -642,9 +642,8 @@ class Simulator:
 
     def _new_sampler_capture(self) -> SpawnSamplerCapture | None:
         """Return a fresh sampler-decision record when explicitly enabled, else None."""
-        if not bool(getattr(self.config, "sampler_capture_enabled", False)):
-            return None
-        return SpawnSamplerCapture()
+        enabled = bool(getattr(self.config, "sampler_capture_enabled", False))
+        return SpawnSamplerCapture() if enabled else None
 
     def obstacle_force_law_metadata(self) -> dict[str, Any]:
         """Return the active fast-pysf obstacle-law metadata for this simulator."""

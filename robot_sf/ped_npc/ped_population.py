@@ -1342,9 +1342,10 @@ def _record_assigned_routes(
     capture: SpawnSamplerCapture, ped_behaviors: list[PedestrianBehavior]
 ) -> None:
     """Record per-group route assignments into the sampler capture object."""
-    for behavior in ped_behaviors:
-        if not isinstance(behavior, FollowRouteBehavior):
-            continue
+    route_behaviors = [
+        behavior for behavior in ped_behaviors if isinstance(behavior, FollowRouteBehavior)
+    ]
+    for behavior in route_behaviors:
         offset = int(getattr(behavior, "global_ped_offset", 0) or 0)
         for (group_index, route), section in zip(
             behavior.route_assignments.items(),

@@ -680,6 +680,9 @@ _FAST_FILES = {
     "test_scenario_denominator_manifest.py",
     "test_trace_exemplar_interest.py",
     "test_trace_exemplar_interest_angle_delta.py",
+    # Step-trace reset-provenance tests are deterministic contract coverage for the
+    # map-runner trace writer; keep them in the exact-head fast lane (issue #9262).
+    "test_step_trace_reset_provenance.py",
     "test_wrapped_angle_delta.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",

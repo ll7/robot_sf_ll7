@@ -440,6 +440,10 @@ _FAST_FILES = {
     # coverage for the delegated helper families; keep them in the exact-head
     # fast lane (issue #9250).
     "test_helper_consolidation_issue_9250.py",
+    # The lane-marker round-trips are deterministic format/parse coverage for
+    # the canonical coordination markers; keep them in the exact-head fast
+    # lane (issue #9254).
+    "test_lane_markers_issue_9254.py",
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",

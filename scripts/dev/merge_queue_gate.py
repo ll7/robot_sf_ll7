@@ -97,18 +97,20 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
 )
 from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
 from scripts.dev.github_quota import quota_reset_handoff  # noqa: E402
-from scripts.dev.pr_loop_policy import (  # noqa: E402
+from scripts.dev.lane_markers import (  # noqa: E402
     GATE_VERDICT_PROJECTION_SOURCE,
+    extract_metadata_digests,
+    metadata_trailer,
+)
+from scripts.dev.pr_loop_policy import (  # noqa: E402
     active_review_claim,
     current_gate_verdict_status,
     has_any_pr_metadata_verdict,
     has_current_pr_metadata_verdict,
 )
 from scripts.dev.pr_metadata import (  # noqa: E402
-    extract_metadata_digests,
     find_not_ready_body_sentinels,
     metadata_digest,
-    metadata_trailer,
 )
 from scripts.dev.snapshot_pr_queue import (  # noqa: E402
     _extract_base_policies,

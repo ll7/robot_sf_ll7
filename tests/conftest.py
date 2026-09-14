@@ -679,6 +679,7 @@ _FAST_FILES = {
     # Benchmark metric characterization tests are deterministic pure-metric
     # contracts; keep them in fast shards for changed metrics coverage.
     "test_aggregate.py",
+    "test_aggregate_provenance.py",
     "test_metric_layers.py",
     "test_metrics.py",
     "test_aggregated_time_cooperative.py",

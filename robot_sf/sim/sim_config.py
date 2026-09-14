@@ -263,6 +263,13 @@ class SimulationSettings:
     actor observations or planner inputs.
     """
 
+    sampler_capture_enabled: bool = False
+    """Record pedestrian spawn-sampler decisions and route assignments when enabled.
+
+    The per-episode capture is retained on the simulator for trace provenance and
+    never enters actor observations or planner inputs. Disabled by default.
+    """
+
     peds_speed_mult: float = 1.3
     """Pedestrian speed multiplier"""
 
@@ -488,6 +495,8 @@ class SimulationSettings:
         self._validate_action_latency_config()
         if type(self.oracle_force_trace_enabled) is not bool:
             raise TypeError("oracle_force_trace_enabled must be bool")
+        if type(self.sampler_capture_enabled) is not bool:
+            raise TypeError("sampler_capture_enabled must be bool")
         self.pedestrian_integration_scheme = normalize_integration_scheme(
             self.pedestrian_integration_scheme
         )

@@ -118,6 +118,7 @@ Feature-focused demos for developers exploring capabilities.
 | [39 Failed Campaign Diagnosis](./advanced/39_failed_campaign_diagnosis.py) | Inspect a retained failed-campaign dossier without rerunning it. | _None_ | campaign, diagnostics, provenance, validation | ✅ |
 | [40 Restore Campaign Capsule](./advanced/40_restore_campaign_capsule.py) | Restore and validate one preserved campaign capsule without running simulation. | _None_ | campaign, offline, fixtures, provenance, validation | ✅ |
 | [41 Artifact Preservation](./advanced/41_artifact_preservation.py) | Convert a task-owned fixture tree into a verified preservation manifest. | _None_ | artifacts, provenance, fixture | ✅ |
+| [42 Reproducible Episode Replay](./advanced/42_reproducible_episode_replay.py) | Compare same-seed episode records and a changed-seed input. | configs/scenarios/single/quickstart_demo.yaml | reproducibility, determinism, episode-record | ✅ |
 
 ## Benchmarks
 

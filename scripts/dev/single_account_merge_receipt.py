@@ -12,6 +12,12 @@ callers.  Report-only and validation paths only read state.  A pre-merge
 receipt digest excludes the terminal merge result, so recording GitHub's
 returned merge SHA never reconstructs or changes the evidence observed before
 the compare-and-swap operation.
+
+A concurrent merge can advance ``main`` between the report-only receipt and the
+apply.  Those blocks carry only base-bound reasons and the verification result
+names the documented two-step recovery: regenerate the report-only receipt for
+the same exact head, then re-apply it in the same shell step.  The remedy is
+diagnostic; it never regenerates a receipt implicitly or relaxes a reason.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -41,6 +48,10 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 
 RECEIPT_SCHEMA = "single_account_merge_receipt.v1"
 VERIFY_SCHEMA = "single_account_merge_receipt_verification.v1"
+# Reasons that only mean another merge advanced base/main after the receipt was built.
+BASE_DRIFT_REASONS = frozenset(
+    {"live_current_base_sha_changed", "live_gate_audit_changed", "live_ordinary_cas_changed"}
+)
 AUTHORITY_FIXTURE_SCHEMA = "single_account_merge_authority_fixture.v1"
 PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
 PROVENANCE_DATA_SOURCES = frozenset({"graphql", "rest_fallback_graphql_quota"})
@@ -1585,6 +1596,50 @@ def _compare_live_evidence(  # noqa: C901, PLR0912 - revalidation compares every
     return reasons
 
 
+def _verification_remedy(receipt: Mapping[str, Any], reasons: list[str]) -> dict[str, Any]:
+    """Return the canonical recovery for a blocked verification, without weakening it.
+
+    A concurrent merge that advances ``main`` between the report-only receipt and the
+    apply invalidates only the base-bound fields; the receipt's head, evidence, and
+    holds are unchanged. Those cases get an explicit regenerate-and-reapply remedy so
+    callers do not have to infer it from reason codes. Every other block stays a
+    fail-closed inspection with no blanket remedy.
+    """
+    # ``live_gate_audit_changed`` also covers non-base audit fields (for example
+    # labels or an exact-head review claim).  The current-main comparison is the
+    # decisive evidence that this is the concurrent-base recovery.
+    if "live_current_base_sha_changed" in reasons and set(reasons) <= BASE_DRIFT_REASONS:
+        head_sha = _string(receipt.get("head_sha"))
+        pr_number = receipt.get("pr_number")
+        repository = shlex.quote(_string(receipt.get("repository")))
+        receipt_path = f"/tmp/merge-receipt-{pr_number or 'pr'}.json"
+        applied_path = f"/tmp/merge-receipt-applied-{pr_number or 'pr'}.json"
+        return {
+            "kind": "regenerate_and_reapply",
+            "reason_class": "concurrent_base_advance",
+            "detail": (
+                "another merge advanced main after this receipt was built; head, evidence, "
+                "and holds are unchanged, so regenerate the report-only receipt for the same "
+                "head and re-apply it in one step"
+            ),
+            "head_sha": head_sha,
+            "commands": [
+                "uv run python scripts/dev/single_account_merge_receipt.py "
+                f"--pr {pr_number} --repo {repository} --expected-head {head_sha} "
+                f"--mode report-only --output {receipt_path}",
+                "uv run python scripts/dev/single_account_merge_receipt.py "
+                f"--pr {pr_number} --repo {repository} --expected-head {head_sha} "
+                f"--mode apply --receipt-file {receipt_path} --output {applied_path}",
+            ],
+        }
+    return {
+        "kind": "inspect_reasons",
+        "reason_class": "other",
+        "detail": "resolve every reason below; no blanket remedy applies",
+        "reasons": list(reasons),
+    }
+
+
 def verify_receipt(
     receipt: Mapping[str, Any],
     *,
@@ -1636,6 +1691,8 @@ def verify_receipt(
         merged_sha = live_evidence.get("merge_commit_sha")
         if _full_sha(_string(merged_sha)):
             res["merge_commit_sha"] = _string(merged_sha)
+    if not passed:
+        res["remedy"] = _verification_remedy(receipt, unique)
     return res
 
 

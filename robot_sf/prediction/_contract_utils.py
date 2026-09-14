@@ -76,19 +76,25 @@ def canonicalize_contract_label(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "_", text).strip("_").lower()
 
 
+def _contains_forbidden_token(normalized: str, tokens: frozenset[str]) -> bool:
+    """Return whether normalized text contains a separator-free forbidden token."""
+    compact = normalized.replace("_", "")
+    return any(token in normalized or token.replace("_", "") in compact for token in tokens)
+
+
 def is_forbidden_evidence_source(value: str) -> bool:
     """Return whether one source label is reserved for privileged evidence."""
     normalized = canonicalize_contract_label(value)
-    return normalized in FORBIDDEN_EVIDENCE_SOURCE_NAMES or any(
-        token in normalized for token in FORBIDDEN_EVIDENCE_SOURCE_TOKENS
+    return normalized in FORBIDDEN_EVIDENCE_SOURCE_NAMES or _contains_forbidden_token(
+        normalized, FORBIDDEN_EVIDENCE_SOURCE_TOKENS
     )
 
 
 def is_forbidden_actor_text(value: str) -> bool:
     """Return whether text can encode privileged actor-side provenance."""
     normalized = canonicalize_contract_label(value)
-    return is_forbidden_evidence_source(normalized) or any(
-        marker in normalized for marker in FORBIDDEN_ACTOR_PROVENANCE_MARKERS
+    return is_forbidden_evidence_source(normalized) or _contains_forbidden_token(
+        normalized, FORBIDDEN_ACTOR_PROVENANCE_MARKERS
     )
 
 

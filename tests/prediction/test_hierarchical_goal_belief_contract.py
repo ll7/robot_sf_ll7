@@ -486,6 +486,13 @@ def test_flat_projection_rejects_unreferenced_candidate_ids() -> None:
         "forceComponent:desired",
         "speed_cap_truth",
         "uncapped_velocity_xy",
+        "truegoal",
+        "groundtruth",
+        "routeassignment",
+        "futuretrajectory",
+        "truewaypoint",
+        "speedcaptruth",
+        "uncappedvelocityxy",
     ],
 )
 def test_flat_projection_rejects_privileged_bound_candidate_ids(candidate_id: str) -> None:
@@ -937,6 +944,43 @@ def test_parent_links_and_unknown_external_keys_fail_closed() -> None:
     payload["unexpected"] = True
     with pytest.raises(ValueError, match="unexpected key"):
         HierarchicalGoalPosteriorV1.from_dict(payload)
+
+
+def test_hierarchy_rejects_self_parent_links() -> None:
+    """A waypoint cannot be its own destination parent."""
+    with pytest.raises(ValueError, match="acyclic"):
+        replace(
+            _posterior(),
+            destination_probabilities=(HierarchicalProbability("node", 0.9),),
+            waypoint_conditionals=(
+                HierarchicalWaypointConditionalV1(
+                    "node", (HierarchicalProbability("node", 0.8),), 0.2
+                ),
+            ),
+            waypoint_parent_destination={"node": "node"},
+        )
+
+
+def test_hierarchy_rejects_cyclic_parent_links() -> None:
+    """Parent metadata must describe a terminating hierarchy rather than a graph cycle."""
+    candidates = (
+        HierarchicalProbability("destination-a", 0.45),
+        HierarchicalProbability("destination-b", 0.45),
+    )
+    conditionals = (
+        HierarchicalWaypointConditionalV1(
+            "destination-a", (HierarchicalProbability("destination-b", 0.8),), 0.2
+        ),
+        HierarchicalWaypointConditionalV1(
+            "destination-b", (HierarchicalProbability("destination-a", 0.8),), 0.2
+        ),
+    )
+    with pytest.raises(ValueError, match="acyclic"):
+        _posterior(
+            destinations=candidates,
+            conditionals=conditionals,
+            parents={"destination-a": "destination-b", "destination-b": "destination-a"},
+        )
 
 
 def test_malformed_external_shapes_fail_closed() -> None:

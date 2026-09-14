@@ -311,6 +311,18 @@ def _normalize_parent_map(
     return tuple(sorted(normalized))
 
 
+def _reject_parent_cycles(parents: Mapping[str, str]) -> None:
+    """Reject self-links and cycles in the two-level waypoint parent map."""
+    for start in parents:
+        visited: set[str] = set()
+        current = start
+        while current in parents:
+            if current in visited:
+                raise ValueError("waypoint_parent_destination must be acyclic")
+            visited.add(current)
+            current = parents[current]
+
+
 @dataclass(frozen=True, slots=True)
 class HierarchicalProbability:
     """Probability mass for one stable destination or waypoint identifier."""
@@ -709,6 +721,7 @@ class HierarchicalGoalPosteriorV1:
                     )
         if set(parent_by_waypoint) != waypoint_ids:
             raise ValueError("waypoint_parent_destination must cover every waypoint exactly")
+        _reject_parent_cycles(parent_by_waypoint)
         object.__setattr__(self, "waypoint_parent_destination", parents)
 
     @property

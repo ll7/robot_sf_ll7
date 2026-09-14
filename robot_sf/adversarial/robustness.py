@@ -159,37 +159,41 @@ def _declared_dt_candidates(record: dict[str, Any]) -> tuple[list[float], bool]:
     return candidates, malformed
 
 
-def _derived_dt(record: dict[str, Any]) -> float | None:
-    """Derive the evaluation timestep from recorded simulation timing, never wall time."""
+def _derived_dt_status(record: dict[str, Any]) -> tuple[float | None, bool]:
+    """Derive the evaluation timestep and flag malformed recorded timing."""
     candidates, malformed = _declared_dt_candidates(record)
     if malformed:
-        return None
-    if candidates:
-        return _consistent_timing_value(candidates)
+        return None, True
 
     steps_value = _positive_recorded_float(record.get("steps"))
-    if steps_value is None:
-        return None
+    if steps_value is not None:
+        for key in (
+            "physical_time_sec",
+            "physical_time_s",
+            "simulation_time_sec",
+            "simulation_time_s",
+            "sim_time_sec",
+            "sim_time_s",
+        ):
+            if key not in record:
+                continue
+            duration = _positive_recorded_float(record[key])
+            if duration is None:
+                return None, True
+            derived = duration / steps_value
+            if not math.isfinite(derived) or derived <= 0.0:
+                return None, True
+            candidates.append(derived)
 
-    derived_candidates: list[float] = []
-    for key in (
-        "physical_time_sec",
-        "physical_time_s",
-        "simulation_time_sec",
-        "simulation_time_s",
-        "sim_time_sec",
-        "sim_time_s",
-    ):
-        if key not in record:
-            continue
-        duration = _positive_recorded_float(record[key])
-        if duration is None:
-            return None
-        derived = duration / steps_value
-        if not math.isfinite(derived) or derived <= 0.0:
-            return None
-        derived_candidates.append(derived)
-    return _consistent_timing_value(derived_candidates)
+    if not candidates:
+        return None, False
+    recorded_dt = _consistent_timing_value(candidates)
+    return recorded_dt, recorded_dt is None
+
+
+def _derived_dt(record: dict[str, Any]) -> float | None:
+    """Derive the evaluation timestep from recorded simulation timing, never wall time."""
+    return _derived_dt_status(record)[0]
 
 
 def _validated_positive_float(value: float, *, name: str) -> float:
@@ -338,7 +342,9 @@ def _goal_robustness(
     if dt is None:
         return PropertyRobustness("goal", None, detail="unavailable: evaluation dt")
     t_total = horizon * dt
-    route_complete = bool(outcome.get("route_complete"))
+    route_complete, malformed_route = _strict_bool_field(outcome, "route_complete")
+    if malformed_route or route_complete is None:
+        return PropertyRobustness("goal", None, detail="unavailable: route_complete")
     time_to_goal_norm = _metric(metrics, "time_to_goal_norm")
     if route_complete:
         if time_to_goal_norm is None:
@@ -386,17 +392,24 @@ def _strict_bool_field(container: Any, key: str) -> tuple[bool | None, bool]:
 
 def _collision_count_value(metrics: dict[str, Any]) -> tuple[float | None, bool]:
     """Read a non-negative integer collision count and report malformed values."""
-    if "total_collision_count" not in metrics:
+    counts: list[float] = []
+    for key in ("collisions", "total_collision_count"):
+        if key not in metrics:
+            continue
+        value = metrics.get(key)
+        count = _metric(metrics, key)
+        valid = (
+            not isinstance(value, bool)
+            and count is not None
+            and count >= 0.0
+            and math.isclose(count, round(count), rel_tol=0.0, abs_tol=1.0e-12)
+        )
+        if not valid:
+            return None, True
+        counts.append(count)
+    if not counts:
         return None, False
-    value = metrics.get("total_collision_count")
-    count = _metric(metrics, "total_collision_count")
-    valid = (
-        not isinstance(value, bool)
-        and count is not None
-        and count >= 0.0
-        and math.isclose(count, round(count), rel_tol=0.0, abs_tol=1.0e-12)
-    )
-    return (count, False) if valid else (None, True)
+    return (_consistent_timing_value(counts), False) if len(set(counts)) == 1 else (None, True)
 
 
 def _collision_flag_value(container: Any) -> tuple[bool | None, bool]:
@@ -426,6 +439,36 @@ def _typed_collision_count(event_ledger: dict[str, Any]) -> tuple[int | None, bo
     # An empty list means that no typed event detail was retained; it is not an
     # authoritative negative collision assertion.
     return (len(collision_events), False) if collision_events else (None, False)
+
+
+def _reconciled_collision_count(
+    collision_count: float | None,
+    outcome_collision: bool | None,
+    ledger_count: int | None,
+    exact_collision: bool | None,
+) -> tuple[float | None, str | None]:
+    """Reconcile collision evidence and return a count or an unavailable reason."""
+    if (
+        collision_count is not None
+        and ledger_count is not None
+        and not math.isclose(collision_count, ledger_count, rel_tol=0.0, abs_tol=1.0e-12)
+    ):
+        return None, "unavailable: collision count/event mismatch"
+
+    evidence = [value > 0.0 for value in (collision_count,) if value is not None]
+    evidence.extend(value for value in (outcome_collision, exact_collision) if value is not None)
+    if ledger_count is not None:
+        evidence.append(ledger_count > 0)
+    if not evidence:
+        return None, "unavailable: collision evidence"
+    if any(value != evidence[0] for value in evidence[1:]):
+        return None, "unavailable: contradictory collision evidence"
+
+    if collision_count is None:
+        collision_count = float(
+            ledger_count if ledger_count is not None else (1 if evidence[0] else 0)
+        )
+    return collision_count, None
 
 
 def _collision_robustness(
@@ -458,21 +501,11 @@ def _collision_robustness(
     if exact_malformed:
         return PropertyRobustness("collision", None, detail="unavailable: malformed exact events")
 
-    evidence = [value > 0.0 for value in (collision_count,) if value is not None]
-    evidence.extend(value for value in (outcome_collision, exact_collision) if value is not None)
-    if ledger_count is not None:
-        evidence.append(ledger_count > 0)
-    if not evidence:
-        return PropertyRobustness("collision", None, detail="unavailable: collision evidence")
-    if any(value != evidence[0] for value in evidence[1:]):
-        return PropertyRobustness(
-            "collision", None, detail="unavailable: contradictory collision evidence"
-        )
-
-    if collision_count is None:
-        collision_count = float(
-            ledger_count if ledger_count is not None else (1 if evidence[0] else 0)
-        )
+    collision_count, unavailable_detail = _reconciled_collision_count(
+        collision_count, outcome_collision, ledger_count, exact_collision
+    )
+    if unavailable_detail is not None:
+        return PropertyRobustness("collision", None, detail=unavailable_detail)
     rho = -collision_count
     critical_time = _first_collision_time(event_ledger) if rho < 0 else None
     return PropertyRobustness(
@@ -533,11 +566,13 @@ def compute_robustness_report(
     )
     horizon = _positive_int(record.get("horizon"), 200)
 
-    recorded_dt = _derived_dt(record)
+    recorded_dt, malformed_timing = _derived_dt_status(record)
     if dt is None:
         dt = recorded_dt
     else:
         dt = _validated_positive_float(dt, name="dt")
+        if malformed_timing:
+            raise ValueError("dt cannot override malformed or conflicting recorded timing")
         if recorded_dt is not None and not math.isclose(
             dt, recorded_dt, rel_tol=0.0, abs_tol=1.0e-12
         ):

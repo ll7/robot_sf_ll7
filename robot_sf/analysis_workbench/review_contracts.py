@@ -1,10 +1,15 @@
-"""Typed ``review-bundle.v1`` / ``visualization-spec.v1`` / component / recipe contracts.
+"""Typed review contracts and the fail-closed admitted-source resolver.
 
 This module owns the SREV-01 shared-contract surface: versioned interfaces,
 JSON schemas, validation with stable reason codes, canonical content digests,
 and the frozen ``run(request)`` invocation with inspect and capability-report
 behavior. It reuses the canonical trace/timeline/annotation owners for
 computation and never replaces them.
+
+The ``admitted-source-receipt.v1`` contract is deliberately separate from
+scientific evidence admission. It proves that a fixture source is the exact
+local byte sequence bound to a request and recipe; it does not authorize a
+benchmark, planner, simulator, or paper-facing claim.
 """
 
 from __future__ import annotations
@@ -14,13 +19,12 @@ import hashlib
 import json
 import math
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
+from typing import Any
+from urllib.parse import urlsplit
 
 from jsonschema import Draft202012Validator
 
@@ -34,6 +38,7 @@ COMPONENT_DESCRIPTOR_SCHEMA_VERSION = "component-descriptor.v1"
 COMPONENT_REQUEST_SCHEMA_VERSION = "component-request.v1"
 COMPONENT_RESULT_SCHEMA_VERSION = "component-result.v1"
 EXPERIMENT_RECIPE_SCHEMA_VERSION = "experiment-recipe.v1"
+ADMITTED_SOURCE_RECEIPT_SCHEMA_VERSION = "admitted-source-receipt.v1"
 
 SCHEMA_FILES = {
     REVIEW_BUNDLE_SCHEMA_VERSION: "review_bundle.v1.json",
@@ -42,6 +47,7 @@ SCHEMA_FILES = {
     COMPONENT_REQUEST_SCHEMA_VERSION: "component_request.v1.json",
     COMPONENT_RESULT_SCHEMA_VERSION: "component_result.v1.json",
     EXPERIMENT_RECIPE_SCHEMA_VERSION: "experiment_recipe.v1.json",
+    ADMITTED_SOURCE_RECEIPT_SCHEMA_VERSION: "admitted_source_receipt.v1.json",
 }
 
 SUPPORTED_MAJOR_VERSIONS = {"v1"}
@@ -49,6 +55,22 @@ RESULT_STATUSES = ("complete", "partial", "unavailable", "failed", "cancelled")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _TEST_PRESET = {"width": 320, "height": 180, "fps": 10.0, "speed": 1.0}
+
+ADMITTED_SOURCE_REASON_RECEIPT_MISSING = "receipt_missing"
+ADMITTED_SOURCE_REASON_RECEIPT_UNREADABLE = "receipt_unreadable"
+ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED = "receipt_malformed"
+ADMITTED_SOURCE_REASON_RECEIPT_UNSUPPORTED = "receipt_unsupported"
+ADMITTED_SOURCE_REASON_RECEIPT_STALE = "receipt_stale"
+ADMITTED_SOURCE_REASON_SOURCE_MISSING = "source_missing"
+ADMITTED_SOURCE_REASON_SOURCE_MUTATED = "source_mutated"
+ADMITTED_SOURCE_REASON_SOURCE_ESCAPED_ROOT = "source_escaped_root"
+ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR = "source_not_regular"
+ADMITTED_SOURCE_REASON_ALLOWED_ROOT_MISSING = "allowed_root_missing"
+ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID = "allowed_root_invalid"
+
+ADMITTED_SOURCE_STATUS = "admitted"
+ADMITTED_SOURCE_KINDS = frozenset({"fixture", "diagnostic"})
+ADMITTED_SOURCE_EVIDENCE_BOUNDARY = "diagnostic_only"
 
 
 class ReviewContractsValidationError(RobotSfError, ValueError):
@@ -215,6 +237,81 @@ class ExperimentRecipe:
     document: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class AdmittedSourceRef:
+    """Integrity and provenance identity for one locally resolved source."""
+
+    uri: str
+    format: str
+    schema: str
+    sha256: str
+    source_commit: str
+    config_identity: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Return the source identity as a JSON-safe mapping."""
+
+        return {
+            "uri": self.uri,
+            "format": self.format,
+            "schema": self.schema,
+            "sha256": self.sha256,
+            "source_commit": self.source_commit,
+            "config_identity": self.config_identity,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class AdmittedSourceReceipt:
+    """Versioned receipt binding a fixture source to request and recipe identities."""
+
+    receipt_id: str
+    source: AdmittedSourceRef
+    request_sha256: str
+    recipe_sha256: str
+    status: str
+    source_kind: str
+    evidence_boundary: str
+    scientific_claim_allowed: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the receipt as a JSON-safe mapping."""
+
+        return {
+            "schema_version": ADMITTED_SOURCE_RECEIPT_SCHEMA_VERSION,
+            "receipt_id": self.receipt_id,
+            "source": self.source.to_dict(),
+            "request_sha256": self.request_sha256,
+            "recipe_sha256": self.recipe_sha256,
+            "status": self.status,
+            "source_kind": self.source_kind,
+            "evidence_boundary": self.evidence_boundary,
+            "scientific_claim_allowed": self.scientific_claim_allowed,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class AdmittedSourceResolution:
+    """Result of resolving and rehashing one admitted-source receipt."""
+
+    status: str
+    reason: str
+    source_path: Path | None = None
+    receipt: AdmittedSourceReceipt | None = None
+    detail: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a compact JSON-safe resolution report."""
+
+        return {
+            "status": self.status,
+            "reason": self.reason,
+            "source_path": str(self.source_path) if self.source_path is not None else None,
+            "receipt": self.receipt.to_dict() if self.receipt is not None else None,
+            "detail": self.detail,
+        }
+
+
 def review_bundle_from_dict(payload: Mapping[str, Any], *, source: Any = None) -> ReviewBundle:
     """Validate and build a review bundle, checking semantic boundaries.
 
@@ -373,6 +470,662 @@ def experiment_recipe_from_dict(
     if errors:
         raise ReviewContractsValidationError(errors, source=source)
     return ExperimentRecipe(recipe_id=str(payload["recipe_id"]), document=dict(payload))
+
+
+def admitted_source_receipt_from_dict(
+    payload: Mapping[str, Any], *, source: Any = None
+) -> AdmittedSourceReceipt:
+    """Validate and build an admitted-source receipt.
+
+    The receipt describes a fixture or diagnostic source only.  It is not an
+    evidence-admission decision, and parsing it does not read or trust the
+    referenced source bytes.
+
+    Returns:
+        Validated admitted-source receipt.
+
+    Raises:
+        ReviewContractsValidationError: If the receipt is malformed or does
+            not carry the explicit diagnostic-only boundary.
+    """
+    if not isinstance(payload, Mapping):
+        raise ReviewContractsValidationError(["expected a mapping payload"], source=source)
+    _require_schema(ADMITTED_SOURCE_RECEIPT_SCHEMA_VERSION, payload, source=source)
+    source_payload = payload["source"]
+    errors: list[str] = []
+    _check_sha256(source_payload["sha256"], path="/source/sha256", errors=errors)
+    _check_sha40(source_payload["source_commit"], path="/source/source_commit", errors=errors)
+    uri = source_payload["uri"]
+    if "\x00" in uri:
+        errors.append("/source/uri: NUL bytes are rejected")
+    if not uri.strip():
+        errors.append("/source/uri: URI must contain non-whitespace text")
+    if errors:
+        raise ReviewContractsValidationError(errors, source=source)
+    return AdmittedSourceReceipt(
+        receipt_id=str(payload["receipt_id"]),
+        source=AdmittedSourceRef(
+            uri=uri,
+            format=str(source_payload["format"]),
+            schema=str(source_payload["schema"]),
+            sha256=str(source_payload["sha256"]).lower(),
+            source_commit=str(source_payload["source_commit"]).lower(),
+            config_identity=str(source_payload["config_identity"]),
+        ),
+        request_sha256=str(payload["request_sha256"]).lower(),
+        recipe_sha256=str(payload["recipe_sha256"]).lower(),
+        status=str(payload["status"]),
+        source_kind=str(payload["source_kind"]),
+        evidence_boundary=str(payload["evidence_boundary"]),
+        scientific_claim_allowed=payload["scientific_claim_allowed"],
+    )
+
+
+def load_admitted_source_receipt(path: str | Path) -> AdmittedSourceReceipt:
+    """Load and validate one JSON admitted-source receipt from *path*.
+
+    Returns:
+        Validated admitted-source receipt.
+
+    Raises:
+        ReviewContractsValidationError: If the file is unreadable or invalid.
+    """
+    receipt_path = Path(path)
+    try:
+        payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ReviewContractsValidationError(
+            [f"cannot read admitted-source receipt: {error}"], source=receipt_path
+        ) from error
+    if not isinstance(payload, Mapping):
+        raise ReviewContractsValidationError(
+            ["admitted-source receipt must be a JSON object"], source=receipt_path
+        )
+    return admitted_source_receipt_from_dict(payload, source=receipt_path)
+
+
+def component_request_canonical_digest(
+    request: ComponentRequest | Mapping[str, Any],
+) -> str:
+    """Hash the location-independent identity of a validated component request.
+
+    Returns:
+        Hex SHA-256 digest of the request identity.
+    """
+    return _canonical_digest(_request_identity_document(request))
+
+
+def experiment_recipe_canonical_digest(
+    recipe: ExperimentRecipe | Mapping[str, Any],
+) -> str:
+    """Hash the canonical JSON document of a validated experiment recipe.
+
+    Returns:
+        Hex SHA-256 digest of the recipe document.
+    """
+    if isinstance(recipe, ExperimentRecipe):
+        document = recipe.document
+    elif isinstance(recipe, Mapping):
+        document = experiment_recipe_from_dict(recipe).document
+    else:
+        raise TypeError("recipe must be an experiment recipe mapping or ExperimentRecipe")
+    return _canonical_digest(document)
+
+
+def _recipe_identity_value(
+    recipe: ExperimentRecipe | Mapping[str, Any] | None,
+    key: str,
+) -> Any:
+    """Read an optional expected source identity from a recipe document.
+
+    Returns:
+        The requested identity value, or ``None`` when it is absent.
+    """
+    if recipe is None:
+        return None
+    document = recipe.document if isinstance(recipe, ExperimentRecipe) else recipe
+    if not isinstance(document, Mapping):
+        return None
+    source_identity = document.get("source_identity")
+    if isinstance(source_identity, Mapping):
+        return source_identity.get(key)
+    return None
+
+
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest of the bytes currently readable at *path*."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _resolution(
+    status: str,
+    reason: str,
+    *,
+    receipt: AdmittedSourceReceipt | None = None,
+    source_path: Path | None = None,
+    detail: str = "",
+) -> AdmittedSourceResolution:
+    """Build a resolution result with a stable reason and optional detail.
+
+    Returns:
+        Resolution with no source path unless one was explicitly supplied.
+    """
+    return AdmittedSourceResolution(
+        status=status,
+        reason=reason,
+        source_path=source_path,
+        receipt=receipt,
+        detail=detail,
+    )
+
+
+def _receipt_payload(
+    receipt: AdmittedSourceReceipt | Mapping[str, Any] | str | Path,
+) -> tuple[Mapping[str, Any] | None, AdmittedSourceResolution | None]:
+    """Load a receipt input without validating its contract.
+
+    Returns:
+        A raw mapping and no early result, or a fail-closed result for a path
+        that cannot be loaded.
+    """
+    if isinstance(receipt, AdmittedSourceReceipt):
+        return receipt.to_dict(), None
+    if isinstance(receipt, Mapping):
+        return receipt, None
+    try:
+        receipt_path = Path(receipt)
+    except (OSError, TypeError, ValueError) as error:
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_UNREADABLE,
+            detail=str(error),
+        )
+    try:
+        if not receipt_path.exists():
+            return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_RECEIPT_MISSING)
+        raw_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_UNREADABLE,
+            detail=str(error),
+        )
+    if not isinstance(raw_payload, Mapping):
+        return None, _resolution(
+            "failed",
+            ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+            detail="receipt must be a JSON object",
+        )
+    return raw_payload, None
+
+
+def _parse_admitted_source_receipt(
+    payload: Mapping[str, Any],
+) -> tuple[AdmittedSourceReceipt | None, AdmittedSourceResolution | None]:
+    """Validate the receipt schema and its explicit diagnostic boundary.
+
+    Returns:
+        A parsed receipt and no early result, or a stable rejection result.
+    """
+    schema_version = payload.get("schema_version")
+    if schema_version is None:
+        return None, _resolution(
+            "failed",
+            ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+            detail="schema_version is missing",
+        )
+    if schema_version != ADMITTED_SOURCE_RECEIPT_SCHEMA_VERSION:
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_UNSUPPORTED,
+            detail=f"schema version {schema_version!r} is unsupported",
+        )
+    boundary_fields = (
+        "status",
+        "source_kind",
+        "evidence_boundary",
+        "scientific_claim_allowed",
+    )
+    missing_boundary_fields = [field for field in boundary_fields if field not in payload]
+    if missing_boundary_fields:
+        return None, _resolution(
+            "failed",
+            ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+            detail="required boundary fields are missing: " + ", ".join(missing_boundary_fields),
+        )
+    if (
+        any(
+            payload.get(field) != expected
+            for field, expected in (
+                ("status", ADMITTED_SOURCE_STATUS),
+                ("evidence_boundary", ADMITTED_SOURCE_EVIDENCE_BOUNDARY),
+                ("scientific_claim_allowed", False),
+            )
+        )
+        or payload.get("source_kind") not in ADMITTED_SOURCE_KINDS
+    ):
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_UNSUPPORTED,
+            detail="receipt is outside the fixture/diagnostic-only boundary",
+        )
+    try:
+        return admitted_source_receipt_from_dict(payload), None
+    except ReviewContractsValidationError as error:
+        return None, _resolution(
+            "failed",
+            ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+            detail="; ".join(error.errors),
+        )
+
+
+def _validated_request(
+    request: ComponentRequest | Mapping[str, Any],
+) -> ComponentRequest:
+    """Return a validated request object for identity and source binding.
+
+    Returns:
+        Validated component request.
+    """
+    if isinstance(request, ComponentRequest):
+        return request
+    if isinstance(request, Mapping):
+        return component_request_from_dict(request)
+    raise TypeError("request must be a component request mapping or ComponentRequest")
+
+
+def _request_identity_document(request: ComponentRequest | Mapping[str, Any]) -> dict[str, Any]:
+    """Return the location-independent request identity used by SREV-22."""
+    validated = _validated_request(request)
+    return {
+        "request_id": validated.request_id,
+        "component_id": validated.component_id,
+        "sources": [
+            {
+                "artifact_id": source.artifact_id,
+                "uri": source.uri,
+                "format": source.format,
+            }
+            for source in validated.sources
+        ],
+        "required_capabilities": list(validated.required_capabilities),
+    }
+
+
+def _check_one_digest_binding(
+    receipt: AdmittedSourceReceipt,
+    *,
+    name: str,
+    receipt_digest: str,
+    expected_digest: str | None,
+    payload: Any,
+    compute: Callable[[Any], str],
+) -> tuple[str | None, AdmittedSourceResolution | None]:
+    """Compute and compare one request or recipe digest.
+
+    Returns:
+        The effective digest and no early result, or a stable stale result.
+    """
+    effective_digest = expected_digest
+    try:
+        if payload is not None:
+            computed_digest = compute(payload)
+            if expected_digest is not None and (
+                not isinstance(expected_digest, str) or expected_digest.lower() != computed_digest
+            ):
+                return None, _resolution(
+                    "unavailable",
+                    ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+                    receipt=receipt,
+                    detail=f"supplied {name} digest does not match the {name} payload",
+                )
+            effective_digest = computed_digest
+    except (ReviewContractsValidationError, TypeError, ValueError) as error:
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail=f"{name} identity is unusable: {error}",
+        )
+    if effective_digest is None:
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail=f"{name} identity is required",
+        )
+    if (
+        not isinstance(effective_digest, str)
+        or _SHA256_RE.fullmatch(effective_digest) is None
+        or effective_digest.lower() != receipt_digest
+    ):
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail=f"{name} SHA-256 does not match the receipt",
+        )
+    return effective_digest, None
+
+
+def _check_receipt_digest_bindings(
+    receipt: AdmittedSourceReceipt,
+    *,
+    request: ComponentRequest | Mapping[str, Any] | None,
+    recipe: ExperimentRecipe | Mapping[str, Any] | None,
+    expected_request_sha256: str | None,
+    expected_recipe_sha256: str | None,
+) -> AdmittedSourceResolution | None:
+    """Check request and recipe digests and the request's URI/format binding.
+
+    Returns:
+        A stale resolution on mismatch, or ``None`` when all bindings pass.
+    """
+    _, early = _check_one_digest_binding(
+        receipt,
+        name="request",
+        receipt_digest=receipt.request_sha256,
+        expected_digest=expected_request_sha256,
+        payload=request,
+        compute=component_request_canonical_digest,
+    )
+    if early is not None:
+        return early
+    _, early = _check_one_digest_binding(
+        receipt,
+        name="recipe",
+        receipt_digest=receipt.recipe_sha256,
+        expected_digest=expected_recipe_sha256,
+        payload=recipe,
+        compute=experiment_recipe_canonical_digest,
+    )
+    if early is not None:
+        return early
+    if request is None:
+        return None
+    validated_request = _validated_request(request)
+    if not any(
+        source.uri == receipt.source.uri and source.format == receipt.source.format
+        for source in validated_request.sources
+    ):
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="receipt URI and format are not present in the request",
+        )
+    return None
+
+
+def _check_source_identity_bindings(
+    receipt: AdmittedSourceReceipt,
+    *,
+    recipe: ExperimentRecipe | Mapping[str, Any] | None,
+    expected_source_commit: str | None,
+    expected_config_identity: str | None,
+) -> AdmittedSourceResolution | None:
+    """Require source commit and config identities to match the receipt.
+
+    Returns:
+        A stale resolution on mismatch or missing expectations, or ``None``.
+    """
+    expected_source = (
+        expected_source_commit
+        if expected_source_commit is not None
+        else _recipe_identity_value(recipe, "source_commit")
+    )
+    if not isinstance(expected_source, str) or _SHA40_RE.fullmatch(expected_source) is None:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="source commit identity is missing or not a commit SHA; migrate the v1 recipe",
+        )
+    if expected_source.lower() != receipt.source.source_commit:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="source commit identity does not match the receipt",
+        )
+    expected_config = (
+        expected_config_identity
+        if expected_config_identity is not None
+        else _recipe_identity_value(recipe, "config_identity")
+    )
+    if not isinstance(expected_config, str) or not expected_config.strip():
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="config identity is missing or empty; migrate the v1 recipe",
+        )
+    if expected_config != receipt.source.config_identity:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="config identity does not match the receipt",
+        )
+    return None
+
+
+def _check_recipe_source_bindings(
+    receipt: AdmittedSourceReceipt,
+    *,
+    recipe: ExperimentRecipe | Mapping[str, Any] | None,
+) -> AdmittedSourceResolution | None:
+    """Check optional source metadata and the recipe's admission reference.
+
+    Returns:
+        A stale resolution on missing or conflicting recipe metadata, or
+        ``None`` when the recipe carries no conflicting value.
+    """
+    if recipe is None:
+        return None
+    document = recipe.document if isinstance(recipe, ExperimentRecipe) else recipe
+    if not isinstance(document, Mapping):
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="recipe document is not a mapping",
+        )
+    admission_reference = document.get("admission_reference")
+    if not isinstance(admission_reference, str) or not admission_reference.strip():
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="recipe admission_reference is required; migrate the v1 recipe",
+        )
+    if admission_reference != receipt.receipt_id:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="receipt ID does not match recipe admission_reference",
+        )
+    for key, actual in (
+        ("source_uri", receipt.source.uri),
+        ("source_format", receipt.source.format),
+        ("source_schema", receipt.source.schema),
+    ):
+        expected = _recipe_identity_value(recipe, key)
+        if expected is not None and expected != actual:
+            return _resolution(
+                "unavailable",
+                ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+                receipt=receipt,
+                detail=f"recipe {key} does not match the receipt",
+            )
+    return None
+
+
+def _resolve_allowed_root(
+    allowed_root: str | Path,
+) -> tuple[Path | None, AdmittedSourceResolution | None]:
+    """Resolve and require an existing directory trust boundary.
+
+    Returns:
+        The canonical root and no early result, or a stable root rejection.
+    """
+    try:
+        if isinstance(allowed_root, str) and not allowed_root.strip():
+            raise ValueError("allowed root must contain non-whitespace text")
+        root = Path(allowed_root).resolve(strict=True)
+    except FileNotFoundError:
+        return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_MISSING)
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        return None, _resolution(
+            "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, detail=str(error)
+        )
+    if not root.is_dir():
+        return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID)
+    return root, None
+
+
+def _resolve_source_path(
+    receipt: AdmittedSourceReceipt,
+    root: Path,
+) -> tuple[Path | None, AdmittedSourceResolution | None]:
+    """Resolve a receipt URI beneath *root* and reject unsafe local forms.
+
+    Returns:
+        A canonical source path and no early result, or a stable path rejection.
+    """
+    uri = receipt.source.uri
+    try:
+        uri_path = Path(uri)
+        uri_info = urlsplit(uri)
+    except (OSError, TypeError, ValueError) as error:
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_UNSUPPORTED,
+            receipt=receipt,
+            detail=f"source URI cannot be interpreted locally: {error}",
+        )
+    if uri_info.scheme or uri_info.netloc or uri_info.query or uri_info.fragment:
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_UNSUPPORTED,
+            receipt=receipt,
+            detail="source URI must be a relative path without a URI scheme",
+        )
+    if "\\" in uri or uri_path.is_absolute() or ".." in uri_path.parts:
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_SOURCE_ESCAPED_ROOT,
+            receipt=receipt,
+            detail="source URI is absolute, traverses its root, or uses a platform separator",
+        )
+    candidate = root.joinpath(uri_path)
+    try:
+        resolved = candidate.resolve(strict=False)
+        resolved.relative_to(root)
+    except (OSError, RuntimeError, ValueError) as error:
+        return None, _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_SOURCE_ESCAPED_ROOT,
+            receipt=receipt,
+            detail=str(error),
+        )
+    if not resolved.exists():
+        return None, _resolution(
+            "unavailable", ADMITTED_SOURCE_REASON_SOURCE_MISSING, receipt=receipt
+        )
+    if not resolved.is_file():
+        return None, _resolution(
+            "unavailable", ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR, receipt=receipt
+        )
+    return resolved, None
+
+
+def resolve_admitted_source(
+    receipt: AdmittedSourceReceipt | Mapping[str, Any] | str | Path,
+    *,
+    allowed_root: str | Path,
+    request: ComponentRequest | Mapping[str, Any] | None = None,
+    recipe: ExperimentRecipe | Mapping[str, Any] | None = None,
+    expected_request_sha256: str | None = None,
+    expected_recipe_sha256: str | None = None,
+    expected_source_commit: str | None = None,
+    expected_config_identity: str | None = None,
+) -> AdmittedSourceResolution:
+    """Resolve a receipt only after all source and identity checks pass.
+
+    ``allowed_root`` is an explicit caller-owned trust boundary.  The receipt
+    URI is interpreted as a relative local path beneath that root; remote URIs,
+    absolute paths, traversal, and symlink escapes are rejected.  Request and
+    recipe digests are required and source commit/config identity expectations
+    come from explicit arguments or the recipe's ``source_identity`` mapping.
+
+    Returns:
+        ``status='admitted'`` and a resolved path only after the current source
+        bytes match the receipt.  All rejection results omit ``source_path``.
+    """
+    raw_receipt, early = _receipt_payload(receipt)
+    if early is not None or raw_receipt is None:
+        assert early is not None
+        return early
+    parsed_receipt, early = _parse_admitted_source_receipt(raw_receipt)
+    if early is not None or parsed_receipt is None:
+        assert early is not None
+        return early
+    early = _check_receipt_digest_bindings(
+        parsed_receipt,
+        request=request,
+        recipe=recipe,
+        expected_request_sha256=expected_request_sha256,
+        expected_recipe_sha256=expected_recipe_sha256,
+    )
+    if early is not None:
+        return early
+    early = _check_recipe_source_bindings(parsed_receipt, recipe=recipe)
+    if early is not None:
+        return early
+    early = _check_source_identity_bindings(
+        parsed_receipt,
+        recipe=recipe,
+        expected_source_commit=expected_source_commit,
+        expected_config_identity=expected_config_identity,
+    )
+    if early is not None:
+        return early
+    root, early = _resolve_allowed_root(allowed_root)
+    if early is not None or root is None:
+        assert early is not None
+        return early
+    source_path, early = _resolve_source_path(parsed_receipt, root)
+    if early is not None or source_path is None:
+        assert early is not None
+        return early
+    try:
+        observed_sha256 = _sha256_file(source_path)
+    except OSError as error:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_SOURCE_MISSING,
+            receipt=parsed_receipt,
+            detail=str(error),
+        )
+    if observed_sha256 != parsed_receipt.source.sha256:
+        return _resolution(
+            "failed",
+            ADMITTED_SOURCE_REASON_SOURCE_MUTATED,
+            receipt=parsed_receipt,
+            detail=f"expected {parsed_receipt.source.sha256}, observed {observed_sha256}",
+        )
+    return _resolution(
+        ADMITTED_SOURCE_STATUS,
+        ADMITTED_SOURCE_STATUS,
+        receipt=parsed_receipt,
+        source_path=source_path,
+    )
 
 
 def review_bundle_canonical_digest(bundle: ReviewBundle) -> str:

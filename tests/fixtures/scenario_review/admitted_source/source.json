@@ -1,0 +1,7 @@
+{
+  "schema_version": "fixture-source.v1",
+  "source_id": "srev22-admitted-source",
+  "scenario_id": "srev22-tiny-crossing",
+  "evidence_boundary": "diagnostic_only",
+  "scientific_claim_allowed": false
+}

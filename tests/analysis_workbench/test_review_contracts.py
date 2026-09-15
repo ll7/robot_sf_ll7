@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import copy
+import json
+from pathlib import Path
+from typing import Any
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from robot_sf.analysis_workbench import review_contracts
 from robot_sf.analysis_workbench.review_contracts import (
     ReviewContractsValidationError,
+    component_request_canonical_digest,
     component_request_from_dict,
     component_result_from_dict,
+    experiment_recipe_canonical_digest,
     experiment_recipe_from_dict,
+    load_admitted_source_receipt,
+    resolve_admitted_source,
     review_bundle_canonical_digest,
     review_bundle_from_dict,
     run,
@@ -23,6 +27,9 @@ from robot_sf.analysis_workbench.review_contracts import (
 
 COMMIT = "a" * 40
 SHA = "b" * 64
+ADMITTED_SOURCE_FIXTURE_DIR = (
+    Path(__file__).parents[1] / "fixtures" / "scenario_review" / "admitted_source"
+)
 
 
 def _bundle_doc(**overrides: object) -> dict[str, object]:
@@ -49,6 +56,10 @@ def _bundle_doc(**overrides: object) -> dict[str, object]:
     }
     doc.update(overrides)
     return doc
+
+
+def _admitted_source_fixture(name: str) -> Any:
+    return json.loads((ADMITTED_SOURCE_FIXTURE_DIR / name).read_text(encoding="utf-8"))
 
 
 def test_review_bundle_accepts_valid_index() -> None:
@@ -222,3 +233,194 @@ def test_deterministic_rerun_matches_artifact_digest(tmp_path: Path) -> None:
         return str(result.artifacts[0]["sha256"])
 
     assert once("run-a") == once("run-b")
+
+
+def test_admitted_source_resolves_checked_in_fixture() -> None:
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt_path = ADMITTED_SOURCE_FIXTURE_DIR / "receipt.json"
+
+    result = resolve_admitted_source(
+        receipt_path,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert result.status == "admitted"
+    assert result.reason == "admitted"
+    assert result.source_path == (ADMITTED_SOURCE_FIXTURE_DIR / "source.json").resolve()
+    assert (
+        result.source_path.read_bytes()
+        == (ADMITTED_SOURCE_FIXTURE_DIR / "source.json").read_bytes()
+    )
+    assert result.receipt is not None
+    assert result.receipt.source.schema == "fixture-source.v1"
+    assert result.receipt.scientific_claim_allowed is False
+
+
+def test_admitted_source_digest_helpers_match_fixture_receipt() -> None:
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = load_admitted_source_receipt(ADMITTED_SOURCE_FIXTURE_DIR / "receipt.json")
+
+    assert component_request_canonical_digest(request) == receipt.request_sha256
+    assert experiment_recipe_canonical_digest(recipe) == receipt.recipe_sha256
+
+
+def test_admitted_source_reports_missing_receipt_and_source(tmp_path: Path) -> None:
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt_path = tmp_path / "missing-receipt.json"
+
+    missing_receipt = resolve_admitted_source(
+        receipt_path,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+    missing_source = resolve_admitted_source(
+        ADMITTED_SOURCE_FIXTURE_DIR / "receipt.json",
+        allowed_root=tmp_path,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (missing_receipt.status, missing_receipt.reason) == ("unavailable", "receipt_missing")
+    assert (missing_source.status, missing_source.reason) == ("unavailable", "source_missing")
+    assert missing_source.source_path is None
+
+
+def test_admitted_source_rejects_mutated_bytes(tmp_path: Path) -> None:
+    source_path = tmp_path / "source.json"
+    source_path.write_bytes((ADMITTED_SOURCE_FIXTURE_DIR / "source.json").read_bytes())
+    source_path.write_text(
+        source_path.read_text(encoding="utf-8") + "\nmutation\n", encoding="utf-8"
+    )
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+
+    result = resolve_admitted_source(receipt, allowed_root=tmp_path, request=request, recipe=recipe)
+
+    assert (result.status, result.reason) == ("failed", "source_mutated")
+    assert result.source_path is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("schema_version", "admitted-source-receipt.v2"), ("source_kind", "benchmark")],
+)
+def test_admitted_source_rejects_unsupported_receipt_boundary(field: str, value: str) -> None:
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt[field] = value
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        expected_request_sha256=receipt["request_sha256"],
+        expected_recipe_sha256=receipt["recipe_sha256"],
+        expected_source_commit=receipt["source"]["source_commit"],
+        expected_config_identity=receipt["source"]["config_identity"],
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_unsupported")
+
+
+def test_admitted_source_rejects_stale_request_and_recipe() -> None:
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt_path = ADMITTED_SOURCE_FIXTURE_DIR / "receipt.json"
+    stale_request = copy.deepcopy(request)
+    stale_request["request_id"] = "different-request"
+    stale_recipe = copy.deepcopy(recipe)
+    stale_recipe["hypothesis"] = "different-hypothesis"
+
+    request_result = resolve_admitted_source(
+        receipt_path,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=stale_request,
+        recipe=recipe,
+    )
+    recipe_result = resolve_admitted_source(
+        receipt_path,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=stale_recipe,
+    )
+
+    assert (request_result.status, request_result.reason) == ("unavailable", "receipt_stale")
+    assert (recipe_result.status, recipe_result.reason) == ("unavailable", "receipt_stale")
+    assert request_result.source_path is None
+    assert recipe_result.source_path is None
+
+
+def test_admitted_source_rejects_source_metadata_mismatch() -> None:
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+    wrong_format = copy.deepcopy(receipt)
+    wrong_format["source"]["format"] = "other-format"
+    format_result = resolve_admitted_source(
+        wrong_format,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+    commit_result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        expected_request_sha256=receipt["request_sha256"],
+        expected_recipe_sha256=receipt["recipe_sha256"],
+        expected_source_commit="c" * 40,
+        expected_config_identity=receipt["source"]["config_identity"],
+    )
+
+    assert (format_result.status, format_result.reason) == ("unavailable", "receipt_stale")
+    assert (commit_result.status, commit_result.reason) == ("unavailable", "receipt_stale")
+
+
+def test_admitted_source_rejects_escape_and_malformed_receipt() -> None:
+    receipt = _admitted_source_fixture("receipt.json")
+    escaped = copy.deepcopy(receipt)
+    escaped["source"]["uri"] = "../source.json"
+    escaped_result = resolve_admitted_source(
+        escaped,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        expected_request_sha256=receipt["request_sha256"],
+        expected_recipe_sha256=receipt["recipe_sha256"],
+        expected_source_commit=receipt["source"]["source_commit"],
+        expected_config_identity=receipt["source"]["config_identity"],
+    )
+
+    malformed = copy.deepcopy(receipt)
+    malformed["source"]["sha256"] = "bad"
+    malformed_result = resolve_admitted_source(
+        malformed,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        expected_request_sha256=receipt["request_sha256"],
+        expected_recipe_sha256=receipt["recipe_sha256"],
+        expected_source_commit=receipt["source"]["source_commit"],
+        expected_config_identity=receipt["source"]["config_identity"],
+    )
+
+    assert (escaped_result.status, escaped_result.reason) == ("unavailable", "source_escaped_root")
+    assert (malformed_result.status, malformed_result.reason) == ("failed", "receipt_malformed")
+
+
+def test_admitted_source_requires_v1_recipe_admission_reference() -> None:
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    recipe.pop("admission_reference")
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["recipe_sha256"] = experiment_recipe_canonical_digest(recipe)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert "migrate" in result.detail

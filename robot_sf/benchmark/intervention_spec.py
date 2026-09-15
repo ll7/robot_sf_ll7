@@ -19,6 +19,7 @@ import stat
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -108,6 +109,29 @@ class _UniqueKeyLoader(yaml.SafeLoader):
     """Safe YAML loader that rejects duplicate keys and recursive aliases."""
 
 
+class _LexicalJsonFloat(float):
+    """A parsed JSON float that retains its source number spelling."""
+
+    lexeme: str
+
+    def __new__(cls, lexeme: str) -> _LexicalJsonFloat:
+        """Create the normal float value while retaining its JSON lexeme."""
+
+        value = super().__new__(cls, lexeme)
+        value.lexeme = lexeme
+        return value
+
+
+def _parse_json_float(lexeme: str) -> _LexicalJsonFloat:
+    """Parse a JSON float without discarding its exact decimal spelling.
+
+    Returns:
+        The parsed float with its source decimal spelling attached.
+    """
+
+    return _LexicalJsonFloat(lexeme)
+
+
 def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     """Reject duplicate JSON object keys instead of silently keeping the last value.
 
@@ -130,7 +154,11 @@ def _load_strict_json(text: str) -> Any:
         The parsed JSON value.
     """
 
-    return json.loads(text, object_pairs_hook=_reject_duplicate_json_object)
+    return json.loads(
+        text,
+        object_pairs_hook=_reject_duplicate_json_object,
+        parse_float=_parse_json_float,
+    )
 
 
 def _construct_unique_mapping(
@@ -371,6 +399,16 @@ def _is_json_number(value: Any) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool)
 
 
+def _json_number_decimal(value: int | float) -> Decimal:
+    """Return the exact decimal represented by one validated JSON number."""
+
+    if isinstance(value, _LexicalJsonFloat):
+        return Decimal(value.lexeme)
+    if isinstance(value, float):
+        return Decimal(repr(value))
+    return Decimal(value)
+
+
 def _json_values_equal(left: Any, right: Any) -> bool:
     """Compare validated JSON values using JSON number semantics.
 
@@ -383,7 +421,7 @@ def _json_values_equal(left: Any, right: Any) -> bool:
     """
 
     if _is_json_number(left) and _is_json_number(right):
-        return left == right
+        return _json_number_decimal(left) == _json_number_decimal(right)
     if type(left) is not type(right):
         return False
     if type(left) is list:

@@ -342,6 +342,62 @@ def test_negative_control_accepts_equivalent_numeric_spelling() -> None:
 
 
 @pytest.mark.parametrize(
+    ("baseline", "intervention", "valid"),
+    [
+        ("9007199254740991", "9007199254740991.0", False),
+        ("9007199254740992", "9007199254740992.0", False),
+        ("9007199254740992", "9007199254740993.0", True),
+        ("9007199254740993", "9007199254740993.0", False),
+    ],
+)
+def test_json_loader_compares_numeric_lexemes_at_float_precision_boundary(
+    tmp_path: Path, baseline: str, intervention: str, valid: bool
+) -> None:
+    """JSON float rounding cannot turn an exact numeric no-op into a change."""
+
+    text = json.dumps(_payload())
+    text = text.replace(
+        '"unit": "category", "baseline": "occluded", "intervention": "visible"',
+        f'"unit": "m/s", "baseline": {baseline}, "intervention": {intervention}',
+        1,
+    )
+    text = text.replace('"value": "occluded"', f'"value": {baseline}', 1)
+    path = tmp_path / "intervention.json"
+    path.write_text(text, encoding="utf-8")
+
+    if valid:
+        load_intervention_spec(path)
+    else:
+        with pytest.raises(InterventionSpecValidationError, match="changed value"):
+            load_intervention_spec(path)
+
+
+@pytest.mark.parametrize(("bits", "valid"), [(4095, True), (4096, False)])
+def test_json_loader_honors_integer_bit_limit_at_boundary(
+    tmp_path: Path, bits: int, valid: bool
+) -> None:
+    """Lexical numeric comparison does not bypass the bounded integer contract."""
+
+    magnitude = 1 << bits
+    payload = _payload()
+    payload["factor"] = {
+        **payload["factor"],
+        "unit": "count",
+        "baseline": magnitude,
+        "intervention": magnitude + 1,
+    }
+    payload["negative_control"] = {**payload["negative_control"], "value": magnitude}
+    path = tmp_path / "intervention.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    if valid:
+        load_intervention_spec(path)
+    else:
+        with pytest.raises(InterventionSpecValidationError, match="bounded JSON integer"):
+            load_intervention_spec(path)
+
+
+@pytest.mark.parametrize(
     "integer_path",
     [
         "factor",

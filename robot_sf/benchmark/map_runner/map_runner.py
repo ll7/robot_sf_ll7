@@ -173,6 +173,9 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
     update_adapter_impact_metrics as _update_adapter_impact_metrics,
 )
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
+    validate_ppo_policy_action as _validate_ppo_policy_action,
+)
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import (
     build_adapter_policy as _build_adapter_policy,
 )
@@ -235,6 +238,7 @@ from robot_sf.benchmark.utils import (
 from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.models import sha256_of_file
 from robot_sf.planner.dwa import (  # noqa: F401 - compatibility re-export for tests.
     DWAPlannerAdapter,
     build_dwa_config,
@@ -1067,6 +1071,29 @@ def _ppo_action_to_unicycle(
     )
 
 
+def _ppo_action_contract_config(
+    action: dict[str, Any], algo_config: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Resolve the action-space declaration used for pre-projection validation.
+
+    Older map-runner callers may omit ``action_space`` and rely on the stable
+    action keys to select velocity or unicycle conversion. Preserve that
+    compatibility while still validating every recognizable raw action before
+    runtime projection.
+
+    Returns:
+        The validator config, or ``None`` for an unsupported payload so the
+        existing conversion error remains the stable failure surface.
+    """
+    if "action_space" in algo_config:
+        return algo_config
+    if "v" in action or "omega" in action:
+        return {**algo_config, "action_space": "unicycle"}
+    if "vx" in action or "vy" in action:
+        return {**algo_config, "action_space": "velocity"}
+    return None
+
+
 # Registry of migrated per-algorithm policy builders (#3384). Consulted before the
 # inline dispatch in _build_policy; families not yet migrated fall through to the
 # existing if/elif chain.
@@ -1228,10 +1255,22 @@ def _checkpoint_runtime_metadata(planner: Any, algo_config: dict[str, Any]) -> d
     """
     metadata = planner.get_metadata() if hasattr(planner, "get_metadata") else {}
     status = str(metadata.get("status", "unknown")).strip().lower()
+    checkpoint_sha256: str | None = None
+    hash_source: str | None = None
+    resolved_model_path = getattr(planner, "_resolved_model_path", None)
+    if status == "ok" and resolved_model_path is not None:
+        resolved_path = Path(resolved_model_path)
+        if resolved_path.is_file():
+            try:
+                checkpoint_sha256 = sha256_of_file(resolved_path)
+                hash_source = "computed_resolved_file"
+            except OSError:
+                checkpoint_sha256 = None
+                hash_source = None
     return {
         "model_id": algo_config.get("model_id"),
-        "checkpoint_sha256": None,
-        "hash_source": None,
+        "checkpoint_sha256": checkpoint_sha256,
+        "hash_source": hash_source,
         "load_succeeded": status == "ok",
         "fallback_triggered": status == "fallback",
         "load_status": "loaded" if status == "ok" else status,
@@ -1310,9 +1349,18 @@ def _build_ppo_policy(  # noqa: C901
             ppo_obs = obs
         else:
             ppo_obs = _obs_to_ppo_format(obs)
-        action = ppo_planner.step(ppo_obs)
+        raw_step = getattr(ppo_planner, "step_raw", None)
+        if not callable(raw_step):
+            raise TypeError(
+                "PPO planner must expose step_raw() for pre-projection action validation"
+            )
+        action = raw_step(ppo_obs)
         if not isinstance(action, dict):
             raise TypeError(f"PPO planner returned non-dict action: {type(action)}")
+        action_contract_config = _ppo_action_contract_config(action, algo_config)
+        if action_contract_config is not None:
+            action_contract = _validate_ppo_policy_action(action, action_contract_config)
+            meta["policy_action_contract"] = action_contract
         linear, angular, conversion_mode = _ppo_action_to_unicycle(
             action,
             obs,

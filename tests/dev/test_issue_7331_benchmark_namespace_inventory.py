@@ -11,6 +11,9 @@ import pytest
 from scripts.dev import audit_benchmark_namespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# Keep the current source inventory explicit so a new direct child fails the audit until it is
+# deliberately classified, rather than silently changing the inventory size.
+EXPECTED_DIRECT_CHILD_COUNT = 320
 
 
 @pytest.fixture(scope="module")
@@ -28,6 +31,7 @@ def test_current_namespace_is_complete_and_routes_fail_closed(
     classified_rows = [row for row in rows if row["classification"]]
 
     assert payload["schema"] == "benchmark-namespace-residual-inventory.v1"
+    assert payload["direct_child_count"] == EXPECTED_DIRECT_CHILD_COUNT
     assert payload["direct_child_count"] == len(rows)
     assert {row["name"] for row in classified_rows} == {row["name"] for row in rows}
     assert len({row["name"] for row in rows}) == len(rows)
@@ -89,6 +93,10 @@ def test_known_facades_and_clusters_are_classified(inventory: dict[str, object])
         "cross_cutting_schema_evidence_readiness_artifact_metric_utility_surface"
     )
     assert rows["__init__.py"]["classification"] == "canonical_top_level_facade_api"
+    assert rows["calf_legnav_comparator.py"]["classification"] == (
+        "cross_cutting_schema_evidence_readiness_artifact_metric_utility_surface"
+    )
+    assert rows["calf_legnav_comparator.py"]["compatibility_action"] == "no_compatibility_action"
 
 
 def test_serialized_outputs_are_deterministic(inventory: dict[str, object]) -> None:

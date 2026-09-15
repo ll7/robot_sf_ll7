@@ -8,7 +8,7 @@ under the repository's ignored ``output/`` directory.
 Example::
 
     uv run python scripts/tools/prepare_presentation_video_pack.py \
-        --episodes output/benchmarks/20260304_184717_policy_analysis_ppo/episodes.jsonl \
+        --episodes output/benchmarks/20260304_184717_policy_analysis_ppo/episodes/episodes.jsonl \
         --videos output/recordings/20260304_184717_policy_analysis_ppo \
         --output output/presentation_video_pack/20260304_184717_policy_analysis_ppo
 """
@@ -955,6 +955,8 @@ def _candidate_record(candidate: Candidate, videos_root: Path | None) -> dict[st
         "selection_reasons": list(candidate.reasons),
         "metrics": metrics,
         "source_file": _portable_source_name(candidate.source_path, videos_root),
+        "source_git_hash": candidate.row.get("git_hash"),
+        "source_config_hash": candidate.row.get("config_hash"),
         "source_renderer": video_meta.get("renderer"),
         "recorded_frame_count": video_meta.get("frames"),
     }
@@ -964,12 +966,22 @@ def _source_provenance(rows: list[dict[str, Any]], episodes_path: Path) -> dict[
     """Summarize provenance fields carried by the input episode records."""
     git_hashes = sorted({str(row["git_hash"]) for row in rows if row.get("git_hash")})
     config_hashes = sorted({str(row["config_hash"]) for row in rows if row.get("config_hash")})
+    rows_with_git_hash = sum(bool(row.get("git_hash")) for row in rows)
+    if not rows:
+        git_hash_status = "missing"
+    elif rows_with_git_hash == len(rows):
+        git_hash_status = "complete"
+    elif rows_with_git_hash:
+        git_hash_status = "partial"
+    else:
+        git_hash_status = "missing"
     return {
         "episodes_file": episodes_path.name,
+        "episodes_file_sha256": _sha256(episodes_path),
         "episode_count": len(rows),
         "source_git_hashes": git_hashes,
         "source_config_hashes": config_hashes,
-        "source_git_hash_status": "complete" if git_hashes else "missing",
+        "source_git_hash_status": git_hash_status,
         "rights": {
             "status": "redistribution-unknown",
             "basis": "local-only-byo",
@@ -1249,6 +1261,7 @@ def _build_report(data: _ReportData) -> dict[str, Any]:
         "schema_version": "presentation-video-pack.v1",
         "generated_at": datetime.now(UTC).isoformat(),
         "command": "prepare_presentation_video_pack",
+        "invocation": data.command,
         "status": status,
         "source": data.source,
         "current_checkout": data.snapshot,
@@ -1286,8 +1299,8 @@ def prepare_pack(
     """Prepare the presentation pack and return its manifest path and payload."""
     if max_clips <= 0:
         raise ValueError("max_clips must be positive")
-    if min_duration < 0:
-        raise ValueError("min_duration cannot be negative")
+    if not math.isfinite(min_duration) or min_duration < 0:
+        raise ValueError("min_duration must be finite and non-negative")
     episodes_path = episodes_path.resolve()
     repo_root = _git_root(episodes_path)
     if output_dir is None:
@@ -1394,8 +1407,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.max_clips <= 0:
         print("error: --max-clips must be positive", file=sys.stderr)
         return 2
-    if args.min_duration < 0:
-        print("error: --min-duration cannot be negative", file=sys.stderr)
+    if not math.isfinite(args.min_duration) or args.min_duration < 0:
+        print("error: --min-duration must be finite and non-negative", file=sys.stderr)
         return 2
     try:
         manifest_path, report = prepare_pack(

@@ -94,12 +94,22 @@ but new code should migrate to the Full Classic pipeline.
 For a talk or demo, prepare a small local pack from an existing native-runtime
 recording and its episode newline-delimited JSON (JSONL) file:
 
+Prerequisites: install the `viz` extra for Pillow (`uv sync --extra viz`) and
+make `ffmpeg` and `ffprobe` available on `PATH`. This tool uses Pillow and the
+FFmpeg command-line tools directly; it does not use MoviePy. The command below
+uses the canonical Full Classic output layout, where episode records are under
+`episodes/episodes.jsonl`:
+
 ```bash
 uv run python scripts/tools/prepare_presentation_video_pack.py \
-  --episodes output/benchmarks/<run>/episodes.jsonl \
+  --episodes output/benchmarks/<run>/episodes/episodes.jsonl \
   --videos output/recordings/<run> \
   --output output/presentation_video_pack/<run>
 ```
+
+The tool accepts any existing JSONL file supplied with `--episodes`, including
+older runs that use a flat `episodes.jsonl` path; pass the path that actually
+exists for those runs.
 
 The tool deterministically selects a compact mixture of successful and
 collision episodes, decodes the source videos, rejects very short or blank
@@ -113,7 +123,10 @@ records `redistribution-unknown` with a `local-only-byo` basis, and does not
 claim rights clearance. Use the source run's native runtime videos; replay
 fallback or synthetic videos should remain clearly labeled as illustrative.
 The contact-sheet input is temporary and removed after generation, so no source
-JSONL cache is left in the output directory. A clip must decode end-to-end and
+JSONL cache is left in the output directory. The manifest hashes the complete
+input JSONL, records the actual CLI invocation when run from the command line,
+and ties source git/config hashes to each selected clip where available. A clip
+must decode end-to-end and
 show visible content in at least two of the three deterministic samples.
 Filename fallback resolution also requires an unambiguous scenario/seed/policy
 identity; when multiple planner recordings could match, the tool leaves the row
@@ -148,8 +161,11 @@ uv run python -c "import json; print(json.loads(open('episodes.jsonl').readline(
 
 #### Videos Not Generating
 **Symptoms**: No MP4 files created, or placeholder videos
+This section covers legacy trajectory-to-video rendering. The presentation-pack
+tool above reads existing recordings and has separate Pillow and FFmpeg
+requirements.
 **Causes**:
-- Missing moviepy: run `uv sync --all-extras`
+- Missing moviepy for legacy rendering: run `uv sync --all-extras`
 - No trajectory data: Episodes lack position/time data
 - Environment issues: Factory functions unavailable
 
@@ -165,6 +181,11 @@ ep = json.loads(open('episodes.jsonl').readline())
 print('Trajectory data:', 'trajectory_data' in ep)
 "
 ```
+
+For the presentation-pack tool above, MoviePy is not required: install the
+`viz` extra for Pillow and verify `ffmpeg` and `ffprobe` are available on
+`PATH`. It reads existing recordings and does not generate videos from
+trajectory data.
 
 #### Validation Failures
 **Symptoms**: Manifest validation fails (`ROBOT_SF_VALIDATE_VISUALS=1`) or `validate_visual_artifacts()` returns failed artifacts

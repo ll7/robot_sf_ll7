@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -279,6 +281,18 @@ def test_output_guard_does_not_depend_on_process_cwd(tmp_path: Path, monkeypatch
     assert not output.exists()
 
 
+@pytest.mark.parametrize("duration", [math.nan, math.inf, -math.inf])
+def test_prepare_pack_rejects_nonfinite_min_duration(tmp_path: Path, duration: float) -> None:
+    """Duration constraints must be finite before any output directory is created."""
+    episodes = tmp_path / "episodes.jsonl"
+    episodes.write_text("", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        prepare_pack(episodes, output_dir=tmp_path / "pack", min_duration=duration)
+
+    assert not (tmp_path / "pack").exists()
+
+
 @pytest.mark.skipif(
     shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
     reason="requires local ffmpeg and ffprobe binaries",
@@ -322,6 +336,8 @@ def test_prepare_pack_cli_runs_real_local_subprocess_path(tmp_path: Path) -> Non
                 "scenario_id": "classic_fixture",
                 "seed": 111,
                 "algo": "ppo",
+                "git_hash": "source-commit",
+                "config_hash": "source-config",
                 "status": "success",
                 "steps": 3,
                 "metrics": {"near_misses": 1},
@@ -374,8 +390,17 @@ def test_prepare_pack_cli_runs_real_local_subprocess_path(tmp_path: Path) -> Non
     }
     assert manifest["source"]["rights"]["status"] == "redistribution-unknown"
     assert manifest["source"]["rights"]["basis"] == "local-only-byo"
+    assert (
+        manifest["source"]["episodes_file_sha256"]
+        == hashlib.sha256(episodes.read_bytes()).hexdigest()
+    )
+    assert manifest["source"]["source_git_hash_status"] == "complete"
+    assert manifest["invocation"][0].endswith("prepare_presentation_video_pack.py")
+    assert "--no-polish" in manifest["invocation"]
     clip = manifest["clips"][0]
     assert clip["source_file"] == source.name
+    assert clip["source_git_hash"] == "source-commit"
+    assert clip["source_config_hash"] == "source-config"
     assert clip["encoding"] == {"overlay": False, "status": "copied"}
     presentation_path = output / clip["presentation_path"]
     assert presentation_path.read_bytes() == source.read_bytes()

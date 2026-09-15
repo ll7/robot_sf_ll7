@@ -50,6 +50,12 @@ causal hypotheses are reported as not evaluated and never enter a metric.
 
 ## Reproduction and boundary
 
+Because this set is diagnostic-only, its claim_boundary is closed to the
+canonical value "Diagnostic-only contract and fixture mechanics; no
+retained-production precision/recall, grouping, or causal claim." The API,
+report validator, and CLI reject arbitrary boundary text. Reviewer and
+adjudicator identities must contain a non-whitespace, non-control character.
+
 ```bash
 uv run python scripts/analysis/validate_trace_predicate_evaluation_issue_9305.py \
   --evaluation-set docs/context/evidence/issue_9305_predicate_validation/evaluation_set.v1.json \

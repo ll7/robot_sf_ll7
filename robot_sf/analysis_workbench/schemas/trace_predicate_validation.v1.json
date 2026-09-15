@@ -26,7 +26,9 @@
     "retained_trace_status": {
       "enum": ["available", "partial", "unavailable"]
     },
-    "claim_boundary": {"type": "string", "minLength": 1},
+    "claim_boundary": {
+      "const": "Diagnostic-only contract and fixture mechanics; no retained-production precision/recall, grouping, or causal claim."
+    },
     "provenance": {
       "type": "object",
       "additionalProperties": false,
@@ -289,7 +291,11 @@
       "additionalProperties": false,
       "required": ["reviewer_id", "labels", "effort_minutes"],
       "properties": {
-        "reviewer_id": {"type": "string", "minLength": 1},
+        "reviewer_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": ".*[^\\s\\u0000-\\u001F\\u007F].*"
+        },
         "labels": {"$ref": "#/$defs/predicate_labels"},
         "effort_minutes": {"type": "number", "minimum": 0}
       }
@@ -311,7 +317,11 @@
           "required": ["status", "reviewer_id", "labels", "effort_minutes", "note"],
           "properties": {
             "status": {"const": "adjudicated"},
-            "reviewer_id": {"type": "string", "minLength": 1},
+            "reviewer_id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": ".*[^\\s\\u0000-\\u001F\\u007F].*"
+            },
             "labels": {"$ref": "#/$defs/predicate_labels"},
             "note": {"type": "string", "minLength": 1},
             "effort_minutes": {"type": "number", "minimum": 0}

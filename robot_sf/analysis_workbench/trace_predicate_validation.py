@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import subprocess
+import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
@@ -52,6 +53,10 @@ TRACE_PREDICATE_VALIDATION_REPORT_SCHEMA_FILE = (
 )
 
 EVIDENCE_STATUS_DIAGNOSTIC_ONLY = "diagnostic-only"
+TRACE_PREDICATE_VALIDATION_CLAIM_BOUNDARY = (
+    "Diagnostic-only contract and fixture mechanics; no retained-production precision/recall, "
+    "grouping, or causal claim."
+)
 RETAINED_TRACE_STATUS_UNAVAILABLE = "unavailable"
 LABEL_POSITIVE = "positive"
 LABEL_NEGATIVE = "negative"
@@ -59,6 +64,9 @@ LABEL_AMBIGUOUS = "ambiguous"
 LABEL_UNAVAILABLE = "unavailable"
 VALIDATION_LABELS = frozenset({LABEL_POSITIVE, LABEL_NEGATIVE, LABEL_AMBIGUOUS, LABEL_UNAVAILABLE})
 _GROUPING_FEATURE_VOCABULARY = frozenset({"observed_pattern", "planner_id", "map_id"})
+_CLAIM_BOUNDARY_BY_EVIDENCE_STATUS = {
+    EVIDENCE_STATUS_DIAGNOSTIC_ONLY: TRACE_PREDICATE_VALIDATION_CLAIM_BOUNDARY,
+}
 _SOURCE_COMMIT_LENGTH = 40
 _SHA256_LENGTH = 64
 
@@ -203,6 +211,7 @@ def validate_trace_predicate_evaluation_set(
         raise TracePredicateValidationError("evaluation set must be an object", source=source)
     schema_errors = _schema_errors(payload, load_trace_predicate_validation_schema())
     if schema_errors:
+        schema_errors.extend(_pre_schema_identity_errors(payload))
         raise TracePredicateValidationError(schema_errors, source=source)
     root = Path(repo_root or Path.cwd()).resolve()
     semantic_errors = _semantic_errors(
@@ -527,6 +536,43 @@ def _schema_errors(payload: Mapping[str, Any], schema: Mapping[str, Any]) -> lis
     ]
 
 
+def _pre_schema_identity_errors(payload: Mapping[str, Any]) -> list[str]:
+    """Return stable identity paths when schema branches collapse nested errors."""
+    cases = payload.get("cases")
+    if not isinstance(cases, list):
+        return []
+    errors: list[str] = []
+    for index, case in enumerate(cases):
+        if not isinstance(case, Mapping):
+            continue
+        review = case.get("review")
+        if not isinstance(review, Mapping):
+            continue
+        reviewers = review.get("reviewers")
+        if isinstance(reviewers, list):
+            for reviewer_index, reviewer in enumerate(reviewers):
+                if isinstance(reviewer, Mapping) and "reviewer_id" in reviewer:
+                    errors.extend(
+                        _identity_content_errors(
+                            reviewer["reviewer_id"],
+                            f"/cases/{index}/review/reviewers/{reviewer_index}/reviewer_id",
+                        )
+                    )
+        adjudication = review.get("adjudication")
+        if (
+            isinstance(adjudication, Mapping)
+            and adjudication.get("status") == "adjudicated"
+            and "reviewer_id" in adjudication
+        ):
+            errors.extend(
+                _identity_content_errors(
+                    adjudication["reviewer_id"],
+                    f"/cases/{index}/review/adjudication/reviewer_id",
+                )
+            )
+    return errors
+
+
 def _value_difference_paths(
     actual: Any,
     expected: Any,
@@ -624,6 +670,12 @@ def _report_semantic_errors(  # noqa: C901, PLR0912, PLR0915
     """
     errors: list[str] = []
     evaluation = report["evaluation_set"]
+    errors.extend(
+        _claim_boundary_errors(
+            evaluation["evidence_status"],
+            report["claim_boundary"],
+        )
+    )
     coverage = report["coverage"]
     case_count = coverage["case_count"]
     if evaluation["case_count"] != case_count:
@@ -845,6 +897,12 @@ def _semantic_errors(  # noqa: C901
             errors.append(
                 "/evidence_status: retained corpus validation must remain diagnostic-only"
             )
+    errors.extend(
+        _claim_boundary_errors(
+            payload["evidence_status"],
+            payload["claim_boundary"],
+        )
+    )
 
     cases = payload["cases"]
     case_ids = [case["case_id"] for case in cases]
@@ -943,6 +1001,12 @@ def _case_semantic_errors(  # noqa: C901, PLR0912
         errors.append(f"{prefix}/review/reviewers: reviewer_id values must be unique per case")
     for reviewer_index, reviewer in enumerate(reviewers):
         errors.extend(
+            _identity_content_errors(
+                reviewer["reviewer_id"],
+                f"{prefix}/review/reviewers/{reviewer_index}/reviewer_id",
+            )
+        )
+        errors.extend(
             _finite_effort_error(
                 reviewer.get("effort_minutes"),
                 f"{prefix}/review/reviewers/{reviewer_index}/effort_minutes",
@@ -960,6 +1024,12 @@ def _case_semantic_errors(  # noqa: C901, PLR0912
             f"{prefix}/review/adjudication/status: unavailable trace requires pending adjudication"
         )
     if adjudication["status"] == "adjudicated":
+        errors.extend(
+            _identity_content_errors(
+                adjudication["reviewer_id"],
+                f"{prefix}/review/adjudication/reviewer_id",
+            )
+        )
         if adjudication["reviewer_id"] in reviewer_ids:
             errors.append(
                 f"{prefix}/review/adjudication/reviewer_id: adjudicator must be distinct from reviewers"
@@ -1193,6 +1263,37 @@ def _finite_effort_error(
     ):
         return [f"{path}: effort_minutes must be finite"]
     return []
+
+
+def _claim_boundary_errors(
+    evidence_status: Any,
+    claim_boundary: Any,
+    *,
+    path: str = "/claim_boundary",
+) -> list[str]:
+    """Return errors for a claim boundary not closed over its evidence status."""
+    expected_boundary = _CLAIM_BOUNDARY_BY_EVIDENCE_STATUS.get(evidence_status)
+    if expected_boundary is None:
+        return [
+            f"{path}: no closed claim boundary is defined for evidence_status={evidence_status!r}"
+        ]
+    if claim_boundary != expected_boundary:
+        return [
+            f"{path}: must match the closed claim boundary for evidence_status={evidence_status!r}"
+        ]
+    return []
+
+
+def _identity_content_errors(value: Any, path: str) -> list[str]:
+    """Return an error when an identity contains only whitespace or control characters."""
+    if not isinstance(value, str):
+        return []
+    if any(
+        not character.isspace() and not unicodedata.category(character).startswith("C")
+        for character in value
+    ):
+        return []
+    return [f"{path}: identity must contain at least one non-whitespace, non-control character"]
 
 
 def _coverage(cases: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -1645,6 +1746,7 @@ __all__ = [
     "LABEL_POSITIVE",
     "LABEL_UNAVAILABLE",
     "RETAINED_TRACE_STATUS_UNAVAILABLE",
+    "TRACE_PREDICATE_VALIDATION_CLAIM_BOUNDARY",
     "TRACE_PREDICATE_VALIDATION_REPORT_SCHEMA_VERSION",
     "TRACE_PREDICATE_VALIDATION_SCHEMA_VERSION",
     "TracePredicateValidationError",

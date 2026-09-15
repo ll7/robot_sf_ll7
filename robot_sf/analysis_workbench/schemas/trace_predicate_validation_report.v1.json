@@ -31,8 +31,7 @@
       "$ref": "#/$defs/evaluation_set"
     },
     "claim_boundary": {
-      "type": "string",
-      "minLength": 1
+      "const": "Diagnostic-only contract and fixture mechanics; no retained-production precision/recall, grouping, or causal claim."
     },
     "coverage": {
       "$ref": "#/$defs/coverage"

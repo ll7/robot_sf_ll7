@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.analysis_workbench import (
+    TRACE_PREDICATE_VALIDATION_CLAIM_BOUNDARY,
     TRACE_PREDICATE_VALIDATION_SCHEMA_VERSION,
     TracePredicateValidationError,
     build_trace_predicate_validation_report,
@@ -199,6 +200,87 @@ def test_nonstandard_json_constants_are_normalized_at_cli_boundary(
     assert not output_path.exists()
 
 
+def test_cli_rejects_overclaiming_diagnostic_boundary(tmp_path: Path) -> None:
+    """The CLI must not publish a report with an arbitrary diagnostic boundary."""
+    evaluation_set = _load_fixture()
+    evaluation_set["claim_boundary"] = "Benchmark accuracy established for all eight predicates."
+    evaluation_path = tmp_path / "overclaiming-boundary.json"
+    evaluation_path.write_text(json.dumps(evaluation_set), encoding="utf-8")
+    output_path = tmp_path / "report.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/analysis/validate_trace_predicate_evaluation_issue_9305.py",
+            "--evaluation-set",
+            str(evaluation_path),
+            "--output-json",
+            str(output_path),
+            "--repo-root",
+            str(REPO_ROOT),
+            "--expected-source-commit",
+            SOURCE_COMMIT,
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "trace predicate validation unavailable" in result.stderr
+    assert "/claim_boundary" in result.stderr
+    assert not output_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("identity_kind", "identity"),
+    (("reviewer", " "), ("adjudicator", "\u200b")),
+)
+def test_cli_rejects_non_content_reviewer_and_adjudicator_identities(
+    tmp_path: Path,
+    identity_kind: str,
+    identity: str,
+) -> None:
+    """The CLI must reject reviewer and adjudicator identities without content."""
+    evaluation_set = _load_fixture()
+    if identity_kind == "reviewer":
+        evaluation_set["cases"][0]["review"]["reviewers"][0]["reviewer_id"] = identity
+        expected_path = "/cases/0/review/reviewers/0/reviewer_id"
+    else:
+        evaluation_set["cases"][0]["review"]["adjudication"]["reviewer_id"] = identity
+        expected_path = "/cases/0/review/adjudication/reviewer_id"
+    evaluation_path = tmp_path / f"{identity_kind}-identity.json"
+    evaluation_path.write_text(json.dumps(evaluation_set), encoding="utf-8")
+    output_path = tmp_path / "report.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/analysis/validate_trace_predicate_evaluation_issue_9305.py",
+            "--evaluation-set",
+            str(evaluation_path),
+            "--output-json",
+            str(output_path),
+            "--repo-root",
+            str(REPO_ROOT),
+            "--expected-source-commit",
+            SOURCE_COMMIT,
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "trace predicate validation unavailable" in result.stderr
+    assert expected_path in result.stderr
+    assert not output_path.exists()
+
+
 def test_current_base_pin_is_checked() -> None:
     """A fixture from another base cannot be admitted silently."""
     with pytest.raises(TracePredicateValidationError, match="different source commit"):
@@ -215,6 +297,71 @@ def test_explicit_source_pin_is_required() -> None:
         TracePredicateValidationError, match="expected source commit pin is required"
     ):
         validate_trace_predicate_evaluation_set(_load_fixture(), repo_root=REPO_ROOT)
+
+
+def test_diagnostic_claim_boundary_is_closed_for_evaluation_sets() -> None:
+    """Diagnostic-only evaluation sets cannot carry arbitrary overclaim text."""
+    payload = _load_fixture()
+    payload["claim_boundary"] = "Benchmark accuracy established for all eight predicates."
+
+    with pytest.raises(TracePredicateValidationError, match="claim_boundary"):
+        validate_trace_predicate_evaluation_set(
+            payload,
+            repo_root=REPO_ROOT,
+            expected_source_commit=SOURCE_COMMIT,
+        )
+
+    assert _load_fixture()["claim_boundary"] == TRACE_PREDICATE_VALIDATION_CLAIM_BOUNDARY
+
+
+def test_diagnostic_claim_boundary_is_closed_for_reports() -> None:
+    """A report cannot replace the admitted diagnostic-only boundary."""
+    report = build_trace_predicate_validation_report(
+        _load_fixture(),
+        repo_root=REPO_ROOT,
+        expected_source_commit=SOURCE_COMMIT,
+    )
+    report["claim_boundary"] = "Benchmark accuracy established for all eight predicates."
+
+    with pytest.raises(TracePredicateValidationError, match="/claim_boundary"):
+        validate_trace_predicate_validation_report(
+            report,
+            evaluation_set=_load_fixture(),
+            repo_root=REPO_ROOT,
+            expected_source_commit=SOURCE_COMMIT,
+        )
+
+
+@pytest.mark.parametrize("reviewer_id", (" ", "\t", "\x00", "\u200b"))
+def test_reviewer_identity_must_contain_non_whitespace_or_control(
+    reviewer_id: str,
+) -> None:
+    """Reviewer IDs cannot be made distinct with whitespace or control-only text."""
+    payload = _load_fixture()
+    payload["cases"][0]["review"]["reviewers"][0]["reviewer_id"] = reviewer_id
+
+    with pytest.raises(TracePredicateValidationError, match="reviewer_id"):
+        validate_trace_predicate_evaluation_set(
+            payload,
+            repo_root=REPO_ROOT,
+            expected_source_commit=SOURCE_COMMIT,
+        )
+
+
+@pytest.mark.parametrize("adjudicator_id", (" ", "\t", "\x00", "\u200b"))
+def test_adjudicator_identity_must_contain_non_whitespace_or_control(
+    adjudicator_id: str,
+) -> None:
+    """Adjudicator IDs cannot be satisfied by whitespace or control-only text."""
+    payload = _load_fixture()
+    payload["cases"][0]["review"]["adjudication"]["reviewer_id"] = adjudicator_id
+
+    with pytest.raises(TracePredicateValidationError, match="adjudication/reviewer_id"):
+        validate_trace_predicate_evaluation_set(
+            payload,
+            repo_root=REPO_ROOT,
+            expected_source_commit=SOURCE_COMMIT,
+        )
 
 
 def test_available_traces_must_match_git_blobs_at_declared_commit(tmp_path: Path) -> None:

@@ -470,3 +470,80 @@ def test_similarity_group_comparison_rejects_incomplete_partition() -> None:
             [{"group_id": "c1", "record_ids": ["a"]}],
             record_ids=["a", "b"],
         )
+
+
+@pytest.mark.parametrize(
+    ("reference", "comparison", "record_ids", "match"),
+    (
+        ([], [{"group_id": "c1", "record_ids": ["a"]}], None, "reference groups"),
+        ("not-groups", [{"group_id": "c1", "record_ids": ["a"]}], None, "reference groups"),
+        ([object()], [{"group_id": "c1", "record_ids": ["a"]}], None, "contain objects"),
+        (
+            [{"group_id": "", "record_ids": ["a"]}],
+            [{"group_id": "c1", "record_ids": ["a"]}],
+            None,
+            "group IDs",
+        ),
+        (
+            [{"group_id": "r1", "record_ids": ["a"]}, {"group_id": "r1", "record_ids": ["b"]}],
+            [{"group_id": "c1", "record_ids": ["a", "b"]}],
+            None,
+            "group IDs",
+        ),
+        (
+            [{"group_id": "r1", "record_ids": []}],
+            [{"group_id": "c1", "record_ids": ["a"]}],
+            None,
+            "group members",
+        ),
+        (
+            [{"group_id": "r1", "record_ids": "a"}],
+            [{"group_id": "c1", "record_ids": ["a"]}],
+            None,
+            "group members",
+        ),
+        (
+            [{"group_id": "r1", "record_ids": [1]}],
+            [{"group_id": "c1", "record_ids": ["a"]}],
+            None,
+            "record_ids",
+        ),
+        (
+            [{"group_id": "r1", "record_ids": ["a"]}, {"group_id": "r2", "record_ids": ["a"]}],
+            [{"group_id": "c1", "record_ids": ["a"]}],
+            None,
+            "partition",
+        ),
+        (
+            [{"group_id": "r1", "record_ids": ["a"]}],
+            [{"group_id": "c1", "record_ids": ["b"]}],
+            None,
+            "universes",
+        ),
+        (
+            [{"group_id": "r1", "record_ids": ["a"]}],
+            [{"group_id": "c1", "record_ids": ["a"]}],
+            [1],
+            "record_ids",
+        ),
+        (
+            [{"group_id": "r1", "record_ids": ["a"]}],
+            [{"group_id": "c1", "record_ids": ["a"]}],
+            ["a", "a"],
+            "record_ids",
+        ),
+    ),
+)
+def test_similarity_group_comparison_rejects_malformed_inputs(
+    reference: object,
+    comparison: object,
+    record_ids: object,
+    match: str,
+) -> None:
+    """Grouping comparisons fail closed for malformed partitions and universes."""
+    with pytest.raises(ValueError, match=match):
+        compare_similarity_groupings(
+            reference,  # type: ignore[arg-type]
+            comparison,  # type: ignore[arg-type]
+            record_ids=record_ids,  # type: ignore[arg-type]
+        )

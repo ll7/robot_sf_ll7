@@ -10,3 +10,7 @@ The contracts are consumed by offline components; the first consumer is the
 [SREV-15 review workbench](./review_contracts.md#review-workbench-srev-15)
 (`python -m robot_sf.render.review_workbench`), which renders a local,
 network-free artifact/provenance view plus a presentation plan.
+
+The [SREV-25 recorded experiment comparison](./review_experiment_report.md)
+reviews retained experiment results offline, preserving negative findings while
+remaining diagnostic-only and outside benchmark or scientific admission.

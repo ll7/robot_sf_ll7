@@ -13,6 +13,7 @@ import pytest
 from robot_sf.analysis_workbench import review_experiment_report as report_module
 from robot_sf.analysis_workbench.review_contracts import (
     COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
+    COMPONENT_RESULT_SCHEMA_VERSION,
     ComponentRequest,
     SourceRef,
     component_descriptor_from_dict,
@@ -246,6 +247,18 @@ def test_oversized_json_integer_fails_closed_without_exception(tmp_path: Path) -
     assert not (tmp_path / "out").exists()
 
 
+def test_deeply_nested_source_fails_closed_without_exception(tmp_path: Path) -> None:
+    """Recursive source validation returns a bounded failed result."""
+    _write_raw_results(tmp_path, "[" * 1200 + "0" + "]" * 1200)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason == "invalid_input: source JSON exceeds the supported nesting depth"
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
 def test_finite_measurements_with_nonfinite_difference_fail_closed(tmp_path: Path) -> None:
     """Two finite values cannot publish an infinite treatment-control effect."""
     payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
@@ -430,6 +443,22 @@ def test_output_collision_and_invalid_config_fail_closed(tmp_path: Path) -> None
     assert not (tmp_path / "other").exists()
 
 
+def test_lone_unicode_surrogate_in_metric_order_fails_before_json_publish(
+    tmp_path: Path,
+) -> None:
+    """Retained config strings use the same strict Unicode boundary as sources."""
+    _copy_fixture(tmp_path)
+
+    result = run(_request(config={"metric_order": ["\ud800"]}), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason.startswith("invalid_input:")
+    assert "Unicode surrogate" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+    assert not list(tmp_path.glob(".out.staging-*"))
+
+
 def test_cli_reads_request_and_config_and_emits_result(
     tmp_path: Path, capsys: CaptureResult[str]
 ) -> None:
@@ -476,9 +505,114 @@ def test_cli_reads_request_and_config_and_emits_result(
     printed = json.loads(captured.out)
 
     assert exit_code == 0
+    assert printed["schema_version"] == COMPONENT_RESULT_SCHEMA_VERSION
+    component_result_from_dict(printed)
     assert printed["status"] == "complete"
     assert (tmp_path / "cli-output" / "experiment-comparison.json").exists()
     assert _load_report(tmp_path / "cli-output")["title"] == "CLI fixture report"
+
+
+def test_cli_deeply_nested_source_emits_failed_result(
+    tmp_path: Path, capsys: CaptureResult[str]
+) -> None:
+    """The CLI converts recursive source validation failures into the result envelope."""
+    _write_raw_results(tmp_path, "[" * 1200 + "0" + "]" * 1200)
+    request_path = tmp_path / "request.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "component-request.v1",
+                "request_id": "nested-cli-request",
+                "component_id": COMPONENT_ID,
+                "sources": [
+                    {
+                        "artifact_id": "recorded-results",
+                        "uri": "results.json",
+                        "format": EXPERIMENT_RESULTS_SCHEMA_VERSION,
+                    }
+                ],
+                "config": {},
+                "output_directory": "ignored-by-cli",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--input",
+            str(request_path),
+            "--output",
+            "cli-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    printed = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert printed["schema_version"] == COMPONENT_RESULT_SCHEMA_VERSION
+    result = component_result_from_dict(printed)
+    assert result.status == "failed"
+    assert "nesting depth" in result.reason
+    assert not (tmp_path / "cli-output").exists()
+
+
+@pytest.mark.parametrize("parser_input", ["request", "config"])
+def test_cli_parser_limit_emits_stable_failed_result(
+    tmp_path: Path, capsys: CaptureResult[str], parser_input: str
+) -> None:
+    """Request and override config parser limits never leak a traceback."""
+    _copy_fixture(tmp_path)
+    request = {
+        "schema_version": "component-request.v1",
+        "request_id": "parser-limit-request",
+        "component_id": COMPONENT_ID,
+        "sources": [
+            {
+                "artifact_id": "recorded-results",
+                "uri": "results.json",
+                "format": EXPERIMENT_RESULTS_SCHEMA_VERSION,
+            }
+        ],
+        "config": {},
+        "output_directory": "ignored-by-cli",
+    }
+    request_path = tmp_path / "request.json"
+    config_path = tmp_path / "config.json"
+    huge_integer = "9" * 5001
+    if parser_input == "request":
+        request_path.write_text(
+            json.dumps(request)[:-1] + f', "config": {{"metric_order": [{huge_integer}]}}}}',
+            encoding="utf-8",
+        )
+    else:
+        request_path.write_text(json.dumps(request), encoding="utf-8")
+        config_path.write_text(f'{{"metric_order": [{huge_integer}]}}', encoding="utf-8")
+
+    arguments = [
+        "--input",
+        str(request_path),
+        "--output",
+        "parser-limit-output",
+        "--base",
+        str(tmp_path),
+    ]
+    if parser_input == "config":
+        arguments.extend(["--config", str(config_path)])
+
+    exit_code = main(arguments)
+    captured = capsys.readouterr()
+    printed = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert printed["schema_version"] == COMPONENT_RESULT_SCHEMA_VERSION
+    result = component_result_from_dict(printed)
+    assert result.status == "failed"
+    assert result.reason == f"invalid_input: {parser_input} JSON cannot be parsed safely"
+    assert not (tmp_path / "parser-limit-output").exists()
 
 
 def test_run_accepts_relocated_output_without_changing_report_content(tmp_path: Path) -> None:

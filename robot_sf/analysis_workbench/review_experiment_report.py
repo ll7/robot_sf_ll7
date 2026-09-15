@@ -23,6 +23,7 @@ from typing import Any
 from robot_sf.analysis_workbench.review_contracts import (
     COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
     COMPONENT_REQUEST_SCHEMA_VERSION,
+    COMPONENT_RESULT_SCHEMA_VERSION,
     ComponentDescriptor,
     ComponentRequest,
     ComponentResult,
@@ -185,6 +186,7 @@ def _validate_config(config: Mapping[str, Any]) -> tuple[list[str], str | None]:
         raise ExperimentReportError(
             "invalid_config", f"unsupported config keys: {', '.join(unknown)}"
         )
+    _validate_strict_json(config, path="/config")
     metric_order_value = config.get("metric_order", [])
     metric_order = _list(metric_order_value, path="/config/metric_order")
     if any(not isinstance(item, str) or not item.strip() for item in metric_order):
@@ -709,11 +711,21 @@ def _read_source(
         ) from error
     try:
         payload = json.loads(decoded)
+    except RecursionError:
+        raise ExperimentReportError(
+            "invalid_input", "source JSON exceeds the supported nesting depth"
+        ) from None
     except ValueError as error:
         raise ExperimentReportError(
             "invalid_input", f"source is not valid UTF-8 JSON: {error}"
         ) from error
-    return _validate_source(payload), source_ref, source_sha256
+    try:
+        normalized = _validate_source(payload)
+    except RecursionError:
+        raise ExperimentReportError(
+            "invalid_input", "source JSON exceeds the supported nesting depth"
+        ) from None
+    return normalized, source_ref, source_sha256
 
 
 def _write_artifact(path: Path, content: str) -> str:
@@ -832,6 +844,12 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         return _result(request, "unavailable", reason=str(error))
     except ExperimentReportError as error:
         return _result(request, "failed", reason=str(error))
+    except RecursionError:
+        return _result(
+            request,
+            "failed",
+            reason="invalid_input: report input exceeds the supported nesting depth",
+        )
     except OSError as error:
         return _result(request, "failed", reason=f"output_write_error: {error}")
 
@@ -847,6 +865,47 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _result_document(result: ComponentResult) -> dict[str, Any]:
+    """Serialize a component result with its shared versioned envelope.
+
+    Returns:
+        JSON-safe component-result.v1 payload.
+    """
+
+    return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)}
+
+
+def _cli_identity(payload: Any) -> tuple[str, str]:
+    """Return safe identity fields for a failure emitted before request validation."""
+
+    if not isinstance(payload, Mapping):
+        return "unknown", COMPONENT_ID
+    request_id = payload.get("request_id")
+    component_id = payload.get("component_id")
+    return (
+        request_id if isinstance(request_id, str) and request_id else "unknown",
+        component_id if isinstance(component_id, str) and component_id else COMPONENT_ID,
+    )
+
+
+def _print_cli_failure(reason: str, *, payload: Any = None) -> int:
+    """Print a contract-valid failed result for pre-request CLI errors.
+
+    Returns:
+        Non-success CLI exit code.
+    """
+
+    request_id, component_id = _cli_identity(payload)
+    result = ComponentResult(
+        request_id=request_id,
+        component_id=component_id,
+        status="failed",
+        reason=reason,
+    )
+    print(json.dumps(_result_document(result), indent=2, sort_keys=True))  # noqa: T201
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the component CLI and print its shared result envelope.
 
@@ -857,25 +916,38 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
         payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ReviewContractsValidationError([f"cannot read request: {error}"]) from error
+    except (OSError, ValueError, RecursionError):
+        return _print_cli_failure("invalid_input: request JSON cannot be parsed safely")
     if not isinstance(payload, dict):
-        raise ReviewContractsValidationError(["request must be a JSON object"])
+        return _print_cli_failure("invalid_input: request must be a JSON object")
+    request_id, component_id = _cli_identity(payload)
     if args.config is not None:
         try:
             config = json.loads(Path(args.config).read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ReviewContractsValidationError([f"cannot read config: {error}"]) from error
+        except (OSError, ValueError, RecursionError):
+            return _print_cli_failure(
+                "invalid_input: config JSON cannot be parsed safely", payload=payload
+            )
         if not isinstance(config, dict):
-            raise ReviewContractsValidationError(["config must be a JSON object"])
+            return _print_cli_failure(
+                "invalid_input: config must be a JSON object", payload=payload
+            )
         existing_config = payload.get("config", {})
         if not isinstance(existing_config, dict):
-            raise ReviewContractsValidationError(["request config must be a JSON object"])
+            return _print_cli_failure(
+                "invalid_input: request config must be a JSON object", payload=payload
+            )
         payload = {**payload, "config": {**existing_config, **config}}
     payload = {**payload, "output_directory": args.output}
-    request = component_request_from_dict(payload, source=args.input)
+    try:
+        request = component_request_from_dict(payload, source=args.input)
+    except (ReviewContractsValidationError, RecursionError):
+        return _print_cli_failure(
+            "invalid_input: request does not satisfy component-request.v1",
+            payload={"request_id": request_id, "component_id": component_id},
+        )
     result = run(request, base=Path(args.base) if args.base is not None else None)
-    print(json.dumps(asdict(result), indent=2, sort_keys=True))  # noqa: T201 - CLI output
+    print(json.dumps(_result_document(result), indent=2, sort_keys=True))  # noqa: T201
     return 0 if result.status == "complete" else 1
 
 

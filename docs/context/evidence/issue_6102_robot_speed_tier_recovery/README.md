@@ -24,7 +24,8 @@ admit a benchmark, planner-ranking, causal, dissertation, or paper claim.
 | Independent source copy | W&B artifact `ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0` |
 | Artifact verification | 76/76 stored objects and 76/76 decompressed sources match manifest digests and sizes |
 | Canonical synthesis parity | Stored and current outputs match after normalizing only `source_path` |
-| Admission | **not admitted**; exact-digest review is complete, but separate admission is required |
+| Source-bound diagnostic contrasts | 24/24 rows projected against the recorded source digest; authenticated `synthesis.json.gz` member receipt pending |
+| Admission | **not admitted**; a separate domain-aware admission decision is required |
 
 The descriptive synthesis reports the same planner ordering at all three speed
 tiers (`scenario_adaptive_hybrid_orca_v2_collision_guard`, `orca`, `ppo`,
@@ -50,6 +51,40 @@ caption, exact-digest review report, and source/output checksums are recorded in
 `SHA256SUMS`. No figure is emitted because this diagnostic packet has no controlled
 visual assertion.
 
+## Source-bound diagnostic successor packet
+
+The tracked issue #7980 packet is diagnostic/pending: it does not claim that an
+authenticated immutable source was hydrated on this machine. The small
+`source_row_crosswalk.issue_7980.fixture.json` file is only a deterministic
+contract-test fixture. Authenticated-source regeneration must receive an exact
+artifact/version/member receipt, the pinned preservation manifest, compressed-
+member and decompressed-source digests, and a matching row crosswalk. The builder
+cross-checks those inputs and fails closed when immutable hydration is unavailable.
+
+Issue #7980 adds
+`result_interpretation_packet.issue_7980.v1.json` without replacing or silently
+mutating the reviewed packet above. The successor has one metric and one fail-closed
+decision for each of the 24 registered planner-by-speed-tier-by-metric contrasts.
+Each metric carries one versioned source-binding payload containing the complete
+canonical synthesis row: pooled effect and standard error, 180-pair denominator,
+both directional raw and Holm-adjusted tests and bounds, preregistered harm threshold,
+activation diagnostics, classification, and the immutable `synthesis.json` SHA-256.
+It also records the exact preregistration-file SHA, seed values, and scenario
+identities; the builder rejects mutations even when the derived denominator stays
+at 180.
+
+The successor still uses `smoke_diagnostic` / `diagnostic_only`. Its 18 activated
+contrasts remain `inconclusive` pending a separate domain-aware admission decision;
+the six inactive prediction-planner contrasts remain `invalid`. The tracked packet
+therefore improves auditability without admitting a null effect, ranking, causal,
+safety, dissertation, release, or paper-facing claim. Its deterministic caption and
+checksums are `result_interpretation_caption.issue_7980.txt` and
+`SHA256SUMS.issue_7980`. The exact packet identity is also recorded in
+`packet_digest_review.issue_7980.json`; it is diagnostic-only and non-approving.
+The packet, caption, checksum manifest, and digest review each have an
+exact-hash `*.review.json` sidecar from the shared evidence-writer convention; the
+caption and checksum manifest also carry inline `NEEDS-REVIEW` markers.
+
 ## Re-check commands
 
 From a checkout containing a verified artifact hydration:
@@ -57,15 +92,21 @@ From a checkout containing a verified artifact hydration:
 ```bash
 uv run python scripts/benchmark/run_issue_5578_speed_tier_campaign.py --synthesize output/issue_7792/job13828_wandb_v0/cell_summaries.jsonl --synthesis-out output/issue_7792/current_synthesis.json --json
 uv run python scripts/analysis/build_result_interpretation_packet.py --input docs/context/evidence/issue_6102_robot_speed_tier_recovery/result_interpretation_packet.v1.json --validate-only
+uv run python scripts/analysis/build_issue_7980_speed_tier_packet.py --synthesis output/issue_7980/source/synthesis.json --check
+uv run python scripts/analysis/build_result_interpretation_packet.py --input docs/context/evidence/issue_6102_robot_speed_tier_recovery/result_interpretation_packet.issue_7980.v1.json --validate-only
+(cd docs/context/evidence/issue_6102_robot_speed_tier_recovery && sha256sum -c SHA256SUMS.issue_7980)
 ```
 
-The first command reproduces the compact synthesis; the second validates the
-tracked interpretation boundary. Neither command grants paper-facing eligibility.
+The first command reproduces the compact synthesis. The later commands regenerate
+and validate the tracked source-bound diagnostic projection. The tracked packet
+does not carry an authenticated immutable-member receipt. None of these commands
+grants benchmark or paper-facing eligibility.
 
 ## Next decision
 
 Do not rerun the 2,160-cell campaign: the native grid and durable raw lineage are
-complete. The bounded interpretation packet now has an exact-digest review. Any
-later admission must explicitly address the six non-activated prediction-planner
-contrasts and must not promote the descriptive planner ordering into a ranking
-claim.
+complete. The source-bound diagnostic successor preserves all missing statistics,
+but authenticated immutable-member custody and the separate admission decision
+remain pending. Any later admission must explicitly address the six non-activated
+prediction-planner contrasts and must not promote the descriptive planner ordering
+into a ranking claim.

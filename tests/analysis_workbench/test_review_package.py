@@ -369,15 +369,22 @@ def test_staging_filesystem_failure_returns_failed_result(
     assert result.status != "complete"
 
 
-def test_publication_value_failure_returns_failed_result(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(OSError("fixture publication filesystem failure"), id="filesystem"),
+        pytest.param(ValueError("fixture publication value failure"), id="value"),
+    ],
+)
+def test_publication_operation_failure_returns_failed_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: Exception
 ) -> None:
     payload = _stage(tmp_path)
     original_write = review_package._write_json
 
     def fail_report(path: Path, document: object) -> str:
         if path.name == "verification-report.json":
-            raise ValueError("fixture publication failure")
+            raise failure
         return original_write(path, document)
 
     monkeypatch.setattr(review_package, "_write_json", fail_report)

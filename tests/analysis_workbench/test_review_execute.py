@@ -5,12 +5,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from robot_sf.analysis_workbench.review_contracts import (
     component_descriptor_from_dict,
@@ -211,3 +209,401 @@ def test_owned_child_timeout_terminates() -> None:
     outcome = _run_owned_child({"sleep_s": 30.0}, 0.5, target="sleep")
     assert outcome["outcome"] == "timeout"
     assert "terminated" in str(outcome.get("error", ""))
+
+
+def _recipe_payload(**overrides: Any) -> dict[str, Any]:
+    config = _fixture_json("config.json")
+    recipe = config["recipe"]
+    recipe.update(overrides)
+    payload = _fixture_json("request.json")
+    payload["config"] = config
+    return payload
+
+
+def test_config_field_validation_branches() -> None:
+    from robot_sf.analysis_workbench.review_execute import ReviewExecuteError
+
+    base = {"recipe": {}}
+    with pytest.raises(ReviewExecuteError, match="unsupported planner"):
+        validate_execute_config({**base, "planner": "learned"})
+    with pytest.raises(ReviewExecuteError, match="seed"):
+        validate_execute_config({**base, "seed": -1})
+    with pytest.raises(ReviewExecuteError, match="horizon_steps"):
+        validate_execute_config({**base, "horizon_steps": 0})
+    with pytest.raises(ReviewExecuteError, match="robot_speed_m_s"):
+        validate_execute_config({**base, "robot_speed_m_s": 99.0})
+    with pytest.raises(ReviewExecuteError, match="max_candidates"):
+        validate_execute_config({**base, "max_candidates": 0})
+    with pytest.raises(ReviewExecuteError, match="wall_timeout_s"):
+        validate_execute_config({**base, "wall_timeout_s": 0.0})
+    with pytest.raises(ReviewExecuteError, match="per_execution_timeout_s"):
+        validate_execute_config({**base, "per_execution_timeout_s": -2.0})
+    with pytest.raises(ReviewExecuteError, match="activation_speed_tolerance"):
+        validate_execute_config({**base, "activation_speed_tolerance_m_s": float("nan")})
+    with pytest.raises(ReviewExecuteError, match="motion_epsilon_m"):
+        validate_execute_config({**base, "motion_epsilon_m": "far"})
+    with pytest.raises(ReviewExecuteError, match="required_component_version"):
+        validate_execute_config({**base, "required_component_version": 3})
+    with pytest.raises(ReviewExecuteError, match="intervention_parameters"):
+        validate_execute_config({**base, "intervention_parameters": []})
+    with pytest.raises(ReviewExecuteError, match="config must be a mapping"):
+        validate_execute_config([])
+
+
+def test_intervention_update_branches() -> None:
+    from robot_sf.analysis_workbench.review_execute import _intervention_update
+
+    update, reason = _intervention_update("nope", {}, control_speed=1.0, control_delay=0.0)
+    assert update is None and "unsupported intervention factor" in str(reason)
+    update, reason = _intervention_update(
+        "single_pedestrian_speed_offset", None, control_speed=1.0, control_delay=0.0
+    )
+    assert update is None and "missing intervention_parameters" in str(reason)
+    update, reason = _intervention_update(
+        "single_pedestrian_speed_offset",
+        {"speed_delta_m_s": 0.0},
+        control_speed=1.0,
+        control_delay=0.0,
+    )
+    assert update is None and "non-zero" in str(reason)
+    update, reason = _intervention_update(
+        "single_pedestrian_speed_offset",
+        {"speed_delta_m_s": 2.0},
+        control_speed=1.0,
+        control_delay=0.0,
+    )
+    assert update is None and "fixture bound" in str(reason)
+    update, reason = _intervention_update(
+        "single_pedestrian_speed_offset",
+        {"speed_delta_m_s": -1.0},
+        control_speed=1.0,
+        control_delay=0.0,
+    )
+    assert update is None and "validity range" in str(reason)
+    update, reason = _intervention_update(
+        "single_pedestrian_speed_offset",
+        {"speed_delta_m_s": 0.5},
+        control_speed=1.0,
+        control_delay=0.0,
+    )
+    assert update == {"ped_speed_m_s": 1.5, "ped_start_delay_s": 0.0} and reason is None
+    update, reason = _intervention_update(
+        "single_pedestrian_start_delay_offset", {}, control_speed=1.0, control_delay=0.0
+    )
+    assert update is None and "requires a finite non-zero dt_s" in str(reason)
+    update, reason = _intervention_update(
+        "single_pedestrian_start_delay_offset",
+        {"dt_s": 9.0},
+        control_speed=1.0,
+        control_delay=0.0,
+    )
+    assert update is None and "fixture bound" in str(reason)
+    update, reason = _intervention_update(
+        "single_pedestrian_start_delay_offset",
+        {"dt_s": -1.0},
+        control_speed=1.0,
+        control_delay=0.5,
+    )
+    assert update is None and "negative" in str(reason)
+
+
+def test_measurement_selection_branches() -> None:
+    from robot_sf.analysis_workbench.review_execute import _measurement_for_recipe
+
+    recipe = _fixture_json("config.json")["recipe"]
+    selected, reason = _measurement_for_recipe(recipe)
+    assert selected is not None and selected["name"] == "min_robot_ped_distance_m"
+    assert reason is None
+    selected, reason = _measurement_for_recipe({**recipe, "measurements": []})
+    assert selected is None and "no measurements" in str(reason)
+    bad_name = {"measurements": [{"name": "vibes", "units": "u", "expected_direction": "increase"}]}
+    selected, reason = _measurement_for_recipe({**recipe, **bad_name})
+    assert selected is None and "unsupported measurement" in str(reason)
+    bad_dir = {
+        "measurements": [
+            {"name": "ped_mean_speed_m_s", "units": "u", "expected_direction": "sideways"}
+        ]
+    }
+    selected, reason = _measurement_for_recipe({**recipe, **bad_dir})
+    assert selected is None and "expected_direction" in str(reason)
+
+
+def test_telemetry_metrics_rejects_malformed_payloads() -> None:
+    from robot_sf.analysis_workbench.review_execute import _telemetry_metrics
+
+    assert _telemetry_metrics({"status": "error"}, horizon=4, motion_epsilon_m=0.05) is None
+    assert (
+        _telemetry_metrics({"status": "ok", "steps_completed": 3}, horizon=4, motion_epsilon_m=0.05)
+        is None
+    )
+    assert (
+        _telemetry_metrics(
+            {"status": "ok", "steps_completed": 4, "ped_traj": [[0.0]], "robot_traj": [[0.0]]},
+            horizon=4,
+            motion_epsilon_m=0.05,
+        )
+        is None
+    )
+    assert (
+        _telemetry_metrics(
+            {
+                "status": "ok",
+                "steps_completed": 4,
+                "ped_traj": [[float("inf")] * 2] * 5,
+                "robot_traj": [[0.0, 0.0]] * 5,
+            },
+            horizon=4,
+            motion_epsilon_m=0.05,
+        )
+        is None
+    )
+    assert _telemetry_metrics({"status": "ok"}, horizon=4, motion_epsilon_m=0.05) is None
+
+
+def test_episode_job_reports_errors_without_raising() -> None:
+    from robot_sf.analysis_workbench.review_execute import _execute_episode_job
+
+    failed = _execute_episode_job({})
+    assert failed["status"] == "error" and "error" in failed
+    tiny = _execute_episode_job(
+        {
+            "seed": 7,
+            "horizon_steps": 4,
+            "robot_speed_m_s": 1.0,
+            "ped_speed_m_s": 1.0,
+            "ped_start_delay_s": 0.0,
+        }
+    )
+    assert tiny["status"] == "ok" and tiny["steps_completed"] == 4
+
+
+def test_child_main_reports_transport_failure() -> None:
+    from robot_sf.analysis_workbench.review_execute import _child_main
+
+    class _ExplodingConn:
+        def send(self, _payload: Any) -> None:
+            raise OSError("pipe gone")
+
+        def close(self) -> None:
+            pass
+
+    # Must not raise: the transport failure path is silent by design.
+    _child_main("sleep", {"sleep_s": 0.0}, _ExplodingConn())
+
+
+def test_sleep_job_returns_ok() -> None:
+    from robot_sf.analysis_workbench.review_execute import _sleep_job
+
+    assert _sleep_job({"sleep_s": 0.0}) == {"status": "ok"}
+
+
+def test_owned_child_spawn_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    import multiprocessing as multiprocessing_module
+
+    real_context = multiprocessing_module.get_context()
+
+    class _FailingProcess:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def start(self) -> None:
+            raise OSError("no fork today")
+
+    monkeypatch.setattr(real_context, "Process", _FailingProcess)
+    outcome = _run_owned_child({"sleep_s": 0.0}, 1.0, target="sleep")
+    assert outcome["outcome"] == "error" and "spawn failed" in str(outcome.get("error"))
+
+
+def test_owned_child_interrupt_terminates(monkeypatch: pytest.MonkeyPatch) -> None:
+    import multiprocessing as multiprocessing_module
+
+    real_context = multiprocessing_module.get_context()
+    real_pipe = real_context.Pipe
+
+    class _InterruptConn:
+        def poll(self, _timeout: float) -> bool:
+            raise KeyboardInterrupt
+
+        def close(self) -> None:
+            pass
+
+    def _fake_pipe(*args: Any, **kwargs: Any) -> Any:
+        parent, child = real_pipe(*args, **kwargs)
+        child.close()
+        return _InterruptConn(), parent
+
+    class _NoopProcess:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def start(self) -> None:
+            pass
+
+        def join(self, _timeout: float | None = None) -> None:
+            pass
+
+        def is_alive(self) -> bool:
+            return False
+
+        def terminate(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(real_context, "Pipe", _fake_pipe)
+    monkeypatch.setattr(real_context, "Process", _NoopProcess)
+    outcome = _run_owned_child({"sleep_s": 0.0}, 1.0, target="sleep")
+    assert outcome["outcome"] == "interrupted" and "terminated" in str(outcome.get("error"))
+
+
+def test_repo_commit_unknown_on_tooling_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess as subprocess_module
+
+    from robot_sf.analysis_workbench.review_execute import _repo_commit
+
+    def _raise(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("no git today")
+
+    monkeypatch.setattr(subprocess_module, "run", _raise)
+    assert _repo_commit() == "unknown"
+
+
+def test_admission_identity_and_control_branches(tmp_path: Path) -> None:
+    no_identity = _recipe_payload(source_identity={})
+    result = run(component_request_from_dict(no_identity), base=tmp_path)
+    assert result.status == "failed" and "invalid_source_identity" in result.reason
+    bad_control = _recipe_payload(control_conditions={"ped_speed_m_s": 0.0})
+    result = run(component_request_from_dict(bad_control), base=tmp_path)
+    assert result.status == "failed" and "invalid_control_conditions" in result.reason
+    not_mapping = _recipe_payload(control_conditions=[])
+    result = run(component_request_from_dict(not_mapping), base=tmp_path)
+    assert result.status == "failed" and "corrupt_recipe" in result.reason
+    bad_measurement = _recipe_payload(
+        measurements=[{"name": "vibes", "units": "u", "expected_direction": "increase"}]
+    )
+    result = run(component_request_from_dict(bad_measurement), base=tmp_path)
+    assert result.status == "unavailable" and "unsupported_measurement" in result.reason
+
+
+def test_unknown_factor_candidate_is_unavailable(tmp_path: Path) -> None:
+    payload = _recipe_payload(
+        interventions=[{"intervention_id": "mystery", "factor": "teleport", "priority": 1}]
+    )
+    payload["config"]["intervention_parameters"] = {}
+    payload["config"]["max_candidates"] = 1
+    result = run(component_request_from_dict(payload), base=tmp_path)
+    assert result.status == "failed"
+    assert "unsupported intervention factor" in result.reason
+
+
+def test_wall_budget_exhaustion_before_first_candidate(tmp_path: Path) -> None:
+    request = _fixture_request(wall_timeout_s=1e-9)
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "wall_timeout" in result.reason
+
+
+def test_per_execution_timeout_cancels(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    def _timed_out(_job: Any, _timeout_s: float, **_kwargs: Any) -> dict[str, Any]:
+        return {"outcome": "timeout", "error": "child exceeded 120s and was terminated"}
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", _timed_out)
+    request = _fixture_request(max_candidates=1, max_executions=2)
+    result = run(request, base=tmp_path)
+    assert result.status == "cancelled"
+    assert "per_execution_timeout" in result.reason
+    assert result.artifacts == ()
+
+
+def test_resume_ledger_error_branches(tmp_path: Path) -> None:
+    out = tmp_path / "srev-22-smoke"
+    out.mkdir()
+    (out / "attempt-ledger.json").write_text("not json", encoding="utf-8")
+    payload = _fixture_json("request.json")
+    payload["config"] = _fixture_json("config.json")
+    result = run(component_request_from_dict(copy.deepcopy(payload)), base=tmp_path, resume=True)
+    assert result.status == "failed" and "ledger" in result.reason
+    (out / "attempt-ledger.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "attempt-ledger.v1",
+                "request_id": "other",
+                "attempts": [],
+                "executions_consumed": 0,
+                "wall_elapsed_s": 0.0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = run(component_request_from_dict(copy.deepcopy(payload)), base=tmp_path, resume=True)
+    assert result.status == "failed" and "mismatch" in result.reason
+
+
+def test_resume_continues_after_partial(tmp_path: Path) -> None:
+    first = _fixture_request(max_executions=2)
+    partial = run(first, base=tmp_path)
+    assert partial.status == "partial"
+    resumed = _fixture_request(max_executions=6)
+    result = run(resumed, base=tmp_path, resume=True)
+    assert result.status == "complete"
+    ledger = json.loads(
+        (tmp_path / "srev-22-smoke" / "attempt-ledger.json").read_text(encoding="utf-8")
+    )
+    assert ledger["executions_consumed"] == 4
+
+
+def test_control_fidelity_predicate() -> None:
+    from robot_sf.analysis_workbench.review_execute import _Executor
+
+    payload = _fixture_json("request.json")
+    payload["config"] = _fixture_json("config.json")
+    request = component_request_from_dict(payload)
+    from robot_sf.analysis_workbench.review_execute import validate_execute_config
+
+    config = validate_execute_config(request.config)
+    executor = _Executor(request=request, config=config, recipe={}, output_dir=Path("."))
+    ok, _ = executor._control_fidelity_ok({"ped_displacement_m": 1.0, "robot_displacement_m": 1.0})
+    assert ok is True
+    ok, reason = executor._control_fidelity_ok(
+        {"ped_displacement_m": 0.0, "robot_displacement_m": 1.0}
+    )
+    assert ok is False and "pedestrian" in reason
+
+
+def test_specs_match_except_predicate() -> None:
+    from robot_sf.analysis_workbench.review_execute import _specs_match_except
+
+    assert _specs_match_except({"a": 1, "b": 2}, {"a": 1, "b": 3}, "b") is True
+    assert _specs_match_except({"a": 1}, {"a": 1, "b": 3}, "b") is False
+    assert _specs_match_except({"a": 1, "b": 2}, {"a": 9, "b": 3}, "b") is False
+
+
+def test_cli_rejects_invalid_config_without_execution(tmp_path: Path, capsys: Any) -> None:
+    from robot_sf.analysis_workbench.review_execute import ReviewExecuteError, main
+
+    request_path = tmp_path / "request.json"
+    config_path = tmp_path / "config.json"
+    request_path.write_text(json.dumps(_fixture_json("request.json")), encoding="utf-8")
+    bad_config = _fixture_json("config.json")
+    bad_config["unknown_key"] = True
+    config_path.write_text(json.dumps(bad_config), encoding="utf-8")
+    code = main(
+        [
+            "--input",
+            str(request_path),
+            "--config",
+            str(config_path),
+            "--output",
+            "out",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    assert code == 1
+    with pytest.raises(ReviewExecuteError, match="cannot read request"):
+        main(
+            ["--input", str(tmp_path / "missing.json"), "--output", "out", "--base", str(tmp_path)]
+        )

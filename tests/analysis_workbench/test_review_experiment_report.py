@@ -694,11 +694,142 @@ def test_cli_invalid_source_uri_emits_failed_component_result(
     assert captured.err == ""
     assert printed["schema_version"] == COMPONENT_RESULT_SCHEMA_VERSION
     result = component_result_from_dict(printed)
+    assert result.request_id == "invalid-uri-cli-request"
+    assert result.component_id == COMPONENT_ID
     assert result.status == "failed"
     assert result.reason.startswith("invalid_input:")
     assert "/sources/0/uri" in result.reason
     assert result.artifacts == ()
     assert not (tmp_path / "cli-output").exists()
+
+
+@pytest.mark.parametrize(
+    ("artifact_id", "expected_reason"),
+    [
+        ("bad\x00id", "invalid_input: /sources/0/artifact_id contains an embedded NUL byte"),
+        ("bad\ud800", "invalid_input: /sources/0/artifact_id contains invalid Unicode text"),
+    ],
+)
+def test_cli_invalid_source_identity_emits_failed_component_result(
+    tmp_path: Path,
+    capsys: CaptureResult[str],
+    artifact_id: str,
+    expected_reason: str,
+) -> None:
+    """Unsafe source identity text cannot be retained in a successful report."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "component-request.v1",
+                "request_id": "invalid-source-identity-request",
+                "component_id": COMPONENT_ID,
+                "sources": [
+                    {
+                        "artifact_id": artifact_id,
+                        "uri": "results.json",
+                        "format": EXPERIMENT_RESULTS_SCHEMA_VERSION,
+                    }
+                ],
+                "config": {},
+                "output_directory": "ignored-by-cli",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--input",
+            str(request_path),
+            "--output",
+            "cli-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    result = component_result_from_dict(json.loads(captured.out))
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert result.request_id == "invalid-source-identity-request"
+    assert result.component_id == COMPONENT_ID
+    assert result.status == "failed"
+    assert result.reason == expected_reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "cli-output").exists()
+
+
+@pytest.mark.parametrize("output_directory", ["bad\x00output", "bad\ud800output"])
+def test_cli_invalid_output_path_emits_failed_component_result(
+    tmp_path: Path, capsys: CaptureResult[str], output_directory: str
+) -> None:
+    """Unsafe CLI output paths are translated into failed result envelopes."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "component-request.v1",
+                "request_id": "invalid-output-path-request",
+                "component_id": COMPONENT_ID,
+                "sources": [
+                    {
+                        "artifact_id": "recorded-results",
+                        "uri": "results.json",
+                        "format": EXPERIMENT_RESULTS_SCHEMA_VERSION,
+                    }
+                ],
+                "config": {},
+                "output_directory": "ignored-by-cli",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--input",
+            str(request_path),
+            "--output",
+            output_directory,
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    result = component_result_from_dict(json.loads(captured.out))
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert result.request_id == "invalid-output-path-request"
+    assert result.component_id == COMPONENT_ID
+    assert result.status == "failed"
+    assert result.reason.startswith("invalid_input: /output_directory")
+    assert result.artifacts == ()
+
+
+def test_path_resolution_errors_emit_failed_component_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unexpected resolver failures stay inside the component result boundary."""
+    original_resolve = Path.resolve
+
+    def fail_for_source(path: Path, *args: Any, **kwargs: Any) -> Path:
+        if path.name == "results.json":
+            raise ValueError("synthetic unsafe path error")
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", fail_for_source)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.request_id == "test-request"
+    assert result.component_id == COMPONENT_ID
+    assert result.reason == "invalid_input: /sources/0/uri cannot be resolved safely"
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
 
 
 def test_run_accepts_relocated_output_without_changing_report_content(tmp_path: Path) -> None:

@@ -105,8 +105,8 @@ def _result(
     provenance: Mapping[str, Any] | None = None,
 ) -> ComponentResult:
     return ComponentResult(
-        request_id=request.request_id,
-        component_id=request.component_id,
+        request_id=_safe_request_identity(request.request_id, fallback="unknown"),
+        component_id=_safe_request_identity(request.component_id, fallback=COMPONENT_ID),
         status=status,
         artifacts=artifacts,
         reason=reason,
@@ -155,6 +155,51 @@ def _validate_unicode_string(value: str, *, path: str) -> None:
             )
         else:
             index += 1
+
+
+def _validate_request_text(value: Any, *, path: str) -> None:
+    """Reject unsafe request text before it reaches output or filesystem APIs."""
+
+    if not isinstance(value, str) or not value:
+        raise ExperimentReportError("invalid_input", f"{path} must be a non-empty string")
+    if "\x00" in value:
+        raise ExperimentReportError("invalid_input", f"{path} contains an embedded NUL byte")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ExperimentReportError(
+            "invalid_input", f"{path} contains invalid Unicode text"
+        ) from None
+
+
+def _safe_request_identity(value: Any, *, fallback: str) -> str:
+    """Keep failure envelopes serializable when a request identity is malformed.
+
+    Returns:
+        The original value when it is safe to retain, otherwise ``fallback``.
+    """
+
+    if not isinstance(value, str) or not value or "\x00" in value:
+        return fallback
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return fallback
+    return value
+
+
+def _validate_request(request: ComponentRequest) -> None:
+    """Validate every request string retained by the report or its failure envelope."""
+
+    _validate_request_text(request.request_id, path="/request_id")
+    _validate_request_text(request.component_id, path="/component_id")
+    _validate_request_text(request.output_directory, path="/output_directory")
+    for index, source_ref in enumerate(request.sources):
+        _validate_request_text(source_ref.artifact_id, path=f"/sources/{index}/artifact_id")
+        _validate_request_text(source_ref.uri, path=f"/sources/{index}/uri")
+        _validate_request_text(source_ref.format, path=f"/sources/{index}/format")
+    for index, capability in enumerate(request.required_capabilities):
+        _validate_request_text(capability, path=f"/required_capabilities/{index}")
 
 
 def _validate_strict_json(value: Any, *, path: str = "/source", depth: int = 0) -> None:
@@ -673,15 +718,11 @@ def _render_html(report: Mapping[str, Any]) -> str:
 
 
 def _resolve_inside(root: Path, value: str, *, path: str) -> Path:
-    if "\x00" in value:
-        raise ExperimentReportError("invalid_input", f"{path} contains an embedded NUL byte")
+    _validate_request_text(value, path=path)
     try:
-        value.encode("utf-8")
-    except UnicodeEncodeError:
-        raise ExperimentReportError(
-            "invalid_input", f"{path} contains invalid Unicode text"
-        ) from None
-    candidate = (root / value).resolve()
+        candidate = (root / value).resolve()
+    except (OSError, RuntimeError, UnicodeError, ValueError):
+        raise ExperimentReportError("invalid_input", f"{path} cannot be resolved safely") from None
     try:
         candidate.relative_to(root)
     except ValueError as error:
@@ -801,6 +842,11 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         with no artifacts when the request cannot be supported safely.
     """
 
+    try:
+        _validate_request(request)
+    except ExperimentReportError as error:
+        return _result(request, "failed", reason=str(error))
+
     if request.component_id != COMPONENT_ID:
         return _result(
             request,
@@ -814,7 +860,10 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             "unavailable",
             reason=f"missing_capability: {', '.join(missing)}",
         )
-    root = (base if base is not None else Path.cwd()).resolve()
+    try:
+        root = (base if base is not None else Path.cwd()).resolve()
+    except (OSError, RuntimeError, UnicodeError, ValueError):
+        return _result(request, "failed", reason="invalid_input: base cannot be resolved safely")
     try:
         output_dir = _resolve_output_directory(root, request)
         metric_order, report_title = _validate_config(request.config)
@@ -897,8 +946,8 @@ def _cli_identity(payload: Any) -> tuple[str, str]:
     request_id = payload.get("request_id")
     component_id = payload.get("component_id")
     return (
-        request_id if isinstance(request_id, str) and request_id else "unknown",
-        component_id if isinstance(component_id, str) and component_id else COMPONENT_ID,
+        _safe_request_identity(request_id, fallback="unknown"),
+        _safe_request_identity(component_id, fallback=COMPONENT_ID),
     )
 
 

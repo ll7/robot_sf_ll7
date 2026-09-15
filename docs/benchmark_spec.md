@@ -408,6 +408,11 @@ path as `compute_aggregates`. Canonical aliases and derived IDs are resolved per
 provenance reader; no fields are added to serialized aggregate output. Metric IDs must be exact
 keys from `robot_sf.benchmark.metric_layers.CANONICAL_METRICS`. Use `resolve_metric_source_binding`
 to retrieve their canonical episode field paths, owner, reduction, direction, and source kind.
+For derived metrics, those paths enumerate every canonical input consulted by the resolver; the
+per-episode selected source identifies the decisive input (collision before timeout before route
+completion for `failure_to_progress_rate`). The resolver validates the route-completion flag before
+applying collision or timeout exclusions, so malformed or non-finite outcomes remain unavailable
+instead of being inferred from partial metadata.
 Unit or source-channel metadata that the registry does not own remains explicitly `unavailable` or
 `unsupported`; display-name matching and inferred aliases fail closed.
 When bootstrap sampling is enabled, aggregate output also includes an additive

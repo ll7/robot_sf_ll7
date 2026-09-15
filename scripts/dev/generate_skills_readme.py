@@ -126,7 +126,7 @@ def render_readme(registry: dict[str, Any]) -> str:
         "- `gh-issue-autopilot`, `issue-to-pr`, and `gh-issue-to-pr` are compatibility aliases for",
         "  `goal-issue-implementation` selected-issue mode; the canonical skill owns issue -> branch ->",
         "  validation -> ready PR.",
-        "- `gh-pr-merger` promotes `merge-if-ci-green` after hosted checks pass, then owns guarded merge after `goal-pr-review` has established exact-head review proof.",
+        "- `gh-pr-merger` promotes merge-if-ci-green after hosted checks pass, then owns guarded merge after `goal-pr-review` has established exact-head review proof.",
         "- `gh-issue-creator` owns new issue creation.",
         "- `issue-contract-maintainer` owns ambiguity, template, and decision repair.",
         "- Use Project #5 `Priority Score` as an advisory queue-ordering signal; use",

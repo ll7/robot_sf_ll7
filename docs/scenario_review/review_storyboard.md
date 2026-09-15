@@ -27,6 +27,10 @@ owner report envelope (`roots`, `weights`, `episodes`, and
 and composite scores in the inclusive range `[0, 1]`. Rows marked with a
 fallback, degraded, unavailable, failed, or equivalent non-admissible
 execution status are rejected before canonical provenance is advertised.
+Each declared `composite_score` is recomputed from the owner-native feature
+values and report weights using the positive-weighted normalized formula; the
+declared value must match within an absolute tolerance of `1e-9` (no relative
+tolerance), or the canonical score input remains unavailable.
 Comparison-pair endpoints must be episode IDs from the review bundle; a valid
 top-N report may omit known bundle episodes from its scored rows. A lookalike,
 foreign, duplicate, unknown-endpoint, or out-of-range report is rejected as

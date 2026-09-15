@@ -68,6 +68,9 @@ MISSING_CAPABILITY_SCHEMA_VERSION = "missing-capability-report.v1"
 EXEMPLAR_SCORES_SCHEMA_VERSION = "srev07-exemplar-scores.v1"
 CANONICAL_SCORE_ADAPTER_VERSION = "trace-exemplar-interest.report-adapter.v1"
 CANONICAL_SCORE_FEATURES = frozenset(TRACE_EXEMPLAR_INTEREST_DEFAULT_WEIGHTS)
+# JSON round-tripping may introduce a few ulps; no larger score discrepancy is
+# accepted when checking the owner-native composite against its feature rows.
+CANONICAL_SCORE_TOLERANCE = 1e-9
 CANONICAL_SCORE_REPORT_FIELDS = frozenset({"roots", "weights", "episodes", "comparison_pairs"})
 CANONICAL_SCORE_EPISODE_FIELDS = frozenset(
     {
@@ -299,6 +302,19 @@ def _safe_relative_parts(path_value: str) -> tuple[str, ...] | None:
         return parts or None
     except (OSError, RuntimeError, TypeError, ValueError):
         return None
+
+
+def _safe_artifact_id(value: str) -> bool:
+    """Return whether ``value`` matches the shared safe artifact-ID predicate."""
+    windows = PureWindowsPath(value)
+    return not (
+        value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or windows.is_absolute()
+        or bool(windows.drive)
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    )
 
 
 def _supports_dir_fd(*operation_names: str) -> bool:
@@ -1395,6 +1411,20 @@ def _canonical_non_admissible_status(status: Any) -> str | None:
     return None
 
 
+def _owner_native_composite_score(features: dict[str, Any], weights: dict[str, Any]) -> float:
+    """Recompute the trace-exemplar-interest positive-weighted composite score.
+
+    Returns:
+        The clamped normalized composite score.
+    """
+    weight_total = sum(max(0.0, float(value)) for value in weights.values())
+    raw_score = sum(
+        float(features[key]) * max(0.0, float(weights[key]))
+        for key in TRACE_EXEMPLAR_INTEREST_DEFAULT_WEIGHTS
+    )
+    return min(1.0, max(0.0, raw_score / weight_total))
+
+
 def _canonical_score_document_valid(  # noqa: C901, PLR0912, PLR0915
     scores_doc: dict[str, Any], known: set[str], diagnostics: list[str]
 ) -> bool:
@@ -1419,7 +1449,8 @@ def _canonical_score_document_valid(  # noqa: C901, PLR0912, PLR0915
     if not isinstance(roots, list) or any(not isinstance(root, str) or not root for root in roots):
         diagnostics.append("exemplar_scores_canonical_field_invalid:roots")
         valid = False
-    if not isinstance(weights, dict) or set(weights) != CANONICAL_SCORE_FEATURES:
+    weights_valid = isinstance(weights, dict) and set(weights) == CANONICAL_SCORE_FEATURES
+    if not weights_valid:
         diagnostics.append("exemplar_scores_canonical_field_invalid:weights")
         valid = False
     elif (
@@ -1428,6 +1459,7 @@ def _canonical_score_document_valid(  # noqa: C901, PLR0912, PLR0915
     ):
         diagnostics.append("exemplar_scores_canonical_field_invalid:weights")
         valid = False
+        weights_valid = False
     if not isinstance(episodes, list):
         diagnostics.append("exemplar_scores_canonical_field_invalid:episodes")
         return False
@@ -1467,7 +1499,8 @@ def _canonical_score_document_valid(  # noqa: C901, PLR0912, PLR0915
             diagnostics.append(f"exemplar_scores_canonical_row_malformed:{position}")
             valid = False
         features = entry["features"]
-        if not isinstance(features, dict) or set(features) != CANONICAL_SCORE_FEATURES:
+        features_valid = isinstance(features, dict) and set(features) == CANONICAL_SCORE_FEATURES
+        if not features_valid:
             diagnostics.append(f"exemplar_scores_canonical_features_malformed:{position}")
             valid = False
         elif any(
@@ -1476,10 +1509,21 @@ def _canonical_score_document_valid(  # noqa: C901, PLR0912, PLR0915
         ):
             diagnostics.append(f"exemplar_scores_canonical_features_out_of_range:{position}")
             valid = False
+            features_valid = False
         composite_score = _finite_number(entry["composite_score"])
         if composite_score is None or not 0.0 <= composite_score <= 1.0:
             diagnostics.append(f"score_out_of_range:{episode_id}")
             valid = False
+        elif weights_valid and features_valid:
+            expected_score = _owner_native_composite_score(features, weights)
+            if not math.isclose(
+                composite_score,
+                expected_score,
+                rel_tol=0.0,
+                abs_tol=CANONICAL_SCORE_TOLERANCE,
+            ):
+                diagnostics.append(f"exemplar_scores_canonical_composite_mismatch:{episode_id}")
+                valid = False
     if not isinstance(comparison_pairs, list):
         diagnostics.append("exemplar_scores_canonical_field_invalid:comparison_pairs")
         return False
@@ -1624,6 +1668,7 @@ def _request_shape_error(request: Any) -> str | None:  # noqa: C901
         not isinstance(capability, str) for capability in request.required_capabilities
     ):
         return "invalid_request: required_capabilities must be strings"
+    seen_artifact_ids: set[str] = set()
     for source in request.sources:
         if not isinstance(source, SourceRef):
             return "invalid_request: sources require SourceRef values"
@@ -1644,6 +1689,11 @@ def _request_shape_error(request: Any) -> str | None:  # noqa: C901
             return "invalid_request: source metadata must be strings"
         if not source.artifact_id or not source.uri or not source.format:
             return "invalid_request: sources require non-empty artifact_id, uri, and format"
+        if not _safe_artifact_id(source.artifact_id):
+            return f"invalid_request: unsafe artifact id for a filename: {source.artifact_id!r}"
+        if source.artifact_id in seen_artifact_ids:
+            return f"invalid_request: duplicate scoped artifact id: {source.artifact_id}"
+        seen_artifact_ids.add(source.artifact_id)
         if source.sha256 and _SHA256_RE.fullmatch(source.sha256) is None:
             return "invalid_request: source sha256 must be a 64-hex digest"
         if source.source_commit and _SHA40_RE.fullmatch(source.source_commit) is None:

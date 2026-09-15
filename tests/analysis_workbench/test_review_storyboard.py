@@ -425,6 +425,39 @@ def test_direct_api_source_metadata_is_validated(
     assert not (tmp_path / "out").exists()
 
 
+@pytest.mark.parametrize("artifact_id", ["../unsafe-id", r"nested\unsafe-id"])
+def test_direct_api_source_artifact_ids_match_shared_semantics(
+    tmp_path: Path, artifact_id: str
+) -> None:
+    """Typed API source IDs reject path-like values before filesystem access."""
+    source = SourceRef(artifact_id=artifact_id, uri="bundle.json", format="review-bundle")
+    request = ComponentRequest(
+        request_id="api-source-artifact-id",
+        component_id=COMPONENT_ID,
+        sources=(source,),
+        output_directory="out",
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert result.reason == f"invalid_request: unsafe artifact id for a filename: {artifact_id!r}"
+    assert not (tmp_path / "out").exists()
+
+
+def test_direct_api_duplicate_source_artifact_ids_are_rejected(tmp_path: Path) -> None:
+    """Typed API requests reject duplicate source IDs in the shared scope."""
+    source = SourceRef(artifact_id="bundle", uri="bundle.json", format="review-bundle")
+    request = ComponentRequest(
+        request_id="api-duplicate-artifact-id",
+        component_id=COMPONENT_ID,
+        sources=(source, source),
+        output_directory="out",
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert result.reason == "invalid_request: duplicate scoped artifact id: bundle"
+    assert not (tmp_path / "out").exists()
+
+
 def test_missing_required_capability_is_unavailable(tmp_path: Path) -> None:
     _stage(tmp_path)
     result = run(_request(required=("rvo2-binary",), base_path=tmp_path), base=tmp_path)
@@ -759,6 +792,33 @@ def test_canonical_exemplar_interest_shape_uses_explicit_adapter(tmp_path: Path)
         "ep-2",
         "ep-1",
     ]
+
+
+def test_canonical_composite_score_mismatch_is_unavailable(tmp_path: Path) -> None:
+    """Producer-shaped rows must agree with their owner-native features and weights."""
+    _stage(tmp_path)
+    canonical = _canonical_report(
+        [_canonical_episode("ep-1", 0.9), _canonical_episode("ep-2", 0.1)]
+    )
+    canonical["episodes"][0]["composite_score"] = 0.1
+    _write_json(tmp_path / "inconsistent-canonical-scores.json", canonical)
+    sources = [
+        {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
+        {
+            "artifact_id": "scores",
+            "uri": "inconsistent-canonical-scores.json",
+            "format": "exemplar-scores",
+        },
+    ]
+    result = run(
+        _request(required=("exemplar-scores",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "exemplar_scores_canonical_composite_mismatch:ep-1" in result.reason
+    assert result.provenance["score_input_format"] == "unavailable"
+    assert result.provenance["score_adapter_version"] == ""
+    assert all(item["score"] is None for item in _spec(tmp_path)["annotations"][0]["ranking"])
 
 
 @pytest.mark.parametrize(

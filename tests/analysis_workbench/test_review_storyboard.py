@@ -18,6 +18,7 @@ import pytest
 from robot_sf.analysis_workbench import review_storyboard as storyboard
 from robot_sf.analysis_workbench.review_contracts import (
     ComponentRequest,
+    SourceRef,
     component_descriptor_from_dict,
     component_request_from_dict,
     component_result_from_dict,
@@ -75,7 +76,53 @@ SCORES = {
     "scores": {"ep-1": 0.5, "ep-2": 0.5},
 }
 
-EVENTS = {"intervals": [{"interval_id": "ev-1", "start_s": 0.0, "end_s": 0.5}]}
+EVENTS = {
+    "intervals": [{"episode_id": "ep-1", "interval_id": "ev-1", "start_s": 0.0, "end_s": 0.5}]
+}
+
+CANONICAL_FEATURES = (
+    "min_dist_severity",
+    "collapse_rate",
+    "time_below_2p5m",
+    "outcome_salience",
+    "speed_modulation",
+    "heading_activity",
+    "detour_ratio",
+    "frozen_robot",
+)
+
+
+def _canonical_episode(episode_id: str, score: float) -> dict[str, Any]:
+    """Build a complete owner-native score row for adapter tests."""
+    return {
+        "episode_dir": f"diagnostic-fixture/{episode_id}",
+        "episode_id": episode_id,
+        "episode_status": "failure",
+        "planner": "fixture-planner",
+        "scenario_id": "fixture-scenario",
+        "seed": 1,
+        "features": dict.fromkeys(CANONICAL_FEATURES, score),
+        "composite_score": score,
+    }
+
+
+def _canonical_report(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build the complete trace-exemplar-interest report envelope."""
+    return {
+        "roots": ["diagnostic-fixture"],
+        "weights": {
+            "min_dist_severity": 0.20,
+            "collapse_rate": 0.15,
+            "time_below_2p5m": 0.10,
+            "outcome_salience": 0.20,
+            "speed_modulation": 0.05,
+            "heading_activity": 0.05,
+            "detour_ratio": 0.10,
+            "frozen_robot": 0.15,
+        },
+        "episodes": entries,
+        "comparison_pairs": [],
+    }
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -331,6 +378,36 @@ def test_invalid_direct_api_request_returns_stable_failure(tmp_path: Path) -> No
     result = run(request, base=tmp_path)
     assert result.status == "failed"
     assert result.reason == "invalid_request: config must be an object"
+
+
+@pytest.mark.parametrize(
+    ("metadata_field", "metadata_value", "expected_reason"),
+    [
+        ("source_commit", "not-a-commit", "source_commit must be a 40-hex commit SHA"),
+        ("config_identity", 17, "source metadata must be strings"),
+    ],
+)
+def test_direct_api_source_metadata_is_validated(
+    tmp_path: Path, metadata_field: str, metadata_value: Any, expected_reason: str
+) -> None:
+    """Typed API requests must enforce the same source metadata shape as JSON requests."""
+    metadata = {metadata_field: metadata_value}
+    source = SourceRef(
+        artifact_id="bundle",
+        uri="bundle.json",
+        format="review-bundle",
+        **metadata,
+    )
+    request = ComponentRequest(
+        request_id="api-source-metadata",
+        component_id=COMPONENT_ID,
+        sources=(source,),
+        output_directory="out",
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert result.reason == f"invalid_request: {expected_reason}"
+    assert not (tmp_path / "out").exists()
 
 
 def test_missing_required_capability_is_unavailable(tmp_path: Path) -> None:
@@ -601,15 +678,9 @@ def test_required_scores_are_reported_missing_without_zero_fallback(tmp_path: Pa
 
 def test_canonical_exemplar_interest_shape_uses_explicit_adapter(tmp_path: Path) -> None:
     _stage(tmp_path)
-    canonical = {
-        "roots": ["diagnostic-fixture"],
-        "weights": {},
-        "episodes": [
-            {"episode_id": "ep-1", "composite_score": 0.1},
-            {"episode_id": "ep-2", "composite_score": 0.9},
-        ],
-        "comparison_pairs": [],
-    }
+    canonical = _canonical_report(
+        [_canonical_episode("ep-1", 0.1), _canonical_episode("ep-2", 0.9)]
+    )
     _write_json(tmp_path / "canonical-scores.json", canonical)
     sources = [
         {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
@@ -632,6 +703,56 @@ def test_canonical_exemplar_interest_shape_uses_explicit_adapter(tmp_path: Path)
     ]
 
 
+def test_canonical_score_lookalike_is_not_advertised_as_adapter(tmp_path: Path) -> None:
+    """A bare episodes list must not receive canonical-adapter provenance."""
+    _stage(tmp_path)
+    _write_json(
+        tmp_path / "lookalike-scores.json",
+        {"episodes": [{"episode_id": "ep-1", "composite_score": 0.9}]},
+    )
+    sources = [
+        {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
+        {
+            "artifact_id": "scores",
+            "uri": "lookalike-scores.json",
+            "format": "exemplar-scores",
+        },
+    ]
+    result = run(
+        _request(required=("exemplar-scores",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "exemplar_scores_canonical_shape_mismatch" in result.reason
+    assert result.provenance["score_adapter_version"] == ""
+    assert all(item["score"] is None for item in _spec(tmp_path)["annotations"][0]["ranking"])
+
+
+def test_canonical_score_out_of_range_is_rejected(tmp_path: Path) -> None:
+    """Owner-native composite scores outside their normalized range stay unavailable."""
+    _stage(tmp_path)
+    _write_json(
+        tmp_path / "out-of-range-scores.json",
+        _canonical_report([_canonical_episode("ep-1", 2.0), _canonical_episode("ep-2", 0.2)]),
+    )
+    sources = [
+        {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
+        {
+            "artifact_id": "scores",
+            "uri": "out-of-range-scores.json",
+            "format": "exemplar-scores",
+        },
+    ]
+    result = run(
+        _request(required=("exemplar-scores",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "score_out_of_range:ep-1" in result.reason
+    assert result.provenance["score_adapter_version"] == ""
+    assert all(item["score"] is None for item in _spec(tmp_path)["annotations"][0]["ranking"])
+
+
 def test_unversioned_score_map_is_not_silently_defaulted(tmp_path: Path) -> None:
     _stage(tmp_path)
     _write_json(tmp_path / "legacy-scores.json", {"scores": {"ep-1": 0.9, "ep-2": 0.1}})
@@ -650,13 +771,13 @@ def test_unversioned_score_map_is_not_silently_defaulted(tmp_path: Path) -> None
 
 def test_duplicate_canonical_score_ids_are_partial(tmp_path: Path) -> None:
     _stage(tmp_path)
-    canonical = {
-        "episodes": [
-            {"episode_id": "ep-1", "composite_score": 0.9},
-            {"episode_id": "ep-1", "composite_score": 0.9},
-            {"episode_id": "ep-2", "composite_score": 0.1},
+    canonical = _canonical_report(
+        [
+            _canonical_episode("ep-1", 0.9),
+            _canonical_episode("ep-1", 0.9),
+            _canonical_episode("ep-2", 0.1),
         ]
-    }
+    )
     _write_json(tmp_path / "duplicate-scores.json", canonical)
     sources = [
         {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
@@ -712,6 +833,42 @@ def test_interval_limit_is_partial(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert "event_index_limit_exceeded:intervals" in result.reason
 
 
+def test_nested_reference_count_budget_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nested bundle verification rejects an aggregate reference fan-out."""
+    monkeypatch.setattr(storyboard, "MAX_TOTAL_BUNDLE_REFERENCES", 1)
+    _stage(tmp_path)
+    result = run(_request(base_path=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "bundle_limit_exceeded:references_total" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_nested_reference_read_budget_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nested bundle verification stops before exceeding its aggregate read cap."""
+    monkeypatch.setattr(storyboard, "MAX_TOTAL_BUNDLE_READS", 1)
+    _stage(tmp_path)
+    result = run(_request(base_path=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "bundle_limit_exceeded:reference_reads_total" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_nested_reference_byte_budget_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nested bundle verification rejects a source exceeding the aggregate byte cap."""
+    monkeypatch.setattr(storyboard, "MAX_TOTAL_BUNDLE_BYTES", 1)
+    _stage(tmp_path)
+    result = run(_request(base_path=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "bundle_limit_exceeded:reference_bytes_total" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
 def test_malformed_event_identity_is_partial_without_api_exception(tmp_path: Path) -> None:
     _stage(tmp_path)
     _write_json(
@@ -727,7 +884,7 @@ def test_malformed_event_identity_is_partial_without_api_exception(tmp_path: Pat
         base=tmp_path,
     )
     assert result.status == "partial"
-    assert "event_row_0_malformed" in result.reason
+    assert "event_row_0_episode_scope_missing" in result.reason
 
 
 def test_output_write_failure_cleans_partial_directory(
@@ -778,5 +935,115 @@ def test_event_interval_identity_is_preserved_in_annotation(tmp_path: Path) -> N
         {"start_s": 0.0, "end_s": 0.5, "include_terminal_frame": False}
     ]
     assert spec["annotations"][0]["event_intervals"] == [
-        {"start_s": 0.0, "end_s": 0.5, "source_row": 0, "interval_id": "ev-1"}
+        {
+            "episode_id": "ep-1",
+            "start_s": 0.0,
+            "end_s": 0.5,
+            "source_row": 0,
+            "interval_id": "ev-1",
+        }
     ]
+
+
+def test_duplicate_event_ids_are_partial_and_not_ambiguous(tmp_path: Path) -> None:
+    """Duplicate event IDs within an episode are excluded and reported."""
+    _stage(tmp_path)
+    _write_json(
+        tmp_path / "duplicate-events.json",
+        {
+            "intervals": [
+                {
+                    "episode_id": "ep-1",
+                    "interval_id": "ev-1",
+                    "event_id": "same-event",
+                    "start_s": 0.0,
+                    "end_s": 0.5,
+                },
+                {
+                    "episode_id": "ep-1",
+                    "interval_id": "ev-2",
+                    "event_id": "same-event",
+                    "start_s": 0.5,
+                    "end_s": 1.0,
+                },
+            ]
+        },
+    )
+    sources = _source_list_with_events()
+    sources[-1]["uri"] = "duplicate-events.json"
+    result = run(
+        _request(required=("event-index",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "duplicate_event_id:ep-1:same-event" in result.reason
+    assert _spec(tmp_path)["annotations"][0]["event_intervals"] == [
+        {
+            "episode_id": "ep-1",
+            "interval_id": "ev-1",
+            "event_id": "same-event",
+            "start_s": 0.0,
+            "end_s": 0.5,
+            "source_row": 0,
+        }
+    ]
+
+
+def test_same_event_id_is_scoped_per_episode_in_emitted_spec(tmp_path: Path) -> None:
+    """Equal source event IDs remain distinct when their episode scopes differ."""
+    _stage(tmp_path)
+    _write_json(
+        tmp_path / "scoped-events.json",
+        {
+            "intervals": [
+                {
+                    "episode_id": "ep-1",
+                    "interval_id": "ev-1",
+                    "event_id": "same-event",
+                    "start_s": 0.0,
+                    "end_s": 0.5,
+                },
+                {
+                    "episode_id": "ep-2",
+                    "interval_id": "ev-1",
+                    "event_id": "same-event",
+                    "start_s": 0.5,
+                    "end_s": 1.0,
+                },
+            ]
+        },
+    )
+    sources = _source_list_with_events()
+    sources[-1]["uri"] = "scoped-events.json"
+    result = run(
+        _request(required=("event-index",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "complete"
+    intervals = _spec(tmp_path)["annotations"][0]["event_intervals"]
+    assert [(item["episode_id"], item["event_id"]) for item in intervals] == [
+        ("ep-1", "same-event"),
+        ("ep-2", "same-event"),
+    ]
+
+
+def test_unscoped_event_identity_is_partial(tmp_path: Path) -> None:
+    """An identified event without an episode scope cannot be emitted as complete."""
+    _stage(tmp_path)
+    _write_json(
+        tmp_path / "unscoped-events.json",
+        {
+            "intervals": [
+                {"interval_id": "ev-1", "event_id": "event-1", "start_s": 0.0, "end_s": 0.5}
+            ]
+        },
+    )
+    sources = _source_list_with_events()
+    sources[-1]["uri"] = "unscoped-events.json"
+    result = run(
+        _request(required=("event-index",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "event_row_0_episode_scope_missing" in result.reason
+    assert _spec(tmp_path)["annotations"][0]["event_intervals"] == []

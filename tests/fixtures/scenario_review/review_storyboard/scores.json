@@ -2,18 +2,72 @@
   "roots": [
     "diagnostic-fixture"
   ],
-  "weights": {},
+  "weights": {
+    "min_dist_severity": 0.2,
+    "collapse_rate": 0.15,
+    "time_below_2p5m": 0.1,
+    "outcome_salience": 0.2,
+    "speed_modulation": 0.05,
+    "heading_activity": 0.05,
+    "detour_ratio": 0.1,
+    "frozen_robot": 0.15
+  },
   "episodes": [
     {
+      "episode_dir": "diagnostic-fixture/ep-1",
       "episode_id": "ep-1",
+      "episode_status": "failure",
+      "planner": "fixture-planner",
+      "scenario_id": "fixture-scenario",
+      "seed": 1,
+      "features": {
+        "min_dist_severity": 0.9,
+        "collapse_rate": 0.9,
+        "time_below_2p5m": 0.9,
+        "outcome_salience": 0.9,
+        "speed_modulation": 0.9,
+        "heading_activity": 0.9,
+        "detour_ratio": 0.9,
+        "frozen_robot": 0.9
+      },
       "composite_score": 0.9
     },
     {
+      "episode_dir": "diagnostic-fixture/ep-2",
       "episode_id": "ep-2",
+      "episode_status": "failure",
+      "planner": "fixture-planner",
+      "scenario_id": "fixture-scenario",
+      "seed": 1,
+      "features": {
+        "min_dist_severity": 0.9,
+        "collapse_rate": 0.9,
+        "time_below_2p5m": 0.9,
+        "outcome_salience": 0.9,
+        "speed_modulation": 0.9,
+        "heading_activity": 0.9,
+        "detour_ratio": 0.9,
+        "frozen_robot": 0.9
+      },
       "composite_score": 0.9
     },
     {
+      "episode_dir": "diagnostic-fixture/ep-3",
       "episode_id": "ep-3",
+      "episode_status": "success",
+      "planner": "fixture-planner",
+      "scenario_id": "fixture-scenario",
+      "seed": 1,
+      "features": {
+        "min_dist_severity": 0.2,
+        "collapse_rate": 0.2,
+        "time_below_2p5m": 0.2,
+        "outcome_salience": 0.2,
+        "speed_modulation": 0.2,
+        "heading_activity": 0.2,
+        "detour_ratio": 0.2,
+        "frozen_robot": 0.2
+      },
       "composite_score": 0.2
     }
   ],

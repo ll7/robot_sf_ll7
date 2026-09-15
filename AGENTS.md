@@ -97,6 +97,14 @@ matrix is owned by `docs/code_review.md`; benchmark governance by `docs/benchmar
 
 ## Delivery And Communication
 
+After an exact-head pull request (PR) review is accepted, apply `merge-if-ci-green`
+when hosted continuous integration (CI) is the only remaining gate. The label
+records completed review while checks are pending; it does not authorize a
+merge. The guarded merger promotes that same head to `merge-ready` after green
+required checks, then runs the existing merge preflight. CI completion alone
+does not start another review cycle. A moved head, substantive finding, or
+removed readiness label requires normal triage.
+
 Use conventional commits. A PR states intent, linked issues, validation commands, artifact
 disposition, and downstream propagation; because merges squash, reconcile the final title and body
 with `uv run python scripts/dev/gh_pr_body_rest.py` and pass Markdown-heavy comments through

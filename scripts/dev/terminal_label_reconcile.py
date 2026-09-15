@@ -58,6 +58,7 @@ ACTIVE_LABELS = frozenset(
         "agent",
         "agent-ready",
         "merge-ready",
+        "merge-if-ci-green",
         "state:ready",
         "state:running",
         "state:working",
@@ -243,10 +244,11 @@ def _apply_label_change(
         if label not in current["labels"]:
             applied["remove"].append({"label": label, "skipped": True})
             return None
-        if label == "merge-ready":
+        if label in {"merge-ready", "merge-if-ci-green"}:
             return _apply_merge_ready_removal(
                 number,
                 repo=repo,
+                label=label,
                 is_pull_request=bool(current.get("is_pull_request")),
                 applied=applied,
             )
@@ -487,6 +489,7 @@ def _apply_merge_ready_removal(
     number: int,
     *,
     repo: str,
+    label: str = "merge-ready",
     is_pull_request: bool,
     applied: dict[str, Any],
 ) -> None:
@@ -498,38 +501,38 @@ def _apply_merge_ready_removal(
     is recorded without mutating labels.
     """
     if not is_pull_request:
-        result = remove_label(number, "merge-ready", repo=repo)
+        result = remove_label(number, label, repo=repo)
         if result.get("status") != "ok":
-            applied["failures"].append({"label": "merge-ready", "error": result.get("error")})
+            applied["failures"].append({"label": label, "error": result.get("error")})
             return None
-        applied["remove"].append({"label": "merge-ready", "skipped": False})
+        applied["remove"].append({"label": label, "skipped": False})
         return None
     identity = fetch_pr_merge_identity(number, repo=repo)
     if not identity["ok"]:
-        applied["failures"].append({"label": "merge-ready", "error": identity["error"]})
+        applied["failures"].append({"label": label, "error": identity["error"]})
         return None
     if identity["state"] != "closed":
         applied["failures"].append(
             {
-                "label": "merge-ready",
+                "label": label,
                 "error": (f"PR no longer closed (state={identity['state']}); removal aborted"),
             }
         )
         return None
     result = remove_label(
         number,
-        "merge-ready",
+        label,
         repo=repo,
         target="pr",
         expected_head_sha=identity["head_sha"],
         expected_base_sha=identity["base_sha"],
     )
     if result.get("status") != "ok":
-        applied["failures"].append({"label": "merge-ready", "error": result.get("error")})
+        applied["failures"].append({"label": label, "error": result.get("error")})
         return None
     applied["remove"].append(
         {
-            "label": "merge-ready",
+            "label": label,
             "skipped": False,
             "target": "pr",
             "pr_head_sha": identity["head_sha"],

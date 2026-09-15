@@ -526,8 +526,8 @@ skills:
     output_schema: skill_run_summary.v1
     aliases: []
   gh-pr-merger:
-    description: Guarded PR merger; merges merge-ready PRs after verifying label, CI status, branch
-      protection, and preflight checks.
+    description: Guarded PR merger; promotes merge-if-ci-green after green CI and merges merge-ready PRs
+      after verifying branch protection and preflight checks.
     category: github-pr
     kind: atomic
     phase: verification
@@ -715,7 +715,7 @@ skills:
     aliases: []
   goal-pr-review:
     description: Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates
-      proof, resolves review threads, and applies merge-ready; not for merging.
+      proof, resolves review threads, and applies merge-ready or merge-if-ci-green; not for merging.
     category: github-pr
     kind: orchestrator
     phase: verification

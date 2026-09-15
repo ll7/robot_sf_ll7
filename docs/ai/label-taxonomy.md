@@ -49,6 +49,12 @@ resource, type, and evidence labels:
 
 ## Execution state
 
+For pull requests, `merge-if-ci-green` records an accepted review on the exact
+head while hosted continuous integration (CI) is pending. It is a conditional
+handoff, not merge permission. `merge-ready` is the merge admission label after
+green required checks and the guarded promotion. Both are active review labels
+and are cleared when the pull request is merged or closed.
+
 The core execution states recognized by the classifier are mutually exclusive.
 The classifier gives the more blocking state precedence when contradictory labels
 coexist:

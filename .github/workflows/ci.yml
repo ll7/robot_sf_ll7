@@ -17,13 +17,13 @@ permissions:
   contents: read
 
 concurrency:
-  # Latest-main-wins (issue #6399): cancelling in-progress runs in the
-  # per-ref group lets the final aggregate SHA of a merge burst be validated
-  # without queueing behind superseded intermediate runs. Because the group is
-  # per-ref, a new main push only cancels superseded main runs, and a new pull
-  # request push still only cancels its own superseded run.
+  # Pushes and pull-request updates retain latest-main-wins supersession. A
+  # workflow_dispatch is the monitor/recovery path: repeated same-head
+  # dispatches must not cancel the one decisive run already in progress
+  # (issue #9340). The watcher decides whether to dispatch; this expression
+  # prevents a duplicate dispatch from destroying its evidence.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 env:
   PYTHONUNBUFFERED: "1"

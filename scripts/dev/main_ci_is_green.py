@@ -352,6 +352,57 @@ def decide(runs: list[Any]) -> tuple[bool, dict[str, Any] | None]:
     return classify(run.get("conclusion")) == "green", run
 
 
+def dispatch_decision(
+    target_sha: str,
+    runs: Sequence[Mapping[str, Any]],
+    *,
+    retry_failed: bool = False,
+    retry_receipt_seen: bool = False,
+) -> dict[str, Any]:
+    """Choose an idempotent watcher action for one main commit.
+
+    A same-head queued or in-progress run is observed, never replaced. A
+    completed success is also observed. A completed failure may be retried at
+    most once when the caller explicitly supplies the retry intent and no
+    durable retry receipt exists. The function is deliberately side-effect
+    free so scheduled watchers can record the decision before dispatching.
+    """
+    target = target_sha.strip().lower()
+    if not target:
+        raise ValueError("target_sha must not be empty")
+    exact = [
+        run
+        for run in runs
+        if isinstance(run, Mapping) and str(run.get("headSha") or "").lower() == target
+    ]
+    active = [
+        run
+        for run in exact
+        if str(run.get("status") or "").lower() in {"queued", "in_progress", "requested"}
+    ]
+    if active:
+        return {"action": "observe", "reason": "same_head_run_active", "head_sha": target}
+    successful = [
+        run
+        for run in exact
+        if str(run.get("status") or "").lower() == "completed"
+        and classify(run.get("conclusion")) == "green"
+    ]
+    if successful:
+        return {"action": "observe", "reason": "same_head_success", "head_sha": target}
+    failed = [
+        run
+        for run in exact
+        if str(run.get("status") or "").lower() == "completed"
+        and classify(run.get("conclusion")) == "red"
+    ]
+    if failed and retry_failed and not retry_receipt_seen:
+        return {"action": "dispatch", "reason": "explicit_failed_retry", "head_sha": target}
+    if failed:
+        return {"action": "observe", "reason": "same_head_failure", "head_sha": target}
+    return {"action": "dispatch", "reason": "no_same_head_decisive_run", "head_sha": target}
+
+
 # The main-signal schema consumed by the red-main merge-hold gate (issue #5571).
 # ``status`` is one of green / red / stale, matching :func:`classify`; a stale
 # verdict (no decisive completed run in the window) still fails closed to not

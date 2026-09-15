@@ -1,0 +1,31 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev07-smoke",
+  "component_id": "srev07-review-storyboard",
+  "sources": [
+    {
+      "artifact_id": "bundle",
+      "uri": "tests/fixtures/scenario_review/review_storyboard/bundle.json",
+      "format": "review-bundle",
+      "sha256": "31a87a3db6eac81930f8aa7d8682fe38bfdfcd4b6f9ed6013c452c0c37c5583f"
+    },
+    {
+      "artifact_id": "scores",
+      "uri": "tests/fixtures/scenario_review/review_storyboard/scores.json",
+      "format": "exemplar-scores",
+      "sha256": "0c2d6503b4b25be7fdadc56e92faee5ea8820529cdcaa1a818fc3e72c8986712"
+    },
+    {
+      "artifact_id": "events",
+      "uri": "tests/fixtures/scenario_review/review_storyboard/events.json",
+      "format": "event-index",
+      "sha256": "4b24055f790a50eb74a08486074da060fcc1c85b0d5acc7a239b5dc588b47ef4"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-07-smoke",
+  "config": {},
+  "required_capabilities": [
+    "exemplar-scores",
+    "event-index"
+  ]
+}

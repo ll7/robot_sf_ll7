@@ -37,6 +37,7 @@ import hashlib
 import json
 import math
 import multiprocessing
+import os
 import platform
 import subprocess
 import sys
@@ -92,6 +93,38 @@ SUPPORTED_MEASUREMENTS = (
     "robot_goal_reached",
     "ped_motion_onset_step",
 )
+REQUIRED_TELEMETRY_METRICS = frozenset(
+    {
+        "ped_mean_speed_m_s",
+        "min_robot_ped_distance_m",
+        "robot_goal_reached",
+        "ped_motion_onset_step",
+        "ped_displacement_m",
+        "robot_displacement_m",
+    }
+)
+
+# These are intentionally small hard ceilings.  The executor is a diagnostic
+# component, so a caller cannot turn a fixture request into an unbounded
+# campaign by changing the JSON config or recipe budget.
+MAX_CANDIDATES = 3
+MAX_EXECUTIONS = 6
+MAX_WALL_TIMEOUT_S = 600.0
+MAX_PER_EXECUTION_TIMEOUT_S = 120.0
+MAX_SEED = 2**32 - 1
+SUPPORTED_STOP_RULES = frozenset(
+    {
+        "exhausted_candidates",
+        "execution_budget_exhausted",
+        "wall_timeout",
+        "control_fidelity_failure_blocks_treatment",
+    }
+)
+ALLOWED_INTERVENTION_PARAMETER_KEYS = frozenset({"speed_delta_m_s", "dt_s"})
+DIAGNOSTIC_EVIDENCE_BOUNDARY = "diagnostic_only"
+DEPENDENT_FAMILY_STATUS = "standalone_fixture_only"
+_SAFE_PRESERVATION_DESTINATION_PREFIXES = ("external:", "artifact:", "fixture:")
+_CHILD_TARGETS = frozenset({"episode", "sleep"})
 
 _DT_S = 0.1
 _ROBOT_GOAL = (16.8, 16.8)
@@ -190,10 +223,11 @@ def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
         "intervention_parameters",
         "recipe",
     }
-    unknown = sorted(set(raw) - allowed)
+    unknown = sorted((key for key in raw if key not in allowed), key=str)
     if unknown:
         raise ReviewExecuteError(
-            [f"unknown config keys are rejected: {', '.join(unknown)}"], source=source
+            ["unknown config keys are rejected: " + ", ".join(str(key) for key in unknown)],
+            source=source,
         )
     if "recipe" not in raw or not isinstance(raw["recipe"], dict):
         raise ReviewExecuteError(
@@ -201,26 +235,36 @@ def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
         )
     errors: list[str] = []
     planner = raw.get("planner", "simple_policy")
-    if planner not in SUPPORTED_PLANNERS:
+    if not isinstance(planner, str) or planner not in SUPPORTED_PLANNERS:
         errors.append(f"unsupported planner: {planner!r}; supported: {list(SUPPORTED_PLANNERS)}")
-    seed = _check_int_field(raw, "seed", 7, minimum=0, maximum=None, errors=errors)
+    seed = _check_int_field(raw, "seed", 7, minimum=0, maximum=MAX_SEED, errors=errors)
     horizon = _check_int_field(raw, "horizon_steps", 60, minimum=1, maximum=600, errors=errors)
     robot_speed = _check_float_field(
         raw, "robot_speed_m_s", 1.0, minimum=0.1, maximum=2.0, errors=errors
     )
     max_candidates = _check_int_field(
-        raw, "max_candidates", 3, minimum=1, maximum=None, errors=errors
+        raw, "max_candidates", MAX_CANDIDATES, minimum=1, maximum=MAX_CANDIDATES, errors=errors
     )
     max_executions = _check_int_field(
-        raw, "max_executions", 6, minimum=1, maximum=None, errors=errors
+        raw, "max_executions", MAX_EXECUTIONS, minimum=1, maximum=MAX_EXECUTIONS, errors=errors
     )
     wall_timeout = _check_float_field(
-        raw, "wall_timeout_s", 600.0, minimum=0.0, maximum=None, errors=errors
+        raw,
+        "wall_timeout_s",
+        MAX_WALL_TIMEOUT_S,
+        minimum=0.0,
+        maximum=MAX_WALL_TIMEOUT_S,
+        errors=errors,
     )
     if wall_timeout <= 0.0:
         errors.append("wall_timeout_s must be positive")
     per_execution_timeout = _check_float_field(
-        raw, "per_execution_timeout_s", 120.0, minimum=0.0, maximum=None, errors=errors
+        raw,
+        "per_execution_timeout_s",
+        MAX_PER_EXECUTION_TIMEOUT_S,
+        minimum=0.0,
+        maximum=MAX_PER_EXECUTION_TIMEOUT_S,
+        errors=errors,
     )
     if per_execution_timeout <= 0.0:
         errors.append("per_execution_timeout_s must be positive")
@@ -231,11 +275,15 @@ def validate_execute_config(raw: Any, *, source: Any = None) -> ExecuteConfig:
         raw, "motion_epsilon_m", 0.05, minimum=0.0, maximum=None, errors=errors
     )
     required_version = raw.get("required_component_version")
-    if required_version is not None and not isinstance(required_version, str):
-        errors.append("required_component_version must be a string")
+    if required_version is not None and (
+        not isinstance(required_version, str) or not required_version.strip()
+    ):
+        errors.append("required_component_version must be a non-empty string")
     intervention_parameters = raw.get("intervention_parameters", {})
     if not isinstance(intervention_parameters, dict):
         errors.append("intervention_parameters must be a mapping")
+    else:
+        _validate_intervention_parameters(intervention_parameters, errors)
     if errors:
         raise ReviewExecuteError(errors, source=source)
     return ExecuteConfig(
@@ -306,6 +354,189 @@ def _check_float_field(
     return numeric
 
 
+def _validate_intervention_parameters(parameters: dict[Any, Any], errors: list[str]) -> None:
+    """Keep intervention parameters declarative and limited to scalar deltas."""
+    for candidate_id, value in parameters.items():
+        if not isinstance(candidate_id, str) or not candidate_id.strip():
+            errors.append("intervention_parameters keys must be non-empty strings")
+            continue
+        if not isinstance(value, dict):
+            errors.append(f"intervention_parameters[{candidate_id!r}] must be a mapping")
+            continue
+        unknown = sorted(
+            (key for key in value if key not in ALLOWED_INTERVENTION_PARAMETER_KEYS),
+            key=str,
+        )
+        if unknown:
+            errors.append(
+                f"intervention_parameters[{candidate_id!r}] has unknown keys: "
+                + ", ".join(str(key) for key in unknown)
+            )
+        for key, parameter_value in value.items():
+            if key in ALLOWED_INTERVENTION_PARAMETER_KEYS and not _is_finite_number(
+                parameter_value
+            ):
+                errors.append(
+                    f"intervention_parameters[{candidate_id!r}].{key} must be a finite number"
+                )
+
+
+def _mapping_unknown_keys(value: Any, allowed: set[str]) -> list[str]:
+    """Return stable stringified unknown keys for a declarative mapping."""
+    if not isinstance(value, dict):
+        return []
+    return sorted((str(key) for key in value if key not in allowed), key=str)
+
+
+def _validate_recipe_execution_contract(  # noqa: C901, PLR0912, PLR0915
+    recipe: dict[str, Any], config: ExecuteConfig
+) -> list[str]:
+    """Validate the executor-owned recipe subset and its finite safety envelope.
+
+    Returns:
+        Stable validation errors; an empty list means the contract is usable.
+    """
+    errors: list[str] = []
+    try:
+        _canonical_digest(recipe)
+    except (TypeError, ValueError):
+        errors.append("invalid_recipe: recipe must contain strict-JSON values")
+    source_identity = recipe.get("source_identity")
+    if not isinstance(source_identity, dict):
+        return ["invalid_source_identity: mapping required"]
+    kind = source_identity.get("kind")
+    if kind not in {"fixture", "diagnostic"}:
+        errors.append(
+            "invalid_evidence_boundary: source_identity.kind must be fixture or diagnostic"
+        )
+    if source_identity.get("evidence_boundary") != DIAGNOSTIC_EVIDENCE_BOUNDARY:
+        errors.append("invalid_evidence_boundary: evidence_boundary must be diagnostic_only")
+    if source_identity.get("scientific_claim_allowed") is not False:
+        errors.append("invalid_evidence_boundary: scientific claims are not allowed")
+    if source_identity.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS:
+        errors.append(
+            "invalid_evidence_boundary: dependent_family_status must be standalone_fixture_only"
+        )
+
+    control_conditions = recipe.get("control_conditions")
+    allowed_control_keys = {"ped_speed_m_s", "ped_start_delay_s"}
+    unknown_control = _mapping_unknown_keys(control_conditions, allowed_control_keys)
+    if unknown_control:
+        errors.append("unknown control_conditions keys are rejected: " + ", ".join(unknown_control))
+    if not isinstance(control_conditions, dict):
+        errors.append("invalid_control_conditions: mapping required")
+    else:
+        delay = control_conditions.get("ped_start_delay_s", 0.0)
+        if not _is_finite_number(delay) or float(delay) < 0.0 or float(delay) > MAX_WALL_TIMEOUT_S:
+            errors.append(
+                "invalid_control_conditions: ped_start_delay_s must be finite within 0..600 s"
+            )
+
+    interventions = recipe.get("interventions")
+    candidate_factors = {
+        str(item["intervention_id"]): item.get("factor")
+        for item in interventions
+        if isinstance(item, dict) and isinstance(item.get("intervention_id"), str)
+    }
+    unknown_parameter_candidates = sorted(
+        (str(key) for key in set(config.intervention_parameters) - set(candidate_factors)),
+        key=str,
+    )
+    if unknown_parameter_candidates:
+        errors.append(
+            "intervention_parameters reference unknown candidates: "
+            + ", ".join(unknown_parameter_candidates)
+        )
+    for candidate_id, factor in candidate_factors.items():
+        parameters = config.intervention_parameters.get(candidate_id)
+        if not isinstance(parameters, dict):
+            continue
+        if factor == "single_pedestrian_speed_offset" and "dt_s" in parameters:
+            errors.append(
+                f"intervention_parameters[{candidate_id!r}] has a delay parameter for a speed factor"
+            )
+        if factor == "single_pedestrian_start_delay_offset" and "speed_delta_m_s" in parameters:
+            errors.append(
+                f"intervention_parameters[{candidate_id!r}] has a speed parameter for a delay factor"
+            )
+
+    budget = recipe.get("budget")
+    allowed_budget_keys = {"max_candidates", "max_executions", "wall_timeout_s"}
+    unknown_budget = _mapping_unknown_keys(budget, allowed_budget_keys)
+    if unknown_budget:
+        errors.append("unknown recipe budget keys are rejected: " + ", ".join(unknown_budget))
+    if not isinstance(budget, dict):
+        errors.append("invalid_budget: recipe budget must be a mapping")
+    else:
+        missing_budget = sorted((str(key) for key in allowed_budget_keys - set(budget)), key=str)
+        if missing_budget:
+            errors.append("invalid_budget: required fields missing: " + ", ".join(missing_budget))
+        recipe_max_candidates = _check_int_field(
+            budget,
+            "max_candidates",
+            MAX_CANDIDATES,
+            minimum=1,
+            maximum=MAX_CANDIDATES,
+            errors=errors,
+        )
+        recipe_max_executions = _check_int_field(
+            budget,
+            "max_executions",
+            MAX_EXECUTIONS,
+            minimum=1,
+            maximum=MAX_EXECUTIONS,
+            errors=errors,
+        )
+        recipe_wall_timeout = _check_float_field(
+            budget,
+            "wall_timeout_s",
+            MAX_WALL_TIMEOUT_S,
+            minimum=0.0,
+            maximum=MAX_WALL_TIMEOUT_S,
+            errors=errors,
+        )
+        if recipe_wall_timeout <= 0.0:
+            errors.append("budget.wall_timeout_s must be positive")
+        if config.max_candidates > recipe_max_candidates:
+            errors.append("invalid_budget: config.max_candidates exceeds recipe budget")
+        if config.max_executions > recipe_max_executions:
+            errors.append("invalid_budget: config.max_executions exceeds recipe budget")
+        if config.wall_timeout_s > recipe_wall_timeout:
+            errors.append("invalid_budget: config.wall_timeout_s exceeds recipe budget")
+
+    stop_rules = recipe.get("stop_rules")
+    if not isinstance(stop_rules, list) or not all(isinstance(rule, str) for rule in stop_rules):
+        errors.append("invalid_stop_rules: stop_rules must be a list of strings")
+    else:
+        if len(stop_rules) != len(set(stop_rules)):
+            errors.append("invalid_stop_rules: duplicate stop rules are rejected")
+        unknown_stop_rules = sorted(set(stop_rules) - SUPPORTED_STOP_RULES)
+        missing_stop_rules = sorted(SUPPORTED_STOP_RULES - set(stop_rules))
+        if unknown_stop_rules:
+            errors.append("invalid_stop_rules: unsupported rules: " + ", ".join(unknown_stop_rules))
+        if missing_stop_rules:
+            errors.append(
+                "invalid_stop_rules: required rules missing: " + ", ".join(missing_stop_rules)
+            )
+
+    measurements = recipe.get("measurements")
+    if isinstance(measurements, list) and len(measurements) != 1:
+        errors.append("unsupported_measurement: exactly one driving measurement is supported")
+
+    preservation_destination = recipe.get("preservation_destination")
+    if not isinstance(preservation_destination, str) or not preservation_destination.strip():
+        errors.append("invalid_preservation_destination: non-empty destination required")
+    elif (
+        not preservation_destination.startswith(_SAFE_PRESERVATION_DESTINATION_PREFIXES)
+        or Path(preservation_destination).is_absolute()
+        or ".." in Path(preservation_destination).parts
+    ):
+        errors.append(
+            "invalid_preservation_destination: use a relative external:, artifact:, or fixture: URI"
+        )
+    return errors
+
+
 def _canonical_digest(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
         "utf-8"
@@ -314,10 +545,26 @@ def _canonical_digest(value: Any) -> str:
 
 
 def _write_json(path: Path, payload: Any) -> str:
+    """Atomically write a component-owned strict-JSON artifact.
+
+    Returns:
+        SHA-256 digest of the written file bytes.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent.is_symlink() or path.is_symlink():
+        raise OSError(f"refusing to write through symlink: {path}")
     text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
     tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(text, encoding="utf-8")
+    if tmp_path.is_symlink():
+        raise OSError(f"refusing to write through symlink: {tmp_path}")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    file_descriptor = os.open(tmp_path, flags, 0o600)
+    with os.fdopen(file_descriptor, "w", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
     tmp_path.replace(path)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -459,8 +706,13 @@ def _sleep_job(job: dict[str, Any]) -> dict[str, Any]:
 
 def _child_main(entry_name: str, payload: dict[str, Any], conn: Any) -> None:
     """Module-level child entry so spawn and fork contexts can both start it."""
-    entry = _execute_episode_job if entry_name == "episode" else _sleep_job
     try:
+        if entry_name == "episode":
+            entry = _execute_episode_job
+        elif entry_name == "sleep":
+            entry = _sleep_job
+        else:
+            raise ValueError(f"unsupported child target: {entry_name!r}")
         conn.send(entry(payload))
     except Exception as error:  # noqa: BLE001 - transport must survive
         try:
@@ -469,6 +721,17 @@ def _child_main(entry_name: str, payload: dict[str, Any], conn: Any) -> None:
             pass
     finally:
         conn.close()
+
+
+def _terminate_owned_process(process: Any) -> None:
+    """Stop an owned child within a small fixed cleanup allowance."""
+    if not process.is_alive():
+        return
+    process.terminate()
+    process.join(1.0)
+    if process.is_alive() and hasattr(process, "kill"):
+        process.kill()
+        process.join(1.0)
 
 
 def _run_owned_child(
@@ -485,7 +748,11 @@ def _run_owned_child(
         Child payload, or a timeout/interrupt marker. A timed-out or
         interrupted child is always terminated before returning.
     """
-    context = multiprocessing.get_context()
+    if target not in _CHILD_TARGETS:
+        return {"outcome": "error", "error": f"unsupported child target: {target!r}"}
+    if not _is_finite_number(timeout_s) or float(timeout_s) <= 0.0:
+        return {"outcome": "error", "error": "child timeout must be a positive finite number"}
+    context = multiprocessing.get_context("spawn")
     parent_conn, child_conn = context.Pipe(duplex=False)
     process = context.Process(target=_child_main, args=(target, job, child_conn))
     try:
@@ -503,26 +770,21 @@ def _run_owned_child(
                 payload = parent_conn.recv()
             except EOFError as error:
                 payload = {"status": "error", "error": f"child closed pipe: {error}"}
-            process.join(10)
-            if process.is_alive():
-                process.terminate()
-                process.join(10)
+            process.join(1.0)
+            _terminate_owned_process(process)
             if isinstance(payload, dict):
                 return {"outcome": "ok", "payload": payload}
             return {"outcome": "error", "error": "child returned a non-mapping payload"}
-        process.terminate()
-        process.join(10)
+        _terminate_owned_process(process)
         return {"outcome": "timeout", "error": f"child exceeded {timeout_s:g}s and was terminated"}
     except KeyboardInterrupt:
-        process.terminate()
-        process.join(10)
+        _terminate_owned_process(process)
         return {"outcome": "interrupted", "error": "cancelled by user; owned child terminated"}
     finally:
         parent_conn.close()
-        if process.is_alive():
-            process.terminate()
-            process.join(10)
-        process.close()
+        _terminate_owned_process(process)
+        if not process.is_alive():
+            process.close()
 
 
 def _telemetry_metrics(
@@ -561,7 +823,7 @@ def _telemetry_metrics(
             "ped_displacement_m": displacement,
             "robot_displacement_m": robot_displacement,
         }
-    except (KeyError, TypeError, ValueError):
+    except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
         return None
 
 
@@ -621,6 +883,58 @@ def _specs_match_except(
     return differences == [allowed_key]
 
 
+def _request_identity_document(request: ComponentRequest) -> dict[str, Any]:
+    """Return the location-sensitive request identity used by resume checks."""
+    return {
+        "request_id": request.request_id,
+        "component_id": request.component_id,
+        "sources": [
+            {
+                "artifact_id": source.artifact_id,
+                "uri": source.uri,
+                "format": source.format,
+            }
+            for source in request.sources
+        ],
+        "output_directory": request.output_directory,
+        "required_capabilities": list(request.required_capabilities),
+    }
+
+
+def _config_identity_document(config: ExecuteConfig) -> dict[str, Any]:
+    """Return config fields that cannot change during a resume."""
+    return {
+        "planner": config.planner,
+        "seed": config.seed,
+        "horizon_steps": config.horizon_steps,
+        "robot_speed_m_s": config.robot_speed_m_s,
+        "per_execution_timeout_s": config.per_execution_timeout_s,
+        "activation_speed_tolerance_m_s": config.activation_speed_tolerance_m_s,
+        "motion_epsilon_m": config.motion_epsilon_m,
+        "required_component_version": config.required_component_version,
+        "intervention_parameters": dict(config.intervention_parameters),
+        "recipe_digest": _canonical_digest(config.recipe),
+    }
+
+
+def _config_budget_document(config: ExecuteConfig) -> dict[str, Any]:
+    """Return the bounded controls that may be extended on resume."""
+    return {
+        "max_candidates": config.max_candidates,
+        "max_executions": config.max_executions,
+        "wall_timeout_s": config.wall_timeout_s,
+    }
+
+
+def _config_document(config: ExecuteConfig) -> dict[str, Any]:
+    """Return the complete effective config for provenance and logical hashing."""
+    return {
+        **_config_identity_document(config),
+        **_config_budget_document(config),
+        "recipe": dict(config.recipe),
+    }
+
+
 @dataclass
 class _Executor:
     request: ComponentRequest
@@ -638,13 +952,53 @@ class _Executor:
     def _elapsed(self) -> float:
         return self._wall_elapsed_s + (time.monotonic() - self._started_at)
 
-    def _budget_remaining(self) -> bool:
-        return self._executions_consumed < self.config.max_executions
+    def _budget_remaining(self, required_executions: int = 1) -> bool:
+        return (
+            required_executions >= 0
+            and self._executions_consumed + required_executions <= self.config.max_executions
+        )
+
+    def _wall_remaining(self) -> float:
+        return max(0.0, self.config.wall_timeout_s - self._elapsed())
 
     def _record_attempt(self, attempt: dict[str, Any]) -> None:
         self._attempts.append(attempt)
 
-    def _load_resume_ledger(self) -> None:
+    def _record_progress(self) -> None:
+        """Persist attempts and candidate state after every execution boundary."""
+        try:
+            self._write_ledger()
+        except (OSError, TypeError, ValueError) as error:
+            raise ReviewExecuteError([f"output_write_failed: {error}"]) from error
+
+    def _candidate_report(self, candidate_id: str) -> dict[str, Any] | None:
+        return next(
+            (
+                report
+                for report in self._candidate_reports
+                if report.get("intervention_id") == candidate_id
+            ),
+            None,
+        )
+
+    def _attempt(self, candidate_id: str, kind: str) -> dict[str, Any] | None:
+        return next(
+            (
+                entry
+                for entry in self._attempts
+                if entry.get("candidate_id") == candidate_id and entry.get("kind") == kind
+            ),
+            None,
+        )
+
+    def _record_candidate_report(self, report: dict[str, Any]) -> None:
+        """Persist one terminal candidate outcome without duplicating it on resume."""
+        candidate_id = report.get("intervention_id")
+        if self._candidate_report(str(candidate_id)) is None:
+            self._candidate_reports.append(report)
+        self._record_progress()
+
+    def _load_resume_ledger(self) -> None:  # noqa: C901, PLR0912, PLR0915
         ledger_path = self.output_dir / "attempt-ledger.json"
         try:
             ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
@@ -652,26 +1006,195 @@ class _Executor:
             raise ReviewExecuteError(
                 [f"cannot resume: unreadable attempt ledger: {error}"]
             ) from error
-        if (
-            not isinstance(ledger, dict)
-            or ledger.get("schema_version") != ATTEMPT_LEDGER_SCHEMA_VERSION
-            or ledger.get("request_id") != self.request.request_id
-        ):
+        if not isinstance(ledger, dict):
+            raise ReviewExecuteError(["cannot resume: ledger is not a mapping"])
+        if ledger.get("request_id") != self.request.request_id:
             raise ReviewExecuteError(["cannot resume: ledger request identity mismatch"])
+        if ledger.get("schema_version") != ATTEMPT_LEDGER_SCHEMA_VERSION:
+            raise ReviewExecuteError(["cannot resume: ledger schema version mismatch"])
+        if ledger.get("component_id") != COMPONENT_ID:
+            raise ReviewExecuteError(["cannot resume: ledger component identity mismatch"])
+        expected_request_digest = _canonical_digest(_request_identity_document(self.request))
+        if ledger.get("request_digest") != expected_request_digest:
+            raise ReviewExecuteError(["cannot resume: ledger request identity mismatch"])
+        expected_recipe_digest = _canonical_digest(self.recipe)
+        if ledger.get("recipe_digest") != expected_recipe_digest:
+            raise ReviewExecuteError(["cannot resume: ledger recipe identity mismatch"])
+        if ledger.get("recipe_id") != str(self.recipe.get("recipe_id", "")):
+            raise ReviewExecuteError(["cannot resume: ledger recipe identity mismatch"])
+        if ledger.get("evidence_boundary") != DIAGNOSTIC_EVIDENCE_BOUNDARY:
+            raise ReviewExecuteError(["cannot resume: ledger evidence boundary is invalid"])
+        if ledger.get("scientific_claim_allowed") is not False:
+            raise ReviewExecuteError(["cannot resume: ledger scientific-claim boundary is invalid"])
+        if ledger.get("dependent_family_status") != DEPENDENT_FAMILY_STATUS:
+            raise ReviewExecuteError(["cannot resume: ledger dependent-family boundary is invalid"])
+        if ledger.get("config_identity_digest") != _canonical_digest(
+            _config_identity_document(self.config)
+        ):
+            raise ReviewExecuteError(["cannot resume: ledger immutable config mismatch"])
+
+        prior_budget = ledger.get("budget")
+        if not isinstance(prior_budget, dict):
+            raise ReviewExecuteError(["cannot resume: ledger budget identity is missing"])
+        expected_budget_keys = set(_config_budget_document(self.config))
+        if set(prior_budget) != expected_budget_keys:
+            raise ReviewExecuteError(["cannot resume: ledger budget identity is malformed"])
+        prior_candidates = prior_budget.get("max_candidates")
+        prior_executions = prior_budget.get("max_executions")
+        prior_wall = prior_budget.get("wall_timeout_s")
+        if not _is_int(prior_candidates) or not _is_int(prior_executions):
+            raise ReviewExecuteError(["cannot resume: ledger budget identity is malformed"])
+        if (
+            not _is_finite_number(prior_wall)
+            or prior_candidates < 1
+            or prior_candidates > MAX_CANDIDATES
+            or prior_executions < 1
+            or prior_executions > MAX_EXECUTIONS
+            or float(prior_wall) <= 0.0
+            or float(prior_wall) > MAX_WALL_TIMEOUT_S
+        ):
+            raise ReviewExecuteError(["cannot resume: ledger budget identity is malformed"])
+        if (
+            self.config.max_candidates < prior_candidates
+            or self.config.max_executions < prior_executions
+            or self.config.wall_timeout_s < float(prior_wall)
+        ):
+            raise ReviewExecuteError(["cannot resume: budget ceilings cannot be reduced"])
+
         attempts = ledger.get("attempts", [])
         if not isinstance(attempts, list):
             raise ReviewExecuteError(["cannot resume: ledger attempts are malformed"])
-        self._attempts = [dict(entry) for entry in attempts]
-        consumed = ledger.get("executions_consumed", 0)
-        self._executions_consumed = int(consumed) if _is_int(consumed) else 0
-        elapsed = ledger.get("wall_elapsed_s", 0.0)
-        self._wall_elapsed_s = float(elapsed) if _is_finite_number(elapsed) else 0.0
+        candidate_ids = {
+            str(item.get("intervention_id"))
+            for item in self.recipe.get("interventions", [])
+            if isinstance(item, dict) and isinstance(item.get("intervention_id"), str)
+        }
+        candidate_factors = {
+            item["intervention_id"]: item.get("factor")
+            for item in self.recipe.get("interventions", [])
+            if isinstance(item, dict) and isinstance(item.get("intervention_id"), str)
+        }
+        allowed_attempt_statuses = {"ok", "failed", "timed_out", "cancelled"}
+        seen_attempts: set[tuple[str, str]] = set()
+        validated_attempts: list[dict[str, Any]] = []
+        for index, entry in enumerate(attempts):
+            if not isinstance(entry, dict):
+                raise ReviewExecuteError([f"cannot resume: ledger attempt {index} is malformed"])
+            candidate_id = entry.get("candidate_id")
+            kind = entry.get("kind")
+            status = entry.get("status")
+            key = (str(candidate_id), str(kind))
+            if (
+                not isinstance(candidate_id, str)
+                or candidate_id not in candidate_ids
+                or kind not in {"control", "treatment"}
+                or status not in allowed_attempt_statuses
+                or key in seen_attempts
+            ):
+                raise ReviewExecuteError([f"cannot resume: ledger attempt {index} is invalid"])
+            elapsed = entry.get("elapsed_s", 0.0)
+            if not _is_finite_number(elapsed) or float(elapsed) < 0.0:
+                raise ReviewExecuteError(
+                    [f"cannot resume: ledger attempt {index} timing is invalid"]
+                )
+            if status == "ok":
+                metrics = entry.get("metrics")
+                if not isinstance(metrics, dict):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: ledger attempt {index} metrics are missing"]
+                    )
+                if set(metrics) != REQUIRED_TELEMETRY_METRICS or any(
+                    not _is_finite_number(metrics[key]) for key in REQUIRED_TELEMETRY_METRICS
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: ledger attempt {index} metrics are invalid"]
+                    )
+            seen_attempts.add(key)
+            validated_attempts.append(dict(entry))
 
-    def _attempt_done(self, candidate_id: str, kind: str) -> bool:
-        return any(
-            entry.get("candidate_id") == candidate_id and entry.get("kind") == kind
-            for entry in self._attempts
-        )
+        candidate_reports = ledger.get("candidate_reports")
+        traces = ledger.get("traces")
+        if not isinstance(candidate_reports, list) or not isinstance(traces, list):
+            raise ReviewExecuteError(["cannot resume: ledger candidate state is missing"])
+        seen_reports: set[str] = set()
+        validated_reports: list[dict[str, Any]] = []
+        for index, report in enumerate(candidate_reports):
+            if not isinstance(report, dict):
+                raise ReviewExecuteError([f"cannot resume: candidate report {index} is malformed"])
+            candidate_id = report.get("intervention_id")
+            if (
+                not isinstance(candidate_id, str)
+                or candidate_id not in candidate_ids
+                or candidate_id in seen_reports
+                or report.get("status") not in {"complete", "unavailable", "failed"}
+                or report.get("factor") != candidate_factors.get(candidate_id)
+            ):
+                raise ReviewExecuteError([f"cannot resume: candidate report {index} is invalid"])
+            seen_reports.add(candidate_id)
+            validated_reports.append(dict(report))
+        seen_traces: set[str] = set()
+        validated_traces: list[dict[str, Any]] = []
+        for index, trace in enumerate(traces):
+            if not isinstance(trace, dict):
+                raise ReviewExecuteError([f"cannot resume: activation trace {index} is malformed"])
+            candidate_id = trace.get("intervention_id")
+            if (
+                trace.get("schema_version") != ACTIVATION_TRACE_SCHEMA_VERSION
+                or not isinstance(candidate_id, str)
+                or candidate_id not in seen_reports
+                or candidate_id in seen_traces
+                or trace.get("factor") != candidate_factors.get(candidate_id)
+            ):
+                raise ReviewExecuteError([f"cannot resume: activation trace {index} is invalid"])
+            seen_traces.add(candidate_id)
+            validated_traces.append(dict(trace))
+
+        for report in validated_reports:
+            candidate_id = report["intervention_id"]
+            matching_attempts = [
+                entry for entry in validated_attempts if entry["candidate_id"] == candidate_id
+            ]
+            if report["status"] == "complete" and (
+                {entry["kind"] for entry in matching_attempts} != {"control", "treatment"}
+                or any(entry["status"] != "ok" for entry in matching_attempts)
+                or candidate_id not in seen_traces
+                or report.get("nonintervened_config_match") is not True
+                or not isinstance(report.get("control_metrics"), dict)
+                or not isinstance(report.get("treatment_metrics"), dict)
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
+                )
+            if any(
+                set(report[key]) != REQUIRED_TELEMETRY_METRICS
+                or any(
+                    not _is_finite_number(report[key][metric])
+                    for metric in REQUIRED_TELEMETRY_METRICS
+                )
+                for key in ("control_metrics", "treatment_metrics")
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: complete candidate {candidate_id} metrics are invalid"]
+                )
+        if seen_traces != {
+            report["intervention_id"]
+            for report in validated_reports
+            if report["status"] == "complete"
+        }:
+            raise ReviewExecuteError(["cannot resume: activation traces do not match reports"])
+        consumed = ledger.get("executions_consumed", 0)
+        if not _is_int(consumed) or consumed != len(validated_attempts) or consumed < 0:
+            raise ReviewExecuteError(["cannot resume: ledger execution count is inconsistent"])
+        if consumed > self.config.max_executions or consumed > prior_executions:
+            raise ReviewExecuteError(["cannot resume: ledger exceeds execution budget"])
+        self._attempts = validated_attempts
+        self._candidate_reports = validated_reports
+        self._traces = validated_traces
+        self._executions_consumed = int(consumed)
+        elapsed = ledger.get("wall_elapsed_s", 0.0)
+        if not _is_finite_number(elapsed) or float(elapsed) < 0.0:
+            raise ReviewExecuteError(["cannot resume: ledger wall timing is invalid"])
+        self._wall_elapsed_s = float(elapsed)
 
     def _write_ledger(self) -> str:
         """Write the attempt ledger, returning the file-bytes SHA-256.
@@ -684,13 +1207,27 @@ class _Executor:
             "request_id": self.request.request_id,
             "component_id": COMPONENT_ID,
             "recipe_id": str(self.recipe.get("recipe_id", "")),
+            "request_digest": _canonical_digest(_request_identity_document(self.request)),
+            "recipe_digest": _canonical_digest(self.recipe),
+            "config_identity_digest": _canonical_digest(_config_identity_document(self.config)),
+            "budget": _config_budget_document(self.config),
             "attempts": list(self._attempts),
             "executions_consumed": self._executions_consumed,
+            "candidate_reports": list(self._candidate_reports),
+            "traces": list(self._traces),
+            "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+            "scientific_claim_allowed": False,
+            "dependent_family_status": DEPENDENT_FAMILY_STATUS,
             "wall_elapsed_s": round(self._elapsed(), 3),
         }
         return _write_json(self.output_dir / "attempt-ledger.json", payload)
 
     def _run_episode(self, candidate_id: str, kind: str, spec: dict[str, Any]) -> dict[str, Any]:
+        if not self._budget_remaining():
+            raise _ExecutionBudgetExhausted("execution_budget_exhausted: no execution slot remains")
+        wall_remaining = self._wall_remaining()
+        if wall_remaining <= 0.0:
+            raise _ExecutionWallTimeout("wall_timeout: wall budget exhausted")
         job = {
             "seed": self.config.seed,
             "horizon_steps": self.config.horizon_steps,
@@ -699,13 +1236,20 @@ class _Executor:
             "ped_start_delay_s": spec["ped_start_delay_s"],
         }
         started = time.monotonic()
-        outcome = _run_owned_child(job, self.config.per_execution_timeout_s)
+        child_timeout = min(self.config.per_execution_timeout_s, wall_remaining)
+        try:
+            outcome = _run_owned_child(job, child_timeout)
+        except Exception as error:  # noqa: BLE001 - convert child boundary failures to a result
+            outcome = {"outcome": "error", "error": f"{type(error).__name__}: {error}"}
         elapsed = time.monotonic() - started
         self._executions_consumed += 1
-        if outcome["outcome"] == "ok":
+        if not isinstance(outcome, dict):
+            outcome = {"outcome": "error", "error": "child returned a non-mapping outcome"}
+        outcome_kind = outcome.get("outcome")
+        if outcome_kind == "ok":
             child_payload = outcome["payload"]
             metrics = _telemetry_metrics(
-                child_payload,
+                child_payload if isinstance(child_payload, dict) else {},
                 horizon=self.config.horizon_steps,
                 motion_epsilon_m=self.config.motion_epsilon_m,
             )
@@ -726,18 +1270,27 @@ class _Executor:
                 }
                 attempt["metrics"] = metrics
             self._record_attempt(attempt)
+            self._record_progress()
             return attempt
-        if outcome["outcome"] == "timeout":
+        if outcome_kind == "timeout":
+            timeout_reason = (
+                "wall_timeout"
+                if child_timeout < self.config.per_execution_timeout_s
+                else "per_execution_timeout"
+            )
             attempt = {
                 "candidate_id": candidate_id,
                 "kind": kind,
                 "status": "timed_out",
-                "reason": f"per_execution_timeout: {outcome.get('error', '')}",
+                "reason": f"{timeout_reason}: {outcome.get('error', '')}",
                 "elapsed_s": round(elapsed, 3),
             }
             self._record_attempt(attempt)
-            return attempt
-        if outcome["outcome"] == "interrupted":
+            self._record_progress()
+            if timeout_reason == "wall_timeout":
+                raise _ExecutionWallTimeout(attempt["reason"])
+            raise _ExecutionTimeout(attempt["reason"])
+        if outcome_kind == "interrupted":
             attempt = {
                 "candidate_id": candidate_id,
                 "kind": kind,
@@ -746,6 +1299,7 @@ class _Executor:
                 "elapsed_s": round(elapsed, 3),
             }
             self._record_attempt(attempt)
+            self._record_progress()
             raise _ExecutionCancelled(attempt["reason"])
         attempt = {
             "candidate_id": candidate_id,
@@ -755,6 +1309,7 @@ class _Executor:
             "elapsed_s": round(elapsed, 3),
         }
         self._record_attempt(attempt)
+        self._record_progress()
         return attempt
 
     def _control_fidelity_ok(self, metrics: dict[str, Any]) -> tuple[bool, str]:
@@ -764,11 +1319,14 @@ class _Executor:
             return False, "control robot shows no measured motion"
         return True, ""
 
-    def _execute_candidate(
+    def _execute_candidate(  # noqa: C901, PLR0912, PLR0915
         self, candidate: dict[str, Any], measurement: dict[str, Any]
     ) -> dict[str, Any]:
         candidate_id = str(candidate["intervention_id"])
         factor = str(candidate["factor"])
+        existing_report = self._candidate_report(candidate_id)
+        if existing_report is not None:
+            return existing_report
         params = self.config.intervention_parameters.get(candidate_id)
         update, reason = _intervention_update(
             factor,
@@ -783,7 +1341,7 @@ class _Executor:
                 "status": "unavailable",
                 "reason": str(reason),
             }
-            self._candidate_reports.append(report)
+            self._record_candidate_report(report)
             return report
         control_spec = {
             "scenario_id": str(self.recipe["source_identity"].get("scenario_id", "")),
@@ -802,17 +1360,35 @@ class _Executor:
         treatment_spec[changed_key] = update[changed_key]
         if not _specs_match_except(control_spec, treatment_spec, changed_key):
             raise ReviewExecuteError(["internal nonintervened config comparison failed"])
-        control_attempt: dict[str, Any] | None = None
-        if self._attempt_done(candidate_id, "control"):
-            control_attempt = next(
-                entry
-                for entry in self._attempts
-                if entry.get("candidate_id") == candidate_id and entry.get("kind") == "control"
+        control_attempt = self._attempt(candidate_id, "control")
+        treatment_attempt = self._attempt(candidate_id, "treatment")
+        if treatment_attempt is not None and control_attempt is None:
+            raise ReviewExecuteError(["resume ledger has treatment without control"])
+        required_executions = 0
+        if control_attempt is None:
+            required_executions = 2
+        elif control_attempt.get("status") == "ok" and treatment_attempt is None:
+            required_executions = 1
+        if not self._budget_remaining(required_executions):
+            raise _ExecutionBudgetExhausted(
+                "execution_budget_exhausted: reserving a complete control/treatment pair"
             )
-        else:
+        if required_executions and self._wall_remaining() <= 0.0:
+            raise _ExecutionWallTimeout("wall_timeout: wall budget exhausted before candidate")
+        if control_attempt is None:
             control_attempt = self._run_episode(candidate_id, "control", control_spec)
-        if control_attempt.get("status") == "timed_out":
-            raise _ExecutionTimeout(str(control_attempt.get("reason", "")))
+        if control_attempt.get("status") in {"timed_out", "cancelled"}:
+            if not self.resume:
+                raise ReviewExecuteError([str(control_attempt.get("reason", "control failed"))])
+            report = {
+                "intervention_id": candidate_id,
+                "factor": factor,
+                "status": "failed",
+                "reason": f"control execution did not complete: {control_attempt.get('reason', '')}",
+                "nonintervened_config_match": True,
+            }
+            self._record_candidate_report(report)
+            return report
         if control_attempt.get("status") != "ok":
             report = {
                 "intervention_id": candidate_id,
@@ -821,7 +1397,7 @@ class _Executor:
                 "reason": f"control execution failed: {control_attempt.get('reason', '')}",
                 "nonintervened_config_match": True,
             }
-            self._candidate_reports.append(report)
+            self._record_candidate_report(report)
             return report
         control_metrics = control_attempt["metrics"]
         fidelity_ok, fidelity_reason = self._control_fidelity_ok(control_metrics)
@@ -835,19 +1411,24 @@ class _Executor:
                 "control_metrics": control_metrics,
                 "nonintervened_config_match": True,
             }
-            self._candidate_reports.append(report)
+            self._record_candidate_report(report)
             return report
-        treatment_attempt: dict[str, Any] | None = None
-        if self._attempt_done(candidate_id, "treatment"):
-            treatment_attempt = next(
-                entry
-                for entry in self._attempts
-                if entry.get("candidate_id") == candidate_id and entry.get("kind") == "treatment"
-            )
-        else:
+        treatment_attempt = self._attempt(candidate_id, "treatment")
+        if treatment_attempt is None:
             treatment_attempt = self._run_episode(candidate_id, "treatment", treatment_spec)
-        if treatment_attempt.get("status") == "timed_out":
-            raise _ExecutionTimeout(str(treatment_attempt.get("reason", "")))
+        if treatment_attempt.get("status") in {"timed_out", "cancelled"}:
+            if not self.resume:
+                raise ReviewExecuteError([str(treatment_attempt.get("reason", "treatment failed"))])
+            report = {
+                "intervention_id": candidate_id,
+                "factor": factor,
+                "status": "failed",
+                "reason": f"treatment execution did not complete: {treatment_attempt.get('reason', '')}",
+                "control_metrics": control_metrics,
+                "nonintervened_config_match": True,
+            }
+            self._record_candidate_report(report)
+            return report
         if treatment_attempt.get("status") != "ok":
             report = {
                 "intervention_id": candidate_id,
@@ -857,7 +1438,7 @@ class _Executor:
                 "control_metrics": control_metrics,
                 "nonintervened_config_match": True,
             }
-            self._candidate_reports.append(report)
+            self._record_candidate_report(report)
             return report
         treatment_metrics = treatment_attempt["metrics"]
         metric_name = str(measurement["name"])
@@ -906,7 +1487,16 @@ class _Executor:
             "nonintervened_config_match": True,
         }
         self._candidate_reports.append(report)
+        self._record_progress()
         return report
+
+
+class _ExecutionBudgetExhausted(Exception):
+    """Internal signal: no complete control/treatment pair fits the budget."""
+
+
+class _ExecutionWallTimeout(Exception):
+    """Internal signal: the bounded wall-clock budget was exhausted."""
 
 
 class _ExecutionTimeout(Exception):
@@ -919,9 +1509,13 @@ class _ExecutionCancelled(Exception):
 
 def _measurement_for_recipe(recipe: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
     measurements = recipe.get("measurements", [])
-    if not measurements:
+    if not isinstance(measurements, list) or not measurements:
         return None, "recipe carries no measurements"
+    if len(measurements) != 1:
+        return None, "exactly one driving measurement is supported"
     first = measurements[0]
+    if not isinstance(first, dict):
+        return None, "driving measurement must be a mapping"
     name = str(first.get("name", ""))
     direction = str(first.get("expected_direction", ""))
     if name not in SUPPORTED_MEASUREMENTS:
@@ -939,6 +1533,10 @@ def _commit_provenance() -> dict[str, Any]:
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "created_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+        "benchmark_success": False,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": DEPENDENT_FAMILY_STATUS,
     }
 
 
@@ -953,6 +1551,10 @@ def _write_complete_outputs(
         "component_id": COMPONENT_ID,
         "recipe_id": str(executor.recipe.get("recipe_id", "")),
         "source_identity": dict(executor.recipe.get("source_identity", {})),
+        "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+        "benchmark_success": False,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": DEPENDENT_FAMILY_STATUS,
         "candidates": list(executor._candidate_reports),
         "budget": {
             "max_candidates": executor.config.max_candidates,
@@ -966,6 +1568,9 @@ def _write_complete_outputs(
     traces = {
         "schema_version": ACTIVATION_TRACE_SCHEMA_VERSION,
         "request_id": request.request_id,
+        "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": DEPENDENT_FAMILY_STATUS,
         "traces": list(executor._traces),
     }
     executor._write_ledger()
@@ -978,9 +1583,13 @@ def _write_complete_outputs(
         "request_id": request.request_id,
         "recipe_id": str(executor.recipe.get("recipe_id", "")),
         "recipe_digest": _canonical_digest(executor.recipe),
-        "config_digest": _canonical_digest(executor.config.recipe),
+        "config_digest": _canonical_digest(_config_document(executor.config)),
         "source_identity": dict(executor.recipe.get("source_identity", {})),
         "retrieval_destination": str(executor.recipe.get("preservation_destination", "")),
+        "evidence_boundary": DIAGNOSTIC_EVIDENCE_BOUNDARY,
+        "benchmark_success": False,
+        "scientific_claim_allowed": False,
+        "dependent_family_status": DEPENDENT_FAMILY_STATUS,
         "artifacts": {
             "execute-report.json": report_digest,
             "activation-traces.json": traces_digest,
@@ -1059,7 +1668,7 @@ def _final_result(
         )
 
 
-def _admit_request(
+def _admit_request(  # noqa: C901
     request: ComponentRequest,
 ) -> tuple[
     ExecuteConfig | None, dict[str, Any] | None, dict[str, Any] | None, ComponentResult | None
@@ -1149,6 +1758,14 @@ def _admit_request(
                 reason="invalid_source_identity: source_identity.scenario_id must be a non-empty string",
             ),
         )
+    recipe_errors = _validate_recipe_execution_contract(recipe_doc, config)
+    if recipe_errors:
+        return (
+            None,
+            None,
+            None,
+            _final_result(request, status="failed", reason=recipe_errors[0]),
+        )
     control_conditions = recipe_doc.get("control_conditions", {})
     if not isinstance(control_conditions, dict):
         return (
@@ -1186,7 +1803,7 @@ def _admit_request(
     return config, recipe_doc, measurement, None
 
 
-def _prepare_output_dir(
+def _prepare_output_dir(  # noqa: C901
     request: ComponentRequest, root: Path, *, resume: bool
 ) -> tuple[Path | None, ComponentResult | None]:
     """Resolve the output directory honoring collision and resume semantics.
@@ -1194,13 +1811,70 @@ def _prepare_output_dir(
     Returns:
         Tuple of (output directory, early result); exactly one is set.
     """
-    output_dir = root / request.output_directory
+    if not isinstance(request.output_directory, str):
+        return None, _final_result(
+            request, status="failed", reason="invalid_output_path: string required"
+        )
+    relative = Path(request.output_directory)
+    if (
+        relative.is_absolute()
+        or ".." in relative.parts
+        or not relative.parts
+        or relative == Path(".")
+    ):
+        return None, _final_result(
+            request,
+            status="failed",
+            reason="invalid_output_path: relative component directory required",
+        )
+    try:
+        root = root.resolve(strict=True)
+        output_dir = root / relative
+        if any(
+            root.joinpath(*relative.parts[:index]).is_symlink()
+            for index in range(1, len(relative.parts) + 1)
+        ):
+            return None, _final_result(
+                request,
+                status="failed",
+                reason="invalid_output_path: output path contains a symlinked component",
+            )
+        resolved_output = output_dir.resolve(strict=False)
+        resolved_output.relative_to(root)
+    except (OSError, ValueError) as error:
+        return None, _final_result(
+            request,
+            status="failed",
+            reason=f"invalid_output_path: output escapes its base: {error}",
+        )
+    if output_dir.is_symlink():
+        return None, _final_result(
+            request, status="failed", reason="invalid_output_path: output directory is a symlink"
+        )
     if output_dir.exists():
+        if not output_dir.is_dir():
+            return None, _final_result(
+                request,
+                status="failed",
+                reason=f"output_collision: output path is not a directory: {request.output_directory}",
+            )
         if not resume:
             return None, _final_result(
                 request,
                 status="failed",
                 reason=f"output_collision: output already exists: {request.output_directory}",
+            )
+        try:
+            unsafe_children = [entry.name for entry in output_dir.iterdir() if entry.is_symlink()]
+        except OSError as error:
+            return None, _final_result(
+                request, status="failed", reason=f"unreadable output directory: {error}"
+            )
+        if unsafe_children:
+            return None, _final_result(
+                request,
+                status="failed",
+                reason="invalid_output_path: output contains symlinked artifacts",
             )
         return output_dir, None
     if resume:
@@ -1229,13 +1903,15 @@ def _drive_candidates(
     reason = "all selected candidates reached a terminal state"
     try:
         for candidate in candidates:
-            if not executor._budget_remaining():
-                return "partial", "execution_budget_exhausted: stopping before the next candidate"
-            if executor._elapsed() >= config.wall_timeout_s:
-                return "partial", "wall_timeout: stopping before the next candidate"
+            if executor._candidate_report(str(candidate["intervention_id"])) is not None:
+                continue
             executor._execute_candidate(candidate, measurement)
+    except _ExecutionBudgetExhausted as error:
+        return "partial", str(error)
+    except _ExecutionWallTimeout as error:
+        return "partial", str(error)
     except _ExecutionTimeout as error:
-        return "cancelled", f"per_execution_timeout: {error}; owned child terminated"
+        return "partial", f"per_execution_timeout: {error}; owned child terminated"
     except _ExecutionCancelled as error:
         return "cancelled", f"cancelled_by_user: {error}"
     return status, reason
@@ -1250,19 +1926,37 @@ def _settle(
         Validated component result for the recorded candidate reports.
     """
     request = executor.request
-    terminal = [
-        report
-        for report in executor._candidate_reports
-        if report.get("status") in ("complete", "unavailable")
-    ]
+    selected_ids = {
+        str(candidate["intervention_id"])
+        for candidate in _select_candidates(executor.recipe, executor.config.max_candidates)
+    }
+    reports_by_id = {
+        str(report.get("intervention_id")): report for report in executor._candidate_reports
+    }
+    unresolved = sorted(selected_ids - set(reports_by_id))
     succeeded = [
         report for report in executor._candidate_reports if report.get("status") == "complete"
     ]
+    failed = [report for report in executor._candidate_reports if report.get("status") == "failed"]
     if status == "complete" and not succeeded:
-        status = "failed"
-        reason = "no candidate completed: " + "; ".join(
-            str(report.get("reason", report.get("status", "")))
-            for report in executor._candidate_reports
+        if failed:
+            status = "failed"
+            reason = "candidate_execution_failed: " + "; ".join(
+                str(report.get("reason", "failed")) for report in failed
+            )
+        else:
+            status = "unavailable"
+            reason = "no candidate completed: " + "; ".join(
+                str(report.get("reason", report.get("status", "")))
+                for report in executor._candidate_reports
+            )
+    elif status == "complete" and unresolved:
+        status = "partial"
+        reason = f"incomplete_candidates: {', '.join(unresolved)}"
+    elif status == "complete" and failed:
+        status = "partial"
+        reason = "candidate_execution_failed: " + "; ".join(
+            str(report.get("reason", "failed")) for report in failed
         )
     if status == "complete":
         artifacts = _write_complete_outputs(executor, provenance)
@@ -1276,11 +1970,12 @@ def _settle(
         )
     try:
         executor._write_ledger()
-    except OSError:
-        pass
-    if status == "partial" and not terminal:
+    except (OSError, TypeError, ValueError) as error:
+        reason = f"{reason}; output_write_failed: {error}"
         status = "failed"
-        reason = f"{reason}; no candidate reached a terminal state"
+    if status == "partial" and not executor._candidate_reports and not executor._attempts:
+        status = "failed"
+        reason = f"{reason}; no candidate or execution reached a terminal state"
     return _final_result(
         request,
         status=status,
@@ -1325,12 +2020,35 @@ def run(
     provenance = _commit_provenance()
     provenance["recipe_id"] = str(recipe_doc.get("recipe_id", ""))
     provenance["source_identity"] = dict(recipe_doc.get("source_identity", {}))
+    provenance["request_digest"] = _canonical_digest(_request_identity_document(request))
+    provenance["recipe_digest"] = _canonical_digest(recipe_doc)
+    provenance["config_digest"] = _canonical_digest(_config_document(config))
+    provenance["sources"] = [
+        {
+            "artifact_id": source.artifact_id,
+            "uri": source.uri,
+            "format": source.format,
+        }
+        for source in request.sources
+    ]
+    provenance["output_directory"] = request.output_directory
     executor._started_at = time.monotonic()
     try:
         status, reason = _drive_candidates(executor, config, measurement)
-    except ReviewExecuteError as error:
-        return _final_result(request, status="failed", reason="; ".join(error.errors))
-    return _settle(executor, provenance, status, reason)
+        return _settle(executor, provenance, status, reason)
+    except Exception as error:  # noqa: BLE001 - fail closed while preserving the ledger
+        reason = f"execution_failed: {type(error).__name__}: {error}"
+        try:
+            executor._write_ledger()
+        except (OSError, TypeError, ValueError) as ledger_error:
+            reason += f"; output_write_failed: {ledger_error}"
+        return _final_result(
+            request,
+            status="failed",
+            reason=reason,
+            diagnostics=tuple(_diagnostics(executor)),
+            provenance=provenance,
+        )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1361,13 +2079,19 @@ def main(argv: list[str] | None = None) -> int:
         payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ReviewExecuteError([f"cannot read request: {error}"]) from error
+    if not isinstance(payload, dict):
+        raise ReviewExecuteError(["request JSON must be a mapping"])
     if args.config is not None:
         try:
             config = json.loads(Path(args.config).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise ReviewExecuteError([f"cannot read config: {error}"]) from error
-        if isinstance(config, dict):
-            payload = {**payload, "config": {**payload.get("config", {}), **config}}
+        if not isinstance(config, dict):
+            raise ReviewExecuteError(["config JSON must be a mapping"])
+        request_config = payload.get("config", {})
+        if not isinstance(request_config, dict):
+            raise ReviewExecuteError(["request config must be a mapping"])
+        payload = {**payload, "config": {**request_config, **config}}
     payload = {**payload, "output_directory": args.output}
     request = component_request_from_dict(payload, source=args.input)
     result = run(

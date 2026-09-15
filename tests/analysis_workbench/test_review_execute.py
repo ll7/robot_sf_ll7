@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,36 @@ def _fixture_request(**config_overrides: Any) -> Any:
     request = component_request_from_dict(payload)
     assert request.component_id == COMPONENT_ID
     return request
+
+
+def _patch_fake_execution(
+    monkeypatch: pytest.MonkeyPatch, *, fail_treatment_speed: float | None = None
+) -> list[dict[str, Any]]:
+    """Supply deterministic telemetry without starting the simulator child."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    calls: list[dict[str, Any]] = []
+
+    def _fake_child(job: dict[str, Any], _timeout_s: float, **_kwargs: Any) -> dict[str, Any]:
+        calls.append(dict(job))
+        speed = float(job["ped_speed_m_s"])
+        if fail_treatment_speed is not None and speed == fail_treatment_speed:
+            return {"outcome": "error", "error": "synthetic child failure"}
+        horizon = int(job["horizon_steps"])
+        ped_traj = [[10.0, step * speed * 0.1] for step in range(horizon + 1)]
+        robot_traj = [[step * 0.1, 0.0] for step in range(horizon + 1)]
+        return {
+            "outcome": "ok",
+            "payload": {
+                "status": "ok",
+                "steps_completed": horizon,
+                "ped_traj": ped_traj,
+                "robot_traj": robot_traj,
+            },
+        }
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", _fake_child)
+    return calls
 
 
 def _logical_ledger(path: Path) -> dict[str, Any]:
@@ -120,6 +151,9 @@ def test_fixture_run_completes_with_measured_verdicts(tmp_path: Path) -> None:
     manifest = json.loads((output_dir / "preservation-manifest.json").read_text(encoding="utf-8"))
     assert manifest["retrieval_destination"] == "external:post-execution-preservation"
     assert manifest["artifacts"]["execute-report.json"] == by_id["execute-report.json"]["sha256"]
+    assert manifest["evidence_boundary"] == "diagnostic_only"
+    assert manifest["scientific_claim_allowed"] is False
+    assert manifest["dependent_family_status"] == "standalone_fixture_only"
 
 
 def test_repeated_runs_agree_on_logical_artifacts(tmp_path: Path) -> None:
@@ -195,6 +229,27 @@ def test_output_collision_fails_and_resume_needs_a_ledger(tmp_path: Path) -> Non
     assert "ledger" in resume_result.reason
 
 
+def test_output_symlink_and_preservation_escape_are_rejected(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    (tmp_path / "link").symlink_to(target, target_is_directory=True)
+    linked_request = replace(_fixture_request(), output_directory="link")
+    linked_result = run(linked_request, base=tmp_path)
+    assert linked_result.status == "failed"
+    assert "symlink" in linked_result.reason
+
+    (tmp_path / "nested-link").symlink_to(target, target_is_directory=True)
+    nested_request = replace(_fixture_request(), output_directory="nested-link/output")
+    nested_result = run(nested_request, base=tmp_path)
+    assert nested_result.status == "failed"
+    assert "symlink" in nested_result.reason
+
+    unsafe_destination = _recipe_payload(preservation_destination="/tmp/not-owned")
+    unsafe_result = run(component_request_from_dict(unsafe_destination), base=tmp_path)
+    assert unsafe_result.status == "failed"
+    assert "invalid_preservation_destination" in unsafe_result.reason
+
+
 def test_exhausted_execution_budget_reports_partial(tmp_path: Path) -> None:
     request = _fixture_request(max_executions=2)
     result = run(request, base=tmp_path)
@@ -248,6 +303,125 @@ def test_config_field_validation_branches() -> None:
         validate_execute_config({**base, "intervention_parameters": []})
     with pytest.raises(ReviewExecuteError, match="config must be a mapping"):
         validate_execute_config([])
+
+
+def test_config_budget_ceilings_and_nested_fields_are_closed() -> None:
+    from robot_sf.analysis_workbench.review_execute import ReviewExecuteError
+
+    base = {"recipe": {}}
+    with pytest.raises(ReviewExecuteError, match="max_candidates"):
+        validate_execute_config({**base, "max_candidates": 4})
+    with pytest.raises(ReviewExecuteError, match="max_executions"):
+        validate_execute_config({**base, "max_executions": 7})
+    with pytest.raises(ReviewExecuteError, match="wall_timeout_s"):
+        validate_execute_config({**base, "wall_timeout_s": 601.0})
+    with pytest.raises(ReviewExecuteError, match="per_execution_timeout_s"):
+        validate_execute_config({**base, "per_execution_timeout_s": 121.0})
+    with pytest.raises(ReviewExecuteError, match="unknown keys"):
+        validate_execute_config(
+            {**base, "intervention_parameters": {"candidate": {"python": "code"}}}
+        )
+
+
+def test_recipe_budget_and_stop_rules_are_enforced(tmp_path: Path) -> None:
+    budget_payload = _recipe_payload()
+    budget_payload["config"]["recipe"]["budget"]["max_executions"] = 2
+    budget_result = run(component_request_from_dict(budget_payload), base=tmp_path)
+    assert budget_result.status == "failed"
+    assert "invalid_budget" in budget_result.reason
+
+    stop_payload = _recipe_payload()
+    stop_payload["config"]["recipe"]["stop_rules"] = ["exhausted_candidates"]
+    stop_result = run(component_request_from_dict(stop_payload), base=tmp_path)
+    assert stop_result.status == "failed"
+    assert "invalid_stop_rules" in stop_result.reason
+
+
+def test_diagnostic_boundary_rejects_benchmark_source(tmp_path: Path) -> None:
+    payload = _recipe_payload()
+    payload["config"]["recipe"]["source_identity"]["kind"] = "benchmark"
+    result = run(component_request_from_dict(payload), base=tmp_path)
+    assert result.status == "failed"
+    assert "invalid_evidence_boundary" in result.reason
+
+    missing_boundary = _recipe_payload()
+    missing_boundary["config"]["recipe"]["source_identity"].pop("evidence_boundary")
+    missing_result = run(component_request_from_dict(missing_boundary), base=tmp_path)
+    assert missing_result.status == "failed"
+    assert "invalid_evidence_boundary" in missing_result.reason
+
+
+def test_run_rejects_direct_request_output_escape(tmp_path: Path) -> None:
+    request = replace(_fixture_request(), output_directory="../srev22-escape")
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "invalid_output_path" in result.reason
+    assert not (tmp_path.parent / "srev22-escape").exists()
+
+
+def test_budget_reserves_a_complete_pair_before_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _patch_fake_execution(monkeypatch)
+    request = _fixture_request(max_candidates=1, max_executions=1)
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "execution_budget_exhausted" in result.reason
+    assert calls == []
+
+
+def test_failed_candidate_is_partial_without_complete_artifacts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _patch_fake_execution(monkeypatch, fail_treatment_speed=0.5)
+    request = _fixture_request(max_candidates=2, max_executions=4)
+    result = run(request, base=tmp_path)
+    assert result.status == "partial"
+    assert "candidate_execution_failed" in result.reason
+    assert result.artifacts == ()
+    ledger = json.loads((tmp_path / "srev-22-smoke" / "attempt-ledger.json").read_text())
+    reports = {report["intervention_id"]: report for report in ledger["candidate_reports"]}
+    assert reports["ped-speed-up"]["status"] == "complete"
+    assert reports["ped-speed-down"]["status"] == "failed"
+    assert ledger["evidence_boundary"] == "diagnostic_only"
+    assert ledger["scientific_claim_allowed"] is False
+    assert ledger["dependent_family_status"] == "standalone_fixture_only"
+    assert not (tmp_path / "srev-22-smoke" / "execute-report.json").exists()
+
+
+def test_resume_restores_reports_and_does_not_rerun_terminal_candidates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5]
+
+    resumed = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert resumed.status == "complete"
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0, 1.5, 1.0, 0.5]
+    ledger = json.loads((tmp_path / "srev-22-smoke" / "attempt-ledger.json").read_text())
+    assert {report["intervention_id"] for report in ledger["candidate_reports"]} == {
+        "ped-speed-up",
+        "ped-speed-down",
+        "ped-start-delay",
+    }
+    assert len(ledger["traces"]) == 2
+
+
+def test_resume_rejects_tampered_ledger_identity(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    ledger["recipe_digest"] = "tampered"
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "recipe identity mismatch" in result.reason
 
 
 def test_intervention_update_branches() -> None:
@@ -358,6 +532,7 @@ def test_telemetry_metrics_rejects_malformed_payloads() -> None:
         is None
     )
     assert _telemetry_metrics({"status": "ok"}, horizon=4, motion_epsilon_m=0.05) is None
+    assert _telemetry_metrics(None, horizon=4, motion_epsilon_m=0.05) is None  # type: ignore[arg-type]
 
 
 def test_episode_job_reports_errors_without_raising() -> None:
@@ -409,6 +584,7 @@ def test_owned_child_spawn_failure(monkeypatch: pytest.MonkeyPatch) -> None:
         def start(self) -> None:
             raise OSError("no fork today")
 
+    monkeypatch.setattr(multiprocessing_module, "get_context", lambda _method=None: real_context)
     monkeypatch.setattr(real_context, "Process", _FailingProcess)
     outcome = _run_owned_child({"sleep_s": 0.0}, 1.0, target="sleep")
     assert outcome["outcome"] == "error" and "spawn failed" in str(outcome.get("error"))
@@ -453,6 +629,7 @@ def test_owned_child_interrupt_terminates(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setattr(real_context, "Pipe", _fake_pipe)
     monkeypatch.setattr(real_context, "Process", _NoopProcess)
+    monkeypatch.setattr(multiprocessing_module, "get_context", lambda _method=None: real_context)
     outcome = _run_owned_child({"sleep_s": 0.0}, 1.0, target="sleep")
     assert outcome["outcome"] == "interrupted" and "terminated" in str(outcome.get("error"))
 
@@ -493,7 +670,7 @@ def test_unknown_factor_candidate_is_unavailable(tmp_path: Path) -> None:
     payload["config"]["intervention_parameters"] = {}
     payload["config"]["max_candidates"] = 1
     result = run(component_request_from_dict(payload), base=tmp_path)
-    assert result.status == "failed"
+    assert result.status == "unavailable"
     assert "unsupported intervention factor" in result.reason
 
 
@@ -504,7 +681,7 @@ def test_wall_budget_exhaustion_before_first_candidate(tmp_path: Path) -> None:
     assert "wall_timeout" in result.reason
 
 
-def test_per_execution_timeout_cancels(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_per_execution_timeout_is_partial(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     import robot_sf.analysis_workbench.review_execute as review_execute_module
 
     def _timed_out(_job: Any, _timeout_s: float, **_kwargs: Any) -> dict[str, Any]:
@@ -513,7 +690,7 @@ def test_per_execution_timeout_cancels(monkeypatch: pytest.MonkeyPatch, tmp_path
     monkeypatch.setattr(review_execute_module, "_run_owned_child", _timed_out)
     request = _fixture_request(max_candidates=1, max_executions=2)
     result = run(request, base=tmp_path)
-    assert result.status == "cancelled"
+    assert result.status == "partial"
     assert "per_execution_timeout" in result.reason
     assert result.artifacts == ()
 

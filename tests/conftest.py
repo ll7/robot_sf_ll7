@@ -450,6 +450,9 @@ _FAST_FILES = {
     # the canonical coordination markers; keep them in the exact-head fast
     # lane (issue #9254).
     "test_lane_markers_issue_9254.py",
+    # Deterministic report-schema, comparison, and provenance tests cover the
+    # recorded experiment outcome comparator in the exact-head fast lane.
+    "test_review_experiment_report.py",
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",

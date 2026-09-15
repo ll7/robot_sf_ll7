@@ -160,6 +160,62 @@ def _check_sha40(value: Any, *, path: str, errors: list[str]) -> None:
         errors.append(f"{path}: expected 40-hex commit SHA")
 
 
+def _contains_lone_unicode_surrogate(value: str) -> bool:
+    """Return whether *value* contains an unpaired UTF-16 surrogate."""
+    index = 0
+    while index < len(value):
+        codepoint = ord(value[index])
+        if 0xD800 <= codepoint <= 0xDBFF:
+            if index + 1 < len(value) and 0xDC00 <= ord(value[index + 1]) <= 0xDFFF:
+                index += 2
+                continue
+            return True
+        if 0xDC00 <= codepoint <= 0xDFFF:
+            return True
+        index += 1
+    return False
+
+
+def _contains_unicode_surrogate(value: Any) -> bool:
+    """Return whether a contract payload contains a lone UTF-16 surrogate.
+
+    Contract payloads can include retained configuration and other nested
+    JSON values.  Walk those values iteratively so maliciously deep input
+    cannot turn this boundary check into a recursion failure.  Mapping keys
+    are checked as well because they participate in canonical identities.
+    """
+    pending: list[Any] = [value]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if isinstance(current, str):
+            if _contains_lone_unicode_surrogate(current):
+                return True
+            continue
+        if isinstance(current, Mapping):
+            marker = id(current)
+            if marker in visited:
+                continue
+            visited.add(marker)
+            for key, nested in current.items():
+                pending.extend((key, nested))
+        elif isinstance(current, (list, tuple)):
+            marker = id(current)
+            if marker in visited:
+                continue
+            visited.add(marker)
+            pending.extend(current)
+    return False
+
+
+def _reject_unicode_surrogates(payload: Any, *, source: Any = None) -> None:
+    """Reject Unicode surrogate code points before schema or digest handling."""
+    if _contains_unicode_surrogate(payload):
+        raise ReviewContractsValidationError(
+            ["payload contains unsupported Unicode surrogate"], source=source
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class SourceRef:
     """Identity and integrity pointer to one source artifact."""
@@ -417,6 +473,7 @@ def component_request_from_dict(
     Returns:
         Validated component request.
     """
+    _reject_unicode_surrogates(payload, source=source)
     _require_schema(COMPONENT_REQUEST_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []
     _check_no_traversal(str(payload["output_directory"]), path="/output_directory", errors=errors)
@@ -477,6 +534,7 @@ def experiment_recipe_from_dict(
     Returns:
         Validated experiment recipe.
     """
+    _reject_unicode_surrogates(payload, source=source)
     _require_schema(EXPERIMENT_RECIPE_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []
     seen: set[str] = set()
@@ -508,6 +566,7 @@ def admitted_source_receipt_from_dict(
     """
     if not isinstance(payload, Mapping):
         raise ReviewContractsValidationError(["expected a mapping payload"], source=source)
+    _reject_unicode_surrogates(payload, source=source)
     _require_schema(ADMITTED_SOURCE_RECEIPT_SCHEMA_VERSION, payload, source=source)
     source_payload = payload["source"]
     errors: list[str] = []
@@ -767,7 +826,7 @@ def _parse_admitted_source_receipt(
         return None, _resolution(
             "failed",
             ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
-            detail="; ".join(error.errors),
+            detail=_bounded_error_detail(error),
         )
 
 

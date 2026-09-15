@@ -20,11 +20,13 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import shutil
+import stat
 import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 import matplotlib
@@ -78,6 +80,23 @@ DEFAULT_ROBOT_RADIUS_M = 0.3
 DEFAULT_PEDESTRIAN_RADIUS_M = 0.3
 DEFAULT_FIGURE = {"width_in": 3.2, "height_in": 2.4, "dpi": 80}
 
+# The renderer is intentionally an offline diagnostic consumer.  Keep its
+# input and output budget finite so a valid-looking local request cannot turn
+# into an unbounded file read, parse, or figure export.
+MAX_SOURCES = 16
+MAX_SOURCE_BYTES = 16 * 1024 * 1024
+MAX_TRACE_FRAMES = 4096
+MAX_RENDER_FRAMES = 256
+MAX_PEDESTRIANS_PER_FRAME = 2048
+MAX_FIGURE_WIDTH_IN = 12.0
+MAX_FIGURE_HEIGHT_IN = 12.0
+MAX_FIGURE_DPI = 300.0
+MAX_FIGURE_PIXELS = 16_000_000
+
+EVIDENCE_BOUNDARY = "analysis_workbench_only"
+DIAGNOSTIC_CLAIM_BOUNDARY = "diagnostic_only; not benchmark evidence"
+DIAGNOSTIC_ADMISSION = "not_evaluated"
+
 # Pinned savefig behavior: other suites mutate global rcParams (notably
 # savefig.bbox=tight via the latex style helper), which would silently crop
 # our fixed-canvas figures under pytest-xdist worker reuse. Rendering stays
@@ -86,6 +105,22 @@ _HERMETIC_SAVEFIG_RCPARAMS = {
     "savefig.bbox": None,
     "savefig.dpi": "figure",
     "figure.constrained_layout.use": False,
+    # Matplotlib uses this salt when generating SVG element ids.  Pinning it
+    # prevents process-dependent ids from undermining artifact digests.
+    "svg.hashsalt": "robot-sf-review-scene-v1",
+}
+
+# Explicit metadata removes backend-generated wall-clock fields from the
+# formats that support them.  The values are part of the diagnostic artifact
+# contract, not environment provenance.
+_SCENE_METADATA: dict[str, dict[str, Any]] = {
+    "svg": {"Date": None},
+    "png": {"Software": "Robot SF review-scene"},
+    "pdf": {
+        "Creator": "Robot SF review-scene",
+        "CreationDate": None,
+        "ModDate": None,
+    },
 }
 
 
@@ -97,6 +132,17 @@ def descriptor() -> dict[str, Any]:
         (none) and versioned result artifact types.
     """
     return json.loads(json.dumps(_DESCRIPTOR_DOC))
+
+
+def _diagnostic_provenance(**fields: Any) -> dict[str, Any]:
+    """Return the immutable diagnostic-only result boundary plus extra fields."""
+    return {
+        **fields,
+        "evidence_boundary": EVIDENCE_BOUNDARY,
+        "diagnostic_only": True,
+        "admission": DIAGNOSTIC_ADMISSION,
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+    }
 
 
 def _canonical_sha256(value: Any) -> str:
@@ -148,7 +194,7 @@ def _positive_int(value: Any) -> int | None:
     return value
 
 
-def _validate_figure(figure: Any) -> tuple[dict[str, float] | None, list[str]]:
+def _validate_figure(figure: Any) -> tuple[dict[str, float] | None, list[str]]:  # noqa: C901
     """Validate the optional figure preset, falling back to defaults.
 
     Returns:
@@ -162,12 +208,33 @@ def _validate_figure(figure: Any) -> tuple[dict[str, float] | None, list[str]]:
     errors: list[str] = []
     for key in ("width_in", "height_in", "dpi"):
         raw = figure.get(key, DEFAULT_FIGURE[key])
-        if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not raw > 0:
-            errors.append(f"corrupt-scene: figure '{key}' must be a positive number")
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            errors.append(f"corrupt-scene: figure '{key}' must be a positive finite number")
             continue
-        figure_spec[key] = float(raw)
+        try:
+            numeric = float(raw)
+        except (OverflowError, ValueError):
+            numeric = math.nan
+        maximum = {
+            "width_in": MAX_FIGURE_WIDTH_IN,
+            "height_in": MAX_FIGURE_HEIGHT_IN,
+            "dpi": MAX_FIGURE_DPI,
+        }[key]
+        if not math.isfinite(numeric) or numeric <= 0:
+            errors.append(f"corrupt-scene: figure '{key}' must be a positive finite number")
+        elif numeric > maximum:
+            errors.append(f"resource-limit: figure '{key}' exceeds maximum {maximum:g}")
+        elif key == "dpi" and numeric < 1:
+            errors.append("resource-limit: figure 'dpi' must be at least 1")
+        else:
+            figure_spec[key] = numeric
     if errors:
         return None, errors
+
+    pixel_width = math.ceil(figure_spec["width_in"] * figure_spec["dpi"])
+    pixel_height = math.ceil(figure_spec["height_in"] * figure_spec["dpi"])
+    if pixel_width * pixel_height > MAX_FIGURE_PIXELS:
+        return None, [f"resource-limit: figure pixel budget exceeds maximum {MAX_FIGURE_PIXELS}"]
     return figure_spec, []
 
 
@@ -181,15 +248,23 @@ def _validate_scene(scene: Any) -> tuple[dict[str, Any] | None, list[str]]:
         return None, ["corrupt-scene: config must carry a 'scene' mapping"]
     errors: list[str] = []
     indices = scene.get("frame_indices")
+    normalized_indices: list[int] | None = None
     if indices is not None:
         if not isinstance(indices, list) or not indices:
             errors.append("corrupt-scene: 'frame_indices' must be a non-empty list")
+        elif len(indices) > MAX_RENDER_FRAMES:
+            errors.append(
+                f"resource-limit: frame selection exceeds maximum {MAX_RENDER_FRAMES} frames"
+            )
         else:
+            normalized_indices = []
             for index in indices:
-                if _positive_int(index) is None:
+                normalized = _positive_int(index)
+                if normalized is None:
                     errors.append("corrupt-scene: frame indices must be non-negative integers")
                     break
-            if len(set(indices)) != len(indices):
+                normalized_indices.append(normalized)
+            if not errors and len(set(normalized_indices)) != len(normalized_indices):
                 errors.append("corrupt-scene: frame indices must be distinct")
     formats = scene.get("formats", list(DEFAULT_SCENE_FORMATS))
     if (
@@ -203,7 +278,7 @@ def _validate_scene(scene: Any) -> tuple[dict[str, Any] | None, list[str]]:
     if errors or figure_spec is None:
         return None, errors or ["corrupt-scene: figure preset could not be normalized"]
     return {
-        "frame_indices": list(indices) if indices is not None else None,
+        "frame_indices": normalized_indices,
         "formats": list(dict.fromkeys(formats)),
         "figure": figure_spec,
     }, []
@@ -269,6 +344,12 @@ def _frame_geometry(frame: Any, frame_index: int) -> tuple[dict[str, Any] | None
     pedestrians = []
     if not isinstance(frame.pedestrians, list):
         return None, f"missing pedestrian list at frame index {frame_index}"
+    if len(frame.pedestrians) > MAX_PEDESTRIANS_PER_FRAME:
+        return (
+            None,
+            f"resource-limit: frame index {frame_index} exceeds maximum "
+            f"{MAX_PEDESTRIANS_PER_FRAME} pedestrians",
+        )
     for pedestrian in frame.pedestrians:
         if not isinstance(pedestrian, dict):
             return None, f"corrupt pedestrian entry at frame index {frame_index}"
@@ -343,6 +424,44 @@ def _render_scene_figure(geometry: dict[str, Any], figure_spec: dict[str, float]
     return figure
 
 
+def _safe_staging_path(staging_dir: Path, filename: str) -> Path:
+    """Resolve one generated filename and enforce staging-directory containment.
+
+    Returns:
+        The contained path in the staging directory.
+    """
+    if not _is_safe_artifact_id(filename):
+        raise ValueError(f"unsafe-output-artifact: {filename!r}")
+    root = staging_dir.resolve(strict=False)
+    candidate = (root / filename).resolve(strict=False)
+    try:
+        candidate.relative_to(root)
+    except ValueError as error:
+        raise ValueError(f"unsafe-output-artifact: {filename!r}") from error
+    return candidate
+
+
+def _staged_artifact_record(
+    staging_dir: Path, output_directory: str, filename: str
+) -> dict[str, str]:
+    """Build a digest record only after checking the staged file and URI.
+
+    Returns:
+        Output-relative artifact record with the final staged-file digest.
+    """
+    path = _safe_staging_path(staging_dir, filename)
+    if not path.is_file():
+        raise OSError(f"output artifact was not written as a regular file: {filename}")
+    uri = str(Path(output_directory) / filename)
+    if not _is_strict_relative_path(uri):
+        raise ValueError(f"unsafe-output-artifact-uri: {uri!r}")
+    return {
+        "artifact_id": filename,
+        "uri": uri,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+
+
 def _render_trace_scenes(
     trace: SimulationTraceExport,
     artifact_id: str,
@@ -358,6 +477,10 @@ def _render_trace_scenes(
     indices = scene["frame_indices"]
     if indices is None:
         indices = list(range(len(trace.frames)))
+    if len(indices) > MAX_RENDER_FRAMES:
+        raise ValueError(
+            f"resource-limit: frame selection exceeds maximum {MAX_RENDER_FRAMES} frames"
+        )
     unknown = [index for index in indices if index >= len(trace.frames)]
     if unknown:
         raise IndexError(f"frame indices out of range for {len(trace.frames)} frames: {unknown}")
@@ -372,15 +495,14 @@ def _render_trace_scenes(
             try:
                 for scene_format in scene["formats"]:
                     filename = f"{artifact_id}-scene_{ordinal:06d}.{scene_format}"
-                    figure.savefig(staging_dir / filename, format=scene_format)
+                    output_path = _safe_staging_path(staging_dir, filename)
+                    figure.savefig(
+                        output_path,
+                        format=scene_format,
+                        metadata=_SCENE_METADATA[scene_format],
+                    )
                     artifacts.append(
-                        {
-                            "artifact_id": filename,
-                            "uri": str(Path(output_directory) / filename),
-                            "sha256": hashlib.sha256(
-                                (staging_dir / filename).read_bytes()
-                            ).hexdigest(),
-                        }
+                        _staged_artifact_record(staging_dir, output_directory, filename)
                     )
             finally:
                 plt.close(figure)
@@ -418,17 +540,21 @@ def _build_source_map(
         "component": COMPONENT_ID,
         "component_version": COMPONENT_VERSION,
         "request_id": request.request_id,
+        "evidence_boundary": EVIDENCE_BOUNDARY,
+        "diagnostic_only": True,
+        "admission": DIAGNOSTIC_ADMISSION,
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
         "figure": scene["figure"],
         "formats": scene["formats"],
         "frames": rows,
-        "provenance": {
-            "source_artifact_ids": sorted(record["artifact_id"] for record in source_records),
-            "source_artifacts": source_records,
-            "source_identity_status": "embedded-observed",
-            "note": "observed_sha256 is the digest of the exact bytes parsed by the "
+        "provenance": _diagnostic_provenance(
+            source_artifact_ids=sorted(record["artifact_id"] for record in source_records),
+            source_artifacts=source_records,
+            source_identity_status="embedded-observed",
+            note="observed_sha256 is the digest of the exact bytes parsed by the "
             "canonical trace owner; embedded trace metadata is observed, not an "
             "independent identity attestation.",
-        },
+        ),
     }
     document["sourcemap_sha256"] = _canonical_sha256(
         {
@@ -519,6 +645,7 @@ def _unavailable(request: ComponentRequest, reason: str) -> ComponentResult:
         request_id=request.request_id,
         component_id=request.component_id,
         status="unavailable",
+        provenance=_diagnostic_provenance(),
         reason=reason,
     )
 
@@ -536,6 +663,7 @@ def _failed(
         component_id=request.component_id,
         status="failed",
         diagnostics=diagnostics,
+        provenance=_diagnostic_provenance(),
         reason=reason,
     )
 
@@ -566,7 +694,23 @@ def _invalid_request_result(request: Any, reason: str) -> ComponentResult:
         request_id=request_id,
         component_id=component_id,
         status="failed",
+        provenance=_diagnostic_provenance(),
         reason=f"invalid-request: {reason}",
+    )
+
+
+def _is_safe_artifact_id(value: Any) -> bool:
+    """Return whether an artifact ID is safe to interpolate into one filename."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    windows = PureWindowsPath(value)
+    return not (
+        value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or windows.is_absolute()
+        or bool(windows.drive)
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
     )
 
 
@@ -577,6 +721,8 @@ def _source_ref_shape_errors(index: int, ref: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(ref.artifact_id, str) or not ref.artifact_id.strip():
         errors.append(f"sources[{index}].artifact_id must be a non-empty string")
+    elif not _is_safe_artifact_id(ref.artifact_id):
+        errors.append(f"sources[{index}].artifact_id must be a safe filename component")
     if not isinstance(ref.uri, str) or not ref.uri.strip():
         errors.append(f"sources[{index}].uri must be a non-empty string")
     if not isinstance(ref.format, str) or not ref.format.strip():
@@ -584,7 +730,7 @@ def _source_ref_shape_errors(index: int, ref: Any) -> list[str]:
     return errors
 
 
-def _request_shape_errors(request: ComponentRequest) -> list[str]:
+def _request_shape_errors(request: ComponentRequest) -> list[str]:  # noqa: C901
     """Return stable shape errors for a manually constructed API request.
 
     Returns:
@@ -605,6 +751,15 @@ def _request_shape_errors(request: ComponentRequest) -> list[str]:
     else:
         for index, ref in enumerate(request.sources):
             errors.extend(_source_ref_shape_errors(index, ref))
+        seen_artifact_ids: set[str] = set()
+        for ref in request.sources:
+            if not isinstance(ref, SourceRef) or not isinstance(ref.artifact_id, str):
+                continue
+            if ref.artifact_id in seen_artifact_ids:
+                errors.append(f"sources must not contain duplicate artifact id: {ref.artifact_id}")
+            seen_artifact_ids.add(ref.artifact_id)
+        if len(request.sources) > MAX_SOURCES:
+            errors.append(f"sources must contain at most {MAX_SOURCES} entries")
     if not isinstance(request.required_capabilities, (tuple, list)) or any(
         not isinstance(capability, str) or not capability.strip()
         for capability in request.required_capabilities
@@ -627,6 +782,11 @@ def _normalize_request(
             return _invalid_request_result(request, "; ".join(errors))
         return request
     if isinstance(request, Mapping):
+        sources = request.get("sources")
+        if isinstance(sources, (list, tuple)) and len(sources) > MAX_SOURCES:
+            return _invalid_request_result(
+                request, f"sources must contain at most {MAX_SOURCES} entries"
+            )
         try:
             normalized = component_request_from_dict(request)
         except (ReviewContractsValidationError, TypeError, ValueError) as error:
@@ -690,6 +850,39 @@ def _resolve_source_file(source_base: Path, uri: str) -> Path | None:
     return resolved
 
 
+def _read_bounded_source(path: Path) -> bytes:
+    """Read a regular source file without blocking on special files.
+
+    Returns:
+        At most ``MAX_SOURCE_BYTES`` source bytes.
+    """
+    initial_stat = path.stat()
+    if not stat.S_ISREG(initial_stat.st_mode):
+        raise ValueError("source must be a regular file")
+    if initial_stat.st_size > MAX_SOURCE_BYTES:
+        raise ValueError(f"source exceeds maximum size of {MAX_SOURCE_BYTES} bytes")
+
+    flags = os.O_RDONLY | os.O_NONBLOCK
+    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    file_descriptor: int | None = None
+    try:
+        file_descriptor = os.open(path, flags)
+        opened_stat = os.fstat(file_descriptor)
+        if not stat.S_ISREG(opened_stat.st_mode):
+            raise ValueError("source must be a regular file")
+        if opened_stat.st_size > MAX_SOURCE_BYTES:
+            raise ValueError(f"source exceeds maximum size of {MAX_SOURCE_BYTES} bytes")
+        with os.fdopen(file_descriptor, "rb") as stream:
+            file_descriptor = None
+            raw = stream.read(MAX_SOURCE_BYTES + 1)
+        if len(raw) > MAX_SOURCE_BYTES:
+            raise ValueError(f"source exceeds maximum size of {MAX_SOURCE_BYTES} bytes")
+        return raw
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+
+
 def _load_trace_source(
     artifact_id: str, path: Path
 ) -> tuple[SimulationTraceExport | None, str | None, str | None]:
@@ -700,7 +893,7 @@ def _load_trace_source(
         error is meaningful.
     """
     try:
-        raw = path.read_bytes()
+        raw = _read_bounded_source(path)
         observed_sha256 = hashlib.sha256(raw).hexdigest()
         payload = json.loads(raw)
         if not isinstance(payload, Mapping):
@@ -853,7 +1046,7 @@ def _verify_source_provenance(
     return source_record, "; ".join(failures) if failures else None
 
 
-def _collect_traces(
+def _collect_traces(  # noqa: C901
     request: ComponentRequest, sources_root: Path
 ) -> tuple[
     list[tuple[Any, str, dict[str, Any]]],
@@ -901,6 +1094,14 @@ def _collect_traces(
                 {"artifact_id": ref.artifact_id, "reason": "empty trace has no scenes"}
             )
             continue
+        if len(trace.frames) > MAX_TRACE_FRAMES:
+            diagnostics.append(
+                {
+                    "artifact_id": ref.artifact_id,
+                    "reason": f"resource-limit: trace exceeds maximum {MAX_TRACE_FRAMES} frames",
+                }
+            )
+            continue
         source_record, provenance_error = _verify_source_provenance(ref, trace, observed_sha256)
         if provenance_error is not None:
             diagnostics.append({"artifact_id": ref.artifact_id, "reason": provenance_error})
@@ -924,6 +1125,7 @@ def _collect_traces(
                 component_id=request.component_id,
                 status="unavailable",
                 diagnostics=tuple(diagnostics),
+                provenance=_diagnostic_provenance(),
                 reason="unsupported-evidence: no source could be rendered",
             ),
         )
@@ -992,13 +1194,13 @@ def run(
         status="complete" if not diagnostics else "partial",
         artifacts=tuple(artifacts),
         diagnostics=tuple(diagnostics),
-        provenance={
-            "output_directory": request.output_directory,
-            "sourcemap_sha256": source_map["sourcemap_sha256"],
-            "component_version": COMPONENT_VERSION,
-            "source_artifacts": source_records,
-            "source_identity_status": "embedded-observed",
-        },
+        provenance=_diagnostic_provenance(
+            output_directory=request.output_directory,
+            sourcemap_sha256=source_map["sourcemap_sha256"],
+            component_version=COMPONENT_VERSION,
+            source_artifacts=source_records,
+            source_identity_status="embedded-observed",
+        ),
     )
 
 

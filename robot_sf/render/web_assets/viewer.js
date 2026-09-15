@@ -1,4 +1,5 @@
 import * as THREE from "https://unpkg.com/three@0.164.1/build/three.module.js";
+import * as PresentationScene from "./components/presentation_scene/presentation_scene.js";
 
 const root = document.querySelector("#viewer");
 const hud = document.querySelector("#hud");
@@ -32,6 +33,12 @@ let payload = null;
 let currentFrame = 0;
 let playing = true;
 let lastFrameTime = 0;
+// Presentation view state (issue #9369): `top-down` reproduces the existing
+// overhead camera; `isometric` adds illustrative wall volumes built once per
+// preset switch (never per frame). Toggled with V.
+let activePreset = "top-down";
+let wallVolumes = null;
+let presentationLight = null;
 let playStartWall = 0;
 let playStartTime = 0;
 
@@ -41,7 +48,7 @@ fetch("./scene.json")
     payload = scenePayload;
     buildStaticMap(scenePayload.map);
     timeline.max = Math.max(scenePayload.frames.length - 1, 0);
-    fitCamera(scenePayload.map);
+    applyViewPreset(PresentationScene.viewPreset(payload));
     buildTimelineMarkers(scenePayload);
     drawFrame(0);
     animate();
@@ -61,6 +68,9 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     playing = !playing;
     resyncClock();
+  } else if (event.code === "KeyV") {
+    applyViewPreset(activePreset === "isometric" ? "top-down" : "isometric");
+    drawFrame(currentFrame);
   }
 });
 
@@ -220,6 +230,10 @@ function drawFrame(index) {
   parts.push(`frame ${currentFrame + 1}/${payload.frames.length}`);
   parts.push(`step=${frame.timestep != null ? frame.timestep : currentFrame}`);
   if (frame.time_s != null) parts.push(`t=${frame.time_s.toFixed(2)}s`);
+  parts.push(`view=${activePreset}`);
+  if (activePreset === "isometric") {
+    parts.push("height=symbolic (illustrative; geometry stays 2D)");
+  }
   const clockMode = timingMode().mode;
   parts.push(clockMode === "source-time" ? "timing=source-time" : "timing=frame-index (legacy; time_s unavailable)");
   const identityMode = payload.fidelity?.identity?.mode || "slot-index";
@@ -383,6 +397,23 @@ function disposeObject(object) {
 }
 
 function fitCamera(map) {
+  const framing = frameMap(map);
+  camera.up.set(0, 0, -1);
+  camera.left = framing.centerX - framing.halfWidth;
+  camera.right = framing.centerX + framing.halfWidth;
+  camera.top = framing.halfHeight;
+  camera.bottom = -framing.halfHeight;
+  camera.position.set(
+    framing.centerX,
+    Math.max(map.width, map.height) * 2.1,
+    framing.centerY
+  );
+  camera.lookAt(framing.centerX, 0, framing.centerY);
+  camera.updateProjectionMatrix();
+  return framing;
+}
+
+function frameMap(map) {
   const origin = map.origin || [0, 0];
   const width = root.clientWidth || window.innerWidth;
   const height = root.clientHeight || window.innerHeight;
@@ -398,19 +429,44 @@ function fitCamera(map) {
   } else {
     halfWidth = halfHeight * aspect;
   }
+  return { centerX, centerY, halfWidth, halfHeight };
+}
 
-  camera.left = centerX - halfWidth;
-  camera.right = centerX + halfWidth;
-  camera.top = halfHeight;
-  camera.bottom = -halfHeight;
-  camera.position.set(centerX, Math.max(map.width, map.height) * 2.1, centerY);
-  camera.lookAt(centerX, 0, centerY);
-  camera.updateProjectionMatrix();
+function applyViewPreset(preset) {
+  activePreset = preset === "isometric" ? "isometric" : "top-down";
+  if (wallVolumes) {
+    wallVolumes.traverse((object) => {
+      if (object === wallVolumes) return;
+      disposeObject(object);
+    });
+    world.remove(wallVolumes);
+    wallVolumes = null;
+  }
+  const framing = fitCamera(payload.map);
+  if (activePreset !== "isometric" || !payload) return;
+  if (!presentationLight) {
+    presentationLight = new THREE.DirectionalLight(0xffffff, 0.85);
+    presentationLight.position.set(20, 30, 10);
+    scene.add(presentationLight);
+  }
+  wallVolumes = PresentationScene.buildWallVolumes(
+    THREE,
+    payload.map,
+    PresentationScene.wallHeight(payload)
+  );
+  world.add(wallVolumes);
+  const span = Math.max(framing.halfWidth, framing.halfHeight) * 2;
+  PresentationScene.poseIsometricCamera(
+    camera,
+    framing.centerX,
+    framing.centerY,
+    span
+  );
 }
 
 function resize() {
   const width = root.clientWidth || window.innerWidth;
   const height = root.clientHeight || window.innerHeight;
   renderer.setSize(width, height);
-  if (payload) fitCamera(payload.map);
+  if (payload) applyViewPreset(activePreset);
 }

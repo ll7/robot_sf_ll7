@@ -502,6 +502,9 @@ _FAST_FILES = {
     # Three.js viewer payload contracts are deterministic schema/fidelity
     # coverage for the changed viewer exporter (issue #9368).
     "test_threejs_viewer.py",
+    # Presentation-scene view contracts are deterministic coverage for the
+    # changed presentation view adapter (issue #9369).
+    "test_presentation_scene.py",
     # SVG geometry contract tests provide changed-line coverage for the
     # parser's explicit legacy/corrected transform paths (issue #8314).
     "test_svg_transform_contract.py",

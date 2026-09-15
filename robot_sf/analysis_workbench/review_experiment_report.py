@@ -45,6 +45,7 @@ EVIDENCE_BOUNDARY = "diagnostic-only recorded-results comparison; not benchmark 
 OUTCOMES = ("survived", "falsified", "inconclusive", "contradictory")
 VALID_GATE_STATUSES = ("pass", "fail", "missing", "unknown", "not_applicable")
 _ALLOWED_CONFIG_KEYS = {"metric_order", "report_title"}
+_MAX_JSON_NESTING_DEPTH = 1000
 
 
 class ExperimentReportError(RobotSfError, ValueError):
@@ -156,9 +157,14 @@ def _validate_unicode_string(value: str, *, path: str) -> None:
             index += 1
 
 
-def _validate_strict_json(value: Any, *, path: str = "/source") -> None:
+def _validate_strict_json(value: Any, *, path: str = "/source", depth: int = 0) -> None:
     """Reject JSON parser extensions that would make artifacts non-canonical."""
 
+    if depth >= _MAX_JSON_NESTING_DEPTH:
+        subject = "config" if path.startswith("/config") else "source"
+        raise ExperimentReportError(
+            "invalid_input", f"{subject} JSON exceeds the supported nesting depth"
+        )
     if isinstance(value, float) and not math.isfinite(value):
         raise ExperimentReportError("invalid_input", f"{path} contains a non-finite number")
     elif isinstance(value, str):
@@ -168,10 +174,10 @@ def _validate_strict_json(value: Any, *, path: str = "/source") -> None:
             if not isinstance(key, str):
                 raise ExperimentReportError("invalid_input", f"{path} has a non-string object key")
             _validate_unicode_string(key, path=f"{path}/<key>")
-            _validate_strict_json(child, path=f"{path}/{key}")
+            _validate_strict_json(child, path=f"{path}/{key}", depth=depth + 1)
     elif type(value) is list:
         for index, child in enumerate(value):
-            _validate_strict_json(child, path=f"{path}/{index}")
+            _validate_strict_json(child, path=f"{path}/{index}", depth=depth + 1)
 
 
 def _list(value: Any, *, path: str) -> list[Any]:

@@ -609,13 +609,14 @@ convention = "google"
 [tool.coverage.run]
 source = ["robot_sf", "fast-pysf/pysocialforce"]
 
-# Omit test files and non-library code from coverage measurement
+# Omit test files and non-library code from aggregate coverage measurement.
+# Changed validation scripts are opted into explicitly by the canonical PR
+# wrapper when they are part of the committed diff.
 omit = [
     "*/tests/*",
     "*/test_*",
     "tests/pygame/*",
     "examples/*",
-    "scripts/*",
     "fast-pysf/tests/*",
     "fast-pysf/examples/*",
     "*/conftest.py",

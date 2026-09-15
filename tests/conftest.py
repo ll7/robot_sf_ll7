@@ -865,6 +865,9 @@ _FAST_FILES = {
     # contracts for the review component; keep changed coverage in fast shards
     # (issue #9284).
     "test_review_workbench.py",
+    # SREV-25 recorded-result comparison tests are deterministic report-schema,
+    # comparison, and provenance contracts; keep them in PR fast shards.
+    "test_review_experiment_report.py",
     # SREV-22 review-execute tests are deterministic fixture and fail-closed
     # execution coverage for the bounded experiment leaf; keep changed coverage
     # in fast shards (issue #9293).

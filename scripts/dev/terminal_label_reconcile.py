@@ -4,7 +4,7 @@ After an issue or pull request reaches a verified terminal state, active
 dispatch and review labels from a controlled namespace become stale: they make
 queue snapshots report false dispatch candidates and distort WIP reporting.
 This planner derives an exact before/after label plan for a declared terminal
-class and executes it with compare-and-swap semantics.
+class and executes it with guarded identity checks.
 
 The controlled namespace is derived from ``docs/ai/label-taxonomy.md``: active
 execution and review labels must not survive a verified terminal transition,
@@ -14,13 +14,15 @@ class explicitly resolves the decision (a merge or a ``ruled`` closure with a
 recorded ruling).
 
 The operation is exact-item scoped and idempotent. ``--report`` mode performs
-no GitHub mutation and lists every proposed change; ``--apply`` mode re-reads
-the live item state immediately before mutating each label, aborts on reopen or
-concurrent label drift, and keeps manual labels outside the controlled
-namespace untouched. ``merge-ready`` removal additionally proves the item is
-still a closed PR through the pulls API and passes its live head/base SHAs to
-the PR-target compare-and-swap guard. The planner never closes issues, merges
-PRs, or creates labels.
+no GitHub mutation and lists every proposed change; ``--apply`` mode captures
+one terminal PR head/base identity for the plan, re-reads the live item and PR
+identity before every mutation, verifies the identity after each successful
+write, aborts on the first failure, and keeps manual labels outside the
+controlled namespace untouched. GitHub's label endpoint has no conditional
+revision write, so the PR path remains a guarded check-then-act protocol: a
+remote writer can interleave between the final preflight and mutation, and
+post-write verification can detect but cannot undo that race. The planner
+never closes issues, merges PRs, or creates labels.
 """
 
 from __future__ import annotations
@@ -31,11 +33,18 @@ import sys
 from typing import Any
 
 from scripts.dev._gh_rest import gh_api_get, parse_json
-from scripts.dev.gh_pr_label_rest import add_label, remove_label
+from scripts.dev.gh_pr_label_rest import (
+    add_label,
+    add_terminal_pr_label,
+    read_terminal_pr_identity,
+    remove_label,
+    remove_terminal_pr_label,
+)
 
 SCHEMA = "terminal_label_reconcile.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 REST_API_VERSION = "github-rest-v3"
+TERMINAL_ITEM_STATES = frozenset({"closed", "merged"})
 
 # Terminal classes supported by the planner.
 TERMINAL_CLASSES = frozenset(
@@ -159,6 +168,49 @@ def plan_for_terminal(
     }
 
 
+_LABEL_RECEIPT_FIELDS = (
+    "receipt_schema",
+    "status",
+    "reason",
+    "target",
+    "operation",
+    "expected_head_sha",
+    "expected_base_sha",
+    "observed_state",
+    "observed_head_sha",
+    "observed_base_sha",
+    "merged_at",
+    "attempts",
+    "reset_at",
+    "rate_limit_kind",
+    "idempotent",
+    "write_status",
+    "verification_status",
+    "verification_stage",
+)
+
+
+def _label_failure_receipt(label: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Preserve guarded mutation status and identity evidence in a failure row."""
+    failure: dict[str, Any] = {"label": label, "error": result.get("error")}
+    for field in _LABEL_RECEIPT_FIELDS:
+        if field == "status" and result.get("target") != "pr":
+            continue
+        if field in result:
+            failure[field] = result[field]
+    return failure
+
+
+def _label_success_receipt(label: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Record guarded PR evidence while preserving the compact issue receipt shape."""
+    receipt: dict[str, Any] = {"label": label, "skipped": False}
+    if result.get("target") == "pr":
+        for field in _LABEL_RECEIPT_FIELDS:
+            if field in result:
+                receipt[field] = result[field]
+    return receipt
+
+
 def _label_names_from_payload(payload: dict[str, Any], *, context: str) -> list[str]:
     """Normalize and validate a REST label list before it enters a plan."""
     raw_labels = payload.get("labels")
@@ -213,6 +265,60 @@ def fetch_item_state(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]
     }
 
 
+def _write_label_change(
+    number: int,
+    *,
+    repo: str,
+    label: str,
+    action: str,
+    is_pull_request: bool,
+    expected_head_sha: str | None,
+    expected_base_sha: str | None,
+) -> dict[str, Any]:
+    """Dispatch one confirmed label write through the correct target guard."""
+    if is_pull_request:
+        if expected_head_sha is None or expected_base_sha is None:
+            return {
+                "status": "error",
+                "error": f"terminal PR plan identity was not established before {action}",
+            }
+        if action == "remove":
+            return remove_terminal_pr_label(
+                number,
+                label,
+                repo=repo,
+                expected_head_sha=expected_head_sha,
+                expected_base_sha=expected_base_sha,
+            )
+        return add_terminal_pr_label(
+            number,
+            label,
+            repo=repo,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+        )
+    if action == "remove":
+        return remove_label(number, label, repo=repo)
+    return add_label(number, label, repo=repo)
+
+
+def _abort_after_label_failure(
+    label: str,
+    *,
+    action: str,
+    result: dict[str, Any],
+    applied: dict[str, Any],
+) -> dict[str, Any]:
+    """Record a failed write and return the sentinel that stops the plan."""
+    applied["failures"].append(_label_failure_receipt(label, result))
+    return {
+        "ok": False,
+        "error": f"{action} '{label}' failed; plan aborted: "
+        f"{result.get('error', 'mutation was not confirmed')}",
+        "applied_changes": applied,
+    }
+
+
 def _apply_label_change(
     number: int,
     *,
@@ -220,11 +326,15 @@ def _apply_label_change(
     label: str,
     action: str,
     applied: dict[str, Any],
+    expected_head_sha: str | None,
+    expected_base_sha: str | None,
 ) -> dict[str, Any] | None:
-    """Apply one compare-and-swap label mutation.
+    """Apply one guarded label mutation and abort the plan on any failure.
 
-    Returns an abort payload (state reopened / read failure) when the live state
-    is no longer terminal, ``None`` when the mutation was attempted.
+    Returns an abort payload whenever the live state cannot be verified as
+    terminal or the requested write is not confirmed. ``None`` means the
+    mutation was skipped because the requested label state was already true or
+    the mutation was confirmed successfully.
     """
     current = fetch_item_state(number, repo=repo)
     if not current["ok"]:
@@ -234,39 +344,201 @@ def _apply_label_change(
             "error": f"state re-read failed before {action} '{label}'",
             "applied_changes": applied,
         }
-    if current["state"] not in {"closed", "merged"}:
+    if current["state"] not in TERMINAL_ITEM_STATES:
+        error = f"item reopened (state={current['state']}); plan aborted"
+        applied["failures"].append(
+            {
+                "label": label,
+                "status": "review_skipped_stale_state",
+                "reason": "pr_not_terminal" if current.get("is_pull_request") else "not_terminal",
+                "error": error,
+            }
+        )
         return {
             "ok": False,
-            "error": f"item reopened (state={current['state']}); plan aborted",
+            "error": error,
             "applied_changes": applied,
         }
-    if action == "remove":
-        if label not in current["labels"]:
-            applied["remove"].append({"label": label, "skipped": True})
-            return None
-        if label in {"merge-ready", "merge-if-ci-green"}:
-            return _apply_merge_ready_removal(
-                number,
-                repo=repo,
-                label=label,
-                is_pull_request=bool(current.get("is_pull_request")),
-                applied=applied,
-            )
-        result = remove_label(number, label, repo=repo)
-        if result.get("status") != "ok":
-            applied["failures"].append({"label": label, "error": result.get("error")})
-            return None
-        applied["remove"].append({"label": label, "skipped": False})
+    if action == "remove" and label not in current["labels"]:
+        applied["remove"].append({"label": label, "skipped": True})
         return None
-    if label in current["labels"]:
+    if action == "add" and label in current["labels"]:
         applied["add"].append({"label": label, "skipped": True})
         return None
-    result = add_label(number, label, repo=repo)
+    result = _write_label_change(
+        number,
+        repo=repo,
+        label=label,
+        action=action,
+        is_pull_request=bool(current.get("is_pull_request")),
+        expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
+    )
     if result.get("status") != "ok":
-        applied["failures"].append({"label": label, "error": result.get("error")})
-        return None
-    applied["add"].append({"label": label, "skipped": False})
+        return _abort_after_label_failure(label, action=action, result=result, applied=applied)
+    applied[action].append(_label_success_receipt(label, result))
     return None
+
+
+def _plan_pr_identity_preflight(
+    number: int,
+    *,
+    repo: str,
+    initial_state: dict[str, Any],
+    changes_required: bool,
+    applied: dict[str, Any],
+) -> tuple[str | None, str | None, str | None]:
+    """Capture the plan-level terminal PR identity before the first mutation."""
+    if not (
+        initial_state.get("is_pull_request")
+        and initial_state.get("state") in TERMINAL_ITEM_STATES
+        and changes_required
+    ):
+        return None, None, None
+
+    identity = read_terminal_pr_identity(number, repo=repo)
+    if identity.get("status") != "ok":
+        error = "terminal PR identity preflight failed; plan aborted: " + str(
+            identity.get("error", "identity was not verified")
+        )
+        applied["failures"].append(
+            {
+                "label": "__plan_identity__",
+                "stage": "plan_preflight_identity",
+                "error": error,
+            }
+        )
+        return None, None, error
+    if identity["observed_state"] not in {"CLOSED", "MERGED"}:
+        error = (
+            "terminal PR identity preflight found a non-terminal state; plan aborted: "
+            f"{identity['observed_state']}"
+        )
+        applied["failures"].append(
+            {
+                "label": "__plan_identity__",
+                "stage": "plan_preflight_identity",
+                "status": "review_skipped_stale_state",
+                "reason": "pr_not_terminal",
+                "error": error,
+                "observed_state": identity["observed_state"],
+                "observed_head_sha": identity["observed_head_sha"],
+                "observed_base_sha": identity["observed_base_sha"],
+                "merged_at": identity["merged_at"],
+            }
+        )
+        return None, None, error
+    return identity["observed_head_sha"], identity["observed_base_sha"], None
+
+
+def _apply_plan_failure_report(
+    number: int,
+    terminal_class: str,
+    *,
+    error: str,
+    applied: dict[str, Any],
+    reason: str | None,
+) -> dict[str, Any]:
+    """Build the common fail-closed report returned before final readback."""
+    return {
+        "schema": SCHEMA,
+        "number": number,
+        "terminal_class": terminal_class,
+        "ok": False,
+        "applied": True,
+        "error": error,
+        "failures": applied["failures"],
+        "applied_changes": applied,
+        "reason": reason,
+    }
+
+
+def _check_final_pr_identity(
+    number: int,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    expected_base_sha: str,
+    failures: list[dict[str, Any]],
+) -> None:
+    """Append a failure when the final PR identity no longer matches the plan."""
+    final_identity = read_terminal_pr_identity(number, repo=repo)
+    if final_identity.get("status") != "ok":
+        failures.append(
+            {
+                "label": "__final_pr_identity__",
+                "stage": "final_identity_readback",
+                "error": final_identity.get("error"),
+            }
+        )
+        return
+    if final_identity["observed_state"] not in {"CLOSED", "MERGED"}:
+        reason = "pr_not_terminal"
+    elif final_identity["observed_head_sha"].lower() != expected_head_sha.lower():
+        reason = "head_sha_changed"
+    elif final_identity["observed_base_sha"].lower() != expected_base_sha.lower():
+        reason = "base_sha_changed"
+    else:
+        return
+    failures.append(
+        {
+            "label": "__final_pr_identity__",
+            "stage": "final_identity_readback",
+            "status": "review_skipped_stale_state",
+            "reason": reason,
+            "error": "terminal PR identity changed during reconciliation",
+            "expected_head_sha": expected_head_sha,
+            "expected_base_sha": expected_base_sha,
+            "observed_state": final_identity["observed_state"],
+            "observed_head_sha": final_identity["observed_head_sha"],
+            "observed_base_sha": final_identity["observed_base_sha"],
+            "merged_at": final_identity["merged_at"],
+        }
+    )
+
+
+def _check_final_item_state(
+    final_state: dict[str, Any],
+    *,
+    expected_labels: list[str],
+    failures: list[dict[str, Any]],
+) -> None:
+    """Append failures for an unavailable or inconsistent final item readback."""
+    if not final_state["ok"]:
+        failures.append(
+            {
+                "label": "__final_state__",
+                "stage": "final_readback",
+                "error": final_state["error"],
+            }
+        )
+        return
+    if final_state["state"] not in TERMINAL_ITEM_STATES:
+        failures.append(
+            {
+                "label": "__final_state__",
+                "stage": "final_terminal_check",
+                "status": "review_skipped_stale_state",
+                "reason": "pr_not_terminal"
+                if final_state.get("is_pull_request")
+                else "not_terminal",
+                "error": (
+                    f"item was no longer terminal at final readback (state={final_state['state']})"
+                ),
+            }
+        )
+        return
+    final_labels = sorted(final_state["labels"])
+    if final_labels != expected_labels:
+        failures.append(
+            {
+                "label": "__final_labels__",
+                "stage": "final_readback",
+                "error": "final labels did not match the expected reconciliation",
+                "expected_labels": expected_labels,
+                "observed_labels": final_labels,
+            }
+        )
 
 
 def _apply_plan(
@@ -276,37 +548,81 @@ def _apply_plan(
     *,
     repo: str,
     reason: str | None,
+    initial_state: dict[str, Any],
 ) -> dict[str, Any]:
-    """Apply a label plan with compare-and-swap state checks."""
+    """Apply a label plan with fail-closed state and PR identity checks."""
     applied: dict[str, Any] = {"add": [], "remove": [], "failures": []}
+    expected_final_labels = sorted(set(plan["preserved"]) | set(plan["add"]))
+    changes_required = bool(plan["remove"]) or any(
+        label not in initial_state["labels"] for label in plan["add"]
+    )
+    expected_head_sha, expected_base_sha, identity_error = _plan_pr_identity_preflight(
+        number,
+        repo=repo,
+        initial_state=initial_state,
+        changes_required=changes_required,
+        applied=applied,
+    )
+    if identity_error is not None:
+        return _apply_plan_failure_report(
+            number,
+            terminal_class,
+            error=identity_error,
+            applied=applied,
+            reason=reason,
+        )
+
     for label in plan["remove"]:
         abort = _apply_label_change(
-            number, repo=repo, label=label, action="remove", applied=applied
+            number,
+            repo=repo,
+            label=label,
+            action="remove",
+            applied=applied,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
         )
         if abort is not None:
-            return {
-                "schema": SCHEMA,
-                "number": number,
-                "terminal_class": terminal_class,
-                "ok": False,
-                "applied": True,
-                "error": abort["error"],
-                "applied_changes": abort["applied_changes"],
-            }
+            return _apply_plan_failure_report(
+                number,
+                terminal_class,
+                error=abort["error"],
+                applied=applied,
+                reason=reason,
+            )
     for label in plan["add"]:
-        abort = _apply_label_change(number, repo=repo, label=label, action="add", applied=applied)
+        abort = _apply_label_change(
+            number,
+            repo=repo,
+            label=label,
+            action="add",
+            applied=applied,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+        )
         if abort is not None:
-            return {
-                "schema": SCHEMA,
-                "number": number,
-                "terminal_class": terminal_class,
-                "ok": False,
-                "applied": True,
-                "error": abort["error"],
-                "applied_changes": abort["applied_changes"],
-            }
+            return _apply_plan_failure_report(
+                number,
+                terminal_class,
+                error=abort["error"],
+                applied=applied,
+                reason=reason,
+            )
     failures = applied["failures"]
+    if expected_head_sha is not None and expected_base_sha is not None:
+        _check_final_pr_identity(
+            number,
+            repo=repo,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+            failures=failures,
+        )
     final_state = fetch_item_state(number, repo=repo)
+    _check_final_item_state(
+        final_state,
+        expected_labels=expected_final_labels,
+        failures=failures,
+    )
     return {
         "schema": SCHEMA,
         "number": number,
@@ -331,8 +647,10 @@ def reconcile_item(
     """Compute (and optionally apply) the terminal-label plan for one item.
 
     In apply mode the live state is re-read immediately before each label
-    mutation; a reopen or a concurrent label change aborts with a structured
-    error. Manual labels outside the controlled namespace are never touched.
+    mutation; terminal PRs additionally carry one plan-level head/base identity
+    through guarded add/remove helpers. A reopen, identity drift, failed write,
+    or missing verification aborts the remaining plan with a structured error.
+    Manual labels outside the controlled namespace are never touched.
     """
     live = fetch_item_state(number, repo=repo)
     if not live["ok"]:
@@ -359,6 +677,7 @@ def reconcile_item(
         plan,
         repo=repo,
         reason=effective_reason,
+        initial_state=live,
     )
 
 
@@ -921,7 +1240,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Apply the plan with compare-and-swap; default is report-only.",
+        help="Apply the plan with fail-closed identity checks; default is report-only.",
     )
     parser.add_argument("--repo", default=DEFAULT_REPO)
     parser.add_argument(

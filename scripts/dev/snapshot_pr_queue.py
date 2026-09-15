@@ -1365,6 +1365,13 @@ def _next_action(
         return "inspect_failing_checks"
     if checks.get("overall") == "pending":
         return "await_ci_or_start_read_only_monitor"
+    if (
+        checks.get("overall") == "success"
+        and "merge-if-ci-green" in labels
+        and not is_draft
+        and "merge-ready" not in labels
+    ):
+        return "promote_merge_if_ci_green"
     if "merge-ready" in labels and not is_draft:
         return "merge_readiness_local_check"
     if is_draft:
@@ -1391,7 +1398,7 @@ def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
         return "ci_attention"
     if next_action == "await_ci_or_start_read_only_monitor":
         return "ci_pending"
-    if "merge-ready" in labels:
+    if "merge-ready" in labels or next_action == "promote_merge_if_ci_green":
         return "merge_attention"
     return "review_attention"
 

@@ -2769,6 +2769,20 @@ def test_gate_verdict_regression_no_head_advances_to_merge() -> None:
             assert state != "mark_ready_candidate"
 
 
+def test_conditional_ready_label_routes_green_ci_to_promotion_without_review() -> None:
+    """An accepted exact-head review remains valid when hosted CI settles."""
+    fixture = json.loads((FIXTURE_DIR / "gate_verdict_regression.json").read_text())
+    reviewed = next(pr for pr in fixture["prs"] if pr["expected_state"] == "ready_to_merge")
+    reviewed = {**reviewed, "labels": ["merge-if-ci-green"]}
+    assert classify_pr_state(reviewed) == "ready_for_ci_promotion"
+    assert (
+        recommend_action("ready_for_ci_promotion", pr_number=9388, actions_remaining=1).action
+        == "promote_merge_if_ci_green"
+    )
+    pending = {**reviewed, "checks": {"overall": "pending"}}
+    assert classify_pr_state(pending) == "pending_ci"
+
+
 def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merge() -> None:
     """A long review comment with a trailer beyond 180 chars is parsed into gate_verdicts and evaluated as ready_to_merge."""
     sha = FULL_SHA

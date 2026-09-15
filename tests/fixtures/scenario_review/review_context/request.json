@@ -1,0 +1,22 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev06-smoke",
+  "component_id": "srev06-review-context",
+  "sources": [
+    {
+      "artifact_id": "campaign",
+      "uri": "tests/fixtures/scenario_review/review_context/campaign.json",
+      "format": "campaign-result"
+    },
+    {
+      "artifact_id": "selection",
+      "uri": "tests/fixtures/scenario_review/review_context/selection.json",
+      "format": "episode-selection"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-06-smoke",
+  "config": {},
+  "required_capabilities": [
+    "episode-selection"
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "campaign_id": "camp-fixture",
+  "episodes": [
+    {
+      "episode_id": "ep-1",
+      "seed": 11,
+      "config": {
+        "config_id": "cfg-a"
+      },
+      "outcome": "success",
+      "metrics": {
+        "clearance_m": 1.5,
+        "speed_m_s": 0.8
+      }
+    },
+    {
+      "episode_id": "ep-2",
+      "seed": 12,
+      "config": {
+        "config_id": "cfg-a"
+      },
+      "outcome": "success",
+      "metrics": {
+        "clearance_m": 2.5,
+        "speed_m_s": 1.0
+      }
+    },
+    {
+      "episode_id": "ep-3",
+      "seed": 13,
+      "config": {
+        "config_id": "cfg-b"
+      },
+      "outcome": "collision",
+      "metrics": {
+        "clearance_m": -0.2
+      }
+    },
+    {
+      "episode_id": "ep-4",
+      "seed": 14,
+      "config": {
+        "config_id": "cfg-b"
+      },
+      "outcome": "success",
+      "metrics": {
+        "clearance_m": 2.5,
+        "speed_m_s": 1.2
+      }
+    }
+  ]
+}

@@ -13,13 +13,13 @@
       "artifact_id": "scores",
       "uri": "tests/fixtures/scenario_review/review_storyboard/scores.json",
       "format": "exemplar-scores",
-      "sha256": "78ae57d917a9caab6766bef5c88cc6bad98a635d4a703f77836b6d55689785e5"
+      "sha256": "0c2d6503b4b25be7fdadc56e92faee5ea8820529cdcaa1a818fc3e72c8986712"
     },
     {
       "artifact_id": "events",
       "uri": "tests/fixtures/scenario_review/review_storyboard/events.json",
       "format": "event-index",
-      "sha256": "43819adad32906c960997518a632104c6b4f2ff8df331795c02b4b3bdccbd78a"
+      "sha256": "4b24055f790a50eb74a08486074da060fcc1c85b0d5acc7a239b5dc588b47ef4"
     }
   ],
   "output_directory": "output/scenario_review/srev-07-smoke",

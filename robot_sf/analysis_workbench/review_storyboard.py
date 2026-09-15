@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -29,11 +30,15 @@ from robot_sf.analysis_workbench.review_contracts import (
     ComponentRequest,
     ComponentResult,
     ReviewContractsValidationError,
+    SourceRef,
     component_descriptor_from_dict,
     component_request_from_dict,
     component_result_from_dict,
     review_bundle_from_dict,
     visualization_spec_from_dict,
+)
+from robot_sf.benchmark.trace_exemplar_interest import (
+    DEFAULT_WEIGHTS as TRACE_EXEMPLAR_INTEREST_DEFAULT_WEIGHTS,
 )
 
 COMPONENT_ID = "srev07-review-storyboard"
@@ -56,6 +61,35 @@ EVIDENCE_BOUNDARY = "diagnostic_only"
 MISSING_CAPABILITY_SCHEMA_VERSION = "missing-capability-report.v1"
 EXEMPLAR_SCORES_SCHEMA_VERSION = "srev07-exemplar-scores.v1"
 CANONICAL_SCORE_ADAPTER_VERSION = "trace-exemplar-interest.report-adapter.v1"
+CANONICAL_SCORE_FEATURES = frozenset(TRACE_EXEMPLAR_INTEREST_DEFAULT_WEIGHTS)
+CANONICAL_SCORE_REPORT_FIELDS = frozenset({"roots", "weights", "episodes", "comparison_pairs"})
+CANONICAL_SCORE_EPISODE_FIELDS = frozenset(
+    {
+        "episode_dir",
+        "episode_id",
+        "episode_status",
+        "planner",
+        "scenario_id",
+        "seed",
+        "features",
+        "composite_score",
+    }
+)
+CANONICAL_SCORE_PAIR_FIELDS = frozenset(
+    {
+        "scenario_id",
+        "seed",
+        "left_episode_id",
+        "left_planner",
+        "right_episode_id",
+        "right_planner",
+        "outcome_divergence",
+        "trajectory_divergence",
+        "pair_score",
+    }
+)
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 # The component is intentionally bounded because it is an offline diagnostic
 # consumer.  These limits prevent malformed or accidentally unbounded fixture
@@ -67,6 +101,12 @@ MAX_EPISODE_REFERENCES = 64
 MAX_SCORE_ENTRIES = 100_000
 MAX_INTERVALS = 100_000
 MAX_OVERRIDE_IDS = 10_000
+# A valid bundle can still contain many references.  These aggregate caps keep
+# nested verification bounded independently of the per-episode and per-file
+# limits above, including when the same URI is repeated across episodes.
+MAX_TOTAL_BUNDLE_REFERENCES = 20_000
+MAX_TOTAL_BUNDLE_READS = 20_000
+MAX_TOTAL_BUNDLE_BYTES = 64 * 1024 * 1024
 
 _DESCRIPTOR_DOCUMENT: dict[str, Any] = {
     "schema_version": COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
@@ -215,14 +255,14 @@ def _read_regular_file(
             return None, "source_too_large"
         chunks: list[bytes] = []
         total = 0
-        while True:
-            chunk = os.read(descriptor, min(1024 * 1024, max_bytes - total + 1))
+        while total < max_bytes:
+            chunk = os.read(descriptor, min(1024 * 1024, max_bytes - total))
             if not chunk:
                 break
             chunks.append(chunk)
             total += len(chunk)
-            if total > max_bytes:
-                return None, "source_too_large"
+        if total >= max_bytes and os.fstat(descriptor).st_size > max_bytes:
+            return None, "source_too_large"
         return b"".join(chunks), None
     except OSError:
         return None, "source_unreadable"
@@ -450,6 +490,7 @@ def _verify_reference(
     *,
     episode_id: str | None = None,
     scope: str = "request",
+    max_bytes: int | None = None,
 ) -> tuple[bytes | None, dict[str, Any], str | None]:
     """Read bytes, verify the declared digest, and report safe path status.
 
@@ -465,7 +506,13 @@ def _verify_reference(
             _source_record(ref, integrity_status="unsafe_path", episode_id=episode_id, scope=scope),
             f"{artifact_id}: source_uri_unsafe",
         )
-    raw, read_problem = _read_regular_file(path)
+    if max_bytes is not None and max_bytes < 0:
+        return (
+            None,
+            _source_record(ref, integrity_status="unavailable", episode_id=episode_id, scope=scope),
+            f"{artifact_id}: source_too_large",
+        )
+    raw, read_problem = _read_regular_file(path, max_bytes=max_bytes)
     if read_problem is not None:
         integrity_status = "unsafe_path" if read_problem == "source_uri_unsafe" else "unavailable"
         record = _source_record(
@@ -689,9 +736,13 @@ def _canonical_bundle_digest(bundle_doc: dict[str, Any]) -> str:
 
 
 def _clip_intervals(  # noqa: C901
-    intervals: list[Any], duration_s: float, diagnostics: list[str]
+    intervals: list[Any],
+    duration_s: float,
+    diagnostics: list[str],
+    *,
+    episode_ids: set[str],
 ) -> list[dict[str, Any]]:
-    """Clip event rows while preserving explicit interval identity.
+    """Clip event rows while preserving episode-scoped interval identity.
 
     Returns:
         Deterministically clipped interval annotations with source identity.
@@ -700,7 +751,8 @@ def _clip_intervals(  # noqa: C901
         diagnostics.append("event_index_limit_exceeded:intervals")
         return []
     clipped: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
+    seen_interval_ids: set[tuple[str, str]] = set()
+    seen_event_ids: set[tuple[str, str]] = set()
     for position, item in enumerate(intervals):
         if not isinstance(item, dict):
             diagnostics.append(f"event_row_{position}_malformed")
@@ -713,16 +765,25 @@ def _clip_intervals(  # noqa: C901
         if start >= duration_s or end <= 0.0:
             diagnostics.append("interval_outside_duration")
             continue
+        episode_id = item.get("episode_id")
+        if not isinstance(episode_id, str) or not episode_id:
+            diagnostics.append(f"event_row_{position}_episode_scope_missing")
+            continue
+        if episode_id not in episode_ids:
+            diagnostics.append(f"event_row_{position}_unknown_episode:{episode_id}")
+            continue
         interval_id = item.get("interval_id")
         if interval_id is not None and (not isinstance(interval_id, str) or not interval_id):
             diagnostics.append(f"event_row_{position}_malformed")
             continue
         if isinstance(interval_id, str):
-            if interval_id in seen_ids:
-                diagnostics.append(f"duplicate_interval_id:{interval_id}")
+            scoped_interval_id = (episode_id, interval_id)
+            if scoped_interval_id in seen_interval_ids:
+                diagnostics.append(f"duplicate_interval_id:{episode_id}:{interval_id}")
                 continue
-            seen_ids.add(interval_id)
+            seen_interval_ids.add(scoped_interval_id)
         entry: dict[str, Any] = {
+            "episode_id": episode_id,
             "start_s": max(start, 0.0),
             "end_s": min(end, duration_s),
             "source_row": position,
@@ -734,13 +795,22 @@ def _clip_intervals(  # noqa: C901
             diagnostics.append(f"event_row_{position}_malformed")
             continue
         if isinstance(event_id, str):
+            scoped_event_id = (episode_id, event_id)
+            if scoped_event_id in seen_event_ids:
+                diagnostics.append(f"duplicate_event_id:{episode_id}:{event_id}")
+                continue
+            seen_event_ids.add(scoped_event_id)
             entry["event_id"] = event_id
         clipped.append(entry)
     return clipped
 
 
 def _spec_intervals(
-    index_doc: dict[str, Any] | None, duration: float | None, diagnostics: list[str]
+    index_doc: dict[str, Any] | None,
+    duration: float | None,
+    diagnostics: list[str],
+    *,
+    episode_ids: set[str],
 ) -> list[dict[str, Any]] | None:
     """Derive clipped event rows, retaining identity for annotation consumers.
 
@@ -753,7 +823,7 @@ def _spec_intervals(
     if not isinstance(raw, list):
         diagnostics.append("event_index_intervals_missing")
         return None
-    return _clip_intervals(raw, duration, diagnostics)
+    return _clip_intervals(raw, duration, diagnostics, episode_ids=episode_ids)
 
 
 def _read_family_docs(
@@ -824,7 +894,7 @@ def _load_inputs(
     return bundle_doc, docs.get("exemplar-scores"), docs.get("event-index"), records, by_format
 
 
-def _bundle_episode_index(  # noqa: C901
+def _bundle_episode_index(  # noqa: C901, PLR0912, PLR0915
     bundle_doc: dict[str, Any], root: Path, diagnostics: list[str]
 ) -> tuple[dict[str, tuple[dict[str, Any], ...]] | None, list[dict[str, Any]], bool]:
     """Validate episode identity and verify every referenced bundle artifact.
@@ -839,6 +909,12 @@ def _bundle_episode_index(  # noqa: C901
     if len(episodes) > MAX_BUNDLE_EPISODES:
         diagnostics.append("bundle_limit_exceeded:episodes")
         return None, records, True
+    total_references = sum(len(episode["references"]) for episode in episodes)
+    if total_references > MAX_TOTAL_BUNDLE_REFERENCES:
+        diagnostics.append("bundle_limit_exceeded:references_total")
+        return None, records, True
+    total_reads = 0
+    total_bytes = 0
     for episode in episodes:
         episode_id = str(episode["episode_id"])
         if episode_id in episode_by_id:
@@ -853,10 +929,36 @@ def _bundle_episode_index(  # noqa: C901
         episode_by_id[episode_id] = refs
         verified_refs: list[dict[str, Any]] = []
         for ref in refs:
+            if total_reads >= MAX_TOTAL_BUNDLE_READS:
+                diagnostics.append("bundle_limit_exceeded:reference_reads_total")
+                hard_failure = True
+                break
+            remaining_bytes = MAX_TOTAL_BUNDLE_BYTES - total_bytes
+            if remaining_bytes <= 0:
+                diagnostics.append("bundle_limit_exceeded:reference_bytes_total")
+                hard_failure = True
+                break
+            total_reads += 1
             raw, record, problem = _verify_reference(
-                ref, root, episode_id=episode_id, scope="bundle-reference"
+                ref,
+                root,
+                episode_id=episode_id,
+                scope="bundle-reference",
+                max_bytes=min(MAX_SOURCE_BYTES, remaining_bytes),
             )
             records.append(record)
+            if raw is not None:
+                if len(raw) > remaining_bytes:
+                    diagnostics.append("bundle_limit_exceeded:reference_bytes_total")
+                    hard_failure = True
+                    break
+                total_bytes += len(raw)
+            elif (
+                record.get("read_status") == "source_too_large"
+                and remaining_bytes < MAX_SOURCE_BYTES
+            ):
+                diagnostics.append("bundle_limit_exceeded:reference_bytes_total")
+                hard_failure = True
             if problem is not None:
                 diagnostics.append(
                     problem.replace("source_uri_unsafe", "source_reference_uri_unsafe")
@@ -873,6 +975,8 @@ def _bundle_episode_index(  # noqa: C901
                     if ref["format"] == "episode-json":
                         record["content_status"] = "validated_json"
                     verified_refs.append(ref)
+        if hard_failure:
+            break
         if len(verified_refs) != len(refs):
             hard_failure = True
     if hard_failure:
@@ -924,54 +1028,76 @@ def _validate_episode_reference(ref: dict[str, Any], raw: bytes, episode_id: str
     return None
 
 
-def _score_entries(entries: list[Any], known: set[str], diagnostics: list[str]) -> dict[str, float]:
+def _score_entries(
+    entries: list[Any], known: set[str], diagnostics: list[str]
+) -> tuple[dict[str, float], bool]:
     """Parse canonical trace-exemplar-interest episode entries.
 
     Returns:
-        Finite scores keyed by known episode ID.
+        Finite scores keyed by known episode ID and whether every row was valid.
     """
     scores: dict[str, float] = {}
+    valid = True
     for position, entry in enumerate(entries):
         if not isinstance(entry, dict):
             diagnostics.append(f"exemplar_scores_row_malformed:{position}")
+            valid = False
             continue
         episode_id = entry.get("episode_id")
         number = _finite_number(entry.get("composite_score"))
         if not isinstance(episode_id, str) or number is None:
             diagnostics.append(f"exemplar_scores_row_malformed:{position}")
+            valid = False
+            continue
+        if not 0.0 <= number <= 1.0:
+            diagnostics.append(f"score_out_of_range:{episode_id}")
+            valid = False
             continue
         if episode_id not in known:
             diagnostics.append(f"score_unknown_episode:{episode_id}")
+            valid = False
             continue
         if episode_id in scores:
             if scores[episode_id] != number:
                 diagnostics.append(f"score_conflicting_duplicate:{episode_id}")
             else:
                 diagnostics.append(f"score_duplicate_episode:{episode_id}")
+            valid = False
             continue
         scores[episode_id] = number
-    return scores
+    return scores, valid
 
 
 def _score_map(
     raw_map: dict[str, Any], known: set[str], diagnostics: list[str]
-) -> dict[str, float]:
+) -> tuple[dict[str, float], bool]:
     """Parse an explicitly versioned SREV-07 score map.
 
     Returns:
-        Finite scores keyed by known episode ID.
+        Finite scores keyed by known episode ID and whether every row was valid.
     """
     scores: dict[str, float] = {}
+    valid = True
     for episode_id, value in raw_map.items():
+        if not isinstance(episode_id, str):
+            diagnostics.append("score_malformed:episode_id")
+            valid = False
+            continue
         number = _finite_number(value)
         if episode_id not in known:
             diagnostics.append(f"score_unknown_episode:{episode_id}")
+            valid = False
             continue
         if number is None:
             diagnostics.append(f"score_malformed:{episode_id}")
+            valid = False
+            continue
+        if not 0.0 <= number <= 1.0:
+            diagnostics.append(f"score_out_of_range:{episode_id}")
+            valid = False
             continue
         scores[episode_id] = number
-    return scores
+    return scores, valid
 
 
 def _record_missing_scores(
@@ -980,6 +1106,119 @@ def _record_missing_scores(
     """Record known bundle episodes omitted by a score document."""
     for episode_id in sorted(known - set(scores)):
         diagnostics.append(f"score_missing:{episode_id}")
+
+
+def _canonical_score_document_valid(  # noqa: C901, PLR0912, PLR0915
+    scores_doc: dict[str, Any], known: set[str], diagnostics: list[str]
+) -> bool:
+    """Validate the owner-native trace-exemplar-interest report shape and value semantics.
+
+    The adapter is deliberately strict: a document is canonical only when it
+    has the complete owner report envelope, complete episode rows, normalized
+    feature values, and bounded composite scores.  This prevents a lookalike
+    ``episodes`` list from being advertised as the canonical adapter.
+
+    Returns:
+        Whether the document is safe to identify as the canonical owner format.
+    """
+    if set(scores_doc) != CANONICAL_SCORE_REPORT_FIELDS:
+        diagnostics.append("exemplar_scores_canonical_shape_mismatch")
+        return False
+    roots = scores_doc["roots"]
+    weights = scores_doc["weights"]
+    episodes = scores_doc["episodes"]
+    comparison_pairs = scores_doc["comparison_pairs"]
+    valid = True
+    if not isinstance(roots, list) or any(not isinstance(root, str) or not root for root in roots):
+        diagnostics.append("exemplar_scores_canonical_field_invalid:roots")
+        valid = False
+    if not isinstance(weights, dict) or set(weights) != CANONICAL_SCORE_FEATURES:
+        diagnostics.append("exemplar_scores_canonical_field_invalid:weights")
+        valid = False
+    elif (
+        any(_finite_number(value) is None or float(value) < 0.0 for value in weights.values())
+        or sum(float(value) for value in weights.values()) <= 0.0
+    ):
+        diagnostics.append("exemplar_scores_canonical_field_invalid:weights")
+        valid = False
+    if not isinstance(episodes, list):
+        diagnostics.append("exemplar_scores_canonical_field_invalid:episodes")
+        return False
+    if len(episodes) > MAX_SCORE_ENTRIES:
+        diagnostics.append("exemplar_scores_limit_exceeded:episodes")
+        return False
+    seen_episode_ids: set[str] = set()
+    for position, entry in enumerate(episodes):
+        if not isinstance(entry, dict) or set(entry) != CANONICAL_SCORE_EPISODE_FIELDS:
+            diagnostics.append(f"exemplar_scores_canonical_row_malformed:{position}")
+            valid = False
+            continue
+        episode_id = entry["episode_id"]
+        if not isinstance(episode_id, str) or not episode_id:
+            diagnostics.append(f"exemplar_scores_canonical_row_malformed:{position}")
+            valid = False
+        elif episode_id in seen_episode_ids:
+            diagnostics.append(f"score_duplicate_episode:{episode_id}")
+            valid = False
+        else:
+            seen_episode_ids.add(episode_id)
+            if episode_id not in known:
+                diagnostics.append(f"score_unknown_episode:{episode_id}")
+                valid = False
+        for field_name in ("episode_dir", "episode_status", "planner", "scenario_id"):
+            if not isinstance(entry[field_name], str) or not entry[field_name]:
+                diagnostics.append(f"exemplar_scores_canonical_row_malformed:{position}")
+                valid = False
+        seed = entry["seed"]
+        if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+            diagnostics.append(f"exemplar_scores_canonical_row_malformed:{position}")
+            valid = False
+        features = entry["features"]
+        if not isinstance(features, dict) or set(features) != CANONICAL_SCORE_FEATURES:
+            diagnostics.append(f"exemplar_scores_canonical_features_malformed:{position}")
+            valid = False
+        elif any(
+            _finite_number(value) is None or not 0.0 <= float(value) <= 1.0
+            for value in features.values()
+        ):
+            diagnostics.append(f"exemplar_scores_canonical_features_out_of_range:{position}")
+            valid = False
+        composite_score = _finite_number(entry["composite_score"])
+        if composite_score is None or not 0.0 <= composite_score <= 1.0:
+            diagnostics.append(f"score_out_of_range:{episode_id}")
+            valid = False
+    if not isinstance(comparison_pairs, list):
+        diagnostics.append("exemplar_scores_canonical_field_invalid:comparison_pairs")
+        return False
+    if len(comparison_pairs) > MAX_SCORE_ENTRIES:
+        diagnostics.append("exemplar_scores_limit_exceeded:comparison_pairs")
+        return False
+    for position, pair in enumerate(comparison_pairs):
+        if not isinstance(pair, dict) or set(pair) != CANONICAL_SCORE_PAIR_FIELDS:
+            diagnostics.append(f"exemplar_scores_canonical_pair_malformed:{position}")
+            valid = False
+            continue
+        for field_name in (
+            "scenario_id",
+            "left_episode_id",
+            "left_planner",
+            "right_episode_id",
+            "right_planner",
+        ):
+            if not isinstance(pair[field_name], str) or not pair[field_name]:
+                diagnostics.append(f"exemplar_scores_canonical_pair_malformed:{position}")
+                valid = False
+        seed = pair["seed"]
+        if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+            diagnostics.append(f"exemplar_scores_canonical_pair_malformed:{position}")
+            valid = False
+        if any(
+            _finite_number(pair[field_name]) is None or not 0.0 <= float(pair[field_name]) <= 1.0
+            for field_name in ("outcome_divergence", "trajectory_divergence", "pair_score")
+        ):
+            diagnostics.append(f"exemplar_scores_canonical_pair_out_of_range:{position}")
+            valid = False
+    return valid
 
 
 def _score_table(
@@ -997,25 +1236,36 @@ def _score_table(
         diagnostics.append("exemplar_scores_unavailable")
         return {}, "unavailable"
     known = set(episode_ids)
-    raw_entries = scores_doc.get("episodes")
-    if isinstance(raw_entries, list):
+    if "episodes" in scores_doc:
+        raw_entries = scores_doc["episodes"]
+        if not isinstance(raw_entries, list):
+            diagnostics.append("exemplar_scores_canonical_shape_mismatch")
+            return {}, "unavailable"
         if len(raw_entries) > MAX_SCORE_ENTRIES:
             diagnostics.append("exemplar_scores_limit_exceeded:episodes")
             return {}, "unavailable"
-        scores = _score_entries(raw_entries, known, diagnostics)
+        if not _canonical_score_document_valid(scores_doc, known, diagnostics):
+            return {}, "unavailable"
+        scores, valid = _score_entries(raw_entries, known, diagnostics)
         _record_missing_scores(scores, known, diagnostics)
+        if not valid:
+            return {}, "unavailable"
         return scores, CANONICAL_SCORE_ADAPTER_VERSION
     raw_map = scores_doc.get("scores")
-    if scores_doc.get("schema_version") != EXEMPLAR_SCORES_SCHEMA_VERSION or not isinstance(
-        raw_map, dict
+    if (
+        set(scores_doc) != {"schema_version", "scores"}
+        or scores_doc.get("schema_version") != EXEMPLAR_SCORES_SCHEMA_VERSION
+        or not isinstance(raw_map, dict)
     ):
         diagnostics.append("exemplar_scores_unversioned_or_malformed")
         return {}, "unavailable"
     if len(raw_map) > MAX_SCORE_ENTRIES:
         diagnostics.append("exemplar_scores_limit_exceeded:scores")
         return {}, "unavailable"
-    scores = _score_map(raw_map, known, diagnostics)
+    scores, valid = _score_map(raw_map, known, diagnostics)
     _record_missing_scores(scores, known, diagnostics)
+    if not valid:
+        return {}, "unavailable"
     return scores, EXEMPLAR_SCORES_SCHEMA_VERSION
 
 
@@ -1055,7 +1305,7 @@ def _request_identity(request: Any) -> tuple[str, str]:
     )
 
 
-def _request_shape_error(request: Any) -> str | None:
+def _request_shape_error(request: Any) -> str | None:  # noqa: C901
     """Return a stable error for a manually constructed invalid API request."""
     if not isinstance(request, ComponentRequest):
         return "invalid_request: expected ComponentRequest"
@@ -1074,11 +1324,29 @@ def _request_shape_error(request: Any) -> str | None:
     ):
         return "invalid_request: required_capabilities must be strings"
     for source in request.sources:
+        if not isinstance(source, SourceRef):
+            return "invalid_request: sources require SourceRef values"
         if any(
             not isinstance(getattr(source, field_name, None), str)
-            for field_name in ("artifact_id", "uri", "format")
+            for field_name in (
+                "artifact_id",
+                "uri",
+                "format",
+                "schema",
+                "sha256",
+                "source_commit",
+                "config_identity",
+                "units",
+                "coordinate_frame",
+            )
         ):
-            return "invalid_request: sources require string artifact_id, uri, and format"
+            return "invalid_request: source metadata must be strings"
+        if not source.artifact_id or not source.uri or not source.format:
+            return "invalid_request: sources require non-empty artifact_id, uri, and format"
+        if source.sha256 and _SHA256_RE.fullmatch(source.sha256) is None:
+            return "invalid_request: source sha256 must be a 64-hex digest"
+        if source.source_commit and _SHA40_RE.fullmatch(source.source_commit) is None:
+            return "invalid_request: source_commit must be a 40-hex commit SHA"
     return None
 
 
@@ -1213,7 +1481,10 @@ def run(  # noqa: C901, PLR0912, PLR0915
             diagnostics.append("source_duration_missing_or_invalid")
             duration = None
         event_intervals = _spec_intervals(
-            index_doc if event_usable else None, duration, diagnostics
+            index_doc if event_usable else None,
+            duration,
+            diagnostics,
+            episode_ids=set(episode_ids),
         )
         selected_episode_ids = [candidate.episode_id for candidate in kept]
         selected_source_artifact_ids = [

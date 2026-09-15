@@ -21,8 +21,21 @@ The component accepts either the canonical
 `trace_exemplar_interest` report shape (`episodes` entries with
 `composite_score`) through the explicitly versioned adapter
 `trace-exemplar-interest.report-adapter.v1`, or the explicitly versioned
-`srev07-exemplar-scores.v1` score map. Missing or unversioned scores remain
-unavailable; they never silently become zero.
+`srev07-exemplar-scores.v1` score map. The canonical adapter requires the full
+owner report envelope (`roots`, `weights`, `episodes`, and
+`comparison_pairs`), complete owner-native episode rows and normalized feature
+and composite scores in the inclusive range `[0, 1]`. A lookalike, foreign,
+duplicate, or out-of-range report is rejected as unavailable input and is
+never advertised as the canonical adapter. Missing or unversioned scores
+remain unavailable; they never silently become zero.
+
+Event rows must carry an episode ID when they carry an interval or event ID.
+Duplicate `interval_id` or `event_id` values are checked within the episode
+scope, so equal source IDs in different episodes remain distinct while an
+ambiguous duplicate is omitted and makes the result partial. The shared
+`source_intervals` field remains the renderer-neutral time list required by
+`visualization-spec.v1`; the annotation's `event_intervals` list preserves the
+episode, interval, event, and source-row identity alongside those times.
 
 ## Command
 
@@ -62,8 +75,9 @@ is still present in `provenance.emitted_artifacts`.
 ## Unavailable reasons and limits
 
 - Missing required families or capabilities, corrupt or unbound sources,
-  digest mismatches, unsafe paths, duplicate episode IDs, malformed score
-  shapes, stale or unbound override sources, and invalid intervals never
+  digest mismatches, unsafe paths, duplicate episode IDs, malformed or
+  out-of-range score shapes, unscoped or duplicate event IDs, stale or unbound
+  override sources, and invalid intervals never
   silently produce a complete ranking.
 - An optional family that is not requested may be absent. Its capability
   remains unavailable in the capability report, and no score fallback is
@@ -73,7 +87,9 @@ is still present in `provenance.emitted_artifacts`.
   without replacement semantics and removes partial output on write failure.
 - Resource limits are explicit: 8 MiB per input file, 256 request sources,
   10,000 bundle episodes, 64 references per episode, 100,000 score rows or
-  event intervals, and 10,000 override IDs per pin/exclude list. Exceeding a
+  event intervals, and 10,000 override IDs per pin/exclude list. Nested bundle
+  verification also caps the aggregate at 20,000 references and reads and 64
+  MiB of referenced bytes, including repeated paths. Exceeding a
   required-input limit fails; exceeding an optional score or interval limit
   yields a partial diagnostic result.
 - `episode-json` references are strictly parsed and, when present, their
@@ -92,3 +108,8 @@ and its approved owner path. This SREV-07 leaf intentionally does not edit
 `docs/scenario_review/README.md` or registry files. A bounded follow-up remains:
 the SREV-29 owner should add this page to the central index when an approved
 owner packet authorizes that cross-leaf change.
+
+The focused-test fast-lane registration is likewise an owner follow-up outside
+this leaf's allowlist (`tests/conftest.py`). SREV-07 does not edit that central
+file; until the fast-lane owner applies the registration, routing remains a
+documented blocker even when the focused tests pass.

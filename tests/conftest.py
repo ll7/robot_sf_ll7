@@ -499,6 +499,9 @@ _FAST_FILES = {
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",
+    # Presentation-style preset contracts are deterministic spec/coverage for
+    # the changed presentation renderer module (issue #9367).
+    "test_presentation_style.py",
     # SVG geometry contract tests provide changed-line coverage for the
     # parser's explicit legacy/corrected transform paths (issue #8314).
     "test_svg_transform_contract.py",

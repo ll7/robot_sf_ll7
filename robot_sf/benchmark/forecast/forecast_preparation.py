@@ -68,6 +68,17 @@ _HISTORICAL_FORECAST_REFERENCE = {
     "reference_path": "docs/context/dependency_license_inventory.md",
     "declared_sha256": "2ce10f1e0d6009f73c4d83b9bbeb8519e88b7a8ce25bdcba1e44ecb9f7ef4d3d",
 }
+_HISTORICAL_FORECAST_PYPROJECT_REFERENCE = {
+    "consumer_path": _HISTORICAL_FORECAST_PACKET_PATH,
+    "consumer_sha256": _HISTORICAL_FORECAST_PACKET_SHA256,
+    "reference_locator": "/evidence_references/5",
+    "reference_path": "pyproject.toml",
+    "declared_sha256": "77ace5438bcef4c1176a42ae58edb31d1864212b4bb65e253c761e79d262a0cf",
+}
+_HISTORICAL_FORECAST_REFERENCES = (
+    _HISTORICAL_FORECAST_REFERENCE,
+    _HISTORICAL_FORECAST_PYPROJECT_REFERENCE,
+)
 _FORBIDDEN_EGO_INPUT_PARTS = frozenset(
     {
         "future",
@@ -690,7 +701,7 @@ def validate_forecast_preparation_packet(  # noqa: C901, PLR0912
     _validate_horizon_rows(rows, horizons)
     _validate_split_policy(payload, source_artifacts)
     _validate_deterministic_split_assignments(payload, source_artifacts)
-    historical_binding = _validate_evidence_references(
+    historical_bindings = _validate_evidence_references(
         payload.get("evidence_references"),
         root,
         payload=payload,
@@ -706,7 +717,7 @@ def validate_forecast_preparation_packet(  # noqa: C901, PLR0912
         _validate_sha256_coverage(
             payload.get("sha256_coverage"),
             root,
-            historical_binding=historical_binding,
+            historical_bindings=historical_bindings,
         )
     return {
         "status": "passed",
@@ -1436,28 +1447,37 @@ def _is_frozen_historical_packet(payload: Mapping[str, Any], root: Path) -> bool
     )
 
 
-def _load_historical_forecast_binding(root: Path) -> Mapping[str, str]:
-    """Resolve the exact PR8974 historical occurrence through the shared resolver.
+def _load_historical_forecast_bindings(root: Path) -> tuple[Mapping[str, str], ...]:
+    """Resolve the exact forecast historical occurrences through the shared resolver.
 
     Returns:
-        The validated binding for the frozen forecast packet reference.
+        The validated bindings for the frozen forecast packet references.
     """
     try:
         bindings, _report = load_historical_bindings(root, authority_ref="HEAD")
     except (HistoricalBindingError, RuntimeError) as exc:
         raise ValueError(f"historical evidence binding validation failed: {exc}") from exc
-    key = (
-        _HISTORICAL_FORECAST_PACKET_PATH,
-        _HISTORICAL_FORECAST_REFERENCE["reference_path"],
-        _HISTORICAL_FORECAST_REFERENCE["declared_sha256"],
-    )
-    binding = bindings.get(key)
-    if binding is None:
-        raise ValueError("canonical historical forecast binding is unavailable")
-    for field, expected in _HISTORICAL_FORECAST_REFERENCE.items():
-        if binding.get(field) != expected:
-            raise ValueError(f"canonical historical forecast binding drift: {field}")
-    return binding
+    resolved: list[Mapping[str, str]] = []
+    for reference in _HISTORICAL_FORECAST_REFERENCES:
+        key = (
+            reference["consumer_path"],
+            reference["reference_path"],
+            reference["declared_sha256"],
+        )
+        binding = bindings.get(key)
+        if binding is None:
+            raise ValueError(
+                "canonical historical forecast binding is unavailable: "
+                f"{reference['reference_path']}"
+            )
+        for field, expected in reference.items():
+            if binding.get(field) != expected:
+                raise ValueError(
+                    "canonical historical forecast binding drift: "
+                    f"{reference['reference_path']}:{field}"
+                )
+        resolved.append(binding)
+    return tuple(resolved)
 
 
 def _validate_historical_sidecar_identity(coverage: Any, root: Path) -> None:
@@ -1474,23 +1494,23 @@ def _validate_evidence_references(
     root: Path,
     *,
     payload: Mapping[str, Any],
-) -> Mapping[str, str] | None:
-    """Bind cited evidence to current bytes or one exact, history-backed occurrence.
+) -> tuple[Mapping[str, str], ...] | None:
+    """Bind cited evidence to current bytes or exact, history-backed occurrences.
 
     Returns:
-        The validated historical binding when the exception is used, otherwise ``None``.
+        The validated historical bindings when the exception is used, otherwise ``None``.
     """
     expected = _build_evidence_references(root)
     if references == expected:
         return None
+    historical_digests = {
+        reference["reference_path"]: reference["declared_sha256"]
+        for reference in _HISTORICAL_FORECAST_REFERENCES
+    }
     historical_expected = [
         {
             "path": item["path"],
-            "sha256": (
-                _HISTORICAL_FORECAST_REFERENCE["declared_sha256"]
-                if item["path"] == _HISTORICAL_FORECAST_REFERENCE["reference_path"]
-                else item["sha256"]
-            ),
+            "sha256": historical_digests.get(item["path"], item["sha256"]),
         }
         for item in expected
     ]
@@ -1498,9 +1518,14 @@ def _validate_evidence_references(
         raise ValueError("evidence_references are not bound to the cited repository bytes")
     if not _is_frozen_historical_packet(payload, root):
         raise ValueError("historical evidence binding requires the exact frozen packet bytes")
-    binding = _load_historical_forecast_binding(root)
+    bindings = _load_historical_forecast_bindings(root)
     _validate_historical_sidecar_identity(payload.get("sha256_coverage"), root)
-    return binding
+    current_digests = {item["path"]: item["sha256"] for item in expected}
+    return tuple(
+        binding
+        for binding in bindings
+        if current_digests[binding["reference_path"]] != binding["declared_sha256"]
+    )
 
 
 def _validate_false_reassurance_case(  # noqa: C901, PLR0912
@@ -1606,8 +1631,20 @@ def _validate_sha256_coverage(  # noqa: C901
     coverage: Any,
     root: Path,
     *,
+    historical_bindings: Sequence[Mapping[str, str]] | None = None,
     historical_binding: Mapping[str, str] | None = None,
 ) -> None:
+    if historical_bindings is not None and historical_binding is not None:
+        raise ValueError("historical binding arguments are mutually exclusive")
+    if historical_binding is not None:
+        historical_bindings = (historical_binding,)
+    resolved_historical_bindings = tuple(historical_bindings or ())
+    historical_entries = {
+        (binding["reference_path"], binding["declared_sha256"]): 0
+        for binding in resolved_historical_bindings
+    }
+    if len(historical_entries) != len(resolved_historical_bindings):
+        raise ValueError("historical forecast bindings must identify unique references")
     if not isinstance(coverage, dict):
         raise ValueError("sha256_coverage must be a mapping")
     if coverage.get("algorithm") != "SHA-256":
@@ -1618,7 +1655,6 @@ def _validate_sha256_coverage(  # noqa: C901
     if not isinstance(covered_paths, list) or not covered_paths:
         raise ValueError("sha256_coverage.covered_paths must be non-empty")
     entries: dict[str, str] = {}
-    historical_entry_count = 0
     for line in manifest_path.read_text(encoding="utf-8").splitlines():
         if not line or line.startswith("#"):
             continue
@@ -1634,13 +1670,9 @@ def _validate_sha256_coverage(  # noqa: C901
             raise ValueError(f"duplicate checksum path: {relative}")
         entries[relative] = digest
         if sha256_file(path) != digest:
-            if (
-                historical_binding is not None
-                and relative == historical_binding["reference_path"]
-                and digest == historical_binding["declared_sha256"]
-                and historical_entry_count == 0
-            ):
-                historical_entry_count += 1
+            historical_key = (relative, digest)
+            if historical_key in historical_entries:
+                historical_entries[historical_key] += 1
                 continue
             raise ValueError(f"checksum mismatch: {relative}")
     expected_paths = {str(path) for path in covered_paths}
@@ -1648,8 +1680,10 @@ def _validate_sha256_coverage(  # noqa: C901
         missing = sorted(expected_paths - set(entries))
         extra = sorted(set(entries) - expected_paths)
         raise ValueError(f"SHA-256 coverage mismatch; missing={missing}, extra={extra}")
-    if historical_binding is not None and historical_entry_count != 1:
-        raise ValueError("historical forecast binding requires exactly one matching sidecar entry")
+    if historical_entries and any(count != 1 for count in historical_entries.values()):
+        raise ValueError(
+            "historical forecast bindings require exactly one matching sidecar entry per binding"
+        )
 
 
 def _build_sha256_coverage(

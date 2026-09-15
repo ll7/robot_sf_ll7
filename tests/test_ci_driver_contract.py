@@ -422,8 +422,19 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     }
     assert setup_step["with"] == {
         "python-version": "${{ matrix.python }}",
-        "sync-args": "--all-extras --frozen",
+        "sync-args": "--extra viz --extra maps --frozen",
     }
+    probe_index = next(
+        index
+        for index, step in enumerate(steps)
+        if "check_compat_import_profile.py" in step.get("run", "")
+    )
+    test_index = next(
+        index
+        for index, step in enumerate(steps)
+        if "pytest tests/common tests/contract tests/factories" in step.get("run", "")
+    )
+    assert probe_index < test_index
     assert any(
         "pytest tests/common tests/contract tests/factories tests/gym_env tests/maps" in step
         and "tests/nav tests/ped_npc tests/render tests/scenarios" in step

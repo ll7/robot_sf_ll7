@@ -874,6 +874,10 @@ _FAST_FILES = {
     # contracts for the review component; keep changed coverage in fast shards
     # (issue #9284).
     "test_review_workbench.py",
+    # SREV-22 review-execute tests are deterministic fixture and fail-closed
+    # execution coverage for the bounded experiment leaf; keep changed coverage
+    # in fast shards (issue #9293).
+    "test_review_execute.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

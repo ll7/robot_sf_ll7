@@ -1,0 +1,35 @@
+{
+  "component_id": "srev26-review-ai",
+  "config": {
+    "explanation": {
+      "focus": "pedestrian-safety",
+      "highlights": [
+        {
+          "metric": "minimum_robot_pedestrian_separation",
+          "source_artifact_id": "annotations-0000",
+          "units": "metres",
+          "value": 1.5
+        }
+      ]
+    },
+    "preset": "test",
+    "provider": {
+      "name": "fake-local"
+    }
+  },
+  "output_directory": "srev-26-smoke",
+  "request_id": "srev26-smoke",
+  "schema_version": "component-request.v1",
+  "sources": [
+    {
+      "artifact_id": "annotations-0000",
+      "format": "trace_annotation_set.v1",
+      "uri": "annotation-set.json"
+    },
+    {
+      "artifact_id": "diagnosis-0000",
+      "format": "failure_diagnosis.v1",
+      "uri": "diagnosis-record.json"
+    }
+  ]
+}

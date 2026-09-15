@@ -626,7 +626,7 @@ Each fixture declares:
 
 ### Force and desired direction
 
-- vector MAE/RMSE on oracle-eligible, uncapped rows;
+- vector L2 MAE/RMSE (mean/root-mean-square Euclidean error) on oracle-eligible, uncapped rows;
 - angular error and cosine similarity;
 - magnitude error with censored rows excluded from the exact denominator;
 - Gaussian/mixture NLL and credible-region coverage;

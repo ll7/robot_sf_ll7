@@ -36,6 +36,9 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.algorithm_metadata import (
+    resolve_learned_checkpoint_observation_contract,
+)
 from scripts.validation.build_issue_8871_pedestrian_speed_canary import (
     DEFAULT_CONFIG as DEFAULT_CANARY_CONFIG,
 )
@@ -577,6 +580,11 @@ def _registry_checkpoint(model_id: str, checkpoint_root: Path) -> dict[str, Any]
     )
     return {
         "model_id": model_id,
+        "benchmark_promotion": (
+            copy.deepcopy(dict(entry["benchmark_promotion"]))
+            if isinstance(entry.get("benchmark_promotion"), Mapping)
+            else None
+        ),
         "path_label": (
             selected.relative_to(checkpoint_root).as_posix()
             if selected.is_relative_to(checkpoint_root)
@@ -629,8 +637,16 @@ def _bind_checkpoint_paths(
     if algo == "ppo":
         model_id = effective.get("model_id")
         if isinstance(model_id, str) and model_id in checkpoints:
+            promotion = checkpoints[model_id].get("benchmark_promotion")
+            _require(
+                isinstance(promotion, Mapping),
+                f"checkpoint {model_id} lacks authoritative benchmark_promotion metadata",
+            )
             effective["model_id"] = None
             effective["model_path"] = str(checkpoints[model_id]["path"])
+            # Keep the exact staged path while carrying the registry observation contract
+            # through the map-runner boundary after model_id is intentionally cleared.
+            effective["benchmark_promotion"] = copy.deepcopy(dict(promotion))
         foresight_id = effective.get("predictive_foresight_model_id")
         if effective.get("predictive_foresight_enabled") and foresight_id in checkpoints:
             effective["predictive_foresight_checkpoint_path"] = str(
@@ -813,6 +829,10 @@ def preflight_canary(  # noqa: C901, PLR0912, PLR0915
         checks: list[dict[str, Any]] = []
         for algorithm_key, effective, scenario_ids in distinct.values():
             try:
+                learned_observation_contract = resolve_learned_checkpoint_observation_contract(
+                    algorithm_key,
+                    effective,
+                )
                 _effective, status = _preflight_policy(
                     algo=algorithm_key,
                     algo_config=effective,
@@ -823,7 +843,12 @@ def preflight_canary(  # noqa: C901, PLR0912, PLR0915
                 if status.get("status") != "ok":
                     raise CanaryError(str(status))
                 checks.append(
-                    {"algorithm": algorithm_key, "scenario_ids": scenario_ids, "status": "ok"}
+                    {
+                        "algorithm": algorithm_key,
+                        "scenario_ids": scenario_ids,
+                        "status": "ok",
+                        "learned_observation_contract": learned_observation_contract,
+                    }
                 )
             except (KeyError, OSError, RuntimeError, TypeError, ValueError, CanaryError) as exc:
                 reason = f"{type(exc).__name__}: {exc}"

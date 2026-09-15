@@ -221,6 +221,53 @@ def test_registry_checkpoint_accepts_release_asset_filename(monkeypatch, tmp_pat
     assert result["sha256"] == expected_sha
 
 
+def test_ppo_binding_preserves_registry_observation_contract_with_staged_path(
+    tmp_path: Path,
+) -> None:
+    model_id = "ppo-fixture"
+    staged = tmp_path / "ppo-model.zip"
+    staged.write_bytes(b"frozen model bytes")
+    promotion = {
+        "benchmark_track": "grid_socnav_v1",
+        "track_schema_version": "observation-track.v1",
+        "observation_level": "tracked_agents_no_noise",
+        "observation_mode": "dict",
+    }
+
+    bound = canary._bind_checkpoint_paths(
+        "ppo",
+        {"model_id": model_id, "obs_mode": "dict"},
+        {
+            model_id: {
+                "path": staged,
+                "benchmark_promotion": promotion,
+            }
+        },
+    )
+
+    assert bound["model_id"] is None
+    assert bound["model_path"] == str(staged)
+    assert bound["benchmark_promotion"] == promotion
+    assert bound["benchmark_promotion"] is not promotion
+    resolved = canary.resolve_learned_checkpoint_observation_contract("ppo", bound)
+    assert resolved["metadata_source"] == "algo_config.benchmark_promotion"
+    assert resolved["active_observation_mode"] == "socnav_state"
+    assert resolved["observation_level"] == "tracked_agents_no_noise"
+
+
+def test_ppo_binding_without_registry_observation_contract_fails_closed(tmp_path: Path) -> None:
+    model_id = "ppo-fixture"
+    staged = tmp_path / "ppo-model.zip"
+    staged.write_bytes(b"frozen model bytes")
+
+    with pytest.raises(canary.CanaryError, match="authoritative benchmark_promotion"):
+        canary._bind_checkpoint_paths(
+            "ppo",
+            {"model_id": model_id, "obs_mode": "dict"},
+            {model_id: {"path": staged, "benchmark_promotion": None}},
+        )
+
+
 def test_journal_event_is_json_lines_and_flushes(tmp_path: Path) -> None:
     journal_path = tmp_path / "journal.jsonl"
     with journal_path.open("w", encoding="utf-8") as stream:

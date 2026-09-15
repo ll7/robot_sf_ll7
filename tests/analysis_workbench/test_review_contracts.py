@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -328,6 +329,7 @@ def test_admitted_source_resolves_checked_in_fixture() -> None:
     assert result.status == "admitted"
     assert result.reason == "admitted"
     assert result.source_path == (ADMITTED_SOURCE_FIXTURE_DIR / "source.json").resolve()
+    assert result.source_bytes == (ADMITTED_SOURCE_FIXTURE_DIR / "source.json").read_bytes()
     assert (
         result.source_path.read_bytes()
         == (ADMITTED_SOURCE_FIXTURE_DIR / "source.json").read_bytes()
@@ -359,6 +361,75 @@ def test_component_request_digest_binds_config_but_ignores_output_directory() ->
     assert component_request_canonical_digest(changed_config) != component_request_canonical_digest(
         request
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema", "changed-source.v2"),
+        ("sha256", "c" * 64),
+        ("source_commit", "c" * 40),
+        ("config_identity", "changed-config.v2"),
+        ("units", "feet"),
+        ("coordinate_frame", "camera"),
+    ],
+)
+def test_component_request_digest_binds_every_source_declaration(field: str, value: str) -> None:
+    """Every v1 source declaration changes the canonical request identity when supplied."""
+    request = _admitted_source_fixture("request.json")
+    changed = copy.deepcopy(request)
+    changed["sources"][0][field] = value
+
+    assert component_request_canonical_digest(changed) != component_request_canonical_digest(
+        request
+    )
+
+
+def test_component_request_digest_normalizes_omitted_optional_source_declarations() -> None:
+    """The request parser gives every omitted v1 source declaration an empty-text value."""
+    request = _admitted_source_fixture("request.json")
+    parsed = component_request_from_dict(request)
+
+    assert parsed.sources[0].schema == ""
+    assert parsed.sources[0].sha256 == ""
+    assert parsed.sources[0].source_commit == ""
+    assert parsed.sources[0].config_identity == ""
+    assert parsed.sources[0].units == ""
+    assert parsed.sources[0].coordinate_frame == ""
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema", "changed-source.v2"),
+        ("sha256", "c" * 64),
+        ("source_commit", "c" * 40),
+        ("config_identity", "changed-config.v2"),
+        ("units", "feet"),
+        ("coordinate_frame", "camera"),
+    ],
+)
+def test_admitted_source_rejects_request_source_declaration_mismatch(
+    field: str, value: str
+) -> None:
+    """A supplied current request declaration must agree with the receipt, not only its digest."""
+    request = _admitted_source_fixture("request.json")
+    request["sources"][0][field] = value
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["request_sha256"] = component_request_canonical_digest(request)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert f"request source {field}" in result.detail
+    assert result.source_path is None
+    assert result.source_bytes is None
 
 
 def test_admitted_source_reports_missing_receipt_and_source(tmp_path: Path) -> None:
@@ -869,6 +940,123 @@ def test_admitted_source_rejects_escape_and_malformed_receipt(tmp_path: Path) ->
         "source_escaped_root",
     )
     assert (malformed_result.status, malformed_result.reason) == ("failed", "receipt_malformed")
+
+
+@pytest.mark.skipif(
+    not all(hasattr(os, flag) for flag in ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK"))
+    or os.open not in os.supports_dir_fd,
+    reason="protected descriptor flags are unavailable",
+)
+def test_admitted_source_rejects_special_file_without_blocking(tmp_path: Path) -> None:
+    """A FIFO is rejected after nonblocking no-follow open and never read as source bytes."""
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    os.mkfifo(allowed_root / "source.json")
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=allowed_root,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "source_not_regular")
+    assert result.source_path is None
+    assert result.source_bytes is None
+
+
+@pytest.mark.skipif(
+    not all(hasattr(os, flag) for flag in ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK"))
+    or os.open not in os.supports_dir_fd,
+    reason="protected descriptor flags are unavailable",
+)
+def test_admitted_source_rejects_symlink_replacement_before_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A source replaced by an outside symlink before protected open cannot be admitted."""
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    source_path = allowed_root / "source.json"
+    source_path.write_bytes((ADMITTED_SOURCE_FIXTURE_DIR / "source.json").read_bytes())
+    outside_source = tmp_path / "outside-source.json"
+    outside_source.write_bytes(b"outside\n")
+    real_open = review_contracts.os.open
+    swapped = False
+
+    def racing_open(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if kwargs.get("dir_fd") is not None and path == "source.json" and not swapped:
+            source_path.unlink()
+            source_path.symlink_to(outside_source)
+            swapped = True
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(review_contracts.os, "open", racing_open)
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=allowed_root,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert swapped is True
+    assert (result.status, result.reason) == ("unavailable", "source_escaped_root")
+    assert result.source_path is None
+    assert result.source_bytes is None
+
+
+@pytest.mark.skipif(
+    not all(hasattr(os, flag) for flag in ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK"))
+    or os.open not in os.supports_dir_fd,
+    reason="protected descriptor flags are unavailable",
+)
+def test_admitted_source_bytes_survive_path_replacement_after_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Protected bytes remain tied to the opened file when its pathname is replaced."""
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    source_path = allowed_root / "source.json"
+    source_bytes = (ADMITTED_SOURCE_FIXTURE_DIR / "source.json").read_bytes()
+    source_path.write_bytes(source_bytes)
+    outside_source = tmp_path / "outside-source.json"
+    outside_source.write_bytes(b"outside\n")
+    real_open = review_contracts.os.open
+    swapped = False
+
+    def racing_open(path, flags, *args, **kwargs):
+        nonlocal swapped
+        opened = real_open(path, flags, *args, **kwargs)
+        if kwargs.get("dir_fd") is not None and path == "source.json" and not swapped:
+            source_path.unlink()
+            source_path.symlink_to(outside_source)
+            swapped = True
+        return opened
+
+    monkeypatch.setattr(review_contracts.os, "open", racing_open)
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=allowed_root,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert swapped is True
+    assert result.status == "admitted"
+    assert result.source_bytes == source_bytes
+    assert result.source_path == source_path
+    assert result.source_path.is_symlink()
 
 
 def test_admitted_source_requires_v1_recipe_admission_reference() -> None:

@@ -15,10 +15,13 @@ benchmark, planner, simulator, or paper-facing claim.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from functools import cache
@@ -55,6 +58,7 @@ RESULT_STATUSES = ("complete", "partial", "unavailable", "failed", "cancelled")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _TEST_PRESET = {"width": 320, "height": 180, "fps": 10.0, "speed": 1.0}
+_ADMITTED_SOURCE_SUPPORTS_DIR_FD = os.open in os.supports_dir_fd
 
 MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS = 200
 MAX_REVIEW_CONTRACT_VALIDATION_ERRORS = 32
@@ -74,6 +78,7 @@ ADMITTED_SOURCE_REASON_SOURCE_MUTATED = "source_mutated"
 ADMITTED_SOURCE_REASON_SOURCE_ESCAPED_ROOT = "source_escaped_root"
 ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR = "source_not_regular"
 ADMITTED_SOURCE_REASON_SOURCE_TOO_LARGE = "source_too_large"
+ADMITTED_SOURCE_REASON_SOURCE_PROTECTION_UNAVAILABLE = "source_protection_unavailable"
 ADMITTED_SOURCE_REASON_ALLOWED_ROOT_MISSING = "allowed_root_missing"
 ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID = "allowed_root_invalid"
 
@@ -364,11 +369,13 @@ class AdmittedSourceRef:
     sha256: str
     source_commit: str
     config_identity: str
+    units: str = ""
+    coordinate_frame: str = ""
 
     def to_dict(self) -> dict[str, str]:
         """Return the source identity as a JSON-safe mapping."""
 
-        return {
+        payload = {
             "uri": self.uri,
             "format": self.format,
             "schema": self.schema,
@@ -376,6 +383,11 @@ class AdmittedSourceRef:
             "source_commit": self.source_commit,
             "config_identity": self.config_identity,
         }
+        if self.units:
+            payload["units"] = self.units
+        if self.coordinate_frame:
+            payload["coordinate_frame"] = self.coordinate_frame
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -409,13 +421,14 @@ class AdmittedSourceReceipt:
 
 @dataclass(frozen=True, slots=True)
 class AdmittedSourceResolution:
-    """Result of resolving and rehashing one admitted-source receipt."""
+    """Result of resolving and protected-reading one admitted-source receipt."""
 
     status: str
     reason: str
     source_path: Path | None = None
     receipt: AdmittedSourceReceipt | None = None
     detail: str = ""
+    source_bytes: bytes | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a compact JSON-safe resolution report."""
@@ -661,6 +674,8 @@ def admitted_source_receipt_from_dict(
             sha256=str(source_payload["sha256"]).lower(),
             source_commit=str(source_payload["source_commit"]).lower(),
             config_identity=str(source_payload["config_identity"]),
+            units=str(source_payload.get("units", "")),
+            coordinate_frame=str(source_payload.get("coordinate_frame", "")),
         ),
         request_sha256=str(payload["request_sha256"]).lower(),
         recipe_sha256=str(payload["recipe_sha256"]).lower(),
@@ -686,6 +701,8 @@ def _check_admitted_source_input_limits(payload: Mapping[str, Any], *, source: A
             ("format", MAX_ADMITTED_SOURCE_METADATA_CHARS),
             ("schema", MAX_ADMITTED_SOURCE_METADATA_CHARS),
             ("config_identity", MAX_ADMITTED_SOURCE_METADATA_CHARS),
+            ("units", MAX_ADMITTED_SOURCE_METADATA_CHARS),
+            ("coordinate_frame", MAX_ADMITTED_SOURCE_METADATA_CHARS),
         ):
             value = source_payload.get(key)
             if isinstance(value, str) and len(value) > maximum:
@@ -716,25 +733,6 @@ def _read_bounded_text(path: Path, *, maximum_bytes: int, label: str) -> str:
             f"{label} exceeds maximum size of {maximum_bytes} bytes"
         )
     return content.decode("utf-8")
-
-
-def _sha256_file_bounded(path: Path) -> str:
-    """Hash a source with a hard read ceiling so a replacement cannot force EOF reads.
-
-    Returns:
-        The lower-case SHA-256 digest of the bounded source bytes.
-    """
-    digest = hashlib.sha256()
-    bytes_read = 0
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            bytes_read += len(chunk)
-            if bytes_read > MAX_ADMITTED_SOURCE_BYTES:
-                raise _AdmittedSourceInputLimitError(
-                    f"source exceeds maximum size of {MAX_ADMITTED_SOURCE_BYTES} bytes"
-                )
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _receipt_read_error_detail(error: BaseException) -> str:
@@ -852,11 +850,12 @@ def _resolution(
     receipt: AdmittedSourceReceipt | None = None,
     source_path: Path | None = None,
     detail: str = "",
+    source_bytes: bytes | None = None,
 ) -> AdmittedSourceResolution:
     """Build a resolution result with a stable reason and optional detail.
 
     Returns:
-        Resolution with no source path unless one was explicitly supplied.
+        Resolution with no source path or bytes unless explicitly supplied.
     """
     return AdmittedSourceResolution(
         status=status,
@@ -864,6 +863,7 @@ def _resolution(
         source_path=source_path,
         receipt=receipt,
         detail=_bounded_text_detail(detail) if detail else "",
+        source_bytes=source_bytes,
     )
 
 
@@ -1020,6 +1020,66 @@ def _validated_request(
     raise TypeError("request must be a component request mapping or ComponentRequest")
 
 
+_COMPONENT_REQUEST_SOURCE_DECLARATION_FIELDS = (
+    "artifact_id",
+    "uri",
+    "format",
+    "schema",
+    "sha256",
+    "source_commit",
+    "config_identity",
+    "units",
+    "coordinate_frame",
+)
+_REQUEST_SOURCE_RECEIPT_BINDING_FIELDS = (
+    "uri",
+    "format",
+    "schema",
+    "sha256",
+    "source_commit",
+    "config_identity",
+    "units",
+    "coordinate_frame",
+)
+
+
+def _normalize_v1_source_declaration(value: Any) -> str:
+    """Normalize an optional v1 source declaration to its canonical text form.
+
+    Returns:
+        The source declaration or an empty string for an absent/non-text value.
+    """
+    return value if isinstance(value, str) else ""
+
+
+def _component_request_source_identity(source: SourceRef) -> dict[str, str]:
+    """Return every v1 source declaration, normalizing absent optionals."""
+    return {
+        field: _normalize_v1_source_declaration(getattr(source, field, ""))
+        for field in _COMPONENT_REQUEST_SOURCE_DECLARATION_FIELDS
+    }
+
+
+def _request_source_binding_mismatch(
+    source: SourceRef,
+    receipt_source: AdmittedSourceRef,
+) -> str | None:
+    """Return the first supplied request declaration that differs from a receipt.
+
+    Returns:
+        The mismatching declaration name, or ``None`` when all supplied values match.
+    """
+    for field_name in _REQUEST_SOURCE_RECEIPT_BINDING_FIELDS:
+        current = _normalize_v1_source_declaration(getattr(source, field_name, ""))
+        expected = _normalize_v1_source_declaration(getattr(receipt_source, field_name, ""))
+        if field_name in {"sha256", "source_commit"}:
+            current = current.lower()
+            expected = expected.lower()
+        if (field_name in {"uri", "format"} or current) and current != expected:
+            return field_name
+    return None
+
+
 def _request_identity_document(request: ComponentRequest | Mapping[str, Any]) -> dict[str, Any]:
     """Return the location-independent request identity used by SREV-22."""
     validated = _validated_request(request)
@@ -1027,14 +1087,7 @@ def _request_identity_document(request: ComponentRequest | Mapping[str, Any]) ->
         "schema_version": COMPONENT_REQUEST_SCHEMA_VERSION,
         "request_id": validated.request_id,
         "component_id": validated.component_id,
-        "sources": [
-            {
-                "artifact_id": source.artifact_id,
-                "uri": source.uri,
-                "format": source.format,
-            }
-            for source in validated.sources
-        ],
+        "sources": [_component_request_source_identity(source) for source in validated.sources],
         "config": dict(validated.config),
         "required_capabilities": list(validated.required_capabilities),
     }
@@ -1104,7 +1157,7 @@ def _check_receipt_digest_bindings(
     expected_request_sha256: str | None,
     expected_recipe_sha256: str | None,
 ) -> AdmittedSourceResolution | None:
-    """Check request and recipe digests and the request's URI/format binding.
+    """Check request and recipe digests and the request source binding.
 
     Returns:
         A stale resolution on mismatch, or ``None`` when all bindings pass.
@@ -1137,10 +1190,25 @@ def _check_receipt_digest_bindings(
     if early is not None:
         return early
     validated_request = _validated_request(request)
-    if not any(
-        source.uri == receipt.source.uri and source.format == receipt.source.format
-        for source in validated_request.sources
-    ):
+    source_mismatch: str | None = None
+    matching_source_found = False
+    for source in validated_request.sources:
+        if source.uri != receipt.source.uri or source.format != receipt.source.format:
+            continue
+        matching_source_found = True
+        current_mismatch = _request_source_binding_mismatch(source, receipt.source)
+        if current_mismatch is None:
+            return None
+        if source_mismatch is None:
+            source_mismatch = current_mismatch
+    if source_mismatch is not None:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail=f"request source {source_mismatch} does not match the receipt",
+        )
+    if not matching_source_found:
         return _resolution(
             "unavailable",
             ADMITTED_SOURCE_REASON_RECEIPT_STALE,
@@ -1317,17 +1385,157 @@ def _check_recipe_boundary_bindings(
     return None
 
 
-def _hash_source_or_rejection(
+def _source_open_flags(*, directory: bool) -> int | None:
+    """Return no-follow descriptor flags or ``None`` when safe open is unavailable."""
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    directory_flag = getattr(os, "O_DIRECTORY", None)
+    nonblocking = getattr(os, "O_NONBLOCK", None)
+    if (
+        not isinstance(nofollow, int)
+        or not isinstance(nonblocking, int)
+        or (directory and not isinstance(directory_flag, int))
+        or not _ADMITTED_SOURCE_SUPPORTS_DIR_FD
+    ):
+        return None
+    flags = os.O_RDONLY | nofollow | getattr(os, "O_CLOEXEC", 0)
+    if directory:
+        flags |= directory_flag
+    else:
+        flags |= nonblocking
+    return flags
+
+
+def _source_open_rejection(
     receipt: AdmittedSourceReceipt,
-    source_path: Path,
-) -> str | AdmittedSourceResolution:
-    """Hash one resolved source or return its bounded unavailable result.
+    error: BaseException,
+) -> AdmittedSourceResolution:
+    """Convert a protected-open failure into a stable source resolution.
 
     Returns:
-        The source digest, or a stable resolution when hashing is unavailable.
+        A bounded unavailable resolution classified by the open failure.
     """
+    if getattr(error, "errno", None) == errno.ELOOP:
+        reason = ADMITTED_SOURCE_REASON_SOURCE_ESCAPED_ROOT
+    elif getattr(error, "errno", None) in {errno.ENOTDIR, errno.EISDIR}:
+        reason = ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR
+    else:
+        reason = ADMITTED_SOURCE_REASON_SOURCE_MISSING
+    return _resolution(
+        "unavailable",
+        reason,
+        receipt=receipt,
+        detail=_bounded_error_detail(error),
+    )
+
+
+def _read_source_fd_bounded(fd: int) -> tuple[str, bytes]:
+    """Hash and retain bounded bytes from one already-open regular-file descriptor.
+
+    Returns:
+        The lower-case SHA-256 digest and the exact bytes read from ``fd``.
+    """
+    digest = hashlib.sha256()
+    content = bytearray()
+    bytes_read = 0
+    while True:
+        chunk = os.read(fd, 1024 * 1024)
+        if not chunk:
+            break
+        bytes_read += len(chunk)
+        if bytes_read > MAX_ADMITTED_SOURCE_BYTES:
+            raise _AdmittedSourceInputLimitError(
+                f"source exceeds maximum size of {MAX_ADMITTED_SOURCE_BYTES} bytes"
+            )
+        digest.update(chunk)
+        content.extend(chunk)
+    return digest.hexdigest(), bytes(content)
+
+
+def _close_source_fds(fds: list[int]) -> None:
+    """Close source descriptors while suppressing cleanup-only operating errors."""
+    for fd in reversed(fds):
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
+def _open_source_fds(
+    root: Path,
+    parts: tuple[str, ...],
+    *,
+    directory_flags: int,
+    file_flags: int,
+) -> tuple[int, list[int]]:
+    """Open every source component relative to no-follow directory descriptors.
+
+    Returns:
+        The source descriptor and all descriptors that the caller must close.
+    """
+    opened_fds: list[int] = []
     try:
-        return _sha256_file_bounded(source_path)
+        root_fd = os.open(root, directory_flags)
+        opened_fds.append(root_fd)
+        parent_fd = root_fd
+        for component in parts[:-1]:
+            parent_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+            opened_fds.append(parent_fd)
+        source_fd = os.open(parts[-1], file_flags, dir_fd=parent_fd)
+        opened_fds.append(source_fd)
+        return source_fd, opened_fds
+    except BaseException:
+        _close_source_fds(opened_fds)
+        raise
+
+
+def _read_source_or_rejection(
+    receipt: AdmittedSourceReceipt,
+    root: Path,
+) -> tuple[str, bytes] | AdmittedSourceResolution:
+    """Open, type-check, hash, and retain one source under a descriptor boundary.
+
+    Every path component is opened relative to a no-follow directory descriptor.
+    The returned bytes and digest therefore come from the same regular-file
+    descriptor, not from a pathname that can be replaced between checks.
+
+    Returns:
+        A ``(sha256, bytes)`` pair or a stable unavailable resolution.
+    """
+    directory_flags = _source_open_flags(directory=True)
+    file_flags = _source_open_flags(directory=False)
+    if directory_flags is None or file_flags is None:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_SOURCE_PROTECTION_UNAVAILABLE,
+            receipt=receipt,
+            detail="platform lacks required no-follow descriptor support",
+        )
+    parts = Path(receipt.source.uri).parts
+    if not parts:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR,
+            receipt=receipt,
+            detail="source URI does not identify a regular file",
+        )
+
+    opened_fds: list[int] = []
+    source_fd: int | None = None
+    try:
+        source_fd, opened_fds = _open_source_fds(
+            root,
+            parts,
+            directory_flags=directory_flags,
+            file_flags=file_flags,
+        )
+        source_stat = os.fstat(source_fd)
+        if not stat.S_ISREG(source_stat.st_mode):
+            return _resolution(
+                "unavailable",
+                ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR,
+                receipt=receipt,
+            )
+        return _read_source_fd_bounded(source_fd)
     except _AdmittedSourceInputLimitError as error:
         return _resolution(
             "unavailable",
@@ -1335,13 +1543,10 @@ def _hash_source_or_rejection(
             receipt=receipt,
             detail=_bounded_error_detail(error),
         )
-    except (OSError, ValueError) as error:
-        return _resolution(
-            "unavailable",
-            ADMITTED_SOURCE_REASON_SOURCE_MISSING,
-            receipt=receipt,
-            detail=_bounded_error_detail(error),
-        )
+    except (OSError, ValueError, TypeError) as error:
+        return _source_open_rejection(receipt, error)
+    finally:
+        _close_source_fds(opened_fds)
 
 
 def _resolve_allowed_root(
@@ -1373,10 +1578,10 @@ def _resolve_source_path(
     receipt: AdmittedSourceReceipt,
     root: Path,
 ) -> tuple[Path | None, AdmittedSourceResolution | None]:
-    """Resolve a receipt URI beneath *root* and reject unsafe local forms.
+    """Validate a receipt URI beneath *root* before descriptor-bound source use.
 
     Returns:
-        A canonical source path and no early result, or a stable path rejection.
+        A canonical display path and no early result, or a stable path rejection.
     """
     uri = receipt.source.uri
     try:
@@ -1414,22 +1619,6 @@ def _resolve_source_path(
             receipt=receipt,
             detail=_bounded_error_detail(error),
         )
-    try:
-        if not resolved.exists():
-            return None, _resolution(
-                "unavailable", ADMITTED_SOURCE_REASON_SOURCE_MISSING, receipt=receipt
-            )
-        if not resolved.is_file():
-            return None, _resolution(
-                "unavailable", ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR, receipt=receipt
-            )
-    except (OSError, RuntimeError, ValueError) as error:
-        return None, _resolution(
-            "unavailable",
-            ADMITTED_SOURCE_REASON_SOURCE_MISSING,
-            receipt=receipt,
-            detail=f"source path could not be inspected: {_bounded_error_detail(error, limit=150)}",
-        )
     return resolved, None
 
 
@@ -1455,8 +1644,9 @@ def resolve_admitted_source(
     corroborate those documents but cannot replace them.
 
     Returns:
-        ``status='admitted'`` and a resolved path only after the current source
-        bytes match the receipt.  All rejection results omit ``source_path``.
+        ``status='admitted'`` with protected source bytes and a compatibility
+        display path only after the current source bytes match the receipt.
+        All rejection results omit ``source_path`` and ``source_bytes``.
     """
     raw_receipt, early = _receipt_payload(receipt)
     raw_or_result = _resolver_value_or_rejection(
@@ -1521,10 +1711,10 @@ def resolve_admitted_source(
     if isinstance(source_or_result, AdmittedSourceResolution):
         return source_or_result
     source_path = source_or_result
-    observed_or_result = _hash_source_or_rejection(parsed_receipt, source_path)
+    observed_or_result = _read_source_or_rejection(parsed_receipt, root_or_result)
     if isinstance(observed_or_result, AdmittedSourceResolution):
         return observed_or_result
-    observed_sha256 = observed_or_result
+    observed_sha256, source_bytes = observed_or_result
     if observed_sha256 != parsed_receipt.source.sha256:
         return _resolution(
             "failed",
@@ -1537,6 +1727,7 @@ def resolve_admitted_source(
         ADMITTED_SOURCE_STATUS,
         receipt=parsed_receipt,
         source_path=source_path,
+        source_bytes=source_bytes,
     )
 
 

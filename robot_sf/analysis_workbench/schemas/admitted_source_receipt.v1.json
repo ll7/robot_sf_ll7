@@ -61,7 +61,7 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "maxProperties": 6,
+      "maxProperties": 8,
       "required": [
         "uri",
         "format",
@@ -95,6 +95,14 @@
         "config_identity": {
           "type": "string",
           "minLength": 1,
+          "maxLength": 256
+        },
+        "units": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "coordinate_frame": {
+          "type": "string",
           "maxLength": 256
         }
       }

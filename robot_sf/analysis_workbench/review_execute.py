@@ -1073,7 +1073,7 @@ class _Executor:
         ledger_path = self.output_dir / "attempt-ledger.json"
         try:
             ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
+        except (OSError, ValueError, RecursionError) as error:
             raise ReviewExecuteError(
                 [f"cannot resume: unreadable attempt ledger: {error}"]
             ) from error

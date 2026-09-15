@@ -817,6 +817,15 @@ def test_resume_ledger_error_branches(tmp_path: Path) -> None:
     assert result.status == "failed" and "mismatch" in result.reason
 
 
+def test_resume_parser_limit_fails_closed(tmp_path: Path) -> None:
+    out = tmp_path / "srev-22-smoke"
+    out.mkdir()
+    (out / "attempt-ledger.json").write_text('{"padding":' + "9" * 5001 + "}", encoding="utf-8")
+    result = run(_fixture_request(), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "unreadable attempt ledger" in result.reason
+
+
 def test_resume_continues_after_partial(tmp_path: Path) -> None:
     first = _fixture_request(max_executions=2)
     partial = run(first, base=tmp_path)

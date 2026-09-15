@@ -190,6 +190,14 @@ def build_subparser(subparsers: Any) -> None:
     doctor.add_argument("--private-launch-packet", type=Path)
     doctor.add_argument("--private-queue", type=Path)
     doctor.add_argument(
+        "--scheduler-closeout-receipt",
+        type=Path,
+        help=(
+            "Versioned terminal sacct closeout receipt. Required by --final so a stale "
+            "RUNNING admission cannot satisfy release publication."
+        ),
+    )
+    doctor.add_argument(
         "--private-ops-repository",
         type=Path,
         help=(
@@ -211,7 +219,13 @@ def build_subparser(subparsers: Any) -> None:
     doctor.add_argument("--publication-preflight", type=Path)
     doctor.add_argument("--private-jobs", type=Path)
     doctor.add_argument("--private-evaluation-receipt", type=Path)
-    doctor.add_argument("--expected-job-id", default="14890")
+    doctor.add_argument(
+        "--expected-job-id",
+        help=(
+            "Require this scheduler job ID when validating a closeout receipt. "
+            "Post-execution compatibility defaults to the historical campaign job when omitted."
+        ),
+    )
     doctor.add_argument("--expected-validator-sha")
     doctor.add_argument("--dissertation", type=Path)
     doctor.add_argument("--token-file", type=Path)
@@ -381,7 +395,7 @@ def _handle_post_execution_doctor(args: argparse.Namespace, repo_root: Path) -> 
         expected_base_sha=args.expected_base_sha,
         tag=args.tag,
         expected_campaign_id=args.expected_campaign_id or EXPECTED_CAMPAIGN_ID,
-        expected_job_id=args.expected_job_id,
+        expected_job_id=args.expected_job_id or "14890",
         expected_validator_sha=args.expected_validator_sha or EXPECTED_VALIDATOR_SHA,
     )
     _print(report)
@@ -461,6 +475,9 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
             checkpoint_path_map=getattr(args, "checkpoint_path_map", None),
             private_launch_packet=_repo_relative_path(args.private_launch_packet, repo_root),
             private_queue=_repo_relative_path(getattr(args, "private_queue", None), repo_root),
+            scheduler_closeout_receipt=_repo_relative_path(
+                getattr(args, "scheduler_closeout_receipt", None), repo_root
+            ),
             private_ops_repository=(
                 args.private_ops_repository.resolve()
                 if getattr(args, "private_ops_repository", None) is not None
@@ -469,6 +486,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
             dissertation=_repo_relative_path(args.dissertation, repo_root),
             token_file=_repo_relative_path(args.token_file, repo_root),
             expected_cells=args.expected_cells,
+            expected_job_id=getattr(args, "expected_job_id", None),
             minimum_free_gib=args.minimum_free_gib,
             require_zenodo_webhook_disabled=args.require_zenodo_webhook_disabled,
             publication_mode=(

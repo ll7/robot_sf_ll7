@@ -515,6 +515,9 @@ _FAST_FILES = {
     # Presentation-scene view contracts are deterministic coverage for the
     # changed presentation view adapter (issue #9369).
     "test_presentation_scene.py",
+    # Video-sync mapping tests are deterministic source/provenance contracts
+    # for the SREV-03 component (issue #9272).
+    "test_video_sync.py",
     # SVG geometry contract tests provide changed-line coverage for the
     # parser's explicit legacy/corrected transform paths (issue #8314).
     "test_svg_transform_contract.py",

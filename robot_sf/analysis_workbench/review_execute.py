@@ -45,7 +45,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from robot_sf.analysis_workbench.review_contracts import (
     COMPONENT_REQUEST_SCHEMA_VERSION,
@@ -433,6 +433,9 @@ def _validate_recipe_execution_contract(  # noqa: C901, PLR0912, PLR0915
             )
 
     interventions = recipe.get("interventions")
+    if not isinstance(interventions, list):
+        errors.append("invalid_interventions: interventions must be a list")
+        interventions = []
     candidate_factors = {
         str(item["intervention_id"]): item.get("factor")
         for item in interventions
@@ -884,7 +887,7 @@ def _specs_match_except(
 
 
 def _request_identity_document(request: ComponentRequest) -> dict[str, Any]:
-    """Return the location-sensitive request identity used by resume checks."""
+    """Return the location-independent request identity used by resume checks."""
     return {
         "request_id": request.request_id,
         "component_id": request.component_id,
@@ -896,7 +899,6 @@ def _request_identity_document(request: ComponentRequest) -> dict[str, Any]:
             }
             for source in request.sources
         ],
-        "output_directory": request.output_directory,
         "required_capabilities": list(request.required_capabilities),
     }
 
@@ -1077,9 +1079,10 @@ class _Executor:
         allowed_attempt_statuses = {"ok", "failed", "timed_out", "cancelled"}
         seen_attempts: set[tuple[str, str]] = set()
         validated_attempts: list[dict[str, Any]] = []
-        for index, entry in enumerate(attempts):
-            if not isinstance(entry, dict):
+        for index, raw_entry in enumerate(attempts):
+            if not isinstance(raw_entry, dict):
                 raise ReviewExecuteError([f"cannot resume: ledger attempt {index} is malformed"])
+            entry = cast("dict[str, Any]", raw_entry)
             candidate_id = entry.get("candidate_id")
             kind = entry.get("kind")
             status = entry.get("status")
@@ -1103,6 +1106,7 @@ class _Executor:
                     raise ReviewExecuteError(
                         [f"cannot resume: ledger attempt {index} metrics are missing"]
                     )
+                metrics = cast("dict[str, Any]", metrics)
                 if set(metrics) != REQUIRED_TELEMETRY_METRICS or any(
                     not _is_finite_number(metrics[key]) for key in REQUIRED_TELEMETRY_METRICS
                 ):
@@ -1118,9 +1122,10 @@ class _Executor:
             raise ReviewExecuteError(["cannot resume: ledger candidate state is missing"])
         seen_reports: set[str] = set()
         validated_reports: list[dict[str, Any]] = []
-        for index, report in enumerate(candidate_reports):
-            if not isinstance(report, dict):
+        for index, raw_report in enumerate(candidate_reports):
+            if not isinstance(raw_report, dict):
                 raise ReviewExecuteError([f"cannot resume: candidate report {index} is malformed"])
+            report = cast("dict[str, Any]", raw_report)
             candidate_id = report.get("intervention_id")
             if (
                 not isinstance(candidate_id, str)
@@ -1134,9 +1139,10 @@ class _Executor:
             validated_reports.append(dict(report))
         seen_traces: set[str] = set()
         validated_traces: list[dict[str, Any]] = []
-        for index, trace in enumerate(traces):
-            if not isinstance(trace, dict):
+        for index, raw_trace in enumerate(traces):
+            if not isinstance(raw_trace, dict):
                 raise ReviewExecuteError([f"cannot resume: activation trace {index} is malformed"])
+            trace = cast("dict[str, Any]", raw_trace)
             candidate_id = trace.get("intervention_id")
             if (
                 trace.get("schema_version") != ACTIVATION_TRACE_SCHEMA_VERSION

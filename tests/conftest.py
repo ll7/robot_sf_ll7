@@ -803,6 +803,9 @@ _FAST_FILES = {
     # Pedestrian reset compatibility covers the simulator metadata forwarding
     # branch in the changed environment reset path.
     "test_pedestrian_env_compat.py",
+    # Delayed single-pedestrian production and reset tests must contribute to
+    # exact-head PR coverage for the changed behavior and population modules.
+    "test_single_pedestrian.py",
     # The evaluator-only oracle channel test is a one-step deterministic contract
     # for changed environment plumbing; keep it in PR fast shards so changed
     # coverage proves the info-only branch.

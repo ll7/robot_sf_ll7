@@ -1015,6 +1015,14 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 def _write_readme(path: Path, report: dict[str, Any]) -> None:
     """Write a short presentation handoff note next to the pack."""
     clips = report.get("clips", [])
+    output_is_ignored = report.get("artifact_policy", {}).get("output_dir_git_ignored") is True
+    output_policy = (
+        "Generated media is intentionally local and untracked; the output directory is covered "
+        "by the repository's ignore policy."
+        if output_is_ignored
+        else "The output directory is external to the detected Git checkout and remains caller-owned; "
+        "keep generated media local and do not treat it as benchmark evidence."
+    )
     lines = [
         "# Presentation video pack",
         "",
@@ -1040,7 +1048,7 @@ def _write_readme(path: Path, report: dict[str, Any]) -> None:
             "",
             "Open `contact_sheet.png` for a quick visual check. `stills/` contains the sampled frames used by QA.",
             "",
-            "Generated media is intentionally local and untracked; the output directory is covered by the repository's ignore policy.",
+            output_policy,
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

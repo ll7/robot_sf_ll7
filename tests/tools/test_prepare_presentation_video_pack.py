@@ -405,3 +405,6 @@ def test_prepare_pack_cli_runs_real_local_subprocess_path(tmp_path: Path) -> Non
     presentation_path = output / clip["presentation_path"]
     assert presentation_path.read_bytes() == source.read_bytes()
     assert (output / manifest["contact_sheet"]).is_file()
+    readme = (output / "README.md").read_text(encoding="utf-8")
+    assert "remains caller-owned" in readme
+    assert "covered by the repository's ignore policy" not in readme

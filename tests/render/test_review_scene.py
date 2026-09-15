@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -108,6 +110,10 @@ def test_fixture_smoke_renders_numbered_scenes_and_source_map(tmp_path: Path) ->
         "component-descriptor.json",
     ]
     source_map = json.loads((tmp_path / "smoke" / "frame-source-map.json").read_text())
+    assert source_map["evidence_boundary"] == "analysis_workbench_only"
+    assert source_map["diagnostic_only"] is True
+    assert source_map["admission"] == "not_evaluated"
+    assert source_map["claim_boundary"] == "diagnostic_only; not benchmark evidence"
     assert [row["step"] for row in source_map["frames"]] == [0, 1, 2]
     assert [row["time_s"] for row in source_map["frames"]] == [0.0, 0.5, 1.0]
     assert source_map["frames"][0]["robot"]["position_m"] == [0.0, 0.0]
@@ -122,6 +128,10 @@ def test_fixture_smoke_renders_numbered_scenes_and_source_map(tmp_path: Path) ->
     assert source_record["trace"]["evidence_boundary"] == "analysis_workbench_only"
     assert result.provenance["source_artifacts"] == [source_record]
     assert source_map["sourcemap_sha256"] == result.provenance["sourcemap_sha256"]
+    assert result.provenance["evidence_boundary"] == "analysis_workbench_only"
+    assert result.provenance["diagnostic_only"] is True
+    assert result.provenance["admission"] == "not_evaluated"
+    assert result.provenance["claim_boundary"] == "diagnostic_only; not benchmark evidence"
     assert descriptor()["component_id"] == COMPONENT_ID
 
 
@@ -139,16 +149,26 @@ def test_svg_carries_fixture_coordinates_and_png_has_expected_size(
         assert image.size == (256, 192)
 
 
-def test_repeated_runs_compare_equal_source_map_bytes(tmp_path: Path) -> None:
-    """Deterministic fixture runs must produce byte-identical source maps."""
+def test_repeated_runs_compare_equal_artifact_bytes(tmp_path: Path) -> None:
+    """Deterministic fixture runs must produce byte-identical artifacts."""
     first, first_dir = _run_request(_request_doc(), tmp_path, output="run-a")
     second, second_dir = _run_request(_request_doc(), tmp_path, output="run-b")
 
     assert first.status == "complete", first.reason
     assert second.status == "complete", second.reason
-    assert (first_dir / "frame-source-map.json").read_bytes() == (
-        second_dir / "frame-source-map.json"
-    ).read_bytes()
+    first_bytes = {
+        artifact["artifact_id"]: (first_dir / artifact["artifact_id"]).read_bytes()
+        for artifact in first.artifacts
+    }
+    second_bytes = {
+        artifact["artifact_id"]: (second_dir / artifact["artifact_id"]).read_bytes()
+        for artifact in second.artifacts
+    }
+    assert first_bytes == second_bytes
+    for artifact_id, content in first_bytes.items():
+        assert hashlib.sha256(content).hexdigest() == next(
+            item["sha256"] for item in first.artifacts if item["artifact_id"] == artifact_id
+        )
 
 
 def test_wrong_component_is_unavailable(tmp_path: Path) -> None:
@@ -325,6 +345,97 @@ def test_source_symlink_escape_is_unavailable(tmp_path: Path) -> None:
 
     assert result.status == "unavailable"
     assert result.diagnostics[0]["reason"] == "unsafe-source-uri"
+
+
+def test_direct_artifact_id_escape_is_failed_before_staging(tmp_path: Path) -> None:
+    """The typed API must not interpolate an unsafe source ID into a path."""
+    doc = _request_doc()
+    doc["sources"] = [{**doc["sources"][0], "artifact_id": "../escaped"}]
+    result = run(_typed_request(doc), base=tmp_path, source_base=FIXTURES)
+
+    assert result.status == "failed"
+    assert "safe filename component" in result.reason
+    assert not (tmp_path / "escaped-scene_000000.svg").exists()
+
+
+def test_special_file_source_is_rejected_without_blocking(tmp_path: Path) -> None:
+    """A FIFO source URI must return a diagnostic instead of blocking read_bytes."""
+    source_root = tmp_path / "source-root"
+    source_root.mkdir()
+    fifo = source_root / "trace.fifo"
+    os.mkfifo(fifo)
+    request = _typed_request(_request_doc(), uri="trace.fifo")
+    results: list[Any] = []
+
+    worker = threading.Thread(
+        target=lambda: results.append(
+            run(request, base=tmp_path / "output", source_base=source_root)
+        ),
+        daemon=True,
+    )
+    worker.start()
+    worker.join(timeout=1.0)
+
+    assert not worker.is_alive(), "special-file source read blocked the API"
+    assert results[0].status == "unavailable"
+    assert "source must be a regular file" in results[0].diagnostics[0]["reason"]
+
+
+def test_oversized_source_is_unavailable(tmp_path: Path) -> None:
+    """A sparse source beyond the byte budget must not be read or parsed."""
+    source_root = tmp_path / "source-root"
+    source_root.mkdir()
+    source_path = source_root / "trace.json"
+    source_path.write_bytes(b"{}")
+    os.truncate(source_path, review_scene.MAX_SOURCE_BYTES + 1)
+    request = _typed_request(_request_doc(), uri="trace.json")
+
+    result = run(request, base=tmp_path / "output", source_base=source_root)
+
+    assert result.status == "unavailable"
+    assert "source exceeds maximum size" in result.diagnostics[0]["reason"]
+
+
+def test_nested_frame_indices_return_schema_valid_failure(tmp_path: Path, capsys: Any) -> None:
+    """Nested frame-index values must fail through both API and CLI envelopes."""
+    doc = _request_doc()
+    doc["config"] = {"scene": _scene(frame_indices=[[0]])}
+    request = component_request_from_dict(doc)
+    result = run(request, base=tmp_path, source_base=FIXTURES)
+
+    assert result.status == "failed"
+    assert "frame indices must be non-negative integers" in result.reason
+    component_result_from_dict(review_scene._result_payload(result))
+
+    request_path = tmp_path / "nested-request.json"
+    request_path.write_text(json.dumps(doc), encoding="utf-8")
+    exit_code = review_scene.main(
+        ["--input", str(request_path), "--output", "nested-output", "--base", str(tmp_path)]
+    )
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    component_result_from_dict(payload)
+    assert payload["status"] == "failed"
+    assert "frame indices must be non-negative integers" in payload["reason"]
+
+
+def test_resource_limits_fail_closed(tmp_path: Path) -> None:
+    """Figure and frame budgets must reject oversized diagnostic requests."""
+    oversized_figure = _request_doc()
+    oversized_figure["config"] = {
+        "scene": _scene(figure={"width_in": review_scene.MAX_FIGURE_WIDTH_IN + 1})
+    }
+    figure_result, _ = _run_request(oversized_figure, tmp_path, output="oversized-figure")
+    assert figure_result.status == "failed"
+    assert "resource-limit" in figure_result.reason
+
+    oversized_frames = _request_doc()
+    oversized_frames["config"] = {
+        "scene": _scene(frame_indices=list(range(review_scene.MAX_RENDER_FRAMES + 1)))
+    }
+    frames_result, _ = _run_request(oversized_frames, tmp_path, output="oversized-frames")
+    assert frames_result.status == "failed"
+    assert "resource-limit" in frames_result.reason
 
 
 def test_output_symlink_escape_is_failed(tmp_path: Path) -> None:

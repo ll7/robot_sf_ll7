@@ -1,0 +1,13 @@
+{
+  "intervals": [
+    {
+      "interval_id": "ph-1",
+      "start_s": 0.0,
+      "end_s": 1.0,
+      "actor_ids": [],
+      "category": "nominal",
+      "precursor_ids": [],
+      "recovery_ids": []
+    }
+  ]
+}

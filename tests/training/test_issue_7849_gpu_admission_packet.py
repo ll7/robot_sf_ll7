@@ -19,11 +19,11 @@ PACKET_PATH = (
 INVENTORY_PATH = (
     REPO_ROOT / "configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml"
 )
-FULL_PPO_PATH = REPO_ROOT / "configs/training/ppo/issue_7849_ppo_full_v1.yaml"
-FULL_RECURRENT_PATH = REPO_ROOT / "configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml"
-CANARY_PPO_PATH = REPO_ROOT / "configs/training/ppo/issue_7849_ppo_gate1_canary_v1.yaml"
+FULL_PPO_PATH = REPO_ROOT / "configs/training/ppo/issue_7849_ppo_full_v2.yaml"
+FULL_RECURRENT_PATH = REPO_ROOT / "configs/training/ppo/issue_7849_recurrent_ppo_full_v2.yaml"
+CANARY_PPO_PATH = REPO_ROOT / "configs/training/ppo/issue_7849_ppo_gate1_canary_v2.yaml"
 CANARY_RECURRENT_PATH = (
-    REPO_ROOT / "configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v1.yaml"
+    REPO_ROOT / "configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v2.yaml"
 )
 
 
@@ -88,8 +88,8 @@ def test_inventory_rehashes_every_declared_source_and_runtime_input() -> None:
 
     assert "maps/registry.yaml" in paths
     assert "maps/svg_maps/classic_crossing.svg" in paths
-    assert "configs/training/ppo/issue_7849_ppo_full_v1.yaml" in paths
-    assert "configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml" in paths
+    assert "configs/training/ppo/issue_7849_ppo_full_v2.yaml" in paths
+    assert "configs/training/ppo/issue_7849_recurrent_ppo_full_v2.yaml" in paths
 
 
 def test_full_and_canary_configs_resolve_to_registered_contract() -> None:
@@ -104,6 +104,13 @@ def test_full_and_canary_configs_resolve_to_registered_contract() -> None:
     assert full_recurrent.base.seeds == full_ppo.seeds
     assert full_ppo.evaluation.evaluation_episodes == 100
     assert full_recurrent.base.evaluation.evaluation_episodes == 100
+    assert full_ppo.evaluation.evaluation_seeds == (111, 112, 113)
+    assert full_recurrent.base.evaluation.evaluation_seeds == full_ppo.evaluation.evaluation_seeds
+    assert full_ppo.evaluation.evaluation_seed_manifest is not None
+    assert (
+        full_ppo.evaluation.evaluation_seed_manifest
+        == full_recurrent.base.evaluation.evaluation_seed_manifest
+    )
     assert train_ppo._build_eval_steps(15_000_000, full_ppo.evaluation.step_schedule) == list(
         range(1_000_000, 15_000_001, 1_000_000)
     )
@@ -124,6 +131,10 @@ def test_full_and_canary_configs_resolve_to_registered_contract() -> None:
     assert set(canary_recurrent.base.seeds).isdisjoint(full_recurrent.base.seeds)
     assert canary_ppo.evaluation.evaluation_episodes == 3
     assert canary_recurrent.base.evaluation.evaluation_episodes == 3
+    assert canary_ppo.evaluation.evaluation_seeds == (111, 112, 113)
+    assert (
+        canary_recurrent.base.evaluation.evaluation_seeds == canary_ppo.evaluation.evaluation_seeds
+    )
     assert train_ppo._build_eval_steps(2_048, canary_ppo.evaluation.step_schedule) == [1_024, 2_048]
 
 
@@ -170,6 +181,28 @@ def test_feed_forward_seed_override_isolated_and_declared(tmp_path: Path, monkey
             training_seed=231,
             run_id="../unsafe",
         )
+
+
+def test_evaluation_seed_manifest_rejects_training_overlap(tmp_path: Path) -> None:
+    manifest = tmp_path / "evaluation-seeds.yaml"
+    manifest.write_text(
+        "schema_version: robot-sf-evaluation-seed-manifest.v1\nevaluation_seeds: [111, 123]\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="disjoint from training seeds"):
+        train_ppo._load_evaluation_seed_manifest(manifest, training_seeds=(123, 231))
+
+
+def test_explicit_evaluation_seed_schedule_replaces_training_seed_fallback() -> None:
+    config = train_ppo.load_expert_training_config(FULL_PPO_PATH)
+    assert [
+        train_ppo._deterministic_eval_seed_for_episode(
+            config,
+            episode_idx=idx,
+            scenario_cycle_length=48,
+        )
+        for idx in (0, 47, 48, 95, 96)
+    ] == [111, 111, 112, 112, 113]
 
 
 def test_canary_inputs_and_answerability_are_explicitly_blocked() -> None:

@@ -23,7 +23,7 @@ import importlib
 import json
 import platform
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -297,6 +297,12 @@ def _manifest_payload(  # noqa: PLR0913
         "scenario_config": str(config.base.scenario_config),
         "seeds": [seed] if seed is not None else list(config.base.seeds),
         "total_timesteps": int(config.base.total_timesteps),
+        "evaluation_seed_manifest": (
+            str(config.base.evaluation.evaluation_seed_manifest)
+            if config.base.evaluation.evaluation_seed_manifest is not None
+            else None
+        ),
+        "evaluation_seeds": list(config.base.evaluation.evaluation_seeds),
         "env_overrides": dict(config.base.env_overrides),
         "env_factory_kwargs": dict(config.base.env_factory_kwargs),
         "recurrent_ppo_hyperparams": dict(config.recurrent_ppo_hyperparams),
@@ -412,6 +418,8 @@ def _evaluate_recurrently(  # noqa: PLR0915
     episodes: int,
     deterministic: bool = True,
     snqi_context: Any | None = None,
+    evaluation_seeds: Sequence[int] | None = None,
+    scenario_cycle_length: int = 1,
 ) -> dict[str, Any]:
     """Evaluate with explicit recurrent-state propagation and reset accounting.
 
@@ -425,12 +433,24 @@ def _evaluate_recurrently(  # noqa: PLR0915
     episode_returns: list[float] = []
     episode_lengths: list[int] = []
     episode_metrics: list[dict[str, float]] = []
+    episode_seed_values: list[int | None] = []
     non_finite_actions = 0
     resolved_snqi_context = snqi_context or train_ppo.resolve_training_snqi_context()
 
     current_return = 0.0
     current_length = 0
-    for _ in range(episodes):
+    resolved_eval_seeds = tuple(int(value) for value in (evaluation_seeds or ()))
+    cycle_length = max(1, int(scenario_cycle_length))
+    for episode_idx in range(episodes):
+        seed = (
+            resolved_eval_seeds[(episode_idx // cycle_length) % len(resolved_eval_seeds)]
+            if resolved_eval_seeds
+            else None
+        )
+        if seed is not None:
+            # VecEnv applies seeds on the next reset.  This keeps the explicit
+            # shared evaluation identity while preserving SB3's reset API.
+            eval_env.seed(seed)
         obs = eval_env.reset()
         lstm_states = None  # fresh state at env.reset: never carry across episodes
         reset_accounting.record("env_reset")
@@ -490,6 +510,7 @@ def _evaluate_recurrently(  # noqa: PLR0915
                 snqi_context=resolved_snqi_context,
             )
         )
+        episode_seed_values.append(seed)
         current_return = 0.0
         current_length = 0
 
@@ -502,6 +523,7 @@ def _evaluate_recurrently(  # noqa: PLR0915
         "reset_counts": reset_accounting.as_dict(),
         "non_finite_action_count": non_finite_actions,
         "episode_metrics": episode_metrics,
+        "evaluation_seeds": episode_seed_values,
     }
     for metric_name in train_ppo._EVAL_METRIC_KEYS:
         values = [row[metric_name] for row in episode_metrics]
@@ -519,6 +541,12 @@ def _checkpoint_identity_payload(config: RecurrentPPOConfig, source_sha: str) ->
         "config_digest": _config_digest(config),
         "algorithm": "recurrent_ppo",
         "policy_class": config.recurrent_policy,
+        "evaluation_seed_manifest": (
+            str(config.base.evaluation.evaluation_seed_manifest)
+            if config.base.evaluation.evaluation_seed_manifest is not None
+            else None
+        ),
+        "evaluation_seeds": list(config.base.evaluation.evaluation_seeds),
     }
 
 
@@ -535,6 +563,12 @@ def _config_digest(config: RecurrentPPOConfig) -> str:
             "policy_kwargs": dict(sorted(config.policy_kwargs.items())),
             "best_checkpoint_metric": config.base.best_checkpoint_metric,
             "evaluation_episodes": config.base.evaluation.evaluation_episodes,
+            "evaluation_seed_manifest": (
+                str(config.base.evaluation.evaluation_seed_manifest)
+                if config.base.evaluation.evaluation_seed_manifest is not None
+                else None
+            ),
+            "evaluation_seeds": list(config.base.evaluation.evaluation_seeds),
         },
         sort_keys=True,
     )
@@ -599,6 +633,7 @@ def _train_and_evaluate_segments(  # noqa: PLR0913
     source_sha: str,
     seed: int,
     snqi_context: Any,
+    scenario_cycle_length: int = 1,
 ) -> tuple[int, float | None, Path | None, list[dict[str, Any]]]:
     """Run the frozen step_schedule loop: learn, save, evaluate, select best."""
     best_score: float | None = None
@@ -635,6 +670,8 @@ def _train_and_evaluate_segments(  # noqa: PLR0913
             eval_env=eval_vec_env,
             episodes=max(1, config.base.evaluation.evaluation_episodes),
             snqi_context=snqi_context,
+            evaluation_seeds=config.base.evaluation.evaluation_seeds or (seed,),
+            scenario_cycle_length=scenario_cycle_length,
         )
         eval_sec = time.perf_counter() - eval_start
         selection_score = eval_summary.get(metric_name)
@@ -658,6 +695,7 @@ def _train_and_evaluate_segments(  # noqa: PLR0913
             "non_finite_action_count": eval_summary["non_finite_action_count"],
             "metrics": {key: float(eval_summary[key]) for key in train_ppo._EVAL_METRIC_KEYS},
             "episode_metrics": eval_summary["episode_metrics"],
+            "evaluation_seeds": eval_summary.get("evaluation_seeds", []),
             "eval_sec": eval_sec,
             "recorded_at": utc_now_iso(),
         }
@@ -778,6 +816,7 @@ def run_training_for_seed(
                 source_sha=source_sha,
                 seed=base_seed,
                 snqi_context=snqi_context,
+                scenario_cycle_length=len(scenario_definitions),
             )
         )
         final_path = output_dir / "final.zip"

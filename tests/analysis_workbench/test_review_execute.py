@@ -47,6 +47,14 @@ def _fixture_request(**config_overrides: Any) -> Any:
     return request
 
 
+def _fixture_episode_identity() -> dict[str, Any]:
+    source_identity = _fixture_json("config.json")["recipe"]["source_identity"]
+    return {
+        "scenario_id": source_identity["scenario_id"],
+        "source_ref": dict(source_identity["source_ref"]),
+    }
+
+
 def _patch_fake_execution(
     monkeypatch: pytest.MonkeyPatch, *, fail_treatment_speed: float | None = None
 ) -> list[dict[str, Any]]:
@@ -351,6 +359,34 @@ def test_diagnostic_boundary_rejects_benchmark_source(tmp_path: Path) -> None:
     assert "invalid_evidence_boundary" in missing_result.reason
 
 
+def test_fixture_source_binding_rejects_mismatches_before_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _patch_fake_execution(monkeypatch)
+
+    wrong_scenario = _recipe_payload()
+    wrong_scenario["output_directory"] = "wrong-scenario"
+    wrong_scenario["config"]["recipe"]["source_identity"]["scenario_id"] = "other-fixture"
+    scenario_result = run(component_request_from_dict(wrong_scenario), base=tmp_path)
+    assert scenario_result.status == "failed"
+    assert "supported fixture" in scenario_result.reason
+
+    missing_source_ref = _recipe_payload()
+    missing_source_ref["output_directory"] = "missing-source-ref"
+    missing_source_ref["config"]["recipe"]["source_identity"].pop("source_ref")
+    source_ref_result = run(component_request_from_dict(missing_source_ref), base=tmp_path)
+    assert source_ref_result.status == "failed"
+    assert "source_ref" in source_ref_result.reason
+
+    wrong_request_source = _recipe_payload()
+    wrong_request_source["output_directory"] = "wrong-request-source"
+    wrong_request_source["sources"][0]["uri"] = "other-recipe.json"
+    request_source_result = run(component_request_from_dict(wrong_request_source), base=tmp_path)
+    assert request_source_result.status == "failed"
+    assert "request source" in request_source_result.reason
+    assert calls == []
+
+
 def test_run_rejects_direct_request_output_escape(tmp_path: Path) -> None:
     request = replace(_fixture_request(), output_directory="../srev22-escape")
     result = run(request, base=tmp_path)
@@ -368,6 +404,46 @@ def test_budget_reserves_a_complete_pair_before_execution(
     assert result.status == "failed"
     assert "execution_budget_exhausted" in result.reason
     assert calls == []
+
+
+def test_wall_budget_reserves_complete_pair_before_control(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _patch_fake_execution(monkeypatch)
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        wall_timeout_s=0.19,
+        per_execution_timeout_s=0.1,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "reserving 2 execution(s)" in result.reason
+    assert calls == []
+
+
+def test_wall_budget_reserves_remaining_treatment_after_control(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    calls = _patch_fake_execution(monkeypatch)
+    wall_remaining = iter((0.2, 0.2, 0.09))
+    monkeypatch.setattr(
+        review_execute_module._Executor,
+        "_wall_remaining",
+        lambda _executor: next(wall_remaining),
+    )
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        wall_timeout_s=0.25,
+        per_execution_timeout_s=0.1,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "partial"
+    assert "reserving 1 execution(s)" in result.reason
+    assert [job["ped_speed_m_s"] for job in calls] == [1.0]
 
 
 def test_failed_candidate_is_partial_without_complete_artifacts(
@@ -542,6 +618,7 @@ def test_episode_job_reports_errors_without_raising() -> None:
     assert failed["status"] == "error" and "error" in failed
     tiny = _execute_episode_job(
         {
+            **_fixture_episode_identity(),
             "seed": 7,
             "horizon_steps": 4,
             "robot_speed_m_s": 1.0,
@@ -550,6 +627,26 @@ def test_episode_job_reports_errors_without_raising() -> None:
         }
     )
     assert tiny["status"] == "ok" and tiny["steps_completed"] == 4
+
+
+def test_episode_job_rejects_unbound_fixture_identity() -> None:
+    from robot_sf.analysis_workbench.review_execute import _execute_episode_job
+
+    job = {
+        **_fixture_episode_identity(),
+        "seed": 7,
+        "horizon_steps": 4,
+        "robot_speed_m_s": 1.0,
+        "ped_speed_m_s": 1.0,
+        "ped_start_delay_s": 0.0,
+    }
+    wrong_scenario = _execute_episode_job({**job, "scenario_id": "other-fixture"})
+    assert wrong_scenario["status"] == "error"
+    assert "scenario_id" in wrong_scenario["error"]
+
+    wrong_source = _execute_episode_job({**job, "source_ref": {"uri": "other-recipe.json"}})
+    assert wrong_source["status"] == "error"
+    assert "source_ref" in wrong_source["error"]
 
 
 def test_child_main_reports_transport_failure() -> None:

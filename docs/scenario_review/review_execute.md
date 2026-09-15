@@ -12,8 +12,12 @@ the whole workbench.
 Diagnostic tooling only. An accepted recipe must explicitly mark its
 `source_identity` as `evidence_boundary: diagnostic_only`,
 `scientific_claim_allowed: false`, and
-`dependent_family_status: standalone_fixture_only`. Fixture executions use the
-real simulator path with a stateless goal-directed holonomic policy
+`dependent_family_status: standalone_fixture_only`. The fixture path also
+requires `scenario_id: srev22-tiny-crossing` and the exact immutable
+`source_ref` `{artifact_id: recipe-srev22-smoke, uri: recipe.json,
+format: experiment-recipe.v1}`; that object must match the request's sole
+source reference before a child is started. Fixture executions use the real
+simulator path with a stateless goal-directed holonomic policy
 (`simple_policy` family) and record survived / falsified / inconclusive pair
 verdicts via the canonical counterfactual-pair evaluator. This is not campaign
 or evidence-admission authority: no benchmark claim, planner/simulator
@@ -56,10 +60,10 @@ Nested intervention parameters are also closed to finite scalar deltas. The
 only child targets are the owned simulator episode and the test-only sleep
 target; no import, command, script, or callable is accepted from JSON.
 
-The recipe carries the hypothesis, `source_identity` (requires a non-empty
-`scenario_id`, plus the explicit diagnostic-only and standalone-family
-markers), finite candidate interventions ordered deterministically by
-(priority, stable ID), `control_conditions`, one driving measurement with an
+The recipe carries the hypothesis, `source_identity` (the supported fixture
+scenario and exact source reference, plus the explicit diagnostic-only and
+standalone-family markers), finite candidate interventions ordered
+deterministically by (priority, stable ID), `control_conditions`, one driving measurement with an
 `increase`/`decrease` expectation, budget, stop rules, and a
 `preservation_destination` recorded as a retrieval URI rather than a local
 write target.
@@ -70,9 +74,10 @@ must carry all four supported stop rules: exhausted candidates, execution
 budget exhausted, wall timeout, and control-fidelity failure blocking
 treatment. Config values may narrow the recipe budget but may not exceed it.
 Before a candidate starts, the executor reserves the complete control/treatment
-pair; it never starts a pair that cannot fit in the remaining execution or wall
-budget. Each execution boundary updates `attempt-ledger.json`, including
-partial and failed outcomes.
+pair; its wall preflight requires one full `per_execution_timeout_s` for each
+reserved execution, so it never starts a pair that cannot fit in the remaining
+execution or wall budget. Each execution boundary updates
+`attempt-ledger.json`, including partial and failed outcomes.
 
 Supported intervention factors are `single_pedestrian_speed_offset`
 (executed) and `single_pedestrian_start_delay_offset`. Supported measurements

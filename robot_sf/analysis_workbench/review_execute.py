@@ -125,6 +125,12 @@ DIAGNOSTIC_EVIDENCE_BOUNDARY = "diagnostic_only"
 DEPENDENT_FAMILY_STATUS = "standalone_fixture_only"
 _SAFE_PRESERVATION_DESTINATION_PREFIXES = ("external:", "artifact:", "fixture:")
 _CHILD_TARGETS = frozenset({"episode", "sleep"})
+_SUPPORTED_FIXTURE_SCENARIO_ID = "srev22-tiny-crossing"
+_SUPPORTED_FIXTURE_SOURCE_REFERENCE = (
+    ("artifact_id", "recipe-srev22-smoke"),
+    ("uri", "recipe.json"),
+    ("format", "experiment-recipe.v1"),
+)
 
 _DT_S = 0.1
 _ROBOT_GOAL = (16.8, 16.8)
@@ -404,6 +410,16 @@ def _validate_recipe_execution_contract(  # noqa: C901, PLR0912, PLR0915
     source_identity = recipe.get("source_identity")
     if not isinstance(source_identity, dict):
         return ["invalid_source_identity: mapping required"]
+    if source_identity.get("scenario_id") != _SUPPORTED_FIXTURE_SCENARIO_ID:
+        errors.append(
+            "invalid_source_identity: scenario_id must bind the supported fixture "
+            f"{_SUPPORTED_FIXTURE_SCENARIO_ID!r}"
+        )
+    if source_identity.get("source_ref") != _supported_fixture_source_reference():
+        errors.append(
+            "invalid_source_identity: source_ref must bind the immutable supported "
+            "fixture source reference"
+        )
     kind = source_identity.get("kind")
     if kind not in {"fixture", "diagnostic"}:
         errors.append(
@@ -593,6 +609,42 @@ def _unsupported_capabilities(request: ComponentRequest) -> list[str]:
     return [name for name in request.required_capabilities if name not in supported]
 
 
+def _supported_fixture_source_reference() -> dict[str, str]:
+    """Return the immutable logical source reference for the supported fixture."""
+    return dict(_SUPPORTED_FIXTURE_SOURCE_REFERENCE)
+
+
+def _request_source_reference(request: ComponentRequest) -> dict[str, str] | None:
+    """Return the one source reference accepted by the fixture execution path."""
+    if len(request.sources) != 1:
+        return None
+    source = request.sources[0]
+    return {
+        "artifact_id": source.artifact_id,
+        "uri": source.uri,
+        "format": source.format,
+    }
+
+
+def _episode_job_identity_error(job: dict[str, Any]) -> str | None:
+    """Reject episode jobs that are not bound to the hard-coded fixture.
+
+    Returns:
+        An invalid-identity reason, or ``None`` for the supported fixture.
+    """
+    if job.get("scenario_id") != _SUPPORTED_FIXTURE_SCENARIO_ID:
+        return (
+            "invalid_source_identity: episode scenario_id is not bound to the "
+            f"supported fixture {_SUPPORTED_FIXTURE_SCENARIO_ID!r}"
+        )
+    if job.get("source_ref") != _supported_fixture_source_reference():
+        return (
+            "invalid_source_identity: episode source_ref is not bound to the "
+            "immutable supported fixture source reference"
+        )
+    return None
+
+
 def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
     """Run one control/treatment episode inside an owned child process.
 
@@ -603,6 +655,9 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
         Plain-data telemetry payload or an error payload; never raises.
     """
     try:
+        identity_error = _episode_job_identity_error(job)
+        if identity_error is not None:
+            return {"status": "error", "error": identity_error}
         import numpy as np  # noqa: PLC0415 - lazy: keep module import light
 
         from robot_sf.common.seed import set_global_seed  # noqa: PLC0415 - lazy: child-process sim stack
@@ -963,6 +1018,19 @@ class _Executor:
     def _wall_remaining(self) -> float:
         return max(0.0, self.config.wall_timeout_s - self._elapsed())
 
+    def _reserve_wall_budget(self, required_executions: int) -> None:
+        """Require each reserved execution's full timeout before starting a pair."""
+        if required_executions <= 0:
+            return
+        required_wall_s = required_executions * self.config.per_execution_timeout_s
+        wall_remaining = self._wall_remaining()
+        if wall_remaining < required_wall_s:
+            raise _ExecutionWallTimeout(
+                "wall_timeout: reserving "
+                f"{required_executions} execution(s) requires {required_wall_s:g}s, "
+                f"but only {wall_remaining:g}s remains"
+            )
+
     def _record_attempt(self, attempt: dict[str, Any]) -> None:
         self._attempts.append(attempt)
 
@@ -1238,6 +1306,8 @@ class _Executor:
             "seed": self.config.seed,
             "horizon_steps": self.config.horizon_steps,
             "robot_speed_m_s": self.config.robot_speed_m_s,
+            "scenario_id": spec["scenario_id"],
+            "source_ref": dict(spec["source_ref"]),
             "ped_speed_m_s": spec["ped_speed_m_s"],
             "ped_start_delay_s": spec["ped_start_delay_s"],
         }
@@ -1349,8 +1419,10 @@ class _Executor:
             }
             self._record_candidate_report(report)
             return report
+        source_identity = self.recipe["source_identity"]
         control_spec = {
-            "scenario_id": str(self.recipe["source_identity"].get("scenario_id", "")),
+            "scenario_id": str(source_identity["scenario_id"]),
+            "source_ref": dict(source_identity["source_ref"]),
             "seed": self.config.seed,
             "horizon_steps": self.config.horizon_steps,
             "robot_speed_m_s": self.config.robot_speed_m_s,
@@ -1379,8 +1451,7 @@ class _Executor:
             raise _ExecutionBudgetExhausted(
                 "execution_budget_exhausted: reserving a complete control/treatment pair"
             )
-        if required_executions and self._wall_remaining() <= 0.0:
-            raise _ExecutionWallTimeout("wall_timeout: wall budget exhausted before candidate")
+        self._reserve_wall_budget(required_executions)
         if control_attempt is None:
             control_attempt = self._run_episode(candidate_id, "control", control_spec)
         if control_attempt.get("status") in {"timed_out", "cancelled"}:
@@ -1421,6 +1492,7 @@ class _Executor:
             return report
         treatment_attempt = self._attempt(candidate_id, "treatment")
         if treatment_attempt is None:
+            self._reserve_wall_budget(1)
             treatment_attempt = self._run_episode(candidate_id, "treatment", treatment_spec)
         if treatment_attempt.get("status") in {"timed_out", "cancelled"}:
             if not self.resume:
@@ -1771,6 +1843,43 @@ def _admit_request(  # noqa: C901
             None,
             None,
             _final_result(request, status="failed", reason=recipe_errors[0]),
+        )
+    request_source_ref = _request_source_reference(request)
+    if request_source_ref is None:
+        return (
+            None,
+            None,
+            None,
+            _final_result(
+                request,
+                status="failed",
+                reason="invalid_source_identity: exactly one source reference is required",
+            ),
+        )
+    if request_source_ref != _supported_fixture_source_reference():
+        return (
+            None,
+            None,
+            None,
+            _final_result(
+                request,
+                status="failed",
+                reason=(
+                    "invalid_source_identity: request source must match the immutable "
+                    "supported fixture source reference"
+                ),
+            ),
+        )
+    if source_identity.get("source_ref") != request_source_ref:
+        return (
+            None,
+            None,
+            None,
+            _final_result(
+                request,
+                status="failed",
+                reason="invalid_source_identity: recipe source_ref does not match request source",
+            ),
         )
     control_conditions = recipe_doc.get("control_conditions", {})
     if not isinstance(control_conditions, dict):

@@ -20,6 +20,11 @@
     "hypothesis": "Raising the crossing pedestrian speed increases the minimum robot-pedestrian distance on the tiny fixture crossing.",
     "source_identity": {
       "scenario_id": "srev22-tiny-crossing",
+      "source_ref": {
+        "artifact_id": "recipe-srev22-smoke",
+        "uri": "recipe.json",
+        "format": "experiment-recipe.v1"
+      },
       "kind": "fixture",
       "origin": "synthetic-constructed",
       "evidence_boundary": "diagnostic_only",

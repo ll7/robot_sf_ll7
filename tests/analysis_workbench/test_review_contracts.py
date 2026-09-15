@@ -203,6 +203,32 @@ def test_experiment_recipe_rejects_duplicate_ids() -> None:
         experiment_recipe_from_dict(doc)
 
 
+@pytest.mark.parametrize("payload_kind", ["request", "recipe"])
+def test_retained_configuration_rejects_unicode_surrogates(payload_kind: str) -> None:
+    """Retained request and recipe identities cannot carry lone surrogates."""
+    if payload_kind == "request":
+        payload = _admitted_source_fixture("request.json")
+        payload["config"] = {"retained": chr(0xD800)}
+        validator = component_request_from_dict
+    else:
+        payload = _admitted_source_fixture("recipe.json")
+        payload["source_identity"]["config_identity"] = chr(0xD800)
+        validator = experiment_recipe_from_dict
+
+    with pytest.raises(ReviewContractsValidationError, match="Unicode surrogate"):
+        validator(payload)
+
+
+def test_retained_configuration_accepts_paired_unicode_surrogates() -> None:
+    """A directly supplied UTF-16 pair is not mistaken for a lone surrogate."""
+    payload = _admitted_source_fixture("request.json")
+    payload["config"] = {"retained": chr(0xD83D) + chr(0xDE00)}
+
+    request = component_request_from_dict(payload)
+
+    assert request.config["retained"] == chr(0xD83D) + chr(0xDE00)
+
+
 def test_unknown_schema_version_fails_closed() -> None:
     with pytest.raises(ReviewContractsValidationError, match="unknown schema version"):
         review_contracts.load_review_contracts_schema("review-bundle.v99")
@@ -328,6 +354,31 @@ def test_admitted_source_bounds_oversized_json_integer_errors(tmp_path: Path) ->
     assert (result.status, result.reason) == ("unavailable", "receipt_unreadable")
     assert result.detail == "receipt JSON is invalid or exceeds parser limits"
     assert len(result.detail) < 300
+    assert result.source_path is None
+
+
+def test_admitted_source_bounds_schema_validation_detail() -> None:
+    """Malformed receipt diagnostics stay bounded for oversized invalid fields."""
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["receipt_id"] = "!" * 1_000_000
+
+    result = resolve_admitted_source(receipt, allowed_root=ADMITTED_SOURCE_FIXTURE_DIR)
+
+    assert (result.status, result.reason) == ("failed", "receipt_malformed")
+    assert len(result.detail) <= 200
+    assert result.source_path is None
+
+
+@pytest.mark.parametrize("field", ["format", "schema", "config_identity"])
+def test_admitted_source_rejects_unicode_surrogates(field: str) -> None:
+    """Receipt source identity strings cannot be mutually admitted with surrogates."""
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["source"][field] = chr(0xD800)
+
+    result = resolve_admitted_source(receipt, allowed_root=ADMITTED_SOURCE_FIXTURE_DIR)
+
+    assert (result.status, result.reason) == ("failed", "receipt_malformed")
+    assert result.detail == "payload contains unsupported Unicode surrogate"
     assert result.source_path is None
 
 

@@ -31,7 +31,7 @@ Example:
 """
 
 from dataclasses import dataclass, field, replace
-from math import atan2, ceil, cos, dist, sin
+from math import atan2, ceil, cos, dist, isfinite, sin
 
 import numpy as np
 from shapely.geometry import Point as _ShapelyPoint
@@ -855,6 +855,68 @@ def _synthetic_crowd_zones(
         ((x_min, y_min), (x_max, y_min), (x_max, y_max)),
         ((x_min, y_min), (x_max, y_max), (x_min, y_max)),
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class SpawnFootprintReport:
+    """Overlap verdict for one robot footprint against spawned pedestrians."""
+
+    collision: bool
+    min_clearance_m: float | None
+    overlapping_rows: tuple[int, ...]
+
+
+def validate_spawn_footprints(
+    robot_xy: Vec2D,
+    robot_radius: float,
+    ped_xy: list[Vec2D],
+    ped_radius: float,
+) -> SpawnFootprintReport:
+    """Check spawned pedestrian positions against the robot spawn footprint.
+
+    Route placement enforces obstacle avoidance (and ped-ped separation on the
+    scatter path) but never consults the robot spawn pose, so a route passing
+    near the robot start can place a pedestrian inside its footprint (issue
+    #9403). This pure helper names that condition without changing any spawn
+    behavior: callers decide whether an overlap blocks, warns, or is expected.
+
+    Returns:
+        Report with the collision verdict, minimum surface clearance, and the
+        overlapping pedestrian rows (empty when clear or when no finite rows).
+
+    Raises:
+        ValueError: For non-finite radii or a malformed robot position.
+    """
+    try:
+        origin = (float(robot_xy[0]), float(robot_xy[1]))
+        robot_r = float(robot_radius)
+        ped_r = float(ped_radius)
+    except (TypeError, ValueError, IndexError) as exc:
+        raise ValueError(f"malformed spawn footprint input: {exc}") from exc
+    if not all(map(isfinite, (*origin, robot_r, ped_r))):
+        raise ValueError("spawn footprint inputs must be finite")
+    if robot_r < 0.0 or ped_r < 0.0:
+        raise ValueError("spawn footprint radii must be non-negative")
+    clearances: list[float] = []
+    overlapping: list[int] = []
+    for row, position in enumerate(ped_xy):
+        try:
+            point = (float(position[0]), float(position[1]))
+        except (TypeError, ValueError, IndexError):
+            continue
+        if not all(map(isfinite, point)):
+            continue
+        clearance = dist(origin, point) - robot_r - ped_r
+        clearances.append(clearance)
+        if clearance < 0.0:
+            overlapping.append(row)
+    if not clearances:
+        return SpawnFootprintReport(collision=False, min_clearance_m=None, overlapping_rows=())
+    return SpawnFootprintReport(
+        collision=bool(overlapping),
+        min_clearance_m=min(clearances),
+        overlapping_rows=tuple(overlapping),
+    )
 
 
 def _sample_scatter_point(

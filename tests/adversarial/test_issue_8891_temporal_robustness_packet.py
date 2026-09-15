@@ -165,6 +165,15 @@ def test_confirmed_failure_requires_activation_time(packet: dict) -> None:
     )
 
 
+def test_observed_sidecar_requires_activation_time_for_violated_property(packet: dict) -> None:
+    sidecar = _sidecar(packet, "fixture")
+    sidecar["properties"][0]["activation_time_s"] = None
+    _bad(
+        lambda: validate_temporal_sidecar(sidecar, packet, candidate_id="fixture"),
+        "activation time",
+    )
+
+
 def test_planned_sidecar_rejects_observed_values(packet: dict) -> None:
     canary = build_canary_packet(packet, repo_root=ROOT)
     sidecar = copy.deepcopy(
@@ -497,6 +506,21 @@ def test_invalid_search_proposal_cannot_claim_confirmed_failure(packet: dict) ->
     _bad(
         lambda: validate_result_rows(packet, [row], identities),
         "invalid search proposals must be excluded",
+    )
+
+
+def test_invalid_search_proposal_cannot_carry_temporal_sidecar(packet: dict) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    row = _result_row(packet, identities)
+    row.update(
+        call_class="search_invalid_proposal",
+        simulator_invocations=0,
+        simulator_call_id=None,
+        admission_status="invalid",
+    )
+    _bad(
+        lambda: validate_result_rows(packet, [row], identities),
+        "cannot carry temporal sidecar lineage",
     )
 
 

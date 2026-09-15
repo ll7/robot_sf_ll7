@@ -929,6 +929,15 @@ def validate_temporal_sidecar(
             ),
             "planned sidecar cannot contain observations",
         )
+    if observed:
+        _require(
+            all(
+                item["activation_time_s"] is not None
+                for item in properties
+                if float(item["signed_margin"]) < 0.0
+            ),
+            "observed sidecar requires activation time for each violated property",
+        )
     if sidecar.get("admission_status") == "confirmed_failure":
         _require(
             observed and sidecar.get("failure_basis") == "independent_confirmation",
@@ -945,14 +954,6 @@ def validate_temporal_sidecar(
         _require(
             any(float(item["signed_margin"]) < 0.0 for item in properties),
             "confirmed sidecar requires a negative signed margin",
-        )
-        _require(
-            all(
-                item["activation_time_s"] is not None
-                for item in properties
-                if float(item["signed_margin"]) < 0.0
-            ),
-            "confirmed sidecar requires activation time for each violated property",
         )
 
 
@@ -1218,18 +1219,21 @@ def validate_result_rows(
         else:
             _require(phase in expected, f"unknown result phase: {phase}")
             _expect(row.get("seed"), expected[phase], f"{phase} seed identity")
-        if (
-            run["objective_id"] == "temporal_robustness"
-            and row.get("call_class") != "search_invalid_proposal"
-        ):
-            sidecar = _mapping(row.get("temporal_sidecar"), "temporal_sidecar")
-            validate_temporal_sidecar(sidecar, packet, candidate_id=candidate_id)
-            if row.get("admission_status") is not None:
-                _expect(
-                    row.get("admission_status"),
-                    sidecar.get("admission_status"),
-                    "result/sidecar admission status",
+        if run["objective_id"] == "temporal_robustness":
+            if row.get("call_class") == "search_invalid_proposal":
+                _require(
+                    "temporal_sidecar" not in row,
+                    "invalid search proposals cannot carry temporal sidecar lineage",
                 )
+            else:
+                sidecar = _mapping(row.get("temporal_sidecar"), "temporal_sidecar")
+                validate_temporal_sidecar(sidecar, packet, candidate_id=candidate_id)
+                if row.get("admission_status") is not None:
+                    _expect(
+                        row.get("admission_status"),
+                        sidecar.get("admission_status"),
+                        "result/sidecar admission status",
+                    )
         groups.setdefault(candidate_id, []).append(row)
     _validate_result_lineage(packet, groups)
     run_budget_limits = {

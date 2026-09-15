@@ -21,7 +21,10 @@
     "source_identity": {
       "scenario_id": "srev22-tiny-crossing",
       "kind": "fixture",
-      "origin": "synthetic-constructed"
+      "origin": "synthetic-constructed",
+      "evidence_boundary": "diagnostic_only",
+      "scientific_claim_allowed": false,
+      "dependent_family_status": "standalone_fixture_only"
     },
     "interventions": [
       {"intervention_id": "ped-speed-up", "factor": "single_pedestrian_speed_offset", "priority": 1},

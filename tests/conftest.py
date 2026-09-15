@@ -867,10 +867,18 @@ _FAST_FILES = {
     # SREV-21 recipe tests protect deterministic contract and provenance
     # behavior for the new analysis-workbench component (issue #9292).
     "test_review_hypotheses.py",
+    # SREV-26 explanation tests protect deterministic draft citations and
+    # fail-closed evidence handling for the new review-ai component
+    # (issue #9297).
+    "test_review_ai.py",
     # SREV-15 workbench tests are deterministic offline rendering and provenance
     # contracts for the review component; keep changed coverage in fast shards
     # (issue #9284).
     "test_review_workbench.py",
+    # SREV-22 review-execute tests are deterministic fixture and fail-closed
+    # execution coverage for the bounded experiment leaf; keep changed coverage
+    # in fast shards (issue #9293).
+    "test_review_execute.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

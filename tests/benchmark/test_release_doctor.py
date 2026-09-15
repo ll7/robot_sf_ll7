@@ -46,7 +46,13 @@ def _scheduler_closeout_fixture(*, state: str = "COMPLETED") -> dict[str, Any]:
             "tool_version": "robot-sf-sacct-query.v1",
             "queried_at": "2026-09-15T10:00:00Z",
         },
-        "allocation": {"cluster": "imech192", "partition": "l40s", "cpus": 36, "gpus": 1, "mem_gb": 256},
+        "allocation": {
+            "cluster": "imech192",
+            "partition": "l40s",
+            "cpus": 36,
+            "gpus": 1,
+            "mem_gb": 256,
+        },
         "reconciliation": {"status": "reconciled", "prior_scheduler_state": "RUNNING"},
         "output": {"digest_sha256": "b" * 64},
     }
@@ -54,9 +60,7 @@ def _scheduler_closeout_fixture(*, state: str = "COMPLETED") -> dict[str, Any]:
 
 def test_scheduler_closeout_check_rejects_stale_active_state(tmp_path: Path) -> None:
     receipt = tmp_path / "closeout.json"
-    receipt.write_text(
-        json.dumps(_scheduler_closeout_fixture(state="RUNNING")), encoding="utf-8"
-    )
+    receipt.write_text(json.dumps(_scheduler_closeout_fixture(state="RUNNING")), encoding="utf-8")
     check = release_doctor._scheduler_closeout_check(
         receipt,
         expected_source_sha="a" * 40,

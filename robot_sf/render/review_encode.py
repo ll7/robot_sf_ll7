@@ -56,7 +56,7 @@ FRAME_MANIFEST_FORMAT = "frame-sequence-manifest.v1"
 SOURCE_CLIP_FORMAT = "source-clip"
 
 REQUIRED_CAPABILITIES: tuple[str, ...] = ()
-OPTIONAL_CAPABILITIES = ("frame-sequence", "source-clip", "storyboard")
+OPTIONAL_CAPABILITIES = ("frame-sequence", "source-clip")
 
 OUTPUT_VIDEO_FILENAME = "edit.mp4"
 OUTPUT_RECEIPT_FILENAME = "encode-receipt.json"
@@ -1132,6 +1132,138 @@ def _load_manifest_source(ref: SourceRef, root: Path) -> _Source:
     )
 
 
+def _positive_infinite(value: Any) -> bool:
+    """Return whether metadata explicitly marks an unknown positive bound."""
+
+    return isinstance(value, float) and math.isinf(value) and value > 0
+
+
+def _clip_metadata_count_error(nframes: Any) -> str | None:
+    """Validate a decoder-reported frame count when it is finite.
+
+    Returns:
+        Stable admission error, or None for an absent/valid count.
+    """
+
+    if nframes is None or _positive_infinite(nframes):
+        return None
+    if not _finite_number(nframes) or float(nframes) < 1 or not float(nframes).is_integer():
+        return "source_clip_invalid: decoder frame count is invalid"
+    if float(nframes) > MAX_SOURCE_FRAMES:
+        return f"resource_limit: source_frames>{MAX_SOURCE_FRAMES}"
+    return None
+
+
+def _clip_metadata_duration_error(duration: Any, fps: float) -> str | None:
+    """Validate a decoder-reported duration and its implied frame count.
+
+    Returns:
+        Stable admission error, or None for an absent/valid duration.
+    """
+
+    if duration is None or _positive_infinite(duration):
+        return None
+    if not _finite_number(duration) or float(duration) < 0:
+        return "source_clip_invalid: decoder duration is invalid"
+    if float(duration) > MAX_SOURCE_DURATION_S:
+        return f"resource_limit: source_duration_s>{MAX_SOURCE_DURATION_S:g}"
+    if float(duration) * fps > MAX_SOURCE_FRAMES + 1e-9:
+        return f"resource_limit: source_frames>{MAX_SOURCE_FRAMES}"
+    return None
+
+
+def _clip_metadata_preflight(metadata: Any) -> tuple[float | None, int | None, str | None]:
+    """Validate decoder metadata before the first source frame is allocated.
+
+    Returns:
+        Decoder fps, bounded RGB24 frame bytes, and no error, or an admission
+        error when the decoder does not expose a safe geometry contract.
+    """
+
+    if not isinstance(metadata, dict):
+        return None, None, "source_clip_invalid: decoder metadata is not an object"
+    fps = metadata.get("fps")
+    if not _finite_number(fps) or float(fps) <= 0 or float(fps) > MAX_SOURCE_FPS:
+        return None, None, "source_clip_invalid: decoder did not provide bounded fps"
+    size = metadata.get("size")
+    if (
+        not isinstance(size, (list, tuple))
+        or len(size) != 2
+        or any(not _finite_number(value) or not float(value).is_integer() for value in size)
+    ):
+        return None, None, "source_clip_invalid: decoder did not provide bounded dimensions"
+    width, height = (int(value) for value in size)
+    if width < 1 or height < 1:
+        return None, None, "source_clip_invalid: decoder dimensions are invalid"
+    pixels = width * height
+    if pixels > MAX_OUTPUT_PIXELS:
+        return None, None, "resource_limit: source_frame_pixels"
+    frame_bytes = pixels * 3  # imageio-ffmpeg's file reader yields uint8 RGB24 by default.
+    if frame_bytes > MAX_SOURCE_BUFFER_BYTES:
+        return None, None, "resource_limit: source_frame_buffer_bytes"
+    count_error = _clip_metadata_count_error(metadata.get("nframes"))
+    if count_error is not None:
+        return None, None, count_error
+    duration_error = _clip_metadata_duration_error(metadata.get("duration"), float(fps))
+    if duration_error is not None:
+        return None, None, duration_error
+    return float(fps), frame_bytes, None
+
+
+def _normalise_bounded_clip_frame(frame: Any, frame_bytes: int) -> tuple[Any, int]:
+    """Reject a decoder frame outside the preflight byte contract.
+
+    Returns:
+        Normalized RGB frame and its retained byte count.
+    """
+
+    raw_bytes = getattr(frame, "nbytes", None)
+    if (
+        isinstance(raw_bytes, bool)
+        or not isinstance(raw_bytes, int)
+        or raw_bytes < 0
+        or raw_bytes > frame_bytes
+    ):
+        raise _SourceLoadError("resource_limit: decoded_source_frame_bytes exceeds metadata bound")
+    normalised = _normalise_frame_array(frame)
+    normalised_bytes = int(normalised.nbytes)
+    if normalised_bytes > frame_bytes:
+        raise _SourceLoadError(
+            "resource_limit: normalized_source_frame_bytes exceeds metadata bound"
+        )
+    return normalised, normalised_bytes
+
+
+def _read_bounded_clip_frames(reader: Any, frame_bytes: int) -> list[Any]:
+    """Read only frames that fit the preflighted count and retained-byte bounds.
+
+    Returns:
+        Decoded, normalized frames within the declared source limits.
+    """
+
+    frames: list[Any] = []
+    decoded_bytes = 0
+    frame_iterator = iter(reader)
+    for _frame_index in range(MAX_SOURCE_FRAMES):
+        if decoded_bytes + frame_bytes > MAX_SOURCE_BUFFER_BYTES:
+            raise _SourceLoadError(f"resource_limit: source_buffer_bytes>{MAX_SOURCE_BUFFER_BYTES}")
+        try:
+            frame = next(frame_iterator)
+        except StopIteration:
+            return frames
+        normalised, normalised_bytes = _normalise_bounded_clip_frame(frame, frame_bytes)
+        decoded_bytes += normalised_bytes
+        frames.append(normalised)
+
+    if decoded_bytes + frame_bytes > MAX_SOURCE_BUFFER_BYTES:
+        raise _SourceLoadError(f"resource_limit: source_buffer_bytes>{MAX_SOURCE_BUFFER_BYTES}")
+    try:
+        next(frame_iterator)
+    except StopIteration:
+        return frames
+    raise _SourceLoadError(f"resource_limit: source_frames>{MAX_SOURCE_FRAMES}")
+
+
 def _decode_clip_frames(path: Path) -> tuple[list[Any], float]:
     """Decode bounded clip frames and require an explicit decoder frame rate.
 
@@ -1141,27 +1273,13 @@ def _decode_clip_frames(path: Path) -> tuple[list[Any], float]:
 
     import imageio.v2 as imageio  # noqa: PLC0415
 
-    frames: list[Any] = []
-    decoded_bytes = 0
     try:
         with _operation_deadline(MAX_DECODER_SECONDS):
             with imageio.get_reader(str(path)) as reader:
-                metadata = reader.get_meta_data()
-                fps = metadata.get("fps") if isinstance(metadata, dict) else None
-                if not _finite_number(fps) or float(fps) <= 0 or float(fps) > MAX_SOURCE_FPS:
-                    raise _SourceLoadError(
-                        "source_clip_invalid: decoder did not provide bounded fps"
-                    )
-                for frame_index, frame in enumerate(reader):
-                    if frame_index >= MAX_SOURCE_FRAMES:
-                        raise _SourceLoadError(f"resource_limit: source_frames>{MAX_SOURCE_FRAMES}")
-                    normalised = _normalise_frame_array(frame)
-                    decoded_bytes += int(normalised.nbytes)
-                    if decoded_bytes > MAX_SOURCE_BUFFER_BYTES:
-                        raise _SourceLoadError(
-                            f"resource_limit: source_buffer_bytes>{MAX_SOURCE_BUFFER_BYTES}"
-                        )
-                    frames.append(normalised)
+                fps, frame_bytes, metadata_error = _clip_metadata_preflight(reader.get_meta_data())
+                if metadata_error is not None or fps is None or frame_bytes is None:
+                    raise _SourceLoadError(metadata_error or "source_clip_invalid")
+                frames = _read_bounded_clip_frames(reader, frame_bytes)
     except _SourceLoadError:
         raise
     except _OperationTimeout as error:
@@ -1626,9 +1744,10 @@ def _pause_anchor(
     if math.isclose(at_s, duration_s, rel_tol=0.0, abs_tol=1e-9):
         if not any(math.isclose(end, duration_s, rel_tol=0.0, abs_tol=1e-9) for _, end in kept):
             return None
-        terminal_source_index = max(0, math.ceil(duration_s * source_fps - 1e-9) - 1)
-        if records[-1].source_index < terminal_source_index:
-            return None
+        # A fast resample can legitimately represent the retained source
+        # endpoint with the last sampled frame before the raw terminal index.
+        # The kept-span boundary, not the pre-resampling index, determines
+        # whether this endpoint remains in the presentation timeline.
         return len(records) - 1
     active = any(start <= at_s < end for start, end in kept)
     if not active:

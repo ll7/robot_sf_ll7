@@ -258,6 +258,28 @@ def test_subframe_and_terminal_pauses_are_retained(
         assert mapping["frame_order_source_indices"][-2:] == [29, 29]
 
 
+def test_terminal_pause_after_fast_speed_is_retained(tmp_path: Path) -> None:
+    """A fast resample keeps a pause at the retained source endpoint."""
+
+    result = run(
+        _request(
+            tmp_path,
+            config_extra={
+                "edits": [
+                    {"op": "speed", "start_s": 0.0, "end_s": 3.0, "factor": 2.0},
+                    {"op": "pause", "at_s": 3.0, "duration_s": 0.1},
+                ],
+                "preset": dict(review_encode.TINY_PRESET),
+            },
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "complete", result.reason
+    mapping = _time_map(tmp_path / "out")
+    assert mapping["frame_order_source_indices"][-2:] == [28, 28]
+    assert mapping["segments"][-1]["operation"] == "pause"
+
+
 def test_terminal_pause_after_tail_cut_is_dropped(tmp_path: Path) -> None:
     """A terminal pause cannot anchor after a cut removed the source endpoint."""
 
@@ -361,6 +383,37 @@ def test_required_frame_source_ignores_optional_clip(tmp_path: Path) -> None:
     assert result.status == "complete", result.reason
     receipt = json.loads((tmp_path / "out" / "encode-receipt.json").read_text(encoding="utf-8"))
     assert receipt["source"]["format"] == "frame-sequence-manifest.v1"
+
+
+def test_source_clip_metadata_rejects_oversized_frame_before_iteration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decoder geometry is bounded before a source frame can be yielded."""
+
+    import imageio.v2 as imageio
+
+    class FakeReader:
+        iterated = False
+
+        def __enter__(self) -> FakeReader:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def get_meta_data(self) -> dict[str, object]:
+            return {"fps": 10.0, "size": (review_encode.MAX_OUTPUT_PIXELS + 1, 1)}
+
+        def __iter__(self):
+            self.iterated = True
+            return iter(())
+
+    reader = FakeReader()
+    monkeypatch.setattr(imageio, "get_reader", lambda *_args, **_kwargs: reader)
+
+    with pytest.raises(review_encode._SourceLoadError, match="source_frame_pixels"):
+        review_encode._decode_clip_frames(tmp_path / "oversized.mp4")
+    assert reader.iterated is False
 
 
 def test_manifest_decoded_memory_limit_counts_retained_frames(
@@ -577,6 +630,16 @@ def test_unsupported_capability_is_unavailable(tmp_path: Path) -> None:
     result = run(_request(tmp_path, caps=["telemetry-xyz"]), base=tmp_path)
     assert result.status == "unavailable"
     assert "unsupported_required_capability" in result.reason
+
+
+def test_required_storyboard_capability_is_unavailable(tmp_path: Path) -> None:
+    """A required storyboard capability cannot complete without a storyboard source."""
+
+    assert "storyboard" not in descriptor()["optional_capabilities"]
+    result = run(_request(tmp_path, caps=["storyboard"]), base=tmp_path)
+    assert result.status == "unavailable"
+    assert result.reason == "unsupported_required_capability: storyboard"
+    assert result.artifacts == ()
 
 
 def test_incompatible_version_fails(tmp_path: Path) -> None:

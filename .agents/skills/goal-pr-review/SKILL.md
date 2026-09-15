@@ -1,7 +1,7 @@
 ---
 name: goal-pr-review
 description: Use for an autonomous Robot SF PR review loop that fixes scoped review gaps, validates proof,
-  resolves review threads, and applies merge-ready; not for merging.
+  resolves review threads, and applies merge-ready or merge-if-ci-green; not for merging.
 category: github-pr
 kind: orchestrator
 phase: verification
@@ -72,7 +72,10 @@ Declare at start:
 - exclusions (drafts, heavy benchmark PRs, external infra blockers),
 - stop condition.
 
-Create `merge-ready` label if absent before first successful application.
+Create `merge-ready` and `merge-if-ci-green` labels if absent before first successful application.
+`merge-if-ci-green` means the exact-head review is accepted and CI is the only
+remaining gate. It is not merge authorization; the merger promotes it to
+`merge-ready` only after green checks on that head.
 
 Before diagnosing any individual PR, run the shared-main baseline check (see
 `## Shared-Main Baseline Before Per-PR Diagnosis`). A red baseline on `origin/main` changes how
@@ -118,7 +121,8 @@ and the owner. One writer per branch is the rule; the following make that rule o
   exact-head carrier (`gate-verdict`, `base-policy`, `pr-metadata`) must be republished at the new
   head after hosted CI is green there. Any content change in the delta gets a focused review of the
   delta before republishing.
-- **Label sweeps are authoritative.** If the factory or owner removes `merge-ready` (or applies
+- **Label sweeps are authoritative.** If the factory or owner removes `merge-ready` or
+  `merge-if-ci-green` (or applies
   `needs-review`, `deferred`, a hold label) without a comment, treat it as a live ruling: publish the
   exact-head evidence, report the PR as "one label away" with what is missing, and do not re-apply
   the label in the same run.
@@ -232,6 +236,7 @@ deterministically:
 | `pending_gate_verdict` | `await_gate_verdict` | `awaiting_reviewer` until current exact-head gate evidence is present |
 | `pending_pr_metadata` | `reconcile_pr_metadata` | `under_review` until the final title/body digest is reconciled and re-reviewed |
 | `ready_to_merge` | `mark_ready_candidate` | `merge_ready` only after the full proof bar in `## Proof and Validation` closes; otherwise `under_review` |
+| `ready_for_ci_promotion` | `promote_merge_if_ci_green` | `awaiting_ci` with review accepted; route to `gh-pr-merger` for guarded promotion, without another review |
 | `no_action` | `no_action` | keep the current state (`awaiting_reviewer`, `blocked_external`, `deferred_scope`, or `closed_out`) |
 
 `ready_to_merge` is a candidate signal, not a merge decision: the policy only checks CI and label
@@ -384,20 +389,20 @@ stops after advancing the child until fresh CI and exact-head evidence are curre
 
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
-8. After the full proof bar closes, reconcile the final title/body one more time and compute its
+8. After the review proof bar closes, reconcile the final title/body one more time and compute its
    exact metadata digest. Immediately before the write, use
    `scripts/dev/gh_pr_review_rest.py` with the captured full head SHA to re-read PR lifecycle
    state and head, then post an exact-head review-evidence comment by submitting a GitHub
    COMMENTED review naming the reviewed SHA, the validation, findings disposition, any
    single-account waiver, and
    `pr-metadata: reconciled @ <digest>` alongside `gate-verdict: accepted @ <head_sha>`. Then update
-   `merge-ready` through `gh_pr_label_rest.py` with `--target pr` and the same expected
-   head/base SHA pair. Both writes
+   `merge-ready` if CI is green, or `merge-if-ci-green` if CI is pending, through
+   `gh_pr_label_rest.py` with `--target pr` and the same expected head/base SHA pair. Both writes
    return `review_skipped_stale_state` without mutating a PR if it is no longer open or its
-   head moved. The
-   The review event refreshes the source-head queue gate after the verdict. Release the bounded
+   head moved. The review event refreshes the source-head queue gate after the
+   verdict. Release the bounded
    `review-claim` for this head with `gh_comment.sh` and re-read the PR before the label write; an
-   active claim must never coexist with a new `merge-ready` authorization. If review submission is
+   active claim must never coexist with a new readiness label. If review submission is
    unavailable, a matching top-level compatibility carrier may be used only when the guarded label
    gate can read it; otherwise record the gate-refresh blocker.
 
@@ -413,10 +418,11 @@ stops after advancing the child until fresh CI and exact-head evidence are curre
    `body,comments,reviews,files,statusCheckRollup` together unless the review task explicitly needs
    that full surface. Use `.agents/skills/goal-autopilot/SKILL.md` "Async CI Wait Policy" instead of
    idling the review loop when other safe PR or cycle work remains.
-   Under hosted-runner starvation (checks queued with zero elapsed time for longer than one bounded
-   poll budget), stop waiting: publish the exact-head evidence you already have, state in the PR
-   comment exactly what remains ("apply `merge-ready` once checks conclude green at `<head>`"),
-   and exit. Do not leave background pollers or sleep loops running after handoff.
+   Under hosted-runner starvation, stop waiting after applying `merge-if-ci-green`
+   to the reviewed head. The label is the handoff; do not post a routine waiting
+   comment or start another review cycle. The merge cycle checks CI and promotes
+   the same head through `scripts/dev/promote_merge_if_ci_green.py`. Do not leave
+   background pollers or sleep loops running after handoff.
 10. Update the active ledger before any CI wait or final handoff. Route completion is not task
    completion until the main agent has verified proof, GitHub state, and cleanup.
 
@@ -487,10 +493,10 @@ Apply minimum tier by change surface:
 - Tier 2: planner, metric, scenario, and benchmark behavior.
 - Tier 3: campaign-level statistical claims or paper-facing evidence.
 
-`merge-ready` conditions:
+Readiness conditions for both labels:
 - linked issue contract and intended design satisfied, or intentionally narrowed with explicit
   rationale, `Refs #<parent>`, an open parent, and linked successor issues,
-- scope matches contract and tests and CI proof are current for reviewed SHA,
+- scope matches contract and focused tests are current for the reviewed SHA,
 - stale-base handling is explicit: current-base subset proof for `base_sensitive` changes, or
   trusted exact-head `ordinary-cas` evidence for the final current-main compare-and-swap path,
 - unresolved actionable review threads closed via GitHub review-thread resolution, with any
@@ -500,7 +506,11 @@ Apply minimum tier by change surface:
   not-applicable rationale,
 - benchmark evidence no longer depends on fallback/degraded execution.
 
-If one condition fails, withhold label and emit a blocker comment/follow-up.
+Apply `merge-if-ci-green` only when hosted CI is pending and all readiness
+conditions above hold. Apply `merge-ready` only when hosted CI is green on the
+reviewed SHA as well. Failed or unknown CI is not a conditional-ready state.
+If a readiness condition fails, withhold both labels and emit a blocker
+comment/follow-up only when there is a substantive finding to act on.
 
 ## Confidence
 

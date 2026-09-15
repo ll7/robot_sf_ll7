@@ -513,6 +513,7 @@ def _guarded_merge_ready_write(
     number: int,
     *,
     repo: str,
+    label: str = "merge-ready",
     expected_head_sha: str | None,
     expected_base_sha: str | None,
     write: Callable[[], dict[str, Any]],
@@ -565,7 +566,7 @@ def _guarded_merge_ready_write(
                 action="add",
                 number=number,
                 repo=repo,
-                label="merge-ready",
+                label=label,
             )
     except RuntimeError as exc:
         return {"status": "error", "error": str(exc)}
@@ -626,8 +627,8 @@ def _label_target_error(
     if target == "issue":
         if expected_head_sha is not None or expected_base_sha is not None:
             return "expected PR SHAs require target=pr"
-        if label == "merge-ready":
-            return "merge-ready labels require target=pr"
+        if label in {"merge-ready", "merge-if-ci-green"}:
+            return f"{label} labels require target=pr"
         return None
     if expected_head_sha is None or expected_base_sha is None:
         return "PR label writes require both expected_head_sha and expected_base_sha"
@@ -805,10 +806,11 @@ def add_label(
             repo=repo,
             label=label,
         )
-    if label == "merge-ready":
+    if label in {"merge-ready", "merge-if-ci-green"}:
         return _guarded_merge_ready_write(
             number,
             repo=repo,
+            label=label,
             expected_head_sha=expected_head_sha,
             expected_base_sha=expected_base_sha,
             write=_write,

@@ -461,6 +461,44 @@ class TestAddLabel:
         assert result == {"status": "error", "error": "expected PR SHAs require target=pr"}
         mock_post.assert_not_called()
 
+    def test_conditional_ready_requires_exact_head_review_carrier(self) -> None:
+        """A pending-CI label cannot be used to bypass the review carrier guard."""
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                return_value={
+                    "status": "ok",
+                    "observed_head_sha": "a" * 40,
+                    "observed_base_sha": "b" * 40,
+                },
+            ),
+            patch(
+                "scripts.dev.gh_pr_label_rest.check_merge_ready_carriers",
+                return_value={"status": "error", "error": "review carrier missing"},
+            ) as carriers,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as post,
+        ):
+            result = add_label(
+                5220,
+                "merge-if-ci-green",
+                target="pr",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+        assert result["status"] == "error"
+        carriers.assert_called_once()
+        post.assert_not_called()
+
+    def test_conditional_ready_cannot_be_added_to_an_issue(self) -> None:
+        """The PR-only conditional label never uses the unguarded issue path."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_post") as post:
+            result = add_label(5220, "merge-if-ci-green")
+        assert result == {
+            "status": "error",
+            "error": "merge-if-ci-green labels require target=pr",
+        }
+        post.assert_not_called()
+
     @pytest.mark.parametrize("target", ["unknown", [], None])
     def test_label_add_rejects_unknown_target(self, target: object) -> None:
         """Direct callers cannot bypass the issue/PR target contract."""

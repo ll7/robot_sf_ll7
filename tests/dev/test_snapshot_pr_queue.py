@@ -318,6 +318,21 @@ def test_snapshot_preserves_merged_at_for_external_merge_classification() -> Non
     assert pr["merged_at"] == "2026-08-18T15:40:53Z"
 
 
+def test_review_complete_conditional_label_routes_green_ci_to_promotion() -> None:
+    """A green reviewed PR is sent to promotion without a new review cycle."""
+    pr_data = _base_freshness_pr(number=9388)
+    pr_data["labels"] = [{"name": "merge-if-ci-green"}]
+    pr = _pr_payload_from_dict(
+        pr_data,
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=9388,
+        expected_head_sha="head-sha",
+    )
+    assert pr["next_action"] == "promote_merge_if_ci_green"
+    assert pr["attention"] == "merge_attention"
+
+
 def test_base_freshness_stale_blocks_merge_ready_action() -> None:
     """A stale PR base must route to branch refresh before review or merge readiness."""
     pr = _pr_payload_from_dict(

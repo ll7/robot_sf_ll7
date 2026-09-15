@@ -888,6 +888,9 @@ _FAST_FILES = {
     # contracts for the review component; keep changed coverage in fast shards
     # (issue #9284).
     "test_review_workbench.py",
+    # SREV-19 rerun tests protect deterministic offline timelines and the
+    # optional-SDK recording path for the new render component (issue #9289).
+    "test_review_rerun.py",
     # SREV-22 review-execute tests are deterministic fixture and fail-closed
     # execution coverage for the bounded experiment leaf; keep changed coverage
     # in fast shards (issue #9293).

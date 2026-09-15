@@ -14,12 +14,14 @@ import hashlib
 import html
 import json
 import math
+import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from robot_sf.analysis_workbench.review_contracts import (
+    COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
     COMPONENT_REQUEST_SCHEMA_VERSION,
     ComponentDescriptor,
     ComponentRequest,
@@ -79,7 +81,7 @@ def component_descriptor() -> dict[str, Any]:
         "optional_capabilities",
     ):
         payload[field_name] = list(payload[field_name])
-    return payload
+    return {"schema_version": COMPONENT_DESCRIPTOR_SCHEMA_VERSION, **payload}
 
 
 def descriptor() -> dict[str, Any]:
@@ -113,7 +115,10 @@ def _result(
 def _finite_number(value: Any, *, path: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ExperimentReportError("invalid_input", f"{path} must be a finite number")
-    number = float(value)
+    try:
+        number = float(value)
+    except (OverflowError, ValueError):
+        raise ExperimentReportError("invalid_input", f"{path} must be a finite number") from None
     if not math.isfinite(number):
         raise ExperimentReportError("invalid_input", f"{path} must be a finite number")
     return number
@@ -189,8 +194,6 @@ def _validate_gate(gate: Any, *, path: str) -> dict[str, Any]:
 
 def _validate_measurements(measurements: Any, *, path: str) -> dict[str, dict[str, Any]]:
     payload = _mapping(measurements, path=path)
-    if not payload:
-        raise ExperimentReportError("invalid_input", f"{path} must not be empty")
     result: dict[str, dict[str, Any]] = {}
     for metric_name in sorted(payload):
         if not isinstance(metric_name, str) or not metric_name.strip():
@@ -322,6 +325,17 @@ def _validate_source(payload: Any) -> dict[str, Any]:  # noqa: C901
         if control_id not in seen_condition_ids:
             raise ExperimentReportError(
                 "invalid_input", f"control condition {control_id} is missing in {family_id}"
+            )
+        control_condition = next(
+            condition
+            for condition in normalized_conditions
+            if condition["condition_id"] == control_id
+        )
+        if control_condition["role"] != "control":
+            raise ExperimentReportError(
+                "invalid_input",
+                f"control_condition_id {control_id} must identify the role=control condition "
+                f"in {family_id}",
             )
         normalized_families.append(
             {
@@ -610,6 +624,10 @@ def _render_html(report: Mapping[str, Any]) -> str:
         f"<p>{safe(report['hypothesis'])}</p>"
         f'<p class="boundary"><strong>Evidence boundary:</strong> '
         f"{safe(report['evidence_boundary'])}</p>"
+        '<p class="authority"><strong>Authoritative detail:</strong> The JSON artifact is '
+        "authoritative for complete measurement values, units, expected directions, and source "
+        f"provenance; see <code>{safe(JSON_ARTIFACT_NAME)}</code>. This HTML is a human-readable "
+        "summary.</p>"
         f"<p>Families: {safe(report['summary']['family_count'])}; "
         f"conditions: {safe(report['summary']['condition_count'])}; "
         "comparison uses recorded results only and requires no executor.</p>"
@@ -674,6 +692,26 @@ def _write_artifact(path: Path, content: str) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _write_artifacts(output_dir: Path, artifacts: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
+    """Write all report artifacts before publishing their output directory.
+
+    Returns:
+        SHA-256 digests in the same order as ``artifacts``.
+    """
+
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        dir=output_dir.parent, prefix=f".{output_dir.name}.staging-"
+    ) as staging_name:
+        staging_dir = Path(staging_name)
+        digests = tuple(
+            _write_artifact(staging_dir / artifact_name, content)
+            for artifact_name, content in artifacts
+        )
+        staging_dir.replace(output_dir)
+    return digests
+
+
 def _resolve_output_directory(root: Path, request: ComponentRequest) -> Path:
     output_dir = _resolve_inside(root, request.output_directory, path="/output_directory")
     if output_dir.exists():
@@ -728,9 +766,13 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         )
         json_text = json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n"
         html_text = _render_html(report)
-        output_dir.mkdir(parents=True)
-        json_digest = _write_artifact(output_dir / JSON_ARTIFACT_NAME, json_text)
-        html_digest = _write_artifact(output_dir / HTML_ARTIFACT_NAME, html_text)
+        json_digest, html_digest = _write_artifacts(
+            output_dir,
+            (
+                (JSON_ARTIFACT_NAME, json_text),
+                (HTML_ARTIFACT_NAME, html_text),
+            ),
+        )
         artifacts = (
             {
                 "artifact_id": JSON_ARTIFACT_NAME,

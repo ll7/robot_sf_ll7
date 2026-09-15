@@ -24,6 +24,11 @@ Each result envelope includes SHA-256 digests for both artifacts and provenance
 for the recorded source. The fixture is intentionally labelled `source_kind:
 fixture` and `execution_mode: recorded_results_only`.
 
+The HTML artifact is a human-readable summary. The JSON artifact is authoritative
+for complete per-condition measurement values, units, expected directions, source
+identity, and provenance; consumers that need the full report contract must read
+`experiment-comparison.json`.
+
 ## Interpretation rules
 
 Results are grouped by `shared_parent_id`. Branches in one group are a single

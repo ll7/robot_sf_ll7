@@ -446,6 +446,9 @@ def _episode_view(record: Mapping[str, Any]) -> dict[str, Any]:
 def _as_float(value: Any) -> float | None:
     """Coerce numeric and boolean values to float.
 
+    Numeric conversion failures are treated as unsupported values so malformed episode metadata
+    cannot escape the conservative unavailable path.
+
     Returns:
         Float value, or ``None`` for unsupported values.
     """
@@ -453,7 +456,10 @@ def _as_float(value: Any) -> float | None:
     if isinstance(value, bool):
         return 1.0 if value else 0.0
     if isinstance(value, int | float):
-        numeric_value = float(value)
+        try:
+            numeric_value = float(value)
+        except (OverflowError, TypeError, ValueError):
+            return None
         if math.isfinite(numeric_value):
             return numeric_value
     return None

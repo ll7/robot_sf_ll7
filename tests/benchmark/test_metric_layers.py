@@ -269,7 +269,7 @@ def test_failure_to_progress_reconstructs_decisive_source_attribution(
 
 @pytest.mark.parametrize(
     "route_complete",
-    [None, "not-a-boolean", 0.5, 2, -1, float("nan"), float("inf")],
+    [None, "not-a-boolean", 0.5, 2, -1, 10**309, -(10**309), float("nan"), float("inf")],
 )
 def test_failure_to_progress_rejects_malformed_route_even_with_exclusion_metadata(
     route_complete: object,

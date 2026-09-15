@@ -42,8 +42,6 @@ STATUS_PARTIAL = "partial"
 STATUS_UNAVAILABLE = "unavailable"
 STATUS_FAILED = "failed"
 
-_VIDEO_SUFFIXES = frozenset({".mp4", ".avi", ".mov", ".mkv", ".webm"})
-
 _DESCRIPTOR = ComponentDescriptor(
     component_id=COMPONENT_ID,
     component_version=COMPONENT_VERSION,
@@ -63,6 +61,16 @@ class _RelocatedEntry:
     relocated_path: str
     sha256: str
     size_bytes: int
+    source_provenance: dict[str, Any]
+
+
+class _PackageOperationError(RuntimeError):
+    """Identify a filesystem operation that prevents a complete package."""
+
+    def __init__(self, code: str) -> None:
+        """Record the stable operation failure code."""
+        self.code = code
+        super().__init__(code)
 
 
 def descriptor() -> dict[str, Any]:
@@ -144,15 +152,59 @@ def _reject_not_applicable(request: ComponentRequest) -> ComponentResult | None:
 def _resolve_local(uri: str, root: Path) -> Path | None:
     """Resolve a local relative URI, rejecting remote/absolute/traversal refs.
 
+    The lexical path is returned so a symlink at the leaf remains visible to
+    ``_is_safe_source``. Its real path is checked first so existing parent
+    symlinks cannot redirect reads outside ``root``.
+
     Returns:
         Resolved path, or None with the refusal recorded by the caller.
     """
     if "://" in uri:
         return None
-    candidate = Path(uri)
-    if candidate.is_absolute() or ".." in candidate.parts:
+    try:
+        candidate = Path(uri)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            return None
+        resolved_root = root.resolve(strict=False)
+        lexical = resolved_root / candidate
+        lexical.resolve(strict=False).relative_to(resolved_root)
+    except (OSError, RuntimeError, TypeError, ValueError):
         return None
-    return root / candidate
+    return lexical
+
+
+def _realpath_within(path: Path, root: Path) -> bool:
+    """Return whether a path's real path remains below a real root."""
+    try:
+        path.resolve(strict=False).relative_to(root.resolve(strict=False))
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return True
+
+
+def _declared_source_provenance(reference: dict[str, Any]) -> dict[str, Any]:
+    """Copy the source identity fields declared by a validated bundle reference.
+
+    Returns:
+        A standalone mapping of the declared source identity and integrity fields.
+    """
+    return {
+        "artifact_id": str(reference["artifact_id"]),
+        "uri": str(reference["uri"]),
+        "format": str(reference["format"]),
+        "schema": str(reference["schema"]),
+        "sha256": str(reference["sha256"]),
+        "source_commit": str(reference["source_commit"]),
+        "config_identity": str(reference.get("config_identity", "")),
+        "units": str(reference["units"]),
+        "coordinate_frame": str(reference["coordinate_frame"]),
+    }
+
+
+def _is_video_format(format_name: str) -> bool:
+    """Return whether a declared reference format identifies video content."""
+    normalized = format_name.strip().lower()
+    return normalized == "video" or normalized.startswith(("video-", "video_", "video/", "video."))
 
 
 def _is_safe_source(path: Path) -> str | None:
@@ -178,6 +230,7 @@ def _relocate_reference(
     operations: list[str],
     diagnostics: list[str],
     dry_run: bool,
+    source_provenance: dict[str, Any],
 ) -> _RelocatedEntry | None:
     """Verify and stage one bundle reference.
 
@@ -186,8 +239,7 @@ def _relocate_reference(
     """
     artifact_id = str(reference.get("artifact_id", "unknown"))
     uri = str(reference.get("uri", ""))
-    suffix = Path(uri).suffix.lower()
-    if suffix in _VIDEO_SUFFIXES:
+    if _is_video_format(str(reference.get("format", ""))):
         diagnostics.append(f"{artifact_id}: video_not_staged")
         return None
     target = _resolve_local(uri, root)
@@ -212,27 +264,35 @@ def _relocate_reference(
         relative = Path(uri)
         destination = package_dir / relative
         destination.relative_to(package_dir)
-    except ValueError:
+        if not _realpath_within(destination, package_dir):
+            raise ValueError("destination resolves outside package")
+        relocated_path = str(destination.relative_to(package_dir.parent))
+    except (TypeError, ValueError):
         diagnostics.append(f"{artifact_id}: reference_not_local")
         return None
-    operations.append(f"copy {uri} -> {destination.relative_to(package_dir.parent)}")
+    operations.append(f"copy {uri} -> {relocated_path}")
     if dry_run:
         return _RelocatedEntry(
             artifact_id=artifact_id,
             source_uri=uri,
-            relocated_path=str(destination.relative_to(package_dir.parent)),
+            relocated_path=relocated_path,
             sha256=observed,
             size_bytes=len(raw),
+            source_provenance=source_provenance,
         )
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with open(target, "rb") as source, open(destination, "wb") as staged:
-        shutil.copyfileobj(source, staged)
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "rb") as source, open(destination, "wb") as staged:
+            shutil.copyfileobj(source, staged)
+    except (OSError, TypeError, ValueError) as error:
+        raise _PackageOperationError("staging_failed") from error
     return _RelocatedEntry(
         artifact_id=artifact_id,
         source_uri=uri,
-        relocated_path=str(destination.relative_to(package_dir.parent)),
+        relocated_path=relocated_path,
         sha256=observed,
         size_bytes=len(raw),
+        source_provenance=source_provenance,
     )
 
 
@@ -246,12 +306,18 @@ class _BundleWork:
         self.diagnostics: list[str] = []
         self.operations: list[str] = []
         self.relocated: list[_RelocatedEntry] = []
+        self.source_provenance: list[dict[str, Any]] = []
+        self.videos_not_staged: list[dict[str, Any]] = []
 
     def add_bundle_source(self, *, artifact_id: str, uri: str, root: Path) -> None:
         """Verify and stage every reference of one bundle source."""
         bundle_path = _resolve_local(uri, root)
         if bundle_path is None:
             self.diagnostics.append(f"{artifact_id}: reference_not_local")
+            return
+        refusal = _is_safe_source(bundle_path)
+        if refusal is not None:
+            self.diagnostics.append(f"{artifact_id}: {refusal}")
             return
         try:
             bundle_payload = json.loads(bundle_path.read_bytes().decode("utf-8"))
@@ -265,6 +331,10 @@ class _BundleWork:
             return
         for episode in bundle.episodes:
             for reference in episode["references"]:
+                source_provenance = _declared_source_provenance(reference)
+                self.source_provenance.append(source_provenance)
+                if _is_video_format(source_provenance["format"]):
+                    self.videos_not_staged.append(source_provenance)
                 entry = _relocate_reference(
                     reference,
                     root,
@@ -272,6 +342,7 @@ class _BundleWork:
                     self.operations,
                     self.diagnostics,
                     self.dry_run,
+                    source_provenance,
                 )
                 if entry is not None:
                     self.relocated.append(entry)
@@ -285,27 +356,120 @@ def _prepare_directories(
     Returns:
         Either an error result or the (output_dir, package_dir, dry_run) tuple.
     """
-    output_dir = root / request.output_directory
-    if output_dir.exists():
+    try:
+        output_relative = Path(request.output_directory)
+        if (
+            not request.output_directory
+            or output_relative.is_absolute()
+            or ".." in output_relative.parts
+        ):
+            return ComponentResult(
+                request_id=request.request_id,
+                component_id=request.component_id,
+                status=STATUS_FAILED,
+                reason="invalid_output_path: output directory must be a plain relative path",
+            )
+        resolved_root = root.resolve(strict=False)
+        output_dir = resolved_root / output_relative
+        if not _realpath_within(output_dir, resolved_root):
+            return ComponentResult(
+                request_id=request.request_id,
+                component_id=request.component_id,
+                status=STATUS_FAILED,
+                reason="unsafe_output_path: output directory must resolve within base",
+            )
+        if output_dir.exists():
+            return ComponentResult(
+                request_id=request.request_id,
+                component_id=request.component_id,
+                status=STATUS_FAILED,
+                reason=f"output_collision: already exists: {request.output_directory}",
+            )
+        dry_run = request.config.get("dry_run") is True
+        package_name = request.config.get("package_dirname", OUTPUT_PACKAGE_DIRNAME)
+        if not isinstance(package_name, str) or not package_name:
+            return ComponentResult(
+                request_id=request.request_id,
+                component_id=request.component_id,
+                status=STATUS_FAILED,
+                reason="invalid_config: package_dirname must be a plain relative name",
+            )
+        package_relative = Path(package_name)
+        if package_relative.is_absolute() or ".." in package_relative.parts:
+            return ComponentResult(
+                request_id=request.request_id,
+                component_id=request.component_id,
+                status=STATUS_FAILED,
+                reason="invalid_config: package_dirname must be a plain relative name",
+            )
+        package_dir = output_dir / package_relative
+        if not _realpath_within(package_dir, output_dir):
+            return ComponentResult(
+                request_id=request.request_id,
+                component_id=request.component_id,
+                status=STATUS_FAILED,
+                reason="invalid_config: package_dirname must resolve within output",
+            )
+        return output_dir, package_dir, dry_run
+    except (OSError, RuntimeError, TypeError, ValueError):
         return ComponentResult(
             request_id=request.request_id,
             component_id=request.component_id,
             status=STATUS_FAILED,
-            reason=f"output_collision: already exists: {request.output_directory}",
+            reason="invalid_output_path: output directory must resolve within base",
         )
-    dry_run = request.config.get("dry_run") is True
-    package_name = request.config.get("package_dirname", OUTPUT_PACKAGE_DIRNAME)
-    if not isinstance(package_name, str) or not package_name or ".." in Path(package_name).parts:
-        return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
-            status=STATUS_FAILED,
-            reason="invalid_config: package_dirname must be a plain relative name",
-        )
-    return output_dir, output_dir / package_name, dry_run
 
 
-def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
+def _source_provenance_sort_key(source: dict[str, Any]) -> tuple[str, str]:
+    """Return the deterministic ordering key for one declared source."""
+    return str(source["artifact_id"]), str(source["uri"])
+
+
+def _sorted_source_provenance(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return copied source provenance records in deterministic order."""
+    return [dict(source) for source in sorted(sources, key=_source_provenance_sort_key)]
+
+
+def _result_provenance(request: ComponentRequest, work: _BundleWork) -> dict[str, Any]:
+    """Build result provenance without weakening the diagnostic-only boundary.
+
+    Returns:
+        Result provenance with declared source identities and no scientific claims.
+    """
+    source_provenance = _sorted_source_provenance(work.source_provenance)
+    return {
+        "output_directory": request.output_directory,
+        "relocated_entries": len(work.relocated),
+        "operations": sorted(set(work.operations)),
+        "dry_run": work.dry_run,
+        "source_provenance": source_provenance,
+        "source_commits": sorted({str(source["source_commit"]) for source in source_provenance}),
+    }
+
+
+def _manifest_entry(entry: _RelocatedEntry) -> dict[str, Any]:
+    """Project one relocated entry with its declared source provenance.
+
+    Returns:
+        Manifest fields for the staged payload and its declared source identity.
+    """
+    source = entry.source_provenance
+    return {
+        "artifact_id": entry.artifact_id,
+        "source_uri": entry.source_uri,
+        "format": source["format"],
+        "schema": source["schema"],
+        "source_commit": source["source_commit"],
+        "config_identity": source["config_identity"],
+        "units": source["units"],
+        "coordinate_frame": source["coordinate_frame"],
+        "relocated_path": entry.relocated_path,
+        "sha256": entry.sha256,
+        "size_bytes": entry.size_bytes,
+    }
+
+
+def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:  # noqa: C901
     """Relocate bundle payloads into a verified package.
 
     Args:
@@ -349,14 +513,10 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             "request_id": request.request_id,
             "dry_run": dry_run,
             "operations": sorted(set(operations)),
+            "source_provenance": _sorted_source_provenance(work.source_provenance),
+            "videos_not_staged": _sorted_source_provenance(work.videos_not_staged),
             "entries": [
-                {
-                    "artifact_id": entry.artifact_id,
-                    "source_uri": entry.source_uri,
-                    "relocated_path": entry.relocated_path,
-                    "sha256": entry.sha256,
-                    "size_bytes": entry.size_bytes,
-                }
+                _manifest_entry(entry)
                 for entry in sorted(relocated, key=lambda item: item.artifact_id)
             ],
         }
@@ -365,21 +525,31 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             "verified_entries": len(relocated),
             "diagnostics": sorted(set(diagnostics)),
             "videos_staged": [],
+            "videos_not_staged": _sorted_source_provenance(work.videos_not_staged),
         }
+        manifest_digest: str | None = None
+        report_digest: str | None = None
         if not dry_run:
-            _write_json(output_dir / "manifest.json", manifest)
-            _write_json(output_dir / OUTPUT_REPORT_FILENAME, verification)
+            try:
+                manifest_digest = _write_json(output_dir / OUTPUT_MANIFEST_FILENAME, manifest)
+                report_digest = _write_json(output_dir / OUTPUT_REPORT_FILENAME, verification)
+            except (OSError, TypeError, ValueError) as error:
+                raise _PackageOperationError("publication_failed") from error
         partial = bool(diagnostics)
         status = STATUS_PARTIAL if partial else STATUS_COMPLETE
         reason = "" if status == STATUS_COMPLETE else "; ".join(sorted(set(diagnostics))[:8])
         artifacts: tuple[dict[str, Any], ...] = ()
         if status == STATUS_COMPLETE and not dry_run:
-            manifest_text = json.dumps(manifest, sort_keys=True, indent=2, allow_nan=False) + "\n"
             artifacts = (
                 {
-                    "artifact_id": "manifest.json",
-                    "uri": str(Path(request.output_directory) / "manifest.json"),
-                    "sha256": _sha256_bytes(manifest_text.encode()),
+                    "artifact_id": OUTPUT_MANIFEST_FILENAME,
+                    "uri": str(Path(request.output_directory) / OUTPUT_MANIFEST_FILENAME),
+                    "sha256": manifest_digest,
+                },
+                {
+                    "artifact_id": OUTPUT_REPORT_FILENAME,
+                    "uri": str(Path(request.output_directory) / OUTPUT_REPORT_FILENAME),
+                    "sha256": report_digest,
                 },
             )
         return ComponentResult(
@@ -388,13 +558,17 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             status=status,
             artifacts=artifacts,
             diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
-            provenance={
-                "output_directory": request.output_directory,
-                "relocated_entries": len(relocated),
-                "operations": sorted(set(operations)),
-                "dry_run": dry_run,
-            },
+            provenance=_result_provenance(request, work),
             reason=reason,
+        )
+    except _PackageOperationError as error:
+        return ComponentResult(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status=STATUS_FAILED,
+            diagnostics=({"code": error.code},),
+            provenance=_result_provenance(request, work),
+            reason=error.code,
         )
     except ReviewContractsValidationError as error:
         return ComponentResult(
@@ -402,6 +576,15 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             component_id=request.component_id,
             status=STATUS_FAILED,
             reason="; ".join(error.errors),
+        )
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        return ComponentResult(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status=STATUS_FAILED,
+            diagnostics=({"code": "package_failed"},),
+            provenance=_result_provenance(request, work),
+            reason=f"package_failed: {type(error).__name__}",
         )
 
 

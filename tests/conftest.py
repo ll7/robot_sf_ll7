@@ -439,6 +439,9 @@ _FAST_FILES = {
     # coverage for the changed receipt verifier; keep it in the exact-head fast
     # lane (issue #9218).
     "test_merge_receipt_verify_remedy.py",
+    # Review-package path, provenance, and output-contract tests are deterministic
+    # fixture checks for the SREV-04 component; keep changed coverage in fast shards.
+    "test_review_package.py",
     # The helper-consolidation contracts are deterministic no-duplicate-def
     # coverage for the delegated helper families; keep them in the exact-head
     # fast lane (issue #9250).

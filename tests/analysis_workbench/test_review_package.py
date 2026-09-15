@@ -9,6 +9,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from robot_sf.analysis_workbench import review_package
 from robot_sf.analysis_workbench.review_contracts import (
     component_result_from_dict,
 )
@@ -29,29 +32,45 @@ def _payload(path: Path, text: str) -> dict:
     }
 
 
-def _stage(tmp_path: Path) -> dict:
+def _reference(
+    artifact_id: str,
+    name: str,
+    integrity: dict,
+    *,
+    format_name: str = "episode-json",
+    config_identity: str = "",
+) -> dict:
+    """Build one validated bundle reference for a fixture payload."""
+    return {
+        "artifact_id": artifact_id,
+        "uri": name,
+        "format": format_name,
+        "schema": "episode.fixture",
+        "sha256": integrity["sha256"],
+        "source_commit": integrity["source_commit"],
+        "config_identity": config_identity,
+        "units": "seconds/metres/radians",
+        "coordinate_frame": "map",
+    }
+
+
+def _stage(tmp_path: Path, *, config_identity: str = "") -> dict:
     """Stage a two-episode bundle; return its request payload dict."""
     first = _payload(tmp_path / "a.json", '{"episode_id": "ep-1"}\n')
     second = _payload(tmp_path / "b.json", '{"episode_id": "ep-2"}\n')
-
-    def ref(artifact_id: str, name: str, integrity: dict) -> dict:
-        return {
-            "artifact_id": artifact_id,
-            "uri": name,
-            "format": "episode-json",
-            "schema": "episode.fixture",
-            "sha256": integrity["sha256"],
-            "source_commit": integrity["source_commit"],
-            "units": "seconds/metres/radians",
-            "coordinate_frame": "map",
-        }
 
     bundle = {
         "schema_version": "review-bundle.v1",
         "bundle_id": "t-bundle",
         "episodes": [
-            {"episode_id": "ep-1", "references": [ref("a1", "a.json", first)]},
-            {"episode_id": "ep-2", "references": [ref("b1", "b.json", second)]},
+            {
+                "episode_id": "ep-1",
+                "references": [_reference("a1", "a.json", first, config_identity=config_identity)],
+            },
+            {
+                "episode_id": "ep-2",
+                "references": [_reference("b1", "b.json", second, config_identity=config_identity)],
+            },
         ],
     }
     (tmp_path / "bundle.json").write_text(json.dumps(bundle), encoding="utf-8")
@@ -84,9 +103,18 @@ def test_success_relocates_verified_payloads(tmp_path: Path) -> None:
     assert (tmp_path / "out" / "package" / "a.json").read_bytes() == before_a
     assert (tmp_path / "out" / "package" / "b.json").read_bytes() == b'{"episode_id": "ep-2"}\n'
     manifest = json.loads((tmp_path / "out" / "manifest.json").read_text())
+    report_path = tmp_path / "out" / "verification-report.json"
+    report = json.loads(report_path.read_text())
     assert manifest["schema_version"] == "review-package.v1"
     assert len(manifest["entries"]) == 2
     assert all(len(e["sha256"]) == 64 for e in manifest["entries"])
+    assert report == {
+        "diagnostics": [],
+        "schema_version": "package-verification-report.v1",
+        "verified_entries": 2,
+        "videos_not_staged": [],
+        "videos_staged": [],
+    }
     envelope = {
         "schema_version": "component-result.v1",
         "request_id": result.request_id,
@@ -98,7 +126,30 @@ def test_success_relocates_verified_payloads(tmp_path: Path) -> None:
         "reason": result.reason,
     }
     assert component_result_from_dict(envelope).status == "complete"
-    assert len(result.artifacts) == 1
+    artifacts = {str(item["artifact_id"]): item for item in result.artifacts}
+    assert set(artifacts) == {"manifest.json", "verification-report.json"}
+    for name, item in artifacts.items():
+        assert item["sha256"] == hashlib.sha256((tmp_path / "out" / name).read_bytes()).hexdigest()
+
+
+def test_declared_source_provenance_is_preserved_in_manifest_and_result(
+    tmp_path: Path,
+) -> None:
+    payload = _stage(tmp_path, config_identity="fixture-config-v1")
+    result = run(_request(tmp_path, payload), base=tmp_path)
+
+    assert result.status == "complete"
+    manifest = json.loads((tmp_path / "out" / "manifest.json").read_text())
+    sources = manifest["source_provenance"]
+    assert [source["artifact_id"] for source in sources] == ["a1", "b1"]
+    assert all(source["source_commit"] == COMMIT for source in sources)
+    assert all(source["config_identity"] == "fixture-config-v1" for source in sources)
+    assert all(
+        entry["source_commit"] == COMMIT and entry["config_identity"] == "fixture-config-v1"
+        for entry in manifest["entries"]
+    )
+    assert result.provenance["source_provenance"] == sources
+    assert result.provenance["source_commits"] == [COMMIT]
 
 
 def test_deterministic_repeat_runs_match_manifest(tmp_path: Path) -> None:
@@ -167,6 +218,100 @@ def test_video_payload_is_never_staged(tmp_path: Path) -> None:
     assert not (tmp_path / "out" / "package" / "clip.mp4").exists()
 
 
+def test_declared_video_format_is_independent_of_uri_suffix(tmp_path: Path) -> None:
+    payload = _stage(tmp_path)
+    declared_video = _payload(tmp_path / "declared-video.json", '{"fixture": "video"}\n')
+    non_video_mp4 = _payload(tmp_path / "episode.mp4", '{"fixture": "episode"}\n')
+    bundle = json.loads((tmp_path / "bundle.json").read_text())
+    bundle["episodes"].append(
+        {
+            "episode_id": "ep-format-boundary",
+            "references": [
+                _reference(
+                    "v-json",
+                    "declared-video.json",
+                    declared_video,
+                    format_name="video-metadata",
+                ),
+                _reference("episode-mp4", "episode.mp4", non_video_mp4),
+            ],
+        }
+    )
+    (tmp_path / "bundle.json").write_text(json.dumps(bundle), encoding="utf-8")
+
+    result = run(_request(tmp_path, payload), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "v-json: video_not_staged" in result.reason
+    assert not (tmp_path / "out" / "package" / "declared-video.json").exists()
+    assert (tmp_path / "out" / "package" / "episode.mp4").read_bytes() == (
+        tmp_path / "episode.mp4"
+    ).read_bytes()
+    report = json.loads((tmp_path / "out" / "verification-report.json").read_text())
+    assert [source["artifact_id"] for source in report["videos_not_staged"]] == ["v-json"]
+
+
+def test_parent_symlink_escape_is_refused(tmp_path: Path) -> None:
+    payload = _stage(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-source-outside"
+    outside.mkdir()
+    (outside / "a.json").write_bytes((tmp_path / "a.json").read_bytes())
+    (tmp_path / "source-parent").symlink_to(outside, target_is_directory=True)
+    bundle = json.loads((tmp_path / "bundle.json").read_text())
+    bundle["episodes"][0]["references"][0]["uri"] = "source-parent/a.json"
+    (tmp_path / "bundle.json").write_text(json.dumps(bundle), encoding="utf-8")
+
+    result = run(_request(tmp_path, payload), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "a1: reference_not_local" in result.reason
+    assert not (tmp_path / "out" / "package" / "a.json").exists()
+
+
+def test_bundle_symlink_escape_is_refused(tmp_path: Path) -> None:
+    payload = _stage(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-bundle-outside"
+    outside.mkdir()
+    outside_bundle = outside / "bundle.json"
+    outside_bundle.write_bytes((tmp_path / "bundle.json").read_bytes())
+    (tmp_path / "bundle-link.json").symlink_to(outside_bundle)
+    payload["sources"][0]["uri"] = "bundle-link.json"
+
+    result = run(_request(tmp_path, payload), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "bundle: reference_not_local" in result.reason
+    assert not (tmp_path / "out" / "package").exists()
+
+
+def test_output_symlink_escape_is_rejected(tmp_path: Path) -> None:
+    payload = _stage(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-output-outside"
+    outside.mkdir()
+    (tmp_path / "output-link").symlink_to(outside, target_is_directory=True)
+    payload["output_directory"] = "output-link/escaped"
+
+    result = run(_request(tmp_path, payload), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "unsafe_output_path" in result.reason
+    assert result.artifacts == ()
+    assert not (outside / "escaped").exists()
+
+
+def test_absolute_package_dirname_is_rejected(tmp_path: Path) -> None:
+    payload = _stage(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-package-outside"
+    payload["config"] = {"package_dirname": str(outside)}
+
+    result = run(_request(tmp_path, payload), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "invalid_config" in result.reason
+    assert result.artifacts == ()
+    assert not outside.exists()
+
+
 def test_dry_run_lists_operations_without_writing(tmp_path: Path) -> None:
     payload = _stage(tmp_path)
     payload["config"] = {"dry_run": True}
@@ -198,6 +343,43 @@ def test_output_collision_fails(tmp_path: Path) -> None:
     result = run(_request(tmp_path, payload), base=tmp_path)
     assert result.status == "failed"
     assert "output_collision" in result.reason
+
+
+def test_staging_filesystem_failure_returns_failed_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = _stage(tmp_path)
+
+    def fail_copy(*_args: object, **_kwargs: object) -> None:
+        raise OSError("fixture staging failure")
+
+    monkeypatch.setattr(review_package.shutil, "copyfileobj", fail_copy)
+    result = run(_request(tmp_path, payload), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason == "staging_failed"
+    assert result.artifacts == ()
+    assert result.status != "complete"
+
+
+def test_publication_value_failure_returns_failed_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = _stage(tmp_path)
+    original_write = review_package._write_json
+
+    def fail_report(path: Path, document: object) -> str:
+        if path.name == "verification-report.json":
+            raise ValueError("fixture publication failure")
+        return original_write(path, document)
+
+    monkeypatch.setattr(review_package, "_write_json", fail_report)
+    result = run(_request(tmp_path, payload), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason == "publication_failed"
+    assert result.artifacts == ()
+    assert not (tmp_path / "out" / "verification-report.json").exists()
 
 
 def test_unsupported_component_is_unavailable(tmp_path: Path) -> None:

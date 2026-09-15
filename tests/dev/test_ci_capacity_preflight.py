@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import stat
@@ -272,6 +273,7 @@ def test_recover_fast_pysf_helper_has_explicit_usage() -> None:
     assert "current linked worktree's .venv" in result.stdout
     assert "refuses the main checkout" in result.stdout
     assert "ROBOT_SF_WORKTREE_MIN_FREE_BYTES" in result.stdout
+    assert "ROBOT_SF_VENV_SEED_CACHE" in result.stdout
     assert "--frozen" in result.stdout
 
 
@@ -1413,3 +1415,242 @@ def test_docs_proof_fails_before_uv_on_incomplete_dependency_profile(tmp_path: P
     assert "worktree dependency profile 'core' is incomplete" in diagnostic
     assert "bootstrap_worktree.sh" in diagnostic
     assert not capture.exists()
+
+
+def _seed_recovery_fixture(
+    tmp_path: Path,
+) -> tuple[Path, Path, Path, Path, dict[str, str]]:
+    """Build a lockfile-complete fixture repo with two linked worktrees.
+
+    Both worktrees check out the same commit, so they share one venv-seed
+    identity. Returns (repo, worktree_a, worktree_b, seed_cache, env).
+    """
+    repo = tmp_path / "seed-main"
+    repo.mkdir()
+    script_dir = repo / "scripts" / "dev"
+    script_dir.mkdir(parents=True)
+    for source in (
+        RUN_SHARED_VENV,
+        RECOVER_FAST_PYSF,
+        REPO_ROOT / "scripts" / "dev" / "worktree_creation_lock.py",
+        REPO_ROOT / "scripts" / "dev" / "check_fast_pysf_runtime.py",
+        REPO_ROOT / "scripts" / "dev" / "check_worktree_capacity.py",
+        REPO_ROOT / "scripts" / "dev" / "check_worktree_optional_deps.py",
+    ):
+        target = script_dir / source.name
+        shutil.copy2(source, target)
+        target.chmod(target.stat().st_mode | stat.S_IXUSR)
+
+    source_package = repo / "fast-pysf" / "pysocialforce"
+    source_package.mkdir(parents=True)
+    (source_package / "__init__.py").write_text("\n", encoding="utf-8")
+    (source_package / "forces.py").write_text(
+        "def social_force_gil_releasing_context():\n    return None\n", encoding="utf-8"
+    )
+    (repo / "fast-pysf" / "pyproject.toml").write_text(
+        '[project]\nname = "seed-fixture-pysf"\nversion = "0.0.0"\n', encoding="utf-8"
+    )
+    (repo / "fast-pysf" / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    rvo2_source = repo / "third_party" / "python-rvo2"
+    rvo2_source.mkdir(parents=True)
+    (rvo2_source / "UPSTREAM.md").write_text("fixture\n", encoding="utf-8")
+    (repo / "pyproject.toml").write_text(
+        '[project]\nname = "seed-fixture"\nversion = "0.0.0"\n', encoding="utf-8"
+    )
+    (repo / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (repo / ".gitignore").write_text(".venv/\n", encoding="utf-8")
+    (repo / "README.md").write_text("fixture\n", encoding="utf-8")
+
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    configure_git_identity(repo, name="Seed Fixture", email="seed@example.invalid")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "seed fixture"], cwd=repo, check=True, capture_output=True
+    )
+
+    worktree_a = tmp_path / "seed-worktree-a"
+    worktree_b = tmp_path / "seed-worktree-b"
+    for worktree in (worktree_a, worktree_b):
+        subprocess.run(
+            ["git", "worktree", "add", "--detach", str(worktree)],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    fake_bin = tmp_path / "seed-bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "uv",
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'printf \'%s\\n\' "$*" >> "$UV_CAPTURE"\n'
+        'case "${1:-}" in\n'
+        "  venv)\n"
+        '    target="${2:?missing venv path}"\n'
+        '    mkdir -p "$target/bin"\n'
+        "    cat > \"$target/bin/python\" <<'PY'\n"
+        "#!/usr/bin/env bash\n"
+        'if [[ "${1:-}" == *check_fast_pysf_runtime.py ]]; then\n'
+        '  printf "fast-pysf runtime preflight passed\\n"\n'
+        "fi\n"
+        "exit 0\n"
+        "PY\n"
+        '    chmod +x "$target/bin/python"\n'
+        "    ;;\n"
+        "  sync)\n"
+        "    ;;\n"
+        "  run)\n"
+        "    ;;\n"
+        '  *) printf "unexpected uv invocation: %s\\n" "$*" >&2; exit 9 ;;\n'
+        "esac\n",
+    )
+    seed_cache = tmp_path / "seed-cache"
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        "ROBOT_SF_CI_MIN_FREE_BYTES": "0",
+        "ROBOT_SF_WORKTREE_MIN_FREE_BYTES": "0",
+        "ROBOT_SF_VENV_SEED_CACHE": str(seed_cache),
+    }
+    env.pop("PYTHONPATH", None)
+    return repo, worktree_a, worktree_b, seed_cache, env
+
+
+def _run_seed_recovery(
+    worktree: Path, env: dict[str, str], capture: Path, *args: str
+) -> subprocess.CompletedProcess[str]:
+    """Run the fixture recovery helper with a per-run uv capture file."""
+    run_env = {**env, "UV_CAPTURE": str(capture)}
+    return subprocess.run(
+        [str(worktree / "scripts" / "dev" / "recover_fast_pysf_worktree.sh"), *args],
+        cwd=worktree,
+        env=run_env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+def _teardown_seed_fixture(repo: Path, *worktrees: Path) -> None:
+    for worktree in worktrees:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_recovery_publishes_checksum_keyed_seed(tmp_path: Path) -> None:
+    """A verified recovery must publish a receipted seed for its identity."""
+    repo, worktree_a, worktree_b, seed_cache, env = _seed_recovery_fixture(tmp_path)
+    try:
+        result = _run_seed_recovery(worktree_a, env, tmp_path / "uv-a.txt", "--profile", "core")
+
+        assert result.returncode == 0, result.stderr
+        seeds = [
+            entry
+            for entry in seed_cache.iterdir()
+            if entry.is_dir() and (entry / "seed-receipt.json").is_file()
+        ]
+        assert len(seeds) == 1
+        receipt = json.loads((seeds[0] / "seed-receipt.json").read_text(encoding="utf-8"))
+        assert len(receipt["identity"]) == 64
+        int(receipt["identity"], 16)
+        assert receipt["identity"] == seeds[0].name
+        assert receipt["dependency_profile"] == "core"
+        assert receipt["source_venv"] == str(worktree_a / ".venv")
+        calls = (tmp_path / "uv-a.txt").read_text(encoding="utf-8").splitlines()
+        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "published checksum-keyed seed environment" in result.stderr
+    finally:
+        _teardown_seed_fixture(repo, worktree_a, worktree_b)
+
+
+def test_recovery_restores_matching_seed_without_materialization(
+    tmp_path: Path,
+) -> None:
+    """An identical worktree must clone the seed, rebind it, and verify it."""
+    repo, worktree_a, worktree_b, seed_cache, env = _seed_recovery_fixture(tmp_path)
+    try:
+        first = _run_seed_recovery(worktree_a, env, tmp_path / "uv-a1.txt", "--profile", "core")
+        assert first.returncode == 0, first.stderr
+        # Plant a seed-path entry point, then republish so the seed carries it.
+        marker = worktree_a / ".venv" / "bin" / "seed-tool"
+        marker.write_text(
+            f"#!{worktree_a / '.venv' / 'bin' / 'python'}\nprint('seed-tool')\n",
+            encoding="utf-8",
+        )
+        marker.chmod(marker.stat().st_mode | stat.S_IXUSR)
+        shutil.rmtree(seed_cache)
+        republish = _run_seed_recovery(worktree_a, env, tmp_path / "uv-a2.txt", "--profile", "core")
+        assert republish.returncode == 0, republish.stderr
+
+        result = _run_seed_recovery(worktree_b, env, tmp_path / "uv-b.txt", "--profile", "core")
+
+        assert result.returncode == 0, result.stderr
+        calls = (tmp_path / "uv-b.txt").read_text(encoding="utf-8").splitlines()
+        assert not any(call.startswith("venv ") for call in calls)
+        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+        assert "restored checksum-keyed seed environment" in result.stderr
+        rebound = (worktree_b / ".venv" / "bin" / "seed-tool").read_text(encoding="utf-8")
+        assert str(worktree_a) not in rebound
+        assert str(worktree_b / ".venv" / "bin" / "python") in rebound
+        # The seed itself must be unmutated by the restore rebind.
+        (seed_dir,) = [
+            entry for entry in seed_cache.iterdir() if entry.is_dir() and entry.name[0] != "."
+        ]
+        seeded = (seed_dir / "bin" / "seed-tool").read_text(encoding="utf-8")
+        assert str(worktree_a / ".venv" / "bin" / "python") in seeded
+        assert "verified worktree-owned fast-pysf environment" in result.stderr
+    finally:
+        _teardown_seed_fixture(repo, worktree_a, worktree_b)
+
+
+def test_recovery_falls_back_to_full_sync_on_seed_mismatch(tmp_path: Path) -> None:
+    """A corrupt seed receipt must not poison recovery; full sync runs instead."""
+    repo, worktree_a, worktree_b, seed_cache, env = _seed_recovery_fixture(tmp_path)
+    try:
+        first = _run_seed_recovery(worktree_a, env, tmp_path / "uv-a.txt", "--profile", "core")
+        assert first.returncode == 0, first.stderr
+        (seed_dir,) = [
+            entry for entry in seed_cache.iterdir() if entry.is_dir() and entry.name[0] != "."
+        ]
+        receipt_path = seed_dir / "seed-receipt.json"
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        receipt["identity"] = "0" * 64
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+        result = _run_seed_recovery(worktree_b, env, tmp_path / "uv-b.txt", "--profile", "core")
+
+        assert result.returncode == 0, result.stderr
+        calls = (tmp_path / "uv-b.txt").read_text(encoding="utf-8").splitlines()
+        assert any(call.startswith("venv ") for call in calls)
+        assert "sync --all-extras --reinstall-package robot-sf --frozen" in calls
+    finally:
+        _teardown_seed_fixture(repo, worktree_a, worktree_b)
+
+
+def test_recovery_seed_cache_off_disables_publish_and_restore(tmp_path: Path) -> None:
+    """ROBOT_SF_VENV_SEED_CACHE=off must leave the seed store untouched."""
+    repo, worktree_a, worktree_b, seed_cache, env = _seed_recovery_fixture(tmp_path)
+    try:
+        off_env = {**env, "ROBOT_SF_VENV_SEED_CACHE": "off"}
+        result = _run_seed_recovery(worktree_a, off_env, tmp_path / "uv-a.txt", "--profile", "core")
+
+        assert result.returncode == 0, result.stderr
+        assert not seed_cache.exists()
+
+        seeded_env = {**env}
+        seeded = _run_seed_recovery(
+            worktree_a, seeded_env, tmp_path / "uv-a2.txt", "--profile", "core"
+        )
+        assert seeded.returncode == 0, seeded.stderr
+        assert seed_cache.is_dir()
+        restore_off = _run_seed_recovery(
+            worktree_b, off_env, tmp_path / "uv-b.txt", "--profile", "core"
+        )
+
+        assert restore_off.returncode == 0, restore_off.stderr
+        calls = (tmp_path / "uv-b.txt").read_text(encoding="utf-8").splitlines()
+        assert any(call.startswith("venv ") for call in calls)
+    finally:
+        _teardown_seed_fixture(repo, worktree_a, worktree_b)

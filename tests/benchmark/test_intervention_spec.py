@@ -366,7 +366,40 @@ def test_json_loader_compares_numeric_lexemes_at_float_precision_boundary(
     path.write_text(text, encoding="utf-8")
 
     if valid:
-        load_intervention_spec(path)
+        loaded = load_intervention_spec(path)
+        assert type(loaded["factor"]["intervention"]) is float
+    else:
+        with pytest.raises(InterventionSpecValidationError, match="changed value"):
+            load_intervention_spec(path)
+
+
+@pytest.mark.parametrize(
+    ("baseline", "intervention", "valid"),
+    [
+        ("9007199254740991", "9007199254740991.0", False),
+        ("9007199254740992", "9007199254740992.0", False),
+        ("9007199254740992", "9007199254740993.0", True),
+        ("9007199254740993", "9007199254740993.0", False),
+    ],
+)
+def test_yaml_loader_compares_numeric_lexemes_at_float_precision_boundary(
+    tmp_path: Path, baseline: str, intervention: str, valid: bool
+) -> None:
+    """YAML float rounding cannot turn an exact numeric no-op into a change."""
+
+    text = yaml.safe_dump(_payload(), sort_keys=False)
+    text = text.replace(
+        "  unit: category\n  baseline: occluded\n  intervention: visible\n",
+        f"  unit: m/s\n  baseline: {baseline}\n  intervention: {intervention}\n",
+        1,
+    )
+    text = text.replace("  value: occluded\n", f"  value: {baseline}\n", 1)
+    path = tmp_path / "intervention.yaml"
+    path.write_text(text, encoding="utf-8")
+
+    if valid:
+        loaded = load_intervention_spec(path)
+        assert type(loaded["factor"]["intervention"]) is float
     else:
         with pytest.raises(InterventionSpecValidationError, match="changed value"):
             load_intervention_spec(path)

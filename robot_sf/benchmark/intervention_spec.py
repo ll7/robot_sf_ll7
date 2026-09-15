@@ -19,7 +19,7 @@ import stat
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -109,12 +109,12 @@ class _UniqueKeyLoader(yaml.SafeLoader):
     """Safe YAML loader that rejects duplicate keys and recursive aliases."""
 
 
-class _LexicalJsonFloat(float):
-    """A parsed JSON float that retains its source number spelling."""
+class _LexicalFloat(float):
+    """A parsed YAML or JSON float that retains its source number spelling."""
 
     lexeme: str
 
-    def __new__(cls, lexeme: str) -> _LexicalJsonFloat:
+    def __new__(cls, lexeme: str) -> _LexicalFloat:
         """Create the normal float value while retaining its JSON lexeme."""
 
         value = super().__new__(cls, lexeme)
@@ -122,14 +122,32 @@ class _LexicalJsonFloat(float):
         return value
 
 
-def _parse_json_float(lexeme: str) -> _LexicalJsonFloat:
+def _parse_json_float(lexeme: str) -> _LexicalFloat:
     """Parse a JSON float without discarding its exact decimal spelling.
 
     Returns:
         The parsed float with its source decimal spelling attached.
     """
 
-    return _LexicalJsonFloat(lexeme)
+    return _LexicalFloat(lexeme)
+
+
+def _construct_yaml_float(loader: _UniqueKeyLoader, node: yaml.nodes.ScalarNode) -> float:
+    """Construct YAML floats while retaining exact decimal spellings.
+
+    Returns:
+        The parsed YAML float, with a decimal lexeme attached when supported.
+    """
+
+    parsed = yaml.constructor.SafeConstructor.construct_yaml_float(loader, node)
+    if not math.isfinite(parsed):
+        return parsed
+    lexeme = loader.construct_scalar(node).replace("_", "")
+    try:
+        Decimal(lexeme)
+    except InvalidOperation:
+        return parsed
+    return _LexicalFloat(lexeme)
 
 
 def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -200,6 +218,7 @@ _UniqueKeyLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
     _construct_unique_mapping,
 )
+_UniqueKeyLoader.add_constructor("tag:yaml.org,2002:float", _construct_yaml_float)
 
 
 class InterventionSpecValidationError(RobotSfError, ValueError):
@@ -402,7 +421,7 @@ def _is_json_number(value: Any) -> bool:
 def _json_number_decimal(value: int | float) -> Decimal:
     """Return the exact decimal represented by one validated JSON number."""
 
-    if isinstance(value, _LexicalJsonFloat):
+    if isinstance(value, _LexicalFloat):
         return Decimal(value.lexeme)
     if isinstance(value, float):
         return Decimal(repr(value))
@@ -434,6 +453,22 @@ def _json_values_equal(left: Any, right: Any) -> bool:
             _json_values_equal(left[key], right[key]) for key in left
         )
     return left == right
+
+
+def _strip_numeric_lexemes(value: Any) -> Any:
+    """Return a validated value without exposing loader-only float subclasses.
+
+    Returns:
+        The value with loader-only float subclasses converted to plain floats.
+    """
+
+    if isinstance(value, _LexicalFloat):
+        return float(value)
+    if type(value) is list:
+        return [_strip_numeric_lexemes(item) for item in value]
+    if isinstance(value, Mapping):
+        return {key: _strip_numeric_lexemes(item) for key, item in value.items()}
+    return value
 
 
 def _validate_json_distinct(left: Any, right: Any, field: str) -> None:
@@ -1183,7 +1218,8 @@ def load_intervention_spec(
         raise InterventionSpecValidationError(
             "intervention specification must be a mapping", source=spec_path
         )
-    return validate_intervention_spec(payload, repo_root=repo_root, source=spec_path)
+    normalized = validate_intervention_spec(payload, repo_root=repo_root, source=spec_path)
+    return _strip_numeric_lexemes(normalized)
 
 
 def compute_intervention_spec_digest(payload: Mapping[str, Any]) -> str:

@@ -32,6 +32,8 @@ let payload = null;
 let currentFrame = 0;
 let playing = true;
 let lastFrameTime = 0;
+let playStartWall = 0;
+let playStartTime = 0;
 
 fetch("./scene.json")
   .then((response) => response.json())
@@ -51,12 +53,14 @@ fetch("./scene.json")
 timeline.addEventListener("input", () => {
   playing = false;
   drawFrame(Number(timeline.value));
+  resyncClock();
 });
 
 window.addEventListener("keydown", (event) => {
   if (event.code === "Space") {
     event.preventDefault();
     playing = !playing;
+    resyncClock();
   }
 });
 
@@ -149,6 +153,41 @@ function buildTimelineMarkers(scenePayload) {
   markers.style.display = "block";
 }
 
+// Source-time cursor (issue #9368): advance by recorded frame.time_s so
+// irregular sources keep apparent speed. Falls back to legacy fixed-step
+// playback when time_s is missing, non-finite, or non-monotonic, and says so
+// in the HUD instead of presenting guessed seconds as authoritative.
+function timingMode() {
+  if (!payload || !payload.frames.length) return { mode: "unavailable" };
+  let previous = null;
+  for (const frame of payload.frames) {
+    const time = frame.time_s;
+    if (typeof time !== "number" || !Number.isFinite(time)) {
+      return { mode: "legacy" };
+    }
+    if (previous !== null && time < previous) return { mode: "legacy" };
+    previous = time;
+  }
+  return { mode: "source-time" };
+}
+
+function resyncClock() {
+  lastFrameTime = performance.now();
+  playStartWall = lastFrameTime;
+  const frame = payload?.frames[currentFrame];
+  playStartTime = frame && typeof frame.time_s === "number" ? frame.time_s : 0;
+}
+
+function frameIndexForTime(targetTime) {
+  const frames = payload.frames;
+  let selected = 0;
+  for (let i = 0; i < frames.length; i++) {
+    if (frames[i].time_s <= targetTime) selected = i;
+    else break;
+  }
+  return selected;
+}
+
 function drawFrame(index) {
   if (!payload) return;
   currentFrame = Math.max(0, Math.min(index, payload.frames.length - 1));
@@ -157,11 +196,7 @@ function drawFrame(index) {
 
   setAgent(robot, frame.robot);
   setAgent(egoPedestrian, frame.ego_pedestrian);
-  replaceChildren(pedestrianGroup, frame.pedestrians.map((ped) => {
-    const marker = makeAgent(0x38bdf8, 0.24);
-    setAgent(marker, { position: ped.position, heading: 0 });
-    return marker;
-  }));
+  syncPedestrianPool(frame.pedestrians || []);
   const trajectoryPoints = (payload.trajectory || []).slice(0, currentFrame + 1);
   replaceChildren(trajectory, [makePolyline(trajectoryPoints, 0x86efac)]);
   replaceChildren(rays, (frame.rays || []).map((ray) => makeLine([ray[0][0], ray[1][0], ray[0][1], ray[1][1]], 0xf8fafc)));
@@ -185,6 +220,12 @@ function drawFrame(index) {
   parts.push(`frame ${currentFrame + 1}/${payload.frames.length}`);
   parts.push(`step=${frame.timestep != null ? frame.timestep : currentFrame}`);
   if (frame.time_s != null) parts.push(`t=${frame.time_s.toFixed(2)}s`);
+  const clockMode = timingMode().mode;
+  parts.push(clockMode === "source-time" ? "timing=source-time" : "timing=frame-index (legacy; time_s unavailable)");
+  const identityMode = payload.fidelity?.identity?.mode || "slot-index";
+  parts.push(`identity=${identityMode}`);
+  const geometryMode = payload.fidelity?.geometry?.mode || "symbolic";
+  parts.push(`geometry=${geometryMode}`);
 
   if (frame.event) parts.push(`event=${frame.event}`);
   if (frame.event_id) parts.push(`id=${frame.event_id}`);
@@ -232,16 +273,66 @@ function annotationFrameRange(scenePayload, annotation) {
 
 function animate() {
   requestAnimationFrame(animate);
-  if (playing && payload?.frames.length > 1 && performance.now() - lastFrameTime >= 100) {
-    lastFrameTime = performance.now();
-    drawFrame((currentFrame + 1) % payload.frames.length);
+  if (playing && payload?.frames.length > 1) {
+    if (timingMode().mode === "source-time") {
+      const now = performance.now();
+      if (playStartWall === 0) resyncClock();
+      const targetTime = playStartTime + (now - playStartWall) / 1000;
+      const lastTime = payload.frames[payload.frames.length - 1].time_s;
+      if (targetTime >= lastTime) {
+        drawFrame(0);
+        resyncClock();
+      } else {
+        drawFrame(frameIndexForTime(targetTime));
+      }
+    } else if (performance.now() - lastFrameTime >= 100) {
+      lastFrameTime = performance.now();
+      drawFrame((currentFrame + 1) % payload.frames.length);
+    }
   }
   renderer.render(scene, camera);
   document.documentElement.dataset.traceViewerRendered = "true";
 }
 
-function makeAgent(color, radius) {
-  const group = new THREE.Group();
+// Pedestrian mesh pool (issue #9368): meshes are reused across frames instead
+// of disposed/recreated per frame. Recorded radii size the mesh; otherwise a
+// symbolic radius is used and disclosed in the HUD. The heading indicator is
+// shown only when the source recorded a heading — never a zero placeholder.
+// Pool slots follow frame order and carry no persistent-identity promise.
+const SYMBOLIC_PED_RADIUS = 0.24;
+
+function pedRadius(ped) {
+  const radius = ped.radius_m;
+  if (typeof radius === "number" && Number.isFinite(radius) && radius > 0) {
+    return radius;
+  }
+  return SYMBOLIC_PED_RADIUS;
+}
+
+function syncPedestrianPool(pedestrians) {
+  const key = `${pedestrians.length}:${pedestrians.map((ped) => pedRadius(ped).toFixed(4)).join(",")}`;
+  if (pedestrianGroup.userData.poolKey !== key) {
+    replaceChildren(
+      pedestrianGroup,
+      pedestrians.map((ped) => makeAgent(0x38bdf8, pedRadius(ped)))
+    );
+    pedestrianGroup.userData.poolKey = key;
+  }
+  pedestrianGroup.children.forEach((marker, index) => {
+    const ped = pedestrians[index];
+    if (!ped) {
+      marker.visible = false;
+      return;
+    }
+    const headingKnown =
+      typeof ped.heading === "number" && Number.isFinite(ped.heading);
+    setAgent(marker, { position: ped.position, heading: headingKnown ? ped.heading : 0 });
+    if (marker.children.length > 1) marker.children[1].visible = headingKnown;
+    marker.visible = true;
+  });
+}
+
+function makeAgent(color, radius) {  const group = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.CylinderGeometry(radius, radius, 0.28, 24),
     new THREE.MeshBasicMaterial({ color })

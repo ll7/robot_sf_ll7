@@ -102,6 +102,34 @@ def test_start_delay_template_orders_candidates_deterministically(tmp_path: Path
     assert len({item["intervention_id"] for item in recipe["interventions"]}) == 3
 
 
+def test_small_positive_speed_preserves_distinct_positive_candidates(tmp_path: Path) -> None:
+    request = component_request_from_dict(
+        _request_doc(_hypothesis(factor_value=1e-7), output_directory="tiny-speed")
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "complete"
+    recipe = json.loads(
+        (tmp_path / request.output_directory / "experiment-recipe.json").read_text(encoding="utf-8")
+    )
+    values = [
+        float(intervention["factor"].split("=", maxsplit=1)[1])
+        for intervention in recipe["interventions"]
+    ]
+    assert all(value > 0 for value in values)
+    assert len(set(values)) == 3
+
+
+def test_unrepresentable_candidate_set_fails_closed(tmp_path: Path) -> None:
+    request = component_request_from_dict(
+        _request_doc(_hypothesis(factor_value=5e-324), output_directory="underflow")
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "candidate factor values must be distinct" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / request.output_directory).exists()
+
+
 def test_unsupported_template_returns_actionable_unavailable(tmp_path: Path) -> None:
     request = component_request_from_dict(_request_doc(_hypothesis(template="learned-policy")))
     result = run(request, base=tmp_path)
@@ -116,6 +144,7 @@ def test_corrupt_inputs_fail_closed_without_artifacts(tmp_path: Path) -> None:
         ({}, "missing-hypothesis"),
         (_hypothesis(factor_value=float("inf")), "corrupt-hypothesis"),
         (_hypothesis(factor_value=1.6e308), "candidate factor values must be finite"),
+        (_hypothesis(factor_value=10**309), "'factor_value' must be a finite number"),
         (_hypothesis(factor_value=0), "pedestrian speed must be positive"),
         (_hypothesis(template="single-pedestrian-start-delay", factor_value=-1), "non-negative"),
         (_hypothesis(expected_direction="sideways"), "corrupt-hypothesis"),
@@ -215,6 +244,22 @@ def test_second_artifact_write_failure_leaves_no_partial_output(
     assert result.artifacts == ()
     assert not (tmp_path / "transactional").exists()
     assert not list(tmp_path.glob(".transactional-*"))
+
+
+def test_output_symlink_escape_is_rejected(tmp_path: Path) -> None:
+    base = tmp_path / "base"
+    base.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (base / "link").symlink_to(outside, target_is_directory=True)
+    request = component_request_from_dict(_request_doc(output_directory="link/escaped"))
+
+    result = run(request, base=base)
+
+    assert result.status == "failed"
+    assert "unsafe-output-path" in result.reason
+    assert result.artifacts == ()
+    assert not (outside / "escaped").exists()
 
 
 def test_descriptor_lists_supported_templates_contract() -> None:

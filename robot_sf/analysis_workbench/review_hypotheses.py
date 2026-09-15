@@ -139,30 +139,62 @@ def _validate_hypothesis_identity(raw: dict[str, Any], errors: list[str]) -> Non
         errors.append("corrupt-hypothesis: 'terminal_condition' must be a non-empty string")
 
 
+def _raw_candidate_factor_values(template: str, base: float) -> list[float]:
+    """Derive the unrounded candidate factors for a supported template.
+
+    Returns:
+        Three raw candidate factors before presentation rounding.
+    """
+    if template == TEMPLATE_SINGLE_PEDESTRIAN_SPEED:
+        return [0.8 * base, base, 1.2 * base]
+    step = max(0.5, 0.25 * abs(base))
+    return [max(0.0, base - step), base, base + step]
+
+
+def _candidate_factor_values_for_base(template: str, base: float) -> list[float]:
+    """Derive readable candidates without rounding away distinct values.
+
+    Returns:
+        Three candidate factors, falling back to raw values when rounding would
+        collapse distinct candidates.
+    """
+    raw_values = _raw_candidate_factor_values(template, base)[:DEFAULT_MAX_CANDIDATES]
+    rounded_values = [round(value, 6) for value in raw_values]
+    if len(set(rounded_values)) != len(rounded_values):
+        return raw_values
+    return rounded_values
+
+
 def _validate_factor_value(template: Any, factor: Any, errors: list[str]) -> None:
     """Reject invalid or non-finite candidate factor values before recipe creation."""
     if isinstance(factor, bool) or not isinstance(factor, (int, float)):
         errors.append("corrupt-hypothesis: 'factor_value' must be a finite number")
         return
-    if not math.isfinite(factor):
+    try:
+        probe = float(factor)
+    except (OverflowError, ValueError):
         errors.append("corrupt-hypothesis: 'factor_value' must be a finite number")
         return
-    if template == TEMPLATE_SINGLE_PEDESTRIAN_SPEED and factor <= 0:
+    if not math.isfinite(probe):
+        errors.append("corrupt-hypothesis: 'factor_value' must be a finite number")
+        return
+    if template == TEMPLATE_SINGLE_PEDESTRIAN_SPEED and probe <= 0:
         errors.append("corrupt-hypothesis: pedestrian speed must be positive")
         return
-    if template == TEMPLATE_SINGLE_PEDESTRIAN_START_DELAY and factor < 0:
+    if template == TEMPLATE_SINGLE_PEDESTRIAN_START_DELAY and probe < 0:
         errors.append("corrupt-hypothesis: start delay must be non-negative")
         return
     if template not in SUPPORTED_TEMPLATES:
         return
-    probe = float(factor)
-    candidates = (
-        (0.8 * probe, probe, 1.2 * probe)
-        if template == TEMPLATE_SINGLE_PEDESTRIAN_SPEED
-        else (max(0.0, probe - max(0.5, 0.25 * probe)), probe, probe + max(0.5, 0.25 * probe))
-    )
-    if not all(math.isfinite(value) for value in candidates):
+    raw_candidates = _raw_candidate_factor_values(template, probe)
+    if not all(math.isfinite(value) for value in raw_candidates):
         errors.append("corrupt-hypothesis: candidate factor values must be finite")
+        return
+    candidates = _candidate_factor_values_for_base(template, probe)
+    if template == TEMPLATE_SINGLE_PEDESTRIAN_SPEED and any(value <= 0 for value in candidates):
+        errors.append("corrupt-hypothesis: candidate pedestrian speeds must be positive")
+    if len(set(candidates)) != len(candidates):
+        errors.append("corrupt-hypothesis: candidate factor values must be distinct")
 
 
 def _validate_hypothesis(config: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
@@ -214,13 +246,7 @@ def _candidate_factor_values(hypothesis: dict[str, Any]) -> list[float]:
     Returns:
         Up to three candidate factor values around the hypothesis base value.
     """
-    base = hypothesis["factor_value"]
-    if hypothesis["template"] == TEMPLATE_SINGLE_PEDESTRIAN_SPEED:
-        values = [0.8 * base, base, 1.2 * base]
-    else:
-        step = max(0.5, 0.25 * abs(base))
-        values = [max(0.0, base - step), base, base + step]
-    return [round(value, 6) for value in values[:DEFAULT_MAX_CANDIDATES]]
+    return _candidate_factor_values_for_base(hypothesis["template"], hypothesis["factor_value"])
 
 
 def _build_interventions(hypothesis: dict[str, Any]) -> list[dict[str, Any]]:
@@ -360,6 +386,21 @@ def _stage_recipe(
             shutil.rmtree(staging_dir)
 
 
+def _resolve_output_directory(root: Path, output_directory: str) -> tuple[Path | None, str | None]:
+    """Resolve an output path and reject symlink escapes from the base directory.
+
+    Returns:
+        A resolved output path and no error, or ``(None, reason)`` for an escape.
+    """
+    try:
+        resolved_root = root.resolve(strict=False)
+        output_dir = (resolved_root / output_directory).resolve(strict=False)
+        output_dir.relative_to(resolved_root)
+    except (OSError, RuntimeError, ValueError):
+        return None, "unsafe-output-path: output directory must resolve within base"
+    return output_dir, None
+
+
 def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
     """Compose one experiment recipe from a validated component request.
 
@@ -424,7 +465,14 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             status="failed",
             reason="; ".join(errors),
         )
-    output_dir = root / request.output_directory
+    output_dir, path_error = _resolve_output_directory(root, request.output_directory)
+    if path_error is not None or output_dir is None:
+        return ComponentResult(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status="failed",
+            reason=path_error or "unsafe-output-path: output directory must resolve within base",
+        )
     if output_dir.exists():
         return ComponentResult(
             request_id=request.request_id,
@@ -445,7 +493,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             status="failed",
             reason="; ".join(error.errors),
         )
-    except OSError as error:
+    except (OSError, ValueError) as error:
         return ComponentResult(
             request_id=request.request_id,
             component_id=request.component_id,

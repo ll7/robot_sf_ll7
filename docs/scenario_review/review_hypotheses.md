@@ -28,8 +28,8 @@ Generated recipes are not campaign or evidence-admission authority.
   capability, hypothesis template, or required version, with an actionable
   reason), or `failed` (corrupt hypothesis fields or output collision; failed
   outputs never carry artifacts).
-- **Output**: one `experiment-recipe.v1` document with three deterministically
-  ordered candidate interventions (priority, then stable ID), an unchanged
+- **Output**: one `experiment-recipe.v1` document with three distinct,
+  deterministically ordered candidate interventions (priority, then stable ID), an unchanged
   control carrying the supplied source config identity, measurements with units and
   expected direction, an evaluation rule using the
   survived/falsified/inconclusive vocabulary, a default budget of three
@@ -64,6 +64,6 @@ directory; sources are never modified.
 
 Failure reasons carry stable codes: `missing-hypothesis`,
 `unsupported-hypothesis-template`, `corrupt-hypothesis`,
-`incompatible-required-version`, `missing capabilities`, and
-`output-collision`. Missing measurements are unavailable with reasons; source
-integrity is separate from evidence admission.
+`incompatible-required-version`, `missing capabilities`, `output-collision`,
+`unsafe-output-path`, and `output-write-failed`. Missing measurements are
+unavailable with reasons; source integrity is separate from evidence admission.

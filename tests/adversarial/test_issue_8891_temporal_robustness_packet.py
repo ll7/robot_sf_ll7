@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from robot_sf.adversarial.matched_budget_packet import (
+    SIMULATOR_INVOCATIONS_PER_SLOT,
     TEMPORAL_SIDECAR_SCHEMA_VERSION,
     PacketError,
     build_canary_packet,
@@ -153,6 +154,40 @@ def test_confirmed_failure_rejects_all_positive_signed_margins(packet: dict) -> 
     )
 
 
+def test_confirmed_failure_requires_activation_time(packet: dict) -> None:
+    sidecar = _sidecar(packet, "fixture")
+    sidecar["admission_status"] = "confirmed_failure"
+    sidecar["failure_basis"] = "independent_confirmation"
+    sidecar["properties"][0]["activation_time_s"] = None
+    _bad(
+        lambda: validate_temporal_sidecar(sidecar, packet, candidate_id="fixture"),
+        "activation time",
+    )
+
+
+def test_observed_sidecar_requires_activation_time_for_violated_property(packet: dict) -> None:
+    sidecar = _sidecar(packet, "fixture")
+    sidecar["properties"][0]["activation_time_s"] = None
+    _bad(
+        lambda: validate_temporal_sidecar(sidecar, packet, candidate_id="fixture"),
+        "activation time",
+    )
+
+
+def test_planned_sidecar_rejects_observed_values(packet: dict) -> None:
+    canary = build_canary_packet(packet, repo_root=ROOT)
+    sidecar = copy.deepcopy(
+        next(
+            item["temporal_sidecar"] for item in canary["candidates"] if "temporal_sidecar" in item
+        )
+    )
+    sidecar["properties"][0]["signed_margin"] = -0.1
+    _bad(
+        lambda: validate_temporal_sidecar(sidecar, packet, candidate_id=sidecar["candidate_id"]),
+        "planned sidecar cannot contain observations",
+    )
+
+
 def test_sidecar_rejects_property_drift_monitor_artifact_and_weak_admission(packet: dict) -> None:
     sidecar = _sidecar(packet, "fixture")
     broken = copy.deepcopy(sidecar)
@@ -186,16 +221,120 @@ def test_sidecar_rejects_property_drift_monitor_artifact_and_weak_admission(pack
 
 def test_ledger_rejects_hidden_retry_duplicate_and_non_native_admission(packet: dict) -> None:
     rows = build_canary_packet(packet, repo_root=ROOT)["rows"]
+    run_budget_limits = {str(row["run_id"]): (1, SIMULATOR_INVOCATIONS_PER_SLOT) for row in rows}
     retry = copy.deepcopy(rows)
     retry[0]["retry_of"] = "prior"
-    _bad(lambda: validate_call_ledger(packet, retry), "hidden retries")
-    _bad(lambda: validate_call_ledger(packet, [*rows, copy.deepcopy(rows[0])]), "duplicate search")
+    _bad(
+        lambda: validate_call_ledger(packet, retry, run_budget_limits=run_budget_limits),
+        "hidden retries",
+    )
+    _bad(
+        lambda: validate_call_ledger(
+            packet, [*rows, copy.deepcopy(rows[0])], run_budget_limits=run_budget_limits
+        ),
+        "duplicate search",
+    )
     weak = copy.deepcopy(rows)
-    weak[0].update(execution_mode="fallback", status="observed", admission_status="confirmed")
-    _bad(lambda: validate_call_ledger(packet, weak), "must be excluded")
+    weak[0].update(
+        execution_mode="fallback", status="observed", admission_status="confirmed_failure"
+    )
+    _bad(
+        lambda: validate_call_ledger(packet, weak, run_budget_limits=run_budget_limits),
+        "must be excluded",
+    )
     over_budget = copy.deepcopy(packet)
     over_budget["budget"]["simulator_call_budget"] = 41
-    _bad(lambda: validate_call_ledger(over_budget, rows), "simulator call budget")
+    _bad(
+        lambda: validate_call_ledger(over_budget, rows, run_budget_limits=run_budget_limits),
+        "simulator call budget",
+    )
+
+
+def test_ledger_rejects_per_run_budget_overruns(packet: dict) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    run = identities["runs"][0]
+    run_budget_limits = {
+        item["run_id"]: (
+            len(item["candidate_slots"]),
+            len(item["candidate_slots"]) * SIMULATOR_INVOCATIONS_PER_SLOT,
+        )
+        for item in identities["runs"]
+    }
+
+    def row(candidate_id: str, *, phase: str, call_class: str, seed: int, index: int) -> dict:
+        return {
+            "schema_version": "temporal-robustness-call-ledger.v1",
+            "candidate_id": candidate_id,
+            "run_id": run["run_id"],
+            "attempt_index": index if phase == "search" else 0,
+            "phase": phase,
+            "call_class": call_class,
+            "simulator_invocations": 1,
+            "simulator_call_id": f"budget-probe-{candidate_id}",
+            "seed": seed,
+            "seed_role": "search" if phase == "search" else "replay",
+            "execution_mode": "native",
+            "retry_of": None,
+            "post_outcome_change": False,
+        }
+
+    search_rows = [
+        row(
+            f"search-probe-{index}",
+            phase="search",
+            call_class="search_evaluation",
+            seed=run["search_seed"],
+            index=index,
+        )
+        for index in range(len(run["candidate_slots"]) + 1)
+    ]
+    _bad(
+        lambda: validate_call_ledger(packet, search_rows, run_budget_limits=run_budget_limits),
+        "per-run search-slot budget",
+    )
+
+    within_search_budget = search_rows[:-1]
+    replay_rows = [
+        row(
+            f"replay-probe-{index}",
+            phase="replay",
+            call_class="deterministic_replay",
+            seed=9_100_000 + index,
+            index=index,
+        )
+        for index in range(113)
+    ]
+    _bad(
+        lambda: validate_call_ledger(
+            packet,
+            [*within_search_budget, *replay_rows],
+            run_budget_limits=run_budget_limits,
+        ),
+        "per-run simulator call budget",
+    )
+
+    inflated_limits = dict(run_budget_limits)
+    inflated_limits[run["run_id"]] = (1000, 1000)
+    _bad(
+        lambda: validate_call_ledger(
+            packet,
+            replay_rows,
+            run_budget_limits=inflated_limits,
+            repo_root=ROOT,
+        ),
+        "derived budget limits",
+    )
+
+    replay_only_limits = dict(run_budget_limits)
+    replay_only_limits[run["run_id"]] = (0, 1)
+    _bad(
+        lambda: validate_call_ledger(
+            packet,
+            replay_rows[:2],
+            run_budget_limits=replay_only_limits,
+        ),
+        "per-run simulator call budget",
+    )
 
 
 def _result_row(packet: dict, identities: dict) -> dict:
@@ -289,6 +428,40 @@ def test_result_lineage_requires_all_gate_records(packet: dict) -> None:
     assert (result["row_count"], result["simulator_invocations"]) == (8, 7)
 
 
+def test_result_rows_reject_outcome_fields(packet: dict) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    rows = _result_lineage_rows(packet, identities)
+    rows[0]["objective_value"] = 1.0
+    _bad(
+        lambda: validate_result_rows(packet, rows, identities),
+        "outcome fields",
+    )
+
+
+def test_result_rows_reject_admission_status_drift_from_sidecar(packet: dict) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    rows = _result_lineage_rows(packet, identities)
+    rows[0]["admission_status"] = "confirmed_failure"
+    _bad(
+        lambda: validate_result_rows(packet, rows, identities),
+        "result/sidecar admission status",
+    )
+
+
+def test_result_rows_reject_supplied_identity_drift(packet: dict) -> None:
+    identities = copy.deepcopy(build_expected_identities(packet, repo_root=ROOT))
+    run = next(item for item in identities["runs"] if item["objective_id"] == "temporal_robustness")
+    run["candidate_slots"][0]["candidate_id"] = "attacker_candidate"
+    identities["identity_sha256"] = canonical_sha256(
+        {key: value for key, value in identities.items() if key != "identity_sha256"}
+    )
+    rows = _result_lineage_rows(packet, identities)
+    _bad(
+        lambda: validate_result_rows(packet, rows, identities),
+        "deterministic identities",
+    )
+
+
 def test_confirmed_result_lineage_enforces_three_of_five(packet: dict) -> None:
     identities = build_expected_identities(packet, repo_root=ROOT)
     rows = _result_lineage_rows(
@@ -300,6 +473,71 @@ def test_confirmed_result_lineage_enforces_three_of_five(packet: dict) -> None:
     _bad(
         lambda: validate_result_rows(packet, rows, identities),
         "3-of-5 threshold",
+    )
+
+
+@pytest.mark.parametrize(
+    "phase_state",
+    [("certification", "certification_state"), ("replay", "replay_state")],
+)
+def test_confirmed_result_requires_passing_certification_and_replay(
+    packet: dict, phase_state: tuple[str, str]
+) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    rows = _result_lineage_rows(packet, identities, confirmed=True)
+    phase, state_key = phase_state
+    next(row for row in rows if row["phase"] == phase)[state_key] = "failed"
+    _bad(
+        lambda: validate_result_rows(packet, rows, identities),
+        f"{phase} gate must pass",
+    )
+
+
+def test_invalid_search_proposal_cannot_claim_confirmed_failure(packet: dict) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    row = _result_row(packet, identities)
+    row.pop("temporal_sidecar")
+    row.update(
+        call_class="search_invalid_proposal",
+        simulator_invocations=0,
+        simulator_call_id=None,
+        admission_status="confirmed_failure",
+    )
+    _bad(
+        lambda: validate_result_rows(packet, [row], identities),
+        "invalid search proposals must be excluded",
+    )
+
+
+def test_invalid_search_proposal_cannot_carry_temporal_sidecar(packet: dict) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    row = _result_row(packet, identities)
+    row.update(
+        call_class="search_invalid_proposal",
+        simulator_invocations=0,
+        simulator_call_id=None,
+        admission_status="invalid",
+    )
+    _bad(
+        lambda: validate_result_rows(packet, [row], identities),
+        "cannot carry temporal sidecar lineage",
+    )
+
+
+def test_invalid_search_proposal_rejects_additional_lineage(packet: dict) -> None:
+    identities = build_expected_identities(packet, repo_root=ROOT)
+    rows = _result_lineage_rows(packet, identities)
+    invalid_search = rows[0]
+    invalid_search.pop("temporal_sidecar")
+    invalid_search.update(
+        call_class="search_invalid_proposal",
+        simulator_invocations=0,
+        simulator_call_id=None,
+        admission_status="invalid",
+    )
+    _bad(
+        lambda: validate_result_rows(packet, rows, identities),
+        "invalid search lineage",
     )
 
 
@@ -342,6 +580,16 @@ def test_packet_mutations_fail_closed(
         (
             lambda packet: packet["budget"].update(simulator_call_budget=1),
             "budget grid",
+        ),
+        (
+            lambda packet: packet["budget"].update(unreviewed_field="unexpected"),
+            "budget contains unsupported fields",
+        ),
+        (
+            lambda packet: packet["scenario"]["parameters"][0].update(
+                unreviewed_field="unexpected"
+            ),
+            "scenario.parameters",
         ),
         (
             lambda packet: packet["analysis_contract"].update(

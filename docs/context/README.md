@@ -78,6 +78,10 @@ The issue #8829 compute-window capacity planner is documented in
 [issue_8829_compute_window_capacity_planner.md](issue_8829_compute_window_capacity_planner.md);
 it is operational planning context only, not benchmark or research evidence.
 
+The issue #8693 simulator-error and diagnostic-success contract is documented in
+[issue_8693_simulator_error_taxonomy.md](issue_8693_simulator_error_taxonomy.md); it is
+implementation-integrity evidence only and does not claim benchmark improvement.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 

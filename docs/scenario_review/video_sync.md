@@ -32,6 +32,12 @@ sampling, so its expected verdict is `partial` with the `skipped_frames:3` and
 `nonuniform_sampling` codes — asserting those proves the detectors work.
 `--output` must not exist. Exit code is 0 only on `complete`.
 
+Input request, config, and source files are strict UTF-8 JSON: duplicate keys,
+non-finite constants, malformed documents, special files, and files larger than
+the component's 16 MiB input limit fail closed. Output documents are staged and
+published into a new directory; an existing directory, symlink, or other output
+entry is a collision and is never overwritten.
+
 Use `--descriptor` to print the shared `component-descriptor.v1` document
 without reading inputs or creating an output directory:
 
@@ -72,7 +78,9 @@ Optional source identity can be supplied in request config under
 the selected URI, format, declared schema, source commit, config identity,
 computed source SHA-256, declared-vs-computed integrity status, and
 `admission: not_evaluated`. Integrity is diagnostic metadata only and does not
-admit scientific evidence.
+admit scientific evidence. Metadata keys must name declared sources, supported
+identity fields cannot conflict with fields on the corresponding source
+reference, and digest/commit declarations use their fixed hexadecimal forms.
 
 ## Unavailable reasons and limits
 
@@ -83,6 +91,10 @@ admit scientific evidence.
   output paths must remain within the base directory after realpath resolution;
   absolute paths and symlink escapes are rejected. Malformed or non-strict JSON
   input is reported as a contract-valid failed result by the CLI.
+- Input row counts, frame-index spans, identity lengths, presentation sizes and
+  rates, timestamp magnitudes, derived simulation times, and serialized output
+  sizes have finite limits. These limits produce stable `resource_limit:*`
+  diagnostics before a mapping or output is published.
 - No simulator, planner, or training imports: the module is observational by
   construction (asserted in tests). Capture hooks in `sim_view.py` /
   `jsonl_recording.py` were not needed and not touched.

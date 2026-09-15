@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     component_descriptor_from_dict,
     component_result_from_dict,
 )
+from robot_sf.render import video_sync
 from robot_sf.render.video_sync import (
     COMPONENT_ID,
     _result_document,
@@ -269,6 +271,100 @@ def test_invalid_timestamp_tolerance_fails_closed(tmp_path: Path) -> None:
 
     assert result.status == "failed"
     assert "timestamp_tolerance_invalid" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_run_accepts_a_string_base_without_changing_resolution(tmp_path: Path) -> None:
+    """The public adapter accepts path-like CLI bases and keeps them contained."""
+    _stage(tmp_path)
+
+    result = run(_request(), base=str(tmp_path))
+
+    assert result.status == "complete"
+    assert (tmp_path / "out" / "media-mapping.json").is_file()
+
+
+def test_duplicate_source_json_keys_fail_closed(tmp_path: Path) -> None:
+    """Duplicate source keys cannot silently replace provenance-relevant values."""
+    (tmp_path / "capture.json").write_text(
+        '{"fps_nominal":10,"fps_nominal":11,"frames":[]}', encoding="utf-8"
+    )
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "capture: source_not_strict_json" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO test requires POSIX mkfifo")
+def test_fifo_source_is_rejected_without_blocking(tmp_path: Path) -> None:
+    """A special source file is rejected before the mapper attempts to read it."""
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+    fifo = tmp_path / "capture.fifo"
+    os.mkfifo(fifo)
+    sources = [
+        {"artifact_id": "capture", "uri": fifo.name, "format": "capture-frames"},
+        {"artifact_id": "stamps", "uri": "stamps.json", "format": "sim-stamps"},
+    ]
+
+    result = run(_request(sources=sources), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "capture: source_not_regular_file" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_source_byte_limit_is_reported_before_json_parsing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Oversized diagnostic sources fail at the bounded file-read boundary."""
+    _stage(tmp_path)
+    monkeypatch.setattr(video_sync, "MAX_JSON_BYTES", 256)
+    (tmp_path / "capture.json").write_bytes(b"{" + b"x" * 512)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "capture: resource_limit:source_bytes" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_frame_row_limit_fails_before_materializing_mapping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Frame cardinality is bounded before mapping or output publication."""
+    _stage(tmp_path)
+    monkeypatch.setattr(video_sync, "MAX_FRAME_ROWS", 2)
+    capture = dict(CAPTURE)
+    capture["frames"] = [{"frame_index": index, "pts_s": index / 10.0} for index in range(3)]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "resource_limit:capture_frame_rows:2" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_frame_index_span_limit_fails_before_gap_expansion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sparse index span cannot force an unbounded skipped-frame list."""
+    _stage(tmp_path)
+    monkeypatch.setattr(video_sync, "MAX_FRAME_INDEX_SPAN", 1)
+    capture = dict(CAPTURE)
+    capture["frames"] = [
+        {"frame_index": 0, "pts_s": 0.0},
+        {"frame_index": 2, "pts_s": 0.2},
+    ]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "resource_limit:frame_index_span:1" in result.reason
     assert not (tmp_path / "out").exists()
 
 
@@ -566,6 +662,18 @@ def test_output_collision_fails(tmp_path: Path) -> None:
     assert "output_collision" in result.reason
 
 
+def test_dangling_output_symlink_is_a_collision(tmp_path: Path) -> None:
+    """A pre-existing output entry, even dangling, cannot be replaced."""
+    _stage(tmp_path)
+    (tmp_path / "out").symlink_to(tmp_path / "not-created")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "output_collision" in result.reason
+    assert (tmp_path / "out").is_symlink()
+
+
 def test_unsupported_component_is_unavailable(tmp_path: Path) -> None:
     _stage(tmp_path)
     result = run(_request(component_id="srev99-nope"), base=tmp_path)
@@ -628,6 +736,45 @@ def test_source_identity_digest_integrity_and_admission_are_retained(tmp_path: P
     assert mapping["provenance"]["admission"] == "not_evaluated"
     assert result.provenance["source_integrity"] == {"capture": "match", "stamps": "match"}
     assert result.provenance["admission"] == "not_evaluated"
+
+
+def test_source_metadata_conflict_with_source_ref_fails_closed(tmp_path: Path) -> None:
+    """Config provenance cannot override a declaration carried by the source ref."""
+    _stage(tmp_path)
+    sources = [
+        {
+            "artifact_id": "capture",
+            "uri": "capture.json",
+            "format": "capture-frames",
+            "schema": "ref-schema",
+        },
+        {"artifact_id": "stamps", "uri": "stamps.json", "format": "sim-stamps"},
+    ]
+
+    result = run(
+        _request(
+            sources=sources,
+            config_extra={"source_metadata": {"capture": {"schema": "config-schema"}}},
+        ),
+        base=tmp_path,
+    )
+
+    assert result.status == "failed"
+    assert "source_metadata.capture.schema conflicts" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_required_component_version_alias_is_admitted_or_rejected_deterministically(
+    tmp_path: Path,
+) -> None:
+    """The version admission alias uses the same strict comparison as the legacy field."""
+    _stage(tmp_path)
+
+    result = run(_request(config_extra={"required_component_version": "2.0.0"}), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "incompatible_component_version" in result.reason
+    assert not (tmp_path / "out").exists()
 
 
 def test_source_digest_mismatch_is_diagnostic_partial(tmp_path: Path) -> None:
@@ -741,6 +888,37 @@ def test_cli_malformed_strict_json_returns_failed_result(tmp_path: Path) -> None
 
     assert completed.returncode == 1
     assert completed.stderr == ""
+    result = json.loads(completed.stdout)
+    assert component_result_from_dict(result).status == "failed"
+    assert result["reason"] == "invalid_input: request JSON cannot be parsed safely"
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO test requires POSIX mkfifo")
+def test_cli_special_input_file_returns_failed_result_without_blocking(tmp_path: Path) -> None:
+    """The CLI rejects a FIFO before attempting a potentially blocking read."""
+    input_path = tmp_path / "request.fifo"
+    os.mkfifo(input_path)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "robot_sf.render.video_sync",
+            "--input",
+            str(input_path),
+            "--output",
+            "out",
+            "--base",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 1
     result = json.loads(completed.stdout)
     assert component_result_from_dict(result).status == "failed"
     assert result["reason"] == "invalid_input: request JSON cannot be parsed safely"

@@ -14,6 +14,11 @@ import hashlib
 import itertools
 import json
 import math
+import os
+import shutil
+import stat
+import tempfile
+from bisect import bisect_left, bisect_right
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PureWindowsPath
@@ -30,6 +35,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     SourceRef,
     component_descriptor_from_dict,
     component_request_from_dict,
+    component_result_from_dict,
 )
 
 COMPONENT_ID = "srev03-video-sync"
@@ -54,6 +60,32 @@ EVIDENCE_STATUS = "diagnostic_only"
 DEFAULT_PRESENTATION = {"width": 1920, "height": 1080, "fps": 30.0, "speed": 1.0}
 DEFAULT_TIMESTAMP_TOLERANCE_S = 0.0
 IDENTITY_NAMESPACE = "shared-episode-reset-v1"
+
+# This component only maps small, already-produced diagnostic documents. Keep
+# every read, parse, and derived index finite so a valid-looking request cannot
+# turn the mapper into an unbounded file or memory consumer.
+MAX_SOURCES = 16
+MAX_JSON_BYTES = 16 * 1024 * 1024
+MAX_FRAME_ROWS = 100_000
+MAX_STAMP_ROWS = 100_000
+MAX_FRAME_INDEX = 1_000_000
+MAX_FRAME_INDEX_SPAN = 100_000
+MAX_IDENTITY_LENGTH = 512
+MAX_ABS_TIME_S = 1_000_000_000.0
+MAX_TIMESTAMP_TOLERANCE_S = 86_400.0
+MAX_PRESENTATION_WIDTH = 16_384
+MAX_PRESENTATION_HEIGHT = 16_384
+MAX_PRESENTATION_RATE = 1_000.0
+MIN_PRESENTATION_RATE = 1.0e-6
+MAX_OUTPUT_BYTES = 64 * 1024 * 1024
+_SOURCE_METADATA_FIELDS = (
+    "schema",
+    "sha256",
+    "source_commit",
+    "config_identity",
+    "units",
+    "coordinate_frame",
+)
 
 _DESCRIPTOR = ComponentDescriptor(
     component_id=COMPONENT_ID,
@@ -96,6 +128,14 @@ class _ImportOutcome:
     selected: bool = False
 
 
+class _BoundedSourceError(ValueError):
+    """Describe a regular-file or byte-budget violation at an input boundary."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
 def descriptor() -> dict[str, Any]:
     """Return this component's versioned capability descriptor."""
     return descriptor_document()
@@ -119,15 +159,72 @@ def _write_json(path: Path, payload: Any) -> str:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
+    if len(text.encode("utf-8")) > MAX_OUTPUT_BYTES:
+        raise _BoundedSourceError("resource_limit:output_bytes")
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(text, encoding="utf-8")
     tmp_path.replace(path)
     return _sha256_bytes(text.encode("utf-8"))
 
 
+def _read_bounded_regular_file(path: Path) -> bytes:
+    """Read one regular file without blocking on special files.
+
+    The path has already crossed the caller's containment boundary. The
+    descriptor and post-open stat checks still close the FIFO/device and
+    replacement-file cases before a read can block or exceed the byte budget.
+
+    Returns:
+        At most ``MAX_JSON_BYTES`` bytes from ``path``.
+
+    Raises:
+        _BoundedSourceError: If the path is not a regular file or exceeds the
+            component's finite input budget.
+    """
+    initial_stat = path.stat()
+    if not stat.S_ISREG(initial_stat.st_mode):
+        raise _BoundedSourceError("source_not_regular_file")
+    if initial_stat.st_size > MAX_JSON_BYTES:
+        raise _BoundedSourceError("resource_limit:source_bytes")
+
+    flags = os.O_RDONLY | os.O_NONBLOCK
+    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    file_descriptor: int | None = None
+    try:
+        file_descriptor = os.open(path, flags)
+        opened_stat = os.fstat(file_descriptor)
+        if not stat.S_ISREG(opened_stat.st_mode):
+            raise _BoundedSourceError("source_not_regular_file")
+        if opened_stat.st_size > MAX_JSON_BYTES:
+            raise _BoundedSourceError("resource_limit:source_bytes")
+        with os.fdopen(file_descriptor, "rb") as stream:
+            file_descriptor = None
+            payload = stream.read(MAX_JSON_BYTES + 1)
+        if len(payload) > MAX_JSON_BYTES:
+            raise _BoundedSourceError("resource_limit:source_bytes")
+        return payload
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+
+
 def _reject_nonfinite_json(value: str) -> Any:
     """Reject JSON extensions such as ``NaN`` and ``Infinity``."""
     raise ValueError(f"non-strict JSON constant: {value}")
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate object keys so source identity cannot be ambiguous.
+
+    Returns:
+        Parsed object with unique keys.
+    """
+    document: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in document:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        document[key] = value
+    return document
 
 
 def _load_strict_json(text: str | bytes) -> Any:
@@ -136,7 +233,17 @@ def _load_strict_json(text: str | bytes) -> Any:
     Returns:
         Parsed JSON value.
     """
-    return json.loads(text, parse_constant=_reject_nonfinite_json)
+    try:
+        byte_length = len(text) if isinstance(text, bytes) else len(text.encode("utf-8"))
+    except UnicodeEncodeError as error:
+        raise ValueError("input is not valid UTF-8") from error
+    if byte_length > MAX_JSON_BYTES:
+        raise _BoundedSourceError("resource_limit:json_bytes")
+    return json.loads(
+        text,
+        object_pairs_hook=_reject_duplicate_json_keys,
+        parse_constant=_reject_nonfinite_json,
+    )
 
 
 def _safe_identity(value: Any, *, default: str) -> str:
@@ -206,7 +313,9 @@ def _failed_result(request: Any, reason: str) -> ComponentResult:
     return _result(request_id, component_id, STATUS_FAILED, reason=reason)
 
 
-def _validate_source_ref(ref: Any, index: int, seen_artifacts: set[str]) -> list[str]:
+def _validate_source_ref(  # noqa: C901 - one fail-closed check per source field
+    ref: Any, index: int, seen_artifacts: set[str]
+) -> list[str]:
     """Validate one typed source reference.
 
     Returns:
@@ -219,6 +328,8 @@ def _validate_source_ref(ref: Any, index: int, seen_artifacts: set[str]) -> list
         errors.append(f"invalid_request: source_{index} artifact_id is invalid")
     elif ref.artifact_id in seen_artifacts:
         errors.append(f"invalid_request: duplicate artifact_id: {ref.artifact_id}")
+    elif _unsafe_artifact_id(ref.artifact_id):
+        errors.append(f"invalid_request: source_{index} artifact_id is unsafe")
     if isinstance(ref.artifact_id, str) and ref.artifact_id:
         seen_artifacts.add(ref.artifact_id)
     if not isinstance(ref.uri, str) or not ref.uri:
@@ -227,6 +338,10 @@ def _validate_source_ref(ref: Any, index: int, seen_artifacts: set[str]) -> list
         errors.append(f"invalid_request: source_{index} uri traversal is rejected")
     if not isinstance(ref.format, str) or not ref.format:
         errors.append(f"invalid_request: source_{index} format is invalid")
+    for field_name in _SOURCE_METADATA_FIELDS:
+        value = getattr(ref, field_name, "")
+        if value not in (None, "") and not isinstance(value, str):
+            errors.append(f"invalid_request: source_{index} {field_name} must be a string")
     return errors
 
 
@@ -244,7 +359,51 @@ def _unsafe_relative_path(value: str) -> bool:
         or bool(windows.drive)
         or ".." in candidate.parts
         or ".." in windows.parts
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
     )
+
+
+def _unsafe_artifact_id(value: str) -> bool:
+    """Return whether an artifact identity could become a path component."""
+    windows = PureWindowsPath(value)
+    return (
+        value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or windows.is_absolute()
+        or bool(windows.drive)
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    )
+
+
+def _validate_source_metadata_bindings(
+    config: dict[str, Any], sources: tuple[SourceRef, ...] | list[SourceRef]
+) -> list[str]:
+    """Reject metadata entries that are not bound to one declared source.
+
+    Returns:
+        Stable validation reason codes.
+    """
+    if "source_metadata" not in config:
+        return []
+    raw_metadata = config["source_metadata"]
+    if raw_metadata is None or not isinstance(raw_metadata, dict):
+        return ["invalid_request: source_metadata must be an object"]
+    source_ids = {
+        ref.artifact_id
+        for ref in sources
+        if isinstance(ref, SourceRef) and isinstance(ref.artifact_id, str)
+    }
+    errors: list[str] = []
+    for artifact_id, metadata in raw_metadata.items():
+        if not isinstance(artifact_id, str) or not artifact_id:
+            errors.append("invalid_request: source_metadata keys must be non-empty strings")
+            continue
+        if artifact_id not in source_ids:
+            errors.append(f"invalid_request: source_metadata.{artifact_id} has no declared source")
+        if not isinstance(metadata, dict):
+            errors.append(f"invalid_request: source_metadata.{artifact_id} must be an object")
+    return errors
 
 
 def _validate_request_config(config: Any) -> list[str]:
@@ -256,13 +415,15 @@ def _validate_request_config(config: Any) -> list[str]:
     if not isinstance(config, dict):
         return ["invalid_request: config must be an object"]
     try:
-        json.dumps(config, allow_nan=False)
+        encoded = json.dumps(config, allow_nan=False, ensure_ascii=False).encode("utf-8")
     except (TypeError, ValueError, OverflowError, RecursionError):
         return ["invalid_request: config must be strict-JSON safe"]
+    if len(encoded) > MAX_JSON_BYTES:
+        return [f"invalid_request: config exceeds resource limit of {MAX_JSON_BYTES} bytes"]
     return []
 
 
-def _validate_request_shape(request: Any) -> list[str]:
+def _validate_request_shape(request: Any) -> list[str]:  # noqa: C901 - bounded request gate
     """Validate the runtime shape expected by ``run`` before field access.
 
     Returns:
@@ -286,6 +447,10 @@ def _validate_request_shape(request: Any) -> list[str]:
         seen_artifacts: set[str] = set()
         for index, ref in enumerate(request.sources):
             errors.extend(_validate_source_ref(ref, index, seen_artifacts))
+        if len(request.sources) > MAX_SOURCES:
+            errors.append(f"invalid_request: sources exceed resource limit of {MAX_SOURCES}")
+    if isinstance(request.config, dict) and isinstance(request.sources, (tuple, list)):
+        errors.extend(_validate_source_metadata_bindings(request.config, request.sources))
     if not isinstance(request.required_capabilities, (tuple, list)) or any(
         not isinstance(value, str) or not value for value in request.required_capabilities
     ):
@@ -299,19 +464,46 @@ def _check_version_compatible(config: dict[str, Any]) -> str | None:
     Returns:
         Failure reason string, or None when the component version satisfies it.
     """
-    minimum = config.get("min_component_version")
-    if minimum is None:
+    declared_versions = [
+        (field_name, config[field_name])
+        for field_name in ("min_component_version", "required_component_version")
+        if field_name in config
+    ]
+    if len(declared_versions) > 1 and not _metadata_values_equal(
+        "component_version", declared_versions[0][1], declared_versions[1][1]
+    ):
+        return "incompatible_component_version: conflicting version requirements"
+    if not declared_versions:
         return None
+    field_name, minimum = declared_versions[0]
     if not isinstance(minimum, str) or not minimum:
-        return "incompatible_component_version: malformed min_component_version"
-    try:
-        wanted = int(minimum.split(".", maxsplit=1)[0])
-        ours = int(COMPONENT_VERSION.split(".", maxsplit=1)[0])
-    except ValueError:
-        return f"incompatible_component_version: malformed min_component_version: {minimum!r}"
+        return f"incompatible_component_version: malformed {field_name}"
+    wanted = _parse_version(minimum)
+    ours = _parse_version(COMPONENT_VERSION)
+    if wanted is None or ours is None:
+        return f"incompatible_component_version: malformed {field_name}: {minimum!r}"
     if wanted > ours:
-        return f"incompatible_component_version: request needs v{wanted}, component is v{ours}"
+        return (
+            f"incompatible_component_version: request needs v{minimum}, "
+            f"component is v{COMPONENT_VERSION}"
+        )
     return None
+
+
+def _parse_version(value: str) -> tuple[int, int, int] | None:
+    """Parse the component's bounded three-part semantic version form.
+
+    Returns:
+        Parsed major, minor, and patch numbers, or ``None``.
+    """
+    parts = value.split(".")
+    if len(parts) != 3 or any(not part.isdigit() for part in parts):
+        return None
+    try:
+        major, minor, patch = (int(part) for part in parts)
+    except ValueError:
+        return None
+    return major, minor, patch
 
 
 def _reject_not_applicable(request: ComponentRequest) -> ComponentResult | None:
@@ -386,6 +578,93 @@ def _resolve_output_directory(root: Path, output_directory: str) -> Path:
     return _resolve_path_under_base(output_directory, root, kind="output")
 
 
+def _resolve_base(base: Path | str | None) -> Path:
+    """Resolve the invocation base without assuming a concrete path type.
+
+    Returns:
+        An absolute, non-strictly resolved base path.
+    """
+    try:
+        candidate = Path.cwd() if base is None else Path(base)
+        return candidate.resolve(strict=False)
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            ["invalid_base: cannot resolve base directory"]
+        ) from error
+
+
+def _path_exists_any(path: Path) -> bool:
+    """Return whether a path entry exists, including a dangling symlink."""
+    try:
+        return os.path.lexists(path)
+    except OSError:
+        return True
+
+
+def _commit_outputs(  # noqa: C901 - staged publication has explicit cleanup branches
+    output_dir: Path, mapping_document: dict[str, Any], capability_document: dict[str, Any]
+) -> str:
+    """Stage both output documents and publish them without overwriting a target.
+
+    Returns:
+        SHA-256 digest of the published mapping document.
+    """
+    stage_dir: Path | None = None
+    reserved_output = False
+    published = False
+    linked_outputs: list[tuple[Path, Path]] = []
+    filenames = (OUTPUT_MAPPING_FILENAME, OUTPUT_CAPABILITY_FILENAME)
+    try:
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+        stage_dir = Path(tempfile.mkdtemp(prefix=".srev03-video-sync-", dir=str(output_dir.parent)))
+        mapping_digest = _write_json(stage_dir / OUTPUT_MAPPING_FILENAME, mapping_document)
+        _write_json(stage_dir / OUTPUT_CAPABILITY_FILENAME, capability_document)
+        try:
+            output_dir.mkdir()
+        except FileExistsError as error:
+            raise ReviewContractsValidationError(
+                [f"output_collision: already exists: {output_dir}"]
+            ) from error
+        reserved_output = True
+        for filename in filenames:
+            staged = stage_dir / filename
+            destination = output_dir / filename
+            os.link(staged, destination)
+            linked_outputs.append((destination, staged))
+        published = True
+        return mapping_digest
+    except _BoundedSourceError as error:
+        raise ReviewContractsValidationError([error.code]) from error
+    except ReviewContractsValidationError:
+        raise
+    except FileExistsError as error:
+        raise ReviewContractsValidationError(
+            [f"output_collision: already exists: {output_dir}"]
+        ) from error
+    except (OSError, TypeError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"output_write_failed: {type(error).__name__}: {error}"]
+        ) from error
+    finally:
+        if reserved_output and not published:
+            for destination, staged in linked_outputs:
+                try:
+                    if (
+                        staged.exists()
+                        and destination.exists()
+                        and os.path.samefile(destination, staged)
+                    ):
+                        destination.unlink()
+                except OSError:
+                    pass
+            try:
+                output_dir.rmdir()
+            except OSError:
+                pass
+        if stage_dir is not None:
+            shutil.rmtree(stage_dir, ignore_errors=True)
+
+
 def _valid_sha256(value: Any) -> bool:
     """Return whether a value is a 64-character hexadecimal SHA-256 digest."""
     return (
@@ -395,7 +674,9 @@ def _valid_sha256(value: Any) -> bool:
     )
 
 
-def _source_metadata(config: dict[str, Any], ref: SourceRef) -> dict[str, Any]:
+def _source_metadata(  # noqa: C901 - bounded provenance field validation
+    config: dict[str, Any], ref: SourceRef
+) -> dict[str, Any]:
     """Return validated per-source identity metadata from the request config.
 
     Returns:
@@ -411,21 +692,74 @@ def _source_metadata(config: dict[str, Any], ref: SourceRef) -> dict[str, Any]:
         )
     metadata = {
         field_name: getattr(ref, field_name)
-        for field_name in ("schema", "sha256", "source_commit", "config_identity")
-        if getattr(ref, field_name)
+        for field_name in _SOURCE_METADATA_FIELDS
+        if getattr(ref, field_name, "") not in (None, "")
     }
-    metadata.update(declared)
     errors: list[str] = []
-    for field_name in ("schema", "source_commit", "config_identity"):
-        if field_name in metadata and not isinstance(metadata[field_name], str):
+    for field_name, value in declared.items():
+        if field_name not in _SOURCE_METADATA_FIELDS:
+            errors.append(
+                f"invalid_config: source_metadata.{ref.artifact_id}.{field_name} "
+                "is not a supported provenance field"
+            )
+            continue
+        if field_name in metadata and not _metadata_values_equal(
+            field_name, metadata[field_name], value
+        ):
+            errors.append(
+                f"invalid_config: source_metadata.{ref.artifact_id}.{field_name} "
+                "conflicts with the source reference"
+            )
+        else:
+            metadata[field_name] = value
+    for field_name in _SOURCE_METADATA_FIELDS:
+        if (
+            field_name in metadata
+            and field_name != "sha256"
+            and not isinstance(metadata[field_name], str)
+        ):
             errors.append(
                 f"invalid_config: source_metadata.{ref.artifact_id}.{field_name} must be a string"
             )
-    if "sha256" in metadata and not isinstance(metadata["sha256"], str):
-        errors.append(f"invalid_config: source_metadata.{ref.artifact_id}.sha256 must be a string")
+    if "sha256" in metadata:
+        if not isinstance(metadata["sha256"], str):
+            errors.append(
+                f"invalid_config: source_metadata.{ref.artifact_id}.sha256 must be a string"
+            )
+        elif not _valid_sha256(metadata["sha256"]):
+            errors.append(
+                f"invalid_config: source_metadata.{ref.artifact_id}.sha256 must be 64-hex"
+            )
+    if "source_commit" in metadata and (
+        not isinstance(metadata["source_commit"], str)
+        or not _valid_sha40(metadata["source_commit"])
+    ):
+        errors.append(
+            f"invalid_config: source_metadata.{ref.artifact_id}.source_commit must be 40-hex"
+        )
     if errors:
         raise ReviewContractsValidationError(errors)
     return dict(metadata)
+
+
+def _metadata_values_equal(field_name: str, left: Any, right: Any) -> bool:
+    """Compare overlapping source declarations without losing digest casing.
+
+    Returns:
+        Whether both declarations represent the same value.
+    """
+    if field_name == "sha256" and isinstance(left, str) and isinstance(right, str):
+        return left.lower() == right.lower()
+    return left == right
+
+
+def _valid_sha40(value: Any) -> bool:
+    """Return whether a value is a 40-character hexadecimal commit digest."""
+    return (
+        isinstance(value, str)
+        and len(value) == 40
+        and all(character in "0123456789abcdefABCDEF" for character in value)
+    )
 
 
 def _source_record(outcome: _ImportOutcome) -> dict[str, Any]:
@@ -445,6 +779,8 @@ def _source_record(outcome: _ImportOutcome) -> dict[str, Any]:
         "schema": metadata.get("schema"),
         "source_commit": metadata.get("source_commit"),
         "config_identity": metadata.get("config_identity"),
+        "units": metadata.get("units"),
+        "coordinate_frame": metadata.get("coordinate_frame"),
         "declared_sha256": outcome.declared_sha256,
         "sha256": outcome.file_sha256,
         "source_sha256": outcome.file_sha256,
@@ -457,7 +793,9 @@ def _source_record(outcome: _ImportOutcome) -> dict[str, Any]:
     }
 
 
-def _load_document(ref: SourceRef, metadata: dict[str, Any], root: Path) -> _ImportOutcome:
+def _load_document(  # noqa: C901 - source boundary maps each failure explicitly
+    ref: SourceRef, metadata: dict[str, Any], root: Path
+) -> _ImportOutcome:
     """Read and parse one JSON source without modifying it.
 
     Returns:
@@ -477,7 +815,11 @@ def _load_document(ref: SourceRef, metadata: dict[str, Any], root: Path) -> _Imp
     if expected_sha256 is not None and not _valid_sha256(expected_sha256):
         outcome.diagnostics.append(f"{ref.artifact_id}: declared_sha256_invalid")
     try:
-        raw = _resolve_source(ref.uri, root).read_bytes()
+        raw = _read_bounded_regular_file(_resolve_source(ref.uri, root))
+    except _BoundedSourceError as error:
+        outcome.diagnostics.append(f"{ref.artifact_id}: {error.code}")
+        outcome.availability = error.code
+        return outcome
     except ReviewContractsValidationError:
         outcome.diagnostics.append(f"{ref.artifact_id}: source_uri_rejected")
         outcome.availability = "source_uri_rejected"
@@ -518,8 +860,23 @@ def _finite_number(value: Any) -> float | None:
     """Return a finite float, or None for malformed input."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, ValueError):
+        return None
     return result if math.isfinite(result) else None
+
+
+def _bounded_identity(value: Any) -> str | None:
+    """Return a finite-size non-empty identity string, or ``None``."""
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > MAX_IDENTITY_LENGTH
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        return None
+    return value
 
 
 def _parse_frame_row(item: Any, index: int) -> tuple[dict[str, Any] | None, str | None]:
@@ -536,14 +893,16 @@ def _parse_frame_row(item: Any, index: int) -> tuple[dict[str, Any] | None, str 
         isinstance(frame_index, bool)
         or not isinstance(frame_index, int)
         or frame_index < 0
+        or frame_index > MAX_FRAME_INDEX
         or pts is None
+        or abs(pts) > MAX_ABS_TIME_S
     ):
         return None, f"frame_row_{index}_malformed"
     frame = {"frame_index": frame_index, "pts_s": pts}
     for identity in ("episode_id", "reset_id"):
         if identity in item:
-            value = item[identity]
-            if not isinstance(value, str) or not value:
+            value = _bounded_identity(item[identity])
+            if value is None:
                 return None, f"frame_row_{index}_malformed"
             frame[identity] = value
     return frame, None
@@ -557,6 +916,8 @@ def _parse_frame_rows(raw_frames: Any) -> tuple[list[dict[str, Any]], list[str]]
     """
     if not isinstance(raw_frames, list) or not raw_frames:
         return [], ["capture_frames_missing_or_empty"]
+    if len(raw_frames) > MAX_FRAME_ROWS:
+        return [], [f"resource_limit:capture_frame_rows:{MAX_FRAME_ROWS}"]
     frames: list[dict[str, Any]] = []
     diagnostics: list[str] = []
     for index, item in enumerate(raw_frames):
@@ -589,23 +950,25 @@ def _parse_step_rows(raw_steps: Any) -> tuple[list[dict[str, Any]], list[str]]:
     diagnostics: list[str] = []
     if not isinstance(raw_steps, list) or not raw_steps:
         return [], ["sim_stamps_missing_or_empty"]
+    if len(raw_steps) > MAX_STAMP_ROWS:
+        return [], [f"resource_limit:sim_stamp_rows:{MAX_STAMP_ROWS}"]
     for index, item in enumerate(raw_steps):
         if not isinstance(item, dict):
             diagnostics.append(f"step_row_{index}_malformed")
             continue
         step = item.get("step")
         when = _finite_number(item.get("time_s"))
-        episode_id = item.get("episode_id")
-        reset_id = item.get("reset_id")
+        episode_id = _bounded_identity(item.get("episode_id"))
+        reset_id = _bounded_identity(item.get("reset_id"))
         if (
             isinstance(step, bool)
             or not isinstance(step, int)
             or step < 0
+            or step > MAX_FRAME_INDEX
             or when is None
-            or not isinstance(episode_id, str)
-            or not episode_id
-            or not isinstance(reset_id, str)
-            or not reset_id
+            or abs(when) > MAX_ABS_TIME_S
+            or episode_id is None
+            or reset_id is None
         ):
             diagnostics.append(f"step_row_{index}_malformed")
             continue
@@ -629,7 +992,11 @@ def _detect_sampling_gaps(
         Tuple of (skipped frame indexes, diagnostic codes).
     """
     seen = [row["frame_index"] for row in frames]
-    skipped = [i for i in range(seen[0], seen[-1] + 1) if i not in set(seen)]
+    frame_span = seen[-1] - seen[0]
+    if frame_span > MAX_FRAME_INDEX_SPAN:
+        return [], [f"resource_limit:frame_index_span:{MAX_FRAME_INDEX_SPAN}"]
+    seen_set = set(seen)
+    skipped = [i for i in range(seen[0], seen[-1] + 1) if i not in seen_set]
     diagnostics = []
     if skipped:
         diagnostics.append(f"skipped_frames:{','.join(str(i) for i in skipped)}")
@@ -710,6 +1077,8 @@ def _select_sim_anchor(
     steps: list[dict[str, Any]],
     sim_time: float,
     timestamp_tolerance_s: float,
+    *,
+    step_times: list[float] | None = None,
 ) -> tuple[dict[str, Any] | None, str | None, float]:
     """Select one simulation stamp or return an explicit unavailable reason.
 
@@ -717,17 +1086,28 @@ def _select_sim_anchor(
         The selected anchor, an unavailable reason, and the nearest temporal
         error in seconds.
     """
-    candidates = [
-        step
-        for step in steps
-        if _within_timestamp_tolerance(abs(step["time_s"] - sim_time), timestamp_tolerance_s)
-    ]
-    nearest_error = min(abs(step["time_s"] - sim_time) for step in steps)
-    if not candidates:
+    times = step_times if step_times is not None else [step["time_s"] for step in steps]
+    insertion = bisect_left(times, sim_time)
+    neighbors = [index for index in (insertion - 1, insertion) if 0 <= index < len(times)]
+    nearest_error = min((abs(times[index] - sim_time) for index in neighbors), default=math.inf)
+    allowance = (
+        0.0
+        if timestamp_tolerance_s == 0.0
+        else 2.0 * math.ulp(max(1.0, abs(sim_time), abs(timestamp_tolerance_s)))
+    )
+    left = bisect_left(times, sim_time - timestamp_tolerance_s - allowance)
+    right = bisect_right(times, sim_time + timestamp_tolerance_s + allowance)
+    candidate_count = right - left
+    if candidate_count == 0:
         return None, "no_sim_stamp_within_tolerance", nearest_error
-    if len(candidates) > 1:
+    if candidate_count > 1:
         return None, "ambiguous_sim_stamp_match", nearest_error
-    anchor = candidates[0]
+    candidate_index = left
+    if not _within_timestamp_tolerance(
+        abs(times[candidate_index] - sim_time), timestamp_tolerance_s
+    ):
+        return None, "no_sim_stamp_within_tolerance", nearest_error
+    anchor = steps[candidate_index]
     temporal_error = abs(anchor["time_s"] - sim_time)
     if any(
         identity in frame and frame[identity] != anchor[identity]
@@ -766,7 +1146,7 @@ def _unavailable_frame(
     return result
 
 
-def _map_frames(
+def _map_frames(  # noqa: C901 - each mapping boundary has an explicit reason
     frames: list[dict[str, Any]],
     steps: list[dict[str, Any]],
     time_origin: float,
@@ -781,16 +1161,25 @@ def _map_frames(
     """
     diagnostics: list[str] = []
     unavailable: list[dict[str, Any]] = []
-    first_time = time_origin + frames[0]["pts_s"] / speed
-    last_time = time_origin + frames[-1]["pts_s"] / speed
+    sim_times: list[float] = []
+    for frame in frames:
+        try:
+            sim_time = time_origin + frame["pts_s"] / speed
+        except (OverflowError, ZeroDivisionError):
+            return [], [], ["resource_limit:derived_sim_time"]
+        if not math.isfinite(sim_time) or abs(sim_time) > MAX_ABS_TIME_S:
+            return [], [], ["resource_limit:derived_sim_time"]
+        sim_times.append(sim_time)
+    first_time = sim_times[0]
+    last_time = sim_times[-1]
     outside_range = first_time < steps[0]["time_s"] or last_time > steps[-1]["time_s"]
     if outside_range:
         diagnostics.append("frames_outside_stamp_range")
     timeline_diagnostics, timeline_invalid = _timeline_diagnostics(steps)
     diagnostics.extend(timeline_diagnostics)
     mapping: list[dict[str, Any]] = []
-    for frame in frames:
-        sim_time = time_origin + frame["pts_s"] / speed
+    step_times = [step["time_s"] for step in steps]
+    for frame, sim_time in zip(frames, sim_times, strict=True):
         if timeline_invalid:
             reason = "ambiguous_sim_stamp_timeline"
             unavailable.append(_unavailable_frame(frame, sim_time, reason, camera))
@@ -823,7 +1212,11 @@ def _map_frames(
             diagnostics.append(f"frame_{frame['frame_index']}_{reason}")
             continue
         anchor, reason, temporal_error = _select_sim_anchor(
-            frame, steps, sim_time, timestamp_tolerance_s
+            frame,
+            steps,
+            sim_time,
+            timestamp_tolerance_s,
+            step_times=step_times,
         )
         if reason is not None:
             unavailable.append(
@@ -871,6 +1264,12 @@ def _validate_presentation_dimension(
     value = raw[name]
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         return None, f"presentation_{name}_invalid"
+    maximum = {
+        "width": MAX_PRESENTATION_WIDTH,
+        "height": MAX_PRESENTATION_HEIGHT,
+    }[name]
+    if value > maximum:
+        return None, f"resource_limit:presentation_{name}:{maximum}"
     return value, None
 
 
@@ -887,6 +1286,10 @@ def _validate_presentation_rate(
     value = _finite_number(raw[name])
     if value is None or value <= 0:
         return None, f"presentation_{name}_invalid"
+    if value < MIN_PRESENTATION_RATE:
+        return None, f"presentation_{name}_invalid"
+    if value > MAX_PRESENTATION_RATE:
+        return None, f"resource_limit:presentation_{name}:{MAX_PRESENTATION_RATE}"
     return value, None
 
 
@@ -942,7 +1345,7 @@ def _validate_presentation(config: dict[str, Any]) -> tuple[dict[str, Any], list
     return effective, []
 
 
-def _build_mapping(
+def _build_mapping(  # noqa: C901 - fail-closed mapping stages are intentionally linear
     frames_doc: dict[str, Any],
     stamps_doc: dict[str, Any],
     config: dict[str, Any],
@@ -961,6 +1364,8 @@ def _build_mapping(
     fps_nominal = _finite_number(frames_doc.get("fps_nominal"))
     if fps_nominal is None or fps_nominal <= 0:
         return {}, ["fps_nominal_missing_or_invalid"]
+    if fps_nominal < MIN_PRESENTATION_RATE or fps_nominal > MAX_PRESENTATION_RATE:
+        return {}, [f"resource_limit:fps_nominal:{MAX_PRESENTATION_RATE}"]
     presentation, presentation_errors = _validate_presentation(config)
     if presentation_errors:
         return {}, presentation_errors
@@ -968,11 +1373,15 @@ def _build_mapping(
     time_origin = _finite_number(config.get("time_origin_s", 0.0))
     if time_origin is None:
         return {}, ["time_origin_invalid"]
+    if abs(time_origin) > MAX_ABS_TIME_S:
+        return {}, [f"resource_limit:time_origin_s:{MAX_ABS_TIME_S}"]
     timestamp_tolerance = _finite_number(
         config.get("timestamp_tolerance_s", DEFAULT_TIMESTAMP_TOLERANCE_S)
     )
     if timestamp_tolerance is None or timestamp_tolerance < 0:
         return {}, ["timestamp_tolerance_invalid"]
+    if timestamp_tolerance > MAX_TIMESTAMP_TOLERANCE_S:
+        return {}, [f"resource_limit:timestamp_tolerance_s:{MAX_TIMESTAMP_TOLERANCE_S}"]
     frames, diagnostics = _parse_frame_rows(raw_frames)
     steps, step_diagnostics = _parse_step_rows(raw_steps)
     diagnostics.extend(step_diagnostics)
@@ -980,6 +1389,8 @@ def _build_mapping(
         return {}, diagnostics or ["no_mappable_rows"]
     skipped, gap_diagnostics = _detect_sampling_gaps(frames, fps_nominal)
     diagnostics.extend(gap_diagnostics)
+    if any(item.startswith("resource_limit:") for item in diagnostics):
+        return {}, sorted(set(diagnostics))
     camera = frames_doc.get("camera", {})
     if not isinstance(camera, dict):
         return {}, [*diagnostics, "camera_invalid: expected an object"]
@@ -992,6 +1403,8 @@ def _build_mapping(
         timestamp_tolerance,
     )
     diagnostics.extend(map_diagnostics)
+    if any(item.startswith("resource_limit:") for item in diagnostics):
+        return {}, sorted(set(diagnostics))
     all_frame_records = sorted([*mapping, *unavailable], key=lambda row: row["frame_index"])
     boundaries = _boundary_records(steps)
     episodes = list(dict.fromkeys(row["episode_id"] for row in steps))
@@ -1107,7 +1520,7 @@ def _source_provenance(
     return records, selected, integrity
 
 
-def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
+def run(request: ComponentRequest, *, base: Path | str | None = None) -> ComponentResult:
     """Map capture frames to simulation time with an explicit presentation map.
 
     Args:
@@ -1130,12 +1543,12 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 STATUS_FAILED,
                 reason="; ".join(shape_errors),
             )
-        root = (base if base is not None else Path.cwd()).resolve(strict=False)
+        root = _resolve_base(base)
         rejected = _reject_not_applicable(request)
         if rejected is not None:
             return rejected
         output_dir = _resolve_output_directory(root, request.output_directory)
-        if output_dir.exists():
+        if _path_exists_any(root / request.output_directory) or _path_exists_any(output_dir):
             return _result(
                 request.request_id,
                 request.component_id,
@@ -1203,8 +1616,17 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             "sources": selected_sources,
             "admission": ADMISSION_NOT_EVALUATED,
         }
-        mapping_digest = _write_json(output_dir / OUTPUT_MAPPING_FILENAME, document)
-        _write_json(output_dir / OUTPUT_CAPABILITY_FILENAME, capability_payload)
+        try:
+            mapping_digest = _commit_outputs(output_dir, document, capability_payload)
+        except ReviewContractsValidationError as error:
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason="; ".join(error.errors),
+                diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
+                provenance=provenance,
+            )
         informational = {"optional_stream_skipped", "nonuniform_sampling"}
         blocking = [item for item in diagnostics if not any(tag in item for tag in informational)]
         partial = bool(blocking) or bool(document.get("unavailable_frames"))
@@ -1305,12 +1727,28 @@ def _result_document(result: ComponentResult) -> dict[str, Any]:
     Returns:
         JSON-safe shared result envelope.
     """
-    return json.loads(
+    document = json.loads(
         json.dumps(
             {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)},
             allow_nan=False,
         )
     )
+    component_result_from_dict(document)
+    return document
+
+
+def _read_cli_json(path_value: str) -> Any:
+    """Read one bounded regular UTF-8 JSON file for the CLI boundary.
+
+    Returns:
+        Parsed strict-JSON payload.
+    """
+    raw = _read_bounded_regular_file(Path(path_value))
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError("input is not valid UTF-8") from error
+    return _load_strict_json(text)
 
 
 def _prepare_cli_payload(args: argparse.Namespace) -> tuple[Any, str | None]:
@@ -1320,14 +1758,14 @@ def _prepare_cli_payload(args: argparse.Namespace) -> tuple[Any, str | None]:
         Prepared request payload and an optional stable input-failure reason.
     """
     try:
-        payload = _load_strict_json(Path(args.input).read_text(encoding="utf-8"))
+        payload = _read_cli_json(args.input)
     except (OSError, ValueError, RecursionError):
         return None, "invalid_input: request JSON cannot be parsed safely"
     if not isinstance(payload, dict):
         return payload, "invalid_input: request must be a JSON object"
     if args.config is not None:
         try:
-            config = _load_strict_json(Path(args.config).read_text(encoding="utf-8"))
+            config = _read_cli_json(args.config)
         except (OSError, ValueError, RecursionError):
             return payload, "invalid_input: config JSON cannot be parsed safely"
         if not isinstance(config, dict):

@@ -867,6 +867,9 @@ _FAST_FILES = {
     # for the shared-contract leaf; keep them in the exact-head fast lane
     # (issue #9270).
     "test_review_contracts.py",
+    # SREV-21 recipe tests protect deterministic contract and provenance
+    # behavior for the new analysis-workbench component (issue #9292).
+    "test_review_hypotheses.py",
     # SREV-15 workbench tests are deterministic offline rendering and provenance
     # contracts for the review component; keep changed coverage in fast shards
     # (issue #9284).

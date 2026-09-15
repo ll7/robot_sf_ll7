@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from robot_sf.analysis_workbench.review_contracts import (
+    ComponentResult,
     component_descriptor_from_dict,
     component_request_from_dict,
     component_result_from_dict,
@@ -881,3 +882,48 @@ def test_cli_rejects_invalid_config_without_execution(tmp_path: Path, capsys: An
         main(
             ["--input", str(tmp_path / "missing.json"), "--output", "out", "--base", str(tmp_path)]
         )
+
+
+def test_cli_stdout_is_a_component_result_v1_envelope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: Any
+) -> None:
+    """The raw standalone CLI payload round-trips through the result contract."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(_fixture_json("request.json")), encoding="utf-8")
+
+    def _fake_run(
+        request: Any, *, base: Path | None = None, resume: bool = False
+    ) -> ComponentResult:
+        assert base == tmp_path
+        assert resume is False
+        return ComponentResult(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status="complete",
+            diagnostics=({"status": "complete", "source": "test"},),
+            provenance={"evidence_boundary": "diagnostic_only"},
+        )
+
+    monkeypatch.setattr(review_execute_module, "run", _fake_run)
+    code = review_execute_module.main(
+        [
+            "--input",
+            str(request_path),
+            "--output",
+            "cli-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+
+    raw_stdout = capsys.readouterr().out
+    printed = json.loads(raw_stdout)
+    parsed = component_result_from_dict(printed)
+
+    assert code == 0
+    assert printed["schema_version"] == "component-result.v1"
+    assert parsed.status == "complete"
+    assert parsed.request_id == "srev22-smoke"
+    assert parsed.diagnostics == ({"status": "complete", "source": "test"},)

@@ -2180,6 +2180,15 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _result_document(result: ComponentResult) -> dict[str, Any]:
+    """Serialize a component result with its versioned shared envelope.
+
+    Returns:
+        JSON-safe ``component-result.v1`` payload.
+    """
+    return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)}
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for the review-execute component.
 
@@ -2212,7 +2221,7 @@ def main(argv: list[str] | None = None) -> int:
     result = run(
         request, base=Path(args.base) if args.base is not None else None, resume=args.resume
     )
-    print(json.dumps(asdict(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
+    print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
     return 0 if result.status == "complete" else 1
 
 

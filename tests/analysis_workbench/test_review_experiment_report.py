@@ -287,7 +287,7 @@ def test_second_artifact_failure_leaves_no_partial_output(
 
 
 def test_lone_unicode_surrogate_fails_closed_without_partial_output(tmp_path: Path) -> None:
-    """An escaped lone surrogate cannot escape through the HTML artifact writer."""
+    """An escaped lone surrogate is rejected before either artifact is staged."""
     source = FIXTURE_RESULTS.read_text(encoding="utf-8")
     needle = '"hypothesis": "A delayed response changes clearance and task success."'
     replacement = r'"hypothesis": "A delayed response changes clearance and task success. \ud800"'
@@ -302,6 +302,55 @@ def test_lone_unicode_surrogate_fails_closed_without_partial_output(tmp_path: Pa
     assert result.artifacts == ()
     assert not (tmp_path / "out").exists()
     assert not list(tmp_path.glob(".out.staging-*"))
+
+
+def test_lone_unicode_surrogate_in_source_identity_fails_before_json_publish(
+    tmp_path: Path,
+) -> None:
+    """A surrogate in JSON-only identity data cannot produce an authoritative artifact."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["source_identity"]["generator"] = "\ud800"
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason.startswith("invalid_input:")
+    assert "Unicode surrogate" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+    assert not list(tmp_path.glob(".out.staging-*"))
+
+
+def test_lone_unicode_surrogate_in_source_key_fails_closed(tmp_path: Path) -> None:
+    """Mapping keys receive the same strict-Unicode validation as string values."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["source_identity"]["\ud800"] = "generator"
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason.startswith("invalid_input:")
+    assert "Unicode surrogate" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+    assert not list(tmp_path.glob(".out.staging-*"))
+
+
+def test_valid_escaped_surrogate_pair_remains_supported(tmp_path: Path) -> None:
+    """A valid JSON UTF-16 pair still decodes to the same non-BMP character."""
+    source = FIXTURE_RESULTS.read_text(encoding="utf-8")
+    needle = '"source_kind": "fixture",'
+    replacement = '"source_kind": "fixture",\n    "generator": "\\ud83e\\udd16",'
+    assert needle in source
+    _write_raw_results(tmp_path, source.replace(needle, replacement, 1))
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "complete"
+    assert len(result.artifacts) == 2
+    assert _load_report(tmp_path / "out")["source"]["identity"]["generator"] == "🤖"
 
 
 def test_repeated_fixture_runs_have_identical_logical_artifact_digests(tmp_path: Path) -> None:

@@ -136,15 +136,37 @@ def _mapping(value: Any, *, path: str) -> Mapping[str, Any]:
     return value
 
 
+def _validate_unicode_string(value: str, *, path: str) -> None:
+    """Reject unpaired UTF-16 surrogate code points in a retained string."""
+    index = 0
+    while index < len(value):
+        codepoint = ord(value[index])
+        if 0xD800 <= codepoint <= 0xDBFF:
+            if index + 1 >= len(value) or not 0xDC00 <= ord(value[index + 1]) <= 0xDFFF:
+                raise ExperimentReportError(
+                    "invalid_input", f"{path} contains an unpaired Unicode surrogate"
+                )
+            index += 2
+        elif 0xDC00 <= codepoint <= 0xDFFF:
+            raise ExperimentReportError(
+                "invalid_input", f"{path} contains an unpaired Unicode surrogate"
+            )
+        else:
+            index += 1
+
+
 def _validate_strict_json(value: Any, *, path: str = "/source") -> None:
     """Reject JSON parser extensions that would make artifacts non-canonical."""
 
     if isinstance(value, float) and not math.isfinite(value):
         raise ExperimentReportError("invalid_input", f"{path} contains a non-finite number")
+    elif isinstance(value, str):
+        _validate_unicode_string(value, path=path)
     if isinstance(value, Mapping):
         for key, child in value.items():
             if not isinstance(key, str):
                 raise ExperimentReportError("invalid_input", f"{path} has a non-string object key")
+            _validate_unicode_string(key, path=f"{path}/<key>")
             _validate_strict_json(child, path=f"{path}/{key}")
     elif type(value) is list:
         for index, child in enumerate(value):

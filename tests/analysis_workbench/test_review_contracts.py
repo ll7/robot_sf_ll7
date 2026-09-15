@@ -369,6 +369,44 @@ def test_admitted_source_bounds_schema_validation_detail() -> None:
     assert result.source_path is None
 
 
+def test_admitted_source_loader_bounds_large_invalid_schema_value(tmp_path: Path) -> None:
+    """Public receipt-loader errors must remain bounded for hostile fields."""
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["source"]["sha256"] = "!" * 1_000_000
+    receipt_path = tmp_path / "large-invalid-receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ReviewContractsValidationError) as error:
+        load_admitted_source_receipt(receipt_path)
+
+    assert len(str(error.value)) < 500
+    assert len(error.value.errors[0]) < 300
+
+
+def test_admitted_source_bounds_long_uri_filesystem_diagnostics() -> None:
+    """Long local URIs must return bounded unavailable results, not OSError."""
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+    long_uri = "x" * 4_096
+    request["sources"][0]["uri"] = long_uri
+    recipe["source_identity"]["source_uri"] = long_uri
+    receipt["source"]["uri"] = long_uri
+    receipt["request_sha256"] = component_request_canonical_digest(request)
+    receipt["recipe_sha256"] = experiment_recipe_canonical_digest(recipe)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "source_missing")
+    assert len(result.detail) <= 200
+    assert result.source_path is None
+
+
 @pytest.mark.parametrize("field", ["format", "schema", "config_identity"])
 def test_admitted_source_rejects_unicode_surrogates(field: str) -> None:
     """Receipt source identity strings cannot be mutually admitted with surrogates."""
@@ -769,3 +807,39 @@ def test_cli_parser_limit_emits_stable_failed_result(
     assert result.status == "failed"
     assert result.reason == f"invalid_input: {parser_input} JSON cannot be parsed safely"
     assert not (tmp_path / "parser-limit-output").exists()
+
+
+def test_cli_nonstandard_json_constant_emits_stable_failed_result(
+    tmp_path: Path, capsys: Any
+) -> None:
+    """NaN must be rejected before it can bypass the result envelope."""
+    from robot_sf.analysis_workbench.review_contracts import main
+
+    request_path = tmp_path / "request.json"
+    request_path.write_text(
+        '{"schema_version":"component-request.v1",'
+        '"request_id":"r","component_id":"srev01-inspect",'
+        '"sources":[{"artifact_id":"a","uri":"a.json","format":"f"}],'
+        '"config":{"seed":NaN},"output_directory":"unused"}',
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--input",
+            str(request_path),
+            "--output",
+            "nan-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    printed = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert printed["schema_version"] == "component-result.v1"
+    assert printed["reason"] == "invalid_input: request JSON cannot be parsed safely"
+    assert component_result_from_dict(printed).status == "failed"
+    assert not (tmp_path / "nan-output").exists()

@@ -114,7 +114,7 @@ def load_review_contracts_schema(version: str) -> dict[str, Any]:
 def _schema_errors(version: str, payload: Mapping[str, Any]) -> list[str]:
     validator = Draft202012Validator(load_review_contracts_schema(version))
     return [
-        f"{_pointer(error.absolute_path)}: {error.message}"
+        f"{_pointer(error.absolute_path)}: {_bounded_text_detail(error.message)}"
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
     ]
 
@@ -634,9 +634,14 @@ def admitted_source_receipt_from_dict(
 
 def _bounded_error_detail(error: BaseException, *, limit: int = 200) -> str:
     """Return a compact parse or filesystem detail for a stable rejection."""
-    detail = " ".join(str(error).split())
+    return _bounded_text_detail(error, limit=limit)
+
+
+def _bounded_text_detail(value: Any, *, limit: int = 200) -> str:
+    """Return a compact bounded representation of arbitrary diagnostic text."""
+    detail = " ".join(str(value).split())
     if not detail:
-        return type(error).__name__
+        return type(value).__name__
     return detail[:limit]
 
 
@@ -651,6 +656,11 @@ def _receipt_read_error_detail(error: BaseException) -> str:
     return _bounded_error_detail(error)
 
 
+def _reject_nonstandard_json_constant(value: str) -> Any:
+    """Reject NaN/Infinity tokens accepted by Python's permissive JSON decoder."""
+    raise ValueError(f"non-standard JSON constant is not allowed: {value}")
+
+
 def load_admitted_source_receipt(path: str | Path) -> AdmittedSourceReceipt:
     """Load and validate one JSON admitted-source receipt from *path*.
 
@@ -662,7 +672,10 @@ def load_admitted_source_receipt(path: str | Path) -> AdmittedSourceReceipt:
     """
     receipt_path = Path(path)
     try:
-        payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+        payload = json.loads(
+            receipt_path.read_text(encoding="utf-8"),
+            parse_constant=_reject_nonstandard_json_constant,
+        )
     except (OSError, RecursionError, UnicodeError, ValueError) as error:
         raise ReviewContractsValidationError(
             [f"cannot read admitted-source receipt: {_receipt_read_error_detail(error)}"],
@@ -775,7 +788,10 @@ def _receipt_payload(
     try:
         if not receipt_path.exists():
             return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_RECEIPT_MISSING)
-        raw_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+        raw_payload = json.loads(
+            receipt_path.read_text(encoding="utf-8"),
+            parse_constant=_reject_nonstandard_json_constant,
+        )
     except (OSError, RecursionError, UnicodeError, ValueError) as error:
         return None, _resolution(
             "unavailable",
@@ -1215,15 +1231,23 @@ def _resolve_source_path(
             "unavailable",
             ADMITTED_SOURCE_REASON_SOURCE_ESCAPED_ROOT,
             receipt=receipt,
-            detail=str(error),
+            detail=_bounded_error_detail(error),
         )
-    if not resolved.exists():
+    try:
+        if not resolved.exists():
+            return None, _resolution(
+                "unavailable", ADMITTED_SOURCE_REASON_SOURCE_MISSING, receipt=receipt
+            )
+        if not resolved.is_file():
+            return None, _resolution(
+                "unavailable", ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR, receipt=receipt
+            )
+    except (OSError, RuntimeError, ValueError) as error:
         return None, _resolution(
-            "unavailable", ADMITTED_SOURCE_REASON_SOURCE_MISSING, receipt=receipt
-        )
-    if not resolved.is_file():
-        return None, _resolution(
-            "unavailable", ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR, receipt=receipt
+            "unavailable",
+            ADMITTED_SOURCE_REASON_SOURCE_MISSING,
+            receipt=receipt,
+            detail=f"source path could not be inspected: {_bounded_error_detail(error, limit=150)}",
         )
     return resolved, None
 
@@ -1475,7 +1499,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             ),
             provenance={"output_directory": request.output_directory},
         )
-    except ReviewContractsValidationError as error:
+    except (OSError, ReviewContractsValidationError, ValueError) as error:
         return ComponentResult(
             request_id=request.request_id,
             component_id=request.component_id,
@@ -1540,7 +1564,10 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     payload: Any = None
     try:
-        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+        payload = json.loads(
+            Path(args.input).read_text(encoding="utf-8"),
+            parse_constant=_reject_nonstandard_json_constant,
+        )
     except (OSError, ValueError, RecursionError):
         return _print_cli_failure("invalid_input: request JSON cannot be parsed safely")
     if not isinstance(payload, dict):
@@ -1548,7 +1575,10 @@ def main(argv: list[str] | None = None) -> int:
     request_id, component_id = _cli_identity(payload)
     if args.config is not None:
         try:
-            config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+            config = json.loads(
+                Path(args.config).read_text(encoding="utf-8"),
+                parse_constant=_reject_nonstandard_json_constant,
+            )
         except (OSError, ValueError, RecursionError):
             return _print_cli_failure(
                 "invalid_input: config JSON cannot be parsed safely", payload=payload

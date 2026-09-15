@@ -20,6 +20,8 @@ import math
 import os
 import re
 import stat
+import tempfile
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PureWindowsPath
 from typing import Any
@@ -37,17 +39,22 @@ from robot_sf.analysis_workbench.review_contracts import (
     component_descriptor_from_dict,
     component_request_from_dict,
 )
+from robot_sf.benchmark.case_workbench import _load_records, _v2_integrity_errors
 
 COMPONENT_ID = "srev06-review-context"
 COMPONENT_VERSION = "1.0.0"
 
 CAMPAIGN_RESULT_FORMAT = "campaign-result"
+CAMPAIGN_RESULT_STORE_FORMAT = "campaign-result-store"
 EPISODE_SELECTION_FORMAT = "episode-selection"
 CAMPAIGN_RESULT_SCHEMA = "campaign-result.v1"
+CAMPAIGN_RESULT_STORE_SCHEMA = "campaign-result-store.v2"
 EPISODE_SELECTION_SCHEMA = "episode-selection.v1"
 
 REQUIRED_CAPABILITIES = (CAMPAIGN_RESULT_FORMAT,)
 OPTIONAL_CAPABILITIES = (EPISODE_SELECTION_FORMAT,)
+_CAMPAIGN_RESULT_FORMATS = frozenset({CAMPAIGN_RESULT_FORMAT, CAMPAIGN_RESULT_STORE_FORMAT})
+_CAMPAIGN_RESULT_SCHEMAS = frozenset({CAMPAIGN_RESULT_SCHEMA, CAMPAIGN_RESULT_STORE_SCHEMA})
 
 OUTPUT_REPORT_FILENAME = "context-report.json"
 OUTPUT_HTML_FILENAME = "context-report.html"
@@ -69,6 +76,15 @@ _EXECUTION_STATUSES = frozenset(
 )
 _NON_ADMISSIBLE_STATUSES = frozenset({"fallback", "degraded", "unavailable", "failed"})
 _MAX_SOURCE_BYTES = 64 * 1024 * 1024
+_MAX_CONTROL_BYTES = 1 * 1024 * 1024
+_MAX_CONTROL_DEPTH = 32
+_MAX_CONTROL_NODES = 8192
+_MAX_CONTROL_COLLECTION_ITEMS = 4096
+_MAX_CONTROL_STRING_BYTES = 256 * 1024
+_MAX_SOURCE_FILES = 4096
+_MAX_OUTPUT_SOURCES = 16
+_METRIC_NAME_RE = r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$"
+_IDENTITY_PROVENANCE_KEYS = ("source_commit", "config_identity")
 
 
 # These schemas belong to this leaf's payloads.  The shared request/result
@@ -107,33 +123,64 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                     "episodes",
                 ],
                 "properties": {
-                    "planner_ids": {"type": "array", "items": {"type": "string"}},
-                    "scenario_ids": {"type": "array", "items": {"type": "string"}},
-                    "seeds": {"type": "array", "items": {"type": "integer"}},
-                    "config_ids": {"type": "array", "items": {"type": "string"}},
+                    "planner_ids": {
+                        "type": "array",
+                        "maxItems": _MAX_CONTROL_COLLECTION_ITEMS,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "scenario_ids": {
+                        "type": "array",
+                        "maxItems": _MAX_CONTROL_COLLECTION_ITEMS,
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                    "seeds": {
+                        "type": "array",
+                        "maxItems": _MAX_CONTROL_COLLECTION_ITEMS,
+                        "items": {"type": "integer"},
+                    },
+                    "config_ids": {
+                        "type": "array",
+                        "maxItems": _MAX_CONTROL_COLLECTION_ITEMS,
+                        "items": {"type": "string", "minLength": 1},
+                    },
                     "episodes": {"type": "integer", "minimum": 0},
                 },
             },
             "denominator": {"type": "integer", "minimum": 0},
             "outcomes": {
                 "type": "object",
+                "maxProperties": _MAX_CONTROL_COLLECTION_ITEMS,
+                "propertyNames": {"pattern": _METRIC_NAME_RE},
                 "additionalProperties": {"type": "integer", "minimum": 0},
             },
             "metrics": {
                 "type": "object",
-                "additionalProperties": {"type": "object"},
+                "maxProperties": _MAX_CONTROL_COLLECTION_ITEMS,
+                "propertyNames": {"pattern": _METRIC_NAME_RE},
+                "additionalProperties": {"$ref": "#/$defs/metric_summary"},
             },
             "selection_coverage": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["selected", "denominator", "unknown_selected_ids"],
+                "required": [
+                    "status",
+                    "selected",
+                    "denominator",
+                    "unknown_selected_ids",
+                    "source_artifact_id",
+                ],
                 "properties": {
+                    "status": {
+                        "enum": ["used", "not_supplied", "skipped", "unavailable", "invalid"]
+                    },
                     "selected": {"type": "integer", "minimum": 0},
                     "denominator": {"type": "integer", "minimum": 0},
                     "unknown_selected_ids": {
                         "type": "array",
+                        "maxItems": _MAX_CONTROL_COLLECTION_ITEMS,
                         "items": {"type": "string"},
                     },
+                    "source_artifact_id": {"type": ["string", "null"]},
                 },
             },
             "campaign": {
@@ -162,10 +209,12 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                     "count": {"type": "integer", "minimum": 0},
                     "by_status": {
                         "type": "object",
+                        "maxProperties": _MAX_CONTROL_COLLECTION_ITEMS,
                         "additionalProperties": {"type": "integer", "minimum": 0},
                     },
                     "rows": {
                         "type": "array",
+                        "maxItems": _MAX_CONTROL_COLLECTION_ITEMS,
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
@@ -181,7 +230,90 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
             },
             "source_provenance": {
                 "type": "array",
-                "items": {"type": "object"},
+                "maxItems": _MAX_OUTPUT_SOURCES,
+                "items": {"$ref": "#/$defs/source_provenance"},
+            },
+        },
+        "$defs": {
+            "metric_summary": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["count", "missing", "denominator"],
+                "properties": {
+                    "count": {"type": "integer", "minimum": 0},
+                    "missing": {"type": "integer", "minimum": 0},
+                    "denominator": {"type": "integer", "minimum": 0},
+                    "min": {"type": "number"},
+                    "max": {"type": "number"},
+                    "mean": {"type": "number"},
+                    "p25": {"type": "number"},
+                    "p50": {"type": "number"},
+                    "p75": {"type": "number"},
+                    "percentile_method": {"const": PERCENTILE_METHOD},
+                },
+            },
+            "source_provenance": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "artifact_id",
+                    "uri",
+                    "format",
+                    "schema_declared",
+                    "sha256_declared",
+                    "source_commit",
+                    "config_identity",
+                    "units",
+                    "coordinate_frame",
+                    "sha256_observed",
+                    "integrity_status",
+                    "execution_status",
+                    "canonical_source",
+                ],
+                "properties": {
+                    "artifact_id": {"type": "string", "minLength": 1},
+                    "uri": {"type": "string", "minLength": 1},
+                    "format": {
+                        "enum": [
+                            CAMPAIGN_RESULT_FORMAT,
+                            CAMPAIGN_RESULT_STORE_FORMAT,
+                            EPISODE_SELECTION_FORMAT,
+                        ]
+                    },
+                    "schema_declared": {"type": "string", "minLength": 1},
+                    "sha256_declared": {"type": ["string", "null"], "pattern": _SHA256_RE.pattern},
+                    "source_commit": {"type": ["string", "null"], "pattern": _SHA40_RE.pattern},
+                    "config_identity": {"type": ["string", "null"], "minLength": 1},
+                    "units": {"type": ["string", "null"]},
+                    "coordinate_frame": {"type": ["string", "null"]},
+                    "sha256_observed": {
+                        "type": ["string", "null"],
+                        "pattern": _SHA256_RE.pattern,
+                    },
+                    "integrity_status": {"type": "string", "minLength": 1},
+                    "execution_status": {
+                        "type": ["string", "null"],
+                        "enum": [*sorted(_EXECUTION_STATUSES), None],
+                    },
+                    "canonical_source": {"type": "boolean"},
+                    "canonical_manifest_schema": {"type": ["string", "null"]},
+                    "payload_provenance": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "source_commit": {
+                                "type": ["string", "null"],
+                                "pattern": _SHA40_RE.pattern,
+                            },
+                            "config_identity": {"type": ["string", "null"]},
+                            "execution_status": {
+                                "type": ["string", "null"],
+                                "enum": [*sorted(_EXECUTION_STATUSES), None],
+                            },
+                            "producer": {"type": ["string", "null"]},
+                        },
+                    },
+                },
             },
         },
     },
@@ -208,7 +340,17 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
             },
             "diagnostics": {
                 "type": "array",
-                "items": {"type": "object", "required": ["code"]},
+                "maxItems": _MAX_CONTROL_COLLECTION_ITEMS,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["code", "severity"],
+                    "properties": {
+                        "code": {"type": "string", "minLength": 1},
+                        "severity": {"enum": ["error", "info", "warning"]},
+                        "detail": {"type": "string"},
+                    },
+                },
             },
         },
     },
@@ -327,6 +469,62 @@ def _add_diagnostic(
 ) -> None:
     """Append one bounded structured diagnostic."""
     diagnostics.append(_Diagnostic(code, severity, _safe_detail(detail) if detail else ""))
+
+
+def _reject_json_constant(value: str) -> None:
+    """Reject non-standard JSON constants before they reach a leaf payload."""
+    raise ValueError(f"non-standard JSON constant: {value}")
+
+
+def _validate_bounded_document(value: Any, *, label: str) -> None:
+    """Bound nested control/source documents before expensive leaf processing.
+
+    The shared request schema owns field semantics.  This leaf-owned guard
+    bounds depth, node count, collection size, and string size so a valid
+    envelope cannot turn into an unbounded control or resource operation.
+    """
+    pending: list[tuple[Any, int, str]] = [(value, 0, label)]
+    nodes = 0
+    while pending:
+        current, depth, path = pending.pop()
+        nodes += 1
+        if depth > _MAX_CONTROL_DEPTH:
+            raise ReviewContractsValidationError(
+                [f"{label}_depth_exceeded: maximum {_MAX_CONTROL_DEPTH} levels"]
+            )
+        if nodes > _MAX_CONTROL_NODES:
+            raise ReviewContractsValidationError(
+                [f"{label}_nodes_exceeded: maximum {_MAX_CONTROL_NODES} values"]
+            )
+        if isinstance(current, str):
+            if len(current.encode("utf-8", errors="surrogatepass")) > _MAX_CONTROL_STRING_BYTES:
+                raise ReviewContractsValidationError(
+                    [
+                        f"{label}_string_too_large: maximum "
+                        f"{_MAX_CONTROL_STRING_BYTES} bytes at {path}"
+                    ]
+                )
+            continue
+        if isinstance(current, Mapping):
+            if len(current) > _MAX_CONTROL_COLLECTION_ITEMS:
+                raise ReviewContractsValidationError(
+                    [
+                        f"{label}_properties_exceeded: maximum "
+                        f"{_MAX_CONTROL_COLLECTION_ITEMS} properties at {path}"
+                    ]
+                )
+            pending.extend((item, depth + 1, f"{path}.{key}") for key, item in current.items())
+        elif isinstance(current, (list, tuple)):
+            if len(current) > _MAX_CONTROL_COLLECTION_ITEMS:
+                raise ReviewContractsValidationError(
+                    [
+                        f"{label}_items_exceeded: maximum "
+                        f"{_MAX_CONTROL_COLLECTION_ITEMS} items at {path}"
+                    ]
+                )
+            pending.extend(
+                (item, depth + 1, f"{path}[{index}]") for index, item in enumerate(current)
+            )
 
 
 def _diagnostic_documents(diagnostics: list[_Diagnostic]) -> tuple[dict[str, str], ...]:
@@ -476,7 +674,7 @@ def _resolve_source(path_value: str, base: Path) -> Path:
     """Resolve a source path and reject lexical or real-path escapes.
 
     Returns:
-        The contained regular-file path.
+        The contained regular-file or canonical-store directory path.
     """
     parts = _path_parts(path_value, kind="source uri")
     try:
@@ -497,11 +695,104 @@ def _resolve_source(path_value: str, base: Path) -> Path:
         raise ReviewContractsValidationError(
             [f"source uri cannot be resolved safely: {type(error).__name__}"]
         ) from error
-    if not resolved.is_relative_to(root) or not resolved.is_file():
+    if not resolved.is_relative_to(root) or not (resolved.is_file() or resolved.is_dir()):
         raise ReviewContractsValidationError(
-            [f"source uri rejected (outside base or not a file): {_safe_detail(path_value)}"]
+            [
+                "source uri rejected (outside base or not a regular file/directory): "
+                f"{_safe_detail(path_value)}"
+            ]
         )
     return resolved
+
+
+def _read_regular_file_no_follow(path: Path, *, limit: int, kind: str) -> bytes:
+    """Read one already-contained regular file without following its final link.
+
+    Returns:
+        The bounded file bytes.
+    """
+    no_follow = getattr(os, "O_NOFOLLOW", 0)
+    close_on_exec = getattr(os, "O_CLOEXEC", 0)
+    file_fd = os.open(path, os.O_RDONLY | close_on_exec | no_follow)
+    try:
+        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+            raise ReviewContractsValidationError([f"{kind} is not a regular file: {path.name}"])
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(file_fd, 1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                raise ReviewContractsValidationError([f"{kind} too large: maximum {limit} bytes"])
+            chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(file_fd)
+
+
+def _directory_files(path: Path) -> list[Path]:
+    """Inventory a contained source directory without admitting links/special files.
+
+    Returns:
+        Sorted regular files in the directory tree.
+    """
+    files: list[Path] = []
+    total_bytes = 0
+    pending = [path]
+    while pending:
+        current = pending.pop()
+        try:
+            entries = sorted(os.scandir(current), key=lambda entry: entry.name)
+        except OSError as error:
+            raise ReviewContractsValidationError(
+                [f"source directory cannot be read: {type(error).__name__}"]
+            ) from error
+        for entry in entries:
+            if entry.is_symlink():
+                raise ReviewContractsValidationError(
+                    [f"source directory rejected (symlink entry): {_safe_detail(entry.name)}"]
+                )
+            try:
+                mode = entry.stat(follow_symlinks=False).st_mode
+            except OSError as error:
+                raise ReviewContractsValidationError(
+                    [f"source directory entry cannot be inspected: {type(error).__name__}"]
+                ) from error
+            entry_path = Path(entry.path)
+            if stat.S_ISDIR(mode):
+                pending.append(entry_path)
+            elif stat.S_ISREG(mode):
+                files.append(entry_path)
+                total_bytes += entry.stat(follow_symlinks=False).st_size
+                if len(files) > _MAX_SOURCE_FILES:
+                    raise ReviewContractsValidationError(
+                        [f"source directory has too many files: maximum {_MAX_SOURCE_FILES}"]
+                    )
+                if total_bytes > _MAX_SOURCE_BYTES:
+                    raise ReviewContractsValidationError(
+                        [f"source directory too large: maximum {_MAX_SOURCE_BYTES} bytes"]
+                    )
+            else:
+                raise ReviewContractsValidationError(
+                    [f"source directory rejected (special entry): {_safe_detail(entry.name)}"]
+                )
+    return sorted(files, key=lambda item: str(item.relative_to(path)))
+
+
+def _directory_digest(path: Path, files: list[Path]) -> str:
+    """Compute the canonical case-workbench directory digest after safe inventory.
+
+    Returns:
+        The hexadecimal directory digest.
+    """
+    digest = hashlib.sha256()
+    for child in files:
+        digest.update(str(child.relative_to(path)).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(_read_regular_file_no_follow(child, limit=_MAX_SOURCE_BYTES, kind="source"))
+    return digest.hexdigest()
 
 
 def _read_contained_bytes(path_value: str, base: Path) -> bytes:
@@ -514,7 +805,11 @@ def _read_contained_bytes(path_value: str, base: Path) -> bytes:
     Returns:
         The source bytes.
     """
-    _resolve_source(path_value, base)
+    resolved = _resolve_source(path_value, base)
+    if not resolved.is_file():
+        raise ReviewContractsValidationError(
+            [f"source uri is a directory; canonical adapter required: {_safe_detail(path_value)}"]
+        )
     parts = _path_parts(path_value, kind="source uri")
     root = base.resolve(strict=True)
     no_follow = getattr(os, "O_NOFOLLOW", 0)
@@ -666,7 +961,7 @@ def _normalize_execution_status(value: Any) -> str | None:
 
 def _validate_source_declarations(
     ref: SourceRef,
-    expected_schema: str,
+    expected_schema: str | tuple[str, ...],
     diagnostics: list[_Diagnostic],
     *,
     expected_config_identity: str | None = None,
@@ -677,11 +972,14 @@ def _validate_source_declarations(
         ``True`` when all required declarations are present and well formed.
     """
     valid = True
-    if ref.schema != expected_schema:
+    expected_schemas = (
+        {expected_schema} if isinstance(expected_schema, str) else set(expected_schema)
+    )
+    if ref.schema not in expected_schemas:
         _add_diagnostic(
             diagnostics,
             "source_schema_mismatch",
-            detail=f"{ref.artifact_id}:{expected_schema}",
+            detail=f"{ref.artifact_id}:{','.join(sorted(expected_schemas))}",
         )
         valid = False
     if not ref.sha256:
@@ -724,10 +1022,196 @@ def _source_provenance(ref: SourceRef) -> dict[str, Any]:
         "sha256_observed": None,
         "integrity_status": "unverified",
         "execution_status": None,
+        "canonical_source": False,
     }
 
 
-def _load_source(  # noqa: C901
+def _source_format_matches(ref: SourceRef, expected_format: str) -> bool:
+    """Return whether a source reference belongs to the expected leaf family."""
+    if expected_format == CAMPAIGN_RESULT_FORMAT:
+        return ref.format in _CAMPAIGN_RESULT_FORMATS
+    return ref.format == expected_format
+
+
+def _source_schema_values(expected_schema: str) -> frozenset[str]:
+    """Return accepted schemas for one source family."""
+    if expected_schema == CAMPAIGN_RESULT_SCHEMA:
+        return frozenset(_CAMPAIGN_RESULT_SCHEMAS)
+    return frozenset({expected_schema})
+
+
+def _load_json_bytes(raw: bytes, *, label: str) -> Any:
+    """Decode strict JSON and apply the leaf's bounded-document guard.
+
+    Returns:
+        The bounded decoded document.
+    """
+    try:
+        payload = json.loads(raw.decode("utf-8"), parse_constant=_reject_json_constant)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise ReviewContractsValidationError([f"{label} is not strict JSON"]) from error
+    _validate_bounded_document(payload, label=label)
+    return payload
+
+
+def _canonical_manifest(path: Path, files: set[Path]) -> dict[str, Any] | None:
+    """Read an optional manifest from a safely inventoried directory.
+
+    Returns:
+        The manifest object, or ``None`` when the directory has no manifest.
+    """
+    manifest_path = path / "manifest.json"
+    if manifest_path not in files:
+        return None
+    payload = _load_json_bytes(
+        _read_regular_file_no_follow(manifest_path, limit=_MAX_CONTROL_BYTES, kind="manifest"),
+        label="canonical manifest",
+    )
+    if not isinstance(payload, dict):
+        raise ReviewContractsValidationError(["canonical manifest must be a JSON object"])
+    return payload
+
+
+def _load_canonical_directory(  # noqa: C901, PLR0912
+    directory: Path,
+    *,
+    ref: SourceRef,
+    expected_campaign_id: str,
+    files: list[Path],
+) -> tuple[dict[str, Any], str, str | None]:
+    """Adapt a case-workbench/campaign-result-store directory to leaf rows.
+
+    ``case_workbench._load_records`` remains the canonical row loader.  This
+    adapter only verifies the bounded, no-follow input boundary and wraps the
+    owner's rows in the leaf's campaign-result envelope; it does not redefine
+    the result-store schema or central registry.
+
+    Returns:
+        The wrapped payload, source execution status, and manifest schema.
+    """
+    file_set = set(files)
+    root_manifest = _canonical_manifest(directory, file_set)
+    store = directory
+    manifest = root_manifest
+    nested_store = directory / "campaign-result-store.v2"
+    if nested_store.is_dir():
+        nested_files = [item for item in files if nested_store in item.parents]
+        nested_manifest = _canonical_manifest(nested_store, set(nested_files))
+        if nested_manifest is None:
+            raise ReviewContractsValidationError(["canonical result store manifest is missing"])
+        store = nested_store
+        manifest = nested_manifest
+    manifest_schema = manifest.get("schema_version") if isinstance(manifest, dict) else None
+    has_parquet = (store / "episodes.parquet") in file_set
+    has_jsonl = any((store / name) in file_set for name in ("episodes.jsonl", "records.jsonl"))
+    if has_parquet:
+        if manifest_schema != CAMPAIGN_RESULT_STORE_SCHEMA:
+            raise ReviewContractsValidationError(
+                ["canonical result store manifest schema mismatch"]
+            )
+        integrity_errors = _v2_integrity_errors(store)
+        if integrity_errors:
+            raise ReviewContractsValidationError(
+                ["canonical result store integrity invalid: " + ",".join(integrity_errors[:8])]
+            )
+    elif not has_jsonl:
+        raise ReviewContractsValidationError(
+            ["canonical result store has no episodes.jsonl, records.jsonl, or episodes.parquet"]
+        )
+    try:
+        records = _load_records(store)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"canonical result store rows unavailable: {type(error).__name__}"]
+        ) from error
+    if not isinstance(records, list):
+        raise ReviewContractsValidationError(["canonical result store rows must be a list"])
+    _validate_bounded_document(records, label="canonical source")
+    if isinstance(manifest, dict):
+        for key in _IDENTITY_PROVENANCE_KEYS:
+            declared = manifest.get(key)
+            if declared is not None and declared != getattr(ref, key):
+                raise ReviewContractsValidationError(
+                    [f"canonical manifest {key} does not match source declaration"]
+                )
+    for index, record in enumerate(records):
+        if not isinstance(record, Mapping):
+            continue
+        record_provenance = record.get("provenance")
+        if not isinstance(record_provenance, Mapping):
+            continue
+        for key in _IDENTITY_PROVENANCE_KEYS:
+            candidates = [record_provenance.get(key)]
+            if key == "source_commit":
+                candidates.append(record_provenance.get("git_hash"))
+            for declared in candidates:
+                if declared is None:
+                    continue
+                if not isinstance(declared, str) or declared != getattr(ref, key):
+                    raise ReviewContractsValidationError(
+                        [f"canonical row {index} {key} does not match source declaration"]
+                    )
+    source_status = (
+        _normalize_execution_status(manifest.get("execution_status"))
+        if isinstance(manifest, dict) and "execution_status" in manifest
+        else "native"
+    )
+    if source_status is None:
+        raise ReviewContractsValidationError(["canonical result store execution status is invalid"])
+    payload_campaign_id = (
+        manifest.get("campaign_id")
+        if isinstance(manifest, dict) and isinstance(manifest.get("campaign_id"), str)
+        else expected_campaign_id
+    )
+    payload = {
+        "schema_version": ref.schema,
+        "campaign_id": payload_campaign_id,
+        "source_commit": ref.source_commit,
+        "config_identity": ref.config_identity,
+        "execution_status": source_status,
+        "episodes": records,
+    }
+    return payload, source_status, manifest_schema if isinstance(manifest_schema, str) else None
+
+
+def _validate_payload_identity(
+    payload: Mapping[str, Any],
+    *,
+    ref: SourceRef,
+    diagnostics: list[_Diagnostic],
+    required: bool,
+) -> bool:
+    """Require payload identity fields to agree with the declared source ref.
+
+    Returns:
+        ``True`` when every present/required identity agrees.
+    """
+    valid = True
+    for key in _IDENTITY_PROVENANCE_KEYS:
+        declared = payload.get(key)
+        expected = getattr(ref, key)
+        if declared is None:
+            if required:
+                _add_diagnostic(
+                    diagnostics, f"source_payload_{key}_missing", detail=ref.artifact_id
+                )
+                valid = False
+        elif not isinstance(declared, str) or declared != expected:
+            _add_diagnostic(diagnostics, f"{key}_mismatch", detail=ref.artifact_id)
+            valid = False
+    nested = payload.get("provenance")
+    if isinstance(nested, Mapping):
+        for key in _IDENTITY_PROVENANCE_KEYS:
+            if key not in nested:
+                continue
+            declared = nested[key]
+            if not isinstance(declared, str) or declared != getattr(ref, key):
+                _add_diagnostic(diagnostics, f"{key}_mismatch", detail=ref.artifact_id)
+                valid = False
+    return valid
+
+
+def _load_source(  # noqa: C901, PLR0912, PLR0915
     ref: SourceRef,
     *,
     expected_format: str,
@@ -736,6 +1220,7 @@ def _load_source(  # noqa: C901
     diagnostics: list[_Diagnostic],
     provenance: dict[str, Any] | None = None,
     expected_config_identity: str | None = None,
+    expected_campaign_id: str | None = None,
 ) -> _LoadedSource | None:
     """Read, hash, schema-check, and admit one canonical source document.
 
@@ -745,14 +1230,73 @@ def _load_source(  # noqa: C901
     provenance = provenance if provenance is not None else _source_provenance(ref)
     if not _validate_source_declarations(
         ref,
-        expected_schema,
+        tuple(sorted(_source_schema_values(expected_schema))),
         diagnostics,
         expected_config_identity=expected_config_identity,
     ):
         provenance["integrity_status"] = "declaration_invalid"
         return None
+    if not _source_format_matches(ref, expected_format):
+        _add_diagnostic(diagnostics, "source_format_mismatch", detail=ref.artifact_id)
+        provenance["integrity_status"] = "format_mismatch"
+        return None
     try:
-        raw = _read_contained_bytes(ref.uri, root)
+        resolved = _resolve_source(ref.uri, root)
+        canonical_manifest_schema: str | None = None
+        if resolved.is_dir():
+            files = _directory_files(resolved)
+            observed_sha = _directory_digest(resolved, files)
+            if observed_sha.lower() != ref.sha256.lower():
+                _add_diagnostic(diagnostics, "source_digest_mismatch", detail=ref.artifact_id)
+                provenance["sha256_observed"] = observed_sha
+                provenance["integrity_status"] = "digest_mismatch"
+                return None
+            if expected_format != CAMPAIGN_RESULT_FORMAT:
+                raise ReviewContractsValidationError(
+                    [f"directory source is not supported for {expected_format}"]
+                )
+            if expected_campaign_id is None:
+                raise ReviewContractsValidationError(["canonical campaign id is required"])
+            payload, source_status, canonical_manifest_schema = _load_canonical_directory(
+                resolved,
+                ref=ref,
+                expected_campaign_id=expected_campaign_id,
+                files=files,
+            )
+            provenance["sha256_observed"] = observed_sha
+            provenance["canonical_source"] = True
+            provenance["canonical_manifest_schema"] = canonical_manifest_schema
+        else:
+            raw = _read_contained_bytes(ref.uri, root)
+            observed_sha = _sha256_bytes(raw)
+            provenance["sha256_observed"] = observed_sha
+            if observed_sha.lower() != ref.sha256.lower():
+                _add_diagnostic(diagnostics, "source_digest_mismatch", detail=ref.artifact_id)
+                provenance["integrity_status"] = "digest_mismatch"
+                return None
+            try:
+                payload = _load_json_bytes(raw, label=f"source {ref.artifact_id}")
+            except ReviewContractsValidationError as error:
+                _add_diagnostic(
+                    diagnostics,
+                    "source_not_json",
+                    detail=f"{ref.artifact_id}:{'; '.join(error.errors)}",
+                )
+                provenance["integrity_status"] = "invalid_json"
+                return None
+            if not isinstance(payload, dict):
+                _add_diagnostic(diagnostics, "source_not_json_object", detail=ref.artifact_id)
+                provenance["integrity_status"] = "source_shape_invalid"
+                return None
+            source_status = _normalize_execution_status(payload.get("execution_status"))
+            if source_status is None:
+                _add_diagnostic(
+                    diagnostics,
+                    "source_execution_status_missing_or_invalid",
+                    detail=ref.artifact_id,
+                )
+                provenance["integrity_status"] = "execution_status_invalid"
+                return None
     except ReviewContractsValidationError as error:
         _add_diagnostic(
             diagnostics,
@@ -769,56 +1313,39 @@ def _load_source(  # noqa: C901
         )
         provenance["integrity_status"] = "unavailable"
         return None
-    observed_sha = _sha256_bytes(raw)
-    provenance["sha256_observed"] = observed_sha
-    if observed_sha.lower() != ref.sha256.lower():
-        _add_diagnostic(diagnostics, "source_digest_mismatch", detail=ref.artifact_id)
-        provenance["integrity_status"] = "digest_mismatch"
-        return None
-    try:
-        payload = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        _add_diagnostic(diagnostics, "source_not_json", detail=ref.artifact_id)
-        provenance["integrity_status"] = "invalid_json"
-        return None
-    if not isinstance(payload, dict):
-        _add_diagnostic(diagnostics, "source_not_json_object", detail=ref.artifact_id)
-        provenance["integrity_status"] = "source_shape_invalid"
-        return None
-    if payload.get("schema_version") != expected_schema:
+    if payload.get("schema_version") not in _source_schema_values(expected_schema):
         _add_diagnostic(diagnostics, "source_payload_schema_mismatch", detail=ref.artifact_id)
         provenance["integrity_status"] = "schema_mismatch"
         return None
-    declared_payload_commit = payload.get("source_commit")
-    if declared_payload_commit is not None and declared_payload_commit != ref.source_commit:
-        _add_diagnostic(diagnostics, "source_commit_mismatch", detail=ref.artifact_id)
+    if payload.get("schema_version") != ref.schema:
+        _add_diagnostic(diagnostics, "source_payload_schema_mismatch", detail=ref.artifact_id)
         provenance["integrity_status"] = "provenance_mismatch"
         return None
-    declared_payload_config = payload.get("config_identity")
-    if declared_payload_config is not None and declared_payload_config != ref.config_identity:
-        _add_diagnostic(diagnostics, "config_identity_mismatch", detail=ref.artifact_id)
+    if not _validate_payload_identity(
+        payload,
+        ref=ref,
+        diagnostics=diagnostics,
+        required=not provenance.get("canonical_source", False),
+    ):
         provenance["integrity_status"] = "provenance_mismatch"
-        return None
-    source_status = _normalize_execution_status(payload.get("execution_status"))
-    if source_status is None:
-        _add_diagnostic(
-            diagnostics, "source_execution_status_missing_or_invalid", detail=ref.artifact_id
-        )
-        provenance["integrity_status"] = "execution_status_invalid"
-        return None
-    if ref.format != expected_format:
-        _add_diagnostic(diagnostics, "source_format_mismatch", detail=ref.artifact_id)
-        provenance["integrity_status"] = "format_mismatch"
         return None
     provenance["integrity_status"] = "digest_and_schema_verified"
     provenance["execution_status"] = source_status
     payload_provenance = payload.get("provenance")
     if isinstance(payload_provenance, dict):
-        provenance["payload_provenance"] = {
-            key: payload_provenance[key]
-            for key in ("source_commit", "config_identity", "execution_status", "producer")
-            if key in payload_provenance
-        }
+        selected_provenance: dict[str, str | None] = {}
+        for key in ("source_commit", "config_identity", "execution_status", "producer"):
+            if key not in payload_provenance:
+                continue
+            value = payload_provenance[key]
+            if value is not None and not isinstance(value, str):
+                _add_diagnostic(
+                    diagnostics, "source_payload_provenance_invalid", detail=ref.artifact_id
+                )
+                provenance["integrity_status"] = "provenance_mismatch"
+                return None
+            selected_provenance[key] = value
+        provenance["payload_provenance"] = selected_provenance
     return _LoadedSource(ref, payload, provenance, source_status)
 
 
@@ -859,24 +1386,40 @@ def _collect_sources(
     required_families = set(REQUIRED_CAPABILITIES) | set(request.required_capabilities)
     by_format: dict[str, list[SourceRef]] = {}
     skipped_optional: set[str] = set()
+    configured_skips = request.config.get("skip_optional_capabilities", [])
+    if configured_skips is None:
+        configured_skips = []
+    if not isinstance(configured_skips, list) or not all(
+        isinstance(item, str) and item in OPTIONAL_CAPABILITIES for item in configured_skips
+    ):
+        _add_diagnostic(
+            diagnostics,
+            "optional_skip_config_invalid",
+            detail="skip_optional_capabilities must list known optional capabilities",
+        )
+        configured_skips = []
+    configured_skips_set = set(configured_skips)
     for ref in request.sources:
-        if ref.format not in REQUIRED_CAPABILITIES + OPTIONAL_CAPABILITIES:
+        if ref.format not in _CAMPAIGN_RESULT_FORMATS | set(OPTIONAL_CAPABILITIES):
             _add_diagnostic(
                 diagnostics,
                 "unknown_source_format",
                 detail=f"{ref.artifact_id}:{ref.format}",
             )
             continue
-        if ref.format in OPTIONAL_CAPABILITIES and ref.format not in required_families:
-            skipped_optional.add(ref.format)
+        family = CAMPAIGN_RESULT_FORMAT if ref.format in _CAMPAIGN_RESULT_FORMATS else ref.format
+        if family in OPTIONAL_CAPABILITIES and family in configured_skips_set:
+            skipped_optional.add(family)
             _add_diagnostic(
                 diagnostics,
                 "optional_stream_skipped",
-                severity="info",
-                detail=ref.format,
+                detail=f"{ref.artifact_id}:{family}",
             )
             continue
-        by_format.setdefault(ref.format, []).append(ref)
+        by_format.setdefault(family, []).append(ref)
+    for family in sorted(configured_skips_set - set(by_format)):
+        skipped_optional.add(family)
+        _add_diagnostic(diagnostics, "optional_stream_skipped", detail=family)
     missing = required_families - set(by_format)
     for family in sorted(missing):
         _add_diagnostic(diagnostics, "required_source_family_missing", detail=family)
@@ -920,6 +1463,29 @@ def _text_field(item: dict[str, Any], *keys: str) -> str:
         value = item.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
+    return "unknown"
+
+
+def _outcome_label(item: Mapping[str, Any]) -> str:
+    """Map a structured canonical outcome to a stable diagnostic label.
+
+    Returns:
+        A non-empty label suitable for the output outcome map.
+    """
+    outcome = item.get("outcome", "unknown")
+    if isinstance(outcome, str) and outcome.strip():
+        return outcome.strip()
+    if isinstance(outcome, Mapping):
+        label = outcome.get("label") or outcome.get("status") or outcome.get("termination_reason")
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+        if outcome.get("collision") is True:
+            return "collision"
+        if outcome.get("success") is True or outcome.get("reached_goal") is True:
+            return "success"
+    termination_reason = item.get("termination_reason")
+    if isinstance(termination_reason, str) and termination_reason.strip():
+        return termination_reason.strip()
     return "unknown"
 
 
@@ -967,14 +1533,18 @@ def _parse_episodes(  # noqa: C901, PLR0912, PLR0915
         if config is not None and not isinstance(config, dict):
             _add_diagnostic(diagnostics, "episode_row_config_invalid", detail=episode_id)
             continue
-        config_id = _text_field(config or {}, "config_id")
+        config_id = _text_field(
+            config or {}, "config_id", "config_identity", "config_digest", "config_hash"
+        )
+        if config_id == "unknown":
+            config_id = _text_field(
+                item, "config_id", "config_identity", "config_digest", "config_hash"
+            )
         metrics = item.get("metrics", {})
         if metrics is not None and not isinstance(metrics, dict):
             _add_diagnostic(diagnostics, "episode_row_metrics_invalid", detail=episode_id)
             continue
-        outcome_value = item.get("outcome", "unknown")
-        if isinstance(outcome_value, dict):
-            outcome_value = outcome_value.get("label", outcome_value.get("status"))
+        outcome_value = _outcome_label(item)
         if not isinstance(outcome_value, str) or not outcome_value.strip():
             _add_diagnostic(diagnostics, "episode_row_outcome_invalid", detail=episode_id)
             continue
@@ -1044,29 +1614,29 @@ def _parse_selection(
     episodes: list[_Episode],
     campaign_id: str,
     diagnostics: list[_Diagnostic],
-) -> tuple[list[str], list[str], bool]:
+) -> tuple[list[str], list[str], bool, str]:
     """Validate a selection document and split known and unknown episode IDs.
 
     Returns:
-        Known IDs, unknown IDs, and a malformed-selection flag.
+        Known IDs, unknown IDs, malformed-selection flag, and coverage status.
     """
     if source is None:
-        return [], [], False
+        return [], [], False, "not_supplied"
     if source.execution_status in _NON_ADMISSIBLE_STATUSES:
         _add_diagnostic(
             diagnostics,
             "required_selection_source_non_admissible",
             detail=source.execution_status,
         )
-        return [], [], True
+        return [], [], True, "unavailable"
     payload = source.payload
     if payload.get("campaign_id") not in (None, campaign_id):
         _add_diagnostic(diagnostics, "selection_campaign_mismatch", detail=source.ref.artifact_id)
-        return [], [], True
+        return [], [], True, "invalid"
     raw = payload.get("selected_episode_ids")
     if not isinstance(raw, list) or not all(isinstance(item, str) and item.strip() for item in raw):
         _add_diagnostic(diagnostics, "selection_ids_malformed", detail=source.ref.artifact_id)
-        return [], [], True
+        return [], [], True, "invalid"
     selected = [item.strip() for item in raw]
     if len(set(selected)) != len(selected):
         _add_diagnostic(diagnostics, "duplicate_selection_id", detail=source.ref.artifact_id)
@@ -1080,7 +1650,40 @@ def _parse_selection(
             "unknown_selected_ids",
             detail=",".join(sorted(unknown)),
         )
-    return known, unknown, False
+    return known, unknown, False, "used"
+
+
+def _bind_source_identities(
+    campaign_source: _LoadedSource,
+    selection_source: _LoadedSource | None,
+    diagnostics: list[_Diagnostic],
+) -> dict[str, Any]:
+    """Bind loaded sources to one shared commit/config identity.
+
+    Returns:
+        The shared identity and the observed source digests.
+    """
+    identity = {
+        "source_commit": campaign_source.ref.source_commit,
+        "config_identity": campaign_source.ref.config_identity,
+        "source_digests": [campaign_source.provenance["sha256_observed"]],
+    }
+    if selection_source is None:
+        return identity
+    for key in _IDENTITY_PROVENANCE_KEYS:
+        if getattr(campaign_source.ref, key) != getattr(selection_source.ref, key):
+            _add_diagnostic(diagnostics, "cross_source_identity_mismatch", detail=key)
+    selection_digest = selection_source.provenance.get("sha256_observed")
+    if not isinstance(selection_digest, str):
+        _add_diagnostic(
+            diagnostics,
+            "cross_source_digest_unverified",
+            detail=selection_source.ref.artifact_id,
+        )
+    else:
+        identity["source_digests"].append(selection_digest)
+    identity["source_digests"] = sorted(set(identity["source_digests"]))
+    return identity
 
 
 def _summarize_metric(
@@ -1125,11 +1728,13 @@ def _summarize_metric(
     return summary
 
 
-def _build_report(
+def _build_report(  # noqa: PLR0913
     episodes: list[_Episode],
     selection: list[str],
     unknown_selection: list[str],
     *,
+    selection_status: str,
+    selection_source_artifact_id: str | None,
     campaign_id: str,
     campaign_source_artifact_id: str,
     exclusions: list[dict[str, str]],
@@ -1171,9 +1776,11 @@ def _build_report(
         "outcomes": dict(sorted(outcomes.items())),
         "metrics": metrics,
         "selection_coverage": {
+            "status": selection_status,
             "selected": len(covered),
             "denominator": len(episodes),
             "unknown_selected_ids": sorted(unknown_selection),
+            "source_artifact_id": selection_source_artifact_id,
         },
         "campaign": {
             "campaign_id": campaign_id,
@@ -1212,6 +1819,21 @@ def _render_html(document: dict[str, Any]) -> str:
         f"<td>{html.escape(row['reason'])}</td></tr>"
         for row in document["exclusions"]["rows"]
     )
+    selection = document["selection_coverage"]
+    unknown_selection = ", ".join(selection["unknown_selected_ids"]) or "none"
+    campaign = document["campaign"]
+    provenance_rows = "\n".join(
+        "<tr>"
+        f"<td>{html.escape(str(source['artifact_id']))}</td>"
+        f"<td>{html.escape(str(source['format']))}</td>"
+        f"<td>{html.escape(str(source['schema_declared']))}</td>"
+        f"<td>{html.escape(str(source['source_commit'] or 'unavailable'))}</td>"
+        f"<td>{html.escape(str(source['config_identity'] or 'unavailable'))}</td>"
+        f"<td>{html.escape(str(source['sha256_observed'] or 'unavailable'))}</td>"
+        f"<td>{html.escape(str(source['integrity_status']))}</td>"
+        "</tr>"
+        for source in document["source_provenance"]
+    )
     grain = document["grain"]
     return (
         '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
@@ -1220,10 +1842,21 @@ def _render_html(document: dict[str, Any]) -> str:
         f"{document['denominator']} admitted episodes; planners: "
         f"{html.escape(str(grain['planner_ids']))}; scenarios: "
         f"{html.escape(str(grain['scenario_ids']))}.</p>"
+        "<h2>Campaign and selection</h2>"
+        f"<p>Campaign: <code>{html.escape(campaign['campaign_id'])}</code>; "
+        f"campaign source: <code>{html.escape(campaign['source_artifact_id'])}</code>; "
+        f"availability: <code>{html.escape(campaign['availability']['status'])}</code>.</p>"
+        f"<p>Selection status: <code>{html.escape(selection['status'])}</code>; "
+        f"source: <code>{html.escape(str(selection['source_artifact_id'] or 'none'))}</code>; "
+        f"coverage: {selection['selected']}/{selection['denominator']}; "
+        f"unknown IDs: {html.escape(unknown_selection)}.</p>"
         "<h2>Outcomes</h2><table><tr><th>Outcome</th><th>Count</th></tr>"
         f"{outcomes}</table>"
         "<h2>Metrics</h2><table><tr><th>Metric</th><th>n</th><th>missing</th>"
         f"<th>min</th><th>p50</th><th>max</th></tr>{rows}</table>"
+        "<h2>Source provenance</h2><table><tr><th>Artifact</th><th>Format</th>"
+        "<th>Schema</th><th>Source commit</th><th>Config identity</th>"
+        f"<th>Observed digest</th><th>Integrity</th></tr>{provenance_rows}</table>"
         "<h2>Exclusions</h2><table><tr><th>Episode</th><th>Status</th>"
         f"<th>Reason</th></tr>{exclusions}</table>"
         f"<p>Excluded rows: {document['exclusions']['count']}; evidence status: "
@@ -1232,7 +1865,7 @@ def _render_html(document: dict[str, Any]) -> str:
     )
 
 
-def _validate_output_document(document: dict[str, Any]) -> None:
+def _validate_output_document(document: dict[str, Any]) -> None:  # noqa: C901
     """Validate one leaf output against its registered machine-readable schema."""
     version = document.get("schema_version")
     schema = OUTPUT_SCHEMAS.get(version)
@@ -1247,47 +1880,110 @@ def _validate_output_document(document: dict[str, Any]) -> None:
     ]
     if errors:
         raise ReviewContractsValidationError(errors)
+    if version == "review-context.v1":
+        denominator = document["denominator"]
+        if sum(document["outcomes"].values()) != denominator:
+            errors.append("outcomes must account for the admitted denominator")
+        for name, summary in document["metrics"].items():
+            if summary["count"] + summary["missing"] != summary["denominator"]:
+                errors.append(f"metrics.{name} count plus missing must equal denominator")
+        selection = document["selection_coverage"]
+        if selection["denominator"] != denominator:
+            errors.append("selection_coverage.denominator must equal report denominator")
+        if selection["selected"] > selection["denominator"]:
+            errors.append("selection_coverage.selected cannot exceed denominator")
+        if selection["status"] == "used" and not selection["source_artifact_id"]:
+            errors.append("used selection coverage requires source_artifact_id")
+        if selection["status"] != "used" and selection["selected"]:
+            errors.append("non-used selection coverage cannot report selected episodes")
+        exclusions = document["exclusions"]
+        if exclusions["count"] != len(exclusions["rows"]):
+            errors.append("exclusions.count must equal the number of rows")
+        if sum(exclusions["by_status"].values()) != exclusions["count"]:
+            errors.append("exclusions.by_status must account for exclusions.count")
+        for source in document["source_provenance"]:
+            if (
+                source["sha256_declared"] is not None
+                and source["sha256_observed"] is not None
+                and source["sha256_declared"].lower() != source["sha256_observed"].lower()
+            ):
+                errors.append(f"source digest mismatch: {source['artifact_id']}")
+    if errors:
+        raise ReviewContractsValidationError(errors)
+
+
+def _atomic_materialize_no_replace(path: Path, text: str) -> str:
+    """Publish UTF-8 text atomically while refusing to replace a final name.
+
+    Returns:
+        The SHA-256 digest of the published bytes.
+    """
+    if path.parent.is_symlink() or not path.parent.is_dir():
+        raise ReviewContractsValidationError(
+            [f"output parent is not a real directory: {path.parent}"]
+        )
+    encoded = text.encode("utf-8")
+    temporary_name: str | None = None
+    temporary_fd = -1
+    try:
+        temporary_fd, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", suffix=".partial", dir=path.parent
+        )
+        with os.fdopen(temporary_fd, "wb") as handle:
+            temporary_fd = -1
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            # A hard-link publication is atomic on the same filesystem and
+            # fails with EEXIST instead of replacing an existing destination.
+            os.link(temporary_name, path)
+        except FileExistsError as error:
+            raise ReviewContractsValidationError(
+                [f"output_collision: already exists: {path.name}"]
+            ) from error
+        except OSError as error:
+            raise ReviewContractsValidationError(
+                [f"output_atomic_materialization_failed: {type(error).__name__}"]
+            ) from error
+        os.unlink(temporary_name)
+        temporary_name = None
+        directory_fd = os.open(
+            path.parent,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0),
+        )
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if temporary_fd >= 0:
+            os.close(temporary_fd)
+        if temporary_name is not None:
+            try:
+                os.unlink(temporary_name)
+            except FileNotFoundError:
+                pass
+    return _sha256_bytes(encoded)
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> str:
-    """Write JSON to an exclusive final name and return its byte digest.
+    """Write JSON to an atomic, exclusive final name and return its byte digest.
 
     Returns:
         The SHA-256 digest of the written bytes.
     """
-    if path.parent.is_symlink() or not path.parent.is_dir():
-        raise ReviewContractsValidationError(
-            [f"output parent is not a real directory: {path.parent}"]
-        )
     text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
-    try:
-        with path.open("x", encoding="utf-8") as handle:
-            handle.write(text)
-    except FileExistsError as error:
-        raise ReviewContractsValidationError(
-            [f"output_collision: already exists: {path.name}"]
-        ) from error
-    return _sha256_bytes(text.encode("utf-8"))
+    return _atomic_materialize_no_replace(path, text)
 
 
 def _write_text_exclusive(path: Path, text: str) -> str:
-    """Write text to an exclusive final name and return its byte digest.
+    """Write text to an atomic, exclusive final name and return its byte digest.
 
     Returns:
         The SHA-256 digest of the written bytes.
     """
-    if path.parent.is_symlink() or not path.parent.is_dir():
-        raise ReviewContractsValidationError(
-            [f"output parent is not a real directory: {path.parent}"]
-        )
-    try:
-        with path.open("x", encoding="utf-8") as handle:
-            handle.write(text)
-    except FileExistsError as error:
-        raise ReviewContractsValidationError(
-            [f"output_collision: already exists: {path.name}"]
-        ) from error
-    return _sha256_bytes(text.encode("utf-8"))
+    return _atomic_materialize_no_replace(path, text)
 
 
 def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:  # noqa: C901, PLR0912, PLR0915
@@ -1330,6 +2026,21 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         "sources": source_provenance,
     }
     try:
+        _validate_bounded_document(request.config, label="request config")
+        if len(request.sources) > _MAX_OUTPUT_SOURCES:
+            _add_diagnostic(
+                diagnostics,
+                "source_references_exceeded",
+                detail=f"maximum {_MAX_OUTPUT_SOURCES}",
+            )
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason="source_references_exceeded",
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
         campaign_id = request.config.get("campaign_id")
         if not isinstance(campaign_id, str) or not campaign_id.strip():
             return _result(
@@ -1406,6 +2117,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             diagnostics=diagnostics,
             provenance=campaign_provenance,
             expected_config_identity=config_identity,
+            expected_campaign_id=campaign_id,
         )
         if campaign_source is None:
             _release_empty_output(output_dir)
@@ -1461,6 +2173,18 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                     diagnostics=diagnostics,
                     provenance=base_provenance,
                 )
+        source_identity = _bind_source_identities(campaign_source, selection_source, diagnostics)
+        base_provenance["source_identity"] = source_identity
+        if any(item.code == "cross_source_identity_mismatch" for item in diagnostics):
+            _release_empty_output(output_dir)
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason="cross_source_identity_mismatch",
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
         episodes, exclusions, conflicting = _parse_episodes(
             campaign_source.payload,
             campaign_id=campaign_id,
@@ -1493,12 +2217,18 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 diagnostics=diagnostics,
                 provenance=base_provenance,
             )
-        selected, unknown, selection_invalid = _parse_selection(
+        selected, unknown, selection_invalid, selection_status = _parse_selection(
             selection_source,
             episodes=episodes,
             campaign_id=campaign_id,
             diagnostics=diagnostics,
         )
+        if selection_ref is not None and selection_source is None:
+            selection_status = "unavailable"
+        elif selection_ref is None and EPISODE_SELECTION_FORMAT in skipped_optional:
+            selection_status = "skipped"
+        elif selection_ref is None and EPISODE_SELECTION_FORMAT in by_format:
+            selection_status = "unavailable"
         if EPISODE_SELECTION_FORMAT in request.required_capabilities and selection_source is None:
             _release_empty_output(output_dir)
             _add_diagnostic(
@@ -1526,6 +2256,10 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             episodes,
             selected,
             unknown,
+            selection_status=selection_status,
+            selection_source_artifact_id=(
+                selection_source.ref.artifact_id if selection_source is not None else None
+            ),
             campaign_id=campaign_id,
             campaign_source_artifact_id=campaign_source.ref.artifact_id,
             exclusions=exclusions,
@@ -1534,7 +2268,9 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         )
         capability_payload = {
             "schema_version": "missing-capability-report.v1",
-            "missing_capabilities": sorted(set(OPTIONAL_CAPABILITIES) - set(by_format)),
+            "missing_capabilities": sorted(
+                set(OPTIONAL_CAPABILITIES) - set(by_format) - set(skipped_optional)
+            ),
             "skipped_optional_streams": sorted(skipped_optional),
             "diagnostics": list(_diagnostic_documents(diagnostics)),
         }
@@ -1557,6 +2293,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                     OUTPUT_CAPABILITY_FILENAME: capability_digest,
                 },
                 "source_integrity": "digest_and_schema_verified",
+                "source_identity": source_identity,
                 "source_execution_status": {
                     source.ref.artifact_id: source.execution_status
                     for source in (campaign_source, selection_source)
@@ -1653,6 +2390,18 @@ def _cli_failure_result(payload: Any, reason: str) -> ComponentResult:
     return _result(request_id, component_id, STATUS_FAILED, reason=reason)
 
 
+def _read_control_document(path_value: str, *, label: str) -> Any:
+    """Read one bounded, no-follow CLI control document.
+
+    Returns:
+        The strict, bounded decoded document.
+    """
+    raw = _read_regular_file_no_follow(
+        Path(path_value), limit=_MAX_CONTROL_BYTES, kind=f"{label} control document"
+    )
+    return _load_json_bytes(raw, label=label)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     """Return the standalone CLI argument parser."""
     parser = argparse.ArgumentParser(description="Build diagnostic cohort context reports.")
@@ -1679,22 +2428,23 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     payload: Any = None
     try:
-        payload = json.loads(Path(args.input).read_bytes().decode("utf-8"))
+        payload = _read_control_document(args.input, label="request")
         if not isinstance(payload, dict):
             raise ReviewContractsValidationError(["request must be a JSON object"])
         if args.config is not None:
-            config = json.loads(Path(args.config).read_bytes().decode("utf-8"))
+            config = _read_control_document(args.config, label="config")
             if not isinstance(config, dict):
                 raise ReviewContractsValidationError(["config must be a JSON object"])
             request_config = payload.get("config", {})
             if not isinstance(request_config, dict):
                 raise ReviewContractsValidationError(["request config must be a JSON object"])
             payload = {**payload, "config": {**request_config, **config}}
+        _validate_bounded_document(payload, label="request")
         payload = {**payload, "output_directory": args.output}
         request = component_request_from_dict(payload, source=args.input)
         result = run(request, base=Path(args.base) if args.base is not None else None)
     except ReviewContractsValidationError as error:
-        result = _cli_failure_result(payload, "; ".join(error.errors))
+        result = _cli_failure_result(payload, "invalid_request: " + "; ".join(error.errors))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
         result = _cli_failure_result(payload, f"invalid_request: {type(error).__name__}")
     except Exception as error:  # noqa: BLE001 - CLI must preserve the result contract

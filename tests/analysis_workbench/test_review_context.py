@@ -11,8 +11,10 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
+from robot_sf.analysis_workbench import review_context
 from robot_sf.analysis_workbench.review_context import (
     COMPONENT_ID,
     OUTPUT_CAPABILITY_FILENAME,
@@ -81,6 +83,8 @@ CAMPAIGN = {
 SELECTION = {
     "schema_version": "episode-selection.v1",
     "campaign_id": "camp-t",
+    "source_commit": SOURCE_COMMIT,
+    "config_identity": CONFIG_IDENTITY,
     "execution_status": "native",
     "selected_episode_ids": ["ep-1", "ep-3"],
 }
@@ -183,6 +187,10 @@ def test_success_reports_admitted_grain_and_tie_percentiles(tmp_path: Path) -> N
     assert result.provenance["source_integrity"] == "digest_and_schema_verified"
     assert result.provenance["sources"][0]["source_commit"] == SOURCE_COMMIT
     assert result.provenance["sources"][0]["config_identity"] == CONFIG_IDENTITY
+    rendered = (tmp_path / "out" / "context-report.html").read_text(encoding="utf-8")
+    assert "Selection status" in rendered
+    assert "Source provenance" in rendered
+    assert SOURCE_COMMIT in rendered and CONFIG_IDENTITY in rendered
 
 
 def test_result_and_descriptor_are_shared_schema_valid(tmp_path: Path) -> None:
@@ -201,6 +209,17 @@ def test_result_and_descriptor_are_shared_schema_valid(tmp_path: Path) -> None:
     ):
         schema = output_schemas()[document["schema_version"]]
         assert list(Draft202012Validator(schema).iter_errors(document)) == []
+
+
+def test_leaf_schema_rejects_untyped_metric_and_provenance_fields(tmp_path: Path) -> None:
+    """Leaf payloads reject arbitrary metric/provenance objects."""
+    _stage(tmp_path)
+    run(_request(tmp_path), base=tmp_path)
+    report = _report(tmp_path)
+    report["metrics"]["clearance_m"]["unexpected"] = {"not": "a summary field"}
+    report["source_provenance"][0]["unexpected"] = "not allowed"
+    errors = list(Draft202012Validator(output_schemas()["review-context.v1"]).iter_errors(report))
+    assert errors
 
 
 def test_repeated_excerpts_never_inflate_counts(tmp_path: Path) -> None:
@@ -232,9 +251,11 @@ def test_selection_coverage_with_unknown_ids_is_partial(tmp_path: Path) -> None:
     assert result.status == "partial"
     assert "unknown_selected_ids" in result.reason
     assert _report(tmp_path)["selection_coverage"] == {
+        "status": "used",
         "selected": 1,
         "denominator": 4,
         "unknown_selected_ids": ["ghost"],
+        "source_artifact_id": "selection",
     }
 
 
@@ -246,9 +267,171 @@ def test_required_capability_requires_an_actual_source(tmp_path: Path) -> None:
     assert not (tmp_path / "out").exists()
 
 
+def test_supplied_optional_selection_is_used_and_reported(tmp_path: Path) -> None:
+    """An optional selection ref must affect coverage when it is supplied."""
+    _stage(tmp_path)
+    sources = [
+        _source_ref(tmp_path / "campaign.json", artifact_id="campaign"),
+        _source_ref(
+            tmp_path / "selection.json",
+            artifact_id="selection",
+            source_format="episode-selection",
+        ),
+    ]
+    result = run(_request(tmp_path, sources=sources), base=tmp_path)
+    assert result.status == "complete"
+    assert _report(tmp_path)["selection_coverage"] == {
+        "status": "used",
+        "selected": 2,
+        "denominator": 4,
+        "unknown_selected_ids": [],
+        "source_artifact_id": "selection",
+    }
+    capability = json.loads(
+        (tmp_path / "out" / OUTPUT_CAPABILITY_FILENAME).read_text(encoding="utf-8")
+    )
+    assert capability["missing_capabilities"] == []
+    assert capability["skipped_optional_streams"] == []
+
+
+def test_explicit_optional_selection_skip_is_partial_and_reported(tmp_path: Path) -> None:
+    """An explicit optional skip cannot silently produce complete selection coverage."""
+    _stage(tmp_path)
+    sources = [
+        _source_ref(tmp_path / "campaign.json", artifact_id="campaign"),
+        _source_ref(
+            tmp_path / "selection.json",
+            artifact_id="selection",
+            source_format="episode-selection",
+        ),
+    ]
+    result = run(
+        _request(
+            tmp_path,
+            sources=sources,
+            config_extra={"skip_optional_capabilities": ["episode-selection"]},
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert _report(tmp_path)["selection_coverage"] == {
+        "status": "skipped",
+        "selected": 0,
+        "denominator": 4,
+        "unknown_selected_ids": [],
+        "source_artifact_id": None,
+    }
+    capability = json.loads(
+        (tmp_path / "out" / OUTPUT_CAPABILITY_FILENAME).read_text(encoding="utf-8")
+    )
+    assert capability["missing_capabilities"] == []
+    assert capability["skipped_optional_streams"] == ["episode-selection"]
+
+
+def test_canonical_result_store_directory_uses_owner_loader(tmp_path: Path) -> None:
+    """A canonical JSONL result-store directory is adapted without flattening its contract."""
+    store = tmp_path / "campaign-store"
+    store.mkdir()
+    rows = "\n".join(json.dumps(row, sort_keys=True) for row in CAMPAIGN["episodes"]) + "\n"
+    (store / "episodes.jsonl").write_text(rows, encoding="utf-8")
+    digest = hashlib.sha256(b"episodes.jsonl\0" + rows.encode("utf-8")).hexdigest()
+    source = {
+        "artifact_id": "campaign-store",
+        "uri": store.name,
+        "format": "campaign-result-store",
+        "schema": "campaign-result-store.v2",
+        "sha256": digest,
+        "source_commit": SOURCE_COMMIT,
+        "config_identity": CONFIG_IDENTITY,
+    }
+    result = run(_request(tmp_path, sources=[source]), base=tmp_path)
+    assert result.status == "complete"
+    report = _report(tmp_path)
+    assert report["denominator"] == 4
+    assert report["source_provenance"][0]["canonical_source"] is True
+    assert report["source_provenance"][0]["schema_declared"] == "campaign-result-store.v2"
+
+
+def test_canonical_result_store_rejects_symlink_entries(tmp_path: Path) -> None:
+    """Canonical directory adaptation keeps the leaf no-follow boundary."""
+    store = tmp_path / "campaign-store"
+    store.mkdir()
+    rows = "\n".join(json.dumps(row, sort_keys=True) for row in CAMPAIGN["episodes"]) + "\n"
+    (store / "episodes.jsonl").write_text(rows, encoding="utf-8")
+    outside = tmp_path / "outside.jsonl"
+    outside.write_text(rows, encoding="utf-8")
+    (store / "outside-link.jsonl").symlink_to(outside)
+    source = {
+        "artifact_id": "campaign-store",
+        "uri": store.name,
+        "format": "campaign-result-store",
+        "schema": "campaign-result-store.v2",
+        "sha256": "0" * 64,
+        "source_commit": SOURCE_COMMIT,
+        "config_identity": CONFIG_IDENTITY,
+    }
+    result = run(_request(tmp_path, sources=[source]), base=tmp_path)
+    assert result.status == "failed"
+    assert "source_unreadable_or_unsafe" in result.reason
+
+
+def test_cross_source_identity_mismatch_fails_closed(tmp_path: Path) -> None:
+    """Campaign and selection sources must share the bound commit/config identity."""
+    _stage(tmp_path)
+    wrong_commit = "b" * 40
+    selection = {**SELECTION, "source_commit": wrong_commit}
+    _write_json(tmp_path / "selection.json", selection)
+    sources = [
+        _source_ref(tmp_path / "campaign.json", artifact_id="campaign"),
+        _source_ref(
+            tmp_path / "selection.json",
+            artifact_id="selection",
+            source_format="episode-selection",
+        ),
+    ]
+    request = _request(tmp_path, required=("episode-selection",), sources=sources)
+    request = replace(
+        request,
+        sources=(request.sources[0], replace(request.sources[1], source_commit=wrong_commit)),
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "cross_source_identity_mismatch" in result.reason
+    assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
+
+
+def test_missing_payload_identity_is_rejected(tmp_path: Path) -> None:
+    """A source cannot pass by omitting its payload commit/config identity."""
+    campaign = {key: value for key, value in CAMPAIGN.items() if key != "source_commit"}
+    _stage(tmp_path, campaign=campaign)
+    result = run(_request(tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "source_payload_source_commit_missing" in result.reason
+
+
+def test_output_materialization_never_publishes_partial_final(tmp_path: Path, monkeypatch) -> None:
+    """An interrupted atomic write leaves neither a partial final nor temp residue."""
+    target = tmp_path / "context-report.json"
+
+    def fail_fsync(_file_descriptor: int) -> None:
+        raise OSError("simulated interruption")
+
+    monkeypatch.setattr(review_context.os, "fsync", fail_fsync)
+    with pytest.raises(OSError, match="simulated interruption"):
+        review_context._write_json(target, {"schema_version": "test"})
+    assert not target.exists()
+    assert list(tmp_path.glob(".context-report.json.*.partial")) == []
+
+
 def test_malformed_selection_is_not_an_empty_selection(tmp_path: Path) -> None:
     _stage(
-        tmp_path, selection={"schema_version": "episode-selection.v1", "execution_status": "native"}
+        tmp_path,
+        selection={
+            "schema_version": "episode-selection.v1",
+            "source_commit": SOURCE_COMMIT,
+            "config_identity": CONFIG_IDENTITY,
+            "execution_status": "native",
+        },
     )
     sources = [
         _source_ref(tmp_path / "campaign.json", artifact_id="campaign"),
@@ -554,3 +737,28 @@ def test_cli_malformed_request_prints_failed_result_envelope(tmp_path: Path) -> 
     parsed = component_result_from_dict(json.loads(completed.stdout))
     assert parsed.status == "failed"
     assert "invalid_request" in parsed.reason
+
+
+def test_cli_rejects_oversized_control_document(tmp_path: Path) -> None:
+    """The CLI bounds request bytes before parsing or invoking the component."""
+    request_path = tmp_path / "request.json"
+    request_path.write_bytes(b"{" + b'"padding":"' + b"a" * (1024 * 1024) + b'"}')
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "robot_sf.analysis_workbench.review_context",
+            "--input",
+            str(request_path),
+            "--output",
+            "out",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+    )
+    assert completed.returncode == 1
+    parsed = component_result_from_dict(json.loads(completed.stdout))
+    assert parsed.status == "failed"
+    assert "control document too large" in parsed.reason

@@ -17,7 +17,7 @@
       "uri": "tests/fixtures/scenario_review/review_context/selection.json",
       "format": "episode-selection",
       "schema": "episode-selection.v1",
-      "sha256": "83e4ed73d87ef59e7568247a13180fdaddc2634b11a40646dbe62b589fba05ba",
+      "sha256": "b02f72258dd1af7caffc5bb97449928dd0f9738606323d66f190229cab4f4a76",
       "source_commit": "671308664d83399366a263637e4dcbadea386101",
       "config_identity": "srev06-fixture-config"
     }

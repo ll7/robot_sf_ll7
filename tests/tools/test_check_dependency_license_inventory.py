@@ -796,7 +796,11 @@ def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None
     selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
     expected = selected_policy_pending_package_count(selected_rows)
 
-    assert expected == 119
+    # 124 = 119 baseline + 5 net-new rows from dependabot bumps 2f393da1d (tqdm
+    # 4.70.1), 51e189474 (wandb 0.30.0 plus 6 transitive otel/googleapis rows,
+    # minus dropped sentry-sdk), ca470a58d (optuna-dashboard 0.21.0). Licenses
+    # verified unchanged/new-permissive via PyPI metadata (issue #9341).
+    assert expected == 124
     assert inventory["summary"]["policy_pending_package_count"] == expected
     assert inventory["summary"]["policy_pending_package_count"] != 155
 
@@ -824,7 +828,8 @@ def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
         )
         == 37
     )
-    assert selected_policy_pending_package_count(selected_rows) == 119
+    assert selected_policy_pending_package_count(selected_rows) == 124  # 119 + 5 net-new
+    # dependabot rows, see above; policy rows (36/37) unchanged.
 
 
 def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:

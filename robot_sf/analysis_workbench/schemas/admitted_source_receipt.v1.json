@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/admitted_source_receipt.v1.json",
+  "$title": "Robot SF Admitted Fixture Source Receipt v1",
+  "description": "Digest-bound local fixture or diagnostic source receipt. This contract proves source integrity and request binding; it does not grant scientific evidence admission.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "source",
+    "request_sha256",
+    "recipe_sha256",
+    "status",
+    "source_kind",
+    "evidence_boundary",
+    "scientific_claim_allowed"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "admitted-source-receipt.v1"
+    },
+    "receipt_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "request_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "recipe_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "status": {
+      "const": "admitted"
+    },
+    "source_kind": {
+      "enum": ["fixture", "diagnostic"]
+    },
+    "evidence_boundary": {
+      "const": "diagnostic_only"
+    },
+    "scientific_claim_allowed": {
+      "const": false
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{40}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uri",
+        "format",
+        "schema",
+        "sha256",
+        "source_commit",
+        "config_identity"
+      ],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source_commit": {
+          "$ref": "#/$defs/commit"
+        },
+        "config_identity": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

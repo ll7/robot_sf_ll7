@@ -16,6 +16,12 @@ exclusions:
   - path: advanced/trajectory_viz_fixture.py
     kind: helper
     reason: "Shared fixture builder and headless-run helper imported by 14_trajectory_visualization.py and its tests; not a runnable example entry point."
+  - path: scenario_review/components/episode_analyzer.py
+    kind: helper
+    reason: "SREV-29 fixture component invoked through the robot_sf.scenario_review entry-point group; not a runnable example entry point."
+  - path: scenario_review/components/telemetry_renderer.py
+    kind: helper
+    reason: "SREV-29 fixture component invoked through the robot_sf.scenario_review entry-point group; not a runnable example entry point."
 categories:
   - slug: uncategorized
     title: "Uncategorized Examples"

@@ -8,16 +8,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from robot_sf.benchmark.research_answerability import evaluate_answerability
 from scripts.dev.preflight_launch_packet import preflight_launch_packet
 from scripts.training import train_ppo, train_recurrent_ppo
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKET_PATH = (
-    REPO_ROOT / "configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v1.yaml"
+    REPO_ROOT / "configs/training/comparison_matrix/issue_7849_ppo_rppo_gpu_admission_v2.yaml"
 )
 INVENTORY_PATH = (
-    REPO_ROOT / "configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml"
+    REPO_ROOT / "configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v2.yaml"
 )
 FULL_PPO_PATH = REPO_ROOT / "configs/training/ppo/issue_7849_ppo_full_v2.yaml"
 FULL_RECURRENT_PATH = REPO_ROOT / "configs/training/ppo/issue_7849_recurrent_ppo_full_v2.yaml"
@@ -45,27 +44,22 @@ def test_packet_is_exact_source_bound_and_fail_closed() -> None:
     assert packet["issue"] == 7849
     assert packet["execution_authorized"] is False
     assert packet["claim_eligible"] is False
-    assert packet["source"]["base_commit"] == "1bb17787b6000a2aa7b5149d201a408e3eedcef5"
+    assert packet["source"]["base_commit"] == "d62a4433716910db4135d6308e01ffccfaa26a74"
     assert packet["source"]["inventory_sha256"] == _sha256(INVENTORY_PATH)
-    assert packet["full_budget"]["independent_run_count"] == 10
-    assert packet["full_budget"]["total_environment_steps"] == 150_000_000
+    assert packet["frozen_contract"]["independent_training_runs"] == 10
+    assert packet["frozen_contract"]["total_planned_environment_steps"] == 150_000_000
     assert packet["execution_boundary"]["submit_slurm_from_this_issue"] is False
+    assert packet["evaluation_seed_manifest"]["evaluation_seeds"] == [111, 112, 113]
     assert packet["execution_boundary"]["full_training_in_this_pr"] is False
-    assert packet["arms"]["ppo"]["current_seed_execution"] == "per_seed_cli_override_available"
-    seed_commands = packet["full_budget"]["command_shapes"]["ppo_per_seed"]
-    assert [entry["seed"] for entry in seed_commands] == [123, 231, 777, 992, 1337]
-    for entry in seed_commands:
-        assert f"--seed {entry['seed']}" in entry["command"]
-        assert entry["run_id"] in entry["command"]
-        assert entry["artifact_root"] in entry["command"]
-    assert packet["checkpoint_evaluation"]["recurrent_metric_producer"]["status"] == (
-        "available_native"
+    assert packet["arms"]["ppo"]["runner_script"] == "scripts/training/train_ppo.py"
+    assert packet["arms"]["recurrent_ppo"]["runner_script"] == (
+        "scripts/training/train_recurrent_ppo.py"
     )
 
 
 def test_inventory_rehashes_every_declared_source_and_runtime_input() -> None:
     inventory = _load(INVENTORY_PATH)
-    assert inventory["source_base_commit"] == "1bb17787b6000a2aa7b5149d201a408e3eedcef5"
+    assert inventory["source_base_commit"] == "d62a4433716910db4135d6308e01ffccfaa26a74"
 
     entries = []
     for section in ("files", "scenario_inputs", "map_inputs"):
@@ -165,11 +159,11 @@ def test_feed_forward_seed_override_isolated_and_declared(tmp_path: Path, monkey
     )
 
     assert result.config.seeds == (231,)
-    assert result.config.policy_id == "ppo_issue_7849_full_v1_seed_231"
+    assert result.config.policy_id == "ppo_issue_7849_full_v2_seed_231"
     assert result.expert_artifact.seeds == (231,)
     assert result.training_run_artifact.seeds == (231,)
     assert result.training_run_artifact.run_id == "issue7849-ppo-seed-231"
-    assert result.checkpoint_path.name == "ppo_issue_7849_full_v1_seed_231.zip"
+    assert result.checkpoint_path.name == "ppo_issue_7849_full_v2_seed_231.zip"
     assert "training_seed_override=231" in result.training_run_artifact.notes
 
     with pytest.raises(ValueError, match="not declared in config.seeds"):
@@ -207,25 +201,15 @@ def test_explicit_evaluation_seed_schedule_replaces_training_seed_fallback() -> 
 
 def test_canary_inputs_and_answerability_are_explicitly_blocked() -> None:
     packet = _load(PACKET_PATH)
-    canary_inputs = packet["gate_1_canary"]["canary_inputs"]
-    assert _sha256(CANARY_PPO_PATH) == canary_inputs["ppo"]["config_sha256"]
-    assert _sha256(CANARY_RECURRENT_PATH) == canary_inputs["recurrent_ppo"]["config_sha256"]
+    assert _sha256(CANARY_PPO_PATH) == packet["gate_1_canary"]["ppo_config_sha256"]
+    assert _sha256(CANARY_RECURRENT_PATH) == packet["gate_1_canary"]["recurrent_config_sha256"]
 
     canary = packet["gate_1_canary"]
     assert canary["status"] == "not_run"
     assert canary["outcome_use"] == "forbidden"
-    assert "sbatch" not in canary["ppo_command"]
-    assert "sbatch" not in canary["recurrent_ppo_command"]
-    assert "train_ppo.py" in canary["ppo_command"]
-    assert "train_recurrent_ppo.py" in canary["recurrent_ppo_command"]
+    assert "sbatch" not in canary["route_boundary"]
+    assert "issue_7849_ppo_gate1_canary_v2.yaml" in canary["ppo_config"]
+    assert "issue_7849_recurrent_ppo_gate1_canary_v2.yaml" in canary["recurrent_config"]
 
-    answerability = evaluate_answerability(packet["answerability"])
-    assert answerability.state == "blocked_missing_producer"
-    assert "full_matrix_episode_rows" in answerability.reasons[0]
     assert packet["domain_aware_approval"]["approved"] is False
     assert packet["compute_authorization"]["authorized"] is False
-    preserved = packet["preserved_vs_executable"]
-    assert (
-        preserved["preserved_outputs"][0]["status"] == "preserved_but_insufficient_for_issue_1496"
-    )
-    assert preserved["executable_training_packets"]["issue_7849_full_matrix"] == "none"

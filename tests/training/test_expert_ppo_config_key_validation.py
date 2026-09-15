@@ -286,8 +286,9 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     config_paths = _canonical_expert_configs()
     # The issue-791 leader became a shared intermediate base in #6691, so the
     # runnable-leaf inventory is one smaller without dropping a config file.
-    # Issue #7849 adds four standalone PPO/RecurrentPPO leaves.
-    assert len(config_paths) == 139
+    # Issue #7849 keeps the original four candidates and adds four manifest-
+    # bound successor leaves for the exact shared evaluation-seed contract.
+    assert len(config_paths) == 143
 
     failures: list[str] = []
     for config_path in config_paths:

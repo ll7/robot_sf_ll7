@@ -313,6 +313,23 @@ class AdmittedSourceResolution:
         }
 
 
+def _resolver_value_or_rejection(
+    value: Any,
+    early: AdmittedSourceResolution | None,
+    *,
+    status: str,
+    reason: str,
+    detail: str,
+    receipt: AdmittedSourceReceipt | None = None,
+) -> Any:
+    """Return a helper result or a bounded rejection for an impossible empty value."""
+    if early is not None:
+        return early
+    if value is None:
+        return _resolution(status, reason, receipt=receipt, detail=detail)
+    return value
+
+
 def review_bundle_from_dict(payload: Mapping[str, Any], *, source: Any = None) -> ReviewBundle:
     """Validate and build a review bundle, checking semantic boundaries.
 
@@ -1107,13 +1124,26 @@ def resolve_admitted_source(
         bytes match the receipt.  All rejection results omit ``source_path``.
     """
     raw_receipt, early = _receipt_payload(receipt)
-    if early is not None or raw_receipt is None:
-        assert early is not None
-        return early
-    parsed_receipt, early = _parse_admitted_source_receipt(raw_receipt)
-    if early is not None or parsed_receipt is None:
-        assert early is not None
-        return early
+    raw_or_result = _resolver_value_or_rejection(
+        raw_receipt,
+        early,
+        status="failed",
+        reason=ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+        detail="receipt payload resolver returned no payload",
+    )
+    if isinstance(raw_or_result, AdmittedSourceResolution):
+        return raw_or_result
+    parsed_receipt, early = _parse_admitted_source_receipt(raw_or_result)
+    parsed_or_result = _resolver_value_or_rejection(
+        parsed_receipt,
+        early,
+        status="failed",
+        reason=ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+        detail="receipt parser returned no receipt",
+    )
+    if isinstance(parsed_or_result, AdmittedSourceResolution):
+        return parsed_or_result
+    parsed_receipt = parsed_or_result
     early = _check_receipt_digest_bindings(
         parsed_receipt,
         request=request,
@@ -1135,13 +1165,27 @@ def resolve_admitted_source(
     if early is not None:
         return early
     root, early = _resolve_allowed_root(allowed_root)
-    if early is not None or root is None:
-        assert early is not None
-        return early
-    source_path, early = _resolve_source_path(parsed_receipt, root)
-    if early is not None or source_path is None:
-        assert early is not None
-        return early
+    root_or_result = _resolver_value_or_rejection(
+        root,
+        early,
+        status="unavailable",
+        reason=ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID,
+        detail="allowed-root resolver returned no path",
+    )
+    if isinstance(root_or_result, AdmittedSourceResolution):
+        return root_or_result
+    source_path, early = _resolve_source_path(parsed_receipt, root_or_result)
+    source_or_result = _resolver_value_or_rejection(
+        source_path,
+        early,
+        status="unavailable",
+        reason=ADMITTED_SOURCE_REASON_SOURCE_MISSING,
+        receipt=parsed_receipt,
+        detail="source-path resolver returned no path",
+    )
+    if isinstance(source_or_result, AdmittedSourceResolution):
+        return source_or_result
+    source_path = source_or_result
     try:
         observed_sha256 = sha256_file(source_path)
     except OSError as error:

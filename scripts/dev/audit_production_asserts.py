@@ -357,6 +357,24 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_status="unowned_residual",
         ownership_references=("#9384",),
     ),
+    (
+        "robot_sf/analysis_workbench/review_alignment.py",
+        "_collect_traces",
+        "left is not None and right is not None",
+    ): _review(
+        "Both named trace sides either return a terminal diagnostic or assign a validated trace; reaching the return narrows both sides for alignment.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9394",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_alignment.py",
+        "_validate_alignment",
+        "anchor is not None and tolerances is not None",
+    ): _review(
+        "Anchor and tolerance validators return terminal errors for invalid input; reaching the normalized mapping narrows both validated values.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9394",),
+    ),
 }
 
 

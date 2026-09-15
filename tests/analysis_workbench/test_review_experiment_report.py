@@ -65,6 +65,10 @@ def _write_results(tmp_path: Path, payload: dict[str, Any]) -> None:
     (tmp_path / "results.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_raw_results(tmp_path: Path, content: str) -> None:
+    (tmp_path / "results.json").write_text(content, encoding="utf-8")
+
+
 def _load_report(output_directory: Path) -> dict[str, Any]:
     return json.loads((output_directory / "experiment-comparison.json").read_text(encoding="utf-8"))
 
@@ -225,6 +229,23 @@ def test_oversized_integer_measurement_fails_closed(tmp_path: Path) -> None:
     assert not (tmp_path / "out").exists()
 
 
+def test_oversized_json_integer_fails_closed_without_exception(tmp_path: Path) -> None:
+    """The JSON parser's digit limit becomes a bounded invalid-input result."""
+    source = FIXTURE_RESULTS.read_text(encoding="utf-8")
+    needle = '"value": 0.7'
+    replacement = f'"value": {"9" * 5001}'
+    assert needle in source
+    _write_raw_results(tmp_path, source.replace(needle, replacement, 1))
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason.startswith("invalid_input:")
+    assert len(result.reason) < 500
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
 def test_finite_measurements_with_nonfinite_difference_fail_closed(tmp_path: Path) -> None:
     """Two finite values cannot publish an infinite treatment-control effect."""
     payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
@@ -261,6 +282,24 @@ def test_second_artifact_failure_leaves_no_partial_output(
 
     assert result.status == "failed"
     assert result.reason.startswith("output_write_error:")
+    assert not (tmp_path / "out").exists()
+    assert not list(tmp_path.glob(".out.staging-*"))
+
+
+def test_lone_unicode_surrogate_fails_closed_without_partial_output(tmp_path: Path) -> None:
+    """An escaped lone surrogate cannot escape through the HTML artifact writer."""
+    source = FIXTURE_RESULTS.read_text(encoding="utf-8")
+    needle = '"hypothesis": "A delayed response changes clearance and task success."'
+    replacement = r'"hypothesis": "A delayed response changes clearance and task success. \ud800"'
+    assert needle in source
+    _write_raw_results(tmp_path, source.replace(needle, replacement, 1))
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason.startswith("invalid_input:")
+    assert "Unicode" in result.reason
+    assert result.artifacts == ()
     assert not (tmp_path / "out").exists()
     assert not list(tmp_path.glob(".out.staging-*"))
 

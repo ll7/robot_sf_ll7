@@ -680,8 +680,14 @@ def _read_source(
         ) from error
     source_sha256 = hashlib.sha256(raw).hexdigest()
     try:
-        payload = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        decoded = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ExperimentReportError(
+            "invalid_input", f"source is not valid UTF-8 JSON: {error}"
+        ) from error
+    try:
+        payload = json.loads(decoded)
+    except ValueError as error:
         raise ExperimentReportError(
             "invalid_input", f"source is not valid UTF-8 JSON: {error}"
         ) from error
@@ -689,7 +695,12 @@ def _read_source(
 
 
 def _write_artifact(path: Path, content: str) -> str:
-    raw = content.encode("utf-8")
+    try:
+        raw = content.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise ExperimentReportError(
+            "invalid_input", "report contains invalid Unicode text"
+        ) from error
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_bytes(raw)
     temporary.replace(path)

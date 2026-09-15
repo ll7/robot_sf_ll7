@@ -487,6 +487,9 @@ def _build_pysf_simulation(  # noqa: PLR0913
     )
     pysf_sim.peds.max_speed_multiplier = config.peds_speed_mult
     _enforce_ped_desired_speeds(pysf_sim.peds, config)
+    for behavior in peds_behaviors:
+        if isinstance(behavior, SinglePedestrianBehavior):
+            behavior.bind_pysf_peds(pysf_sim.peds)
 
     return pysf_sim, pysf_state, groups, peds_behaviors, pedestrian_response_multipliers
 

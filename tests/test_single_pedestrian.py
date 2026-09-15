@@ -19,7 +19,6 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
-from robot_sf.ped_npc.ped_behavior import SinglePedestrianBehavior
 from robot_sf.ped_npc.ped_population import (
     PedSpawnConfig,
     populate_simulation,
@@ -236,12 +235,6 @@ class TestSimulatorIntegration:
             ),
         )
         simulator = init_simulators(config, map_def, num_robots=1, random_start_pos=False)[0]
-        behavior = next(
-            behavior
-            for behavior in simulator.peds_behaviors
-            if isinstance(behavior, SinglePedestrianBehavior)
-        )
-        behavior.bind_pysf_peds(simulator.pysf_sim.peds)
         simulator.reset_state()
         return simulator
 

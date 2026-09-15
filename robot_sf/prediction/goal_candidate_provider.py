@@ -26,6 +26,7 @@ from robot_sf.common.math_utils import (
     point_distance,
 )
 from robot_sf.prediction._contract_utils import (
+    is_forbidden_evidence_source,
     require_finite,
     require_non_negative,
     require_text,
@@ -89,18 +90,6 @@ class CandidatePathMode(StrEnum):
 _PUBLIC_SOURCES = tuple(
     source for source in GoalCandidateSource if source is not GoalCandidateSource.UNKNOWN
 )
-_ORACLE_SOURCE_NAMES = frozenset(
-    {
-        "scenario_assigned_route",
-        "assigned_route",
-        "true_goal",
-        "goal_truth",
-        "waypoint_truth",
-        "future_trajectory",
-        "simulator_goal",
-        "simulator_route",
-    }
-)
 
 
 def _parse_source(value: GoalCandidateSource | str, field_name: str) -> GoalCandidateSource:
@@ -111,7 +100,7 @@ def _parse_source(value: GoalCandidateSource | str, field_name: str) -> GoalCand
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be a GoalCandidateSource or string")
     normalized = value.strip().lower()
-    if normalized in _ORACLE_SOURCE_NAMES:
+    if is_forbidden_evidence_source(normalized):
         raise ValueError(f"{field_name} requests forbidden oracle source: {value}")
     try:
         return GoalCandidateSource(normalized)

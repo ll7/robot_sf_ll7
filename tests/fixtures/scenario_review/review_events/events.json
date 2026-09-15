@@ -1,4 +1,5 @@
 {
+  "schema_version": "event-list.v1",
   "intervals": [
     {
       "interval_id": "ev-a",

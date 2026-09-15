@@ -1,4 +1,5 @@
 {
+  "schema_version": "phase-list.v1",
   "intervals": [
     {
       "interval_id": "ph-1",

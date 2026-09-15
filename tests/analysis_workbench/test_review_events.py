@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
+from robot_sf.analysis_workbench.review_contracts import component_result_from_dict
 from robot_sf.analysis_workbench.review_events import (
     COMPONENT_ID,
     descriptor,
@@ -59,8 +61,26 @@ CONFIG = {"t0_s": 0.0, "terminal_s": 1.0}
 
 
 def _stage(tmp_path: Path) -> None:
-    (tmp_path / "events.json").write_text(json.dumps(EVENTS), encoding="utf-8")
-    (tmp_path / "phases.json").write_text(json.dumps(PHASES), encoding="utf-8")
+    _write_source(tmp_path / "events.json", EVENTS, "event-list.v1")
+    _write_source(tmp_path / "phases.json", PHASES, "phase-list.v1")
+
+
+def _write_source(path: Path, payload: dict, schema_version: str) -> None:
+    document = {**payload, "schema_version": schema_version}
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+
+def _source_ref(artifact_id: str, uri: str, format_name: str, base: Path) -> dict:
+    path = base / uri
+    reference = {"artifact_id": artifact_id, "uri": uri, "format": format_name}
+    if path.is_file():
+        reference.update(
+            {
+                "schema": f"{format_name}.v1",
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        )
+    return reference
 
 
 def _request(
@@ -71,6 +91,7 @@ def _request(
     config_extra: dict | None = None,
     output: str = "out",
     sources: list[dict] | None = None,
+    base: Path | None = None,
 ) -> dict:
     from robot_sf.analysis_workbench.review_events import (
         component_request_from_dict,
@@ -86,8 +107,8 @@ def _request(
             sources
             if sources is not None
             else [
-                {"artifact_id": "events", "uri": "events.json", "format": "event-list"},
-                {"artifact_id": "phases", "uri": "phases.json", "format": "phase-list"},
+                _source_ref("events", "events.json", "event-list", base or Path.cwd()),
+                _source_ref("phases", "phases.json", "phase-list", base or Path.cwd()),
             ]
         ),
         "output_directory": output,
@@ -100,7 +121,7 @@ def _request(
 def test_success_indexes_overlapping_intervals_with_links(tmp_path: Path) -> None:
     _stage(tmp_path)
     source_before = (tmp_path / "events.json").read_bytes()
-    result = run(_request(), base=tmp_path)
+    result = run(_request(base=tmp_path), base=tmp_path)
     assert result.status == "complete"
     assert result.reason == ""
     assert (tmp_path / "events.json").read_bytes() == source_before
@@ -111,13 +132,25 @@ def test_success_indexes_overlapping_intervals_with_links(tmp_path: Path) -> Non
     assert by_id["ev-b"]["precursor_ids"] == ["ev-a"]
     assert by_id["ev-a"]["metric_value"] == 0.42
     assert by_id["ev-a"]["category"] == "near-miss"
-    assert len(result.artifacts) == 1
+    assert len(result.artifacts) == 2
+    assert index["schema_version"] == "event-index.v1"
+    assert result.provenance["source_integrity"] == "digest_and_schema_verified"
+    assert (
+        result.provenance["sources"][0]["sha256_declared"]
+        == result.provenance["sources"][0]["sha256_observed"]
+    )
+    capability = json.loads((tmp_path / "out" / "missing-capability-report.json").read_text())
+    assert capability["missing_capabilities"] == ["predicate-report"]
+    assert capability["skipped_optional_streams"] == []
+    for artifact in result.artifacts:
+        artifact_path = tmp_path / artifact["uri"]
+        assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == artifact["sha256"]
 
 
 def test_deterministic_repeat_runs_match_bytes(tmp_path: Path) -> None:
     _stage(tmp_path)
-    first = run(_request(output="out-a"), base=tmp_path)
-    second = run(_request(output="out-b"), base=tmp_path)
+    first = run(_request(output="out-a", base=tmp_path), base=tmp_path)
+    second = run(_request(output="out-b", base=tmp_path), base=tmp_path)
     assert first.status == second.status == "complete"
     assert (tmp_path / "out-a" / "event-index.json").read_bytes() == (
         tmp_path / "out-b" / "event-index.json"
@@ -126,9 +159,9 @@ def test_deterministic_repeat_runs_match_bytes(tmp_path: Path) -> None:
 
 def test_missing_links_are_unavailable_not_invented(tmp_path: Path) -> None:
     events = {"intervals": [dict(EVENTS["intervals"][0], precursor_ids=[], recovery_ids=[])]}
-    (tmp_path / "events.json").write_text(json.dumps(events), encoding="utf-8")
-    (tmp_path / "phases.json").write_text(json.dumps({"intervals": []}), encoding="utf-8")
-    result = run(_request(), base=tmp_path)
+    _write_source(tmp_path / "events.json", events, "event-list.v1")
+    _write_source(tmp_path / "phases.json", {"intervals": []}, "phase-list.v1")
+    result = run(_request(base=tmp_path), base=tmp_path)
     assert result.status == "partial"
     assert "links_unavailable" in result.reason
     assert result.artifacts == ()
@@ -138,9 +171,9 @@ def test_dangling_link_is_partial(tmp_path: Path) -> None:
     events = {
         "intervals": [dict(EVENTS["intervals"][0], recovery_ids=["ghost"])],
     }
-    (tmp_path / "events.json").write_text(json.dumps(events), encoding="utf-8")
-    (tmp_path / "phases.json").write_text(json.dumps(PHASES), encoding="utf-8")
-    result = run(_request(), base=tmp_path)
+    _write_source(tmp_path / "events.json", events, "event-list.v1")
+    _write_source(tmp_path / "phases.json", PHASES, "phase-list.v1")
+    result = run(_request(base=tmp_path), base=tmp_path)
     assert result.status == "partial"
     assert "dangling_links" in result.reason
 
@@ -157,18 +190,18 @@ def test_out_of_range_interval_is_partial(tmp_path: Path) -> None:
             }
         ]
     }
-    (tmp_path / "events.json").write_text(json.dumps(events), encoding="utf-8")
-    (tmp_path / "phases.json").write_text(json.dumps(PHASES), encoding="utf-8")
-    result = run(_request(), base=tmp_path)
+    _write_source(tmp_path / "events.json", events, "event-list.v1")
+    _write_source(tmp_path / "phases.json", PHASES, "phase-list.v1")
+    result = run(_request(base=tmp_path), base=tmp_path)
     assert result.status == "partial"
     assert "outside_range" in result.reason
 
 
-def test_corrupt_source_is_partial(tmp_path: Path) -> None:
+def test_corrupt_required_source_fails_closed(tmp_path: Path) -> None:
     (tmp_path / "events.json").write_text("{not json", encoding="utf-8")
-    (tmp_path / "phases.json").write_text(json.dumps(PHASES), encoding="utf-8")
-    result = run(_request(), base=tmp_path)
-    assert result.status == "partial"
+    _write_source(tmp_path / "phases.json", PHASES, "phase-list.v1")
+    result = run(_request(base=tmp_path), base=tmp_path)
+    assert result.status == "failed"
     assert "source_not_json" in result.reason
 
 
@@ -184,6 +217,134 @@ def test_incompatible_component_version_fails(tmp_path: Path) -> None:
     result = run(_request(config_extra={"min_component_version": "2.0.0"}), base=tmp_path)
     assert result.status == "failed"
     assert "incompatible_component_version" in result.reason
+
+
+def test_minor_component_version_requirement_is_enforced(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    result = run(
+        _request(config_extra={"min_component_version": "1.0.1"}, base=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "failed"
+    assert "incompatible_component_version" in result.reason
+
+
+def test_declared_required_optional_capability_must_be_present(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    result = run(_request(required=("predicate-report",), base=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "required_source_family_missing:predicate-report" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_optional_source_is_reported_as_skipped_when_not_required(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    _write_source(tmp_path / "predicates.json", {"intervals": []}, "predicate-report.v1")
+    sources = [
+        _source_ref("events", "events.json", "event-list", tmp_path),
+        _source_ref("phases", "phases.json", "phase-list", tmp_path),
+        _source_ref("predicates", "predicates.json", "predicate-report", tmp_path),
+    ]
+    result = run(_request(sources=sources, base=tmp_path), base=tmp_path)
+    assert result.status == "complete"
+    capability = json.loads((tmp_path / "out" / "missing-capability-report.json").read_text())
+    assert capability["missing_capabilities"] == []
+    assert capability["skipped_optional_streams"] == ["predicate-report"]
+
+
+def test_source_digest_mismatch_fails_closed(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    sources = [
+        _source_ref("events", "events.json", "event-list", tmp_path),
+        _source_ref("phases", "phases.json", "phase-list", tmp_path),
+    ]
+    sources[0]["sha256"] = "0" * 64
+    result = run(_request(sources=sources, base=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "source_digest_mismatch" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_declared_source_provenance_is_preserved(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    sources = [
+        _source_ref("events", "events.json", "event-list", tmp_path),
+        _source_ref("phases", "phases.json", "phase-list", tmp_path),
+    ]
+    sources[0].update(
+        {
+            "source_commit": "a" * 40,
+            "config_identity": "fixture-config-v1",
+            "units": "seconds",
+            "coordinate_frame": "world",
+        }
+    )
+    result = run(_request(sources=sources, base=tmp_path), base=tmp_path)
+    assert result.status == "complete"
+    source = result.provenance["sources"][0]
+    assert source["source_commit"] == "a" * 40
+    assert source["config_identity"] == "fixture-config-v1"
+    assert source["units"] == "seconds"
+    assert source["coordinate_frame"] == "world"
+
+
+def test_json_array_source_returns_a_failure_result(tmp_path: Path) -> None:
+    (tmp_path / "events.json").write_text("[]", encoding="utf-8")
+    _write_source(tmp_path / "phases.json", PHASES, "phase-list.v1")
+    result = run(_request(base=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "source_not_json_object" in result.reason
+    assert result.diagnostics
+    assert not (tmp_path / "out").exists()
+
+
+def test_source_symlink_escape_is_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside-events.json"
+    _write_source(outside, EVENTS, "event-list.v1")
+    (root / "events.json").symlink_to(outside)
+    _write_source(root / "phases.json", PHASES, "phase-list.v1")
+    result = run(_request(base=root), base=root)
+    assert result.status == "failed"
+    assert "source_unreadable_or_unsafe" in result.reason
+    assert not (tmp_path / "outside-output").exists()
+
+
+def test_output_parent_symlink_escape_is_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    _stage(root)
+    outside = tmp_path / "outside-output"
+    outside.mkdir()
+    (root / "redirect").symlink_to(outside, target_is_directory=True)
+    result = run(_request(output="redirect/out", base=root), base=root)
+    assert result.status == "failed"
+    assert "symlink" in result.reason
+    assert not (outside / "out").exists()
+
+
+def test_typed_identity_is_rejected_instead_of_coerced(tmp_path: Path) -> None:
+    events = {"intervals": [dict(EVENTS["intervals"][0], actor_ids=[1])]}
+    _write_source(tmp_path / "events.json", events, "event-list.v1")
+    _write_source(tmp_path / "phases.json", PHASES, "phase-list.v1")
+    result = run(_request(base=tmp_path), base=tmp_path)
+    assert result.status == "partial"
+    assert "typed_actor_id" in result.reason
+
+
+def test_conflicting_duplicate_interval_is_not_silently_deduplicated(tmp_path: Path) -> None:
+    events = {
+        "intervals": [
+            *EVENTS["intervals"],
+            dict(EVENTS["intervals"][0], category="conflicting-category"),
+        ]
+    }
+    _write_source(tmp_path / "events.json", events, "event-list.v1")
+    _write_source(tmp_path / "phases.json", PHASES, "phase-list.v1")
+    result = run(_request(base=tmp_path), base=tmp_path)
+    assert result.status == "partial"
+    assert "conflicting_duplicate_interval_id:ev-a" in result.reason
 
 
 def test_output_collision_fails(tmp_path: Path) -> None:
@@ -254,9 +415,40 @@ def test_cli_produces_index_from_fixture_request() -> None:
         # The gap-exercising fixture yields partial with the explicit code.
         assert completed.returncode == 1, completed.stderr[-2000:]
         payload = json.loads(completed.stdout)
+        component_result_from_dict(payload)
+        assert payload["schema_version"] == "component-result.v1"
         assert payload["status"] == "partial"
         assert "links_unavailable" in payload["reason"]
         index = json.loads((repo / output_rel / "event-index.json").read_text())
         assert len(index["intervals"]) == 3
     finally:
         shutil.rmtree(repo / output_rel, ignore_errors=True)
+
+
+def test_cli_malformed_json_emits_component_result_envelope(tmp_path: Path) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text("{not json", encoding="utf-8")
+    repo = Path(__file__).resolve().parents[2]
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "robot_sf.analysis_workbench.review_events",
+            "--input",
+            str(request_path),
+            "--output",
+            "out",
+            "--base",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        check=False,
+    )
+    assert completed.returncode == 1, completed.stderr[-2000:]
+    payload = json.loads(completed.stdout)
+    component_result_from_dict(payload)
+    assert payload["schema_version"] == "component-result.v1"
+    assert payload["status"] == "failed"
+    assert "JSONDecodeError" in payload["reason"]

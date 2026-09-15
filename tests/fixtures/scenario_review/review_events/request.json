@@ -6,12 +6,16 @@
     {
       "artifact_id": "events",
       "uri": "tests/fixtures/scenario_review/review_events/events.json",
-      "format": "event-list"
+      "format": "event-list",
+      "schema": "event-list.v1",
+      "sha256": "17648d3e8fae3c458bb91db01e853a3e79b673962e2e16d54d714d02f252ee5e"
     },
     {
       "artifact_id": "phases",
       "uri": "tests/fixtures/scenario_review/review_events/phases.json",
-      "format": "phase-list"
+      "format": "phase-list",
+      "schema": "phase-list.v1",
+      "sha256": "5b3443bdf05f491eeeaec4c77396ae72a08baf380f61ca2cd7823d5f4be3e964"
     }
   ],
   "output_directory": "output/scenario_review/srev-05-smoke",

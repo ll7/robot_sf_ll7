@@ -114,6 +114,7 @@ _EDIT_KEYS = {
     "speed": frozenset({"op", "start_s", "end_s", "factor"}),
     "crop": frozenset({"op", "x", "y", "width", "height"}),
 }
+_CROP_PROVENANCE_KEYS = frozenset({"operation", "box"})
 _RECEIPT_KEYS = frozenset(
     {
         "schema_version",
@@ -125,6 +126,7 @@ _RECEIPT_KEYS = frozenset(
         "edit_plan_digest",
         "output",
         "presentation_duration_s",
+        "crop",
         "audio_policy",
         "evidence_status",
         "evidence_boundary",
@@ -188,6 +190,7 @@ _TIMEMAP_KEYS = frozenset(
         "frame_order_source_indices",
         "first_source_frame",
         "terminal_source_frame",
+        "crop",
         "evidence_status",
         "evidence_boundary",
         "benchmark_success",
@@ -835,9 +838,11 @@ def _encoder_probe() -> tuple[dict[str, Any] | None, str | None]:
 
 @contextmanager
 def _operation_deadline(seconds: float) -> Iterator[None]:
-    """Bound an ffmpeg-backed operation when running on the main thread."""
+    """Bound an ffmpeg-backed operation or fail closed on worker threads."""
 
-    if signal.getsignal(signal.SIGALRM) is None or threading_is_not_main():
+    if threading_is_not_main():
+        raise _OperationTimeout("bounded deadline is unavailable on a non-main thread")
+    if signal.getsignal(signal.SIGALRM) is None:
         yield
         return
 
@@ -1026,6 +1031,46 @@ def _decode_image(path: Path) -> Any:
     return result
 
 
+def _load_manifest_frame(
+    frame_path: Path | None,
+    index: int,
+    declared_digest: str,
+    total_bytes: int,
+    decoded_bytes: int,
+) -> tuple[Any, str, int, int]:
+    """Verify and decode one manifest frame within both memory ceilings.
+
+    Returns:
+        Decoded frame, observed digest, encoded-byte total, and decoded-byte total.
+    """
+
+    if frame_path is None or not frame_path.is_file():
+        raise _SourceLoadError(f"source_frame_missing: frame_paths[{index}]")
+    observed, size = _sha256_file(frame_path, max_bytes=MAX_SOURCE_FILE_BYTES)
+    total_bytes += size
+    if total_bytes > MAX_SOURCE_BUFFER_BYTES:
+        raise _SourceLoadError(f"resource_limit: source_buffer_bytes>{MAX_SOURCE_BUFFER_BYTES}")
+    if observed.lower() != declared_digest.lower():
+        raise _SourceLoadError(
+            f"source_frame_digest_mismatch: frame_paths[{index}]",
+            diagnostics=(
+                {
+                    "code": "source_frame_digest_mismatch",
+                    "frame_index": index,
+                    "declared_sha256": str(declared_digest).lower(),
+                    "observed_sha256": observed,
+                },
+            ),
+        )
+    decoded = _decode_image(frame_path)
+    decoded_bytes += int(decoded.nbytes)
+    if decoded_bytes > MAX_SOURCE_BUFFER_BYTES:
+        raise _SourceLoadError(
+            f"resource_limit: decoded_source_buffer_bytes>{MAX_SOURCE_BUFFER_BYTES}"
+        )
+    return decoded, observed, total_bytes, decoded_bytes
+
+
 def _load_manifest_source(ref: SourceRef, root: Path) -> _Source:
     """Load and integrity-check every frame named by a frame manifest.
 
@@ -1062,29 +1107,19 @@ def _load_manifest_source(ref: SourceRef, root: Path) -> _Source:
     frames: list[Any] = []
     frame_digests: list[str] = []
     total_bytes = manifest_bytes
+    decoded_bytes = 0
     for index, (frame_uri, declared_digest) in enumerate(
         zip(manifest["frame_paths"], manifest["frame_digests"], strict=True)
     ):
         frame_path = _resolve_under(str(frame_uri), manifest_path.parent)
-        if frame_path is None or not frame_path.is_file():
-            raise _SourceLoadError(f"source_frame_missing: frame_paths[{index}]")
-        observed, size = _sha256_file(frame_path, max_bytes=MAX_SOURCE_FILE_BYTES)
-        total_bytes += size
-        if total_bytes > MAX_SOURCE_BUFFER_BYTES:
-            raise _SourceLoadError(f"resource_limit: source_buffer_bytes>{MAX_SOURCE_BUFFER_BYTES}")
-        if observed.lower() != declared_digest.lower():
-            raise _SourceLoadError(
-                f"source_frame_digest_mismatch: frame_paths[{index}]",
-                diagnostics=(
-                    {
-                        "code": "source_frame_digest_mismatch",
-                        "frame_index": index,
-                        "declared_sha256": str(declared_digest).lower(),
-                        "observed_sha256": observed,
-                    },
-                ),
-            )
-        frames.append(_decode_image(frame_path))
+        decoded, observed, total_bytes, decoded_bytes = _load_manifest_frame(
+            frame_path,
+            index,
+            declared_digest,
+            total_bytes,
+            decoded_bytes,
+        )
+        frames.append(decoded)
         frame_digests.append(observed)
     return _Source(
         frames=tuple(frames),
@@ -1207,7 +1242,11 @@ def _validate_preset(config: dict[str, Any]) -> tuple[int, int, float, str | Non
 def _select_source_ref(
     request: ComponentRequest,
 ) -> tuple[SourceRef | None, str | None, str | None]:
-    """Select one source family while honoring required capability requests.
+    """Select one source family with an explicit required/optional policy.
+
+    Exactly one required source family wins over any optional source family.
+    Multiple required families and multiple unqualified families are rejected
+    rather than silently choosing an arbitrary source.
 
     Returns:
         Selected source, optional reason, and optional unavailable marker.
@@ -1215,21 +1254,38 @@ def _select_source_ref(
 
     frame_refs = [ref for ref in request.sources if ref.format == FRAME_MANIFEST_FORMAT]
     clip_refs = [ref for ref in request.sources if ref.format == SOURCE_CLIP_FORMAT]
-    if "frame-sequence" in request.required_capabilities and not frame_refs:
-        return None, "required_source_family_missing: frame-sequence", STATUS_UNAVAILABLE
-    if "source-clip" in request.required_capabilities and not clip_refs:
-        return None, "required_source_family_missing: source-clip", STATUS_UNAVAILABLE
-    if not frame_refs and not clip_refs:
+    required_families = [
+        ("frame-sequence", frame_refs),
+        ("source-clip", clip_refs),
+    ]
+    required = [item for item in required_families if item[0] in request.required_capabilities]
+    if len(required) > 1:
+        return (
+            None,
+            "source_invalid: multiple required source families are unsupported",
+            STATUS_FAILED,
+        )
+    if required:
+        family, refs = required[0]
+        if not refs:
+            return None, f"required_source_family_missing: {family}", STATUS_UNAVAILABLE
+    elif not frame_refs and not clip_refs:
         return (
             None,
             "required_source_family_missing: frame-sequence or source-clip",
             STATUS_UNAVAILABLE,
         )
-    if len(frame_refs) > 1 or len(clip_refs) > 1:
+    elif frame_refs and clip_refs:
+        return (
+            None,
+            "source_invalid: multiple source families require one required capability",
+            STATUS_FAILED,
+        )
+    else:
+        refs = frame_refs or clip_refs
+    if len(refs) > 1:
         return None, "source_invalid: multiple source artifacts in one family", STATUS_FAILED
-    if frame_refs and clip_refs:
-        return None, "source_invalid: frame-sequence and source-clip are ambiguous", STATUS_FAILED
-    return (frame_refs or clip_refs)[0], None, None
+    return refs[0], None, None
 
 
 def _load_selected_source(ref: SourceRef, root: Path) -> _Source:
@@ -1495,15 +1551,17 @@ def _source_segments(
     cuts: list[dict[str, Any]],
     fps: float,
     frame_count: int,
-) -> tuple[_TimelineSegment, ...]:
+) -> tuple[tuple[_TimelineSegment, ...], str | None]:
     """Split kept spans at speed boundaries and resample each actual span.
 
     Returns:
-        Ordered timeline segments with source and presentation indices.
+        Ordered timeline segments with source and presentation indices, or a
+        stable resource-limit error before presentation indices are allocated.
     """
 
     segments: list[_TimelineSegment] = []
     segment_id = 0
+    presentation_frame_count = 0
     for start, end in kept:
         boundaries = {start, end}
         for speed in speeds:
@@ -1528,6 +1586,9 @@ def _source_segments(
                 else "passthrough"
             )
             presentation_count = max(1, math.ceil(len(indices) / factor - 1e-12))
+            presentation_frame_count += presentation_count
+            if presentation_frame_count > MAX_OUTPUT_FRAMES:
+                return (), f"resource_limit: output_frames>{MAX_OUTPUT_FRAMES}"
             presentation_indices = tuple(
                 indices[min(len(indices) - 1, math.floor(position * factor + 1e-12))]
                 for position in range(presentation_count)
@@ -1544,7 +1605,7 @@ def _source_segments(
                 )
             )
             segment_id += 1
-    return tuple(segments)
+    return tuple(segments), None
 
 
 def _pause_anchor(
@@ -1563,6 +1624,11 @@ def _pause_anchor(
     if not records:
         return None
     if math.isclose(at_s, duration_s, rel_tol=0.0, abs_tol=1e-9):
+        if not any(math.isclose(end, duration_s, rel_tol=0.0, abs_tol=1e-9) for _, end in kept):
+            return None
+        terminal_source_index = max(0, math.ceil(duration_s * source_fps - 1e-9) - 1)
+        if records[-1].source_index < terminal_source_index:
+            return None
         return len(records) - 1
     active = any(start <= at_s < end for start, end in kept)
     if not active:
@@ -1599,11 +1665,12 @@ def _apply_pauses(
     source_fps: float,
     out_fps: float,
     duration_s: float,
-) -> tuple[tuple[_PresentationFrame, ...], tuple[str, ...]]:
+) -> tuple[tuple[_PresentationFrame, ...], tuple[str, ...], str | None]:
     """Insert rounded pauses after retained anchor frames, including endpoints.
 
     Returns:
-        Presentation frames and stable diagnostics for dropped pauses.
+        Presentation frames, stable diagnostics for dropped pauses, and an
+        optional resource-limit error.
     """
 
     base: list[_PresentationFrame] = []
@@ -1637,6 +1704,9 @@ def _apply_pauses(
         hold = max(1, math.ceil(pause["duration_s"] * out_fps - 1e-12))
         anchor_time = base[position].source_index / source_fps
         insertions.append((position, order, hold, anchor_time))
+    projected_count = len(base) + sum(hold for _, _, hold, _ in insertions)
+    if projected_count > MAX_OUTPUT_FRAMES:
+        return (), tuple(diagnostics), f"resource_limit: output_frames>{MAX_OUTPUT_FRAMES}"
     final: list[_PresentationFrame] = []
     by_position: dict[int, list[tuple[int, int, float]]] = {}
     for position, order, hold, anchor_time in insertions:
@@ -1656,7 +1726,7 @@ def _apply_pauses(
                 )
                 for _ in range(hold)
             )
-    return tuple(final), tuple(diagnostics)
+    return tuple(final), tuple(diagnostics), None
 
 
 def _resolve_crop(
@@ -1684,6 +1754,58 @@ def _resolve_crop(
     return (left, top, right, bottom), diagnostic, None
 
 
+def _crop_provenance(crop_box: tuple[int, int, int, int] | None) -> dict[str, Any] | None:
+    """Return the normalized crop operation carried by both output artifacts."""
+
+    if crop_box is None:
+        return None
+    return {"operation": "crop", "box": list(crop_box)}
+
+
+def _build_timeline(
+    source: _Source,
+    kept: list[tuple[float, float]],
+    speeds: list[dict[str, Any]],
+    cuts: list[dict[str, Any]],
+    pauses: list[dict[str, Any]],
+    duration_s: float,
+    out_fps: float,
+) -> tuple[
+    tuple[_TimelineSegment, ...], tuple[_PresentationFrame, ...], tuple[str, ...], str | None
+]:
+    """Build the source and pause timeline before crop and output checks.
+
+    Returns:
+        Timeline segments, presentation records, pause diagnostics, and an
+        optional stable planning error.
+    """
+
+    segments, segment_error = _source_segments(
+        kept,
+        speeds,
+        cuts,
+        source.source_fps,
+        len(source.frames),
+    )
+    if segment_error is not None:
+        return (), (), (), segment_error
+    if not segments:
+        return (), (), (), "empty_timeline: no source frames remain"
+    records, pause_diagnostics, pause_error = _apply_pauses(
+        segments,
+        pauses,
+        kept,
+        source.source_fps,
+        out_fps,
+        duration_s,
+    )
+    if pause_error is not None:
+        return (), (), pause_diagnostics, pause_error
+    if not records:
+        return (), (), pause_diagnostics, "empty_timeline: no presentation frames remain"
+    return segments, records, pause_diagnostics, None
+
+
 def _plan_order(prepared: _Prepared) -> tuple[_Planned | None, str | None]:
     """Build a split, resource-bounded presentation timeline.
 
@@ -1703,25 +1825,17 @@ def _plan_order(prepared: _Prepared) -> tuple[_Planned | None, str | None]:
     kept = _apply_cuts(cuts, duration_s)
     if not kept:
         return None, "empty_timeline: cuts remove the whole source"
-    segments = _source_segments(
+    segments, records, pause_diagnostics, timeline_error = _build_timeline(
+        source,
         kept,
         speeds,
         cuts,
-        source.source_fps,
-        len(source.frames),
-    )
-    if not segments:
-        return None, "empty_timeline: no source frames remain"
-    records, pause_diagnostics = _apply_pauses(
-        segments,
         pauses,
-        kept,
-        source.source_fps,
-        prepared.out_fps,
         duration_s,
+        prepared.out_fps,
     )
-    if not records:
-        return None, "empty_timeline: no presentation frames remain"
+    if timeline_error is not None:
+        return None, timeline_error
     crop_box, crop_diagnostic, crop_error = _resolve_crop(crops, prepared.width, prepared.height)
     if crop_error is not None:
         return None, crop_error
@@ -1790,6 +1904,7 @@ def _build_time_map(prepared: _Prepared, plan: _Planned) -> dict[str, Any]:
         "frame_order_source_indices": [record.source_index for record in records],
         "first_source_frame": records[0].source_index,
         "terminal_source_frame": records[-1].source_index,
+        "crop": _crop_provenance(plan.crop_box),
         "evidence_status": "diagnostic-only",
         "evidence_boundary": "diagnostic-only; not benchmark evidence",
         "benchmark_success": False,
@@ -1940,6 +2055,36 @@ def _validate_time_map_segment(segment: Any, previous_end: float) -> float:  # n
     return float(segment["presentation_end_s"])
 
 
+def _validate_crop_provenance(value: Any) -> None:
+    """Validate normalized crop coordinates stored in a leaf artifact."""
+
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) != _CROP_PROVENANCE_KEYS:
+        raise ValueError("crop provenance is invalid")
+    if value["operation"] != "crop":
+        raise ValueError("crop provenance operation is invalid")
+    box = value["box"]
+    if (
+        not isinstance(box, list)
+        or len(box) != 4
+        or any(
+            isinstance(coordinate, bool) or not isinstance(coordinate, int) for coordinate in box
+        )
+    ):
+        raise ValueError("crop provenance box is invalid")
+    left, top, right, bottom = box
+    if (
+        left < 0
+        or top < 0
+        or right <= left
+        or bottom <= top
+        or right > MAX_OUTPUT_WIDTH
+        or bottom > MAX_OUTPUT_HEIGHT
+    ):
+        raise ValueError("crop provenance box is out of bounds")
+
+
 def _validate_time_map(payload: Any) -> None:  # noqa: C901, PLR0912
     """Validate the SREV-10 leaf time-map shape and finite interval semantics."""
 
@@ -1988,6 +2133,7 @@ def _validate_time_map(payload: Any) -> None:  # noqa: C901, PLR0912
         or payload["scientific_claim_allowed"] is not False
     ):
         raise ValueError("time-map evidence flags are invalid")
+    _validate_crop_provenance(payload["crop"])
     order = payload["frame_order_source_indices"]
     if (
         not isinstance(order, list)
@@ -2074,6 +2220,7 @@ def _validate_receipt(payload: Any) -> None:  # noqa: C901, PLR0912
         or payload["scientific_claim_allowed"] is not False
     ):
         raise ValueError("receipt evidence flags are invalid")
+    _validate_crop_provenance(payload["crop"])
     if payload["audio_policy"] != AUDIO_POLICY_SILENT:
         raise ValueError("receipt audio policy is invalid")
     output = payload["output"]
@@ -2094,6 +2241,10 @@ def _validate_receipt(payload: Any) -> None:  # noqa: C901, PLR0912
         or output["fps"] > MAX_OUTPUT_FPS
     ):
         raise ValueError("receipt output geometry is invalid")
+    if payload["crop"] is not None:
+        box = payload["crop"]["box"]
+        if output["width"] != box[2] - box[0] or output["height"] != box[3] - box[1]:
+            raise ValueError("receipt crop provenance disagrees with output geometry")
     if (
         isinstance(payload["source"].get("source_frames"), bool)
         or not isinstance(payload["source"].get("source_frames"), int)
@@ -2305,6 +2456,7 @@ def _build_receipt(
             "height": (plan.crop_box[3] - plan.crop_box[1] if plan.crop_box else prepared.height),
             "fps": prepared.out_fps,
         },
+        "crop": _crop_provenance(plan.crop_box),
         "presentation_duration_s": len(plan.frames) / prepared.out_fps,
         "audio_policy": AUDIO_POLICY_SILENT,
         "evidence_status": "diagnostic-only",

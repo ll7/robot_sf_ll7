@@ -7,6 +7,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import threading
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -257,6 +258,28 @@ def test_subframe_and_terminal_pauses_are_retained(
         assert mapping["frame_order_source_indices"][-2:] == [29, 29]
 
 
+def test_terminal_pause_after_tail_cut_is_dropped(tmp_path: Path) -> None:
+    """A terminal pause cannot anchor after a cut removed the source endpoint."""
+
+    result = run(
+        _request(
+            tmp_path,
+            config_extra={
+                "edits": [
+                    {"op": "cut", "start_s": 2.0, "end_s": 3.0},
+                    {"op": "pause", "at_s": 3.0, "duration_s": 0.1},
+                ],
+                "preset": dict(review_encode.TINY_PRESET),
+            },
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "dropped_pause" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
 def test_pause_in_cut_region_is_partial_without_artifacts(tmp_path: Path) -> None:
     """A pause with no retained anchor is explicit partial diagnostic output."""
 
@@ -294,6 +317,104 @@ def test_crop_clamp_is_partial(tmp_path: Path) -> None:
     assert result.status == "partial"
     assert "crop_clamped" in result.reason
     assert result.artifacts == ()
+
+
+def test_crop_provenance_is_recorded_in_receipt_and_time_map(tmp_path: Path) -> None:
+    """Normalized crop coordinates make the diagnostic transform auditable."""
+
+    result = run(
+        _request(
+            tmp_path,
+            config_extra={
+                "edits": [{"op": "crop", "x": 1.2, "y": 2.7, "width": 3.1, "height": 3.2}],
+                "preset": dict(review_encode.TINY_PRESET),
+            },
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "complete", result.reason
+    expected = {"operation": "crop", "box": [1, 2, 5, 6]}
+    receipt = json.loads((tmp_path / "out" / "encode-receipt.json").read_text(encoding="utf-8"))
+    mapping = _time_map(tmp_path / "out")
+    assert receipt["crop"] == mapping["crop"] == expected
+    assert receipt["output"]["width"] == 4
+    assert receipt["output"]["height"] == 4
+
+
+def test_required_frame_source_ignores_optional_clip(tmp_path: Path) -> None:
+    """One required source family remains authoritative when another is optional."""
+
+    request = _request(tmp_path, config_extra={"preset": dict(review_encode.TINY_PRESET)})
+    optional_clip = tmp_path / "optional-clip.bin"
+    optional_clip.write_bytes(b"optional source that must not be decoded")
+    optional_ref = replace(
+        request.sources[0],
+        artifact_id="optional-clip",
+        uri=optional_clip.name,
+        format="source-clip",
+        sha256=_sha256(optional_clip),
+    )
+    request = replace(request, sources=(*request.sources, optional_ref))
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == "complete", result.reason
+    receipt = json.loads((tmp_path / "out" / "encode-receipt.json").read_text(encoding="utf-8"))
+    assert receipt["source"]["format"] == "frame-sequence-manifest.v1"
+
+
+def test_manifest_decoded_memory_limit_counts_retained_frames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compressed manifest size cannot bypass the decoded retained-frame ceiling."""
+
+    class DecodedFrame:
+        nbytes = review_encode.MAX_SOURCE_BUFFER_BYTES // 2 + 1
+
+    monkeypatch.setattr(review_encode, "_decode_image", lambda _path: DecodedFrame())
+    result = run(_request(tmp_path), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "decoded_source_buffer_bytes" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_pause_expansion_is_rejected_before_materialization(tmp_path: Path) -> None:
+    """Projected pause cardinality is bounded before allocating repeated frames."""
+
+    result = run(
+        _request(
+            tmp_path,
+            config_extra={
+                "edits": [{"op": "pause", "at_s": 0.0, "duration_s": 300.0}],
+                "preset": {"width": 16, "height": 16, "fps": 120},
+            },
+        ),
+        base=tmp_path,
+    )
+
+    assert result.status == "failed"
+    assert result.reason == f"resource_limit: output_frames>{review_encode.MAX_OUTPUT_FRAMES}"
+    assert not (tmp_path / "out").exists()
+
+
+def test_threaded_deadlines_fail_closed_for_decoder_and_encoder(tmp_path: Path) -> None:
+    """Worker-thread callers cannot bypass bounded decoder or encoder deadlines."""
+
+    outcomes: dict[str, tuple[str | None, dict]] = {}
+
+    def worker() -> None:
+        outcomes["decoder"] = review_encode._decode_frame_count(tmp_path / "missing.mp4")
+        outcomes["encoder"] = review_encode._encode_mp4(
+            [], tmp_path / "missing-output.mp4", 10.0, {}
+        )
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    thread.join(timeout=2.0)
+    assert not thread.is_alive()
+    assert outcomes["decoder"] == (None, "decoder_timeout")
+    assert outcomes["encoder"] == ("encoder_timeout", {})
 
 
 def test_conflicting_speeds_fail(tmp_path: Path) -> None:

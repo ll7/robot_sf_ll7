@@ -652,3 +652,69 @@ def test_admitted_source_requires_v1_recipe_admission_reference() -> None:
 
     assert (result.status, result.reason) == ("unavailable", "receipt_stale")
     assert "migrate" in result.detail
+
+
+def test_cli_stdout_is_a_component_result_v1_envelope(tmp_path: Path, capsys: Any) -> None:
+    """The standalone CLI emits the shared result schema on successful requests."""
+    from robot_sf.analysis_workbench.review_contracts import main
+
+    request_path = Path("tests/fixtures/scenario_review/review_contracts/request.json")
+    config_path = Path("tests/fixtures/scenario_review/review_contracts/config.json")
+    code = main(
+        [
+            "--input",
+            str(request_path),
+            "--config",
+            str(config_path),
+            "--output",
+            "cli-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    parsed = component_result_from_dict(printed)
+    assert code == 0
+    assert printed["schema_version"] == "component-result.v1"
+    assert parsed.status == "complete"
+
+
+@pytest.mark.parametrize("parser_input", ["request", "config"])
+def test_cli_parser_limit_emits_stable_failed_result(
+    tmp_path: Path, capsys: Any, parser_input: str
+) -> None:
+    """Request and override config parser limits never leak a traceback."""
+    from robot_sf.analysis_workbench.review_contracts import main
+
+    request_path = tmp_path / "request.json"
+    config_path = tmp_path / "config.json"
+    huge_integer = "9" * 5001
+    if parser_input == "request":
+        request_path.write_text('{"config":{"seed":' + huge_integer + "}}", encoding="utf-8")
+    else:
+        request_path.write_text("{}", encoding="utf-8")
+        config_path.write_text('{"seed":' + huge_integer + "}", encoding="utf-8")
+
+    arguments = [
+        "--input",
+        str(request_path),
+        "--output",
+        "parser-limit-output",
+        "--base",
+        str(tmp_path),
+    ]
+    if parser_input == "config":
+        arguments.extend(["--config", str(config_path)])
+
+    exit_code = main(arguments)
+    captured = capsys.readouterr()
+    printed = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert printed["schema_version"] == "component-result.v1"
+    result = component_result_from_dict(printed)
+    assert result.status == "failed"
+    assert result.reason == f"invalid_input: {parser_input} JSON cannot be parsed safely"
+    assert not (tmp_path / "parser-limit-output").exists()

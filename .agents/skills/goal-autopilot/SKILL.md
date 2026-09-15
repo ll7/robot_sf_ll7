@@ -464,10 +464,14 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
    failures, stale-head state, terminal status, and the expected head SHA.
 
 3. Continue with non-conflicting work on the main thread: review other PRs, merge already-green
-   `merge-ready` PRs, or run bounded discovery. Do not mutate the waiting PR branch or resolve its
+   `merge-ready` PRs, promote green `merge-if-ci-green` PRs through `gh-pr-merger`,
+   or run bounded discovery. Do not mutate the waiting PR branch or resolve its
    final readiness while its monitor is active.
-4. When the monitor returns, the main agent must review the result against the current PR head SHA
-   before applying `merge-ready`, merging, or reporting completion.
+4. When the monitor returns, the main agent checks the result against the live
+   PR head SHA and conditional label, then routes a green, unchanged head to
+   `gh-pr-merger` for promotion. This CI readback is not a new implementation
+   review. A moved head or substantive new finding returns to normal review
+   triage before any readiness label, merge, or completion report.
 
 The polling helper prints queued, in-progress, failed, and passed check summaries. With `--json`,
 each poll payload includes compact `monitor` metadata: expected head SHA, SHA-match result, attempt

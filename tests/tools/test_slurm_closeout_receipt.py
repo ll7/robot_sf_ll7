@@ -81,7 +81,9 @@ def test_identity_and_source_mismatch_are_blocking(tmp_path: Path) -> None:
     path = tmp_path / "closeout.json"
     path.write_text("not-json\n", encoding="utf-8")
     assert validate_file(path) == ["scheduler closeout receipt cannot be read"]
-    assert "closeout receipt identity digest does not match its identity" in validate_payload(payload)
+    assert "closeout receipt identity digest does not match its identity" in validate_payload(
+        payload
+    )
 
 
 def test_credential_shaped_fields_are_rejected() -> None:

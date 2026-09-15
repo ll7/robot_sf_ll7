@@ -225,6 +225,21 @@ def test_oversized_integer_measurement_fails_closed(tmp_path: Path) -> None:
     assert not (tmp_path / "out").exists()
 
 
+def test_finite_measurements_with_nonfinite_difference_fail_closed(tmp_path: Path) -> None:
+    """Two finite values cannot publish an infinite treatment-control effect."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["families"][0]["conditions"][0]["measurements"]["clearance_m"]["value"] = -1.6e308
+    payload["families"][0]["conditions"][1]["measurements"]["clearance_m"]["value"] = 1.6e308
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "difference for clearance_m must be finite" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
 def test_second_artifact_failure_leaves_no_partial_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

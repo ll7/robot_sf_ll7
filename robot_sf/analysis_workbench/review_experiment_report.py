@@ -412,6 +412,10 @@ def _build_effects(
             control_value = float(control_measurement["value"])
             treatment_value = float(treatment_measurement["value"])
             delta = treatment_value - control_value
+            if not math.isfinite(delta):
+                raise ExperimentReportError(
+                    "invalid_input", f"difference for {metric} must be finite"
+                )
             effect.update(
                 {
                     "status": "interpretable",

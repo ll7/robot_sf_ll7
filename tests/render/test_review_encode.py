@@ -1,27 +1,82 @@
-"""Focused tests for the SREV-10 review-encode leaf (issue #9279)."""
+"""Focused source, timeline, envelope, and publication tests for SREV-10."""
 
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import subprocess
 import sys
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
 
-from robot_sf.analysis_workbench.review_contracts import component_request_from_dict
+from robot_sf.analysis_workbench.review_contracts import (
+    component_descriptor_from_dict,
+    component_request_from_dict,
+    component_result_from_dict,
+)
 from robot_sf.render import review_encode
-from robot_sf.render.review_encode import _render_frame, descriptor, run
+from robot_sf.render.review_encode import descriptor, result_payload, run
 
-FIXTURES = Path("tests/fixtures/scenario_review/review_encode")
-
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/scenario_review/review_encode"
 EXPECTED_ORDER = [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5, 6, 7, 8, 9, 20, 22, 24, 26, 28]
 
 
-def _request(tmp_path: Path, config_extra: dict | None = None, caps: list[str] | None = None):
-    manifest = tmp_path / "manifest.json"
-    manifest.write_text(json.dumps({"source_fps": 10, "source_frames": 30}), encoding="utf-8")
+def _sha256(path: Path) -> str:
+    """Return the digest used by a fixture source reference."""
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_source(tmp_path: Path, *, count: int = 30, variation: int = 0) -> str:
+    """Write numbered PNG frames and their integrity-bound manifest."""
+
+    from PIL import Image
+
+    frames_dir = tmp_path / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    paths: list[str] = []
+    digests: list[str] = []
+    for index in range(count):
+        relative = f"frames/frame-{index:03d}.png"
+        path = tmp_path / relative
+        image = Image.new(
+            "RGB",
+            (8, 6),
+            (
+                (index * 17 + variation) % 256,
+                (index * 31 + variation * 2) % 256,
+                (index * 47 + variation * 3) % 256,
+            ),
+        )
+        image.save(path, format="PNG")
+        paths.append(relative)
+        digests.append(_sha256(path))
+    manifest = {
+        "schema_version": "frame-sequence-manifest.v1",
+        "source_fps": 10,
+        "source_frames": count,
+        "frame_paths": paths,
+        "frame_digests": digests,
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+    return _sha256(manifest_path)
+
+
+def _request(
+    tmp_path: Path,
+    config_extra: dict | None = None,
+    caps: list[str] | None = None,
+    *,
+    variation: int = 0,
+    output: str = "out",
+):
+    """Create a parsed request backed by actual numbered source frames."""
+
+    manifest_sha = _write_source(tmp_path, variation=variation)
     payload = {
         "schema_version": "component-request.v1",
         "request_id": "t10",
@@ -31,9 +86,10 @@ def _request(tmp_path: Path, config_extra: dict | None = None, caps: list[str] |
                 "artifact_id": "frames",
                 "uri": "manifest.json",
                 "format": "frame-sequence-manifest.v1",
+                "sha256": manifest_sha,
             }
         ],
-        "output_directory": "out",
+        "output_directory": output,
         "config": config_extra or {},
         "required_capabilities": caps if caps is not None else ["frame-sequence"],
     }
@@ -41,17 +97,24 @@ def _request(tmp_path: Path, config_extra: dict | None = None, caps: list[str] |
 
 
 def _time_map(out: Path) -> dict:
+    """Load the emitted presentation-time-map.v1 leaf payload."""
+
     return json.loads((out / "time-map.json").read_text(encoding="utf-8"))
 
 
-def test_descriptor_declares_capabilities() -> None:
+def test_descriptor_is_shared_contract_valid() -> None:
+    """The descriptor must be accepted by SREV-01 before discovery."""
+
     desc = descriptor()
-    assert desc["component_id"] == "srev10-review-encode"
-    assert "frame-sequence" in desc["required_capabilities"]
-    assert "review-edit-mp4.v1" in desc["output_types"]
+    component_descriptor_from_dict(desc)
+    assert desc["schema_version"] == "component-descriptor.v1"
+    assert "frame-sequence" in desc["optional_capabilities"]
+    assert "source-clip" in desc["optional_capabilities"]
 
 
 def test_fixture_plan_produces_expected_frame_order(tmp_path: Path) -> None:
+    """Cuts, pauses, and a full-span speed edit preserve source frame identity."""
+
     config = json.loads((FIXTURES / "config.json").read_text(encoding="utf-8"))
     result = run(_request(tmp_path, config_extra=config), base=tmp_path)
     assert result.status == "complete", result.reason
@@ -59,6 +122,8 @@ def test_fixture_plan_produces_expected_frame_order(tmp_path: Path) -> None:
 
 
 def test_interval_endpoints_and_first_terminal_frames(tmp_path: Path) -> None:
+    """Half-open source intervals retain the first and terminal kept frames."""
+
     config = json.loads((FIXTURES / "config.json").read_text(encoding="utf-8"))
     result = run(_request(tmp_path, config_extra=config), base=tmp_path)
     assert result.status == "complete"
@@ -69,9 +134,12 @@ def test_interval_endpoints_and_first_terminal_frames(tmp_path: Path) -> None:
     assert mapping["segments"][-1]["presentation_end_s"] == pytest.approx(2.0)
 
 
-def test_encoded_video_decodes_to_planned_pixels(tmp_path: Path) -> None:
+def test_encoded_video_uses_actual_source_pixels(tmp_path: Path) -> None:
+    """The encoder must consume decoded fixture pixels instead of synthetic frames."""
+
     import imageio.v2 as imageio
     import numpy as np
+    from PIL import Image
 
     config = json.loads((FIXTURES / "config.json").read_text(encoding="utf-8"))
     result = run(_request(tmp_path, config_extra=config), base=tmp_path)
@@ -80,32 +148,146 @@ def test_encoded_video_decodes_to_planned_pixels(tmp_path: Path) -> None:
         decoded = [np.asarray(frame) for frame in reader]
     assert len(decoded) == len(EXPECTED_ORDER)
     for position in (0, 10, 15, 19):
-        expected = np.asarray(_render_frame(EXPECTED_ORDER[position], 160, 120))
+        with Image.open(
+            tmp_path / "frames" / f"frame-{EXPECTED_ORDER[position]:03d}.png"
+        ) as source:
+            expected = np.asarray(source.resize((160, 120)), dtype=np.uint8)
         assert decoded[position].shape == expected.shape
-        assert abs(decoded[position].astype(int) - expected.astype(int)).mean() < 12
+        assert abs(decoded[position].astype(int) - expected.astype(int)).mean() < 15
 
 
 def test_pause_repeats_anchor_frame(tmp_path: Path) -> None:
+    """A pause inserts repeated decoded anchor frames at presentation time."""
+
     config = json.loads((FIXTURES / "config.json").read_text(encoding="utf-8"))
     result = run(_request(tmp_path, config_extra=config), base=tmp_path)
     assert result.status == "complete"
-    order = _time_map(tmp_path / "out")["frame_order_source_indices"]
-    assert order.count(5) == 6
+    assert _time_map(tmp_path / "out")["frame_order_source_indices"].count(5) == 6
 
 
-def test_speed_resamples_kept_span(tmp_path: Path) -> None:
-    config = json.loads((FIXTURES / "config.json").read_text(encoding="utf-8"))
-    result = run(_request(tmp_path, config_extra=config), base=tmp_path)
-    assert result.status == "complete"
+def test_partial_speed_is_split_and_applied(tmp_path: Path) -> None:
+    """A speed edit affects only its bounded interval and produces split map segments."""
+
+    result = run(
+        _request(
+            tmp_path,
+            config_extra={
+                "edits": [{"op": "speed", "start_s": 0.5, "end_s": 1.5, "factor": 2.0}],
+                "preset": dict(review_encode.TINY_PRESET),
+            },
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "complete", result.reason
+    mapping = _time_map(tmp_path / "out")
+    assert len(mapping["frame_order_source_indices"]) == 25
+    assert [segment["operation"] for segment in mapping["segments"]] == [
+        "passthrough",
+        "speed",
+        "passthrough",
+    ]
+    assert mapping["segments"][1]["source_start_s"] == pytest.approx(0.5)
+    assert mapping["segments"][1]["source_end_s"] == pytest.approx(1.5)
+
+
+def test_slow_motion_factor_repeats_without_index_error(tmp_path: Path) -> None:
+    """Factors below one expand a span deterministically and stay within source bounds."""
+
+    result = run(
+        _request(
+            tmp_path,
+            config_extra={
+                "edits": [{"op": "speed", "start_s": 0.0, "end_s": 3.0, "factor": 0.5}],
+                "preset": dict(review_encode.TINY_PRESET),
+            },
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "complete", result.reason
     order = _time_map(tmp_path / "out")["frame_order_source_indices"]
-    assert order[-5:] == [20, 22, 24, 26, 28]
+    assert len(order) == 60
+    assert order[:4] == [0, 0, 1, 1]
+    assert order[-1] == 29
+
+
+def test_cut_and_speed_keep_operation_identity(tmp_path: Path) -> None:
+    """Untouched post-cut spans must not be mislabeled as speed edits."""
+
+    result = run(
+        _request(
+            tmp_path,
+            config_extra={
+                "edits": [
+                    {"op": "cut", "start_s": 1.0, "end_s": 2.0},
+                    {"op": "speed", "start_s": 2.0, "end_s": 2.5, "factor": 2.0},
+                ],
+                "preset": dict(review_encode.TINY_PRESET),
+            },
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "complete", result.reason
+    assert [segment["operation"] for segment in _time_map(tmp_path / "out")["segments"]] == [
+        "cut",
+        "speed",
+        "cut",
+    ]
+
+
+@pytest.mark.parametrize(("at_s", "duration_s"), [(0.001, 0.001), (3.0, 0.001)])
+def test_subframe_and_terminal_pauses_are_retained(
+    tmp_path: Path, at_s: float, duration_s: float
+) -> None:
+    """Sub-frame and terminal pauses round up to at least one output frame."""
+
+    result = run(
+        _request(
+            tmp_path,
+            config_extra={
+                "edits": [{"op": "pause", "at_s": at_s, "duration_s": duration_s}],
+                "preset": dict(review_encode.TINY_PRESET),
+            },
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "complete", result.reason
+    mapping = _time_map(tmp_path / "out")
+    assert any(segment["operation"] == "pause" for segment in mapping["segments"])
+    if at_s == 3.0:
+        assert mapping["frame_order_source_indices"][-2:] == [29, 29]
+
+
+def test_pause_in_cut_region_is_partial_without_artifacts(tmp_path: Path) -> None:
+    """A pause with no retained anchor is explicit partial diagnostic output."""
+
+    result = run(
+        _request(
+            tmp_path,
+            config_extra={
+                "edits": [
+                    {"op": "cut", "start_s": 0.0, "end_s": 1.0},
+                    {"op": "pause", "at_s": 0.5, "duration_s": 0.1},
+                ],
+            },
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "dropped_pause" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
 
 
 def test_crop_clamp_is_partial(tmp_path: Path) -> None:
-    edits = [{"op": "crop", "x": 100, "y": 100, "width": 200, "height": 200}]
+    """Clamping a valid crop is surfaced as partial rather than complete evidence."""
+
     result = run(
         _request(
-            tmp_path, config_extra={"edits": edits, "preset": dict(review_encode.TINY_PRESET)}
+            tmp_path,
+            config_extra={
+                "edits": [{"op": "crop", "x": 100, "y": 100, "width": 200, "height": 200}],
+                "preset": dict(review_encode.TINY_PRESET),
+            },
         ),
         base=tmp_path,
     )
@@ -115,6 +297,8 @@ def test_crop_clamp_is_partial(tmp_path: Path) -> None:
 
 
 def test_conflicting_speeds_fail(tmp_path: Path) -> None:
+    """Overlapping speed factors with different values make the map ambiguous."""
+
     edits = [
         {"op": "speed", "start_s": 0.0, "end_s": 2.0, "factor": 2.0},
         {"op": "speed", "start_s": 1.0, "end_s": 3.0, "factor": 0.5},
@@ -125,20 +309,127 @@ def test_conflicting_speeds_fail(tmp_path: Path) -> None:
 
 
 def test_cut_everything_fails(tmp_path: Path) -> None:
-    edits = [{"op": "cut", "start_s": 0.0, "end_s": 3.0}]
-    result = run(_request(tmp_path, config_extra={"edits": edits}), base=tmp_path)
+    """Removing the whole source is a failed empty timeline, not an empty MP4."""
+
+    result = run(
+        _request(tmp_path, config_extra={"edits": [{"op": "cut", "start_s": 0.0, "end_s": 3.0}]}),
+        base=tmp_path,
+    )
     assert result.status == "failed"
     assert "empty_timeline" in result.reason
 
 
-def test_corrupt_manifest_fails(tmp_path: Path) -> None:
+def test_corrupt_manifest_fails_closed(tmp_path: Path) -> None:
+    """A source changed after request admission fails the declared digest binding."""
+
     request = _request(tmp_path)
     (tmp_path / "manifest.json").write_text("{nope", encoding="utf-8")
     result = run(request, base=tmp_path)
     assert result.status == "failed"
+    assert "source_digest_mismatch" in result.reason
 
 
-def test_missing_family_is_unavailable(tmp_path: Path) -> None:
+def test_source_digest_change_changes_consumed_output(tmp_path: Path) -> None:
+    """Different source pixels produce different encoded output and receipt identity."""
+
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first = run(_request(first_root, variation=0), base=first_root)
+    second = run(_request(second_root, variation=3), base=second_root)
+    assert first.status == second.status == "complete"
+    first_receipt = json.loads((first_root / "out" / "encode-receipt.json").read_text())
+    second_receipt = json.loads((second_root / "out" / "encode-receipt.json").read_text())
+    assert first_receipt["source"]["frame_sha256"] != second_receipt["source"]["frame_sha256"]
+    assert first_receipt["output"]["video_sha256"] != second_receipt["output"]["video_sha256"]
+
+
+def test_repeated_fixture_runs_have_stable_logical_artifacts(tmp_path: Path) -> None:
+    """Repeated identical fixture inputs keep IDs, timing, and logical digests stable."""
+
+    roots = [tmp_path / "first", tmp_path / "second"]
+    results = []
+    for root in roots:
+        root.mkdir()
+        results.append(
+            run(
+                _request(
+                    root,
+                    config_extra={"preset": dict(review_encode.TINY_PRESET)},
+                ),
+                base=root,
+            )
+        )
+    assert [result.status for result in results] == ["complete", "complete"]
+    first_out, second_out = (root / "out" for root in roots)
+    assert (first_out / "encode-receipt.json").read_bytes() == (
+        second_out / "encode-receipt.json"
+    ).read_bytes()
+    assert (first_out / "time-map.json").read_bytes() == (second_out / "time-map.json").read_bytes()
+    assert [artifact["artifact_id"] for artifact in results[0].artifacts] == [
+        artifact["artifact_id"] for artifact in results[1].artifacts
+    ]
+    assert [artifact["sha256"] for artifact in results[0].artifacts] == [
+        artifact["sha256"] for artifact in results[1].artifacts
+    ]
+
+
+def test_encoder_failure_has_no_complete_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An encoder crash is failed closed and cannot publish a complete output."""
+
+    monkeypatch.setattr(
+        review_encode,
+        "_encode_mp4",
+        lambda *_args: ("encoder_failed: injected", {}),
+    )
+    result = run(_request(tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
+def test_source_clip_is_decoded_and_bound(tmp_path: Path) -> None:
+    """A clip-only request decodes its frames and does not synthesize a manifest."""
+
+    import imageio.v2 as imageio
+    import numpy as np
+
+    clip = tmp_path / "source.mp4"
+    frames = [
+        np.full((12, 16, 3), (index * 40, 10, 200 - index * 20), dtype=np.uint8)
+        for index in range(4)
+    ]
+    imageio.mimsave(str(clip), frames, fps=10, codec="libx264", macro_block_size=None)
+    payload = {
+        "schema_version": "component-request.v1",
+        "request_id": "clip",
+        "component_id": "srev10-review-encode",
+        "sources": [
+            {
+                "artifact_id": "clip",
+                "uri": "source.mp4",
+                "format": "source-clip",
+                "sha256": _sha256(clip),
+            }
+        ],
+        "output_directory": "clip-out",
+        "config": {"preset": dict(review_encode.TINY_PRESET)},
+        "required_capabilities": ["source-clip"],
+    }
+    result = run(component_request_from_dict(payload), base=tmp_path)
+    assert result.status == "complete", result.reason
+    mapping = _time_map(tmp_path / "clip-out")
+    assert mapping["source_frames"] == 4
+    assert mapping["frame_order_source_indices"] == [0, 1, 2, 3]
+
+
+def test_missing_source_family_is_unavailable(tmp_path: Path) -> None:
+    """Requests without a usable source family are unavailable."""
+
+    manifest_sha = _write_source(tmp_path)
     payload = {
         "schema_version": "component-request.v1",
         "request_id": "t10",
@@ -148,101 +439,178 @@ def test_missing_family_is_unavailable(tmp_path: Path) -> None:
                 "artifact_id": "scores",
                 "uri": "manifest.json",
                 "format": "exemplar-scores",
+                "sha256": manifest_sha,
             }
         ],
         "output_directory": "out",
         "config": {},
         "required_capabilities": ["frame-sequence"],
     }
-    (tmp_path / "manifest.json").write_text("{}", encoding="utf-8")
     result = run(component_request_from_dict(payload), base=tmp_path)
     assert result.status == "unavailable"
 
 
 def test_unsupported_capability_is_unavailable(tmp_path: Path) -> None:
+    """Unknown capability names cannot be silently downgraded."""
+
     result = run(_request(tmp_path, caps=["telemetry-xyz"]), base=tmp_path)
     assert result.status == "unavailable"
     assert "unsupported_required_capability" in result.reason
 
 
 def test_incompatible_version_fails(tmp_path: Path) -> None:
+    """A request requiring a newer major component version fails before encoding."""
+
     result = run(_request(tmp_path, config_extra={"min_component_version": "9.0.0"}), base=tmp_path)
     assert result.status == "failed"
     assert "incompatible_component_version" in result.reason
 
 
-def test_output_collision_fails(tmp_path: Path) -> None:
-    out = tmp_path / "out"
-    out.mkdir()
-    (out / "sentinel.txt").write_text("x", encoding="utf-8")
+def test_component_identity_is_admitted(tmp_path: Path) -> None:
+    """A request for another component cannot be completed by this leaf."""
+
+    result = run(replace(_request(tmp_path), component_id="other-component"), base=tmp_path)
+    assert result.status == "unavailable"
+    assert "unsupported_component" in result.reason
+
+
+def test_direct_api_malformed_request_fails_closed(tmp_path: Path) -> None:
+    """Direct dataclass callers receive stable failures for malformed fields."""
+
+    request = _request(tmp_path)
+    empty_sources = run(replace(request, sources=[]), base=tmp_path)
+    assert empty_sources.status == "failed"
+    malformed_digest = run(
+        replace(request, sources=(replace(request.sources[0], sha256=123),)),
+        base=tmp_path,
+    )
+    assert malformed_digest.status == "failed"
+    missing_digest = run(
+        replace(request, sources=(replace(request.sources[0], sha256=""),)),
+        base=tmp_path,
+    )
+    assert missing_digest.status == "failed"
+
+
+@pytest.mark.parametrize(
+    ("config", "reason"),
+    [
+        ({"edits": [{"op": "cut", "start_s": [0], "end_s": 1}]}, "edit_plan_invalid"),
+        (
+            {"edits": [{"op": "pause", "at_s": 0.0, "duration_s": float("nan")}]},
+            "edit_plan_invalid",
+        ),
+        (
+            {"edits": [{"op": "speed", "start_s": 0.0, "end_s": 1.0, "factor": 1e-12}]},
+            "out of range",
+        ),
+        ({"unknown": True}, "unknown keys"),
+        ({"preset": {"width": float("inf"), "height": 120, "fps": 10}}, "config_invalid"),
+    ],
+)
+def test_malformed_config_and_edits_fail_closed(tmp_path: Path, config: dict, reason: str) -> None:
+    """Malformed values and unknown keys produce stable failures instead of exceptions."""
+
+    result = run(_request(tmp_path, config_extra=config), base=tmp_path)
+    assert result.status == "failed"
+    assert reason in result.reason
+
+
+def test_output_collision_includes_empty_directory(tmp_path: Path) -> None:
+    """An existing empty output directory is a collision under no-overwrite semantics."""
+
+    (tmp_path / "out").mkdir()
     result = run(_request(tmp_path), base=tmp_path)
     assert result.status == "failed"
     assert "output_collision" in result.reason
 
 
+def test_output_symlink_escape_is_rejected(tmp_path: Path) -> None:
+    """Output symlinks are rejected before any encoder or file publication."""
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / "out").symlink_to(outside, target_is_directory=True)
+    result = run(_request(tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "unsafe_output_path" in result.reason
+    assert not list(outside.iterdir())
+
+
 def test_non_silent_audio_fails(tmp_path: Path) -> None:
+    """The v1 silent-audio policy rejects unsupported passthrough requests."""
+
     result = run(_request(tmp_path, config_extra={"audio_policy": "passthrough"}), base=tmp_path)
     assert result.status == "failed"
     assert "unsupported_audio_policy" in result.reason
 
 
-def test_deterministic_repeat_runs_match_bytes(tmp_path: Path) -> None:
-    import imageio.v2 as imageio
-    import numpy as np
+def test_resource_limits_reject_huge_manifest_before_frame_load(tmp_path: Path) -> None:
+    """A source frame ceiling blocks huge declarations without allocating frames."""
 
-    first = tmp_path / "a"
-    second = tmp_path / "b"
-    for target in (first, second):
-        manifest = target / "manifest.json"
-        target.mkdir(parents=True)
-        manifest.write_text(json.dumps({"source_fps": 10, "source_frames": 30}), encoding="utf-8")
-        payload = {
-            "schema_version": "component-request.v1",
-            "request_id": "t10",
-            "component_id": "srev10-review-encode",
-            "sources": [
-                {
-                    "artifact_id": "frames",
-                    "uri": "manifest.json",
-                    "format": "frame-sequence-manifest.v1",
-                }
-            ],
-            "output_directory": "out",
-            "config": json.loads((FIXTURES / "config.json").read_text(encoding="utf-8")),
-            "required_capabilities": ["frame-sequence"],
-        }
-        result = run(component_request_from_dict(payload), base=target)
-        assert result.status == "complete"
-    assert (first / "out" / "time-map.json").read_bytes() == (
-        second / "out" / "time-map.json"
-    ).read_bytes()
-    assert (first / "out" / "encode-receipt.json").read_bytes() == (
-        second / "out" / "encode-receipt.json"
-    ).read_bytes()
-    with imageio.get_reader(str(first / "out" / "edit.mp4")) as reader_a:
-        pixels_a = [np.asarray(frame) for frame in reader_a]
-    with imageio.get_reader(str(second / "out" / "edit.mp4")) as reader_b:
-        pixels_b = [np.asarray(frame) for frame in reader_b]
-    assert len(pixels_a) == len(pixels_b) == len(EXPECTED_ORDER)
-    for left, right in zip(pixels_a, pixels_b, strict=True):
-        assert (left == right).all()
+    request = _request(tmp_path)
+    manifest = {
+        "schema_version": "frame-sequence-manifest.v1",
+        "source_fps": 10,
+        "source_frames": review_encode.MAX_SOURCE_FRAMES + 1,
+        "frame_paths": [],
+        "frame_digests": [],
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+    request = replace(
+        request, sources=(replace(request.sources[0], sha256=_sha256(manifest_path)),)
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "resource_limit" in result.reason
 
 
-def test_cli_end_to_end(tmp_path: Path) -> None:
-    out = tmp_path / "cli-out"
+def test_result_envelope_has_schema_and_artifact_digests(tmp_path: Path) -> None:
+    """Complete API output serializes to the shared result envelope with bound files."""
+
+    result = run(_request(tmp_path), base=tmp_path)
+    payload = result_payload(result)
+    component_result_from_dict(payload)
+    assert payload["schema_version"] == "component-result.v1"
+    for artifact in payload["artifacts"]:
+        assert artifact["sha256"] == _sha256(tmp_path / "out" / artifact["uri"])
+
+
+def test_cli_emits_schema_valid_status_and_nonzero_failure(tmp_path: Path) -> None:
+    """The CLI prints a versioned result and returns nonzero for handled failure."""
+
+    request = _request(tmp_path)
+    input_path = tmp_path / "input.json"
+    input_payload = {
+        "schema_version": "component-request.v1",
+        "request_id": request.request_id,
+        "component_id": request.component_id,
+        "sources": [
+            {key: value for key, value in asdict(source).items() if value}
+            for source in request.sources
+        ],
+        "output_directory": request.output_directory,
+        "config": request.config,
+        "required_capabilities": list(request.required_capabilities),
+    }
+    input_path.write_text(json.dumps(input_payload, sort_keys=True) + "\n", encoding="utf-8")
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{}\n", encoding="utf-8")
+    output_path = tmp_path / "cli-out"
     completed = subprocess.run(
         [
             sys.executable,
             "-m",
             "robot_sf.render.review_encode",
             "--input",
-            str((FIXTURES / "request.json").resolve()),
+            str(input_path),
             "--config",
-            str((FIXTURES / "config.json").resolve()),
+            str(config_path),
             "--output",
-            str(out),
+            str(output_path),
             "--base",
-            ".",
+            str(tmp_path),
         ],
         capture_output=True,
         text=True,
@@ -250,12 +618,57 @@ def test_cli_end_to_end(tmp_path: Path) -> None:
     )
     assert completed.returncode == 0, completed.stderr[-2000:]
     envelope = json.loads(completed.stdout)
+    component_result_from_dict(envelope)
     assert envelope["status"] == "complete"
-    assert (out / "edit.mp4").is_file()
-    assert (out / "encode-receipt.json").is_file()
+    assert all("sha256" in artifact for artifact in envelope["artifacts"])
+
+    failed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "robot_sf.render.review_encode",
+            "--input",
+            str(input_path),
+            "--output",
+            str(tmp_path.parent / "srev10-cli-outside" / "bad"),
+            "--base",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert failed.returncode == 2
+    component_result_from_dict(json.loads(failed.stdout))
+
+    config_path.write_text('{"unknown": true}\n', encoding="utf-8")
+    handled = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "robot_sf.render.review_encode",
+            "--input",
+            str(input_path),
+            "--config",
+            str(config_path),
+            "--output",
+            str(tmp_path / "cli-bad"),
+            "--base",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert handled.returncode == 1
+    handled_envelope = json.loads(handled.stdout)
+    component_result_from_dict(handled_envelope)
+    assert handled_envelope["status"] == "failed"
 
 
 def test_module_has_no_simulation_imports() -> None:
+    """The leaf remains an offline renderer and cannot import simulator modules."""
+
     tree = ast.parse(
         (Path(__file__).resolve().parents[2] / "robot_sf/render/review_encode.py").read_bytes()
     )

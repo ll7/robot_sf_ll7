@@ -32,7 +32,7 @@ uv run python scripts/analysis/validate_trace_predicate_evaluation_issue_9305.py
   --output-json docs/context/evidence/issue_9305_predicate_validation/report.v1.json \
   --output-markdown docs/context/evidence/issue_9305_predicate_validation/report.v1.md \
   --repo-root . \
-  --expected-source-commit b8811949e087fabae6c6b57656bd7090d92e43ac
+  --expected-source-commit 754509029710564ef801b79cc8d86a78011899f4
 ```
 
 The command performs static contract and file-integrity checks only. It does

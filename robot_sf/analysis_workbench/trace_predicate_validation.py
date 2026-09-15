@@ -25,7 +25,7 @@ from jsonschema import Draft202012Validator
 from robot_sf.analysis_workbench.simulation_trace_export import (
     SIMULATION_TRACE_EXPORT_SCHEMA_VERSION,
     SimulationTraceExportValidationError,
-    load_simulation_trace_export,
+    simulation_trace_export_from_dict,
 )
 from robot_sf.analysis_workbench.trace_failure_predicates import (
     TRACE_FAILURE_PREDICATE_IDS,
@@ -678,11 +678,13 @@ def _semantic_errors(
         errors.append("/cases: case_id values must be unique")
     case_id_set = set(case_ids)
     seen_trace_uris: set[str] = set()
+    minimum_reviewers = payload["review_protocol"]["minimum_reviewers"]
     for index, case in enumerate(cases):
         errors.extend(
             _case_semantic_errors(
                 case,
                 index=index,
+                minimum_reviewers=minimum_reviewers,
                 source_kind=source_kind,
                 source_commit=source_commit,
                 repo_root=repo_root,
@@ -699,6 +701,7 @@ def _case_semantic_errors(  # noqa: C901, PLR0912
     case: Mapping[str, Any],
     *,
     index: int,
+    minimum_reviewers: int,
     source_kind: str,
     source_commit: str,
     repo_root: Path,
@@ -759,6 +762,8 @@ def _case_semantic_errors(  # noqa: C901, PLR0912
 
     review = case["review"]
     reviewers = review["reviewers"]
+    if len(reviewers) < minimum_reviewers:
+        errors.append(f"{prefix}/review/reviewers: requires at least {minimum_reviewers} reviewers")
     reviewer_ids = [reviewer["reviewer_id"] for reviewer in reviewers]
     if len(set(reviewer_ids)) != len(reviewer_ids):
         errors.append(f"{prefix}/review/reviewers: reviewer_id values must be unique per case")
@@ -835,8 +840,13 @@ def _available_trace_errors(  # noqa: C901, PLR0912
             f"{prefix}/trace_ref/source_commit: source commit differs from set provenance"
         )
     try:
-        trace = load_simulation_trace_export(resolved)
-    except (OSError, json.JSONDecodeError, SimulationTraceExportValidationError) as exc:
+        raw_trace = _strict_json_loads(resolved.read_text(encoding="utf-8"))
+        if not isinstance(raw_trace, Mapping):
+            raise SimulationTraceExportValidationError(
+                ["expected a mapping payload"], source=resolved
+            )
+        trace = simulation_trace_export_from_dict(raw_trace, source=resolved)
+    except (OSError, UnicodeDecodeError, ValueError, SimulationTraceExportValidationError) as exc:
         errors.append(f"{prefix}/trace_ref: referenced trace is not a valid strict export: {exc}")
         return errors
     if trace.schema_version != SIMULATION_TRACE_EXPORT_SCHEMA_VERSION:
@@ -853,7 +863,14 @@ def _available_trace_errors(  # noqa: C901, PLR0912
         errors.append(
             f"{prefix}/planner_identity_status: available trace planner identity must be source_bound"
         )
-    if source_kind == "retained_trace_corpus" and case["map_identity_status"] == "unavailable":
+    if (
+        source_kind == "bounded_labeled_fixture"
+        and case["map_identity_status"] != "fixture_annotation"
+    ):
+        errors.append(
+            f"{prefix}/map_identity_status: bounded fixture maps must remain fixture_annotation"
+        )
+    elif source_kind == "retained_trace_corpus" and case["map_identity_status"] == "unavailable":
         errors.append(
             f"{prefix}/map_identity_status: retained corpus rows require map identity status"
         )

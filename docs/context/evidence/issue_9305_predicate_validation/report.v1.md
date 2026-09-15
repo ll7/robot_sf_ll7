@@ -2,7 +2,7 @@
 
 - Evaluation set: `issue_9305_bounded_predicate_validation` v1
 - Evidence status: `diagnostic-only`; retained traces: `unavailable`.
-- Source commit: `b8811949e087fabae6c6b57656bd7090d92e43ac`; set SHA-256: `6cc0a06c454142dd7895bac5a68b573dbb30423017608659b4af4e7740d8be71`.
+- Source commit: `754509029710564ef801b79cc8d86a78011899f4`; set SHA-256: `141a80f67b0720b37c1b37e9d47904412f819d27158a609a8c495fd12f820be6`.
 - Claim boundary: Diagnostic-only contract and fixture mechanics; no retained-production precision/recall, grouping, or causal claim.
 
 ## Coverage

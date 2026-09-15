@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -97,7 +98,7 @@ def test_bounded_fixture_reports_all_required_validation_dimensions() -> None:
     assert report["observations"]["causal_hypotheses"]["used_for_metrics"] is False
     assert set(report["predicate_metrics"]) == set(TRACE_FAILURE_PREDICATE_IDS)
     assert evaluation_set["provenance"]["source_commit"] == (
-        "b8811949e087fabae6c6b57656bd7090d92e43ac"
+        "754509029710564ef801b79cc8d86a78011899f4"
     )
 
 
@@ -131,6 +132,42 @@ def test_current_base_pin_is_checked() -> None:
             repo_root=REPO_ROOT,
             expected_source_commit="0" * 40,
         )
+
+
+def test_declared_minimum_reviewer_count_is_enforced() -> None:
+    """Every case must satisfy the evaluation set's declared reviewer minimum."""
+    payload = _load_fixture()
+    payload["review_protocol"]["minimum_reviewers"] = 3
+
+    with pytest.raises(TracePredicateValidationError, match="requires at least 3 reviewers"):
+        validate_trace_predicate_evaluation_set(payload, repo_root=REPO_ROOT)
+
+
+def test_bounded_fixture_map_identity_cannot_be_source_bound() -> None:
+    """Fixture traces cannot turn an annotation-only map ID into source provenance."""
+    payload = _load_fixture()
+    payload["cases"][0]["map_identity_status"] = "source_bound"
+
+    with pytest.raises(TracePredicateValidationError, match="fixture_annotation"):
+        validate_trace_predicate_evaluation_set(payload, repo_root=REPO_ROOT)
+
+
+def test_duplicate_keys_in_referenced_trace_are_rejected(tmp_path: Path) -> None:
+    """Referenced traces use the same duplicate-key rejection as evaluation JSON."""
+    payload = _load_fixture()
+    source_path = REPO_ROOT / payload["cases"][0]["trace_ref"]["uri"]
+    trace_path = tmp_path / "trace.json"
+    trace_text = source_path.read_text(encoding="utf-8")
+    duplicate = '"schema_version": "simulation_trace_export.v1",\n  "schema_version": "simulation_trace_export.v1",'
+    trace_path.write_text(
+        trace_text.replace('"schema_version": "simulation_trace_export.v1",', duplicate, 1),
+        encoding="utf-8",
+    )
+    payload["cases"][0]["trace_ref"]["uri"] = "trace.json"
+    payload["cases"][0]["trace_ref"]["sha256"] = hashlib.sha256(trace_path.read_bytes()).hexdigest()
+
+    with pytest.raises(TracePredicateValidationError, match="duplicate JSON object key"):
+        validate_trace_predicate_evaluation_set(payload, repo_root=tmp_path)
 
 
 def test_bounded_fixture_cannot_claim_retained_trace_availability() -> None:

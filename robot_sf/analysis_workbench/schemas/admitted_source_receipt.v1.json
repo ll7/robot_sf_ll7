@@ -3,6 +3,7 @@
   "$id": "https://robot-sf.local/schemas/admitted_source_receipt.v1.json",
   "$title": "Robot SF Admitted Fixture Source Receipt v1",
   "description": "Digest-bound local fixture or diagnostic source receipt. This contract proves source integrity and request binding; it does not grant scientific evidence admission.",
+  "$comment": "When present, source.units and source.coordinate_frame are exact semantic declarations. The resolver normalizes omission to the empty string and requires exact equality with the current request and recipe source_identity values.",
   "type": "object",
   "additionalProperties": false,
   "maxProperties": 9,
@@ -99,11 +100,13 @@
         },
         "units": {
           "type": "string",
-          "maxLength": 256
+          "maxLength": 256,
+          "description": "Optional source semantic declaration; omission is the canonical empty value and must match the request and recipe."
         },
         "coordinate_frame": {
           "type": "string",
-          "maxLength": 256
+          "maxLength": 256,
+          "description": "Optional source semantic declaration; omission is the canonical empty value and must match the request and recipe."
         }
       }
     }

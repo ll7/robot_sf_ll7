@@ -61,6 +61,11 @@ reopened as the admitted source.
 - the source commit and config identity in the current recipe's
   `source_identity` match the receipt. Optional explicit resolver expectations
   may corroborate those identities but cannot replace the recipe context; and
+- `units` and `coordinate_frame` are exact semantic bindings across the
+  request source, receipt source, and recipe `source_identity`. Omission is
+  normalized to the empty string; a non-empty declaration must be present and
+  equal in all three documents, otherwise admission returns `receipt_stale`;
+  and
 - the recipe's `source_identity` preserves the receipt's source kind and the
   diagnostic-only boundary: `kind` is the receipt kind,
   `evidence_boundary` is `diagnostic_only`, `scientific_claim_allowed` is
@@ -79,11 +84,15 @@ with the receipt, with SHA-256 and commit values compared case-insensitively.
 `format` and `schema` are required receipt metadata; the request format and any
 recipe `source_schema` are checked for exact equality. The resolver does not
 parse arbitrary source formats or choose a simulator map.
-Receipt files are limited to 256 KiB, receipt identity fields have bounded
-lengths, and source hashing stops at 16 MiB. Validation and resolver
+Receipt, CLI request, and CLI config files are limited to 256 KiB and are read
+through no-follow, nonblocking, regular-file descriptors before any read.
+Receipt identity fields and result request/component identities are bounded to
+256 characters; source hashing stops at 16 MiB; validation and resolver
 diagnostics are bounded to 200 characters and at most 32 retained validation
 errors. These are resource-safety limits; they do not widen source admission.
-An oversized source returns `unavailable` with reason `source_too_large`.
+Direct envelope constructors and the CLI reject nested non-finite numbers
+before schema or result serialization. An oversized source returns
+`unavailable` with reason `source_too_large`.
 
 The resolver keeps source integrity separate from scientific evidence
 admission. `status: admitted` means that this fixture source is available and

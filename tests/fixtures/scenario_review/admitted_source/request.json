@@ -6,7 +6,9 @@
     {
       "artifact_id": "fixture-source",
       "uri": "source.json",
-      "format": "fixture-json"
+      "format": "fixture-json",
+      "units": "metres",
+      "coordinate_frame": "world"
     }
   ],
   "output_directory": "unused",

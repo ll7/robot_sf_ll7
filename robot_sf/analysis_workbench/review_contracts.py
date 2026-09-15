@@ -62,9 +62,12 @@ _ADMITTED_SOURCE_SUPPORTS_DIR_FD = os.open in os.supports_dir_fd
 
 MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS = 200
 MAX_REVIEW_CONTRACT_VALIDATION_ERRORS = 32
+MAX_REVIEW_CONTRACT_ID_CHARS = 256
+MAX_REVIEW_CONTRACT_CLI_INPUT_BYTES = 256 * 1024
+MAX_REVIEW_CONTRACT_REASON_CHARS = MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS
 MAX_ADMITTED_SOURCE_RECEIPT_BYTES = 256 * 1024
 MAX_ADMITTED_SOURCE_BYTES = 16 * 1024 * 1024
-MAX_ADMITTED_SOURCE_RECEIPT_ID_CHARS = 256
+MAX_ADMITTED_SOURCE_RECEIPT_ID_CHARS = MAX_REVIEW_CONTRACT_ID_CHARS
 MAX_ADMITTED_SOURCE_URI_CHARS = 4_096
 MAX_ADMITTED_SOURCE_METADATA_CHARS = 256
 
@@ -99,6 +102,15 @@ def _bounded_text_detail(value: Any, *, limit: int = MAX_REVIEW_CONTRACT_DIAGNOS
 
 class _AdmittedSourceInputLimitError(ValueError):
     """Identify a receipt or source that exceeds the resolver input ceiling."""
+
+
+class _AdmittedSourceFileRejectedError(ValueError):
+    """Identify a path rejected before any potentially blocking read."""
+
+    def __init__(self, detail: str):
+        """Store the stable rejection detail used by loader boundaries."""
+        self.detail = detail
+        super().__init__(detail)
 
 
 class ReviewContractsValidationError(RobotSfError, ValueError):
@@ -279,6 +291,88 @@ def _reject_unicode_surrogates(payload: Any, *, source: Any = None) -> None:
         raise ReviewContractsValidationError(
             ["payload contains unsupported Unicode surrogate"], source=source
         )
+
+
+def _contains_non_finite(value: Any) -> bool:
+    """Return whether nested JSON-like values contain NaN or infinity."""
+    pending: list[Any] = [value]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if isinstance(current, float) and not math.isfinite(current):
+            return True
+        if isinstance(current, Mapping):
+            marker = id(current)
+            if marker in visited:
+                continue
+            visited.add(marker)
+            for key, nested in current.items():
+                pending.extend((key, nested))
+        elif isinstance(current, (list, tuple)):
+            marker = id(current)
+            if marker in visited:
+                continue
+            visited.add(marker)
+            pending.extend(current)
+    return False
+
+
+def _reject_non_finite(payload: Any, *, source: Any = None) -> None:
+    """Reject non-finite numbers before direct API schema or digest handling."""
+    if _contains_non_finite(payload):
+        raise ReviewContractsValidationError(["payload contains non-finite number"], source=source)
+
+
+def _check_envelope_identity_limits(
+    payload: Mapping[str, Any], *, source: Any = None, include_reason: bool = False
+) -> None:
+    """Reject oversized envelope identities and failure details before construction."""
+    errors: list[str] = []
+    for field_name in ("request_id", "component_id"):
+        value = payload.get(field_name)
+        if isinstance(value, str) and len(value) > MAX_REVIEW_CONTRACT_ID_CHARS:
+            errors.append(
+                f"/{field_name}: exceeds maximum length of {MAX_REVIEW_CONTRACT_ID_CHARS} characters"
+            )
+    if include_reason:
+        reason = payload.get("reason")
+        if isinstance(reason, str) and len(reason) > MAX_REVIEW_CONTRACT_REASON_CHARS:
+            errors.append(
+                f"/reason: exceeds maximum length of {MAX_REVIEW_CONTRACT_REASON_CHARS} characters"
+            )
+    if errors:
+        raise ReviewContractsValidationError(errors, source=source)
+
+
+def _safe_identity(value: Any) -> str:
+    """Return a bounded identity suitable for a failure result envelope."""
+    if isinstance(value, str) and value and len(value) <= MAX_REVIEW_CONTRACT_ID_CHARS:
+        return value
+    return "unknown"
+
+
+def _bounded_join(values: Any, *, separator: str = ", ") -> str:
+    """Join diagnostic values without constructing an unbounded detail string.
+
+    Returns:
+        A bounded joined diagnostic string.
+    """
+    parts: list[str] = []
+    total = 0
+    omitted = "additional details omitted"
+    for value in values:
+        part = _bounded_text_detail(value)
+        added = len(part) + (len(separator) if parts else 0)
+        if total + added > MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS:
+            remaining = (
+                MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS - total - (len(separator) if parts else 0)
+            )
+            if remaining > 0:
+                parts.append(omitted[:remaining])
+            break
+        parts.append(part)
+        total += added
+    return separator.join(parts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,6 +559,7 @@ def review_bundle_from_dict(payload: Mapping[str, Any], *, source: Any = None) -
     Returns:
         Validated review bundle.
     """
+    _reject_non_finite(payload, source=source)
     _require_schema(REVIEW_BUNDLE_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []
     seen: set[str] = set()
@@ -497,6 +592,7 @@ def visualization_spec_from_dict(
     Returns:
         Validated visualization spec.
     """
+    _reject_non_finite(payload, source=source)
     _require_schema(VISUALIZATION_SPEC_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []
     for index, interval in enumerate(payload.get("source_intervals", [])):
@@ -527,6 +623,8 @@ def component_descriptor_from_dict(
     Returns:
         Validated component descriptor.
     """
+    _reject_non_finite(payload, source=source)
+    _check_envelope_identity_limits(payload, source=source)
     _require_schema(COMPONENT_DESCRIPTOR_SCHEMA_VERSION, payload, source=source)
     return ComponentDescriptor(
         component_id=str(payload["component_id"]),
@@ -547,6 +645,8 @@ def component_request_from_dict(
         Validated component request.
     """
     _reject_unicode_surrogates(payload, source=source)
+    _reject_non_finite(payload, source=source)
+    _check_envelope_identity_limits(payload, source=source)
     _require_schema(COMPONENT_REQUEST_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []
     _check_no_traversal(str(payload["output_directory"]), path="/output_directory", errors=errors)
@@ -591,6 +691,8 @@ def component_result_from_dict(
     Returns:
         Validated component result.
     """
+    _reject_non_finite(payload, source=source)
+    _check_envelope_identity_limits(payload, source=source, include_reason=True)
     _require_schema(COMPONENT_RESULT_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []
     if payload["status"] != "complete" and payload.get("artifacts"):
@@ -620,6 +722,7 @@ def experiment_recipe_from_dict(
         Validated experiment recipe.
     """
     _reject_unicode_surrogates(payload, source=source)
+    _reject_non_finite(payload, source=source)
     _require_schema(EXPERIMENT_RECIPE_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []
     seen: set[str] = set()
@@ -652,6 +755,7 @@ def admitted_source_receipt_from_dict(
     if not isinstance(payload, Mapping):
         raise ReviewContractsValidationError(["expected a mapping payload"], source=source)
     _reject_unicode_surrogates(payload, source=source)
+    _reject_non_finite(payload, source=source)
     _check_admitted_source_input_limits(payload, source=source)
     _require_schema(ADMITTED_SOURCE_RECEIPT_SCHEMA_VERSION, payload, source=source)
     source_payload = payload["source"]
@@ -720,14 +824,46 @@ def _bounded_error_detail(
     return _bounded_text_detail(error, limit=limit)
 
 
+def _open_regular_file_no_follow(path: Path, *, label: str) -> int:
+    """Open a path without following its final component and require a regular file.
+
+    ``O_NONBLOCK`` prevents special files from turning the open into a blocking
+    operation.  The descriptor is type-checked before any read, so the bytes
+    are obtained from the same file object that was checked.
+
+    Returns:
+        An open descriptor owned by the caller.
+
+    Raises:
+        _AdmittedSourceFileRejectedError: If safe regular-file support is absent
+            or the opened path is not a regular file.
+    """
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    nonblocking = getattr(os, "O_NONBLOCK", None)
+    if not isinstance(nofollow, int) or not isinstance(nonblocking, int):
+        raise _AdmittedSourceFileRejectedError(f"{label} cannot be read safely")
+    flags = os.O_RDONLY | nofollow | nonblocking | getattr(os, "O_CLOEXEC", 0)
+    file_fd = os.open(path, flags)
+    try:
+        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+            raise _AdmittedSourceFileRejectedError(f"{label} must be a regular file")
+    except BaseException:
+        os.close(file_fd)
+        raise
+    return file_fd
+
+
 def _read_bounded_text(path: Path, *, maximum_bytes: int, label: str) -> str:
-    """Read UTF-8 text while refusing inputs larger than the contract ceiling.
+    """Read UTF-8 text from a bounded, no-follow regular-file descriptor.
 
     Returns:
         The decoded UTF-8 content.
     """
-    with path.open("rb") as handle:
-        content = handle.read(maximum_bytes + 1)
+    file_fd = _open_regular_file_no_follow(path, label=label)
+    try:
+        content = os.read(file_fd, maximum_bytes + 1)
+    finally:
+        os.close(file_fd)
     if len(content) > maximum_bytes:
         raise _AdmittedSourceInputLimitError(
             f"{label} exceeds maximum size of {maximum_bytes} bytes"
@@ -743,6 +879,13 @@ def _receipt_read_error_detail(error: BaseException) -> str:
     """
     if isinstance(error, _AdmittedSourceInputLimitError):
         return _bounded_error_detail(error)
+    if isinstance(error, _AdmittedSourceFileRejectedError):
+        return error.detail
+    if (
+        isinstance(error, (BlockingIOError, OSError))
+        and getattr(error, "errno", None) == errno.ELOOP
+    ):
+        return "path cannot be read safely"
     if isinstance(error, (RecursionError, ValueError)):
         return "receipt JSON is invalid or exceeds parser limits"
     return _bounded_error_detail(error)
@@ -816,6 +959,7 @@ def experiment_recipe_canonical_digest(
     """
     if isinstance(recipe, ExperimentRecipe):
         document = recipe.document
+        _reject_non_finite(document)
     elif isinstance(recipe, Mapping):
         document = experiment_recipe_from_dict(recipe).document
     else:
@@ -889,8 +1033,6 @@ def _receipt_payload(
             detail=_bounded_error_detail(error),
         )
     try:
-        if not receipt_path.exists():
-            return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_RECEIPT_MISSING)
         raw_payload = json.loads(
             _read_bounded_text(
                 receipt_path,
@@ -899,6 +1041,8 @@ def _receipt_payload(
             ),
             parse_constant=_reject_nonstandard_json_constant,
         )
+    except FileNotFoundError:
+        return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_RECEIPT_MISSING)
     except (OSError, RecursionError, UnicodeError, ValueError) as error:
         return None, _resolution(
             "unavailable",
@@ -1014,6 +1158,10 @@ def _validated_request(
         Validated component request.
     """
     if isinstance(request, ComponentRequest):
+        _reject_non_finite(asdict(request))
+        _check_envelope_identity_limits(
+            {"request_id": request.request_id, "component_id": request.component_id}
+        )
         return request
     if isinstance(request, Mapping):
         return component_request_from_dict(request)
@@ -1041,6 +1189,7 @@ _REQUEST_SOURCE_RECEIPT_BINDING_FIELDS = (
     "units",
     "coordinate_frame",
 )
+_SOURCE_SEMANTIC_BINDING_FIELDS = ("units", "coordinate_frame")
 
 
 def _normalize_v1_source_declaration(value: Any) -> str:
@@ -1075,7 +1224,10 @@ def _request_source_binding_mismatch(
         if field_name in {"sha256", "source_commit"}:
             current = current.lower()
             expected = expected.lower()
-        if (field_name in {"uri", "format"} or current) and current != expected:
+        if field_name in _SOURCE_SEMANTIC_BINDING_FIELDS:
+            if current != expected:
+                return field_name
+        elif (field_name in {"uri", "format"} or current) and current != expected:
             return field_name
     return None
 
@@ -1283,12 +1435,43 @@ def _check_source_identity_bindings(
     return None
 
 
+def _check_recipe_semantic_bindings(
+    receipt: AdmittedSourceReceipt,
+    *,
+    recipe: ExperimentRecipe | Mapping[str, Any],
+) -> AdmittedSourceResolution | None:
+    """Require exact recipe bindings for units and coordinate frame.
+
+    Returns:
+        A stale resolution on a missing, non-text, or conflicting binding.
+    """
+    for key in _SOURCE_SEMANTIC_BINDING_FIELDS:
+        expected = _recipe_identity_value(recipe, key)
+        if expected is None:
+            expected = ""
+        elif not isinstance(expected, str):
+            return _resolution(
+                "unavailable",
+                ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+                receipt=receipt,
+                detail=f"recipe source_identity.{key} must be a string",
+            )
+        if expected != getattr(receipt.source, key):
+            return _resolution(
+                "unavailable",
+                ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+                receipt=receipt,
+                detail=f"recipe source_identity.{key} does not match the receipt",
+            )
+    return None
+
+
 def _check_recipe_source_bindings(
     receipt: AdmittedSourceReceipt,
     *,
     recipe: ExperimentRecipe | Mapping[str, Any] | None,
 ) -> AdmittedSourceResolution | None:
-    """Check optional source metadata and the recipe's admission reference.
+    """Check source metadata and the recipe's admission reference.
 
     Returns:
         A stale resolution on missing or conflicting recipe metadata, or
@@ -1348,7 +1531,7 @@ def _check_recipe_source_bindings(
                 receipt=receipt,
                 detail=f"recipe {key} does not match the receipt",
             )
-    return None
+    return _check_recipe_semantic_bindings(receipt, recipe=recipe)
 
 
 def _check_recipe_boundary_bindings(
@@ -1747,6 +1930,7 @@ def review_bundle_canonical_digest(bundle: ReviewBundle) -> str:
 
 
 def _canonical_digest(value: Any) -> str:
+    _reject_non_finite(value)
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
         "utf-8"
     )
@@ -1788,7 +1972,10 @@ def _resolve_output_dir(request: ComponentRequest, base: Path) -> Path:
     output_dir = base / request.output_directory
     if output_dir.exists():
         raise ReviewContractsValidationError(
-            [f"/output_directory: output collision, already exists: {request.output_directory}"]
+            [
+                "/output_directory: output collision, already exists: "
+                f"{_bounded_text_detail(request.output_directory)}"
+            ]
         )
     return output_dir
 
@@ -1820,6 +2007,8 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         Component result with artifacts, diagnostics, and provenance.
     """
     root = base if base is not None else Path.cwd()
+    request_id = _safe_identity(request.request_id)
+    component_id = _safe_identity(request.component_id)
     try:
         output_dir = _resolve_output_dir(request, root)
         if request.component_id == INSPECT_COMPONENT_ID:
@@ -1828,23 +2017,25 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             descriptor = _CAPABILITY_DESCRIPTOR
         else:
             return ComponentResult(
-                request_id=request.request_id,
-                component_id=request.component_id,
+                request_id=request_id,
+                component_id=component_id,
                 status="unavailable",
-                reason=f"unsupported component: {request.component_id}",
+                reason=_bounded_text_detail(f"unsupported component: {component_id}"),
             )
         missing = _unsupported_capabilities(request, descriptor)
         if missing:
             return ComponentResult(
-                request_id=request.request_id,
-                component_id=request.component_id,
+                request_id=request_id,
+                component_id=component_id,
                 status="unavailable",
-                reason=f"missing capabilities: {', '.join(sorted(missing))}",
+                reason=_bounded_text_detail(
+                    f"missing capabilities: {_bounded_join(sorted(missing))}"
+                ),
             )
         if request.component_id == INSPECT_COMPONENT_ID:
             report = {
                 "schema_version": "inspect-report.v1",
-                "request_id": request.request_id,
+                "request_id": request_id,
                 "sources": [asdict(ref) for ref in request.sources],
                 "config": dict(request.config),
             }
@@ -1854,8 +2045,8 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             filename = "capability-report.json"
         digest = _write_json(output_dir / filename, report)
         return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
+            request_id=request_id,
+            component_id=component_id,
             status="complete",
             artifacts=(
                 {
@@ -1869,15 +2060,15 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
     except ReviewContractsValidationError as error:
         reason = _bounded_error_detail(error)
         return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
+            request_id=request_id,
+            component_id=component_id,
             status="failed",
             reason=reason,
         )
     except (OSError, TypeError, ValueError, RecursionError) as error:
         return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
+            request_id=request_id,
+            component_id=component_id,
             status="failed",
             reason=_bounded_error_detail(error),
         )
@@ -1898,10 +2089,7 @@ def _cli_identity(payload: Any) -> tuple[str, str]:
         return "unknown", "unknown"
     request_id = payload.get("request_id")
     component_id = payload.get("component_id")
-    return (
-        request_id if isinstance(request_id, str) and request_id else "unknown",
-        component_id if isinstance(component_id, str) and component_id else "unknown",
-    )
+    return _safe_identity(request_id), _safe_identity(component_id)
 
 
 def _result_document(result: ComponentResult) -> dict[str, Any]:
@@ -1910,7 +2098,11 @@ def _result_document(result: ComponentResult) -> dict[str, Any]:
     Returns:
         JSON-safe ``component-result.v1`` payload.
     """
-    return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)}
+    document = {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)}
+    document["request_id"] = _safe_identity(document.get("request_id"))
+    document["component_id"] = _safe_identity(document.get("component_id"))
+    document["reason"] = _bounded_text_detail(document.get("reason", ""))
+    return document
 
 
 def _print_cli_failure(reason: str, *, payload: Any = None) -> int:
@@ -1924,9 +2116,11 @@ def _print_cli_failure(reason: str, *, payload: Any = None) -> int:
         request_id=request_id,
         component_id=component_id,
         status="failed",
-        reason=reason,
+        reason=_bounded_text_detail(reason),
     )
-    print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201
+    print(  # noqa: T201
+        json.dumps(_result_document(result), sort_keys=True, indent=2, allow_nan=False)
+    )
     return 1
 
 
@@ -1940,7 +2134,11 @@ def main(argv: list[str] | None = None) -> int:
     payload: Any = None
     try:
         payload = json.loads(
-            Path(args.input).read_text(encoding="utf-8"),
+            _read_bounded_text(
+                Path(args.input),
+                maximum_bytes=MAX_REVIEW_CONTRACT_CLI_INPUT_BYTES,
+                label="request JSON",
+            ),
             parse_constant=_reject_nonstandard_json_constant,
         )
     except (OSError, ValueError, RecursionError):
@@ -1951,7 +2149,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.config is not None:
         try:
             config = json.loads(
-                Path(args.config).read_text(encoding="utf-8"),
+                _read_bounded_text(
+                    Path(args.config),
+                    maximum_bytes=MAX_REVIEW_CONTRACT_CLI_INPUT_BYTES,
+                    label="config JSON",
+                ),
                 parse_constant=_reject_nonstandard_json_constant,
             )
         except (OSError, ValueError, RecursionError):
@@ -1977,7 +2179,9 @@ def main(argv: list[str] | None = None) -> int:
             payload={"request_id": request_id, "component_id": component_id},
         )
     result = run(request, base=Path(args.base) if args.base is not None else None)
-    print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
+    print(  # noqa: T201 - CLI output
+        json.dumps(_result_document(result), sort_keys=True, indent=2, allow_nan=False)
+    )
     return 0 if result.status == "complete" else 1
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ import pytest
 from robot_sf.analysis_workbench import review_contracts
 from robot_sf.analysis_workbench.review_contracts import (
     ReviewContractsValidationError,
+    admitted_source_receipt_from_dict,
+    component_descriptor_from_dict,
     component_request_canonical_digest,
     component_request_from_dict,
     component_result_from_dict,
@@ -112,6 +115,92 @@ def test_visualization_spec_validates_intervals_and_units() -> None:
         visualization_spec_from_dict(bad_finite)
 
 
+@pytest.mark.parametrize(
+    "payload_kind",
+    [
+        "bundle",
+        "visualization",
+        "descriptor",
+        "request",
+        "result",
+        "recipe",
+        "receipt",
+    ],
+)
+def test_direct_api_envelopes_reject_nested_non_finite(payload_kind: str) -> None:
+    """Every direct envelope boundary rejects nested NaN and infinity values."""
+    if payload_kind == "bundle":
+        payload = _bundle_doc()
+        payload["episodes"][0]["references"][0]["units"] = {"nested": [float("nan")]}  # type: ignore[index,union-attr]
+        validator = review_bundle_from_dict
+    elif payload_kind == "visualization":
+        payload = {
+            "schema_version": "visualization-spec.v1",
+            "spec_id": "spec-0000",
+            "sources": [{"artifact_id": "trace-0000"}],
+            "camera": {"nested": [float("inf")]},
+        }
+        validator = visualization_spec_from_dict
+    elif payload_kind == "descriptor":
+        payload = {
+            "schema_version": "component-descriptor.v1",
+            "component_id": "component-0000",
+            "component_version": "1.0.0",
+            "supported_input_versions": ["component-request.v1"],
+            "output_types": ["component-result.v1"],
+            "required_capabilities": [{"nested": float("-inf")}],
+        }
+        validator = component_descriptor_from_dict
+    elif payload_kind == "request":
+        payload = _admitted_source_fixture("request.json")
+        payload["config"] = {"nested": [float("nan")]}
+        validator = component_request_from_dict
+    elif payload_kind == "result":
+        payload = {
+            "schema_version": "component-result.v1",
+            "request_id": "request-0000",
+            "component_id": "component-0000",
+            "status": "failed",
+            "diagnostics": [{"nested": {"value": float("inf")}}],
+        }
+        validator = component_result_from_dict
+    elif payload_kind == "recipe":
+        payload = _admitted_source_fixture("recipe.json")
+        payload["control_conditions"] = {"nested": [float("-inf")]}
+        validator = experiment_recipe_from_dict
+    else:
+        payload = _admitted_source_fixture("receipt.json")
+        payload["source"]["units"] = float("nan")
+        validator = admitted_source_receipt_from_dict
+
+    with pytest.raises(ReviewContractsValidationError, match="non-finite"):
+        validator(payload)
+
+
+@pytest.mark.parametrize("field", ["request_id", "component_id"])
+def test_component_request_rejects_oversized_identity(field: str) -> None:
+    """Direct request construction rejects identities before envelope creation."""
+    payload = _admitted_source_fixture("request.json")
+    payload[field] = "x" * (review_contracts.MAX_REVIEW_CONTRACT_ID_CHARS + 1)
+
+    with pytest.raises(ReviewContractsValidationError, match="maximum length"):
+        component_request_from_dict(payload)
+
+
+def test_component_result_rejects_oversized_reason() -> None:
+    """Direct result construction rejects unbounded failure details."""
+    payload = {
+        "schema_version": "component-result.v1",
+        "request_id": "request-0000",
+        "component_id": "component-0000",
+        "status": "failed",
+        "reason": "x" * (review_contracts.MAX_REVIEW_CONTRACT_REASON_CHARS + 1),
+    }
+
+    with pytest.raises(ReviewContractsValidationError, match="maximum length"):
+        component_result_from_dict(payload)
+
+
 def test_component_request_rejects_traversal_and_unknown_component_runs_unavailable(
     tmp_path: Path,
 ) -> None:
@@ -180,7 +269,7 @@ def test_run_normalizes_non_json_failures_to_component_result(tmp_path: Path) ->
             "component_id": "srev01-inspect",
             "sources": [{"artifact_id": "a", "uri": "a.json", "format": "f"}],
             "output_directory": "nan-output",
-            "config": {"seed": float("nan")},
+            "config": {"unserializable": object()},
         }
     )
 
@@ -388,6 +477,8 @@ def test_component_request_digest_binds_every_source_declaration(field: str, val
 def test_component_request_digest_normalizes_omitted_optional_source_declarations() -> None:
     """The request parser gives every omitted v1 source declaration an empty-text value."""
     request = _admitted_source_fixture("request.json")
+    request["sources"][0].pop("units")
+    request["sources"][0].pop("coordinate_frame")
     parsed = component_request_from_dict(request)
 
     assert parsed.sources[0].schema == ""
@@ -430,6 +521,69 @@ def test_admitted_source_rejects_request_source_declaration_mismatch(
     assert f"request source {field}" in result.detail
     assert result.source_path is None
     assert result.source_bytes is None
+
+
+@pytest.mark.parametrize("field", ["units", "coordinate_frame"])
+def test_admitted_source_rejects_missing_request_semantic_binding(field: str) -> None:
+    """Omitting a semantic request declaration cannot silently widen admission."""
+    request = _admitted_source_fixture("request.json")
+    request["sources"][0].pop(field)
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["request_sha256"] = component_request_canonical_digest(request)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert f"request source {field}" in result.detail
+    assert result.source_path is None
+
+
+@pytest.mark.parametrize("field", ["units", "coordinate_frame"])
+def test_admitted_source_rejects_recipe_semantic_mutation(field: str) -> None:
+    """Recipe semantic declarations must match the receipt exactly."""
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    recipe["source_identity"][field] = "mutated-semantic-value"
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["recipe_sha256"] = experiment_recipe_canonical_digest(recipe)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert f"recipe source_identity.{field}" in result.detail
+    assert result.source_path is None
+
+
+@pytest.mark.parametrize("field", ["units", "coordinate_frame"])
+def test_admitted_source_rejects_missing_recipe_semantic_binding(field: str) -> None:
+    """Missing recipe semantic declarations cannot silently widen admission."""
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    recipe["source_identity"].pop(field)
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["recipe_sha256"] = experiment_recipe_canonical_digest(recipe)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert f"recipe source_identity.{field}" in result.detail
+    assert result.source_path is None
 
 
 def test_admitted_source_reports_missing_receipt_and_source(tmp_path: Path) -> None:
@@ -969,6 +1123,38 @@ def test_admitted_source_rejects_special_file_without_blocking(tmp_path: Path) -
 
 
 @pytest.mark.skipif(
+    not hasattr(os, "mkfifo")
+    or not all(hasattr(os, flag) for flag in ("O_NOFOLLOW", "O_NONBLOCK")),
+    reason="FIFO or protected descriptor flags are unavailable",
+)
+def test_admitted_source_receipt_fifo_is_rejected_without_blocking(tmp_path: Path) -> None:
+    """A receipt FIFO is rejected before a read can wait for a writer."""
+    receipt_path = tmp_path / "receipt.json"
+    os.mkfifo(receipt_path)
+    command = (
+        "import json, sys; "
+        "from robot_sf.analysis_workbench.review_contracts import resolve_admitted_source; "
+        "result = resolve_admitted_source(sys.argv[1], allowed_root=sys.argv[2]); "
+        "print(json.dumps(result.to_dict(), sort_keys=True))"
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", command, str(receipt_path), str(tmp_path)],
+        cwd=Path.cwd(),
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=2,
+    )
+
+    assert completed.returncode == 0
+    assert completed.stderr == ""
+    payload = json.loads(completed.stdout)
+    assert (payload["status"], payload["reason"]) == ("unavailable", "receipt_unreadable")
+    assert payload["detail"] == "admitted-source receipt must be a regular file"
+
+
+@pytest.mark.skipif(
     not all(hasattr(os, flag) for flag in ("O_NOFOLLOW", "O_DIRECTORY", "O_NONBLOCK"))
     or os.open not in os.supports_dir_fd,
     reason="protected descriptor flags are unavailable",
@@ -1141,6 +1327,148 @@ def test_cli_parser_limit_emits_stable_failed_result(
     assert result.status == "failed"
     assert result.reason == f"invalid_input: {parser_input} JSON cannot be parsed safely"
     assert not (tmp_path / "parser-limit-output").exists()
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "mkfifo")
+    or not all(hasattr(os, flag) for flag in ("O_NOFOLLOW", "O_NONBLOCK")),
+    reason="FIFO or protected descriptor flags are unavailable",
+)
+@pytest.mark.parametrize("parser_input", ["request", "config"])
+def test_cli_fifo_input_is_rejected_without_blocking(tmp_path: Path, parser_input: str) -> None:
+    """CLI request and config FIFOs fail quickly without waiting for a writer."""
+    request_path = tmp_path / "request.json"
+    config_path = tmp_path / "config.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "component-request.v1",
+                "request_id": "fifo-request",
+                "component_id": "srev01-inspect",
+                "sources": [{"artifact_id": "a", "uri": "a.json", "format": "f"}],
+                "output_directory": "unused",
+            }
+        ),
+        encoding="utf-8",
+    )
+    if parser_input == "request":
+        request_path.unlink()
+        os.mkfifo(request_path)
+    else:
+        os.mkfifo(config_path)
+
+    arguments = [
+        "--input",
+        str(request_path),
+        "--output",
+        "fifo-output",
+        "--base",
+        str(tmp_path),
+    ]
+    if parser_input == "config":
+        arguments.extend(["--config", str(config_path)])
+    command = (
+        "from robot_sf.analysis_workbench.review_contracts import main; "
+        "raise SystemExit(main(__import__('sys').argv[1:]))"
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", command, *arguments],
+        cwd=Path.cwd(),
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=2,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stderr == ""
+    printed = json.loads(completed.stdout)
+    assert printed["schema_version"] == "component-result.v1"
+    assert printed["request_id"] == ("unknown" if parser_input == "request" else "fifo-request")
+    assert printed["component_id"] == ("unknown" if parser_input == "request" else "srev01-inspect")
+    assert printed["reason"] == f"invalid_input: {parser_input} JSON cannot be parsed safely"
+    assert component_result_from_dict(printed).status == "failed"
+    assert not (tmp_path / "fifo-output").exists()
+
+
+def test_cli_failure_envelope_bounds_identities(tmp_path: Path, capsys: Any) -> None:
+    """Malformed CLI identities are replaced with bounded safe envelope values."""
+    from robot_sf.analysis_workbench.review_contracts import main
+
+    request_path = tmp_path / "request.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "component-request.v1",
+                "request_id": "r" * (review_contracts.MAX_REVIEW_CONTRACT_ID_CHARS + 1),
+                "component_id": "c" * (review_contracts.MAX_REVIEW_CONTRACT_ID_CHARS + 1),
+                "sources": [{"artifact_id": "a", "uri": "a.json", "format": "f"}],
+                "output_directory": "bounded-id-output",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--input",
+            str(request_path),
+            "--output",
+            "bounded-id-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    printed = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert printed["request_id"] == "unknown"
+    assert printed["component_id"] == "unknown"
+    assert len(printed["reason"]) <= review_contracts.MAX_REVIEW_CONTRACT_REASON_CHARS
+    assert component_result_from_dict(printed).status == "failed"
+
+
+def test_cli_failure_envelope_bounds_interpolated_details(tmp_path: Path, capsys: Any) -> None:
+    """CLI-generated missing-capability details remain bounded before serialization."""
+    from robot_sf.analysis_workbench.review_contracts import main
+
+    request_path = tmp_path / "request.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "component-request.v1",
+                "request_id": "bounded-detail-request",
+                "component_id": "srev01-inspect",
+                "sources": [{"artifact_id": "a", "uri": "a.json", "format": "f"}],
+                "required_capabilities": [f"unsupported-{index}" for index in range(100)],
+                "output_directory": "bounded-detail-output",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--input",
+            str(request_path),
+            "--output",
+            "bounded-detail-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    printed = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert printed["reason"].startswith("missing capabilities: ")
+    assert len(printed["reason"]) <= review_contracts.MAX_REVIEW_CONTRACT_REASON_CHARS
+    assert component_result_from_dict(printed).status == "unavailable"
+    assert not (tmp_path / "bounded-detail-output").exists()
 
 
 def test_cli_nonstandard_json_constant_emits_stable_failed_result(

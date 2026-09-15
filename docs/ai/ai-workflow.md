@@ -110,6 +110,9 @@ During long delegated runs, record the REST publication path that actually worke
 head-SHA check-run polling, labels, merge, closeout comment, and cleanup. A successful REST
 operation is publication evidence only; still verify branch head, CI state, and local validation
 before applying merge-ready or calling an issue closed.
+When review proof is accepted while hosted CI is pending, record that with
+`merge-if-ci-green`. The merge cycle promotes it after green checks on the
+same head; CI completion does not require another review or waiting comment.
 
 The priority workflow uses [docs/project_prioritization.md](../project_prioritization.md) as an
 advisory rubric, not as hard authority over current maintainer direction or fresh evidence.

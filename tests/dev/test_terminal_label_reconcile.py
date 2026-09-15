@@ -124,10 +124,12 @@ def test_pr_merged_policy() -> None:
     """A merged PR clears active review labels and merge-ready."""
     plan = plan_for_terminal(
         "pr_merged",
-        _labels("merge-ready", "needs-review", "review-bot-auto", "state:done"),
+        _labels(
+            "merge-ready", "merge-if-ci-green", "needs-review", "review-bot-auto", "state:done"
+        ),
         reason=None,
     )
-    assert plan["remove"] == ["merge-ready", "needs-review"]
+    assert plan["remove"] == ["merge-if-ci-green", "merge-ready", "needs-review"]
     assert "review-bot-auto" in plan["preserved"]  # bot marker is not active-only
 
 

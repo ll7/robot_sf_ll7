@@ -25,8 +25,8 @@ Use this skill for a continuous issue-to-merge-to-discovery loop.
 
 It orchestrates:
 - `goal-issue-implementation` — select, implement, validate, and open PRs.
-- `goal-pr-review` — review, fix, and apply `merge-ready`.
-- `gh-pr-merger` — merge approved PRs.
+- `goal-pr-review` — review, fix, and apply `merge-ready` or `merge-if-ci-green` while CI is pending.
+- `gh-pr-merger` — promote reviewed PRs after green CI and merge approved PRs.
 - `goal-issue-discovery` — discover new improvement opportunities.
 
 It does not define child-skill mechanics; it standardizes cycle policy, preflight
@@ -211,7 +211,8 @@ Do not retry preflight without fixing the identified gap.
 Record at start:
 - Cycle scope: eligible issues, open PRs, and discovery lanes.
 - Write permissions: branch/commit/PR/project/merge writes allowed by default.
-- Stop condition: all eligible issues processed, no merge-ready PRs remain, discovery
+- Stop condition: all eligible issues processed, no merge-ready or
+  merge-if-ci-green PRs remain, discovery
   saturated, or user stop.
 - Queue truth: a label-filtered row is a candidate, not claimable work; only a successful live
   `goal_issue_admission.py --check-only` result is claimable.
@@ -250,7 +251,9 @@ Each cycle iteration follows a fixed phase order:
 5. `implement` — delegate to `goal-issue-implementation` for one admitted issue.
 6. `review` — delegate to `goal-pr-review` for all merge-eligible PRs, prioritizing exact-head
    domain-review backlog before new evidence-bearing implementation work.
-7. `merge` — delegate to `gh-pr-merger` for all `merge-ready` PRs.
+7. `merge` — delegate to `gh-pr-merger` for all `merge-ready` and
+   `merge-if-ci-green` PRs. A conditional label routes CI readback and promotion;
+   it does not bypass the guarded merge gate or trigger another review.
 8. `discover` — delegate to `goal-issue-discovery` for one bounded, unsaturated discovery lane.
 
 ### Reconciliation and empty-queue policy
@@ -309,7 +312,7 @@ head-bound zero-work proof covering:
 
 1. an authoritative complete ready-candidate scan and admission-reason
    histogram;
-2. zero merge-ready, review-eligible, and recoverable active PRs;
+2. zero merge-ready, merge-if-ci-green, review-eligible, and recoverable active PRs;
 3. zero safely promotable or formalizable issue contracts;
 4. a completed blocker reconciliation pass;
 5. an unsaturated discovery pass followed by readiness gating, or a
@@ -795,6 +798,9 @@ Each delegate skill may fail. Handle failures per phase:
 
 - `merge` failure:
   - If merge conflict: report conflict, leave PR open, continue.
+  - If CI is pending for a PR carrying `merge-if-ci-green`: leave the conditional
+    label in place and revisit the same head after checks settle, without a
+    routine waiting comment or repeat review.
   - If CI status check fails: leave PR in `merge-ready` (CI is async), report
     the failing check, continue.
   - If branch protection rejects: record rejection reason, continue.
@@ -829,7 +835,8 @@ If the phase used `worker_sparse_artifacts`, require the self-review companion t
   reached, stop new evidence implementations, prioritize exact-head review/merge work, and permit
   only local support changes that do not add another domain-review obligation.
 - After implementation, review all open non-draft PRs that are not blocked.
-- Merge all PRs carrying the `merge-ready` label.
+- Process all PRs carrying `merge-if-ci-green` for green-CI promotion, then merge
+  all PRs carrying `merge-ready` through the guarded merger.
 - Run one bounded discovery pass after merge.
 - End the cycle only when the parent arbiter proves that every controller lane
   is empty and discovery is head-bound saturated.

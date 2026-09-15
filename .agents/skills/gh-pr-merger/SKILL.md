@@ -1,7 +1,7 @@
 ---
 name: gh-pr-merger
-description: Guarded PR merger; merges merge-ready PRs after verifying label, CI status, branch
-  protection, and preflight checks.
+description: Guarded PR merger; promotes merge-if-ci-green after green CI and merges merge-ready PRs
+  after verifying branch protection and preflight checks.
 category: github-pr
 kind: atomic
 phase: verification
@@ -17,8 +17,13 @@ aliases:
 
 # GH PR Merger
 
-Use this skill when a PR is `merge-ready` and the owner or parent orchestrator has authorized a
+Use this skill when a PR is `merge-ready` or `merge-if-ci-green` and the owner or parent orchestrator has authorized a
 bounded guarded-merge run.
+
+`merge-if-ci-green` is a completed-review signal while hosted checks are
+pending. It never authorizes merge directly. On green CI for the same head,
+promote it to `merge-ready` with the guarded REST helper, then run the unchanged
+merge receipt and gate. Do not request another review merely because CI settled.
 
 This skill is intentionally restricted: it never force-pushes, never rewrites
 history, and stops on any auth/permission/CI failure.
@@ -117,7 +122,9 @@ uv run python scripts/dev/check_skills.py --preflight gh-pr-merger
 
 Before each merge operation, verify:
 
-1. Current GitHub state has the `merge-ready` label. Labels are the source of truth; do not infer
+1. Current GitHub state has the `merge-ready` label. For a PR carrying only
+   `merge-if-ci-green`, run the promotion command below after green CI and re-read
+   labels. Labels are the source of truth; do not infer
    merge authorization from Projects, dashboards, a local ledger, or a worker report. If absent,
    skip and report.
 2. PR is not a draft. If draft, skip and report.
@@ -220,11 +227,25 @@ review evidence are current. Never use it to bypass this skill's `merge-ready`, 
 requested-reviewer, base-policy, or branch-protection checks, and never run stack mutations
 concurrently against the same PR or branch.
 
-1. List open PRs with `merge-ready` label:
+1. List open PRs with either readiness label (deduplicate PR numbers):
    ```bash
    gh pr list --state open --label merge-ready --json number,title,headRefName,baseRefName,mergeable,statusCheckRollup
+   gh pr list --state open --label merge-if-ci-green --json number,title,headRefName,baseRefName,mergeable,statusCheckRollup
    ```
 2. For each PR:
+   - If it carries `merge-if-ci-green` without `merge-ready`, capture the live
+     full head and base SHAs and run the one-shot promotion helper. A `waiting`,
+     `skipped`, `blocked`, or `partial` result is a handoff, not permission to merge.
+     The helper requires green required checks on the expected head, checks the
+     conditional label again, uses the existing carrier guard to apply
+     `merge-ready`, and clears the conditional label after verifying the add.
+     ```bash
+     uv run python -m scripts.dev.promote_merge_if_ci_green <number> \
+       --repo ll7/robot_sf_ll7 --expected-head-sha <full-head-sha> \
+       --expected-base-sha <full-base-sha>
+     ```
+     Re-read live labels before continuing. A moved head, base, review claim,
+     or removed conditional label parks the PR for normal triage.
    - Run preflight checks.
    - Update the active delegation ledger from `.agents/skills/goal-autopilot/SKILL.md` with the PR
      number, head SHA, preflight status, merge command status, cleanup status, and next action.

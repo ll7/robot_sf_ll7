@@ -39,9 +39,14 @@ _GATE_VERDICT_RE = re.compile(
     re.IGNORECASE,
 )
 GATE_VERDICT_RE = _GATE_VERDICT_RE
+# Gate-verdict events are control trailers, so require the marker to begin a
+# Markdown-style line (after optional list/quote/fence decoration). This keeps
+# prose such as ``keep `gate-verdict: hold`;`` from becoming a malformed event
+# while leaving malformed dedicated trailers fail-closed below.
 _GATE_VERDICT_MARKER_RE = re.compile(
-    r"gate-verdict\s*:\s*(?P<verdict>accepted|hold)\b",
-    re.IGNORECASE,
+    r"^[ \t]*(?:[-*+>]\s*)*(?:`{1,3}\s*)?"
+    r"(?P<marker>gate-verdict\s*:\s*(?P<verdict>accepted|hold)\b)",
+    re.IGNORECASE | re.MULTILINE,
 )
 _BASE_POLICY_RE = re.compile(
     r"base-policy\s*:\s*(ordinary-cas|current-base)\s*@\s*([0-9a-fA-F]{7,40})\b",
@@ -53,6 +58,26 @@ _EXACT_HEAD_RE = re.compile(
     re.IGNORECASE,
 )
 EXACT_HEAD_RE = _EXACT_HEAD_RE
+
+
+def gate_verdict_matches(text: str) -> list[re.Match[str]]:
+    """Return complete gate-verdict carriers from dedicated Markdown lines.
+
+    The broad SHA carrier parser remains available for provenance inspection, but
+    gate-event consumers must not promote inline prose into control state. A
+    dedicated marker with an invalid or missing SHA is intentionally omitted here;
+    event consumers that need fail-closed malformed detection inspect the marker
+    stream directly.
+    """
+    if not isinstance(text, str) or not text:
+        return []
+    matches: list[re.Match[str]] = []
+    for marker in _GATE_VERDICT_MARKER_RE.finditer(text):
+        match = _GATE_VERDICT_RE.match(text, marker.start("marker"))
+        if match is not None:
+            matches.append(match)
+    return matches
+
 
 # A ``review-claim`` comment announces a lane's mutable-write window; admission
 # gates treat an unexpired trusted claim as a hold. The same comment thread is

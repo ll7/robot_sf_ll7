@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scripts.dev.merge_queue_gate import evaluate_merge_gate
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.snapshot_pr_queue import (
     COMMENT_BODY_LIMIT,
@@ -1427,6 +1428,63 @@ def test_snapshot_prs_extracts_gate_verdicts_from_long_bodies() -> None:
     assert len(excerpt) <= 180
     assert excerpt.endswith("...")
     assert f"gate-verdict: accepted @ {sha}" not in excerpt
+
+
+def test_compact_snapshot_ignores_inline_gate_verdict_prose() -> None:
+    """Compact normalization must preserve the canonical line-level gate parser."""
+    sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+    body = "final body"
+    digest = metadata_digest("compact gate parser PR", body)
+    pr_data = {
+        "number": 9325,
+        "title": "compact gate parser PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/9325",
+        "labels": [{"name": "merge-ready"}],
+        "headRefName": "feature",
+        "headRefOid": sha,
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [
+            {"name": "ci", "status": "completed", "conclusion": "success"},
+        ],
+        "reviews": [
+            {
+                "state": "COMMENTED",
+                "author": {"login": "ll7"},
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {sha}",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": sha},
+            },
+            {
+                "state": "COMMENTED",
+                "author": {"login": "ll7"},
+                "authorAssociation": "OWNER",
+                "body": "Keep `gate-verdict: hold @ " + sha + "`; do not apply merge-ready.",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": sha},
+            },
+        ],
+        "comments": [],
+        "body": body,
+    }
+
+    snapshot = _pr_payload_from_dict(
+        pr_data,
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=9325,
+        expected_head_sha=sha,
+    )
+    snapshot["changed_coverage"] = {"status": "success", "head_sha": sha}
+    snapshot["metadata_verdicts"] = [metadata_trailer(digest)]
+    snapshot["closing_discipline"] = {"status": "passed", "blockers": []}
+
+    assert snapshot["gate_verdicts"] == [f"gate-verdict: accepted @ {sha}"]
+    assert snapshot["gate_verdict_status"] == "accepted"
+    audit = evaluate_merge_gate(snapshot, main_sha="main-sha", threads_resolved=True)
+    assert audit.gate_verdict_status == "accepted"
 
 
 # Issue #6564: GraphQL quota exhaustion REST fallback tests (deterministic, no live GitHub).

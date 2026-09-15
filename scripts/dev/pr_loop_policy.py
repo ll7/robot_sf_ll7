@@ -683,11 +683,12 @@ def _gate_verdict_events_from_body(
 
     events: list[_GateVerdictEvent] = []
     for marker in markers:
-        match = _GATE_VERDICT_RE.match(body, marker.start())
+        marker_start = marker.start("marker")
+        match = _GATE_VERDICT_RE.match(body, marker_start)
         position = _MarkerPosition(
             collection=collection,
             entry_index=entry_index,
-            offset=marker.start(),
+            offset=marker_start,
             published_at=published_at,
             legacy_order=legacy_order,
         )

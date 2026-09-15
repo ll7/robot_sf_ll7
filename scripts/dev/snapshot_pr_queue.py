@@ -25,10 +25,10 @@ from scripts.dev.check_pr_ci_status import (
 )
 from scripts.dev.github_graphql_retry import run_with_retry
 from scripts.dev.github_quota import quota_reset_handoff
+from scripts.dev.lane_markers import gate_verdict_matches
 from scripts.dev.pr_loop_policy import (
     BASE_POLICY_RE,
     GATE_VERDICT_PROJECTION_SOURCE,
-    GATE_VERDICT_RE,
     authoritative_body_text,
     current_gate_verdict_status,
 )
@@ -1442,7 +1442,7 @@ def _extract_trailers_from_bodies(items: Any) -> list[str]:
         if isinstance(entry, dict):
             body = authoritative_body_text(entry)
             if body is not None:
-                for match in GATE_VERDICT_RE.finditer(body):
+                for match in gate_verdict_matches(body):
                     trailers.append(
                         f"gate-verdict: {match.group('verdict').lower()} @ {match.group('sha')}"
                     )

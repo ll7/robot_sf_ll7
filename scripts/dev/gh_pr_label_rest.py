@@ -54,11 +54,18 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.dev._gh_rest import gh_api_delete as _gh_api_delete
+from scripts.dev._gh_rest import gh_api_get as _gh_api_pr_get
 from scripts.dev._gh_rest import gh_api_label_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_post as _gh_api_post
+from scripts.dev._gh_rest import parse_json as _parse_json
 from scripts.dev._gh_rest import subprocess
 from scripts.dev.github_transport_policy import get_transport_contract
-from scripts.dev.pr_write_guard import guard_pr_write, pr_write_lock
+from scripts.dev.pr_write_guard import (
+    FULL_SHA_RE,
+    STALE_WRITE_STATUS,
+    guard_pr_write,
+    pr_write_lock,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -79,6 +86,7 @@ _RATE_LIMIT_RETRY_AFTER_RE = re.compile(r"(?im)(?:^|[\s,;(])retry[- ]after\s*[:=
 _RATE_LIMIT_RESET_HEADER_RE = re.compile(r"(?im)(?:^|[\s,;(])x-ratelimit-reset\s*[:=]")
 _RATE_LIMIT_RETRY_AFTER_HEADER_RE = re.compile(r"(?im)(?:^|[\s,;(])retry[- ]after\s*[:=]")
 _HTTP_STATUS_RE = re.compile(r"(?i)\bHTTP(?:/\d+(?:\.\d+)?)?\s*([45]\d{2})\b")
+_TERMINAL_PR_STATES = frozenset({"CLOSED", "MERGED"})
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_label_rest.py")
 
 
@@ -734,6 +742,250 @@ def _classify_write_failure(
     return {"status": "error", "error": f"label {action} failed: {detail}"}
 
 
+def _read_pr_terminal_identity(number: int, *, repo: str) -> dict[str, Any]:
+    """Read a PR's terminal state and exact head/base identity for one delete."""
+    result = _gh_api_pr_get(f"repos/{repo}/pulls/{number}", timeout=30)
+    payload, error = _parse_json(result, what=f"PR #{number} terminal-state read")
+    if error:
+        return {"status": "error", "error": error}
+    if not isinstance(payload, dict):
+        return {
+            "status": "error",
+            "error": f"PR #{number} terminal-state payload was not an object",
+        }
+
+    raw_state = payload.get("state")
+    if not isinstance(raw_state, str) or not raw_state.strip():
+        return {
+            "status": "error",
+            "error": f"PR #{number} terminal-state payload has no state",
+        }
+    raw_head = payload.get("head")
+    raw_base = payload.get("base")
+    head_sha = raw_head.get("sha") if isinstance(raw_head, dict) else None
+    base_sha = raw_base.get("sha") if isinstance(raw_base, dict) else None
+    if not isinstance(head_sha, str) or not FULL_SHA_RE.fullmatch(head_sha):
+        return {
+            "status": "error",
+            "error": f"PR #{number} terminal-state payload has no full head SHA",
+        }
+    if not isinstance(base_sha, str) or not FULL_SHA_RE.fullmatch(base_sha):
+        return {
+            "status": "error",
+            "error": f"PR #{number} terminal-state payload has no full base SHA",
+        }
+    merged_at = payload.get("merged_at")
+    if merged_at is not None and not isinstance(merged_at, str):
+        return {
+            "status": "error",
+            "error": f"PR #{number} terminal-state payload has malformed merged_at",
+        }
+    return {
+        "status": "ok",
+        "number": number,
+        "repo": repo,
+        "operation": "terminal_label_remove",
+        "target": "pr",
+        "observed_state": raw_state.strip().upper(),
+        "observed_head_sha": head_sha,
+        "observed_base_sha": base_sha,
+        "merged_at": merged_at,
+    }
+
+
+def _verify_pr_terminal_identity(
+    identity: dict[str, Any],
+    *,
+    expected_head_sha: str,
+    expected_base_sha: str,
+) -> dict[str, Any]:
+    """Return a terminal PR CAS verdict for the identity read before DELETE."""
+    base = {
+        "number": identity["number"],
+        "repo": identity["repo"],
+        "operation": identity["operation"],
+        "target": "pr",
+        "expected_head_sha": expected_head_sha,
+        "expected_base_sha": expected_base_sha,
+        "observed_state": identity["observed_state"],
+        "observed_head_sha": identity["observed_head_sha"],
+        "observed_base_sha": identity["observed_base_sha"],
+        "merged_at": identity["merged_at"],
+    }
+    if identity["observed_state"] not in _TERMINAL_PR_STATES:
+        state = identity["observed_state"]
+        return {
+            "status": STALE_WRITE_STATUS,
+            "reason": "pr_not_terminal",
+            "error": f"PR #{identity['number']} is not terminal (state={state})",
+            **base,
+        }
+    if identity["observed_head_sha"].lower() != expected_head_sha.lower():
+        return {
+            "status": STALE_WRITE_STATUS,
+            "reason": "head_sha_changed",
+            "error": f"PR #{identity['number']} head SHA changed before terminal label removal",
+            **base,
+        }
+    if identity["observed_base_sha"].lower() != expected_base_sha.lower():
+        return {
+            "status": STALE_WRITE_STATUS,
+            "reason": "base_sha_changed",
+            "error": f"PR #{identity['number']} base SHA changed before terminal label removal",
+            **base,
+        }
+    return {"status": "ok", **base}
+
+
+def _terminal_pr_expected_sha_error(
+    number: int,
+    *,
+    repo: str,
+    expected_head_sha: object,
+    expected_base_sha: object,
+) -> dict[str, Any] | None:
+    """Validate the explicit full SHAs accepted by the terminal PR API."""
+    if not isinstance(expected_head_sha, str) or not FULL_SHA_RE.fullmatch(expected_head_sha):
+        return {
+            "status": "error",
+            "error": "expected_head_sha must be a full 40-character SHA",
+            "number": number,
+            "repo": repo,
+            "operation": "terminal_label_remove",
+        }
+    if not isinstance(expected_base_sha, str) or not FULL_SHA_RE.fullmatch(expected_base_sha):
+        return {
+            "status": "error",
+            "error": "expected_base_sha must be a full 40-character SHA",
+            "number": number,
+            "repo": repo,
+            "operation": "terminal_label_remove",
+        }
+    return None
+
+
+def _with_terminal_pr_receipt_fields(
+    result: dict[str, Any],
+    *,
+    expected_head_sha: str | None,
+    expected_base_sha: str | None,
+    identity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Attach target/CAS evidence to terminal PR removal receipts."""
+    receipt = {**result, "target": "pr"}
+    if expected_head_sha is not None:
+        receipt.setdefault("expected_head_sha", expected_head_sha)
+    if expected_base_sha is not None:
+        receipt.setdefault("expected_base_sha", expected_base_sha)
+    if identity is not None and identity.get("status") == "ok":
+        for key in ("observed_state", "observed_head_sha", "observed_base_sha", "merged_at"):
+            receipt.setdefault(key, identity[key])
+    return receipt
+
+
+def _remove_label_once(number: int, label: str, *, repo: str) -> dict[str, Any]:
+    """Delete one label and perform the existing authoritative readback."""
+    path = f"repos/{repo}/issues/{number}/labels/{quote(label, safe='')}"
+    result = _gh_api_delete(path)
+    idempotent = _is_absent_label_delete(result)
+    if result.returncode != 0 and not idempotent:
+        return _classify_write_failure(
+            result,
+            number=number,
+            label=label,
+            repo=repo,
+            action="remove",
+            expected_present=False,
+        )
+
+    # Verify the label was actually removed by re-reading labels.
+    current = get_label_names(number, repo=repo)
+    if current["status"] == "error":
+        return current
+    if label in current["labels"]:
+        return {
+            "status": "error",
+            "error": f"label '{label}' was still found in labels after remove; "
+            "the delete may not have taken effect",
+        }
+    response = {
+        "status": "ok",
+        "number": number,
+        "label": label,
+        "action": "remove",
+        "repo": repo,
+    }
+    if idempotent:
+        response["idempotent"] = True
+    return response
+
+
+def _establish_terminal_pr_expectations(
+    number: int,
+    *,
+    repo: str,
+    expected_head_sha: str | None,
+    expected_base_sha: str | None,
+) -> tuple[dict[str, Any] | None, str | None, str | None]:
+    """Establish and initially validate CAS SHAs when callers omit them."""
+    if expected_head_sha is not None or expected_base_sha is not None:
+        assert expected_head_sha is not None
+        assert expected_base_sha is not None
+        return None, expected_head_sha, expected_base_sha
+    initial = _read_pr_terminal_identity(number, repo=repo)
+    if initial.get("status") != "ok":
+        return (
+            _with_terminal_pr_receipt_fields(
+                initial,
+                expected_head_sha=None,
+                expected_base_sha=None,
+            ),
+            None,
+            None,
+        )
+    initial_head = initial["observed_head_sha"]
+    initial_base = initial["observed_base_sha"]
+    initial_verdict = _verify_pr_terminal_identity(
+        initial,
+        expected_head_sha=initial_head,
+        expected_base_sha=initial_base,
+    )
+    if initial_verdict["status"] != "ok":
+        return initial_verdict, None, None
+    return None, initial_head, initial_base
+
+
+def _terminal_pr_remove_attempt(
+    number: int,
+    label: str,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    expected_base_sha: str,
+) -> dict[str, Any]:
+    """Recheck terminal state/CAS and then perform one verified DELETE attempt."""
+    identity = _read_pr_terminal_identity(number, repo=repo)
+    if identity.get("status") != "ok":
+        return _with_terminal_pr_receipt_fields(
+            identity,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+        )
+    verdict = _verify_pr_terminal_identity(
+        identity,
+        expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
+    )
+    if verdict["status"] != "ok":
+        return verdict
+    return _with_terminal_pr_receipt_fields(
+        _remove_label_once(number, label, repo=repo),
+        expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
+        identity=identity,
+    )
+
+
 def add_label(
     number: int,
     label: str,
@@ -853,39 +1105,7 @@ def remove_label(
 
     def _remove() -> dict[str, Any]:
         """Delete and verify one label, classifying rate-limit failures."""
-        path = f"repos/{repo}/issues/{number}/labels/{quote(label, safe='')}"
-        result = _gh_api_delete(path)
-        idempotent = _is_absent_label_delete(result)
-        if result.returncode != 0 and not idempotent:
-            return _classify_write_failure(
-                result,
-                number=number,
-                label=label,
-                repo=repo,
-                action="remove",
-                expected_present=False,
-            )
-
-        # Verify the label was actually removed by re-reading labels.
-        current = get_label_names(number, repo=repo)
-        if current["status"] == "error":
-            return current
-        if label in current["labels"]:
-            return {
-                "status": "error",
-                "error": f"label '{label}' was still found in labels after remove; "
-                "the delete may not have taken effect",
-            }
-        response = {
-            "status": "ok",
-            "number": number,
-            "label": label,
-            "action": "remove",
-            "repo": repo,
-        }
-        if idempotent:
-            response["idempotent"] = True
-        return response
+        return _remove_label_once(number, label, repo=repo)
 
     if target == "issue":
         return _run_bounded_label_mutation(
@@ -904,6 +1124,87 @@ def remove_label(
         expected_base_sha=expected_base_sha,
         write=_remove,
     )
+
+
+def remove_terminal_pr_label(
+    number: int,
+    label: str,
+    *,
+    repo: str = DEFAULT_REPO,
+    expected_head_sha: str | None = None,
+    expected_base_sha: str | None = None,
+) -> dict[str, Any]:
+    """Remove one label from a terminal PR under a state-and-identity CAS guard.
+
+    The guard is intentionally separate from :func:`remove_label`: ordinary PR
+    writes remain open-only, while this narrow path re-reads the PR immediately
+    before DELETE and requires a closed/merged state plus matching full head/base
+    SHAs. When no expected SHAs are supplied, the first terminal read establishes
+    the CAS values and a second read confirms them before the mutation.
+    """
+    if type(number) is not int or number < 1:
+        return {"status": "error", "error": f"issue/PR number must be positive, got {number}"}
+    if (label_error := _label_name_error(label, context="label")) is not None:
+        return {"status": "error", "error": label_error}
+    if (expected_head_sha is None) != (expected_base_sha is None):
+        return {
+            "status": "error",
+            "error": "terminal PR label removal requires both expected_head_sha and expected_base_sha",
+        }
+    if expected_head_sha is not None and expected_base_sha is not None:
+        validation_error = _terminal_pr_expected_sha_error(
+            number,
+            repo=repo,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+        )
+        if validation_error is not None:
+            return validation_error
+
+    try:
+        with pr_write_lock(repo, number):
+            early_result, expected_head_sha, expected_base_sha = (
+                _establish_terminal_pr_expectations(
+                    number,
+                    repo=repo,
+                    expected_head_sha=expected_head_sha,
+                    expected_base_sha=expected_base_sha,
+                )
+            )
+            if early_result is not None:
+                return early_result
+
+            assert expected_head_sha is not None
+            assert expected_base_sha is not None
+
+            def _attempt() -> dict[str, Any]:
+                """Recheck terminal state/CAS before each bounded DELETE attempt."""
+                return _terminal_pr_remove_attempt(
+                    number,
+                    label,
+                    repo=repo,
+                    expected_head_sha=expected_head_sha,
+                    expected_base_sha=expected_base_sha,
+                )
+
+            result = _run_bounded_label_mutation(
+                _attempt,
+                action="remove",
+                number=number,
+                repo=repo,
+                label=label,
+            )
+            return _with_terminal_pr_receipt_fields(
+                result,
+                expected_head_sha=expected_head_sha,
+                expected_base_sha=expected_base_sha,
+            )
+    except RuntimeError as exc:
+        return _with_terminal_pr_receipt_fields(
+            {"status": "error", "error": str(exc)},
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+        )
 
 
 def _build_parser() -> argparse.ArgumentParser:

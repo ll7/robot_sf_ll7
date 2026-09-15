@@ -17,10 +17,8 @@ The operation is exact-item scoped and idempotent. ``--report`` mode performs
 no GitHub mutation and lists every proposed change; ``--apply`` mode re-reads
 the live item state immediately before mutating each label, aborts on reopen or
 concurrent label drift, and keeps manual labels outside the controlled
-namespace untouched. ``merge-ready`` removal additionally proves the item is
-still a closed PR through the pulls API and passes its live head/base SHAs to
-the PR-target compare-and-swap guard. The planner never closes issues, merges
-PRs, or creates labels.
+namespace untouched. The planner never closes issues, merges PRs, or creates
+labels.
 """
 
 from __future__ import annotations
@@ -31,7 +29,7 @@ import sys
 from typing import Any
 
 from scripts.dev._gh_rest import gh_api_get, parse_json
-from scripts.dev.gh_pr_label_rest import add_label, remove_label
+from scripts.dev.gh_pr_label_rest import add_label, remove_label, remove_terminal_pr_label
 
 SCHEMA = "terminal_label_reconcile.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -159,6 +157,47 @@ def plan_for_terminal(
     }
 
 
+_LABEL_RECEIPT_FIELDS = (
+    "status",
+    "reason",
+    "target",
+    "operation",
+    "expected_head_sha",
+    "expected_base_sha",
+    "observed_state",
+    "observed_head_sha",
+    "observed_base_sha",
+    "merged_at",
+    "attempts",
+    "reset_at",
+    "rate_limit_kind",
+    "idempotent",
+    "write_status",
+    "verification_status",
+)
+
+
+def _label_failure_receipt(label: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Preserve guarded mutation status and identity evidence in a failure row."""
+    failure: dict[str, Any] = {"label": label, "error": result.get("error")}
+    for field in _LABEL_RECEIPT_FIELDS:
+        if field == "status" and result.get("target") != "pr":
+            continue
+        if field in result:
+            failure[field] = result[field]
+    return failure
+
+
+def _label_success_receipt(label: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Record guarded PR evidence while preserving the compact issue receipt shape."""
+    receipt: dict[str, Any] = {"label": label, "skipped": False}
+    if result.get("target") == "pr":
+        for field in _LABEL_RECEIPT_FIELDS:
+            if field in result:
+                receipt[field] = result[field]
+    return receipt
+
+
 def _label_names_from_payload(payload: dict[str, Any], *, context: str) -> list[str]:
     """Normalize and validate a REST label list before it enters a plan."""
     raw_labels = payload.get("labels")
@@ -235,28 +274,32 @@ def _apply_label_change(
             "applied_changes": applied,
         }
     if current["state"] not in {"closed", "merged"}:
+        error = f"item reopened (state={current['state']}); plan aborted"
+        applied["failures"].append(
+            {
+                "label": label,
+                "status": "review_skipped_stale_state",
+                "reason": "pr_not_terminal" if current.get("is_pull_request") else "not_terminal",
+                "error": error,
+            }
+        )
         return {
             "ok": False,
-            "error": f"item reopened (state={current['state']}); plan aborted",
+            "error": error,
             "applied_changes": applied,
         }
     if action == "remove":
         if label not in current["labels"]:
             applied["remove"].append({"label": label, "skipped": True})
             return None
-        if label in {"merge-ready", "merge-if-ci-green"}:
-            return _apply_merge_ready_removal(
-                number,
-                repo=repo,
-                label=label,
-                is_pull_request=bool(current.get("is_pull_request")),
-                applied=applied,
-            )
-        result = remove_label(number, label, repo=repo)
+        if current.get("is_pull_request"):
+            result = remove_terminal_pr_label(number, label, repo=repo)
+        else:
+            result = remove_label(number, label, repo=repo)
         if result.get("status") != "ok":
-            applied["failures"].append({"label": label, "error": result.get("error")})
+            applied["failures"].append(_label_failure_receipt(label, result))
             return None
-        applied["remove"].append({"label": label, "skipped": False})
+        applied["remove"].append(_label_success_receipt(label, result))
         return None
     if label in current["labels"]:
         applied["add"].append({"label": label, "skipped": True})
@@ -291,6 +334,7 @@ def _apply_plan(
                 "ok": False,
                 "applied": True,
                 "error": abort["error"],
+                "failures": applied["failures"],
                 "applied_changes": abort["applied_changes"],
             }
     for label in plan["add"]:
@@ -303,10 +347,33 @@ def _apply_plan(
                 "ok": False,
                 "applied": True,
                 "error": abort["error"],
+                "failures": applied["failures"],
                 "applied_changes": abort["applied_changes"],
             }
     failures = applied["failures"]
     final_state = fetch_item_state(number, repo=repo)
+    if not final_state["ok"]:
+        failures.append(
+            {
+                "label": "__final_state__",
+                "stage": "final_readback",
+                "error": final_state["error"],
+            }
+        )
+    elif final_state["state"] not in {"closed", "merged"}:
+        failures.append(
+            {
+                "label": "__final_state__",
+                "stage": "final_terminal_check",
+                "status": "review_skipped_stale_state",
+                "reason": "pr_not_terminal"
+                if final_state.get("is_pull_request")
+                else "not_terminal",
+                "error": (
+                    f"item was no longer terminal at final readback (state={final_state['state']})"
+                ),
+            }
+        )
     return {
         "schema": SCHEMA,
         "number": number,

@@ -31,6 +31,7 @@ from scripts.dev.gh_pr_label_rest import (
     get_label_names,
     main,
     remove_label,
+    remove_terminal_pr_label,
     validate_result_envelope,
 )
 
@@ -265,6 +266,25 @@ def _proc(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> MagicMo
 def _mock_labels_payload(*names: str) -> str:
     """Build a JSON labels-array payload from label names."""
     return json.dumps([{"name": n} for n in names])
+
+
+def _mock_pr_payload(
+    *,
+    state: str = "closed",
+    head_sha: str = "a" * 40,
+    base_sha: str = "b" * 40,
+    merged_at: str | None = "2026-09-15T00:00:00Z",
+) -> str:
+    """Build a minimal pulls-API response for terminal label guard tests."""
+    return json.dumps(
+        {
+            "number": 5220,
+            "state": state,
+            "head": {"sha": head_sha},
+            "base": {"sha": base_sha},
+            "merged_at": merged_at,
+        }
+    )
 
 
 def _page_path(page: int) -> str:
@@ -889,6 +909,202 @@ class TestRemoveLabel:
 
         assert result["status"] == "error"
         assert "printable" in result["error"]
+        mock_delete.assert_not_called()
+
+
+class TestRemoveTerminalPrLabel:
+    """Tests for the closed/merged PR-only terminal removal path (issue #9370)."""
+
+    def test_removes_label_from_merged_pr_with_terminal_cas_and_readback(self) -> None:
+        """A merged PR removal verifies state, both SHAs, and the final labels."""
+        head_sha, base_sha = "a" * 40, "b" * 40
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_label_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+        ):
+            mock_pr_get.return_value = _proc(
+                stdout=_mock_pr_payload(head_sha=head_sha, base_sha=base_sha)
+            )
+            mock_label_get.return_value = _proc(stdout=_mock_labels_payload("state:done"))
+            mock_delete.return_value = _proc(stdout="")
+            result = remove_terminal_pr_label(
+                5220,
+                "merge-ready",
+                repo="ll7/robot_sf_ll7",
+                expected_head_sha=head_sha,
+                expected_base_sha=base_sha,
+            )
+
+        assert result["status"] == "ok"
+        assert result["target"] == "pr"
+        assert result["observed_state"] == "CLOSED"
+        assert result["merged_at"] == "2026-09-15T00:00:00Z"
+        assert result["expected_head_sha"] == head_sha
+        assert result["expected_base_sha"] == base_sha
+        mock_pr_get.assert_called_once_with(
+            "repos/ll7/robot_sf_ll7/pulls/5220",
+            timeout=30,
+        )
+        mock_delete.assert_called_once()
+
+    def test_removes_active_label_from_closed_unmerged_pr(self) -> None:
+        """Closed-unmerged PRs use the same guarded terminal removal contract."""
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_label_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+        ):
+            mock_pr_get.return_value = _proc(stdout=_mock_pr_payload(merged_at=None))
+            mock_label_get.return_value = _proc(stdout=_mock_labels_payload("review-bot-auto"))
+            mock_delete.return_value = _proc(stdout="")
+            result = remove_terminal_pr_label(
+                5220,
+                "needs-review",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+
+        assert result["status"] == "ok"
+        assert result["observed_state"] == "CLOSED"
+        assert result["merged_at"] is None
+        mock_delete.assert_called_once()
+
+    def test_omitted_cas_is_established_then_confirmed_before_delete(self) -> None:
+        """The self-contained API confirms its initial PR identity before DELETE."""
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_label_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+        ):
+            mock_pr_get.side_effect = [
+                _proc(stdout=_mock_pr_payload()),
+                _proc(stdout=_mock_pr_payload()),
+            ]
+            mock_label_get.return_value = _proc(stdout=_mock_labels_payload("state:done"))
+            mock_delete.return_value = _proc(stdout="")
+            result = remove_terminal_pr_label(5220, "merge-ready")
+
+        assert result["status"] == "ok"
+        assert result["expected_head_sha"] == "a" * 40
+        assert result["expected_base_sha"] == "b" * 40
+        assert mock_pr_get.call_count == 2
+        mock_delete.assert_called_once()
+
+    @pytest.mark.parametrize("changed_identity", ["head", "base"])
+    def test_omitted_cas_rejects_identity_drift_between_reads(self, changed_identity: str) -> None:
+        """A head/base move between identity reads fails before DELETE."""
+        changed_kwargs = {"head_sha": "a" * 40, "base_sha": "b" * 40}
+        changed_kwargs["head_sha" if changed_identity == "head" else "base_sha"] = "c" * 40
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+        ):
+            mock_pr_get.side_effect = [
+                _proc(stdout=_mock_pr_payload()),
+                _proc(stdout=_mock_pr_payload(**changed_kwargs)),
+            ]
+            result = remove_terminal_pr_label(5220, "merge-ready")
+
+        assert result["status"] == "review_skipped_stale_state"
+        assert result["reason"] == f"{changed_identity}_sha_changed"
+        mock_delete.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("changed_identity", "reason"),
+        [("head", "head_sha_changed"), ("base", "base_sha_changed")],
+    )
+    def test_rejects_head_or_base_drift_before_delete(
+        self, changed_identity: str, reason: str
+    ) -> None:
+        """A moved terminal PR never reaches DELETE."""
+        payload_kwargs = {"head_sha": "a" * 40, "base_sha": "b" * 40}
+        payload_kwargs["head_sha" if changed_identity == "head" else "base_sha"] = "c" * 40
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+        ):
+            mock_pr_get.return_value = _proc(stdout=_mock_pr_payload(**payload_kwargs))
+            result = remove_terminal_pr_label(
+                5220,
+                "merge-ready",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+
+        assert result["status"] == "review_skipped_stale_state"
+        assert result["reason"] == reason
+        mock_delete.assert_not_called()
+
+    def test_rejects_reopened_pr_before_delete(self) -> None:
+        """A PR that is open at the terminal preflight keeps its labels."""
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+        ):
+            mock_pr_get.return_value = _proc(stdout=_mock_pr_payload(state="open"))
+            result = remove_terminal_pr_label(
+                5220,
+                "merge-ready",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+
+        assert result["status"] == "review_skipped_stale_state"
+        assert result["reason"] == "pr_not_terminal"
+        assert "not terminal" in result["error"]
+        mock_delete.assert_not_called()
+
+    def test_retries_rate_limited_delete_with_fresh_terminal_cas(self) -> None:
+        """A bounded retry rechecks terminal identity before the second DELETE."""
+        reset_at = int(time.time()) + 1
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_label_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+            patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
+        ):
+            mock_pr_get.side_effect = [
+                _proc(stdout=_mock_pr_payload()),
+                _proc(stdout=_mock_pr_payload()),
+            ]
+            mock_label_get.return_value = _proc(stdout=_mock_labels_payload("state:done"))
+            mock_delete.side_effect = [
+                _rate_limited_403(reset_at=reset_at),
+                _proc(stdout=""),
+            ]
+            result = remove_terminal_pr_label(
+                5220,
+                "merge-ready",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+
+        assert result["status"] == "ok"
+        assert result["attempts"] == 2
+        assert mock_pr_get.call_count == 2
+        assert mock_delete.call_count == 2
+        mock_sleep.assert_called_once()
+
+    def test_ordinary_open_pr_remove_guard_remains_unchanged(self) -> None:
+        """The terminal API does not loosen ordinary open-PR remove_label protection."""
+        stale = {
+            "status": "review_skipped_stale_state",
+            "reason": "pr_not_open",
+        }
+        with (
+            patch("scripts.dev.gh_pr_label_rest.guard_pr_write", return_value=stale),
+            patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
+        ):
+            result = remove_label(
+                5220,
+                "merge-ready",
+                target="pr",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+
+        assert result == stale
         mock_delete.assert_not_called()
 
 

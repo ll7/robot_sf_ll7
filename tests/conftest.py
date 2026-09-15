@@ -882,6 +882,9 @@ _FAST_FILES = {
     # execution coverage for the bounded experiment leaf; keep changed coverage
     # in fast shards (issue #9293).
     "test_review_execute.py",
+    # SREV-02 review-import tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9271).
+    "test_review_import.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

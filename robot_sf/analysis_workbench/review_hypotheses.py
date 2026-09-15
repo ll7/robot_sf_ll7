@@ -21,6 +21,8 @@ import argparse
 import hashlib
 import json
 import math
+import shutil
+import tempfile
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -137,6 +139,32 @@ def _validate_hypothesis_identity(raw: dict[str, Any], errors: list[str]) -> Non
         errors.append("corrupt-hypothesis: 'terminal_condition' must be a non-empty string")
 
 
+def _validate_factor_value(template: Any, factor: Any, errors: list[str]) -> None:
+    """Reject invalid or non-finite candidate factor values before recipe creation."""
+    if isinstance(factor, bool) or not isinstance(factor, (int, float)):
+        errors.append("corrupt-hypothesis: 'factor_value' must be a finite number")
+        return
+    if not math.isfinite(factor):
+        errors.append("corrupt-hypothesis: 'factor_value' must be a finite number")
+        return
+    if template == TEMPLATE_SINGLE_PEDESTRIAN_SPEED and factor <= 0:
+        errors.append("corrupt-hypothesis: pedestrian speed must be positive")
+        return
+    if template == TEMPLATE_SINGLE_PEDESTRIAN_START_DELAY and factor < 0:
+        errors.append("corrupt-hypothesis: start delay must be non-negative")
+        return
+    if template not in SUPPORTED_TEMPLATES:
+        return
+    probe = float(factor)
+    candidates = (
+        (0.8 * probe, probe, 1.2 * probe)
+        if template == TEMPLATE_SINGLE_PEDESTRIAN_SPEED
+        else (max(0.0, probe - max(0.5, 0.25 * probe)), probe, probe + max(0.5, 0.25 * probe))
+    )
+    if not all(math.isfinite(value) for value in candidates):
+        errors.append("corrupt-hypothesis: candidate factor values must be finite")
+
+
 def _validate_hypothesis(config: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
     """Validate the ``hypothesis`` mapping inside a request config.
 
@@ -158,10 +186,7 @@ def _validate_hypothesis(config: dict[str, Any]) -> tuple[dict[str, Any] | None,
             "provide an explicit single-pedestrian speed or start-delay hypothesis"
         )
     factor = raw.get("factor_value")
-    if isinstance(factor, bool) or not isinstance(factor, (int, float)):
-        errors.append("corrupt-hypothesis: 'factor_value' must be a finite number")
-    elif not math.isfinite(factor):
-        errors.append("corrupt-hypothesis: 'factor_value' must be a finite number")
+    _validate_factor_value(template, factor, errors)
     direction = raw.get("expected_direction")
     if direction not in EXPECTED_DIRECTIONS:
         errors.append(
@@ -169,6 +194,8 @@ def _validate_hypothesis(config: dict[str, Any]) -> tuple[dict[str, Any] | None,
         )
     priority = raw.get("priority", 0)
     _validate_hypothesis_identity(raw, errors)
+    if not isinstance(config.get("source_config_identity", ""), str):
+        errors.append("corrupt-source-config-identity: expected a string")
     if errors:
         return None, errors
     return {
@@ -227,6 +254,15 @@ def _build_recipe(request: ComponentRequest, hypothesis: dict[str, Any]) -> dict
     """
     hypothesis_digest = _canonical_sha256(hypothesis)
     source_ids = [ref.artifact_id for ref in request.sources]
+    source_refs = [
+        {
+            "artifact_id": ref.artifact_id,
+            "uri": ref.uri,
+            "format": ref.format,
+        }
+        for ref in request.sources
+    ]
+    config_identity = request.config.get("source_config_identity", "")
     template = hypothesis["template"]
     factor_label = "speed" if template == TEMPLATE_SINGLE_PEDESTRIAN_SPEED else "start delay"
     return {
@@ -239,15 +275,22 @@ def _build_recipe(request: ComponentRequest, hypothesis: dict[str, Any]) -> dict
         ),
         "source_identity": {
             "source_artifact_ids": source_ids,
+            "source_refs": source_refs,
             "hypothesis_template": template,
             "hypothesis_sha256": hypothesis_digest,
-            "note": "Sources are immutable; recipe creation preserves source config/hash.",
+            "note": "Source identities are copied from the request, not verified against source bytes.",
         },
         "interventions": _build_interventions(hypothesis),
         "control_conditions": {
             "mode": "unchanged-control",
-            "source_config_sha256": hypothesis_digest,
-            "note": "Replay the preserved source configuration unchanged as the control.",
+            "source_config_identity": config_identity,
+            "source_config_identity_status": (
+                "provided_unverified" if config_identity else "unavailable"
+            ),
+            "note": (
+                "Replay the preserved source configuration unchanged as the control; "
+                "execution requires a verified source configuration identity."
+            ),
         },
         "measurements": [
             {
@@ -268,7 +311,7 @@ def _build_recipe(request: ComponentRequest, hypothesis: dict[str, Any]) -> dict
             "and never silently retried."
         ),
         "activation_checks": ["mechanism_activation_measured_before_verdict"],
-        "fidelity_checks": ["control_replay_matches_source_config_hash"],
+        "fidelity_checks": ["verified_source_config_identity_required_before_execution"],
         "budget": {
             "max_candidate_interventions": DEFAULT_MAX_CANDIDATES,
             "max_simulator_executions": DEFAULT_MAX_SIMULATOR_EXECUTIONS,
@@ -291,6 +334,30 @@ def _build_recipe(request: ComponentRequest, hypothesis: dict[str, Any]) -> dict
         "preservation_destination": request.output_directory,
         "admission_reference": "diagnostic-only; not campaign or evidence-admission authority",
     }
+
+
+def _stage_recipe(
+    output_dir: Path, request: ComponentRequest, recipe: dict[str, Any]
+) -> tuple[str, str]:
+    """Publish both artifacts together or leave the requested directory absent.
+
+    Returns:
+        SHA-256 digests for the recipe and descriptor bytes.
+    """
+    staging_dir: Path | None = None
+    try:
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+        staging_dir = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+        recipe_digest = _write_json(staging_dir / RECIPE_FILENAME, recipe)
+        descriptor_digest = _write_json(staging_dir / DESCRIPTOR_FILENAME, _DESCRIPTOR_DOC)
+        if output_dir.exists():
+            raise FileExistsError(f"output directory already exists: {request.output_directory}")
+        staging_dir.replace(output_dir)
+        staging_dir = None
+        return recipe_digest, descriptor_digest
+    finally:
+        if staging_dir is not None:
+            shutil.rmtree(staging_dir)
 
 
 def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
@@ -370,14 +437,20 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
     try:
         recipe = _build_recipe(request, hypothesis)
         experiment_recipe_from_dict(recipe)
-        recipe_digest = _write_json(output_dir / RECIPE_FILENAME, recipe)
-        descriptor_digest = _write_json(output_dir / DESCRIPTOR_FILENAME, _DESCRIPTOR_DOC)
+        recipe_digest, descriptor_digest = _stage_recipe(output_dir, request, recipe)
     except ReviewContractsValidationError as error:
         return ComponentResult(
             request_id=request.request_id,
             component_id=request.component_id,
             status="failed",
             reason="; ".join(error.errors),
+        )
+    except OSError as error:
+        return ComponentResult(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status="failed",
+            reason=f"output-write-failed: {error}",
         )
     return ComponentResult(
         request_id=request.request_id,

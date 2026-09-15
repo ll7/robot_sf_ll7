@@ -20,7 +20,8 @@ Generated recipes are not campaign or evidence-admission authority.
   `single-pedestrian-start-delay`), numeric `factor_value`, `pedestrian_id`,
   `expected_direction` (`increase`/`decrease`), `priority`, and
   `terminal_condition`. An optional `required_component_version` gates
-  compatibility.
+  compatibility. An optional `source_config_identity` may carry a source
+  configuration identity supplied by the caller.
 - **`run(request)`**: returns a `component-result.v1` result with status
   `complete` (artifacts `experiment-recipe.json` plus
   `component-descriptor.json`), `unavailable` (unsupported component,
@@ -29,7 +30,7 @@ Generated recipes are not campaign or evidence-admission authority.
   outputs never carry artifacts).
 - **Output**: one `experiment-recipe.v1` document with three deterministically
   ordered candidate interventions (priority, then stable ID), an unchanged
-  control bound to the source config hash, measurements with units and
+  control carrying the supplied source config identity, measurements with units and
   expected direction, an evaluation rule using the
   survived/falsified/inconclusive vocabulary, a default budget of three
   candidates / six simulator executions / 600 elapsed seconds / one concurrent
@@ -38,8 +39,12 @@ Generated recipes are not campaign or evidence-admission authority.
   descriptor; unsupported optional streams never block supported operations.
 
 Unknown required versions fail; output collisions and unsafe paths are
-rejected. Canonical hashes bind logical content, versions, and config — not
-absolute paths. Repeated fixture runs compare equal artifact digests.
+rejected. The recipe copies the source references accepted by the v1 request
+schema; that schema carries no source-byte hash. It does not read or verify
+source bytes. A supplied `source_config_identity` is marked
+`provided_unverified`; without one, it is `unavailable`. Execution must wait
+for a verified source configuration. The hypothesis digest identifies only the
+logical hypothesis. Repeated fixture runs compare equal artifact digests.
 
 ## Usage
 

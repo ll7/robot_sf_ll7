@@ -6,6 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+from robot_sf.analysis_workbench import review_hypotheses
 from robot_sf.analysis_workbench.review_contracts import (
     component_request_from_dict,
     experiment_recipe_from_dict,
@@ -112,6 +115,9 @@ def test_corrupt_inputs_fail_closed_without_artifacts(tmp_path: Path) -> None:
     cases = [
         ({}, "missing-hypothesis"),
         (_hypothesis(factor_value=float("inf")), "corrupt-hypothesis"),
+        (_hypothesis(factor_value=1.6e308), "candidate factor values must be finite"),
+        (_hypothesis(factor_value=0), "pedestrian speed must be positive"),
+        (_hypothesis(template="single-pedestrian-start-delay", factor_value=-1), "non-negative"),
         (_hypothesis(expected_direction="sideways"), "corrupt-hypothesis"),
         (_hypothesis(priority=-1), "corrupt-hypothesis"),
         (_hypothesis(pedestrian_id=""), "corrupt-hypothesis"),
@@ -171,10 +177,44 @@ def test_deterministic_rerun_matches_digests_and_preserves_source_hash(tmp_path:
     second_digest, second_recipe = once(second_base)
     assert first_digest == second_digest
     assert first_recipe == second_recipe
-    assert (
-        first_recipe["control_conditions"]["source_config_sha256"]
-        == first_recipe["source_identity"]["hypothesis_sha256"]
-    )
+    assert "source_config_sha256" not in first_recipe["control_conditions"]
+    assert first_recipe["control_conditions"]["source_config_identity_status"] == "unavailable"
+    assert first_recipe["source_identity"]["source_refs"][0]["artifact_id"] == "finding-0000"
+
+
+def test_supplied_source_config_identity_is_copied_without_inventing_a_hash(
+    tmp_path: Path,
+) -> None:
+    source_config_identity = "fixture-config-v1"
+    doc = _request_doc(output_directory="source-bound")
+    doc["config"]["source_config_identity"] = source_config_identity
+    request = component_request_from_dict(doc)
+    result = run(request, base=tmp_path)
+    assert result.status == "complete"
+    recipe = json.loads((tmp_path / "source-bound" / "experiment-recipe.json").read_text())
+    assert recipe["control_conditions"]["source_config_identity"] == source_config_identity
+    assert recipe["control_conditions"]["source_config_identity_status"] == "provided_unverified"
+    assert "source_config_sha256" not in recipe["control_conditions"]
+
+
+def test_second_artifact_write_failure_leaves_no_partial_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_write = review_hypotheses._write_json
+
+    def fail_descriptor(path: Path, payload: Any) -> str:
+        if path.name == "component-descriptor.json":
+            raise OSError("fixture write failure")
+        return original_write(path, payload)
+
+    monkeypatch.setattr(review_hypotheses, "_write_json", fail_descriptor)
+    request = component_request_from_dict(_request_doc(output_directory="transactional"))
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "output-write-failed" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "transactional").exists()
+    assert not list(tmp_path.glob(".transactional-*"))
 
 
 def test_descriptor_lists_supported_templates_contract() -> None:

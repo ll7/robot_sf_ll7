@@ -135,6 +135,38 @@ class TestSinglePedestrianSpawning:
         assert np.allclose(ped_states[0, 4:6], start)
         assert metadata[0]["start_delay_s"] == pytest.approx(1.5)
 
+    def test_delayed_trajectory_uses_first_waypoint_for_speed_capability(self):
+        """A trajectory-only delayed pedestrian can walk toward its first waypoint on release."""
+        start: Vec2D = (2.0, 2.0)
+        ped = SinglePedestrianDefinition(
+            id="delayed_trajectory",
+            start=start,
+            trajectory=[(2.0, 8.0), (8.0, 8.0)],
+            speed_m_s=1.1,
+            start_delay_s=1.0,
+        )
+
+        ped_states, _metadata = populate_single_pedestrians([ped])
+
+        assert np.allclose(ped_states[0, 2:4], [0.0, 1.1])
+        assert np.allclose(ped_states[0, 4:6], start)
+
+    def test_delayed_follow_role_keeps_dynamic_speed_capability(self):
+        """A delayed robot-relative pedestrian keeps a speed cap without a fixed waypoint."""
+        start: Vec2D = (2.0, 2.0)
+        ped = SinglePedestrianDefinition(
+            id="delayed_follow",
+            start=start,
+            role="follow",
+            speed_m_s=1.1,
+            start_delay_s=1.0,
+        )
+
+        ped_states, _metadata = populate_single_pedestrians([ped])
+
+        assert np.allclose(ped_states[0, 2:4], [1.1, 0.0])
+        assert np.allclose(ped_states[0, 4:6], start)
+
     def test_populate_single_pedestrians_with_trajectory(self):
         """Test spawning a single pedestrian with a predefined trajectory."""
         start: Vec2D = (2.0, 2.0)

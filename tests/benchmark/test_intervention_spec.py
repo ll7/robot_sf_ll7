@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import pytest
@@ -367,7 +368,10 @@ def test_json_loader_compares_numeric_lexemes_at_float_precision_boundary(
 
     if valid:
         loaded = load_intervention_spec(path)
-        assert type(loaded["factor"]["intervention"]) is float
+        assert loaded["factor"]["intervention"] == int(Decimal(intervention))
+        assert type(loaded["factor"]["intervention"]) is int
+        assert validate_intervention_spec(loaded) == loaded
+        assert len(compute_intervention_spec_digest(loaded)) == 64
     else:
         with pytest.raises(InterventionSpecValidationError, match="changed value"):
             load_intervention_spec(path)
@@ -399,10 +403,64 @@ def test_yaml_loader_compares_numeric_lexemes_at_float_precision_boundary(
 
     if valid:
         loaded = load_intervention_spec(path)
-        assert type(loaded["factor"]["intervention"]) is float
+        assert loaded["factor"]["intervention"] == int(Decimal(intervention))
+        assert type(loaded["factor"]["intervention"]) is int
+        assert validate_intervention_spec(loaded) == loaded
+        assert len(compute_intervention_spec_digest(loaded)) == 64
     else:
         with pytest.raises(InterventionSpecValidationError, match="changed value"):
             load_intervention_spec(path)
+
+
+@pytest.mark.parametrize("suffix", [".json", ".yaml"])
+def test_loader_preserves_conventional_decimal_float_roundtrip(tmp_path: Path, suffix: str) -> None:
+    """Ordinary decimal floats remain plain floats through validation and digesting."""
+
+    payload = _payload()
+    payload["factor"] = {
+        **payload["factor"],
+        "unit": "m/s",
+        "baseline": 1.1,
+        "intervention": 2.2,
+    }
+    payload["negative_control"] = {**payload["negative_control"], "value": 1.1}
+    text = json.dumps(payload) if suffix == ".json" else yaml.safe_dump(payload, sort_keys=False)
+    path = tmp_path / f"intervention{suffix}"
+    path.write_text(text, encoding="utf-8")
+
+    loaded = load_intervention_spec(path)
+    assert type(loaded["factor"]["baseline"]) is float
+    assert validate_intervention_spec(loaded) == loaded
+    assert len(compute_intervention_spec_digest(loaded)) == 64
+
+
+@pytest.mark.parametrize("suffix", [".json", ".yaml"])
+def test_loader_rejects_roundtrip_precision_loss_that_becomes_no_op(
+    tmp_path: Path, suffix: str
+) -> None:
+    """A lossy decimal conversion cannot silently admit a post-load no-op."""
+
+    text = json.dumps(_payload())
+    if suffix == ".json":
+        text = text.replace(
+            '"unit": "category", "baseline": "occluded", "intervention": "visible"',
+            '"unit": "m/s", "baseline": 0.1, "intervention": 0.100000000000000005',
+            1,
+        )
+        text = text.replace('"value": "occluded"', '"value": 0.1', 1)
+    else:
+        text = yaml.safe_dump(_payload(), sort_keys=False)
+        text = text.replace(
+            "  unit: category\n  baseline: occluded\n  intervention: visible\n",
+            "  unit: m/s\n  baseline: 0.1\n  intervention: 0.100000000000000005\n",
+            1,
+        )
+        text = text.replace("  value: occluded\n", "  value: 0.1\n", 1)
+    path = tmp_path / f"intervention{suffix}"
+    path.write_text(text, encoding="utf-8")
+
+    with pytest.raises(InterventionSpecValidationError, match="round-trip"):
+        load_intervention_spec(path)
 
 
 @pytest.mark.parametrize(("bits", "valid"), [(4095, True), (4096, False)])

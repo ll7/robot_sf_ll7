@@ -125,7 +125,10 @@ disable replacement refs, and bind all tree/blob reads to the checkout's own
 Git directories. Every lexical path component is checked for symlinks before
 the file is resolved. Factor and no-op comparisons use numeric JSON equality,
 so `1` and `1.0` (or `-0.0` and `0.0`) are equal while nonnumeric JSON types
-remain distinct.
+remain distinct. Ordinary decimal floats remain plain floats after loading; an
+integral decimal float that would lose precision is normalized to an exact
+bounded integer, and a lossy normalization that would invalidate the factor or
+negative-control contract fails during loading.
 
 This API validates and normalizes a specification only. It does not replay,
 execute paired runs, verify an intervention, or support a causal, benchmark,

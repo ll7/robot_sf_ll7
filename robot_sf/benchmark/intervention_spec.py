@@ -115,7 +115,7 @@ class _LexicalFloat(float):
     lexeme: str
 
     def __new__(cls, lexeme: str) -> _LexicalFloat:
-        """Create the normal float value while retaining its JSON lexeme."""
+        """Create the normal float value while retaining its decimal lexeme."""
 
         value = super().__new__(cls, lexeme)
         value.lexeme = lexeme
@@ -459,16 +459,37 @@ def _strip_numeric_lexemes(value: Any) -> Any:
     """Return a validated value without exposing loader-only float subclasses.
 
     Returns:
-        The value with loader-only float subclasses converted to plain floats.
+        The value with loader-only float subclasses converted to plain numbers.
     """
 
     if isinstance(value, _LexicalFloat):
+        exact = Decimal(value.lexeme)
+        if exact != Decimal(repr(value)) and exact == exact.to_integral_value():
+            integer = int(exact)
+            _assert_json_integer(integer, "numeric value")
+            return integer
         return float(value)
     if type(value) is list:
         return [_strip_numeric_lexemes(item) for item in value]
     if isinstance(value, Mapping):
         return {key: _strip_numeric_lexemes(item) for key, item in value.items()}
     return value
+
+
+def _contains_numeric_lexemes(value: Any) -> bool:
+    """Return whether a value still contains a loader-only numeric lexeme.
+
+    Returns:
+        Whether a lexical float marker occurs in the value tree.
+    """
+
+    if isinstance(value, _LexicalFloat):
+        return True
+    if type(value) is list:
+        return any(_contains_numeric_lexemes(item) for item in value)
+    if isinstance(value, Mapping):
+        return any(_contains_numeric_lexemes(item) for item in value.values())
+    return False
 
 
 def _validate_json_distinct(left: Any, right: Any, field: str) -> None:
@@ -1219,7 +1240,17 @@ def load_intervention_spec(
             "intervention specification must be a mapping", source=spec_path
         )
     normalized = validate_intervention_spec(payload, repo_root=repo_root, source=spec_path)
-    return _strip_numeric_lexemes(normalized)
+    if not _contains_numeric_lexemes(normalized):
+        return normalized
+    normalized = _strip_numeric_lexemes(normalized)
+    try:
+        validate_intervention_spec(normalized)
+    except InterventionSpecValidationError as exc:
+        raise InterventionSpecValidationError(
+            "numeric value cannot survive normalized loader round-trip without precision loss",
+            source=spec_path,
+        ) from exc
+    return normalized
 
 
 def compute_intervention_spec_digest(payload: Mapping[str, Any]) -> str:

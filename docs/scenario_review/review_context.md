@@ -28,8 +28,20 @@ the source payload's schema, execution status, commit, and configuration
 identity. Campaign sources may use either the leaf `campaign-result.v1` JSON
 document or the canonical `campaign-result-store.v2`/case-workbench directory
 contract; the latter is adapted through the case-workbench result loader and
-does not redefine its schema. Multiple campaign or selection candidates require
-an explicit `canonical_*_artifact_id` config key; they are never silently merged.
+does not redefine its schema. For the canonical directory shape, `study_id` in
+the owner manifest (or per-row `campaign_id`) must bind the campaign, and the
+owner manifest/rows must provide one matching source commit and configuration
+identity (`config_hash`, `config_identity`, or `config_digest`). The requested
+source declarations must match those owner values; caller-only identity is
+rejected as `unavailable` with `canonical_identity_unbound` or
+`canonical_identity_mismatch`, without a report. Multiple campaign or selection
+candidates require an explicit `canonical_*_artifact_id` config key; they are
+never silently merged.
+
+Canonical v2 owner rows use `row_status` as the execution-mode field. Their
+`status`/`execution_status` columns may contain descriptive outcomes such as
+`success` or `collision`; those values do not upgrade a `fallback` or `degraded`
+`row_status`, and contradictory recognized execution modes fail closed.
 
 Campaign and selection sources must share source-commit and configuration
 identities. Each source's declared digest is compared with its observed digest,
@@ -59,8 +71,12 @@ temporary file and an atomic no-replace publication. An existing final name is
 an output collision; it is never overwritten.
 
 Control documents are bounded to 1 MiB and bounded nesting, collections, nodes,
-and strings. Source files and canonical source directories are bounded to 64
-MiB and 4,096 regular files; symlink and special-file entries are rejected.
+and strings. CLI control paths are opened no-follow and non-blocking, then
+required to be regular files, so FIFO, directory, symlink, special-file,
+oversized, and invalid inputs return a stable failed result envelope without
+waiting on a writer. Source files and canonical source directories are bounded
+to 64 MiB and 4,096 regular files; symlink and special-file entries are
+rejected.
 
 Fallback, degraded, unavailable, and failed rows are excluded from the
 denominator and are recorded in `exclusions`. A requested capability without an

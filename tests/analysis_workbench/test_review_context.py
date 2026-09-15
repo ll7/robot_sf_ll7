@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -97,6 +98,40 @@ def _write_json(path: Path, payload: object) -> None:
 def _stage(tmp_path: Path, campaign: dict | None = None, selection: dict | None = None) -> None:
     _write_json(tmp_path / "campaign.json", campaign or CAMPAIGN)
     _write_json(tmp_path / "selection.json", selection or SELECTION)
+
+
+def _directory_digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    for child in sorted(item for item in path.rglob("*") if item.is_file()):
+        digest.update(str(child.relative_to(path)).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(child.read_bytes())
+    return digest.hexdigest()
+
+
+def _canonical_source_ref(
+    store: Path, *, config_identity: str = CONFIG_IDENTITY, artifact_id: str = "campaign-store"
+) -> dict[str, str]:
+    return {
+        "artifact_id": artifact_id,
+        "uri": store.name,
+        "format": "campaign-result-store",
+        "schema": "campaign-result-store.v2",
+        "sha256": _directory_digest(store),
+        "source_commit": SOURCE_COMMIT,
+        "config_identity": config_identity,
+    }
+
+
+def _write_canonical_store(
+    tmp_path: Path, rows: list[dict], manifest: dict, *, name: str = "campaign-store"
+) -> Path:
+    store = tmp_path / name
+    store.mkdir()
+    rows_text = "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n"
+    (store / "episodes.jsonl").write_text(rows_text, encoding="utf-8")
+    _write_json(store / "manifest.json", manifest)
+    return store
 
 
 def _source_ref(
@@ -334,22 +369,175 @@ def test_canonical_result_store_directory_uses_owner_loader(tmp_path: Path) -> N
     store.mkdir()
     rows = "\n".join(json.dumps(row, sort_keys=True) for row in CAMPAIGN["episodes"]) + "\n"
     (store / "episodes.jsonl").write_text(rows, encoding="utf-8")
-    digest = hashlib.sha256(b"episodes.jsonl\0" + rows.encode("utf-8")).hexdigest()
-    source = {
-        "artifact_id": "campaign-store",
-        "uri": store.name,
-        "format": "campaign-result-store",
-        "schema": "campaign-result-store.v2",
-        "sha256": digest,
-        "source_commit": SOURCE_COMMIT,
-        "config_identity": CONFIG_IDENTITY,
-    }
+    _write_json(
+        store / "manifest.json",
+        {
+            "schema_version": "campaign-result-store.v2",
+            "study_id": "camp-t",
+            "source_commit": SOURCE_COMMIT,
+            "config_hash": CONFIG_IDENTITY,
+        },
+    )
+    source = _canonical_source_ref(store)
     result = run(_request(tmp_path, sources=[source]), base=tmp_path)
     assert result.status == "complete"
     report = _report(tmp_path)
     assert report["denominator"] == 4
     assert report["source_provenance"][0]["canonical_source"] is True
     assert report["source_provenance"][0]["schema_declared"] == "campaign-result-store.v2"
+
+
+def test_canonical_owner_export_rows_accept_descriptive_execution_status(
+    tmp_path: Path,
+) -> None:
+    """Owner v2 rows use row_status for execution mode and retain outcome labels."""
+    rows = [
+        {
+            "episode_id": "owner-success",
+            "planner": "orca",
+            "scenario_id": "crossing",
+            "seed": 11,
+            "row_status": "native",
+            "execution_status": "success",
+            "status": "success",
+            "config_hash": CONFIG_IDENTITY,
+            "outcome": {"label": "success"},
+            "metrics": {"clearance_m": 1.5},
+            "provenance": {"git_hash": SOURCE_COMMIT, "config_hash": CONFIG_IDENTITY},
+        },
+        {
+            "episode_id": "owner-collision",
+            "planner": "orca",
+            "scenario_id": "crossing",
+            "seed": 12,
+            "row_status": "native",
+            "execution_status": "collision",
+            "status": "collision",
+            "config_hash": CONFIG_IDENTITY,
+            "outcome": {"label": "collision"},
+            "metrics": {"clearance_m": -0.2},
+            "provenance": {"git_hash": SOURCE_COMMIT, "config_hash": CONFIG_IDENTITY},
+        },
+    ]
+    store = _write_canonical_store(
+        tmp_path,
+        rows,
+        {"schema_version": "campaign-result-store.v2", "study_id": "camp-t"},
+    )
+    request = _request(
+        tmp_path,
+        config_extra={"config_identity": CONFIG_IDENTITY},
+        sources=[_canonical_source_ref(store)],
+    )
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == "complete"
+    assert _report(tmp_path)["outcomes"] == {"collision": 1, "success": 1}
+
+
+def test_canonical_owner_export_fallback_row_is_not_native(tmp_path: Path) -> None:
+    """A descriptive outcome never upgrades an explicitly fallback row."""
+    rows = [
+        {
+            "episode_id": "owner-native",
+            "planner": "orca",
+            "scenario_id": "crossing",
+            "seed": 11,
+            "row_status": "native",
+            "execution_status": "success",
+            "status": "success",
+            "config_hash": CONFIG_IDENTITY,
+            "outcome": {"label": "success"},
+            "provenance": {"git_hash": SOURCE_COMMIT, "config_hash": CONFIG_IDENTITY},
+        },
+        {
+            "episode_id": "owner-fallback",
+            "planner": "orca",
+            "scenario_id": "crossing",
+            "seed": 12,
+            "row_status": "fallback",
+            "execution_status": "success",
+            "status": "success",
+            "config_hash": CONFIG_IDENTITY,
+            "outcome": {"label": "success"},
+            "provenance": {"git_hash": SOURCE_COMMIT, "config_hash": CONFIG_IDENTITY},
+        },
+    ]
+    store = _write_canonical_store(
+        tmp_path,
+        rows,
+        {"schema_version": "campaign-result-store.v2", "study_id": "camp-t"},
+    )
+    result = run(
+        _request(tmp_path, sources=[_canonical_source_ref(store)]),
+        base=tmp_path,
+    )
+
+    assert result.status == "partial"
+    report = _report(tmp_path)
+    assert report["denominator"] == 1
+    assert report["exclusions"]["by_status"] == {"fallback": 1}
+
+
+def test_canonical_identity_cannot_be_synthesized_from_request(tmp_path: Path) -> None:
+    """A canonical store without owner identity is unavailable, not complete."""
+    store = _write_canonical_store(
+        tmp_path,
+        [dict(CAMPAIGN["episodes"][0])],
+        {"schema_version": "campaign-result-store.v2", "study_id": "camp-t"},
+    )
+    caller_identity = "caller-only-config"
+    source = _canonical_source_ref(store, config_identity=caller_identity)
+    request = _request(
+        tmp_path,
+        config_extra={"config_identity": caller_identity},
+        sources=[source],
+    )
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == "unavailable"
+    assert "canonical_identity_unbound" in result.reason
+    assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "reason_fragment"),
+    [
+        ("study_id", "camp-mutated", "campaign_context_unavailable"),
+        ("config_hash", "mutated-config", "canonical_identity_mismatch"),
+    ],
+)
+def test_canonical_identity_mutation_is_unavailable(
+    tmp_path: Path, field: str, value: str, reason_fragment: str
+) -> None:
+    """Mutated owner identity cannot be hidden by matching caller values."""
+    row = {
+        **CAMPAIGN["episodes"][0],
+        "config_hash": CONFIG_IDENTITY,
+        "provenance": {"git_hash": SOURCE_COMMIT, "config_hash": CONFIG_IDENTITY},
+    }
+    manifest = {"schema_version": "campaign-result-store.v2", "study_id": "camp-t"}
+    if field == "study_id":
+        manifest[field] = value
+    else:
+        row["config_hash"] = value
+        row["provenance"] = {"git_hash": SOURCE_COMMIT, "config_hash": value}
+    store = _write_canonical_store(tmp_path, [row], manifest)
+
+    result = run(
+        _request(
+            tmp_path,
+            sources=[_canonical_source_ref(store)],
+            config_extra={"config_identity": CONFIG_IDENTITY},
+        ),
+        base=tmp_path,
+    )
+
+    assert result.status == "unavailable"
+    assert reason_fragment in result.reason
+    assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
 
 
 def test_canonical_result_store_rejects_symlink_entries(tmp_path: Path) -> None:
@@ -568,6 +756,19 @@ def test_mixed_campaign_row_fails_closed(tmp_path: Path) -> None:
     assert "mixed_campaign_row" in result.reason
 
 
+def test_malformed_campaign_row_is_failed_not_empty_unavailable(tmp_path: Path) -> None:
+    """Malformed source rows are distinct from a valid empty campaign."""
+    malformed = {**CAMPAIGN, "episodes": [None]}
+    _stage(tmp_path, campaign=malformed)
+
+    result = run(_request(tmp_path), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "malformed_campaign_source" in result.reason
+    assert "episode_row_malformed" in result.reason
+    assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
+
+
 def test_fallback_and_degraded_rows_are_excluded_from_denominator(tmp_path: Path) -> None:
     fallback = {
         **CAMPAIGN,
@@ -762,3 +963,38 @@ def test_cli_rejects_oversized_control_document(tmp_path: Path) -> None:
     parsed = component_result_from_dict(json.loads(completed.stdout))
     assert parsed.status == "failed"
     assert "control document too large" in parsed.reason
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO support is platform-specific")
+@pytest.mark.parametrize("fifo_option", ["--input", "--config"])
+def test_cli_rejects_fifo_control_document_without_blocking(
+    tmp_path: Path, fifo_option: str
+) -> None:
+    """FIFO and special control inputs fail promptly with a result envelope."""
+    repo = Path(__file__).resolve().parents[2]
+    fifo_path = tmp_path / "control.fifo"
+    os.mkfifo(fifo_path)
+    command = [
+        sys.executable,
+        "-m",
+        "robot_sf.analysis_workbench.review_context",
+        "--input",
+        str(fifo_path) if fifo_option == "--input" else str(repo / FIXTURE_DIR / "request.json"),
+    ]
+    if fifo_option == "--config":
+        command.extend(["--config", str(fifo_path)])
+    command.extend(["--output", "fifo-output"])
+
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        check=False,
+        timeout=5,
+    )
+
+    assert completed.returncode == 1
+    parsed = component_result_from_dict(json.loads(completed.stdout))
+    assert parsed.status == "failed"
+    assert "not a regular file" in parsed.reason

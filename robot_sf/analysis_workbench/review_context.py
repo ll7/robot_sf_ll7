@@ -85,6 +85,21 @@ _MAX_SOURCE_FILES = 4096
 _MAX_OUTPUT_SOURCES = 16
 _METRIC_NAME_RE = r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$"
 _IDENTITY_PROVENANCE_KEYS = ("source_commit", "config_identity")
+_CANONICAL_CAMPAIGN_ID_KEYS = ("campaign_id", "study_id")
+_CANONICAL_SOURCE_COMMIT_KEYS = ("source_commit", "git_hash", "commit_sha", "commit")
+_CANONICAL_CONFIG_IDENTITY_KEYS = ("config_identity", "config_hash", "config_digest")
+_MALFORMED_EPISODE_DIAGNOSTICS = frozenset(
+    {
+        "episode_row_malformed",
+        "episode_row_missing_id",
+        "episode_row_seed_invalid",
+        "episode_row_config_invalid",
+        "episode_row_metrics_invalid",
+        "episode_row_outcome_invalid",
+        "episode_row_execution_status_invalid",
+        "episode_row_execution_status_conflict",
+    }
+)
 
 
 # These schemas belong to this leaf's payloads.  The shared request/result
@@ -395,6 +410,15 @@ class _LoadedSource:
     payload: dict[str, Any]
     provenance: dict[str, Any]
     execution_status: str
+
+
+class _CanonicalIdentityError(ReviewContractsValidationError):
+    """Reject a canonical directory whose identity is missing or contradictory."""
+
+    def __init__(self, code: str, detail: str):
+        """Build an error carrying the leaf diagnostic code."""
+        self.code = code
+        super().__init__([detail])
 
 
 @dataclass
@@ -712,8 +736,9 @@ def _read_regular_file_no_follow(path: Path, *, limit: int, kind: str) -> bytes:
         The bounded file bytes.
     """
     no_follow = getattr(os, "O_NOFOLLOW", 0)
+    non_blocking = getattr(os, "O_NONBLOCK", 0)
     close_on_exec = getattr(os, "O_CLOEXEC", 0)
-    file_fd = os.open(path, os.O_RDONLY | close_on_exec | no_follow)
+    file_fd = os.open(path, os.O_RDONLY | close_on_exec | no_follow | non_blocking)
     try:
         if not stat.S_ISREG(os.fstat(file_fd).st_mode):
             raise ReviewContractsValidationError([f"{kind} is not a regular file: {path.name}"])
@@ -1072,6 +1097,114 @@ def _canonical_manifest(path: Path, files: set[Path]) -> dict[str, Any] | None:
     return payload
 
 
+def _identity_values(container: Mapping[str, Any], keys: tuple[str, ...]) -> tuple[list[str], bool]:
+    """Collect non-empty identity values and flag non-string declarations.
+
+    Returns:
+        The collected values and whether a non-string declaration was found.
+    """
+    values: list[str] = []
+    invalid = False
+    for key in keys:
+        value = container.get(key)
+        if value in (None, ""):
+            continue
+        if not isinstance(value, str) or not value.strip():
+            invalid = True
+            continue
+        values.append(value.strip())
+    return values, invalid
+
+
+def _record_identity_containers(record: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    """Return owner row mappings that can carry canonical identity metadata."""
+    containers: list[Mapping[str, Any]] = [record]
+    for key in ("provenance", "cell_context"):
+        nested = record.get(key)
+        if isinstance(nested, Mapping):
+            containers.append(nested)
+    metadata = record.get("algorithm_metadata")
+    if isinstance(metadata, Mapping):
+        trace = metadata.get("analysis_trace")
+        if isinstance(trace, Mapping):
+            containers.append(trace)
+    return tuple(containers)
+
+
+def _canonical_identity(
+    manifest: Mapping[str, Any] | None,
+    records: list[dict[str, Any]],
+    *,
+    ref: SourceRef,
+) -> tuple[str, str, str]:
+    """Bind campaign, commit, and configuration identity to canonical owner bytes.
+
+    A caller-supplied source reference is not evidence of the identity of a
+    canonical directory.  The owner manifest may bind the whole directory;
+    otherwise every row must carry the corresponding identity field.
+
+    Returns:
+        The bound campaign ID, source commit, and configuration identity.
+    """
+    manifest_mapping = manifest if isinstance(manifest, Mapping) else {}
+    specs = (
+        (
+            "campaign",
+            _CANONICAL_CAMPAIGN_ID_KEYS,
+            None,
+            "canonical campaign identity",
+        ),
+        (
+            "source_commit",
+            _CANONICAL_SOURCE_COMMIT_KEYS,
+            ref.source_commit,
+            "canonical source commit",
+        ),
+        (
+            "config_identity",
+            _CANONICAL_CONFIG_IDENTITY_KEYS,
+            ref.config_identity,
+            "canonical configuration identity",
+        ),
+    )
+    bound: dict[str, str] = {}
+    for name, keys, expected, label in specs:
+        manifest_values, manifest_invalid = _identity_values(manifest_mapping, keys)
+        values = list(manifest_values)
+        rows_missing_value = False
+        rows_invalid = False
+        for record in records:
+            row_values: list[str] = []
+            row_invalid = False
+            for container in _record_identity_containers(record):
+                candidates, invalid = _identity_values(container, keys)
+                row_values.extend(candidates)
+                row_invalid = row_invalid or invalid
+            if not row_values and not manifest_values:
+                rows_missing_value = True
+            values.extend(row_values)
+            rows_invalid = rows_invalid or row_invalid
+        unique = set(values)
+        if manifest_invalid or rows_invalid or not unique or rows_missing_value:
+            raise _CanonicalIdentityError(
+                "canonical_identity_unbound",
+                f"{label} is missing from the canonical manifest/rows",
+            )
+        if len(unique) != 1:
+            raise _CanonicalIdentityError(
+                "canonical_identity_mismatch",
+                f"{label} conflicts across the canonical manifest/rows",
+            )
+        actual = next(iter(unique))
+        if expected is not None and actual != expected:
+            raise _CanonicalIdentityError(
+                "canonical_identity_mismatch",
+                f"{label} does not match the source declaration",
+            )
+        bound[name] = actual
+    return bound["campaign"], bound["source_commit"], bound["config_identity"]
+
+
 def _load_canonical_directory(  # noqa: C901, PLR0912
     directory: Path,
     *,
@@ -1127,13 +1260,11 @@ def _load_canonical_directory(  # noqa: C901, PLR0912
     if not isinstance(records, list):
         raise ReviewContractsValidationError(["canonical result store rows must be a list"])
     _validate_bounded_document(records, label="canonical source")
-    if isinstance(manifest, dict):
-        for key in _IDENTITY_PROVENANCE_KEYS:
-            declared = manifest.get(key)
-            if declared is not None and declared != getattr(ref, key):
-                raise ReviewContractsValidationError(
-                    [f"canonical manifest {key} does not match source declaration"]
-                )
+    payload_campaign_id, payload_source_commit, payload_config_identity = _canonical_identity(
+        manifest,
+        records,
+        ref=ref,
+    )
     for index, record in enumerate(records):
         if not isinstance(record, Mapping):
             continue
@@ -1158,16 +1289,11 @@ def _load_canonical_directory(  # noqa: C901, PLR0912
     )
     if source_status is None:
         raise ReviewContractsValidationError(["canonical result store execution status is invalid"])
-    payload_campaign_id = (
-        manifest.get("campaign_id")
-        if isinstance(manifest, dict) and isinstance(manifest.get("campaign_id"), str)
-        else expected_campaign_id
-    )
     payload = {
         "schema_version": ref.schema,
         "campaign_id": payload_campaign_id,
-        "source_commit": ref.source_commit,
-        "config_identity": ref.config_identity,
+        "source_commit": payload_source_commit,
+        "config_identity": payload_config_identity,
         "execution_status": source_status,
         "episodes": records,
     }
@@ -1297,6 +1423,14 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
                 )
                 provenance["integrity_status"] = "execution_status_invalid"
                 return None
+    except _CanonicalIdentityError as error:
+        _add_diagnostic(
+            diagnostics,
+            error.code,
+            detail=f"{ref.artifact_id}:{'; '.join(error.errors)}",
+        )
+        provenance["integrity_status"] = "canonical_identity_invalid"
+        return None
     except ReviewContractsValidationError as error:
         _add_diagnostic(
             diagnostics,
@@ -1434,15 +1568,22 @@ def _row_status(
     Returns:
         The effective status, or ``None`` for malformed/conflicting status fields.
     """
-    declared: list[str] = []
-    for key in ("execution_status", "row_status", "status"):
+    row_status = _normalize_execution_status(item["row_status"]) if "row_status" in item else None
+    if "row_status" in item and row_status is None:
+        _add_diagnostic(diagnostics, "episode_row_execution_status_invalid", detail=index)
+        return None
+    declared = [row_status] if row_status is not None else []
+    for key in ("execution_status", "status"):
         if key not in item:
             continue
         normalized = _normalize_execution_status(item[key])
-        if normalized is None:
-            _add_diagnostic(diagnostics, "episode_row_execution_status_invalid", detail=index)
-            return None
-        declared.append(normalized)
+        if row_status is None:
+            if normalized is None:
+                _add_diagnostic(diagnostics, "episode_row_execution_status_invalid", detail=index)
+                return None
+            declared.append(normalized)
+        elif normalized is not None and normalized != row_status:
+            declared.append(normalized)
     if len(set(declared)) > 1:
         _add_diagnostic(diagnostics, "episode_row_execution_status_conflict", detail=index)
         return None
@@ -2121,12 +2262,18 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         )
         if campaign_source is None:
             _release_empty_output(output_dir)
+            canonical_identity_failure = any(
+                item.code.startswith("canonical_identity_") for item in diagnostics
+            )
             return _result(
                 request.request_id,
                 request.component_id,
-                STATUS_FAILED,
+                STATUS_UNAVAILABLE if canonical_identity_failure else STATUS_FAILED,
                 reason=_reason_with_diagnostics(
-                    "required_source_unavailable: campaign-result", diagnostics
+                    "canonical_campaign_source_unavailable"
+                    if canonical_identity_failure
+                    else "required_source_unavailable: campaign-result",
+                    diagnostics,
                 ),
                 diagnostics=diagnostics,
                 provenance=base_provenance,
@@ -2200,6 +2347,16 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 reason=_reason_with_diagnostics(
                     "conflicting_duplicate_episode_or_mixed_campaign", diagnostics
                 ),
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
+        if any(item.code in _MALFORMED_EPISODE_DIAGNOSTICS for item in diagnostics):
+            _release_empty_output(output_dir)
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason=_reason_with_diagnostics("malformed_campaign_source", diagnostics),
                 diagnostics=diagnostics,
                 provenance=base_provenance,
             )

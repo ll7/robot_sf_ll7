@@ -664,7 +664,7 @@ def _unavailable_frame(
     }
     for identity in ("episode_id", "reset_id"):
         if identity in frame:
-            result[identity] = frame[identity]
+            result[f"capture_{identity}"] = frame[identity]
     return result
 
 

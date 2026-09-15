@@ -144,7 +144,12 @@ def test_after_last_frames_are_unavailable_without_a_stale_anchor(tmp_path: Path
     capture = dict(CAPTURE)
     capture["frames"] = [
         {"frame_index": 0, "pts_s": 0.0},
-        {"frame_index": 6, "pts_s": 0.6},
+        {
+            "frame_index": 6,
+            "pts_s": 0.6,
+            "episode_id": "capture-ep",
+            "reset_id": "capture-reset",
+        },
     ]
     (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
     (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
@@ -161,6 +166,9 @@ def test_after_last_frames_are_unavailable_without_a_stale_anchor(tmp_path: Path
     assert unavailable["reason"] == "after_last_sim_stamp"
     assert "sim_step" not in unavailable
     assert "episode_id" not in unavailable
+    assert "reset_id" not in unavailable
+    assert unavailable["capture_episode_id"] == "capture-ep"
+    assert unavailable["capture_reset_id"] == "capture-reset"
     assert mapping["last_frame"]["status"] == "unavailable"
 
 

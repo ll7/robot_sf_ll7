@@ -1,0 +1,30 @@
+{
+  "fps_nominal": 10.0,
+  "camera": {
+    "id": "cam-fixture",
+    "width": 320,
+    "height": 180
+  },
+  "frames": [
+    {
+      "frame_index": 0,
+      "pts_s": 0.0
+    },
+    {
+      "frame_index": 1,
+      "pts_s": 0.1
+    },
+    {
+      "frame_index": 2,
+      "pts_s": 0.2
+    },
+    {
+      "frame_index": 4,
+      "pts_s": 0.47
+    },
+    {
+      "frame_index": 5,
+      "pts_s": 0.5
+    }
+  ]
+}

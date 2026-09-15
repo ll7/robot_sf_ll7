@@ -91,6 +91,10 @@ LOCAL_NAMESPACES = frozenset({"robot_sf", "tests", "examples", "hooks", "scripts
 _BUCKETS = ("top_hard", "top_in_repo", "func_heavy", "skip_strings")
 
 
+class _ProfileScanError(RuntimeError):
+    """Raised when a selected source file cannot be inspected safely."""
+
+
 def _new_buckets() -> dict[str, set[str]]:
     """Return empty import-classification buckets."""
     return {key: set() for key in _BUCKETS}
@@ -134,7 +138,7 @@ def _names(node: ast.Import | ast.ImportFrom) -> list[str]:
 
 
 def _record(names: list[str], buckets: dict[str, set[str]], *, collection_time: bool) -> None:
-    """File names into the hard/in-repo buckets (guarded imports are dropped)."""
+    """File names into hard/in-repo buckets (optional guarded attempts are dropped)."""
     for name in names:
         if name == "robot_sf" or name.startswith("robot_sf."):
             if collection_time:
@@ -162,7 +166,7 @@ def _visit_value(node: ast.AST, buckets: dict[str, set[str]]) -> None:
 
 
 def _visit_nested(node: ast.stmt, buckets: dict[str, set[str]]) -> None:
-    """Collect deferred (function-body) imports as informational only."""
+    """Collect deferred (function-body) imports for selected test checks."""
     if isinstance(node, (ast.Import, ast.ImportFrom)):
         _record(_names(node), buckets, collection_time=False)
         return
@@ -174,15 +178,19 @@ def _visit_nested(node: ast.stmt, buckets: dict[str, set[str]]) -> None:
 
 
 def _visit_branch(
-    statements: list[ast.stmt], buckets: dict[str, set[str]], *, guarded: bool
+    statements: list[ast.stmt],
+    buckets: dict[str, set[str]],
+    *,
+    guarded: bool,
+    top_level: bool,
 ) -> None:
-    """Visit one statement list, dropping guarded imports entirely."""
+    """Visit one statement list while preserving import execution context."""
     for sub in statements:
         if isinstance(sub, (ast.Import, ast.ImportFrom)):
             if not guarded:
-                _record(_names(sub), buckets, collection_time=True)
+                _record(_names(sub), buckets, collection_time=top_level)
         else:
-            _visit_statement(sub, buckets, top_level=True, guarded=guarded)
+            _visit_statement(sub, buckets, top_level=top_level, guarded=guarded)
 
 
 def _visit_statement(
@@ -192,8 +200,15 @@ def _visit_statement(
     if isinstance(node, ast.If) and _is_type_checking(node):
         return
     if isinstance(node, ast.Try) and _handler_catches_import_error(node):
-        _visit_branch(node.body, buckets, guarded=True)
+        # The import attempt itself is an explicitly tolerated optional path.
+        # Its handler and cleanup still execute when the attempt fails, so
+        # inspect those statements instead of dropping the complete try node.
+        _visit_branch(node.body, buckets, guarded=True, top_level=top_level)
+        for handler in node.handlers:
+            _visit_branch(handler.body, buckets, guarded=guarded, top_level=top_level)
         for sub in node.orelse:
+            _visit_statement(sub, buckets, top_level=top_level, guarded=guarded)
+        for sub in node.finalbody:
             _visit_statement(sub, buckets, top_level=top_level, guarded=guarded)
         return
     if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -213,22 +228,40 @@ def _scan_file(path: Path) -> dict[str, set[str]]:
     Returns:
         Buckets with ``top_hard`` (collection-time third-party imports),
         ``top_in_repo`` (collection-time in-repo modules), ``func_heavy``
-        (deferred third-party imports, informational), and ``skip_strings``.
+        (deferred third-party imports), and ``skip_strings``.
     """
     import sys as _sys
 
     buckets = _new_buckets()
     try:
-        tree = ast.parse(path.read_bytes())
-    except (OSError, SyntaxError):
-        return buckets
-    for statement in tree.body:
-        _visit_statement(statement, buckets, top_level=True, guarded=False)
-    stdlib = set(_sys.stdlib_module_names)
-    drop = stdlib | LOCAL_NAMESPACES | {"__future__", "typing", "typing_extensions"}
-    for key in ("top_hard", "func_heavy", "skip_strings"):
-        buckets[key] = {m for m in buckets[key] if m not in drop}
+        source = path.read_bytes()
+    except OSError as error:
+        raise _ProfileScanError(f"{path}: cannot read source ({type(error).__name__})") from error
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except (SyntaxError, UnicodeError, ValueError, RecursionError) as error:
+        detail = getattr(error, "msg", None) or type(error).__name__
+        detail = str(detail).replace("\n", " ")[:160]
+        raise _ProfileScanError(f"{path}: cannot parse source ({detail})") from error
+    try:
+        for statement in tree.body:
+            _visit_statement(statement, buckets, top_level=True, guarded=False)
+        stdlib = set(_sys.stdlib_module_names)
+        drop = stdlib | LOCAL_NAMESPACES | {"__future__", "typing", "typing_extensions"}
+        for key in ("top_hard", "func_heavy", "skip_strings"):
+            buckets[key] = {m for m in buckets[key] if m not in drop}
+    except RecursionError as error:
+        raise _ProfileScanError(f"{path}: cannot inspect source (recursion limit)") from error
     return buckets
+
+
+def _scan_path(path: Path, errors: list[str]) -> dict[str, set[str]] | None:
+    """Scan one selected path, retaining a bounded diagnostic on failure."""
+    try:
+        return _scan_file(path)
+    except _ProfileScanError as error:
+        errors.append(str(error))
+        return None
 
 
 def _resolve_module(root: Path, dotted: str) -> Path | None:
@@ -246,28 +279,66 @@ def _resolve_module(root: Path, dotted: str) -> Path | None:
 def _check_violation(display: str, module: str, context: str) -> str:
     """Format one profile violation with its remedy."""
     return (
-        f"{display} imports {module!r} at collection time ({context}): "
+        f"{display} imports {module!r} at {context}: "
         "outside the compat profile (base+viz+maps); "
         "extend the profile or move the module out of the lane"
     )
+
+
+def _selected_files(root: Path, dirname: str, errors: list[str]) -> list[Path]:
+    """Return the selected test files, failing closed for missing roots."""
+    target = root / dirname
+    if dirname.endswith(".py"):
+        if not target.is_file():
+            errors.append(f"{dirname}: required compat profile file is missing")
+            return []
+        return [target]
+    if not target.is_dir():
+        errors.append(f"{dirname}: required compat profile directory is missing")
+        return []
+    try:
+        return sorted(
+            path
+            for path in target.rglob("*.py")
+            if path.name == "__init__.py" or path.name.startswith("test_")
+        )
+    except OSError as error:
+        errors.append(f"{dirname}: cannot enumerate compat profile files ({type(error).__name__})")
+        return []
+
+
+def _check_deferred_test_imports(
+    display: str,
+    modules: set[str],
+    errors: list[str],
+    report: dict[str, list[str]],
+) -> None:
+    """Require function-body imports in selected tests to be profile-covered."""
+    for module in sorted(modules):
+        report.setdefault(module, []).append(display)
+        if module not in PROFILE_IMPORTS:
+            errors.append(_check_violation(display, module, "deferred test execution"))
 
 
 def _collect_roots(root: Path, errors: list[str], report: dict[str, list[str]]) -> list[str]:
     """Scan test roots; return in-repo modules for transitive closure."""
     pending: list[str] = []
     for dirname in COMPAT_TEST_DIRS + ("tests/conftest.py",):
-        target = root / dirname
-        files = [target] if target.is_file() else sorted(target.rglob("test_*.py"))
+        files = _selected_files(root, dirname, errors)
         for path in files:
-            buckets = _scan_file(path)
+            buckets = _scan_path(path, errors)
+            if buckets is None:
+                continue
             display = str(path.relative_to(root))
             for module in sorted(buckets["top_hard"]):
                 report.setdefault(module, []).append(display)
                 if module not in PROFILE_IMPORTS:
-                    errors.append(_check_violation(display, module, "test file"))
+                    errors.append(_check_violation(display, module, "collection time (test file)"))
+            _check_deferred_test_imports(display, buckets["func_heavy"], errors, report)
             for module in sorted(buckets["skip_strings"]):
                 if module in ACCEPTED_SKIPS or module in LOCAL_NAMESPACES:
                     continue
+                report.setdefault(module, []).append(display)
                 if module not in PROFILE_IMPORTS:
                     errors.append(
                         f"{display} silently skips on missing {module!r}: "
@@ -281,7 +352,13 @@ def _collect_roots(root: Path, errors: list[str], report: dict[str, list[str]]) 
 def _collect_closure(
     root: Path, pending: list[str], errors: list[str], report: dict[str, list[str]]
 ) -> None:
-    """Follow collection-time in-repo imports; deferred imports fail loudly."""
+    """Follow collection-time in-repo imports from the selected test roots.
+
+    Source-owner function bodies can expose optional runtime adapters that are
+    outside this slim compatibility lane. Deferred imports in the selected test
+    files are checked by ``_collect_roots``; this closure only guarantees the
+    imports executed while those tests are collected.
+    """
     seen_files: set[Path] = set()
     while pending:
         dotted = pending.pop()
@@ -293,11 +370,15 @@ def _collect_closure(
             display = str(location.relative_to(root))
         except ValueError:
             display = str(location)
-        buckets = _scan_file(location)
+        buckets = _scan_path(location, errors)
+        if buckets is None:
+            continue
         for module in sorted(buckets["top_hard"]):
             report.setdefault(module, []).append(display)
             if module not in PROFILE_IMPORTS:
-                errors.append(_check_violation(display, module, "reached from compat tests"))
+                errors.append(
+                    _check_violation(display, module, "collection time (reached from compat tests)")
+                )
         pending.extend(sorted(buckets["top_in_repo"]))
 
 

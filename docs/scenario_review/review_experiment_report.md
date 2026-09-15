@@ -21,8 +21,11 @@ The output directory must not already exist. The command writes:
 - `experiment-comparison.html`, a dependency-free static view of the same comparison.
 
 Each result envelope includes SHA-256 digests for both artifacts and provenance
-for the recorded source. The fixture is intentionally labelled `source_kind:
-fixture` and `execution_mode: recorded_results_only`.
+for the recorded source. A source identity is a closed contract: it must carry
+`source_kind`, `source_commit`, `execution_mode`, `readiness_status`, and
+`availability_status`. The fixture is intentionally labelled `source_kind:
+fixture`, `execution_mode: recorded_results_only`,
+`readiness_status: verified`, and `availability_status: available`.
 
 The HTML artifact is a human-readable summary. The JSON artifact is authoritative
 for complete per-condition measurement values, units, expected directions, source
@@ -32,24 +35,39 @@ identity, and provenance; consumers that need the full report contract must read
 ## Interpretation rules
 
 Results are grouped by `shared_parent_id`. Branches in one group are a single
-`dependent_family`, not independent samples. Each condition retains its role,
+`dependent_family_by_shared_parent_id`, not independent samples. Each condition retains its role,
 outcome, measurement values and units, fidelity status, and activation status.
 The report keeps `survived`, `falsified`, `inconclusive`, and `contradictory`
 outcomes in the inventory and negative-findings ledger without ranking them or
-converting them into a scientific claim.
+converting them into a scientific claim. Summary counts carry a `count_units`
+map: family counts are dependent-family records, outcome/condition counts are
+condition records including controls and treatments, and negative-finding counts
+are non-survived condition records. The report publishes no independent sample
+count because no independence contract is supplied or validated.
 
-An effect is `interpretable` only when both conditions have verified fidelity
-and activation and both values are present with matching units. A missing or
-failed control blocks effect interpretation for its whole family. Missing
-treatment measurements or prerequisites block only that treatment's effect;
-the recorded outcome is still retained. A blocked effect is not silently
-treated as zero.
+An effect is `interpretable` only when the source has
+`readiness_status=verified` and `availability_status=available`, and both
+conditions have verified fidelity and activation and both values are present
+with matching units. A missing or failed control blocks effect interpretation
+for its whole family. Missing treatment measurements or prerequisites block only
+that treatment's effect; the recorded outcome is still retained. A blocked
+effect is not silently treated as zero.
 
-The component returns `complete` only after both artifacts are written.
+Source `missing`, `fallback`, `degraded`, or `unavailable` readiness remains
+visible for diagnostic inspection, but produces a `partial` component result,
+marks the comparison `diagnostic_tainted`, and blocks every effect. The source's
+declared execution mode is preserved separately from the component's
+`recorded_results_only` execution mode. Unsupported readiness or availability
+values and unrecognized source-identity keys fail closed.
+
+The component returns `complete` only after both artifacts are written and the
+source readiness/availability contract permits interpretation. A diagnostic
+`partial` report may carry both artifacts, but it is not a verified comparison.
 Unsupported requested capabilities and unsupported source versions return
 `unavailable`; malformed input, invalid configuration, output collisions, and
 write failures return `failed`. These non-complete statuses carry no output
-artifacts. The component descriptor is available from
+artifacts except for the diagnostic `partial` case described above. The
+component descriptor is available from
 `component_descriptor()` and declares the supported request and result
 versions.
 

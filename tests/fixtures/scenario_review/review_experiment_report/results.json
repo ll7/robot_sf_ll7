@@ -3,8 +3,10 @@
   "experiment_id": "fixture-delay-study-0001",
   "hypothesis": "A delayed response changes clearance and task success.",
   "source_identity": {
+    "availability_status": "available",
     "source_kind": "fixture",
     "execution_mode": "recorded_results_only",
+    "readiness_status": "verified",
     "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
   "families": [

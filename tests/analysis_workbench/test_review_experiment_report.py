@@ -104,6 +104,122 @@ def test_control_id_must_reference_the_role_control_condition(tmp_path: Path) ->
     assert not (tmp_path / "out").exists()
 
 
+def test_missing_source_identity_fails_closed(tmp_path: Path) -> None:
+    """A source without closed provenance cannot publish a verified report."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["source_identity"] = {}
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "source_identity is missing required keys" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
+def test_unknown_source_identity_key_fails_closed(tmp_path: Path) -> None:
+    """Unvalidated provenance extensions cannot be silently retained."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["source_identity"]["unvalidated_note"] = "not part of the contract"
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "source_identity has unsupported keys: unvalidated_note" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("readiness_status", ["missing", "fallback", "degraded", "unavailable"])
+def test_non_verified_source_status_is_preserved_and_taints_effects(
+    tmp_path: Path, readiness_status: str
+) -> None:
+    """Diagnostic source statuses remain visible and cannot publish verified effects."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["source_identity"]["readiness_status"] = readiness_status
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "partial"
+    assert len(result.artifacts) == 2
+    report = _load_report(tmp_path / "out")
+    assert report["comparison_status"] == "diagnostic_tainted"
+    assert report["source"]["readiness_status"] == readiness_status
+    assert report["provenance"]["source_readiness_status"] == readiness_status
+    assert all(
+        effect["reason"] == "source_readiness_not_verified"
+        for family in report["families"]
+        for effect in family["effects"]
+    )
+
+
+def test_non_available_source_status_is_preserved_and_taints_effects(tmp_path: Path) -> None:
+    """An unavailable source cannot be treated as a verified comparison."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["source_identity"]["availability_status"] = "not_available"
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "partial"
+    report = _load_report(tmp_path / "out")
+    assert report["comparison_status"] == "diagnostic_tainted"
+    assert report["source"]["availability_status"] == "not_available"
+    assert report["provenance"]["source_availability_status"] == "not_available"
+    assert all(
+        effect["reason"] == "source_availability_not_verified"
+        for family in report["families"]
+        for effect in family["effects"]
+    )
+
+
+def test_expected_direction_rejects_unknown_enum_member(tmp_path: Path) -> None:
+    """Authoritative measurements cannot retain an unsupported direction."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["families"][0]["conditions"][1]["measurements"]["clearance_m"]["expected_direction"] = (
+        "sideways"
+    )
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "expected_direction must be one of increase, decrease" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_valid_expected_direction_is_retained(tmp_path: Path) -> None:
+    """Supported expected-direction values remain available to report consumers."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["families"][0]["conditions"][1]["measurements"]["clearance_m"]["expected_direction"] = (
+        "decrease"
+    )
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "complete"
+    report = _load_report(tmp_path / "out")
+    treatment = report["families"][0]["treatments"][0]["condition"]
+    assert treatment["measurements"]["clearance_m"]["expected_direction"] == "decrease"
+
+
+def test_unknown_config_key_surrogate_is_not_retained_in_direct_api_error(
+    tmp_path: Path,
+) -> None:
+    """Direct API errors remain UTF-8-safe even for malformed config keys."""
+    _copy_fixture(tmp_path)
+
+    result = run(_request(config={"\ud800": "value"}), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "Unicode surrogate" in result.reason
+    result.reason.encode("utf-8")
+    assert not (tmp_path / "out").exists()
+
+
 def test_run_keeps_dependent_families_and_negative_outcomes(tmp_path: Path) -> None:
     _copy_fixture(tmp_path)
     result = run(
@@ -116,10 +232,21 @@ def test_run_keeps_dependent_families_and_negative_outcomes(tmp_path: Path) -> N
     report = _load_report(tmp_path / "out")
     assert report["summary"] == {
         "condition_count": 5,
+        "count_units": {
+            "condition_count": "condition_record_including_control_and_treatment",
+            "effect_counts": "treatment_metric_comparison_record",
+            "family_count": "dependent_family_by_shared_parent_id",
+            "negative_finding_count": "condition_record_with_non_survived_outcome",
+            "outcome_counts": "condition_record_including_control_and_treatment",
+        },
         "effect_counts": {"blocked": 4, "interpretable": 2},
         "executor_required": False,
         "family_count": 2,
-        "independent_family_count": 2,
+        "independence": {
+            "count_published": False,
+            "reason": "no independence contract was supplied or validated",
+            "status": "not_validated",
+        },
         "negative_finding_count": 3,
         "outcome_counts": {
             "contradictory": 1,
@@ -128,10 +255,14 @@ def test_run_keeps_dependent_families_and_negative_outcomes(tmp_path: Path) -> N
             "survived": 2,
         },
         "recorded_results_only": True,
-        "sample_unit": "shared_parent_family",
+        "sample_unit": "dependent_family_by_shared_parent_id",
+        "source_availability_status": "available",
+        "source_readiness_status": "verified",
     }
+    assert "independent_family_count" not in report["summary"]
+    assert report["comparison_status"] == "verified"
     first_family = report["families"][0]
-    assert first_family["sample_unit"] == "dependent_family"
+    assert first_family["sample_unit"] == "dependent_family_by_shared_parent_id"
     assert first_family["shared_parent_id"] == "episode-parent-0001"
     assert first_family["effect_interpretation"] == "allowed"
     clearance_effect = first_family["effects"][0]
@@ -151,6 +282,9 @@ def test_run_keeps_dependent_families_and_negative_outcomes(tmp_path: Path) -> N
         "inconclusive",
     }
     assert report["summary"]["executor_required"] is False
+    assert report["source"]["readiness_status"] == "verified"
+    assert report["source"]["availability_status"] == "available"
+    assert report["provenance"]["source_execution_mode"] == "recorded_results_only"
     assert "not benchmark" in report["evidence_boundary"]
     html_report = (tmp_path / "out" / "experiment-comparison.html").read_text(encoding="utf-8")
     assert "Outcome inventory" in html_report
@@ -444,6 +578,29 @@ def test_output_collision_and_invalid_config_fail_closed(tmp_path: Path) -> None
     assert not (tmp_path / "other").exists()
 
 
+def test_concurrent_empty_output_directory_is_not_replaced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concurrent empty directory remains untouched at the final claim."""
+    _copy_fixture(tmp_path)
+    output_dir = tmp_path / "out"
+    original_reserve = report_module._reserve_output_directory
+
+    def create_before_reservation(path: Path) -> None:
+        output_dir.mkdir()
+        original_reserve(path)
+
+    monkeypatch.setattr(report_module, "_reserve_output_directory", create_before_reservation)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason.startswith("output_collision:")
+    assert output_dir.is_dir()
+    assert tuple(output_dir.iterdir()) == ()
+    assert not list(tmp_path.glob(".out.staging-*"))
+
+
 def test_lone_unicode_surrogate_in_metric_order_fails_before_json_publish(
     tmp_path: Path,
 ) -> None:
@@ -706,7 +863,7 @@ def test_cli_invalid_source_uri_emits_failed_component_result(
 @pytest.mark.parametrize(
     ("artifact_id", "expected_reason"),
     [
-        ("bad\x00id", "invalid_input: /sources/0/artifact_id contains an embedded NUL byte"),
+        ("bad\x00id", "invalid_input: request does not satisfy component-request.v1"),
         ("bad\ud800", "invalid_input: /sources/0/artifact_id contains invalid Unicode text"),
     ],
 )

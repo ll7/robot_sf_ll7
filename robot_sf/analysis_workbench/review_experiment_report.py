@@ -14,6 +14,7 @@ import hashlib
 import html
 import json
 import math
+import os
 import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict
@@ -44,7 +45,36 @@ HTML_ARTIFACT_NAME = "experiment-comparison.html"
 EVIDENCE_BOUNDARY = "diagnostic-only recorded-results comparison; not benchmark or paper evidence"
 OUTCOMES = ("survived", "falsified", "inconclusive", "contradictory")
 VALID_GATE_STATUSES = ("pass", "fail", "missing", "unknown", "not_applicable")
+VALID_EXPECTED_DIRECTIONS = ("increase", "decrease")
+VALID_SOURCE_READINESS_STATUSES = (
+    "verified",
+    "missing",
+    "fallback",
+    "degraded",
+    "unavailable",
+)
+VALID_SOURCE_AVAILABILITY_STATUSES = ("available", "partial-failure", "failed", "not_available")
 _ALLOWED_CONFIG_KEYS = {"metric_order", "report_title"}
+_SOURCE_IDENTITY_KEYS = frozenset(
+    {
+        "availability_status",
+        "execution_mode",
+        "generator",
+        "readiness_status",
+        "source_commit",
+        "source_kind",
+    }
+)
+_REQUIRED_SOURCE_IDENTITY_KEYS = frozenset(
+    {"availability_status", "execution_mode", "readiness_status", "source_commit", "source_kind"}
+)
+_COUNT_UNITS = {
+    "family_count": "dependent_family_by_shared_parent_id",
+    "condition_count": "condition_record_including_control_and_treatment",
+    "outcome_counts": "condition_record_including_control_and_treatment",
+    "effect_counts": "treatment_metric_comparison_record",
+    "negative_finding_count": "condition_record_with_non_survived_outcome",
+}
 _MAX_JSON_NESTING_DEPTH = 1000
 
 
@@ -232,12 +262,12 @@ def _list(value: Any, *, path: str) -> list[Any]:
 
 
 def _validate_config(config: Mapping[str, Any]) -> tuple[list[str], str | None]:
+    _validate_strict_json(config, path="/config")
     unknown = sorted(set(config) - _ALLOWED_CONFIG_KEYS)
     if unknown:
         raise ExperimentReportError(
             "invalid_config", f"unsupported config keys: {', '.join(unknown)}"
         )
-    _validate_strict_json(config, path="/config")
     metric_order_value = config.get("metric_order", [])
     metric_order = _list(metric_order_value, path="/config/metric_order")
     if any(not isinstance(item, str) or not item.strip() for item in metric_order):
@@ -285,10 +315,11 @@ def _validate_measurements(measurements: Any, *, path: str) -> dict[str, dict[st
         item: dict[str, Any] = {"units": units, "value": value}
         if "expected_direction" in measurement:
             expected = measurement["expected_direction"]
-            if not isinstance(expected, str):
+            if not isinstance(expected, str) or expected not in VALID_EXPECTED_DIRECTIONS:
                 raise ExperimentReportError(
                     "invalid_input",
-                    f"{path}/{metric_name}/expected_direction must be a string",
+                    f"{path}/{metric_name}/expected_direction must be one of "
+                    f"{', '.join(VALID_EXPECTED_DIRECTIONS)}",
                 )
             item["expected_direction"] = expected
         result[metric_name] = item
@@ -307,7 +338,7 @@ def _validate_source(payload: Any) -> dict[str, Any]:  # noqa: C901
         )
     experiment_id = _non_empty_string(source.get("experiment_id"), path="/source/experiment_id")
     hypothesis = _non_empty_string(source.get("hypothesis"), path="/source/hypothesis")
-    source_identity = dict(_mapping(source.get("source_identity"), path="/source/source_identity"))
+    source_identity = _validate_source_identity(source.get("source_identity"))
     families = _list(source.get("families"), path="/source/families")
     if not families:
         raise ExperimentReportError("invalid_input", "/source/families must not be empty")
@@ -429,6 +460,46 @@ def _validate_source(payload: Any) -> dict[str, Any]:  # noqa: C901
     }
 
 
+def _validate_source_identity(value: Any) -> dict[str, str]:
+    """Validate the closed source provenance and readiness contract.
+
+    Returns:
+        Normalized source identity with explicit readiness and availability status.
+    """
+
+    payload = _mapping(value, path="/source/source_identity")
+    missing = sorted(_REQUIRED_SOURCE_IDENTITY_KEYS - set(payload))
+    if missing:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity is missing required keys: " + ", ".join(missing),
+        )
+    unknown = sorted(set(payload) - _SOURCE_IDENTITY_KEYS)
+    if unknown:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity has unsupported keys: " + ", ".join(unknown),
+        )
+    normalized: dict[str, str] = {}
+    for key in sorted(payload):
+        normalized[key] = _non_empty_string(payload[key], path=f"/source/source_identity/{key}")
+    readiness_status = normalized["readiness_status"]
+    if readiness_status not in VALID_SOURCE_READINESS_STATUSES:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/readiness_status must be one of "
+            + ", ".join(VALID_SOURCE_READINESS_STATUSES),
+        )
+    availability_status = normalized["availability_status"]
+    if availability_status not in VALID_SOURCE_AVAILABILITY_STATUSES:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/availability_status must be one of "
+            + ", ".join(VALID_SOURCE_AVAILABILITY_STATUSES),
+        )
+    return normalized
+
+
 def _ordered_metrics(
     control: Mapping[str, Any], treatment: Mapping[str, Any], configured: list[str]
 ) -> list[str]:
@@ -438,6 +509,14 @@ def _ordered_metrics(
 
 def _gate_ready(gate: Mapping[str, Any]) -> bool:
     return gate.get("status") == "pass"
+
+
+def _source_effect_reason(source_identity: Mapping[str, str]) -> str | None:
+    if source_identity["readiness_status"] != "verified":
+        return "source_readiness_not_verified"
+    if source_identity["availability_status"] != "available":
+        return "source_availability_not_verified"
+    return None
 
 
 def _effect_reason(
@@ -463,7 +542,11 @@ def _effect_reason(
 
 
 def _build_effects(
-    control: Mapping[str, Any], treatment: Mapping[str, Any], configured: list[str]
+    control: Mapping[str, Any],
+    treatment: Mapping[str, Any],
+    configured: list[str],
+    *,
+    source_effect_reason: str | None,
 ) -> list[dict[str, Any]]:
     effects: list[dict[str, Any]] = []
     for metric in _ordered_metrics(control["measurements"], treatment["measurements"], configured):
@@ -482,7 +565,7 @@ def _build_effects(
             "status": "blocked",
             "reason": None,
         }
-        reason = _effect_reason(control, treatment, metric=metric)
+        reason = source_effect_reason or _effect_reason(control, treatment, metric=metric)
         if reason is None:
             control_value = float(control_measurement["value"])
             treatment_value = float(treatment_measurement["value"])
@@ -537,6 +620,8 @@ def _build_report(
     negative_findings: list[dict[str, Any]] = []
     families: list[dict[str, Any]] = []
     condition_count = 0
+    source_identity = source["source_identity"]
+    source_effect_reason = _source_effect_reason(source_identity)
     for family in source["families"]:
         conditions = family["conditions"]
         condition_by_id = {condition["condition_id"]: condition for condition in conditions}
@@ -557,7 +642,12 @@ def _build_report(
                     }
                 )
             if condition["role"] == "treatment":
-                effects = _build_effects(control, condition, metric_order)
+                effects = _build_effects(
+                    control,
+                    condition,
+                    metric_order,
+                    source_effect_reason=source_effect_reason,
+                )
                 family_effects.extend(effects)
                 treatment_reports.append(
                     {
@@ -567,12 +657,16 @@ def _build_report(
                 )
         for effect in family_effects:
             effect_counts[effect["status"]] += 1
-        control_ready = _gate_ready(control["fidelity"]) and _gate_ready(control["activation"])
+        control_ready = (
+            source_effect_reason is None
+            and _gate_ready(control["fidelity"])
+            and _gate_ready(control["activation"])
+        )
         families.append(
             {
                 "family_id": family["family_id"],
                 "shared_parent_id": family["shared_parent_id"],
-                "sample_unit": "dependent_family",
+                "sample_unit": "dependent_family_by_shared_parent_id",
                 "control": _condition_summary(control),
                 "treatments": treatment_reports,
                 "all_conditions": [_condition_summary(condition) for condition in conditions],
@@ -600,6 +694,8 @@ def _build_report(
             "sha256": source_sha256,
             "schema_version": source["schema_version"],
             "identity": dict(source["source_identity"]),
+            "readiness_status": source_identity["readiness_status"],
+            "availability_status": source_identity["availability_status"],
         },
         "families": families,
         "negative_findings": negative_findings,
@@ -609,8 +705,15 @@ def _build_report(
             "outcome_counts": outcome_counts,
             "effect_counts": effect_counts,
             "negative_finding_count": len(negative_findings),
-            "sample_unit": "shared_parent_family",
-            "independent_family_count": len(families),
+            "count_units": dict(_COUNT_UNITS),
+            "sample_unit": "dependent_family_by_shared_parent_id",
+            "independence": {
+                "status": "not_validated",
+                "count_published": False,
+                "reason": "no independence contract was supplied or validated",
+            },
+            "source_readiness_status": source_identity["readiness_status"],
+            "source_availability_status": source_identity["availability_status"],
             "recorded_results_only": True,
             "executor_required": False,
         },
@@ -618,12 +721,16 @@ def _build_report(
             "component_version": COMPONENT_VERSION,
             "input_schema": EXPERIMENT_RESULTS_SCHEMA_VERSION,
             "execution_mode": "recorded_results_only",
+            "source_execution_mode": source_identity["execution_mode"],
+            "source_readiness_status": source_identity["readiness_status"],
+            "source_availability_status": source_identity["availability_status"],
             "evidence_tier": "diagnostic",
             "evidence_boundary": EVIDENCE_BOUNDARY,
             "metric_order": metric_order,
             "source_sha256": source_sha256,
             "source_identity": dict(source["source_identity"]),
         },
+        "comparison_status": "verified" if source_effect_reason is None else "diagnostic_tainted",
     }
     return report
 
@@ -679,7 +786,8 @@ def _render_html(report: Mapping[str, Any]) -> str:
             + "</tbody></table></section>"
         )
     outcome_items = "".join(
-        f"<li>{safe(outcome)}: {safe(count)}</li>"
+        f"<li>{safe(outcome)}: {safe(count)} "
+        f"({safe(report['summary']['count_units']['outcome_counts'])})</li>"
         for outcome, count in report["summary"]["outcome_counts"].items()
     )
     finding_items = "".join(
@@ -707,8 +815,15 @@ def _render_html(report: Mapping[str, Any]) -> str:
         "authoritative for complete measurement values, units, expected directions, and source "
         f"provenance; see <code>{safe(JSON_ARTIFACT_NAME)}</code>. This HTML is a human-readable "
         "summary.</p>"
-        f"<p>Families: {safe(report['summary']['family_count'])}; "
-        f"conditions: {safe(report['summary']['condition_count'])}; "
+        f"<p>Families: {safe(report['summary']['family_count'])} "
+        f"({safe(report['summary']['count_units']['family_count'])}); "
+        f"conditions: {safe(report['summary']['condition_count'])} "
+        f"({safe(report['summary']['count_units']['condition_count'])}); "
+        f"negative findings: {safe(report['summary']['negative_finding_count'])} "
+        f"({safe(report['summary']['count_units']['negative_finding_count'])}); "
+        f"source readiness: <code>{safe(report['source']['readiness_status'])}</code>; "
+        f"source availability: <code>{safe(report['source']['availability_status'])}</code>; "
+        f"independence: <code>{safe(report['summary']['independence']['status'])}</code>. "
         "comparison uses recorded results only and requires no executor.</p>"
         f"<h2>Outcome inventory</h2><ul>{outcome_items}</ul>"
         f"<h2>Negative findings</h2><ul>{finding_items or '<li>None recorded</li>'}</ul>"
@@ -796,6 +911,33 @@ def _write_artifact(path: Path, content: str) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _reserve_output_directory(output_dir: Path) -> None:
+    """Atomically reserve a previously absent output directory."""
+
+    try:
+        output_dir.mkdir()
+    except FileExistsError as error:
+        raise ExperimentReportError(
+            "output_collision", f"output directory already exists: {output_dir}"
+        ) from error
+
+
+def _cleanup_owned_output_directory(output_dir: Path, published_paths: list[Path]) -> None:
+    """Remove only artifacts published into this call's owned reservation."""
+
+    for path in published_paths:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            continue
+    try:
+        output_dir.rmdir()
+    except OSError:
+        pass
+
+
 def _write_artifacts(output_dir: Path, artifacts: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
     """Write all report artifacts before publishing their output directory.
 
@@ -812,7 +954,18 @@ def _write_artifacts(output_dir: Path, artifacts: tuple[tuple[str, str], ...]) -
             _write_artifact(staging_dir / artifact_name, content)
             for artifact_name, content in artifacts
         )
-        staging_dir.replace(output_dir)
+        _reserve_output_directory(output_dir)
+        published_paths: list[Path] = []
+        try:
+            for artifact_name, _ in artifacts:
+                staged_path = staging_dir / artifact_name
+                output_path = output_dir / artifact_name
+                os.link(staged_path, output_path)
+                published_paths.append(output_path)
+                staged_path.unlink()
+        except BaseException:
+            _cleanup_owned_output_directory(output_dir, published_paths)
+            raise
     return digests
 
 
@@ -838,8 +991,9 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         base: Directory against which source and output paths are resolved.
 
     Returns:
-        A complete result with JSON/HTML artifacts, or a status-bearing result
-        with no artifacts when the request cannot be supported safely.
+        A verified complete or diagnostic partial result with JSON/HTML artifacts,
+        or a status-bearing result with no artifacts when the request cannot be
+        supported safely.
     """
 
     try:
@@ -897,9 +1051,10 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 "sha256": html_digest,
             },
         )
+        result_status = "complete" if report["comparison_status"] == "verified" else "partial"
         return _result(
             request,
-            "complete",
+            result_status,
             artifacts=artifacts,
             provenance=report["provenance"],
         )

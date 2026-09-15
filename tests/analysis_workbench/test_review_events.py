@@ -9,7 +9,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from robot_sf.analysis_workbench.review_contracts import component_result_from_dict
+from robot_sf.analysis_workbench import review_events
+from robot_sf.analysis_workbench.review_contracts import (
+    component_descriptor_from_dict,
+    component_result_from_dict,
+)
 from robot_sf.analysis_workbench.review_events import (
     COMPONENT_ID,
     descriptor,
@@ -164,6 +168,25 @@ def test_missing_links_are_unavailable_not_invented(tmp_path: Path) -> None:
     result = run(_request(base=tmp_path), base=tmp_path)
     assert result.status == "partial"
     assert "links_unavailable" in result.reason
+    assert result.artifacts == ()
+
+
+def test_interval_id_cannot_hide_blocking_link_diagnostic(tmp_path: Path) -> None:
+    events = {
+        "intervals": [
+            dict(
+                EVENTS["intervals"][0],
+                interval_id="optional_stream_skipped",
+                precursor_ids=[],
+                recovery_ids=[],
+            )
+        ]
+    }
+    _write_source(tmp_path / "events.json", events, "event-list.v1")
+    _write_source(tmp_path / "phases.json", {"intervals": []}, "phase-list.v1")
+    result = run(_request(base=tmp_path), base=tmp_path)
+    assert result.status == "partial"
+    assert "optional_stream_skipped: links_unavailable" in result.reason
     assert result.artifacts == ()
 
 
@@ -355,6 +378,51 @@ def test_output_collision_fails(tmp_path: Path) -> None:
     assert "output_collision" in result.reason
 
 
+def test_final_artifact_collision_does_not_replace_raced_file(tmp_path: Path, monkeypatch) -> None:
+    _stage(tmp_path)
+    original_link = review_events.os.link
+    target = tmp_path / "out" / "event-index.json"
+    raced = False
+
+    def create_raced_target(source, destination, *args, **kwargs):
+        nonlocal raced
+        if not raced and Path(destination) == target:
+            target.write_text("raced-in", encoding="utf-8")
+            raced = True
+        return original_link(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(review_events.os, "link", create_raced_target)
+    result = run(_request(base=tmp_path), base=tmp_path)
+    assert raced
+    assert result.status == "failed"
+    assert "output_collision" in result.reason
+    assert target.read_text(encoding="utf-8") == "raced-in"
+
+
+def test_source_read_rejects_swap_to_symlink_after_resolution(tmp_path: Path, monkeypatch) -> None:
+    _stage(tmp_path)
+    outside = tmp_path / "outside-events.json"
+    _write_source(outside, EVENTS, "event-list.v1")
+    source = tmp_path / "events.json"
+    original_open = review_events.os.open
+    swapped = False
+
+    def swap_before_root_open(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal swapped
+        if not swapped and Path(path) == tmp_path and dir_fd is None:
+            source.unlink()
+            source.symlink_to(outside)
+            swapped = True
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(review_events.os, "open", swap_before_root_open)
+    result = run(_request(base=tmp_path), base=tmp_path)
+    assert swapped
+    assert result.status == "failed"
+    assert "source_unreadable_or_unsafe" in result.reason
+    assert "source_digest_mismatch" not in result.reason
+
+
 def test_unsupported_component_is_unavailable(tmp_path: Path) -> None:
     _stage(tmp_path)
     result = run(_request(component_id="srev99-nope"), base=tmp_path)
@@ -364,9 +432,19 @@ def test_unsupported_component_is_unavailable(tmp_path: Path) -> None:
 
 def test_descriptor_declares_capabilities() -> None:
     info = descriptor()
+    component_descriptor_from_dict(info)
+    assert info["schema_version"] == "component-descriptor.v1"
     assert info["component_id"] == COMPONENT_ID
     assert set(info["required_capabilities"]) == {"event-list", "phase-list"}
     assert "predicate-report" in info["optional_capabilities"]
+
+
+def test_raw_malformed_request_returns_failure_result() -> None:
+    result = run({})
+    assert result.status == "failed"
+    assert result.request_id == "unknown"
+    assert result.component_id == COMPONENT_ID
+    assert result.reason == "invalid_request: expected validated ComponentRequest"
 
 
 def test_module_touches_no_simulator_paths() -> None:

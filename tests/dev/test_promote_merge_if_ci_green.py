@@ -88,3 +88,26 @@ def test_moved_head_or_removed_conditional_label_prevents_promotion() -> None:
         result = promote(42, repo="owner/repo", head_sha=HEAD, base_sha=BASE)
     assert result["reason"] == "conditional_label_removed"
     add.assert_not_called()
+
+
+def test_newer_review_hold_prevents_promotion_after_green_ci() -> None:
+    """A maintainer's newer hold must outweigh the older accepted review."""
+    with (
+        patch(
+            "scripts.dev.promote_merge_if_ci_green.get_label_names",
+            side_effect=[
+                _labels("merge-if-ci-green"),
+                _labels("merge-if-ci-green", "needs-review"),
+            ],
+        ),
+        patch("scripts.dev.promote_merge_if_ci_green.read_ci", return_value=_ci("success")),
+        patch("scripts.dev.promote_merge_if_ci_green.add_label") as add,
+    ):
+        result = promote(42, repo="owner/repo", head_sha=HEAD, base_sha=BASE)
+    assert result == {
+        "status": "blocked",
+        "reason": "newer_hold_label",
+        "labels": ["needs-review"],
+        "number": 42,
+    }
+    add.assert_not_called()

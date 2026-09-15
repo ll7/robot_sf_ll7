@@ -237,7 +237,7 @@ concurrently against the same PR or branch.
      full head and base SHAs and run the one-shot promotion helper. A `waiting`,
      `skipped`, `blocked`, or `partial` result is a handoff, not permission to merge.
      The helper requires green required checks on the expected head, checks the
-     conditional label again, uses the existing carrier guard to apply
+     conditional label and newer hold labels again, uses the existing carrier guard to apply
      `merge-ready`, and clears the conditional label after verifying the add.
      ```bash
      uv run python -m scripts.dev.promote_merge_if_ci_green <number> \

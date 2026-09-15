@@ -18,6 +18,9 @@ from scripts.dev.gh_pr_label_rest import add_label, get_label_names, remove_labe
 
 CONDITIONAL_LABEL = "merge-if-ci-green"
 READY_LABEL = "merge-ready"
+PROMOTION_HOLD_LABELS = frozenset(
+    {"blocked", "decision-required", "deferred", "needs-review", "state:blocked", "state:hold"}
+)
 
 
 def read_ci(number: int, *, repo: str, head_sha: str) -> dict[str, Any]:
@@ -69,13 +72,29 @@ def _clear_conditional(number: int, *, repo: str, head_sha: str, base_sha: str) 
     return {"status": "promoted", "number": number, "head_sha": head_sha}
 
 
-def promote(number: int, *, repo: str, head_sha: str, base_sha: str) -> dict[str, Any]:
-    """Add merge-ready only after green CI, then clear the conditional label."""
+def _candidate_status(number: int, *, repo: str, missing_reason: str) -> dict[str, Any] | None:
+    """Respect a removed candidate or newer hold label on every live read."""
     labels = get_label_names(number, repo=repo)
     if labels.get("status") != "ok":
         return labels
     if CONDITIONAL_LABEL not in labels["labels"]:
-        return {"status": "skipped", "reason": "conditional_label_absent", "number": number}
+        return {"status": "skipped", "reason": missing_reason, "number": number}
+    holds = sorted(PROMOTION_HOLD_LABELS.intersection(labels["labels"]))
+    if holds:
+        return {
+            "status": "blocked",
+            "reason": "newer_hold_label",
+            "labels": holds,
+            "number": number,
+        }
+    return None
+
+
+def promote(number: int, *, repo: str, head_sha: str, base_sha: str) -> dict[str, Any]:
+    """Add merge-ready only after green CI, then clear the conditional label."""
+    candidate = _candidate_status(number, repo=repo, missing_reason="conditional_label_absent")
+    if candidate is not None:
+        return candidate
     ci = read_ci(number, repo=repo, head_sha=head_sha)
     if ci.get("status") == "error":
         return ci
@@ -89,11 +108,9 @@ def promote(number: int, *, repo: str, head_sha: str, base_sha: str) -> dict[str
             "number": number,
         }
     # A label sweep is a live ruling; do not re-create readiness after removal.
-    labels = get_label_names(number, repo=repo)
-    if labels.get("status") != "ok":
-        return labels
-    if CONDITIONAL_LABEL not in labels["labels"]:
-        return {"status": "skipped", "reason": "conditional_label_removed", "number": number}
+    candidate = _candidate_status(number, repo=repo, missing_reason="conditional_label_removed")
+    if candidate is not None:
+        return candidate
     ready = add_label(
         number,
         READY_LABEL,

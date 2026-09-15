@@ -1,0 +1,9 @@
+{
+  "source_duration_s": 1.0,
+  "overrides": {
+    "pin": [
+      "ep-3"
+    ],
+    "exclude": []
+  }
+}

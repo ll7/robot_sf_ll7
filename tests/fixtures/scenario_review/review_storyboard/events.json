@@ -1,0 +1,9 @@
+{
+  "intervals": [
+    {
+      "interval_id": "ev-1",
+      "start_s": 0.0,
+      "end_s": 0.5
+    }
+  ]
+}

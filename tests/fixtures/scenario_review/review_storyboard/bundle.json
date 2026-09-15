@@ -1,0 +1,51 @@
+{
+  "schema_version": "review-bundle.v1",
+  "bundle_id": "srev07-fixture-bundle",
+  "episodes": [
+    {
+      "episode_id": "ep-1",
+      "references": [
+        {
+          "artifact_id": "a1",
+          "uri": "fixture",
+          "format": "episode-json",
+          "schema": "episode.fixture",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "source_commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "units": "seconds/metres/radians",
+          "coordinate_frame": "map"
+        }
+      ]
+    },
+    {
+      "episode_id": "ep-2",
+      "references": [
+        {
+          "artifact_id": "a2",
+          "uri": "fixture",
+          "format": "episode-json",
+          "schema": "episode.fixture",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "source_commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "units": "seconds/metres/radians",
+          "coordinate_frame": "map"
+        }
+      ]
+    },
+    {
+      "episode_id": "ep-3",
+      "references": [
+        {
+          "artifact_id": "a3",
+          "uri": "fixture",
+          "format": "episode-json",
+          "schema": "episode.fixture",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "source_commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "units": "seconds/metres/radians",
+          "coordinate_frame": "map"
+        }
+      ]
+    }
+  ]
+}

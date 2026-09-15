@@ -1,0 +1,28 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev07-smoke",
+  "component_id": "srev07-review-storyboard",
+  "sources": [
+    {
+      "artifact_id": "bundle",
+      "uri": "tests/fixtures/scenario_review/review_storyboard/bundle.json",
+      "format": "review-bundle"
+    },
+    {
+      "artifact_id": "scores",
+      "uri": "tests/fixtures/scenario_review/review_storyboard/scores.json",
+      "format": "exemplar-scores"
+    },
+    {
+      "artifact_id": "events",
+      "uri": "tests/fixtures/scenario_review/review_storyboard/events.json",
+      "format": "event-index"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-07-smoke",
+  "config": {},
+  "required_capabilities": [
+    "exemplar-scores",
+    "event-index"
+  ]
+}

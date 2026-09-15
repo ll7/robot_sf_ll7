@@ -308,7 +308,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["status", "reviewer_id", "labels", "note"],
+          "required": ["status", "reviewer_id", "labels", "effort_minutes", "note"],
           "properties": {
             "status": {"const": "adjudicated"},
             "reviewer_id": {"type": "string", "minLength": 1},
@@ -363,12 +363,12 @@
         "included_features": {
           "type": "array",
           "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1}
+          "items": {"enum": ["observed_pattern", "planner_id", "map_id"]}
         },
         "excluded_features": {
           "type": "array",
           "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1}
+          "items": {"enum": ["observed_pattern", "planner_id", "map_id"]}
         },
         "groups": {
           "type": "array",

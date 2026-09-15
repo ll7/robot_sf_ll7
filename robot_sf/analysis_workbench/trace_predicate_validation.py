@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import subprocess
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
@@ -38,7 +39,6 @@ from robot_sf.benchmark.collision.collision_scenario_similarity import (
 from robot_sf.benchmark.collision.collision_scenario_similarity import (
     compare_similarity_groupings,
 )
-from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.common.json_pointer import json_pointer
 from robot_sf.errors import RobotSfError
 
@@ -58,6 +58,7 @@ LABEL_NEGATIVE = "negative"
 LABEL_AMBIGUOUS = "ambiguous"
 LABEL_UNAVAILABLE = "unavailable"
 VALIDATION_LABELS = frozenset({LABEL_POSITIVE, LABEL_NEGATIVE, LABEL_AMBIGUOUS, LABEL_UNAVAILABLE})
+_GROUPING_FEATURE_VOCABULARY = frozenset({"observed_pattern", "planner_id", "map_id"})
 _SOURCE_COMMIT_LENGTH = 40
 _SHA256_LENGTH = 64
 
@@ -208,9 +209,19 @@ def validate_trace_predicate_evaluation_set(
 def validate_trace_predicate_validation_report(
     report: Mapping[str, Any],
     *,
+    evaluation_set: Mapping[str, Any] | None = None,
+    repo_root: str | Path | None = None,
+    expected_source_commit: str | None = None,
     source: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Validate a generated report envelope without interpreting its numbers.
+    """Validate a report against the admitted evaluation set and recompute its fields.
+
+    A report summary is not a provenance boundary on its own: its evaluation-set
+    digest, source pin, coverage, and derived metrics can all be edited without
+    changing the report's JSON shape.  Callers must therefore provide the
+    admitted evaluation-set payload and the explicit source commit pin.  The
+    validator re-admits that set and compares every report field with a fresh
+    deterministic reconstruction.
 
     Returns:
         Validated report mapping.
@@ -220,9 +231,36 @@ def validate_trace_predicate_validation_report(
     errors = _schema_errors(report, load_trace_predicate_validation_report_schema())
     if errors:
         raise TracePredicateValidationError(errors, source=source)
+    binding_errors: list[str] = []
+    if evaluation_set is None:
+        binding_errors.append(
+            "/evaluation_set: admitted evaluation set is required for report validation"
+        )
+    if expected_source_commit is None:
+        binding_errors.append(
+            "/provenance/source_commit: expected source commit pin is required for report validation"
+        )
+    if binding_errors:
+        raise TracePredicateValidationError(binding_errors, source=source)
+    assert evaluation_set is not None
+    payload = validate_trace_predicate_evaluation_set(
+        evaluation_set,
+        repo_root=repo_root,
+        expected_source_commit=expected_source_commit,
+    )
     semantic_errors = _report_semantic_errors(report)
     if semantic_errors:
         raise TracePredicateValidationError(semantic_errors, source=source)
+    expected_report = _build_report_from_payload(payload)
+    drift_paths = _value_difference_paths(report, expected_report)
+    if drift_paths:
+        raise TracePredicateValidationError(
+            [
+                f"{path}: report field does not match recomputed evaluation-set output"
+                for path in drift_paths
+            ],
+            source=source,
+        )
     return dict(report)
 
 
@@ -238,29 +276,14 @@ def canonical_trace_predicate_validation_sha256(payload: Mapping[str, Any]) -> s
     return hashlib.sha256(serialized).hexdigest()
 
 
-def build_trace_predicate_validation_report(
-    evaluation_set: Mapping[str, Any],
-    *,
-    repo_root: str | Path | None = None,
-    expected_source_commit: str | None = None,
-) -> dict[str, Any]:
-    """Build diagnostic validation metrics from an admitted evaluation set.
-
-    Only explicit adjudication labels of ``positive`` or ``negative`` enter
-    precision/recall counts.  Pending, ambiguous, unavailable, and missing-trace
-    rows are retained in denominators and exclusion/unavailable ledgers; no
-    majority vote or inferred ground truth is created.
+def _build_report_from_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the complete deterministic report projection for an admitted set.
 
     Returns:
-        Diagnostic-only report mapping.
+        The unvalidated report projection.
     """
-    payload = validate_trace_predicate_evaluation_set(
-        evaluation_set,
-        repo_root=repo_root,
-        expected_source_commit=expected_source_commit,
-    )
     cases = payload["cases"]
-    report: dict[str, Any] = {
+    return {
         "schema_version": TRACE_PREDICATE_VALIDATION_REPORT_SCHEMA_VERSION,
         "report_kind": "trace_predicate_validation",
         "evaluation_set": {
@@ -301,16 +324,56 @@ def build_trace_predicate_validation_report(
             "Observed pattern annotations are separate from causal hypotheses, and neither is used to infer mechanism from correlation.",
         ],
     }
-    return validate_trace_predicate_validation_report(report)
 
 
-def format_trace_predicate_validation_markdown(report: Mapping[str, Any]) -> str:
+def build_trace_predicate_validation_report(
+    evaluation_set: Mapping[str, Any],
+    *,
+    repo_root: str | Path | None = None,
+    expected_source_commit: str | None = None,
+) -> dict[str, Any]:
+    """Build diagnostic validation metrics from an admitted evaluation set.
+
+    Only explicit adjudication labels of ``positive`` or ``negative`` enter
+    precision/recall counts.  Pending, ambiguous, unavailable, and missing-trace
+    rows are retained in denominators and exclusion/unavailable ledgers; no
+    majority vote or inferred ground truth is created.
+
+    Returns:
+        Diagnostic-only report mapping.
+    """
+    payload = validate_trace_predicate_evaluation_set(
+        evaluation_set,
+        repo_root=repo_root,
+        expected_source_commit=expected_source_commit,
+    )
+    report = _build_report_from_payload(payload)
+    return validate_trace_predicate_validation_report(
+        report,
+        evaluation_set=payload,
+        repo_root=repo_root,
+        expected_source_commit=expected_source_commit,
+    )
+
+
+def format_trace_predicate_validation_markdown(
+    report: Mapping[str, Any],
+    *,
+    evaluation_set: Mapping[str, Any],
+    repo_root: str | Path | None = None,
+    expected_source_commit: str,
+) -> str:
     """Render a compact reviewer-facing validation report.
 
     Returns:
         Markdown report text.
     """
-    validated = validate_trace_predicate_validation_report(report)
+    validated = validate_trace_predicate_validation_report(
+        report,
+        evaluation_set=evaluation_set,
+        repo_root=repo_root,
+        expected_source_commit=expected_source_commit,
+    )
     evaluation = validated["evaluation_set"]
     lines = [
         "# Trace Predicate Validation Report",
@@ -414,10 +477,18 @@ def write_trace_predicate_validation_report(
     report: Mapping[str, Any],
     out_json: str | Path,
     *,
+    evaluation_set: Mapping[str, Any],
+    repo_root: str | Path | None = None,
+    expected_source_commit: str,
     out_markdown: str | Path | None = None,
 ) -> None:
     """Write a validated JSON report and optional Markdown companion."""
-    validated = validate_trace_predicate_validation_report(report)
+    validated = validate_trace_predicate_validation_report(
+        report,
+        evaluation_set=evaluation_set,
+        repo_root=repo_root,
+        expected_source_commit=expected_source_commit,
+    )
     json_path = Path(out_json)
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(validated, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -425,7 +496,13 @@ def write_trace_predicate_validation_report(
         markdown_path = Path(out_markdown)
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(
-            format_trace_predicate_validation_markdown(validated), encoding="utf-8"
+            format_trace_predicate_validation_markdown(
+                validated,
+                evaluation_set=evaluation_set,
+                repo_root=repo_root,
+                expected_source_commit=expected_source_commit,
+            ),
+            encoding="utf-8",
         )
 
 
@@ -439,6 +516,89 @@ def _schema_errors(payload: Mapping[str, Any], schema: Mapping[str, Any]) -> lis
             key=lambda error: tuple(str(part) for part in error.absolute_path),
         )
     ]
+
+
+def _value_difference_paths(
+    actual: Any,
+    expected: Any,
+    path: str = "",
+) -> list[str]:
+    """Return JSON-pointer-like paths whose values differ."""
+    if isinstance(actual, Mapping) and isinstance(expected, Mapping):
+        paths: list[str] = []
+        for key in sorted(set(actual) | set(expected), key=str):
+            child_path = f"{path}/{key}" if path else f"/{key}"
+            if key not in actual or key not in expected:
+                paths.append(child_path)
+            else:
+                paths.extend(_value_difference_paths(actual[key], expected[key], child_path))
+        return paths
+    if isinstance(actual, list) and isinstance(expected, list):
+        paths = []
+        for index in range(max(len(actual), len(expected))):
+            child_path = f"{path}/{index}" if path else f"/{index}"
+            if index >= len(actual) or index >= len(expected):
+                paths.append(child_path)
+            else:
+                paths.extend(_value_difference_paths(actual[index], expected[index], child_path))
+        return paths
+    return [] if actual == expected else [path or "/"]
+
+
+def _git_commit_error(repo_root: Path, source_commit: str) -> str | None:
+    """Return an error when a declared source pin is not a reachable Git commit.
+
+    Returns:
+        An actionable error string, or ``None`` when the object is a commit.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "cat-file", "-t", source_commit],
+            cwd=repo_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        return f"declared source commit cannot be verified as a Git commit: {exc}"
+    if result.returncode != 0 or result.stdout.strip() != b"commit":
+        return "declared source commit is not a Git commit in the supplied repository root"
+    return None
+
+
+def _git_blob_at_commit(
+    repo_root: Path,
+    source_commit: str,
+    uri: str,
+) -> tuple[bytes | None, str | None]:
+    """Read one immutable Git blob and return an error when the path is not a blob.
+
+    Returns:
+        The blob bytes and ``None``, or ``None`` and an actionable error string.
+    """
+    object_spec = f"{source_commit}:{uri}"
+    try:
+        type_result = subprocess.run(
+            ["git", "cat-file", "-t", object_spec],
+            cwd=repo_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        return None, f"Git blob binding cannot be verified: {exc}"
+    if type_result.returncode != 0 or type_result.stdout.strip() != b"blob":
+        return None, "resolved trace path is not a Git blob at the declared source commit"
+    try:
+        blob_result = subprocess.run(
+            ["git", "cat-file", "blob", object_spec],
+            cwd=repo_root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        return None, f"Git blob binding cannot be read: {exc}"
+    if blob_result.returncode != 0:
+        return None, "Git blob at the declared source commit cannot be read"
+    return blob_result.stdout, None
 
 
 def _report_semantic_errors(  # noqa: C901, PLR0912, PLR0915
@@ -633,7 +793,7 @@ def _report_semantic_errors(  # noqa: C901, PLR0912, PLR0915
     return errors
 
 
-def _semantic_errors(
+def _semantic_errors(  # noqa: C901
     payload: Mapping[str, Any],
     *,
     repo_root: Path,
@@ -645,13 +805,18 @@ def _semantic_errors(
     source_kind = provenance["source_kind"]
     retained_status = payload["retained_trace_status"]
     source_commit = provenance["source_commit"]
-    if expected_source_commit is not None:
-        if not _is_sha(expected_source_commit, _SOURCE_COMMIT_LENGTH):
-            errors.append("/provenance/source_commit: expected source commit is not a 40-digit SHA")
-        elif expected_source_commit != source_commit:
-            errors.append(
-                "/provenance/source_commit: evaluation set is bound to a different source commit"
-            )
+    if expected_source_commit is None:
+        errors.append("/provenance/source_commit: expected source commit pin is required")
+    elif not _is_sha(expected_source_commit, _SOURCE_COMMIT_LENGTH):
+        errors.append("/provenance/source_commit: expected source commit is not a 40-digit SHA")
+    elif expected_source_commit != source_commit:
+        errors.append(
+            "/provenance/source_commit: evaluation set is bound to a different source commit"
+        )
+    if _is_sha(source_commit, _SOURCE_COMMIT_LENGTH):
+        git_commit_error = _git_commit_error(repo_root, source_commit)
+        if git_commit_error is not None:
+            errors.append(f"/provenance/source_commit: {git_commit_error}")
     if (
         source_kind == "bounded_labeled_fixture"
         and retained_status != RETAINED_TRACE_STATUS_UNAVAILABLE
@@ -692,7 +857,7 @@ def _semantic_errors(
             )
         )
 
-    errors.extend(_threshold_semantic_errors(payload["threshold_sensitivity"], case_id_set))
+    errors.extend(_threshold_semantic_errors(payload["threshold_sensitivity"], cases))
     errors.extend(_grouping_semantic_errors(payload["grouping_stability"], case_id_set))
     return errors
 
@@ -782,11 +947,14 @@ def _case_semantic_errors(  # noqa: C901, PLR0912
             )
     adjudication = review["adjudication"]
     if adjudication["status"] == "adjudicated":
+        if adjudication["reviewer_id"] in reviewer_ids:
+            errors.append(
+                f"{prefix}/review/adjudication/reviewer_id: adjudicator must be distinct from reviewers"
+            )
         errors.extend(
             _finite_effort_error(
-                adjudication.get("effort_minutes"),
+                adjudication["effort_minutes"],
                 f"{prefix}/review/adjudication/effort_minutes",
-                optional=True,
             )
         )
     if (
@@ -832,15 +1000,26 @@ def _available_trace_errors(  # noqa: C901, PLR0912
         return errors
     if not resolved.is_file():
         return [f"{prefix}/trace_ref/uri: referenced trace file does not exist: {raw_uri}"]
-    actual_sha = sha256_file(resolved)
+    try:
+        resolved_bytes = resolved.read_bytes()
+    except OSError as exc:
+        return [f"{prefix}/trace_ref/uri: referenced trace file cannot be read: {exc}"]
+    actual_sha = hashlib.sha256(resolved_bytes).hexdigest()
     if actual_sha != trace_ref["sha256"]:
         errors.append(f"{prefix}/trace_ref/sha256: referenced trace digest does not match bytes")
     if trace_ref["source_commit"] != source_commit:
         errors.append(
             f"{prefix}/trace_ref/source_commit: source commit differs from set provenance"
         )
+    git_blob, git_blob_error = _git_blob_at_commit(repo_root, source_commit, raw_uri)
+    if git_blob_error is not None:
+        errors.append(f"{prefix}/trace_ref: {git_blob_error}")
+    elif git_blob != resolved_bytes:
+        errors.append(
+            f"{prefix}/trace_ref: resolved bytes do not match the Git blob at the declared source commit"
+        )
     try:
-        raw_trace = _strict_json_loads(resolved.read_text(encoding="utf-8"))
+        raw_trace = _strict_json_loads(resolved_bytes.decode("utf-8"))
         if not isinstance(raw_trace, Mapping):
             raise SimulationTraceExportValidationError(
                 ["expected a mapping payload"], source=resolved
@@ -877,13 +1056,17 @@ def _available_trace_errors(  # noqa: C901, PLR0912
     return errors
 
 
-def _threshold_semantic_errors(threshold_spec: Mapping[str, Any], case_ids: set[str]) -> list[str]:
-    """Validate threshold variant IDs and complete case coverage.
+def _threshold_semantic_errors(
+    threshold_spec: Mapping[str, Any], cases: Sequence[Mapping[str, Any]]
+) -> list[str]:
+    """Validate threshold IDs, complete coverage, and availability propagation.
 
     Returns:
         Semantic validation errors for threshold variants.
     """
     errors: list[str] = []
+    case_by_id = {case["case_id"]: case for case in cases}
+    case_ids = set(case_by_id)
     variants = threshold_spec["variants"]
     variant_ids = [variant["variant_id"] for variant in variants]
     if len(set(variant_ids)) != len(variant_ids):
@@ -896,6 +1079,18 @@ def _threshold_semantic_errors(threshold_spec: Mapping[str, Any], case_ids: set[
             errors.append(
                 f"/threshold_sensitivity/variants/{index}/labels_by_case: must cover each case exactly once"
             )
+        for case_id, labels in labels_by_case.items():
+            case = case_by_id.get(case_id)
+            if case is None:
+                continue
+            trace_unavailable = case["trace_ref"]["status"] != "available"
+            for predicate_id, label in labels.items():
+                detector_unavailable = case["detector"]["labels"][predicate_id] == LABEL_UNAVAILABLE
+                if (trace_unavailable or detector_unavailable) and label != LABEL_UNAVAILABLE:
+                    errors.append(
+                        f"/threshold_sensitivity/variants/{index}/labels_by_case/{case_id}/{predicate_id}: "
+                        "unavailable trace or detector requires an unavailable threshold label"
+                    )
     return errors
 
 
@@ -945,6 +1140,18 @@ def _grouping_semantic_errors(  # noqa: C901
             "/grouping_stability/ablated_variant_id: ablated variant must exclude declared identity features"
         )
     for index, variant in enumerate(variants):
+        included_features = set(variant["included_features"])
+        excluded_features = set(variant["excluded_features"])
+        unknown_features = (included_features | excluded_features) - _GROUPING_FEATURE_VOCABULARY
+        if unknown_features:
+            errors.append(
+                f"/grouping_stability/variants/{index}: feature names are outside the closed vocabulary"
+            )
+        overlap = included_features & excluded_features
+        if overlap:
+            errors.append(
+                f"/grouping_stability/variants/{index}: included and excluded features must be disjoint"
+            )
         groups = variant["groups"]
         group_ids = [group["group_id"] for group in groups]
         if len(set(group_ids)) != len(group_ids):

@@ -34,7 +34,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--expected-source-commit",
-        help="Optional exact lowercase commit SHA required by the evaluation set.",
+        required=True,
+        help="Exact lowercase commit SHA required by the evaluation set and trace Git blobs.",
     )
     return parser
 
@@ -56,6 +57,9 @@ def main(argv: list[str] | None = None) -> int:
         write_trace_predicate_validation_report(
             report,
             args.output_json,
+            evaluation_set=evaluation_set,
+            repo_root=args.repo_root,
+            expected_source_commit=args.expected_source_commit,
             out_markdown=args.output_markdown,
         )
     except TracePredicateValidationError as exc:

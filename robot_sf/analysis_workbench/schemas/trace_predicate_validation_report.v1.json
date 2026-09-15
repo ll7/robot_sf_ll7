@@ -770,10 +770,18 @@
           "minLength": 1
         },
         "included_features": {
-          "$ref": "#/$defs/id_list"
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["observed_pattern", "planner_id", "map_id"]
+          }
         },
         "excluded_features": {
-          "$ref": "#/$defs/id_list"
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["observed_pattern", "planner_id", "map_id"]
+          }
         },
         "group_count": {
           "$ref": "#/$defs/count"

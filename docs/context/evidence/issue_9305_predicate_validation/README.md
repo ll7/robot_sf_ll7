@@ -11,11 +11,13 @@ pending-review paths can be checked. They are not retained-corpus evidence.
 
 The contract is fail-closed on:
 
-- exact source commit, strict trace schema, repository-relative URI, and file SHA-256;
+- an explicit source-commit pin, strict trace schema, repository-relative URI,
+  file SHA-256, and byte-for-byte equality with the Git blob at that commit;
 - complete labels for all eight predicates and a reason for every unavailable label;
-- at least two independent reviewers, explicit adjudication, and preserved disagreement;
-- complete threshold-variant case coverage; and
-- complete full-identity and planner/map-ablated grouping partitions.
+- at least two independent reviewers, distinct measured adjudication, and preserved disagreement;
+- complete threshold-variant case coverage with unavailable-detector propagation; and
+- complete full-identity and planner/map-ablated grouping partitions with closed,
+  disjoint feature sets.
 
 Map IDs in these fixtures are explicit annotations because
 `simulation_trace_export.v1` does not carry map identity. Planner IDs and seeds
@@ -41,3 +43,8 @@ current-base pin is intentional: a future source-commit mismatch fails closed. A
 retained corpus must replace the fixture source kind and label origin only
 after access, provenance, licensing, independent review, and adjudication are
 accepted; this fixture must not be silently upgraded.
+
+Report validation is bound to the admitted evaluation-set payload and recomputes
+the complete report projection, including the set digest, source commit, coverage,
+metrics, availability, threshold, grouping, review, and observation fields. A
+report summary cannot authorize edited derived values by itself.

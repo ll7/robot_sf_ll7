@@ -13,6 +13,8 @@ from typing import Any
 
 import yaml
 
+from scripts.dev.git_common import resolve_repo_root
+
 DEFAULT_PACKET_PATH = Path("configs/benchmarks/issue_3808_ttc_near_miss_decision_packet.yaml")
 SCHEMA_VERSION = "issue-3808-ttc-near-miss-decision-packet.v1"
 EXPECTED_FIXTURE_STATUS = {
@@ -47,7 +49,8 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    """Return the current Git repository root."""
+    return resolve_repo_root()
 
 
 def _repo_relative(path_value: Any, key: str) -> Path:

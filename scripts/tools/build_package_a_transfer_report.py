@@ -21,6 +21,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from scripts.dev.git_common import resolve_repo_root
 from scripts.tools.campaign_result_store import read_parquet_frame
 from scripts.validation.check_package_a_readiness import build_decision_packet
 
@@ -74,7 +75,8 @@ class SurfaceFamilies:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    """Return the current Git repository root."""
+    return resolve_repo_root()
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:

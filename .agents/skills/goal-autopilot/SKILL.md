@@ -319,7 +319,11 @@ The proof schema is `goal_autopilot_zero_work_proof.v1`. It binds
 `origin_main_sha`, issue labels/bodies, atomic claims, PR heads, the preparation
 audit digest, and discovery-relevant paths. Any drift invalidates the receipt.
 An open issue count is neither positive nor negative zero-work evidence. A zero
-claimable issue count proves only implementation-lane exhaustion.
+claimable issue count proves only implementation-lane exhaustion. A capped
+snapshot reporting `truncated: true` never satisfies the complete-scan
+requirement: raise the queue limit until the snapshot returns
+`truncated: false` before emitting the proof, since the queue refills faster
+than lanes drain it and eligible `ready` issues hide below narrow cutoffs.
 
 For each issue created during discovery, `readiness_outcomes` must contain the
 canonical gate result object (at minimum a non-empty `outcome` and boolean
@@ -403,6 +407,11 @@ Before each phase, run a delegation checkpoint:
   machine-checkable state classification and next-action decisions under a loop budget. Use
   `--capsule-dir <private-artifact-dir>` when an implementation worker should receive a bounded
   issue context capsule instead of rediscovering files with broad search.
+- Before declaring the `implement` phase zero-work, re-pull a fresh wide
+  `snapshot_issue_batch --claimable --limit 100` snapshot: the queue refills
+  faster than lanes drain it, and a narrow or stale window hides eligible
+  `ready` issues below the cutoff. A truncated snapshot is route evidence
+  only, never proof of queue exhaustion.
 - For optional discovery scouts, default to a short hard timeout (120-180s) and require periodic
   evidence in the ledger. If a bounded scout emits no heartbeat within one timeout slice, treat it as
   incomplete and retry with an explicit local timeout + heartbeat plan.

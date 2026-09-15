@@ -609,6 +609,34 @@ def test_tracked_historical_binding_manifest_resolves_all_three_records() -> Non
     }
 
 
+def test_historical_binding_manifest_rejects_non_three_record_sets() -> None:
+    """A manifest that is not exactly three records fails closed before entry proof."""
+    historical = importlib.import_module("robot_sf.evidence.historical_bindings")
+    manifest_path = ROOT / "scripts/validation/evidence_registry_historical_bindings.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    cases = (
+        manifest["bindings"][:2],
+        manifest["bindings"] + [dict(manifest["bindings"][0])],
+    )
+
+    for bindings in cases:
+        mutated = json.loads(json.dumps(manifest))
+        mutated["bindings"] = bindings
+        with pytest.raises(
+            historical.HistoricalBindingError,
+            match="bindings must contain exactly three records",
+        ):
+            historical._load_historical_bindings(
+                ROOT,
+                content_ref="HEAD",
+                content_cache={
+                    historical.HISTORICAL_BINDING_MANIFEST.as_posix(): (
+                        json.dumps(mutated).encode("utf-8")
+                    )
+                },
+            )
+
+
 def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:
     """A campaign with committed config and matching artifact hash passes."""
     linter = _load_linter()

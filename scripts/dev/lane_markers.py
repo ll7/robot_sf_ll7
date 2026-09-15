@@ -39,9 +39,14 @@ _GATE_VERDICT_RE = re.compile(
     re.IGNORECASE,
 )
 GATE_VERDICT_RE = _GATE_VERDICT_RE
+# Gate-verdict events are control trailers, so require the marker to begin a
+# Markdown-style line (after optional list/quote/fence decoration). This keeps
+# prose such as ``keep `gate-verdict: hold`;`` from becoming a malformed event
+# while leaving malformed dedicated trailers fail-closed below.
 _GATE_VERDICT_MARKER_RE = re.compile(
-    r"gate-verdict\s*:\s*(?P<verdict>accepted|hold)\b",
-    re.IGNORECASE,
+    r"^[ \t]*(?:[-*+>]\s*)*(?:`{1,3}\s*)?"
+    r"(?P<marker>gate-verdict\s*:\s*(?P<verdict>accepted|hold)\b)",
+    re.IGNORECASE | re.MULTILINE,
 )
 _BASE_POLICY_RE = re.compile(
     r"base-policy\s*:\s*(ordinary-cas|current-base)\s*@\s*([0-9a-fA-F]{7,40})\b",

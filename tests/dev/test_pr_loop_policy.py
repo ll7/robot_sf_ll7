@@ -1530,6 +1530,51 @@ def test_classify_review_body_carries_verdict() -> None:
     assert classify_pr_state(pr) == "ready_to_merge"
 
 
+def test_current_gate_verdict_status_ignores_prose_marker_mentions() -> None:
+    """A prose mention must not become a malformed control event."""
+    pr = {
+        "number": 3007,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": "Keep `gate-verdict: hold`; do not apply merge-ready until review.",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            },
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "accepted"
+
+
+def test_current_gate_verdict_status_rejects_malformed_dedicated_marker() -> None:
+    """A dedicated marker without its SHA remains fail-closed as malformed."""
+    pr = {
+        "number": 3008,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": "gate-verdict: hold",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            }
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+
+
 def test_classify_explicit_gate_verdict_field_accepted() -> None:
     """A top-level gate_verdict dict should satisfy the gate (snapshot enrichment)."""
     pr = _pr(

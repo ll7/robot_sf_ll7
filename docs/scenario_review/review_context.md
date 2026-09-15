@@ -31,12 +31,23 @@ contract; the latter is adapted through the case-workbench result loader and
 does not redefine its schema. For the canonical directory shape, `study_id` in
 the owner manifest (or per-row `campaign_id`) must bind the campaign, and the
 owner manifest/rows must provide one matching source commit and configuration
-identity (`config_hash`, `config_identity`, or `config_digest`). The requested
+identity (`config_hash` or `config_identity`); `config_digest` is independent
+provenance rather than an identity alias. The requested
 source declarations must match those owner values; caller-only identity is
 rejected as `unavailable` with `canonical_identity_unbound` or
 `canonical_identity_mismatch`, without a report. Multiple campaign or selection
 candidates require an explicit `canonical_*_artifact_id` config key; they are
 never silently merged.
+
+For canonical owner rows, `config_hash` is the configuration identity bound to
+the request's `config_identity`. `config_digest` is a separate resolved-config
+provenance value: it is retained in each source-provenance record and never
+substituted for or compared as an alias of `config_hash`. If a source contains
+several independent digests, the singular field is `null` and `config_digests`
+retains the sorted set. Supported nested
+source-commit aliases (`source_commit`, `git_hash`, `commit_sha`, `commit`) and
+configuration-identity aliases (`config_identity`, `config_hash`) must agree;
+contradictions are rejected.
 
 Canonical v2 owner rows use `row_status` as the execution-mode field. Their
 `status`/`execution_status` columns may contain descriptive outcomes such as
@@ -45,11 +56,17 @@ Canonical v2 owner rows use `row_status` as the execution-mode field. Their
 
 Campaign and selection sources must share source-commit and configuration
 identities. Each source's declared digest is compared with its observed digest,
-and both identities are retained in the report provenance. The optional
+and both identities are retained in the report provenance. The independent
+owner `config_digest`, when present, is retained alongside the canonical
+configuration identity. The optional
 `episode-selection` stream is consumed whenever supplied. If it is explicitly
 listed in `skip_optional_capabilities`, the report is `partial` and records
 `selection_coverage.status: skipped`; an absent optional stream is reported as
 `not_supplied` rather than treated as selected coverage.
+
+Every supplied selection must carry a non-empty `campaign_id` matching the
+requested campaign before any episode IDs are interpreted. Missing or mismatched
+selection campaign identity returns a failed result without a cohort report.
 
 ## Outputs
 
@@ -76,7 +93,13 @@ required to be regular files, so FIFO, directory, symlink, special-file,
 oversized, and invalid inputs return a stable failed result envelope without
 waiting on a writer. Source files and canonical source directories are bounded
 to 64 MiB and 4,096 regular files; symlink and special-file entries are
-rejected.
+rejected. Before canonical owner loading, the complete inventoried directory is
+read once through descriptor-backed no-follow/non-blocking opens into a private
+bounded snapshot; owner loaders never reopen the original source paths after the
+digest check. Non-standard JSON constants such as `NaN` and `Infinity` are
+rejected in in-memory control documents, canonical JSONL, and final result/output
+serialization. Existing malformed finite metric handling remains a diagnostic
+partial result only where the leaf contract requires it.
 
 Fallback, degraded, unavailable, and failed rows are excluded from the
 denominator and are recorded in `exclusions`. A requested capability without an

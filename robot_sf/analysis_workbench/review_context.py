@@ -87,7 +87,8 @@ _METRIC_NAME_RE = r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$"
 _IDENTITY_PROVENANCE_KEYS = ("source_commit", "config_identity")
 _CANONICAL_CAMPAIGN_ID_KEYS = ("campaign_id", "study_id")
 _CANONICAL_SOURCE_COMMIT_KEYS = ("source_commit", "git_hash", "commit_sha", "commit")
-_CANONICAL_CONFIG_IDENTITY_KEYS = ("config_identity", "config_hash", "config_digest")
+_CANONICAL_CONFIG_IDENTITY_KEYS = ("config_identity", "config_hash")
+_CANONICAL_CONFIG_DIGEST_KEYS = ("config_digest",)
 _MALFORMED_EPISODE_DIAGNOSTICS = frozenset(
     {
         "episode_row_malformed",
@@ -278,6 +279,8 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                     "sha256_declared",
                     "source_commit",
                     "config_identity",
+                    "config_digest",
+                    "config_digests",
                     "units",
                     "coordinate_frame",
                     "sha256_observed",
@@ -299,6 +302,12 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                     "sha256_declared": {"type": ["string", "null"], "pattern": _SHA256_RE.pattern},
                     "source_commit": {"type": ["string", "null"], "pattern": _SHA40_RE.pattern},
                     "config_identity": {"type": ["string", "null"], "minLength": 1},
+                    "config_digest": {"type": ["string", "null"]},
+                    "config_digests": {
+                        "type": "array",
+                        "maxItems": _MAX_CONTROL_COLLECTION_ITEMS,
+                        "items": {"type": "string", "minLength": 1},
+                    },
                     "units": {"type": ["string", "null"]},
                     "coordinate_frame": {"type": ["string", "null"]},
                     "sha256_observed": {
@@ -321,6 +330,7 @@ OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
                                 "pattern": _SHA40_RE.pattern,
                             },
                             "config_identity": {"type": ["string", "null"]},
+                            "config_digest": {"type": ["string", "null"]},
                             "execution_status": {
                                 "type": ["string", "null"],
                                 "enum": [*sorted(_EXECUTION_STATUSES), None],
@@ -500,6 +510,14 @@ def _reject_json_constant(value: str) -> None:
     raise ValueError(f"non-standard JSON constant: {value}")
 
 
+def _reject_non_finite_number(value: Any, *, label: str, path: str) -> None:
+    """Reject an in-memory floating-point value that JSON cannot persist."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ReviewContractsValidationError(
+            [f"{label}_non_finite_number: non-finite number at {path}"]
+        )
+
+
 def _validate_bounded_document(value: Any, *, label: str) -> None:
     """Bound nested control/source documents before expensive leaf processing.
 
@@ -529,6 +547,7 @@ def _validate_bounded_document(value: Any, *, label: str) -> None:
                     ]
                 )
             continue
+        _reject_non_finite_number(current, label=label, path=path)
         if isinstance(current, Mapping):
             if len(current) > _MAX_CONTROL_COLLECTION_ITEMS:
                 raise ReviewContractsValidationError(
@@ -806,18 +825,63 @@ def _directory_files(path: Path) -> list[Path]:
     return sorted(files, key=lambda item: str(item.relative_to(path)))
 
 
-def _directory_digest(path: Path, files: list[Path]) -> str:
-    """Compute the canonical case-workbench directory digest after safe inventory.
+def _read_descriptor_backed_file(
+    relative_parts: tuple[str, ...], root: Path, *, limit: int, kind: str
+) -> bytes:
+    """Read one bounded regular file from a directory descriptor walk.
+
+    The directory descriptor is opened before walking any attacker-controlled
+    component.  Every component uses ``O_NOFOLLOW`` and the final file also
+    uses ``O_NONBLOCK`` so a path replaced by a link, FIFO, or special file
+    cannot redirect or block the snapshot.
 
     Returns:
-        The hexadecimal directory digest.
+        The bounded file bytes.
     """
-    digest = hashlib.sha256()
-    for child in files:
-        digest.update(str(child.relative_to(path)).encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(_read_regular_file_no_follow(child, limit=_MAX_SOURCE_BYTES, kind="source"))
-    return digest.hexdigest()
+    if not relative_parts:
+        raise ReviewContractsValidationError([f"{kind} path is empty"])
+    no_follow = getattr(os, "O_NOFOLLOW", 0)
+    non_blocking = getattr(os, "O_NONBLOCK", 0)
+    close_on_exec = getattr(os, "O_CLOEXEC", 0)
+    directory_flag = getattr(os, "O_DIRECTORY", 0)
+    root_fd = os.open(
+        root,
+        os.O_RDONLY | close_on_exec | directory_flag | no_follow,
+    )
+    current_fd = root_fd
+    file_fd = -1
+    try:
+        for part in relative_parts[:-1]:
+            next_fd = os.open(
+                part,
+                os.O_RDONLY | close_on_exec | directory_flag | no_follow,
+                dir_fd=current_fd,
+            )
+            os.close(current_fd)
+            current_fd = next_fd
+        file_fd = os.open(
+            relative_parts[-1],
+            os.O_RDONLY | close_on_exec | no_follow | non_blocking,
+            dir_fd=current_fd,
+        )
+        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+            raise ReviewContractsValidationError([f"{kind} is not a regular file"])
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(file_fd, 1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                raise ReviewContractsValidationError([f"{kind} too large: maximum {limit} bytes"])
+            chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        if file_fd >= 0:
+            os.close(file_fd)
+        if current_fd >= 0:
+            os.close(current_fd)
 
 
 def _read_contained_bytes(path_value: str, base: Path) -> bytes:
@@ -835,48 +899,55 @@ def _read_contained_bytes(path_value: str, base: Path) -> bytes:
         raise ReviewContractsValidationError(
             [f"source uri is a directory; canonical adapter required: {_safe_detail(path_value)}"]
         )
-    parts = _path_parts(path_value, kind="source uri")
-    root = base.resolve(strict=True)
-    no_follow = getattr(os, "O_NOFOLLOW", 0)
-    close_on_exec = getattr(os, "O_CLOEXEC", 0)
-    directory_flag = getattr(os, "O_DIRECTORY", 0)
-    root_fd = os.open(root, os.O_RDONLY | close_on_exec | directory_flag)
-    current_fd = root_fd
-    file_fd = -1
-    try:
-        for part in parts[:-1]:
-            next_fd = os.open(
-                part,
-                os.O_RDONLY | close_on_exec | directory_flag | no_follow,
-                dir_fd=current_fd,
-            )
-            os.close(current_fd)
-            current_fd = next_fd
-        file_fd = os.open(parts[-1], os.O_RDONLY | close_on_exec | no_follow, dir_fd=current_fd)
-        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+    return _read_descriptor_backed_file(
+        _path_parts(path_value, kind="source uri"),
+        base.resolve(strict=True),
+        limit=_MAX_SOURCE_BYTES,
+        kind=f"source uri: {_safe_detail(path_value)}",
+    )
+
+
+def _snapshot_directory(
+    directory: Path, files: list[Path], snapshot_root: Path
+) -> tuple[list[Path], str]:
+    """Snapshot a canonical source once before handing it to an owner loader.
+
+    The owner loader accepts paths, so passing the original directory would
+    reopen attacker-controlled JSONL/receipt files after the leaf's digest
+    check.  This function performs one descriptor-backed, bounded read of each
+    inventoried file and materializes those bytes in a private temporary tree.
+    All subsequent owner reads use that immutable-in-process snapshot.
+
+    Returns:
+        Snapshot file paths and the digest of the snapshotted directory bytes.
+    """
+    snapshot_files: list[Path] = []
+    digest = hashlib.sha256()
+    total_bytes = 0
+    for source_path in files:
+        relative = source_path.relative_to(directory)
+        raw = _read_descriptor_backed_file(
+            relative.parts,
+            directory,
+            limit=_MAX_SOURCE_BYTES,
+            kind=f"canonical source: {relative}",
+        )
+        total_bytes += len(raw)
+        if total_bytes > _MAX_SOURCE_BYTES:
             raise ReviewContractsValidationError(
-                [f"source uri rejected (not a regular file): {_safe_detail(path_value)}"]
+                [f"source directory too large: maximum {_MAX_SOURCE_BYTES} bytes"]
             )
-        chunks: list[bytes] = []
-        total = 0
-        while True:
-            chunk = os.read(file_fd, 1024 * 1024)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > _MAX_SOURCE_BYTES:
-                raise ReviewContractsValidationError(
-                    [f"source too large: maximum {_MAX_SOURCE_BYTES} bytes"]
-                )
-            chunks.append(chunk)
-        os.close(file_fd)
-        file_fd = -1
-        return b"".join(chunks)
-    finally:
-        if file_fd >= 0:
-            os.close(file_fd)
-        if current_fd >= 0:
-            os.close(current_fd)
+        target = snapshot_root.joinpath(*relative.parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("xb") as handle:
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+        digest.update(str(relative).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(raw)
+        snapshot_files.append(target)
+    return snapshot_files, digest.hexdigest()
 
 
 def _reserve_output_directory(output_directory: str, base: Path) -> Path:  # noqa: C901
@@ -1042,6 +1113,8 @@ def _source_provenance(ref: SourceRef) -> dict[str, Any]:
         "sha256_declared": ref.sha256.lower() if ref.sha256 else None,
         "source_commit": ref.source_commit or None,
         "config_identity": ref.config_identity or None,
+        "config_digest": None,
+        "config_digests": [],
         "units": ref.units or None,
         "coordinate_frame": ref.coordinate_frame or None,
         "sha256_observed": None,
@@ -1073,7 +1146,13 @@ def _load_json_bytes(raw: bytes, *, label: str) -> Any:
     """
     try:
         payload = json.loads(raw.decode("utf-8"), parse_constant=_reject_json_constant)
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ReviewContractsValidationError([f"{label} is not strict JSON"]) from error
+    except ValueError as error:
+        if str(error).startswith("non-standard JSON constant:"):
+            raise ReviewContractsValidationError(
+                [f"{label}_non_finite_number: non-finite JSON constant"]
+            ) from error
         raise ReviewContractsValidationError([f"{label} is not strict JSON"]) from error
     _validate_bounded_document(payload, label=label)
     return payload
@@ -1095,6 +1174,20 @@ def _canonical_manifest(path: Path, files: set[Path]) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         raise ReviewContractsValidationError(["canonical manifest must be a JSON object"])
     return payload
+
+
+def _validate_strict_jsonl(path: Path) -> None:
+    """Reject non-standard JSON constants before the owner JSONL loader runs."""
+    raw = _read_regular_file_no_follow(path, limit=_MAX_SOURCE_BYTES, kind="canonical JSONL")
+    for line_number, line in enumerate(raw.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            _load_json_bytes(line, label=f"canonical JSONL line {line_number}")
+        except ReviewContractsValidationError as error:
+            raise ReviewContractsValidationError(
+                [f"canonical JSONL line {line_number}: {'; '.join(error.errors)}"]
+            ) from error
 
 
 def _identity_values(container: Mapping[str, Any], keys: tuple[str, ...]) -> tuple[list[str], bool]:
@@ -1119,7 +1212,7 @@ def _identity_values(container: Mapping[str, Any], keys: tuple[str, ...]) -> tup
 def _record_identity_containers(record: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
     """Return owner row mappings that can carry canonical identity metadata."""
     containers: list[Mapping[str, Any]] = [record]
-    for key in ("provenance", "cell_context"):
+    for key in ("provenance", "result_provenance", "cell_context"):
         nested = record.get(key)
         if isinstance(nested, Mapping):
             containers.append(nested)
@@ -1129,6 +1222,49 @@ def _record_identity_containers(record: Mapping[str, Any]) -> tuple[Mapping[str,
         if isinstance(trace, Mapping):
             containers.append(trace)
     return tuple(containers)
+
+
+def _identity_values_from_containers(
+    containers: tuple[Mapping[str, Any], ...], keys: tuple[str, ...]
+) -> tuple[list[str], bool]:
+    """Collect identity aliases from all supported nested provenance containers.
+
+    Returns:
+        The collected values and whether any declaration was malformed.
+    """
+    values: list[str] = []
+    invalid = False
+    for container in containers:
+        candidates, container_invalid = _identity_values(container, keys)
+        values.extend(candidates)
+        invalid = invalid or container_invalid
+    return values, invalid
+
+
+def _canonical_config_digest(
+    manifest: Mapping[str, Any] | None, records: list[dict[str, Any]]
+) -> list[str]:
+    """Collect independent owner ``config_digest`` provenance values.
+
+    Returns:
+        Sorted unique digests, or an empty list when the owner provided none.
+    """
+    containers: list[Mapping[str, Any]] = []
+    if isinstance(manifest, Mapping):
+        containers.append(manifest)
+    for record in records:
+        if isinstance(record, Mapping):
+            containers.extend(_record_identity_containers(record))
+    values, invalid = _identity_values_from_containers(
+        tuple(containers), _CANONICAL_CONFIG_DIGEST_KEYS
+    )
+    unique = sorted(set(values))
+    if invalid:
+        raise _CanonicalIdentityError(
+            "canonical_config_digest_invalid",
+            "canonical config_digest provenance is not a non-empty string",
+        )
+    return unique
 
 
 def _canonical_identity(
@@ -1205,7 +1341,7 @@ def _canonical_identity(
     return bound["campaign"], bound["source_commit"], bound["config_identity"]
 
 
-def _load_canonical_directory(  # noqa: C901, PLR0912
+def _load_canonical_directory(  # noqa: C901
     directory: Path,
     *,
     ref: SourceRef,
@@ -1251,6 +1387,16 @@ def _load_canonical_directory(  # noqa: C901, PLR0912
         raise ReviewContractsValidationError(
             ["canonical result store has no episodes.jsonl, records.jsonl, or episodes.parquet"]
         )
+    jsonl_path = next(
+        (
+            store / name
+            for name in ("episodes.jsonl", "records.jsonl")
+            if (store / name) in file_set
+        ),
+        None,
+    )
+    if jsonl_path is not None:
+        _validate_strict_jsonl(jsonl_path)
     try:
         records = _load_records(store)
     except (OSError, RuntimeError, ValueError) as error:
@@ -1265,23 +1411,7 @@ def _load_canonical_directory(  # noqa: C901, PLR0912
         records,
         ref=ref,
     )
-    for index, record in enumerate(records):
-        if not isinstance(record, Mapping):
-            continue
-        record_provenance = record.get("provenance")
-        if not isinstance(record_provenance, Mapping):
-            continue
-        for key in _IDENTITY_PROVENANCE_KEYS:
-            candidates = [record_provenance.get(key)]
-            if key == "source_commit":
-                candidates.append(record_provenance.get("git_hash"))
-            for declared in candidates:
-                if declared is None:
-                    continue
-                if not isinstance(declared, str) or declared != getattr(ref, key):
-                    raise ReviewContractsValidationError(
-                        [f"canonical row {index} {key} does not match source declaration"]
-                    )
+    payload_config_digests = _canonical_config_digest(manifest, records)
     source_status = (
         _normalize_execution_status(manifest.get("execution_status"))
         if isinstance(manifest, dict) and "execution_status" in manifest
@@ -1294,6 +1424,8 @@ def _load_canonical_directory(  # noqa: C901, PLR0912
         "campaign_id": payload_campaign_id,
         "source_commit": payload_source_commit,
         "config_identity": payload_config_identity,
+        "config_digest": payload_config_digests[0] if len(payload_config_digests) == 1 else None,
+        "config_digests": payload_config_digests,
         "execution_status": source_status,
         "episodes": records,
     }
@@ -1313,28 +1445,52 @@ def _validate_payload_identity(
         ``True`` when every present/required identity agrees.
     """
     valid = True
-    for key in _IDENTITY_PROVENANCE_KEYS:
-        declared = payload.get(key)
-        expected = getattr(ref, key)
-        if declared is None:
+    containers = _record_identity_containers(payload)
+    for key, aliases in (
+        ("source_commit", _CANONICAL_SOURCE_COMMIT_KEYS),
+        ("config_identity", _CANONICAL_CONFIG_IDENTITY_KEYS),
+    ):
+        values, invalid = _identity_values_from_containers(containers, aliases)
+        unique = set(values)
+        if invalid or len(unique) > 1:
+            _add_diagnostic(diagnostics, f"{key}_mismatch", detail=ref.artifact_id)
+            valid = False
+            continue
+        if not unique:
             if required:
                 _add_diagnostic(
                     diagnostics, f"source_payload_{key}_missing", detail=ref.artifact_id
                 )
                 valid = False
-        elif not isinstance(declared, str) or declared != expected:
+            continue
+        if next(iter(unique)) != getattr(ref, key):
             _add_diagnostic(diagnostics, f"{key}_mismatch", detail=ref.artifact_id)
             valid = False
-    nested = payload.get("provenance")
-    if isinstance(nested, Mapping):
-        for key in _IDENTITY_PROVENANCE_KEYS:
-            if key not in nested:
-                continue
-            declared = nested[key]
-            if not isinstance(declared, str) or declared != getattr(ref, key):
-                _add_diagnostic(diagnostics, f"{key}_mismatch", detail=ref.artifact_id)
-                valid = False
     return valid
+
+
+def _payload_config_digest(
+    payload: Mapping[str, Any], diagnostics: list[_Diagnostic], artifact_id: str
+) -> tuple[list[str], bool]:
+    """Read independent config-digest provenance without using it as identity.
+
+    Returns:
+        Sorted unique digests and whether their declarations were valid.
+    """
+    containers = list(_record_identity_containers(payload))
+    records = payload.get("episodes")
+    if isinstance(records, list):
+        for record in records:
+            if isinstance(record, Mapping):
+                containers.extend(_record_identity_containers(record))
+    values, invalid = _identity_values_from_containers(
+        tuple(containers), _CANONICAL_CONFIG_DIGEST_KEYS
+    )
+    unique = sorted(set(values))
+    if invalid:
+        _add_diagnostic(diagnostics, "config_digest_mismatch", detail=artifact_id)
+        return [], False
+    return unique, True
 
 
 def _load_source(  # noqa: C901, PLR0912, PLR0915
@@ -1371,24 +1527,27 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
         canonical_manifest_schema: str | None = None
         if resolved.is_dir():
             files = _directory_files(resolved)
-            observed_sha = _directory_digest(resolved, files)
-            if observed_sha.lower() != ref.sha256.lower():
-                _add_diagnostic(diagnostics, "source_digest_mismatch", detail=ref.artifact_id)
-                provenance["sha256_observed"] = observed_sha
-                provenance["integrity_status"] = "digest_mismatch"
-                return None
-            if expected_format != CAMPAIGN_RESULT_FORMAT:
-                raise ReviewContractsValidationError(
-                    [f"directory source is not supported for {expected_format}"]
+            with tempfile.TemporaryDirectory(prefix="srev06-source-snapshot-") as snapshot_dir:
+                snapshot_files, observed_sha = _snapshot_directory(
+                    resolved, files, Path(snapshot_dir)
                 )
-            if expected_campaign_id is None:
-                raise ReviewContractsValidationError(["canonical campaign id is required"])
-            payload, source_status, canonical_manifest_schema = _load_canonical_directory(
-                resolved,
-                ref=ref,
-                expected_campaign_id=expected_campaign_id,
-                files=files,
-            )
+                if observed_sha.lower() != ref.sha256.lower():
+                    _add_diagnostic(diagnostics, "source_digest_mismatch", detail=ref.artifact_id)
+                    provenance["sha256_observed"] = observed_sha
+                    provenance["integrity_status"] = "digest_mismatch"
+                    return None
+                if expected_format != CAMPAIGN_RESULT_FORMAT:
+                    raise ReviewContractsValidationError(
+                        [f"directory source is not supported for {expected_format}"]
+                    )
+                if expected_campaign_id is None:
+                    raise ReviewContractsValidationError(["canonical campaign id is required"])
+                payload, source_status, canonical_manifest_schema = _load_canonical_directory(
+                    Path(snapshot_dir),
+                    ref=ref,
+                    expected_campaign_id=expected_campaign_id,
+                    files=snapshot_files,
+                )
             provenance["sha256_observed"] = observed_sha
             provenance["canonical_source"] = True
             provenance["canonical_manifest_schema"] = canonical_manifest_schema
@@ -1432,6 +1591,14 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
         provenance["integrity_status"] = "canonical_identity_invalid"
         return None
     except ReviewContractsValidationError as error:
+        if any("non_finite_number" in item for item in error.errors):
+            _add_diagnostic(
+                diagnostics,
+                "source_non_finite_number",
+                detail=f"{ref.artifact_id}:{'; '.join(error.errors)}",
+            )
+            provenance["integrity_status"] = "non_finite_json"
+            return None
         _add_diagnostic(
             diagnostics,
             "source_unreadable_or_unsafe",
@@ -1463,12 +1630,26 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
     ):
         provenance["integrity_status"] = "provenance_mismatch"
         return None
+    config_digests, config_digest_valid = _payload_config_digest(
+        payload, diagnostics, ref.artifact_id
+    )
+    if not config_digest_valid:
+        provenance["integrity_status"] = "provenance_mismatch"
+        return None
     provenance["integrity_status"] = "digest_and_schema_verified"
     provenance["execution_status"] = source_status
+    provenance["config_digest"] = config_digests[0] if len(config_digests) == 1 else None
+    provenance["config_digests"] = config_digests
     payload_provenance = payload.get("provenance")
     if isinstance(payload_provenance, dict):
         selected_provenance: dict[str, str | None] = {}
-        for key in ("source_commit", "config_identity", "execution_status", "producer"):
+        for key in (
+            "source_commit",
+            "config_identity",
+            "config_digest",
+            "execution_status",
+            "producer",
+        ):
             if key not in payload_provenance:
                 continue
             value = payload_provenance[key]
@@ -1674,13 +1855,9 @@ def _parse_episodes(  # noqa: C901, PLR0912, PLR0915
         if config is not None and not isinstance(config, dict):
             _add_diagnostic(diagnostics, "episode_row_config_invalid", detail=episode_id)
             continue
-        config_id = _text_field(
-            config or {}, "config_id", "config_identity", "config_digest", "config_hash"
-        )
+        config_id = _text_field(config or {}, "config_id", "config_identity", "config_hash")
         if config_id == "unknown":
-            config_id = _text_field(
-                item, "config_id", "config_identity", "config_digest", "config_hash"
-            )
+            config_id = _text_field(item, "config_id", "config_identity", "config_hash")
         metrics = item.get("metrics", {})
         if metrics is not None and not isinstance(metrics, dict):
             _add_diagnostic(diagnostics, "episode_row_metrics_invalid", detail=episode_id)
@@ -1771,7 +1948,11 @@ def _parse_selection(
         )
         return [], [], True, "unavailable"
     payload = source.payload
-    if payload.get("campaign_id") not in (None, campaign_id):
+    supplied_campaign_id = payload.get("campaign_id")
+    if not isinstance(supplied_campaign_id, str) or not supplied_campaign_id.strip():
+        _add_diagnostic(diagnostics, "selection_campaign_unbound", detail=source.ref.artifact_id)
+        return [], [], True, "invalid"
+    if supplied_campaign_id.strip() != campaign_id:
         _add_diagnostic(diagnostics, "selection_campaign_mismatch", detail=source.ref.artifact_id)
         return [], [], True, "invalid"
     raw = payload.get("selected_episode_ids")
@@ -1808,6 +1989,15 @@ def _bind_source_identities(
         "source_commit": campaign_source.ref.source_commit,
         "config_identity": campaign_source.ref.config_identity,
         "source_digests": [campaign_source.provenance["sha256_observed"]],
+        "config_digests": sorted(
+            {
+                digest
+                for source in (campaign_source, selection_source)
+                if source is not None
+                for digest in source.provenance.get("config_digests", [])
+                if isinstance(digest, str)
+            }
+        ),
     }
     if selection_source is None:
         return identity
@@ -1970,6 +2160,7 @@ def _render_html(document: dict[str, Any]) -> str:
         f"<td>{html.escape(str(source['schema_declared']))}</td>"
         f"<td>{html.escape(str(source['source_commit'] or 'unavailable'))}</td>"
         f"<td>{html.escape(str(source['config_identity'] or 'unavailable'))}</td>"
+        f"<td>{html.escape(str(source['config_digest'] or ', '.join(source['config_digests']) or 'unavailable'))}</td>"
         f"<td>{html.escape(str(source['sha256_observed'] or 'unavailable'))}</td>"
         f"<td>{html.escape(str(source['integrity_status']))}</td>"
         "</tr>"
@@ -1997,6 +2188,7 @@ def _render_html(document: dict[str, Any]) -> str:
         f"<th>min</th><th>p50</th><th>max</th></tr>{rows}</table>"
         "<h2>Source provenance</h2><table><tr><th>Artifact</th><th>Format</th>"
         "<th>Schema</th><th>Source commit</th><th>Config identity</th>"
+        "<th>Config digest(s)</th>"
         f"<th>Observed digest</th><th>Integrity</th></tr>{provenance_rows}</table>"
         "<h2>Exclusions</h2><table><tr><th>Episode</th><th>Status</th>"
         f"<th>Reason</th></tr>{exclusions}</table>"
@@ -2008,6 +2200,7 @@ def _render_html(document: dict[str, Any]) -> str:
 
 def _validate_output_document(document: dict[str, Any]) -> None:  # noqa: C901
     """Validate one leaf output against its registered machine-readable schema."""
+    _validate_bounded_document(document, label="output")
     version = document.get("schema_version")
     schema = OUTPUT_SCHEMAS.get(version)
     if schema is None:
@@ -2108,13 +2301,22 @@ def _atomic_materialize_no_replace(path: Path, text: str) -> str:
     return _sha256_bytes(encoded)
 
 
+def _strict_json_text(payload: Any, *, label: str) -> str:
+    """Return bounded JSON text while rejecting non-finite or non-JSON values."""
+    _validate_bounded_document(payload, label=label)
+    try:
+        return json.dumps(payload, sort_keys=True, indent=2, allow_nan=False)
+    except (TypeError, ValueError, OverflowError, UnicodeError) as error:
+        raise ReviewContractsValidationError([f"{label} is not strict JSON"]) from error
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> str:
     """Write JSON to an atomic, exclusive final name and return its byte digest.
 
     Returns:
         The SHA-256 digest of the written bytes.
     """
-    text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
+    text = _strict_json_text(payload, label="output") + "\n"
     return _atomic_materialize_no_replace(path, text)
 
 
@@ -2405,7 +2607,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 request.request_id,
                 request.component_id,
                 STATUS_FAILED,
-                reason="invalid_episode_selection",
+                reason=_reason_with_diagnostics("invalid_episode_selection", diagnostics),
                 diagnostics=diagnostics,
                 provenance=base_provenance,
             )
@@ -2534,7 +2736,9 @@ def _result_document(result: ComponentResult) -> dict[str, Any]:
     document = asdict(result)
     document["artifacts"] = [dict(item) for item in result.artifacts]
     document["diagnostics"] = [dict(item) for item in result.diagnostics]
-    return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **document}
+    result_document = {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **document}
+    _validate_bounded_document(result_document, label="result")
+    return result_document
 
 
 def _cli_failure_result(payload: Any, reason: str) -> ComponentResult:
@@ -2545,6 +2749,27 @@ def _cli_failure_result(payload: Any, reason: str) -> ComponentResult:
     """
     request_id, component_id = _request_identity(payload)
     return _result(request_id, component_id, STATUS_FAILED, reason=reason)
+
+
+def _serialized_cli_result(result: ComponentResult, payload: Any) -> tuple[ComponentResult, str]:
+    """Serialize a CLI result strictly, replacing an invalid result with failure.
+
+    Returns:
+        The result that was serialized and its strict JSON representation.
+    """
+    try:
+        return result, _strict_json_text(_result_document(result), label="result")
+    except (
+        ReviewContractsValidationError,
+        TypeError,
+        ValueError,
+        OverflowError,
+        UnicodeError,
+    ) as error:
+        fallback = _cli_failure_result(
+            payload, f"result_serialization_error: {type(error).__name__}"
+        )
+        return fallback, _strict_json_text(_result_document(fallback), label="result")
 
 
 def _read_control_document(path_value: str, *, label: str) -> Any:
@@ -2581,7 +2806,8 @@ def main(argv: list[str] | None = None) -> int:
         if error.code == 0:
             raise
         result = _cli_failure_result(None, "invalid_cli_arguments")
-        print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201
+        _, serialized = _serialized_cli_result(result, None)
+        print(serialized)  # noqa: T201
         return 1
     payload: Any = None
     try:
@@ -2606,7 +2832,8 @@ def main(argv: list[str] | None = None) -> int:
         result = _cli_failure_result(payload, f"invalid_request: {type(error).__name__}")
     except Exception as error:  # noqa: BLE001 - CLI must preserve the result contract
         result = _cli_failure_result(payload, f"internal_error: {type(error).__name__}")
-    print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201
+    result, serialized = _serialized_cli_result(result, payload)
+    print(serialized)  # noqa: T201
     return 0 if result.status == STATUS_COMPLETE else 1
 
 

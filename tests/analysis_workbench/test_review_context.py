@@ -5,10 +5,12 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -27,6 +29,8 @@ from robot_sf.analysis_workbench.review_context import (
     run,
 )
 from robot_sf.analysis_workbench.review_contracts import (
+    ComponentResult,
+    ReviewContractsValidationError,
     component_descriptor_from_dict,
     component_result_from_dict,
 )
@@ -387,6 +391,87 @@ def test_canonical_result_store_directory_uses_owner_loader(tmp_path: Path) -> N
     assert report["source_provenance"][0]["schema_declared"] == "campaign-result-store.v2"
 
 
+def test_canonical_owner_config_hash_and_digest_are_independent(tmp_path: Path) -> None:
+    """The owner config hash binds identity while config digest remains provenance."""
+    config_digest = "resolved-config-digest"
+    rows = [
+        {
+            "episode_id": "owner-success",
+            "planner": "orca",
+            "scenario_id": "crossing",
+            "seed": 11,
+            "row_status": "native",
+            "execution_status": "success",
+            "status": "success",
+            "config_hash": CONFIG_IDENTITY,
+            "config_digest": config_digest,
+            "outcome": {"label": "success"},
+            "metrics": {"clearance_m": 1.5},
+            "provenance": {
+                "git_hash": SOURCE_COMMIT,
+                "config_hash": CONFIG_IDENTITY,
+                "config_digest": config_digest,
+            },
+        }
+    ]
+    store = _write_canonical_store(
+        tmp_path,
+        rows,
+        {"schema_version": "campaign-result-store.v2", "study_id": "camp-t"},
+    )
+
+    result = run(_request(tmp_path, sources=[_canonical_source_ref(store)]), base=tmp_path)
+
+    assert result.status == "complete"
+    report = _report(tmp_path)
+    assert report["grain"]["config_ids"] == [CONFIG_IDENTITY]
+    assert report["source_provenance"][0]["config_identity"] == CONFIG_IDENTITY
+    assert report["source_provenance"][0]["config_digest"] == config_digest
+    assert result.provenance["source_identity"]["config_digests"] == [config_digest]
+
+
+def test_canonical_owner_preserves_multiple_config_digests_without_rebinding_identity(
+    tmp_path: Path,
+) -> None:
+    """Independent per-row digests remain provenance, not canonical identity."""
+    rows = []
+    for index, config_digest in enumerate(("planner-a-digest", "planner-b-digest"), start=1):
+        rows.append(
+            {
+                "episode_id": f"owner-{index}",
+                "planner": f"planner-{index}",
+                "scenario_id": "crossing",
+                "seed": index,
+                "row_status": "native",
+                "config_hash": CONFIG_IDENTITY,
+                "config_digest": config_digest,
+                "outcome": {"label": "success"},
+                "metrics": {"clearance_m": 1.5},
+                "provenance": {
+                    "git_hash": SOURCE_COMMIT,
+                    "config_hash": CONFIG_IDENTITY,
+                    "config_digest": config_digest,
+                },
+            }
+        )
+    store = _write_canonical_store(
+        tmp_path,
+        rows,
+        {"schema_version": "campaign-result-store.v2", "study_id": "camp-t"},
+    )
+
+    result = run(_request(tmp_path, sources=[_canonical_source_ref(store)]), base=tmp_path)
+
+    assert result.status == "complete"
+    report_source = _report(tmp_path)["source_provenance"][0]
+    assert report_source["config_digest"] is None
+    assert report_source["config_digests"] == ["planner-a-digest", "planner-b-digest"]
+    assert result.provenance["source_identity"]["config_digests"] == [
+        "planner-a-digest",
+        "planner-b-digest",
+    ]
+
+
 def test_canonical_owner_export_rows_accept_descriptive_execution_status(
     tmp_path: Path,
 ) -> None:
@@ -563,6 +648,100 @@ def test_canonical_result_store_rejects_symlink_entries(tmp_path: Path) -> None:
     assert "source_unreadable_or_unsafe" in result.reason
 
 
+def test_canonical_owner_loader_uses_one_snapshot_after_source_replacement(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Owner path reads use the bounded snapshot, not a replaced source path."""
+    rows = [dict(row) for row in CAMPAIGN["episodes"]]
+    store = _write_canonical_store(
+        tmp_path,
+        rows,
+        {
+            "schema_version": "campaign-result-store.v2",
+            "study_id": "camp-t",
+            "source_commit": SOURCE_COMMIT,
+            "config_hash": CONFIG_IDENTITY,
+        },
+    )
+    source = _canonical_source_ref(store)
+    outside = tmp_path / "outside.jsonl"
+    outside.write_text(
+        json.dumps({**rows[0], "episode_id": "outside"}, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    original_snapshot = review_context._snapshot_directory
+
+    def replace_after_snapshot(directory: Path, files: list[Path], snapshot_root: Path):
+        snapshot = original_snapshot(directory, files, snapshot_root)
+        source_path = directory / "episodes.jsonl"
+        source_path.unlink()
+        source_path.symlink_to(outside)
+        return snapshot
+
+    monkeypatch.setattr(review_context, "_snapshot_directory", replace_after_snapshot)
+
+    result = run(_request(tmp_path, sources=[source]), base=tmp_path)
+
+    assert result.status == "complete"
+    assert _report(tmp_path)["denominator"] == len(rows)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO support is platform-specific")
+def test_canonical_result_store_rejects_fifo_entry_without_blocking(tmp_path: Path) -> None:
+    """A canonical FIFO is rejected during bounded inventory without opening it."""
+    store = tmp_path / "campaign-store"
+    store.mkdir()
+    _write_json(
+        store / "manifest.json",
+        {"schema_version": "campaign-result-store.v2", "study_id": "camp-t"},
+    )
+    os.mkfifo(store / "episodes.jsonl")
+    source = {
+        "artifact_id": "campaign-store",
+        "uri": store.name,
+        "format": "campaign-result-store",
+        "schema": "campaign-result-store.v2",
+        "sha256": "0" * 64,
+        "source_commit": SOURCE_COMMIT,
+        "config_identity": CONFIG_IDENTITY,
+    }
+
+    result = run(_request(tmp_path, sources=[source]), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "source_unreadable_or_unsafe" in result.reason
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO support is platform-specific")
+def test_canonical_snapshot_rejects_fifo_replacement_without_blocking(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A FIFO inserted after inventory cannot block the descriptor-backed snapshot."""
+    store = _write_canonical_store(
+        tmp_path,
+        [dict(CAMPAIGN["episodes"][0])],
+        {"schema_version": "campaign-result-store.v2", "study_id": "camp-t"},
+    )
+    source = _canonical_source_ref(store)
+    original_inventory = review_context._directory_files
+
+    def replace_after_inventory(directory: Path) -> list[Path]:
+        files = original_inventory(directory)
+        episodes_path = directory / "episodes.jsonl"
+        episodes_path.unlink()
+        os.mkfifo(episodes_path)
+        return files
+
+    monkeypatch.setattr(review_context, "_directory_files", replace_after_inventory)
+    started = time.monotonic()
+
+    result = run(_request(tmp_path, sources=[source]), base=tmp_path)
+
+    assert time.monotonic() - started < 1.0
+    assert result.status == "failed"
+    assert "source_unreadable_or_unsafe" in result.reason
+
+
 def test_cross_source_identity_mismatch_fails_closed(tmp_path: Path) -> None:
     """Campaign and selection sources must share the bound commit/config identity."""
     _stage(tmp_path)
@@ -595,6 +774,34 @@ def test_missing_payload_identity_is_rejected(tmp_path: Path) -> None:
     result = run(_request(tmp_path), base=tmp_path)
     assert result.status == "failed"
     assert "source_payload_source_commit_missing" in result.reason
+
+
+@pytest.mark.parametrize(
+    ("alias", "value", "diagnostic"),
+    [
+        ("git_hash", "b" * 40, "source_commit_mismatch"),
+        ("commit_sha", "b" * 40, "source_commit_mismatch"),
+        ("commit", "b" * 40, "source_commit_mismatch"),
+        ("config_hash", "mutated-config", "config_identity_mismatch"),
+        ("config_identity", "mutated-config", "config_identity_mismatch"),
+    ],
+)
+def test_nested_identity_alias_contradictions_are_rejected(
+    tmp_path: Path, alias: str, value: str, diagnostic: str
+) -> None:
+    """Nested owner identity aliases cannot contradict the source declaration."""
+    campaign = {
+        **CAMPAIGN,
+        "provenance": {"git_hash": SOURCE_COMMIT, "config_hash": CONFIG_IDENTITY},
+    }
+    campaign["provenance"][alias] = value
+    _stage(tmp_path, campaign=campaign)
+
+    result = run(_request(tmp_path), base=tmp_path)
+
+    assert result.status == "failed"
+    assert diagnostic in result.reason
+    assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
 
 
 def test_output_materialization_never_publishes_partial_final(tmp_path: Path, monkeypatch) -> None:
@@ -635,6 +842,40 @@ def test_malformed_selection_is_not_an_empty_selection(tmp_path: Path) -> None:
     )
     assert result.status == "failed"
     assert "invalid_episode_selection" in result.reason
+    assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
+
+
+@pytest.mark.parametrize(
+    ("campaign_id", "diagnostic"),
+    [(None, "selection_campaign_unbound"), ("camp-other", "selection_campaign_mismatch")],
+)
+def test_selection_campaign_id_is_required_before_ids_are_interpreted(
+    tmp_path: Path, campaign_id: str | None, diagnostic: str
+) -> None:
+    """Supplied selection IDs are never interpreted without a matching campaign."""
+    _stage(tmp_path)
+    selection = dict(SELECTION)
+    if campaign_id is None:
+        selection.pop("campaign_id")
+    else:
+        selection["campaign_id"] = campaign_id
+    _write_json(tmp_path / "selection.json", selection)
+    sources = [
+        _source_ref(tmp_path / "campaign.json", artifact_id="campaign"),
+        _source_ref(
+            tmp_path / "selection.json",
+            artifact_id="selection",
+            source_format="episode-selection",
+        ),
+    ]
+
+    result = run(
+        _request(tmp_path, required=("episode-selection",), sources=sources),
+        base=tmp_path,
+    )
+
+    assert result.status == "failed"
+    assert diagnostic in result.reason
     assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
 
 
@@ -814,6 +1055,91 @@ def test_huge_numeric_value_is_a_stable_partial_result(tmp_path: Path) -> None:
     assert result.status == "partial"
     assert "metric_value_invalid" in result.reason
     assert _report(tmp_path)["denominator"] == 1
+
+
+def test_in_memory_config_rejects_non_finite_numbers(tmp_path: Path) -> None:
+    """The API gate rejects NaN before a config can reach output or source logic."""
+    _stage(tmp_path)
+    request = _request(tmp_path)
+    request = replace(request, config={**request.config, "non_finite": math.nan})
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == "failed"
+    assert "request config_non_finite_number" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_canonical_jsonl_rejects_non_finite_numbers_before_owner_loader(
+    tmp_path: Path,
+) -> None:
+    """Canonical JSONL NaN is rejected before the owner loader's permissive parser."""
+    store = tmp_path / "campaign-store"
+    store.mkdir()
+    row = {
+        "episode_id": "owner-nan",
+        "planner": "orca",
+        "scenario_id": "crossing",
+        "seed": 11,
+        "row_status": "native",
+        "config_hash": CONFIG_IDENTITY,
+        "outcome": {"label": "success"},
+        "metrics": {"clearance_m": math.nan},
+        "provenance": {"git_hash": SOURCE_COMMIT, "config_hash": CONFIG_IDENTITY},
+    }
+    (store / "episodes.jsonl").write_text(
+        json.dumps(row, allow_nan=True, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    _write_json(
+        store / "manifest.json",
+        {
+            "schema_version": "campaign-result-store.v2",
+            "study_id": "camp-t",
+            "source_commit": SOURCE_COMMIT,
+            "config_hash": CONFIG_IDENTITY,
+        },
+    )
+
+    result = run(
+        _request(tmp_path, sources=[_canonical_source_ref(store)]),
+        base=tmp_path,
+    )
+
+    assert result.status == "failed"
+    assert any("non_finite_number" in item.get("detail", "") for item in result.diagnostics)
+    assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
+
+
+def test_result_document_rejects_non_finite_provenance() -> None:
+    """The shared result serialization boundary never returns NaN/Infinity."""
+    result = ComponentResult(
+        request_id="t",
+        component_id=COMPONENT_ID,
+        status="failed",
+        provenance={"non_finite": math.inf},
+    )
+
+    with pytest.raises(ReviewContractsValidationError) as error:
+        _result_document(result)
+
+    assert any("result_non_finite_number" in item for item in error.value.errors)
+
+
+def test_cli_result_serializer_falls_back_to_strict_failure() -> None:
+    """An invalid result is replaced before the CLI can emit non-finite JSON."""
+    invalid = ComponentResult(
+        request_id="t",
+        component_id=COMPONENT_ID,
+        status="failed",
+        provenance={"non_finite": math.nan},
+    )
+
+    serialized_result, serialized = review_context._serialized_cli_result(invalid, {})
+
+    assert serialized_result.status == "failed"
+    assert "result_serialization_error" in serialized_result.reason
+    assert "NaN" not in serialized and "Infinity" not in serialized
+    assert component_result_from_dict(json.loads(serialized)).status == "failed"
 
 
 def test_output_parent_file_is_a_stable_failure(tmp_path: Path) -> None:

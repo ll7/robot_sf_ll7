@@ -64,6 +64,76 @@ _FALLBACK_IDENTITIES = frozenset({"", "0", "none", "null", "unknown", "unavailab
 _LOCAL_ONLY_PATH_PARTS = frozenset({".git", ".venv", "output", "results"})
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate keys and recursive aliases."""
+
+
+def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON object keys instead of silently keeping the last value.
+
+    Returns:
+        The object mapping when every key is unique.
+    """
+
+    mapping: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in mapping:
+            raise ValueError(f"duplicate JSON object key: {key!r}")
+        mapping[key] = value
+    return mapping
+
+
+def _load_strict_json(text: str) -> Any:
+    """Parse JSON while preserving the contract's fail-closed key semantics.
+
+    Returns:
+        The parsed JSON value.
+    """
+
+    return json.loads(text, object_pairs_hook=_reject_duplicate_json_object)
+
+
+def _construct_unique_mapping(
+    loader: _UniqueKeyLoader, node: yaml.nodes.MappingNode, _deep: bool = False
+) -> dict[Any, Any]:
+    """Construct a YAML mapping without duplicate keys or deferred cycles.
+
+    Returns:
+        The mapping with each key constructed exactly once.
+    """
+
+    if not isinstance(node, yaml.nodes.MappingNode):
+        raise yaml.constructor.ConstructorError(None, None, "expected a mapping", node.start_mark)
+    loader.flatten_mapping(node)
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=True)
+        try:
+            duplicate = key in mapping
+        except TypeError as exc:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                "found unhashable key",
+                key_node.start_mark,
+            ) from exc
+        if duplicate:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=True)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_unique_mapping,
+)
+
+
 class InterventionSpecValidationError(RobotSfError, ValueError):
     """Raised when an intervention specification is missing or ambiguous."""
 
@@ -92,7 +162,7 @@ def _canonical_bytes(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def _assert_json_value(value: Any, field: str) -> None:
+def _assert_json_value(value: Any, field: str, *, _active_ids: set[int] | None = None) -> None:
     """Reject values that are not finite, unambiguous JSON values."""
 
     if value is None or isinstance(value, str | bool | int):
@@ -101,15 +171,25 @@ def _assert_json_value(value: Any, field: str) -> None:
         if not value.isfinite():
             raise InterventionSpecValidationError(f"{field} must contain finite JSON numbers")
         return
-    if type(value) is list:
-        for index, child in enumerate(value):
-            _assert_json_value(child, f"{field}[{index}]")
-        return
-    if isinstance(value, Mapping):
-        for key, child in value.items():
-            if not isinstance(key, str):
-                raise InterventionSpecValidationError(f"{field} object keys must be strings")
-            _assert_json_value(child, f"{field}.{key}")
+    if type(value) is list or isinstance(value, Mapping):
+        active_ids = _active_ids if _active_ids is not None else set()
+        value_id = id(value)
+        if value_id in active_ids:
+            raise InterventionSpecValidationError(
+                f"{field} must not contain recursive mappings or sequences"
+            )
+        active_ids.add(value_id)
+        try:
+            if type(value) is list:
+                for index, child in enumerate(value):
+                    _assert_json_value(child, f"{field}[{index}]", _active_ids=active_ids)
+                return
+            for key, child in value.items():
+                if not isinstance(key, str):
+                    raise InterventionSpecValidationError(f"{field} object keys must be strings")
+                _assert_json_value(child, f"{field}.{key}", _active_ids=active_ids)
+        finally:
+            active_ids.remove(value_id)
         return
     raise InterventionSpecValidationError(f"{field} must contain only JSON-compatible values")
 
@@ -274,8 +354,8 @@ def load_intervention_spec_schema() -> dict[str, Any]:
     """
 
     try:
-        schema = json.loads(INTERVENTION_SPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        schema = _load_strict_json(INTERVENTION_SPEC_SCHEMA_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise InterventionSpecValidationError(
             f"cannot load intervention specification schema: {INTERVENTION_SPEC_SCHEMA_PATH}"
         ) from exc
@@ -536,8 +616,9 @@ def validate_intervention_spec(
         raise InterventionSpecValidationError(
             "intervention specification must be a mapping", source=source
         )
-    normalized = copy.deepcopy(dict(payload))
     try:
+        normalized = copy.deepcopy(dict(payload))
+        _assert_json_value(normalized, "payload")
         _validate_schema(normalized)
         _validate_semantics(normalized)
         if repo_root is not None:
@@ -546,6 +627,11 @@ def validate_intervention_spec(
         if source is not None and exc.source is None:
             raise InterventionSpecValidationError(str(exc), source=source) from exc
         raise
+    except RecursionError as exc:
+        raise InterventionSpecValidationError(
+            "intervention specification contains a recursive mapping or sequence",
+            source=source,
+        ) from exc
     return normalized
 
 
@@ -563,10 +649,19 @@ def load_intervention_spec(
     spec_path = Path(path)
     try:
         text = spec_path.read_text(encoding="utf-8")
-        payload = json.loads(text) if spec_path.suffix.lower() == ".json" else yaml.safe_load(text)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError) as exc:
+        payload = (
+            _load_strict_json(text)
+            if spec_path.suffix.lower() == ".json"
+            else yaml.load(text, Loader=_UniqueKeyLoader)  # noqa: S506
+        )
+    except RecursionError as exc:
         raise InterventionSpecValidationError(
-            f"cannot read intervention specification: {spec_path}", source=spec_path
+            "cannot read intervention specification: recursive YAML alias",
+            source=spec_path,
+        ) from exc
+    except (OSError, UnicodeDecodeError, ValueError, yaml.YAMLError) as exc:
+        raise InterventionSpecValidationError(
+            f"cannot read intervention specification: {exc}", source=spec_path
         ) from exc
     if not isinstance(payload, Mapping):
         raise InterventionSpecValidationError(

@@ -136,6 +136,46 @@ def test_yaml_loader_is_validation_only(tmp_path: Path) -> None:
     assert loaded["provenance"]["execution_status"] == "not_executed"
 
 
+@pytest.mark.parametrize("suffix", [".json", ".yaml"])
+def test_loader_rejects_duplicate_mapping_keys(tmp_path: Path, suffix: str) -> None:
+    """Duplicate input keys cannot silently replace a contract field last-wins."""
+
+    if suffix == ".json":
+        text = json.dumps(_payload())
+        text = text.replace(
+            '"status": "specification_only"',
+            '"status": "specification_only", "status": "specification_only"',
+            1,
+        )
+    else:
+        text = yaml.safe_dump(_payload(), sort_keys=False)
+        text = text.replace(
+            "status: specification_only\n",
+            "status: specification_only\nstatus: specification_only\n",
+            1,
+        )
+
+    path = tmp_path / f"duplicate{suffix}"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(InterventionSpecValidationError, match="duplicate"):
+        load_intervention_spec(path)
+
+
+def test_recursive_yaml_alias_fails_with_validation_error(tmp_path: Path) -> None:
+    """Recursive aliases must be rejected as validation errors, not leak RecursionError."""
+
+    text = yaml.safe_dump(_payload(), sort_keys=False)
+    assert "baseline: occluded\n" in text
+    path = tmp_path / "recursive.yaml"
+    path.write_text(
+        text.replace("baseline: occluded\n", "baseline: &cycle {self: *cycle}\n", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(InterventionSpecValidationError, match="recursive"):
+        load_intervention_spec(path)
+
+
 @pytest.mark.parametrize(
     ("field", "replacement"),
     [

@@ -499,6 +499,10 @@ _FAST_FILES = {
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",
+    # Spawn-footprint validation tests are deterministic pure-function contracts
+    # for the changed ped_population helper; keep them in fast shards for
+    # changed-line coverage (issue #9403).
+    "test_spawn_footprint_validation.py",
     # Presentation-style preset contracts are deterministic spec/coverage for
     # the changed presentation renderer module (issue #9367).
     "test_presentation_style.py",

@@ -237,6 +237,10 @@ class SimulationView:
     robot_sprite_path: str | None = field(default=None)
     ped_sprite_path: str | None = field(default=None)
     ego_ped_sprite_path: str | None = field(default=None)
+    # Opt-in presentation color overrides (issue #9367): maps role names such as
+    # "robot", "pedestrian", "obstacle" or "background" to RGB(A) tuples. None
+    # keeps every module-constant default exactly as before.
+    color_overrides: dict[str, tuple[int, ...]] | None = field(default=None)
     _sprite_cache: dict[str, pygame.surface.Surface | None] = field(
         init=False, default_factory=dict
     )
@@ -345,6 +349,17 @@ class SimulationView:
             )
             self.observation_space_mode = "auto"
 
+    def _style_color(self, role: str, default: tuple[int, ...]) -> tuple[int, ...]:
+        """Resolve one role color through the opt-in presentation overrides.
+
+        Returns:
+            The override for ``role`` when ``color_overrides`` names it,
+            otherwise ``default`` unchanged.
+        """
+        if self.color_overrides is not None and role in self.color_overrides:
+            return self.color_overrides[role]
+        return default
+
     def _is_headless_environment(self) -> bool:
         """Return True if the runtime should be treated as headless.
 
@@ -422,7 +437,7 @@ class SimulationView:
         """Prepare a new frame with the given state."""
         # Adjust the view based on the focus
         self._move_camera(state)
-        self.screen.fill(BACKGROUND_COLOR)
+        self.screen.fill(self._style_color("background", BACKGROUND_COLOR))
 
         # Draw scene components in order
         self._draw_static_elements()
@@ -777,7 +792,7 @@ class SimulationView:
         This method fills the screen with the background color,
         adds text at position 0, and updates the display.
         """
-        self.screen.fill(BACKGROUND_COLOR)
+        self.screen.fill(self._style_color("background", BACKGROUND_COLOR))
         if self._use_display:
             pygame.display.update()
 
@@ -902,7 +917,7 @@ class SimulationView:
                 )
                 return
 
-        pygame.draw.circle(self.screen, ROBOT_COLOR, center, radius_px)
+        pygame.draw.circle(self.screen, self._style_color("robot", ROBOT_COLOR), center, radius_px)
 
         # Draw heading arrow to indicate facing direction
         arrow_length = max(radius_px * 1.2, 6)
@@ -910,7 +925,7 @@ class SimulationView:
         end_y = position[1] + (arrow_length / self.scaling) * np.sin(theta)
         pygame.draw.line(
             self.screen,
-            ROBOT_ACTION_COLOR,
+            self._style_color("robot_action", ROBOT_ACTION_COLOR),
             center,
             self._scale_tuple((end_x, end_y)),
             width=3,
@@ -937,7 +952,7 @@ class SimulationView:
 
         pygame.draw.circle(
             self.screen,
-            EGO_PED_COLOR,
+            self._style_color("ego_ped", EGO_PED_COLOR),
             center,
             radius_px,
         )
@@ -963,14 +978,16 @@ class SimulationView:
             if ped_sprite is not None:
                 self._draw_sprite(ped_sprite, center, radius_px)
             else:
-                pygame.draw.circle(self.screen, PED_COLOR, center, radius_px)
+                pygame.draw.circle(
+                    self.screen, self._style_color("pedestrian", PED_COLOR), center, radius_px
+                )
 
             # If we have an action for this ped, draw a direction line
             if ped_idx < num_actions:
                 _, end = ped_actions[ped_idx]
                 pygame.draw.line(
                     self.screen,
-                    PED_ACTION_COLOR,
+                    self._style_color("pedestrian_action", PED_ACTION_COLOR),
                     center,
                     self._scale_tuple(end),
                     width=2,
@@ -983,7 +1000,9 @@ class SimulationView:
             # Scale and offset the vertices of the obstacle
             scaled_vertices = [(self._scale_tuple((x, y))) for x, y in obstacle.vertices_np]
             # Draw the obstacle as a polygon on the screen
-            pygame.draw.polygon(self.screen, OBSTACLE_COLOR, scaled_vertices)
+            pygame.draw.polygon(
+                self.screen, self._style_color("obstacle", OBSTACLE_COLOR), scaled_vertices
+            )
 
     def _draw_spawn_zones(self):
         # Iterate over each spawn_zone in the list of spawn_zones
@@ -993,7 +1012,9 @@ class SimulationView:
             vertices_np = np.array(spawn_zone)
             scaled_vertices = [(self._scale_tuple((x, y))) for x, y in vertices_np]
             # Draw the spawn zone as a polygon on the screen
-            pygame.draw.polygon(self.screen, PED_SPAWN_COLOR, scaled_vertices)
+            pygame.draw.polygon(
+                self.screen, self._style_color("ped_spawn_zone", PED_SPAWN_COLOR), scaled_vertices
+            )
 
     def _draw_goal_zones(self):
         # Iterate over each goal_zone in the list of goal_zones
@@ -1003,7 +1024,9 @@ class SimulationView:
             vertices_np = np.array(goal_zone)
             scaled_vertices = [(self._scale_tuple((x, y))) for x, y in vertices_np]
             # Draw the goal_zone as a polygon on the screen
-            pygame.draw.polygon(self.screen, PED_GOAL_COLOR, scaled_vertices)
+            pygame.draw.polygon(
+                self.screen, self._style_color("ped_goal_zone", PED_GOAL_COLOR), scaled_vertices
+            )
 
     def _augment_goal_position(self, robot_goal: Vec2D):
         """Draw the robot goal marker in world space.
@@ -1016,7 +1039,7 @@ class SimulationView:
         outline_width_px = max(1, min(3, round(radius_px * 0.1)))
         pygame.draw.circle(
             self.screen,
-            ROBOT_GOAL_COLOR,
+            self._style_color("robot_goal", ROBOT_GOAL_COLOR),
             self._scale_tuple(robot_goal),
             radius_px,
             width=outline_width_px,
@@ -1256,7 +1279,7 @@ class SimulationView:
         for route in self.map_def.ped_routes:
             pygame.draw.lines(
                 self.screen,
-                PED_ROUTE_COLOR,
+                self._style_color("ped_route", PED_ROUTE_COLOR),
                 False,
                 [self._scale_tuple((x, y)) for x, y in route.waypoints],
                 width=1,
@@ -1269,7 +1292,7 @@ class SimulationView:
         for route in self.map_def.robot_routes:
             pygame.draw.lines(
                 self.screen,
-                ROBOT_ROUTE_COLOR,
+                self._style_color("robot_route", ROBOT_ROUTE_COLOR),
                 False,
                 [self._scale_tuple((x, y)) for x, y in route.waypoints],
                 width=1,

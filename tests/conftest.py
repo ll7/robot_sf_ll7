@@ -499,6 +499,9 @@ _FAST_FILES = {
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",
+    # Presentation-style preset contracts are deterministic spec/coverage for
+    # the changed presentation renderer module (issue #9367).
+    "test_presentation_style.py",
     # Three.js viewer payload contracts are deterministic schema/fidelity
     # coverage for the changed viewer exporter (issue #9368).
     "test_threejs_viewer.py",

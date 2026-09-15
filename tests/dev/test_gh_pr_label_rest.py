@@ -19,6 +19,7 @@ from scripts.dev.gh_pr_label_rest import (
     MAX_RETRY_AFTER_SECONDS,
     RATE_LIMIT_MAX_ATTEMPTS,
     RATE_LIMIT_MAX_WAIT_SECONDS,
+    TERMINAL_PR_RECEIPT_SCHEMA,
     _get_label_names,
     _is_ambiguous_write_failure,
     _is_rate_limit_failure,
@@ -27,12 +28,14 @@ from scripts.dev.gh_pr_label_rest import (
     _retry_after_seconds,
     _retry_after_utc,
     add_label,
+    add_terminal_pr_label,
     check_merge_ready_carriers,
     get_label_names,
     main,
     remove_label,
     remove_terminal_pr_label,
     validate_result_envelope,
+    validate_terminal_pr_receipt,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -457,7 +460,7 @@ class TestAddLabel:
         mock_post.assert_not_called()
 
     def test_issue_label_add_retains_compatibility_path(self) -> None:
-        """Issue labels remain writable without PR-only target or CAS arguments."""
+        """Issue labels remain writable without PR-only target or identity arguments."""
         with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
             mock_run.side_effect = [
                 _proc(stdout=json.dumps({"name": "cheap-lane"})),
@@ -912,10 +915,98 @@ class TestRemoveLabel:
         mock_delete.assert_not_called()
 
 
+class TestAddTerminalPrLabel:
+    """Tests for the guarded terminal PR addition path used by reconciliation."""
+
+    def test_adds_state_done_to_terminal_pr_with_identity_readback(self) -> None:
+        """state:done uses the PR terminal guard and verifies the final identity."""
+        head_sha, base_sha = "a" * 40, "b" * 40
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_label_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        ):
+            mock_pr_get.side_effect = [
+                _proc(stdout=_mock_pr_payload(head_sha=head_sha, base_sha=base_sha)),
+                _proc(stdout=_mock_pr_payload(head_sha=head_sha, base_sha=base_sha)),
+            ]
+            mock_label_get.return_value = _proc(stdout=_mock_labels_payload("state:done"))
+            mock_post.return_value = _proc(stdout=json.dumps({"name": "state:done"}))
+            result = add_terminal_pr_label(
+                5220,
+                "state:done",
+                repo="ll7/robot_sf_ll7",
+                expected_head_sha=head_sha,
+                expected_base_sha=base_sha,
+            )
+
+        assert result["status"] == "ok"
+        assert result["action"] == "add"
+        assert result["operation"] == "terminal_label_add"
+        assert result["target"] == "pr"
+        assert result["receipt_schema"] == TERMINAL_PR_RECEIPT_SCHEMA
+        assert result["verification_stage"] == "post_write_identity"
+        assert mock_pr_get.call_count == 2
+        mock_post.assert_called_once_with(
+            "repos/ll7/robot_sf_ll7/issues/5220/labels",
+            {"labels": ["state:done"]},
+        )
+
+    @pytest.mark.parametrize("changed_identity", ["head", "base"])
+    def test_add_rejects_identity_drift_before_post(self, changed_identity: str) -> None:
+        """A moved terminal PR never receives the guarded state:done POST."""
+        payload_kwargs = {"head_sha": "a" * 40, "base_sha": "b" * 40}
+        payload_kwargs["head_sha" if changed_identity == "head" else "base_sha"] = "c" * 40
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest._gh_api_pr_get",
+                return_value=_proc(stdout=_mock_pr_payload(**payload_kwargs)),
+            ),
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        ):
+            result = add_terminal_pr_label(
+                5220,
+                "state:done",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+
+        assert result["status"] == "review_skipped_stale_state"
+        assert result["reason"] == f"{changed_identity}_sha_changed"
+        mock_post.assert_not_called()
+
+    def test_add_reports_identity_drift_after_post_without_claiming_success(self) -> None:
+        """Post-write identity drift is surfaced instead of being reported as success."""
+        head_sha, base_sha = "a" * 40, "b" * 40
+        with (
+            patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_label_get,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        ):
+            mock_pr_get.side_effect = [
+                _proc(stdout=_mock_pr_payload(head_sha=head_sha, base_sha=base_sha)),
+                _proc(stdout=_mock_pr_payload(head_sha="c" * 40, base_sha=base_sha)),
+            ]
+            mock_label_get.return_value = _proc(stdout=_mock_labels_payload("state:done"))
+            mock_post.return_value = _proc(stdout=json.dumps({"name": "state:done"}))
+            result = add_terminal_pr_label(
+                5220,
+                "state:done",
+                expected_head_sha=head_sha,
+                expected_base_sha=base_sha,
+            )
+
+        assert result["status"] == "review_skipped_stale_state"
+        assert result["reason"] == "head_sha_changed"
+        assert result["verification_stage"] == "post_write_identity"
+        assert result["observed_head_sha"] == "c" * 40
+        mock_post.assert_called_once()
+
+
 class TestRemoveTerminalPrLabel:
     """Tests for the closed/merged PR-only terminal removal path (issue #9370)."""
 
-    def test_removes_label_from_merged_pr_with_terminal_cas_and_readback(self) -> None:
+    def test_removes_label_from_merged_pr_with_terminal_identity_and_readback(self) -> None:
         """A merged PR removal verifies state, both SHAs, and the final labels."""
         head_sha, base_sha = "a" * 40, "b" * 40
         with (
@@ -923,9 +1014,10 @@ class TestRemoveTerminalPrLabel:
             patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_label_get,
             patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
         ):
-            mock_pr_get.return_value = _proc(
-                stdout=_mock_pr_payload(head_sha=head_sha, base_sha=base_sha)
-            )
+            mock_pr_get.side_effect = [
+                _proc(stdout=_mock_pr_payload(head_sha=head_sha, base_sha=base_sha)),
+                _proc(stdout=_mock_pr_payload(head_sha=head_sha, base_sha=base_sha)),
+            ]
             mock_label_get.return_value = _proc(stdout=_mock_labels_payload("state:done"))
             mock_delete.return_value = _proc(stdout="")
             result = remove_terminal_pr_label(
@@ -943,7 +1035,10 @@ class TestRemoveTerminalPrLabel:
         assert result["merged_at"] == "2026-09-15T00:00:00Z"
         assert result["expected_head_sha"] == head_sha
         assert result["expected_base_sha"] == base_sha
-        mock_pr_get.assert_called_once_with(
+        assert result["receipt_schema"] == TERMINAL_PR_RECEIPT_SCHEMA
+        assert result["verification_stage"] == "post_write_identity"
+        assert mock_pr_get.call_count == 2
+        mock_pr_get.assert_any_call(
             "repos/ll7/robot_sf_ll7/pulls/5220",
             timeout=30,
         )
@@ -956,7 +1051,10 @@ class TestRemoveTerminalPrLabel:
             patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_label_get,
             patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
         ):
-            mock_pr_get.return_value = _proc(stdout=_mock_pr_payload(merged_at=None))
+            mock_pr_get.side_effect = [
+                _proc(stdout=_mock_pr_payload(merged_at=None)),
+                _proc(stdout=_mock_pr_payload(merged_at=None)),
+            ]
             mock_label_get.return_value = _proc(stdout=_mock_labels_payload("review-bot-auto"))
             mock_delete.return_value = _proc(stdout="")
             result = remove_terminal_pr_label(
@@ -971,7 +1069,7 @@ class TestRemoveTerminalPrLabel:
         assert result["merged_at"] is None
         mock_delete.assert_called_once()
 
-    def test_omitted_cas_is_established_then_confirmed_before_delete(self) -> None:
+    def test_omitted_identity_is_established_then_confirmed_before_delete(self) -> None:
         """The self-contained API confirms its initial PR identity before DELETE."""
         with (
             patch("scripts.dev.gh_pr_label_rest._gh_api_pr_get") as mock_pr_get,
@@ -979,6 +1077,7 @@ class TestRemoveTerminalPrLabel:
             patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete,
         ):
             mock_pr_get.side_effect = [
+                _proc(stdout=_mock_pr_payload()),
                 _proc(stdout=_mock_pr_payload()),
                 _proc(stdout=_mock_pr_payload()),
             ]
@@ -989,11 +1088,11 @@ class TestRemoveTerminalPrLabel:
         assert result["status"] == "ok"
         assert result["expected_head_sha"] == "a" * 40
         assert result["expected_base_sha"] == "b" * 40
-        assert mock_pr_get.call_count == 2
+        assert mock_pr_get.call_count == 3
         mock_delete.assert_called_once()
 
     @pytest.mark.parametrize("changed_identity", ["head", "base"])
-    def test_omitted_cas_rejects_identity_drift_between_reads(self, changed_identity: str) -> None:
+    def test_omitted_identity_rejects_drift_between_reads(self, changed_identity: str) -> None:
         """A head/base move between identity reads fails before DELETE."""
         changed_kwargs = {"head_sha": "a" * 40, "base_sha": "b" * 40}
         changed_kwargs["head_sha" if changed_identity == "head" else "base_sha"] = "c" * 40
@@ -1056,7 +1155,7 @@ class TestRemoveTerminalPrLabel:
         assert "not terminal" in result["error"]
         mock_delete.assert_not_called()
 
-    def test_retries_rate_limited_delete_with_fresh_terminal_cas(self) -> None:
+    def test_retries_rate_limited_delete_with_fresh_terminal_identity(self) -> None:
         """A bounded retry rechecks terminal identity before the second DELETE."""
         reset_at = int(time.time()) + 1
         with (
@@ -1066,6 +1165,7 @@ class TestRemoveTerminalPrLabel:
             patch("scripts.dev.gh_pr_label_rest.time.sleep") as mock_sleep,
         ):
             mock_pr_get.side_effect = [
+                _proc(stdout=_mock_pr_payload()),
                 _proc(stdout=_mock_pr_payload()),
                 _proc(stdout=_mock_pr_payload()),
             ]
@@ -1083,9 +1183,77 @@ class TestRemoveTerminalPrLabel:
 
         assert result["status"] == "ok"
         assert result["attempts"] == 2
-        assert mock_pr_get.call_count == 2
+        assert mock_pr_get.call_count == 3
         assert mock_delete.call_count == 2
         mock_sleep.assert_called_once()
+
+    def test_blocked_rate_limit_receipt_preserves_observed_terminal_identity(self) -> None:
+        """A blocked terminal write remains bound to its observed PR revision."""
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest._gh_api_pr_get",
+                return_value=_proc(stdout=_mock_pr_payload()),
+            ),
+            patch(
+                "scripts.dev.gh_pr_label_rest._gh_api_delete",
+                return_value=_rate_limited_403(),
+            ),
+            patch(
+                "scripts.dev.gh_pr_label_rest._fetch_core_rate_limit_reset_at",
+                return_value=None,
+            ),
+        ):
+            result = remove_terminal_pr_label(
+                5220,
+                "merge-ready",
+                expected_head_sha="a" * 40,
+                expected_base_sha="b" * 40,
+            )
+
+        assert result["status"] == BLOCKED_STATUS
+        assert result["receipt_schema"] == TERMINAL_PR_RECEIPT_SCHEMA
+        assert result["operation"] == "terminal_label_remove"
+        assert result["target"] == "pr"
+        assert result["expected_head_sha"] == "a" * 40
+        assert result["expected_base_sha"] == "b" * 40
+        assert result["observed_state"] == "CLOSED"
+        assert result["observed_head_sha"] == "a" * 40
+        assert result["observed_base_sha"] == "b" * 40
+        assert result["merged_at"] == "2026-09-15T00:00:00Z"
+        assert result["verification_stage"] == "pre_write_identity"
+        validate_terminal_pr_receipt(
+            result,
+            number=5220,
+            repo="ll7/robot_sf_ll7",
+            label="merge-ready",
+            action="remove",
+        )
+
+    def test_terminal_receipt_validator_rejects_missing_observed_identity(self) -> None:
+        """A success-like terminal receipt without identity evidence is invalid."""
+        receipt = {
+            "status": "blocked",
+            "receipt_schema": TERMINAL_PR_RECEIPT_SCHEMA,
+            "number": 5220,
+            "repo": "ll7/robot_sf_ll7",
+            "label": "merge-ready",
+            "action": "remove",
+            "operation": "terminal_label_remove",
+            "target": "pr",
+            "expected_head_sha": "a" * 40,
+            "expected_base_sha": "b" * 40,
+            "observed_state": "CLOSED",
+            "observed_base_sha": "b" * 40,
+            "verification_stage": "pre_write_identity",
+        }
+        with pytest.raises(ValueError, match="observed_head_sha"):
+            validate_terminal_pr_receipt(
+                receipt,
+                number=5220,
+                repo="ll7/robot_sf_ll7",
+                label="merge-ready",
+                action="remove",
+            )
 
     def test_ordinary_open_pr_remove_guard_remains_unchanged(self) -> None:
         """The terminal API does not loosen ordinary open-PR remove_label protection."""
@@ -1381,7 +1549,7 @@ class TestRateLimitRetry:
         mock_sleep.assert_not_called()
 
     def test_merge_ready_retry_rechecks_exact_head_and_aborts_on_drift(self) -> None:
-        """Every retry re-runs the live CAS preflight before it may mutate."""
+        """Every retry re-runs the live identity preflight before it may mutate."""
         head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
         base_sha = "b1c2d3e4f5061728394a5b6c7d8e9f0011121314"
         stale = {
@@ -1462,7 +1630,7 @@ class TestRateLimitRetry:
         assert mock_sleep.call_count == RATE_LIMIT_MAX_ATTEMPTS - 1
 
     def test_pr_label_retry_rechecks_head_and_base_before_second_post(self) -> None:
-        """Every explicit PR label retry re-runs both live CAS comparisons."""
+        """Every explicit PR label retry re-runs both live identity comparisons."""
         head_sha = "a" * 40
         base_sha = "b" * 40
         stale = {

@@ -14,6 +14,14 @@ responses, and verification mismatches fail closed. A rate-limited mutation
 retries only within a small bounded policy and otherwise returns an explicit
 ``blocked`` receipt carrying the rate-limit reset evidence (issue #9146).
 
+Terminal PR mutations additionally carry one exact head/base identity through
+the operation, verify the terminal state and identity before the write, and
+read the identity back after a successful label readback. GitHub's labels
+endpoint does not expose a conditional PR-revision write, so this is a guarded
+check-then-act protocol, not an atomic compare-and-swap: a remote writer can
+still interleave between the final preflight and the REST mutation. The
+post-write identity check detects an observable move but cannot undo a write.
+
 The REST issues-labels endpoint works for both issues and PRs because GitHub
 treats PRs as issues for labeling. One helper covers ``gh pr edit --add-label``
 and ``gh issue edit --label``.
@@ -77,6 +85,7 @@ RATE_LIMIT_STATUS = "rate_limited"
 BLOCKED_STATUS = "blocked"
 RATE_LIMIT_MAX_ATTEMPTS = 3
 RATE_LIMIT_MAX_WAIT_SECONDS = 15.0
+TERMINAL_PR_RECEIPT_SCHEMA = "terminal_pr_label_mutation.v1"
 _RATE_LIMIT_MARKERS = ("rate limit", "rate_limit", "too many requests")
 _SECONDARY_RATE_LIMIT_MARKERS = ("secondary rate", "secondary-rate", "abuse detection")
 MAX_RETRY_AFTER_SECONDS = 7 * 24 * 60 * 60
@@ -87,6 +96,22 @@ _RATE_LIMIT_RESET_HEADER_RE = re.compile(r"(?im)(?:^|[\s,;(])x-ratelimit-reset\s
 _RATE_LIMIT_RETRY_AFTER_HEADER_RE = re.compile(r"(?im)(?:^|[\s,;(])retry[- ]after\s*[:=]")
 _HTTP_STATUS_RE = re.compile(r"(?i)\bHTTP(?:/\d+(?:\.\d+)?)?\s*([45]\d{2})\b")
 _TERMINAL_PR_STATES = frozenset({"CLOSED", "MERGED"})
+_TERMINAL_PR_RECEIPT_FIELDS = (
+    "receipt_schema",
+    "number",
+    "repo",
+    "label",
+    "action",
+    "operation",
+    "target",
+    "expected_head_sha",
+    "expected_base_sha",
+    "observed_state",
+    "observed_head_sha",
+    "observed_base_sha",
+    "merged_at",
+    "verification_stage",
+)
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_label_rest.py")
 
 
@@ -276,7 +301,7 @@ def _blocked_label_mutation_result(
     attempts: int,
     reset_at: int | None,
 ) -> dict[str, Any]:
-    """Build the stable blocked receipt without leaking unsafe parser values."""
+    """Build a stable blocked receipt while preserving safe terminal identity fields."""
     blocked = {
         "status": BLOCKED_STATUS,
         "reason": "rate_limited",
@@ -288,6 +313,11 @@ def _blocked_label_mutation_result(
         "reset_at": reset_at,
         "error": result.get("error", "GitHub rate limit blocked the label mutation"),
     }
+    for field in _TERMINAL_PR_RECEIPT_FIELDS:
+        if field in {"number", "repo", "label", "action"}:
+            continue
+        if field in result:
+            blocked[field] = result[field]
     rate_limit_kind = result.get("_rate_limit_kind")
     if rate_limit_kind in {"core", "secondary"}:
         blocked["rate_limit_kind"] = rate_limit_kind
@@ -314,7 +344,8 @@ def _run_bounded_label_mutation(
     and falls inside ``RATE_LIMIT_MAX_WAIT_SECONDS`` under an attempt cap of
     ``RATE_LIMIT_MAX_ATTEMPTS``. Unknown reset evidence blocks fail-closed with
     an explicit receipt. Guarded callers pass an ``attempt`` that re-runs their
-    live exact-head/base CAS preflight, so a retry can never mutate a moved PR.
+    live exact-head/base identity preflight, so a retry cannot intentionally
+    mutate a moved PR (the REST write itself remains non-conditional).
     """
     now_fn = now or time.time
     sleep_fn = sleep or time.sleep
@@ -466,6 +497,72 @@ def validate_result_envelope(
     return result
 
 
+def _validate_terminal_pr_receipt_request(
+    result: dict[str, Any],
+    *,
+    number: int,
+    repo: str,
+    label: str,
+    action: Literal["add", "remove"],
+) -> None:
+    """Validate the request identity carried by a terminal PR receipt."""
+    expected_operation = f"terminal_label_{action}"
+    if result.get("receipt_schema") != TERMINAL_PR_RECEIPT_SCHEMA:
+        raise ValueError("terminal PR receipt schema is unsupported")
+    if result.get("number") != number or result.get("repo") != repo:
+        raise ValueError("terminal PR receipt identity does not match the request")
+    if result.get("label") != label or result.get("action") != action:
+        raise ValueError("terminal PR receipt label/action does not match the request")
+    if result.get("operation") != expected_operation or result.get("target") != "pr":
+        raise ValueError("terminal PR receipt target/operation does not match the request")
+
+
+def _validate_terminal_pr_receipt_evidence(result: dict[str, Any]) -> None:
+    """Validate the identity evidence required for an outcome-like receipt."""
+    for field in (
+        "expected_head_sha",
+        "expected_base_sha",
+        "observed_head_sha",
+        "observed_base_sha",
+    ):
+        value = result.get(field)
+        if not isinstance(value, str) or not FULL_SHA_RE.fullmatch(value):
+            raise ValueError(f"terminal PR receipt has no full {field}")
+    if not isinstance(result.get("observed_state"), str) or not result["observed_state"]:
+        raise ValueError("terminal PR receipt has no observed state")
+    if not isinstance(result.get("verification_stage"), str) or not result["verification_stage"]:
+        raise ValueError("terminal PR receipt has no verification stage")
+
+
+def validate_terminal_pr_receipt(
+    result: object,
+    *,
+    number: int,
+    repo: str,
+    label: str,
+    action: Literal["add", "remove"],
+) -> dict[str, Any]:
+    """Validate the versioned identity fields on an attempted terminal PR write.
+
+    Error receipts produced before the PR identity can be read may omit the
+    observed fields. Successful, stale-state, and rate-limit-blocked terminal
+    receipts must retain the complete identity and verification-stage fields so
+    an audit consumer can bind the outcome to the attempted PR revision.
+    """
+    if not isinstance(result, dict):
+        raise ValueError("terminal PR receipt must be a JSON object")
+    _validate_terminal_pr_receipt_request(
+        result,
+        number=number,
+        repo=repo,
+        label=label,
+        action=action,
+    )
+    if result.get("status") in {"ok", STALE_WRITE_STATUS, BLOCKED_STATUS}:
+        _validate_terminal_pr_receipt_evidence(result)
+    return result
+
+
 def _validate_result_identity(result: object, *, action: str, number: int, repo: str) -> None:
     """Validate the common identity fields in a successful label result."""
     if not isinstance(result, dict):
@@ -590,7 +687,7 @@ def _guarded_pr_label_write(
     expected_base_sha: str | None,
     write: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
-    """Run a non-``merge-ready`` PR label write under exact live head/base CAS."""
+    """Run a non-``merge-ready`` PR label write under exact live identity checks."""
     if expected_head_sha is None or expected_base_sha is None:
         return {
             "status": "error",
@@ -629,7 +726,7 @@ def _label_target_error(
     expected_head_sha: str | None,
     expected_base_sha: str | None,
 ) -> str | None:
-    """Validate the issue/PR target and its required compare-and-swap inputs."""
+    """Validate the issue/PR target and its required identity inputs."""
     if target not in ("issue", "pr"):
         return f"unsupported label target: {target!r}"
     if target == "issue":
@@ -743,7 +840,7 @@ def _classify_write_failure(
 
 
 def _read_pr_terminal_identity(number: int, *, repo: str) -> dict[str, Any]:
-    """Read a PR's terminal state and exact head/base identity for one delete."""
+    """Read a PR's terminal state and exact head/base identity."""
     result = _gh_api_pr_get(f"repos/{repo}/pulls/{number}", timeout=30)
     payload, error = _parse_json(result, what=f"PR #{number} terminal-state read")
     if error:
@@ -784,7 +881,7 @@ def _read_pr_terminal_identity(number: int, *, repo: str) -> dict[str, Any]:
         "status": "ok",
         "number": number,
         "repo": repo,
-        "operation": "terminal_label_remove",
+        "operation": "terminal_pr_identity_read",
         "target": "pr",
         "observed_state": raw_state.strip().upper(),
         "observed_head_sha": head_sha,
@@ -793,17 +890,37 @@ def _read_pr_terminal_identity(number: int, *, repo: str) -> dict[str, Any]:
     }
 
 
+def read_terminal_pr_identity(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
+    """Read a validated terminal PR identity for a multi-label plan.
+
+    This is a read-only plan preflight. Callers may carry the returned full
+    head/base SHAs through several terminal mutations, but the individual
+    mutation helpers still repeat their own preflight and post-write readback.
+    """
+    if type(number) is not int or number < 1:
+        return {
+            "status": "error",
+            "number": number,
+            "repo": repo,
+            "operation": "terminal_pr_identity_read",
+            "target": "pr",
+            "error": f"PR number must be positive, got {number}",
+        }
+    return _read_pr_terminal_identity(number, repo=repo)
+
+
 def _verify_pr_terminal_identity(
     identity: dict[str, Any],
     *,
     expected_head_sha: str,
     expected_base_sha: str,
+    operation: str = "terminal_label_remove",
 ) -> dict[str, Any]:
-    """Return a terminal PR CAS verdict for the identity read before DELETE."""
+    """Return a guarded terminal PR verdict for the supplied identity."""
     base = {
         "number": identity["number"],
         "repo": identity["repo"],
-        "operation": identity["operation"],
+        "operation": operation,
         "target": "pr",
         "expected_head_sha": expected_head_sha,
         "expected_base_sha": expected_base_sha,
@@ -817,21 +934,21 @@ def _verify_pr_terminal_identity(
         return {
             "status": STALE_WRITE_STATUS,
             "reason": "pr_not_terminal",
-            "error": f"PR #{identity['number']} is not terminal (state={state})",
+            "error": f"PR #{identity['number']} is not terminal for {operation} (state={state})",
             **base,
         }
     if identity["observed_head_sha"].lower() != expected_head_sha.lower():
         return {
             "status": STALE_WRITE_STATUS,
             "reason": "head_sha_changed",
-            "error": f"PR #{identity['number']} head SHA changed before terminal label removal",
+            "error": f"PR #{identity['number']} head SHA changed before {operation}",
             **base,
         }
     if identity["observed_base_sha"].lower() != expected_base_sha.lower():
         return {
             "status": STALE_WRITE_STATUS,
             "reason": "base_sha_changed",
-            "error": f"PR #{identity['number']} base SHA changed before terminal label removal",
+            "error": f"PR #{identity['number']} base SHA changed before {operation}",
             **base,
         }
     return {"status": "ok", **base}
@@ -843,15 +960,18 @@ def _terminal_pr_expected_sha_error(
     repo: str,
     expected_head_sha: object,
     expected_base_sha: object,
+    action: Literal["add", "remove"],
 ) -> dict[str, Any] | None:
     """Validate the explicit full SHAs accepted by the terminal PR API."""
+    operation = f"terminal_label_{action}"
     if not isinstance(expected_head_sha, str) or not FULL_SHA_RE.fullmatch(expected_head_sha):
         return {
             "status": "error",
             "error": "expected_head_sha must be a full 40-character SHA",
             "number": number,
             "repo": repo,
-            "operation": "terminal_label_remove",
+            "operation": operation,
+            "target": "pr",
         }
     if not isinstance(expected_base_sha, str) or not FULL_SHA_RE.fullmatch(expected_base_sha):
         return {
@@ -859,22 +979,33 @@ def _terminal_pr_expected_sha_error(
             "error": "expected_base_sha must be a full 40-character SHA",
             "number": number,
             "repo": repo,
-            "operation": "terminal_label_remove",
+            "operation": operation,
+            "target": "pr",
         }
     return None
 
 
-def _with_terminal_pr_receipt_fields(
+def _with_terminal_pr_receipt_fields(  # noqa: PLR0913 - explicit receipt identity contract
     result: dict[str, Any],
     *,
+    number: int,
+    repo: str,
+    label: str,
+    action: Literal["add", "remove"],
     expected_head_sha: str | None,
     expected_base_sha: str | None,
     identity: dict[str, Any] | None = None,
+    verification_stage: str | None = None,
 ) -> dict[str, Any]:
-    """Attach target/CAS evidence to terminal PR removal receipts."""
+    """Attach versioned target, identity, and verification evidence to a receipt."""
     receipt = {
         **result,
-        "operation": "terminal_label_remove",
+        "receipt_schema": TERMINAL_PR_RECEIPT_SCHEMA,
+        "number": number,
+        "repo": repo,
+        "label": label,
+        "action": action,
+        "operation": f"terminal_label_{action}",
         "target": "pr",
     }
     if expected_head_sha is not None:
@@ -884,6 +1015,8 @@ def _with_terminal_pr_receipt_fields(
     if identity is not None and identity.get("status") == "ok":
         for key in ("observed_state", "observed_head_sha", "observed_base_sha", "merged_at"):
             receipt.setdefault(key, identity[key])
+    if verification_stage is not None:
+        receipt["verification_stage"] = verification_stage
     return receipt
 
 
@@ -924,70 +1057,181 @@ def _remove_label_once(number: int, label: str, *, repo: str) -> dict[str, Any]:
     return response
 
 
+def _add_label_once(number: int, label: str, *, repo: str) -> dict[str, Any]:
+    """Post one label and verify the authoritative label inventory contains it."""
+    path = f"repos/{repo}/issues/{number}/labels"
+    result = _gh_api_post(path, {"labels": [label]})
+    if result.returncode != 0:
+        return _classify_write_failure(
+            result,
+            number=number,
+            label=label,
+            repo=repo,
+            action="add",
+            expected_present=True,
+        )
+    try:
+        json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        snippet = result.stdout.strip()[:200]
+        return {
+            "status": "error",
+            "error": f"label add returned invalid JSON: {exc}; stdout snippet: {snippet!r}",
+        }
+
+    current = get_label_names(number, repo=repo)
+    if current["status"] == "error":
+        return current
+    if label not in current["labels"]:
+        return {
+            "status": "error",
+            "error": f"label '{label}' was not found in labels after add; "
+            "the write may not have taken effect",
+        }
+    return {
+        "status": "ok",
+        "number": number,
+        "label": label,
+        "action": "add",
+        "repo": repo,
+    }
+
+
 def _establish_terminal_pr_expectations(
     number: int,
     *,
     repo: str,
     expected_head_sha: str | None,
     expected_base_sha: str | None,
+    operation: str,
 ) -> tuple[dict[str, Any] | None, str | None, str | None]:
-    """Establish and initially validate CAS SHAs when callers omit them."""
+    """Establish and initially validate identity SHAs when callers omit them."""
     if expected_head_sha is not None or expected_base_sha is not None:
         assert expected_head_sha is not None
         assert expected_base_sha is not None
         return None, expected_head_sha, expected_base_sha
     initial = _read_pr_terminal_identity(number, repo=repo)
     if initial.get("status") != "ok":
-        return (
-            _with_terminal_pr_receipt_fields(
-                initial,
-                expected_head_sha=None,
-                expected_base_sha=None,
-            ),
-            None,
-            None,
-        )
+        return initial, None, None
     initial_head = initial["observed_head_sha"]
     initial_base = initial["observed_base_sha"]
     initial_verdict = _verify_pr_terminal_identity(
         initial,
         expected_head_sha=initial_head,
         expected_base_sha=initial_base,
+        operation=operation,
     )
     if initial_verdict["status"] != "ok":
         return initial_verdict, None, None
     return None, initial_head, initial_base
 
 
-def _terminal_pr_remove_attempt(
+def _terminal_pr_mutation_attempt(
     number: int,
     label: str,
     *,
     repo: str,
     expected_head_sha: str,
     expected_base_sha: str,
+    action: Literal["add", "remove"],
+    write: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
-    """Recheck terminal state/CAS and then perform one verified DELETE attempt."""
+    """Run one guarded terminal mutation with pre/post identity readbacks."""
+    operation = f"terminal_label_{action}"
     identity = _read_pr_terminal_identity(number, repo=repo)
     if identity.get("status") != "ok":
         return _with_terminal_pr_receipt_fields(
             identity,
+            number=number,
+            repo=repo,
+            label=label,
+            action=action,
             expected_head_sha=expected_head_sha,
             expected_base_sha=expected_base_sha,
+            verification_stage="pre_write_identity",
         )
     verdict = _verify_pr_terminal_identity(
         identity,
         expected_head_sha=expected_head_sha,
         expected_base_sha=expected_base_sha,
+        operation=operation,
     )
     if verdict["status"] != "ok":
-        return verdict
-    return _with_terminal_pr_receipt_fields(
-        _remove_label_once(number, label, repo=repo),
+        return _with_terminal_pr_receipt_fields(
+            verdict,
+            number=number,
+            repo=repo,
+            label=label,
+            action=action,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+            identity=identity,
+            verification_stage="pre_write_identity",
+        )
+
+    result = _with_terminal_pr_receipt_fields(
+        write(),
+        number=number,
+        repo=repo,
+        label=label,
+        action=action,
         expected_head_sha=expected_head_sha,
         expected_base_sha=expected_base_sha,
         identity=identity,
+        verification_stage="pre_write_identity",
     )
+    if result.get("status") != "ok":
+        return result
+
+    post_identity = _read_pr_terminal_identity(number, repo=repo)
+    if post_identity.get("status") != "ok":
+        return _with_terminal_pr_receipt_fields(
+            {
+                "status": "error",
+                "error": f"terminal PR identity read failed after {operation}: "
+                f"{post_identity.get('error')}",
+            },
+            number=number,
+            repo=repo,
+            label=label,
+            action=action,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+            identity=identity,
+            verification_stage="post_write_identity",
+        )
+    post_verdict = _verify_pr_terminal_identity(
+        post_identity,
+        expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
+        operation=operation,
+    )
+    if post_verdict["status"] != "ok":
+        return _with_terminal_pr_receipt_fields(
+            post_verdict,
+            number=number,
+            repo=repo,
+            label=label,
+            action=action,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+            identity=post_identity,
+            verification_stage="post_write_identity",
+        )
+    receipt = _with_terminal_pr_receipt_fields(
+        result,
+        number=number,
+        repo=repo,
+        label=label,
+        action=action,
+        expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
+        identity=post_identity,
+        verification_stage="post_write_identity",
+    )
+    for key in ("observed_state", "observed_head_sha", "observed_base_sha", "merged_at"):
+        receipt[key] = post_identity[key]
+    return receipt
 
 
 def add_label(
@@ -1017,42 +1261,7 @@ def add_label(
 
     def _write() -> dict[str, Any]:
         """Apply and verify one label after any required PR preflight."""
-        path = f"repos/{repo}/issues/{number}/labels"
-        result = _gh_api_post(path, {"labels": [label]})
-        if result.returncode != 0:
-            return _classify_write_failure(
-                result,
-                number=number,
-                label=label,
-                repo=repo,
-                action="add",
-                expected_present=True,
-            )
-        try:
-            json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            snippet = result.stdout.strip()[:200]
-            return {
-                "status": "error",
-                "error": f"label add returned invalid JSON: {exc}; stdout snippet: {snippet!r}",
-            }
-
-        current = get_label_names(number, repo=repo)
-        if current["status"] == "error":
-            return current
-        if label not in current["labels"]:
-            return {
-                "status": "error",
-                "error": f"label '{label}' was not found in labels after add; "
-                "the write may not have taken effect",
-            }
-        return {
-            "status": "ok",
-            "number": number,
-            "label": label,
-            "action": "add",
-            "repo": repo,
-        }
+        return _add_label_once(number, label, repo=repo)
 
     if target == "issue":
         return _run_bounded_label_mutation(
@@ -1130,6 +1339,158 @@ def remove_label(
     )
 
 
+def _run_terminal_pr_label_mutation(
+    number: int,
+    label: str,
+    *,
+    repo: str = DEFAULT_REPO,
+    action: Literal["add", "remove"],
+    expected_head_sha: str | None = None,
+    expected_base_sha: str | None = None,
+    write: Callable[[], dict[str, Any]],
+) -> dict[str, Any]:
+    """Run one terminal PR label mutation under a versioned identity contract.
+
+    The guard is intentionally separate from :func:`add_label` and
+    :func:`remove_label`: ordinary PR writes remain open-only, while this narrow
+    path re-reads the PR immediately before the mutation and requires a
+    closed/merged state plus matching full head/base SHAs. A successful write is
+    followed by an identity readback. The endpoint remains check-then-act because
+    GitHub does not offer a conditional revision parameter for label writes.
+    """
+    operation = f"terminal_label_{action}"
+    if type(number) is not int or number < 1:
+        return _with_terminal_pr_receipt_fields(
+            {"status": "error", "error": f"issue/PR number must be positive, got {number}"},
+            number=number,
+            repo=repo,
+            label=label,
+            action=action,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+        )
+    if (label_error := _label_name_error(label, context="label")) is not None:
+        return _with_terminal_pr_receipt_fields(
+            {"status": "error", "error": label_error},
+            number=number,
+            repo=repo,
+            label=label,
+            action=action,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+        )
+    if (expected_head_sha is None) != (expected_base_sha is None):
+        return _with_terminal_pr_receipt_fields(
+            {
+                "status": "error",
+                "error": "terminal PR label mutation requires both expected_head_sha and "
+                "expected_base_sha",
+            },
+            number=number,
+            repo=repo,
+            label=label,
+            action=action,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+        )
+    if expected_head_sha is not None and expected_base_sha is not None:
+        validation_error = _terminal_pr_expected_sha_error(
+            number,
+            repo=repo,
+            expected_head_sha=expected_head_sha,
+            expected_base_sha=expected_base_sha,
+            action=action,
+        )
+        if validation_error is not None:
+            return _with_terminal_pr_receipt_fields(
+                validation_error,
+                number=number,
+                repo=repo,
+                label=label,
+                action=action,
+                expected_head_sha=expected_head_sha,
+                expected_base_sha=expected_base_sha,
+            )
+
+    current_head_sha = expected_head_sha
+    current_base_sha = expected_base_sha
+    try:
+        with pr_write_lock(repo, number):
+            early_result, current_head_sha, current_base_sha = _establish_terminal_pr_expectations(
+                number,
+                repo=repo,
+                expected_head_sha=current_head_sha,
+                expected_base_sha=current_base_sha,
+                operation=operation,
+            )
+            if early_result is not None:
+                return _with_terminal_pr_receipt_fields(
+                    early_result,
+                    number=number,
+                    repo=repo,
+                    label=label,
+                    action=action,
+                    expected_head_sha=current_head_sha,
+                    expected_base_sha=current_base_sha,
+                    verification_stage="initial_identity",
+                )
+
+            assert current_head_sha is not None
+            assert current_base_sha is not None
+
+            def _attempt() -> dict[str, Any]:
+                """Recheck terminal identity before each bounded mutation attempt."""
+                return _terminal_pr_mutation_attempt(
+                    number,
+                    label,
+                    repo=repo,
+                    expected_head_sha=current_head_sha,
+                    expected_base_sha=current_base_sha,
+                    action=action,
+                    write=write,
+                )
+
+            result = _run_bounded_label_mutation(
+                _attempt,
+                action=action,
+                number=number,
+                repo=repo,
+                label=label,
+            )
+            try:
+                validate_terminal_pr_receipt(
+                    result,
+                    number=number,
+                    repo=repo,
+                    label=label,
+                    action=action,
+                )
+            except ValueError as exc:
+                result = {
+                    "status": "error",
+                    "error": f"invalid terminal PR mutation receipt: {exc}",
+                }
+            return _with_terminal_pr_receipt_fields(
+                result,
+                number=number,
+                repo=repo,
+                label=label,
+                action=action,
+                expected_head_sha=current_head_sha,
+                expected_base_sha=current_base_sha,
+            )
+    except RuntimeError as exc:
+        return _with_terminal_pr_receipt_fields(
+            {"status": "error", "error": str(exc)},
+            number=number,
+            repo=repo,
+            label=label,
+            action=action,
+            expected_head_sha=current_head_sha,
+            expected_base_sha=current_base_sha,
+        )
+
+
 def remove_terminal_pr_label(
     number: int,
     label: str,
@@ -1138,82 +1499,36 @@ def remove_terminal_pr_label(
     expected_head_sha: str | None = None,
     expected_base_sha: str | None = None,
 ) -> dict[str, Any]:
-    """Remove one label from a terminal PR under a state-and-identity CAS guard.
+    """Remove one label from a terminal PR under the guarded identity contract."""
+    return _run_terminal_pr_label_mutation(
+        number,
+        label,
+        repo=repo,
+        action="remove",
+        expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
+        write=lambda: _remove_label_once(number, label, repo=repo),
+    )
 
-    The guard is intentionally separate from :func:`remove_label`: ordinary PR
-    writes remain open-only, while this narrow path re-reads the PR immediately
-    before DELETE and requires a closed/merged state plus matching full head/base
-    SHAs. When no expected SHAs are supplied, the first terminal read establishes
-    the CAS values and a second read confirms them before the mutation.
-    """
-    if type(number) is not int or number < 1:
-        return {
-            "status": "error",
-            "operation": "terminal_label_remove",
-            "error": f"issue/PR number must be positive, got {number}",
-        }
-    if (label_error := _label_name_error(label, context="label")) is not None:
-        return {"status": "error", "operation": "terminal_label_remove", "error": label_error}
-    if (expected_head_sha is None) != (expected_base_sha is None):
-        return {
-            "status": "error",
-            "operation": "terminal_label_remove",
-            "error": "terminal PR label removal requires both expected_head_sha and expected_base_sha",
-        }
-    if expected_head_sha is not None and expected_base_sha is not None:
-        validation_error = _terminal_pr_expected_sha_error(
-            number,
-            repo=repo,
-            expected_head_sha=expected_head_sha,
-            expected_base_sha=expected_base_sha,
-        )
-        if validation_error is not None:
-            return validation_error
 
-    try:
-        with pr_write_lock(repo, number):
-            early_result, expected_head_sha, expected_base_sha = (
-                _establish_terminal_pr_expectations(
-                    number,
-                    repo=repo,
-                    expected_head_sha=expected_head_sha,
-                    expected_base_sha=expected_base_sha,
-                )
-            )
-            if early_result is not None:
-                return early_result
-
-            assert expected_head_sha is not None
-            assert expected_base_sha is not None
-
-            def _attempt() -> dict[str, Any]:
-                """Recheck terminal state/CAS before each bounded DELETE attempt."""
-                return _terminal_pr_remove_attempt(
-                    number,
-                    label,
-                    repo=repo,
-                    expected_head_sha=expected_head_sha,
-                    expected_base_sha=expected_base_sha,
-                )
-
-            result = _run_bounded_label_mutation(
-                _attempt,
-                action="remove",
-                number=number,
-                repo=repo,
-                label=label,
-            )
-            return _with_terminal_pr_receipt_fields(
-                result,
-                expected_head_sha=expected_head_sha,
-                expected_base_sha=expected_base_sha,
-            )
-    except RuntimeError as exc:
-        return _with_terminal_pr_receipt_fields(
-            {"status": "error", "error": str(exc)},
-            expected_head_sha=expected_head_sha,
-            expected_base_sha=expected_base_sha,
-        )
+def add_terminal_pr_label(
+    number: int,
+    label: str,
+    *,
+    repo: str = DEFAULT_REPO,
+    expected_head_sha: str | None = None,
+    expected_base_sha: str | None = None,
+) -> dict[str, Any]:
+    """Add one label to a terminal PR under the guarded identity contract."""
+    return _run_terminal_pr_label_mutation(
+        number,
+        label,
+        repo=repo,
+        action="add",
+        expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
+        write=lambda: _add_label_once(number, label, repo=repo),
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:

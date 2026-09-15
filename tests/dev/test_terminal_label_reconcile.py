@@ -53,6 +53,7 @@ def _terminal_remove_ok(label: str) -> dict[str, Any]:
     """Build a guarded terminal-removal success receipt for mocked reconciler calls."""
     return {
         "status": "ok",
+        "receipt_schema": "terminal_pr_label_mutation.v1",
         "number": 9356,
         "label": label,
         "action": "remove",
@@ -64,6 +65,37 @@ def _terminal_remove_ok(label: str) -> dict[str, Any]:
         "observed_state": "CLOSED",
         "observed_head_sha": "a" * 40,
         "observed_base_sha": "b" * 40,
+        "merged_at": "2026-09-15T00:00:00Z",
+        "verification_stage": "post_write_identity",
+    }
+
+
+def _terminal_add_ok(label: str) -> dict[str, Any]:
+    """Build a guarded terminal-add success receipt for mocked reconciler calls."""
+    return {
+        **_terminal_remove_ok(label),
+        "label": label,
+        "action": "add",
+        "operation": "terminal_label_add",
+    }
+
+
+def _terminal_identity_ok(
+    *,
+    state: str = "CLOSED",
+    head_sha: str = "a" * 40,
+    base_sha: str = "b" * 40,
+) -> dict[str, Any]:
+    """Build a validated terminal PR identity for plan-level guard tests."""
+    return {
+        "status": "ok",
+        "number": 9356,
+        "repo": "o/r",
+        "operation": "terminal_pr_identity_read",
+        "target": "pr",
+        "observed_state": state,
+        "observed_head_sha": head_sha,
+        "observed_base_sha": base_sha,
         "merged_at": "2026-09-15T00:00:00Z",
     }
 
@@ -619,20 +651,38 @@ def test_apply_merged_pr_removes_merge_ready_and_records_final_labels() -> None:
         ) as mock_terminal_remove,
         patch("scripts.dev.terminal_label_reconcile.remove_label") as mock_issue_remove,
         patch(
-            "scripts.dev.terminal_label_reconcile.add_label",
-            return_value={"status": "ok"},
+            "scripts.dev.terminal_label_reconcile.add_terminal_pr_label",
+            return_value=_terminal_add_ok("state:done"),
+        ) as mock_terminal_add,
+        patch(
+            "scripts.dev.terminal_label_reconcile.read_terminal_pr_identity",
+            side_effect=[_terminal_identity_ok(), _terminal_identity_ok()],
         ),
     ):
         report = reconcile_item(9356, "pr_merged", repo="o/r", apply=True)
 
     assert report["ok"] is True, report
-    mock_terminal_remove.assert_called_once_with(9356, "merge-ready", repo="o/r")
+    mock_terminal_remove.assert_called_once_with(
+        9356,
+        "merge-ready",
+        repo="o/r",
+        expected_head_sha="a" * 40,
+        expected_base_sha="b" * 40,
+    )
+    mock_terminal_add.assert_called_once_with(
+        9356,
+        "state:done",
+        repo="o/r",
+        expected_head_sha="a" * 40,
+        expected_base_sha="b" * 40,
+    )
     mock_issue_remove.assert_not_called()
     assert report["final_labels"] == ["review-bot-auto", "state:done"]
     assert report["applied_changes"]["remove"] == [
         {
             "label": "merge-ready",
             "skipped": False,
+            "receipt_schema": "terminal_pr_label_mutation.v1",
             "status": "ok",
             "target": "pr",
             "operation": "terminal_label_remove",
@@ -642,6 +692,7 @@ def test_apply_merged_pr_removes_merge_ready_and_records_final_labels() -> None:
             "observed_head_sha": "a" * 40,
             "observed_base_sha": "b" * 40,
             "merged_at": "2026-09-15T00:00:00Z",
+            "verification_stage": "post_write_identity",
         }
     ]
 
@@ -666,8 +717,12 @@ def test_apply_closed_unmerged_pr_routes_all_active_removals_to_terminal_guard()
         ) as mock_terminal_remove,
         patch("scripts.dev.terminal_label_reconcile.remove_label") as mock_issue_remove,
         patch(
-            "scripts.dev.terminal_label_reconcile.add_label",
-            return_value={"status": "ok"},
+            "scripts.dev.terminal_label_reconcile.add_terminal_pr_label",
+            return_value=_terminal_add_ok("state:done"),
+        ) as mock_terminal_add,
+        patch(
+            "scripts.dev.terminal_label_reconcile.read_terminal_pr_identity",
+            side_effect=[_terminal_identity_ok(), _terminal_identity_ok()],
         ),
     ):
         report = reconcile_item(9356, "pr_closed_unmerged", repo="o/r", apply=True)
@@ -678,6 +733,16 @@ def test_apply_closed_unmerged_pr_routes_all_active_removals_to_terminal_guard()
         (9356, "needs-review"),
         (9356, "state:running"),
     ]
+    assert [call.kwargs for call in mock_terminal_remove.call_args_list] == [
+        {"repo": "o/r", "expected_head_sha": "a" * 40, "expected_base_sha": "b" * 40}
+    ] * 3
+    mock_terminal_add.assert_called_once_with(
+        9356,
+        "state:done",
+        repo="o/r",
+        expected_head_sha="a" * 40,
+        expected_base_sha="b" * 40,
+    )
     mock_issue_remove.assert_not_called()
     assert report["final_labels"] == ["review-bot-auto", "state:done"]
 
@@ -709,13 +774,13 @@ def test_apply_reopened_pr_does_not_remove_active_labels() -> None:
 
 
 def test_apply_records_terminal_guard_failure_and_truthful_final_labels() -> None:
-    """A failed PR CAS leaves labels observable and never reports success."""
+    """A failed terminal PR write aborts before the state:done addition."""
     before = _pr_state("merge-ready")
-    final = _pr_state("merge-ready", "state:done")
     stale = {
         "status": "review_skipped_stale_state",
         "reason": "head_sha_changed",
         "error": "head moved before terminal label removal",
+        "receipt_schema": "terminal_pr_label_mutation.v1",
         "target": "pr",
         "operation": "terminal_label_remove",
         "expected_head_sha": "a" * 40,
@@ -724,31 +789,42 @@ def test_apply_records_terminal_guard_failure_and_truthful_final_labels() -> Non
         "observed_head_sha": "c" * 40,
         "observed_base_sha": "b" * 40,
         "merged_at": "2026-09-15T00:00:00Z",
+        "verification_stage": "pre_write_identity",
     }
     with (
         patch(
             "scripts.dev.terminal_label_reconcile.fetch_item_state",
-            side_effect=[before, before, before, final],
+            side_effect=[before, before],
         ),
         patch(
             "scripts.dev.terminal_label_reconcile.remove_terminal_pr_label",
             return_value=stale,
-        ),
+        ) as mock_terminal_remove,
+        patch("scripts.dev.terminal_label_reconcile.add_terminal_pr_label") as mock_terminal_add,
         patch(
-            "scripts.dev.terminal_label_reconcile.add_label",
-            return_value={"status": "ok"},
+            "scripts.dev.terminal_label_reconcile.read_terminal_pr_identity",
+            return_value=_terminal_identity_ok(),
         ),
     ):
         report = reconcile_item(9356, "pr_merged", repo="o/r", apply=True)
 
     assert report["ok"] is False
-    assert report["final_labels"] == ["merge-ready", "state:done"]
+    assert "final_labels" not in report
+    mock_terminal_remove.assert_called_once_with(
+        9356,
+        "merge-ready",
+        repo="o/r",
+        expected_head_sha="a" * 40,
+        expected_base_sha="b" * 40,
+    )
+    mock_terminal_add.assert_not_called()
     failure = report["applied_changes"]["failures"][0]
     assert failure == {
         "label": "merge-ready",
         "error": "head moved before terminal label removal",
         "status": "review_skipped_stale_state",
         "reason": "head_sha_changed",
+        "receipt_schema": "terminal_pr_label_mutation.v1",
         "target": "pr",
         "operation": "terminal_label_remove",
         "expected_head_sha": "a" * 40,
@@ -757,6 +833,7 @@ def test_apply_records_terminal_guard_failure_and_truthful_final_labels() -> Non
         "observed_head_sha": "c" * 40,
         "observed_base_sha": "b" * 40,
         "merged_at": "2026-09-15T00:00:00Z",
+        "verification_stage": "pre_write_identity",
     }
 
 
@@ -769,7 +846,14 @@ def test_apply_final_label_readback_failure_is_not_success() -> None:
             "scripts.dev.terminal_label_reconcile.fetch_item_state",
             side_effect=[before, before, final_error],
         ),
-        patch("scripts.dev.terminal_label_reconcile.add_label", return_value={"status": "ok"}),
+        patch(
+            "scripts.dev.terminal_label_reconcile.add_terminal_pr_label",
+            return_value=_terminal_add_ok("state:done"),
+        ),
+        patch(
+            "scripts.dev.terminal_label_reconcile.read_terminal_pr_identity",
+            side_effect=[_terminal_identity_ok(), _terminal_identity_ok()],
+        ),
     ):
         report = reconcile_item(9356, "pr_closed_unmerged", repo="o/r", apply=True)
 
@@ -796,7 +880,14 @@ def test_apply_final_label_readback_rejects_target_label_readdition() -> None:
             "scripts.dev.terminal_label_reconcile.remove_terminal_pr_label",
             return_value=_terminal_remove_ok("merge-ready"),
         ),
-        patch("scripts.dev.terminal_label_reconcile.add_label", return_value={"status": "ok"}),
+        patch(
+            "scripts.dev.terminal_label_reconcile.add_terminal_pr_label",
+            return_value=_terminal_add_ok("state:done"),
+        ),
+        patch(
+            "scripts.dev.terminal_label_reconcile.read_terminal_pr_identity",
+            side_effect=[_terminal_identity_ok(), _terminal_identity_ok()],
+        ),
     ):
         report = reconcile_item(9356, "pr_merged", repo="o/r", apply=True)
 
@@ -825,7 +916,14 @@ def test_apply_final_label_readback_rejects_unrelated_label_loss() -> None:
             "scripts.dev.terminal_label_reconcile.remove_terminal_pr_label",
             return_value=_terminal_remove_ok("merge-ready"),
         ),
-        patch("scripts.dev.terminal_label_reconcile.add_label", return_value={"status": "ok"}),
+        patch(
+            "scripts.dev.terminal_label_reconcile.add_terminal_pr_label",
+            return_value=_terminal_add_ok("state:done"),
+        ),
+        patch(
+            "scripts.dev.terminal_label_reconcile.read_terminal_pr_identity",
+            side_effect=[_terminal_identity_ok(), _terminal_identity_ok()],
+        ),
     ):
         report = reconcile_item(9356, "pr_merged", repo="o/r", apply=True)
 

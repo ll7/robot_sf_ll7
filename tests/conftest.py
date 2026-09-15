@@ -405,6 +405,10 @@ _FAST_FILES = {
     "test_compare_coverage_cli.py",
     "test_global_route.py",
     "test_open_coverage_report.py",
+    # Changed-coverage gate self-tests are deterministic unit coverage for the
+    # gate implementation; keep them in the exact-head fast lane so changes to
+    # the gate itself carry coverage (issue #9031).
+    "test_check_changed_files_coverage.py",
     "test_route_geometry.py",
     "test_pytest_config_contract.py",
     # Deterministic CMA-ES sampler contract tests provide exact-head coverage

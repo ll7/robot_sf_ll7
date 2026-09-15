@@ -118,7 +118,9 @@ def validate_payload(  # noqa: C901, PLR0912, PLR0915
     if status == "terminal" and state not in TERMINAL_STATES:
         problems.append("terminal closeout receipt does not contain a terminal scheduler state")
     if status == "unavailable" and state not in UNAVAILABLE_STATES:
-        problems.append("unavailable closeout receipt does not contain an unavailable scheduler state")
+        problems.append(
+            "unavailable closeout receipt does not contain an unavailable scheduler state"
+        )
     if status == "unavailable":
         problems.append("scheduler readback is unavailable; release admission is blocked")
     if state in ACTIVE_STATES:

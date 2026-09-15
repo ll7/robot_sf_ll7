@@ -12,7 +12,11 @@ training, remote scheduling, or scientific publication — and admits no
 scientific claim, benchmark result, or planner/simulator behavior change.
 The Rerun recording is an optional prototype stream: core inspection (the
 offline timeline plus the measured report) always works without the optional
-`rerun-sdk` package, and simulation time stays the telemetry authority.
+`rerun-sdk` package, and simulation time stays the telemetry authority. Every
+published timeline wraps and validates the canonical `simulation_timeline.v1`
+projection, carries the complete validated trace identity, and is marked
+`evidence_boundary: analysis_workbench_only`, `diagnostic_only: true`, and
+`admission: not_evaluated`.
 
 ## Interfaces
 
@@ -35,15 +39,20 @@ offline timeline plus the measured report) always works without the optional
   SDK, with an actionable reason), or `failed` (corrupt config, missing
   evidence, or output collision; failed outputs never carry artifacts).
 - **Output**: per-trace timelines with step/time-stamped robot and
-  pedestrian geometry plus event identity, and a measured prototype report
-  (frame/pedestrian-point counts, artifact bytes and digests, and an
-  environment-labeled encode time). `descriptor()` exposes the versioned
+  pedestrian geometry plus event identity, source trace metadata, source-byte
+  and configuration digests, and the canonical timeline wrapper. The measured
+  prototype report includes the same diagnostic boundary and provenance
+  fields, frame/pedestrian-point counts, artifact bytes and digests, and an
+  environment-labeled encode time. `descriptor()` exposes the versioned
   capability descriptor.
 
-Unknown required versions fail; output collisions and unsafe paths are
-rejected. The report copies the source identities accepted by the v1 request
-schema; that schema carries no source-byte hash. Repeated fixture runs
-compare equal timeline bytes and report digests.
+Unknown required versions fail; duplicate or unsafe artifact IDs, output
+collisions, source digest mismatches, and unsafe paths are rejected. Rerun
+geometry is keyed by source actor identity and explicitly clears actors that
+disappear from a frame. An installed SDK that fails during initialization,
+logging, or saving fails the requested recording without publishing a partial
+directory. Repeated fixture runs compare equal timeline bytes and report
+digests.
 
 ## Usage
 

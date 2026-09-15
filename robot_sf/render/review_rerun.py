@@ -48,6 +48,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceExportValidationError,
     load_simulation_trace_export,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 
 COMPONENT_ID = "srev19-review-rerun"
 COMPONENT_VERSION = "1.0.0"
@@ -166,6 +167,9 @@ def _request_integrity_errors(request: ComponentRequest) -> list[str]:
     seen: set[str] = set()
     for index, ref in enumerate(request.sources):
         artifact_id = ref.artifact_id
+        if not isinstance(artifact_id, str):
+            errors.append(f"/sources/{index}/artifact_id: expected string: {artifact_id!r}")
+            continue
         pure = PureWindowsPath(artifact_id)
         if (
             not artifact_id
@@ -390,9 +394,8 @@ def _try_import_rerun() -> tuple[Any | None, str | None]:
         import rerun as rr  # noqa: PLC0415
     except ImportError as error:
         return None, f"rerun-sdk-missing: {error}"
-    except (OSError, RuntimeError, TypeError, ValueError) as error:
-        # Import hooks and optional SDK module initialization are environment-specific.
-        return None, f"rerun-sdk-import-failed: {type(error).__name__}: {error}"
+    except Exception as error:  # noqa: BLE001 - optional SDK boundary
+        return None, f"rerun-sdk-unavailable: {type(error).__name__}: {error}"
     return rr, None
 
 
@@ -496,6 +499,12 @@ def _write_rerun_recording(rr: Any, timeline: dict[str, Any], path: Path, episod
             {
                 "event_id": str(frame["event_id"] or ""),
                 "selected_action_json": json.dumps(frame["selected_action"], sort_keys=True),
+                "robot_id": "robot",
+                "robot_state_json": json.dumps(frame["robot"], sort_keys=True),
+                "pedestrian_count": len(frame["pedestrians"]),
+                "pedestrian_ids_json": json.dumps(
+                    [str(pedestrian["id"]) for pedestrian in frame["pedestrians"]]
+                ),
                 "coordinate_frame": timeline["coordinate_frame"],
                 "units_json": json.dumps(timeline["units"], sort_keys=True),
                 "evidence_boundary": timeline["evidence_boundary"],
@@ -540,6 +549,8 @@ def _record_episode(
     else:
         rr, error = _try_import_rerun()
         if rr is None or error is not None:
+            if mode == "rerun":
+                raise RerunRecordingError(error or "optional Rerun SDK became unavailable")
             diagnostics.append(
                 {"artifact_id": timeline["artifact_id"], "reason": error or "unknown"}
             )
@@ -551,7 +562,7 @@ def _record_episode(
                 _write_rerun_recording(
                     rr, timeline, recording_path, timeline["frames"][0]["episode_id"]
                 )
-                recording_digest = hashlib.sha256(recording_path.read_bytes()).hexdigest()
+                recording_digest = _sha256_file(recording_path)
             except Exception as error:
                 raise RerunRecordingError(f"{type(error).__name__}: {error}") from error
             measurements["recording"] = {
@@ -647,6 +658,97 @@ def _resolve_output_directory(root: Path, output_directory: str) -> tuple[Path |
     except (OSError, RuntimeError, ValueError):
         return None, "unsafe-output-path: output directory must resolve within base"
     return output_dir, None
+
+
+def _published_artifact_paths(
+    root: Path,
+    request: ComponentRequest,
+    artifact_id: str,
+    uri: str,
+) -> tuple[Path, Path]:
+    """Resolve one published URI and its safe on-disk path.
+
+    Returns:
+        Tuple of the raw path and its resolved path below ``root``.
+    """
+    output_prefix = Path(request.output_directory)
+    uri_path = Path(uri)
+    if uri_path.is_absolute() or ".." in uri_path.parts or ".." in output_prefix.parts:
+        raise ValueError(f"published artifact URI escapes output directory: {uri!r}")
+    try:
+        relative = uri_path.relative_to(output_prefix)
+    except ValueError as error:
+        raise ValueError(f"published artifact URI is outside output directory: {uri!r}") from error
+    if len(relative.parts) != 1 or relative.as_posix() != artifact_id:
+        raise ValueError(f"published artifact URI disagrees with ID: {uri!r}")
+    artifact_path = root / relative
+    return artifact_path, _safe_staging_path(root, artifact_id)
+
+
+def _validate_published_artifacts(
+    root: Path,
+    request: ComponentRequest,
+    artifacts: list[dict[str, Any]],
+) -> None:
+    """Validate artifact URIs, containment, regular files, and byte digests."""
+    seen_ids: set[str] = set()
+    seen_paths: set[Path] = set()
+    for artifact in artifacts:
+        artifact_id = artifact.get("artifact_id")
+        uri = artifact.get("uri")
+        expected_digest = artifact.get("sha256")
+        if not isinstance(artifact_id, str) or not isinstance(uri, str):
+            raise ValueError("published artifacts require string artifact_id and uri")
+        if artifact_id in seen_ids:
+            raise ValueError(f"duplicate published artifact ID: {artifact_id!r}")
+        seen_ids.add(artifact_id)
+        artifact_path, resolved_path = _published_artifact_paths(root, request, artifact_id, uri)
+        if artifact_path.is_symlink() or not artifact_path.is_file():
+            raise OSError(f"published artifact is not a regular file: {artifact_path}")
+        if resolved_path in seen_paths:
+            raise ValueError(f"duplicate published artifact path: {uri!r}")
+        seen_paths.add(resolved_path)
+        actual_digest = _sha256_file(artifact_path)
+        if not isinstance(expected_digest, str) or actual_digest != expected_digest.lower():
+            raise ValueError(
+                f"published artifact digest mismatch for {artifact_id!r}: "
+                f"expected {expected_digest!r}, observed {actual_digest}"
+            )
+
+
+def _cleanup_published_output(output_dir: Path) -> str | None:
+    """Remove a just-published directory when final validation fails.
+
+    Returns:
+        Cleanup error text, or ``None`` when cleanup succeeds.
+    """
+    try:
+        if output_dir.is_symlink():
+            output_dir.unlink()
+        elif output_dir.exists():
+            shutil.rmtree(output_dir)
+    except OSError as error:
+        return str(error)
+    return None
+
+
+def _publish_failure(
+    request: ComponentRequest,
+    output_dir: Path,
+    published: bool,
+    error: Exception,
+) -> ComponentResult:
+    """Convert a publish-boundary exception into a cleaned-up failed result.
+
+    Returns:
+        Failed component result with a stable reason.
+    """
+    reason = f"output-write-failed: {type(error).__name__}: {error}"
+    if published:
+        cleanup_error = _cleanup_published_output(output_dir)
+        if cleanup_error is not None:
+            reason += f"; published-output-cleanup-failed: {cleanup_error}"
+    return _failed(request, reason)
 
 
 def _unavailable(request: ComponentRequest, reason: str) -> ComponentResult:
@@ -766,7 +868,7 @@ def _collect_traces(
             diagnostics.append({"artifact_id": ref.artifact_id, "reason": error})
             continue
         try:
-            source_sha256 = hashlib.sha256(source_file.read_bytes()).hexdigest()
+            source_sha256 = _sha256_file(source_file)
             if ref.sha256 and source_sha256.lower() != ref.sha256.lower():
                 diagnostics.append(
                     {
@@ -886,6 +988,7 @@ def _publish_outputs(
         Complete component result, or a failed result on write errors.
     """
     staging_dir: Path | None = None
+    published = False
     try:
         output_dir.parent.mkdir(parents=True, exist_ok=True)
         staging_dir = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
@@ -926,19 +1029,14 @@ def _publish_outputs(
                 "sha256": descriptor_digest,
             }
         )
-        for artifact in artifacts:
-            artifact_path = _safe_staging_path(staging_dir, artifact["artifact_id"])
-            observed_digest = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-            if observed_digest != artifact["sha256"]:
-                raise ValueError(
-                    f"artifact-digest-mismatch: {artifact['artifact_id']}: "
-                    f"expected {artifact['sha256']}, observed {observed_digest}"
-                )
+        _validate_published_artifacts(staging_dir, request, artifacts)
         if output_dir.exists():
             raise FileExistsError(f"output directory already exists: {request.output_directory}")
         staging_dir.replace(output_dir)
+        published = True
         staging_dir = None
-        return ComponentResult(
+        _validate_published_artifacts(output_dir, request, artifacts)
+        result = ComponentResult(
             request_id=request.request_id,
             component_id=request.component_id,
             status="complete",
@@ -955,10 +1053,12 @@ def _publish_outputs(
                 "config_sha256": _canonical_sha256(request.config),
             },
         )
+        _result_payload(result)
+        return result
     except RerunRecordingError as error:
         return _failed(request, f"rerun-recording-failed: {error}")
-    except (OSError, ValueError) as error:
-        return _failed(request, f"output-write-failed: {error}")
+    except Exception as error:  # noqa: BLE001 - fail closed at component boundary
+        return _publish_failure(request, output_dir, published, error)
     finally:
         if staging_dir is not None:
             shutil.rmtree(staging_dir, ignore_errors=True)
@@ -990,6 +1090,8 @@ def main(argv: list[str] | None = None) -> int:
         payload = json.loads(input_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ReviewContractsValidationError([f"cannot read request: {error}"]) from error
+    if not isinstance(payload, dict):
+        raise ReviewContractsValidationError(["request must be a JSON object"], source=input_path)
     if args.config is not None:
         try:
             config = json.loads(Path(args.config).read_text(encoding="utf-8"))

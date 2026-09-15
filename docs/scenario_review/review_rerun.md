@@ -31,6 +31,10 @@ projection, carries the complete validated trace identity, and is marked
   `rerun` requires the optional SDK and is unavailable without it. `auto`
   writes the timeline plus the report and adds the recording whenever the
   SDK is installed, otherwise diagnosing the skipped stream.
+- **Source identities**: every source `artifact_id` must be a single relative
+  filename component and unique within the request. Traversal, absolute, or
+  duplicate IDs fail before output staging. A CLI `--config` document must be
+  a JSON object; non-object config is rejected rather than ignored.
 - **`run(request)`**: returns a `component-result.v1` result with status
   `complete` (artifacts per-trace `inspection-timeline.json`, optional
   per-trace `inspection-recording.rrd`, `prototype-report.json`, plus
@@ -47,12 +51,15 @@ projection, carries the complete validated trace identity, and is marked
   capability descriptor.
 
 Unknown required versions fail; duplicate or unsafe artifact IDs, output
-collisions, source digest mismatches, and unsafe paths are rejected. Rerun
+collisions, source digest mismatches, and unsafe paths are rejected. Every
+published artifact URI is checked against the requested output directory and
+its final bytes are re-hashed before a complete result is returned. Rerun
 geometry is keyed by source actor identity and explicitly clears actors that
-disappear from a frame. An installed SDK that fails during initialization,
-logging, or saving fails the requested recording without publishing a partial
-directory. Repeated fixture runs compare equal timeline bytes and report
-digests.
+disappear from a frame. Per-frame metadata includes actor state and the
+pedestrian count/IDs, including an explicit zero-pedestrian frame. An
+installed SDK that fails during initialization, logging, or saving fails the
+requested recording without publishing a partial directory. Repeated fixture
+runs compare equal timeline bytes and report digests.
 
 ## Usage
 

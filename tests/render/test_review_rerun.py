@@ -142,6 +142,10 @@ def test_fixture_smoke_produces_timeline_report_and_descriptor(tmp_path: Path) -
     assert report["diagnostic_only"] is True
     assert report["admission"] == "not_evaluated"
     assert report["provenance"]["config_sha256"]
+    for artifact in result.artifacts:
+        artifact_path = tmp_path / Path(artifact["uri"])
+        assert artifact_path.is_file()
+        assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == artifact["sha256"]
     assert descriptor()["component_id"] == COMPONENT_ID
 
 
@@ -269,7 +273,8 @@ def test_rerun_preserves_empty_frames_and_actor_identity(
     source_root = tmp_path / "source"
     source_root.mkdir()
     payload = json.loads((FIXTURES / "trace-export.json").read_text(encoding="utf-8"))
-    payload["frames"][1]["pedestrians"] = []
+    payload["frames"][0]["pedestrians"] = []
+    payload["frames"][2]["pedestrians"] = []
     (source_root / "trace.json").write_text(json.dumps(payload), encoding="utf-8")
     doc = _request_doc(
         sources=[
@@ -289,13 +294,18 @@ def test_rerun_preserves_empty_frames_and_actor_identity(
     timeline = json.loads(
         (tmp_path / "out" / "trace-empty.inspection-timeline.json").read_text(encoding="utf-8")
     )
-    assert timeline["frames"][1]["pedestrians"] == []
+    assert timeline["frames"][0]["pedestrians"] == []
+    assert timeline["frames"][2]["pedestrians"] == []
     log_paths = [call[1][0] for call in fake.calls if call[0] == "log"]
     assert "episode-0001/pedestrians/ped-0000" in log_paths
     clear_logs = [call for call in fake.calls if call[0] == "log" and call[1][1][0] == "clear"]
     assert [call[1][0] for call in clear_logs] == ["episode-0001/pedestrians/ped-0000"]
     actor_metadata = [call for call in fake.calls if call[0] == "AnyValues"]
     assert any(call[2].get("actor_id") == "ped-0000" for call in actor_metadata)
+    frame_metadata = [call[2] for call in actor_metadata if "pedestrian_count" in call[2]]
+    assert any(item["pedestrian_count"] == 0 for item in frame_metadata)
+    assert any(json.loads(item["pedestrian_ids_json"]) == [] for item in frame_metadata)
+    assert all("robot_state_json" in item for item in frame_metadata)
 
 
 @pytest.mark.parametrize("operation", ["init", "log", "save"])
@@ -307,6 +317,20 @@ def test_rerun_sdk_failures_return_failed_without_publishing(
     doc = _request_doc(config={"recording": {"mode": "rerun"}})
 
     result, out_dir = _run_request(doc, tmp_path)
+
+    assert result.status == "failed"
+    assert "rerun-recording-failed" in result.reason
+    assert result.artifacts == ()
+    assert not out_dir.exists()
+
+
+def test_auto_rerun_sdk_failure_returns_failed_without_publishing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An installed but failing optional SDK still returns a stable result."""
+    monkeypatch.setitem(sys.modules, "rerun", _FailingRerun("save"))
+
+    result, out_dir = _run_request(_request_doc(), tmp_path)
 
     assert result.status == "failed"
     assert "rerun-recording-failed" in result.reason

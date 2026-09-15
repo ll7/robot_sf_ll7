@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
@@ -100,6 +101,32 @@ def _payload() -> dict[str, object]:
             },
         },
     }
+
+
+def _init_git_checkout(repo_root: Path) -> str:
+    """Create a minimal local Git checkout and return its committed HEAD."""
+
+    subprocess.run(["git", "init", "--quiet", str(repo_root)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "config", "user.email", "tests@example.invalid"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_root), "config", "user.name", "Robot SF tests"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo_root), "add", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "commit", "--quiet", "-m", "fixture"],
+        check=True,
+    )
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
 
 
 def test_schema_loads_and_valid_payload_is_normalized() -> None:
@@ -234,6 +261,84 @@ def test_numeric_factor_values_are_finite_json_numbers() -> None:
         validate_intervention_spec(payload)
 
 
+def test_programmatic_huge_integer_fails_as_bounded_validation_error() -> None:
+    """A huge Python integer must not leak jsonschema's raw conversion error."""
+
+    payload = _payload()
+    huge = 10**4301
+    payload["factor"] = {
+        **payload["factor"],
+        "baseline": huge,
+        "intervention": huge + 1,
+    }
+    payload["negative_control"] = {**payload["negative_control"], "value": huge}
+
+    with pytest.raises(InterventionSpecValidationError) as exc_info:
+        validate_intervention_spec(payload)
+    assert "schema validation failed" in str(exc_info.value)
+    assert "Exceeds the limit" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("identity_group", "field", "value"),
+    [
+        ("source_identity", "scenario_id", "N/A"),
+        ("source_identity", "planner_id", "fallback"),
+        ("source_identity", "episode_id", "unknown_id"),
+        ("config_identity", "config_id", "degraded"),
+    ],
+)
+def test_placeholder_identities_are_rejected(identity_group: str, field: str, value: str) -> None:
+    """Fallback and unavailable identifiers cannot pass source admission."""
+
+    payload = _payload()
+    payload["provenance"][identity_group][field] = value
+
+    with pytest.raises(InterventionSpecValidationError, match="fallback identity"):
+        validate_intervention_spec(payload)
+
+
+def test_commit_identity_rejects_zero_and_missing_commits(tmp_path: Path) -> None:
+    """A local binding requires a real Git worktree and an existing commit object."""
+
+    zero = _payload()
+    zero["provenance"]["contract_identity"]["base_commit"] = "0" * 40
+    with pytest.raises(InterventionSpecValidationError, match="all-zero"):
+        validate_intervention_spec(zero)
+
+    non_git = tmp_path / "non-git"
+    non_git.mkdir()
+    with pytest.raises(InterventionSpecValidationError, match="Git worktree"):
+        validate_intervention_spec(_payload(), repo_root=non_git)
+
+    missing = tmp_path / "missing-commit"
+    missing.mkdir()
+    (missing / "marker.txt").write_text("fixture\n", encoding="utf-8")
+    _init_git_checkout(missing)
+    payload = _payload()
+    payload["provenance"]["contract_identity"]["base_commit"] = "1" * 40
+    with pytest.raises(InterventionSpecValidationError, match="not a commit in repo_root"):
+        validate_intervention_spec(payload, repo_root=missing)
+
+
+@pytest.mark.parametrize("identity_group", ["source_identity", "config_identity"])
+@pytest.mark.parametrize("with_root", [False, True])
+def test_embedded_nul_paths_fail_closed(
+    tmp_path: Path, identity_group: str, with_root: bool
+) -> None:
+    """Embedded NUL path bytes are rejected before any Path or Git binding call."""
+
+    payload = _payload()
+    if identity_group == "source_identity":
+        payload["provenance"][identity_group]["source_refs"][0]["path"] = "safe\x00name"
+    else:
+        payload["provenance"][identity_group]["path"] = "safe\x00name"
+    root = tmp_path if with_root else None
+
+    with pytest.raises(InterventionSpecValidationError, match="embedded NUL"):
+        validate_intervention_spec(payload, repo_root=root)
+
+
 def test_comparison_classification_carries_no_unverified_shared_prefix() -> None:
     """Shared-prefix wording is a declared design, never an observed result."""
 
@@ -291,6 +396,7 @@ def test_bound_files_require_matching_hashes(tmp_path: Path) -> None:
         {"path": "source.json", "sha256": source_hash, "role": "mechanism_trace"}
     ]
     payload["provenance"]["config_identity"].update({"path": "config.yaml", "sha256": config_hash})
+    payload["provenance"]["contract_identity"]["base_commit"] = _init_git_checkout(tmp_path)
 
     assert validate_intervention_spec(payload, repo_root=tmp_path)["spec_id"] == payload["spec_id"]
     source.write_text("tampered\n", encoding="utf-8")

@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import re
+import subprocess
 from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -61,7 +62,29 @@ _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _ID_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
 _PATH_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.\[\]-]*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_FALLBACK_IDENTITIES = frozenset({"", "0", "none", "null", "unknown", "unavailable"})
+# Exact case-insensitive tokens only; meaningful identifiers are not rejected by substring.
+_FALLBACK_IDENTITIES = frozenset(
+    {
+        "",
+        "0",
+        "degraded",
+        "failed",
+        "fallback",
+        "n/a",
+        "na",
+        "none",
+        "not-available",
+        "not_available",
+        "null",
+        "partial-failure",
+        "partial_failure",
+        "unknown",
+        "unknown_id",
+        "unknown_planner",
+        "unknown_scenario",
+        "unavailable",
+    }
+)
 _LOCAL_ONLY_PATH_PARTS = frozenset({".git", ".venv", "output", "results"})
 
 
@@ -219,6 +242,28 @@ def _text(value: Any, field: str) -> str:
     return value.strip()
 
 
+def _reject_fallback_identity(value: str, field: str) -> str:
+    """Reject stable placeholder identities used by fallback or unavailable paths.
+
+    Returns:
+        The unchanged identity when it is not a reserved fallback sentinel.
+    """
+
+    if value.casefold() in _FALLBACK_IDENTITIES:
+        raise InterventionSpecValidationError(f"{field} must not be a fallback identity")
+    return value
+
+
+def _identity_text(value: Any, field: str) -> str:
+    """Require non-empty text that identifies a real source or experiment entity.
+
+    Returns:
+        The stripped, non-sentinel identity.
+    """
+
+    return _reject_fallback_identity(_text(value, field), field)
+
+
 def _identifier(value: Any, field: str) -> str:
     """Require a stable identifier rather than a free-form or fallback value.
 
@@ -268,6 +313,8 @@ def _commit(value: Any, field: str) -> str:
     commit = _text(value, field)
     if _COMMIT_RE.fullmatch(commit) is None:
         raise InterventionSpecValidationError(f"{field} must be a 40-character lowercase SHA-1")
+    if commit == "0" * 40:
+        raise InterventionSpecValidationError(f"{field} must not be the all-zero commit")
     return commit
 
 
@@ -305,6 +352,8 @@ def _normalise_file_path(value: Any, field: str) -> str:
     """
 
     text = _text(value, field)
+    if "\x00" in text:
+        raise InterventionSpecValidationError(f"{field} must not contain an embedded NUL")
     path = Path(text)
     if (
         path.is_absolute()
@@ -374,10 +423,17 @@ def load_intervention_spec_schema() -> dict[str, Any]:
 def _validate_schema(payload: Mapping[str, Any]) -> None:
     """Apply the machine-readable schema before semantic checks."""
 
-    errors = sorted(
-        Draft202012Validator(load_intervention_spec_schema()).iter_errors(payload),
-        key=lambda error: list(error.absolute_path),
-    )
+    try:
+        errors = sorted(
+            Draft202012Validator(load_intervention_spec_schema()).iter_errors(payload),
+            key=lambda error: list(error.absolute_path),
+        )
+    except InterventionSpecValidationError:
+        raise
+    except (OverflowError, ValueError) as exc:
+        raise InterventionSpecValidationError(
+            "schema validation failed for a bounded JSON value"
+        ) from exc
     if errors:
         error = errors[0]
         location = "/".join(str(part) for part in error.absolute_path) or "payload"
@@ -501,12 +557,9 @@ def _validate_semantics(payload: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     source_identity = _mapping(provenance["source_identity"], "provenance.source_identity")
     source_identity_copy = dict(source_identity)
     for field in ("scenario_id", "planner_id", "episode_id"):
-        identity = _text(source_identity[field], f"provenance.source_identity.{field}")
-        if identity.lower() in _FALLBACK_IDENTITIES:
-            raise InterventionSpecValidationError(
-                f"provenance.source_identity.{field} must not be a fallback identity"
-            )
-        source_identity_copy[field] = identity
+        source_identity_copy[field] = _identity_text(
+            source_identity[field], f"provenance.source_identity.{field}"
+        )
     seed = source_identity["seed"]
     if type(seed) is not int or seed < 0:
         raise InterventionSpecValidationError(
@@ -546,8 +599,9 @@ def _validate_semantics(payload: dict[str, Any]) -> None:  # noqa: C901, PLR0912
 
     config_identity = _mapping(provenance["config_identity"], "provenance.config_identity")
     config_identity_copy = dict(config_identity)
-    config_identity_copy["config_id"] = _identifier(
-        config_identity["config_id"], "provenance.config_identity.config_id"
+    config_identity_copy["config_id"] = _reject_fallback_identity(
+        _identifier(config_identity["config_id"], "provenance.config_identity.config_id"),
+        "provenance.config_identity.config_id",
     )
     config_identity_copy["path"] = _normalise_file_path(
         config_identity["path"], "provenance.config_identity.path"
@@ -574,12 +628,64 @@ def _validate_semantics(payload: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     payload["provenance"] = provenance_copy
 
 
-def _validate_bound_files(payload: Mapping[str, Any], repo_root: str | Path) -> None:
-    """Verify declared config/source bytes when the caller supplies a checkout root."""
+def _git_command(repo_root: Path, args: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
+    """Run a bounded Git probe without invoking a shell.
 
-    root = Path(repo_root)
+    Returns:
+        The completed Git process result.
+    """
+
+    try:
+        return subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError, UnicodeError, ValueError) as exc:
+        raise InterventionSpecValidationError("repo_root is not a usable Git checkout") from exc
+
+
+def _validate_git_checkout(repo_root: Path, commit: str) -> None:
+    """Require a repository-root Git worktree containing the declared commit."""
+
+    try:
+        root = repo_root.resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise InterventionSpecValidationError("repo_root is not a usable Git checkout") from exc
     if not root.is_dir():
-        raise InterventionSpecValidationError(f"repo_root is not a directory: {root}")
+        raise InterventionSpecValidationError(f"repo_root is not a directory: {repo_root}")
+
+    worktree = _git_command(root, ("rev-parse", "--is-inside-work-tree"))
+    if worktree.returncode != 0 or worktree.stdout.strip() != "true":
+        raise InterventionSpecValidationError("repo_root must be a Git worktree")
+
+    top_level = _git_command(root, ("rev-parse", "--show-toplevel"))
+    top_level_text = top_level.stdout.strip()
+    if top_level.returncode != 0 or not top_level_text:
+        raise InterventionSpecValidationError("repo_root must be a Git worktree")
+    try:
+        top_level_root = Path(top_level_text).resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise InterventionSpecValidationError("repo_root must be the Git checkout root") from exc
+    if top_level_root != root:
+        raise InterventionSpecValidationError("repo_root must be the Git checkout root")
+
+    commit_probe = _git_command(root, ("rev-parse", "--verify", "--quiet", f"{commit}^{{commit}}"))
+    if commit_probe.returncode != 0 or commit_probe.stdout.strip() != commit:
+        raise InterventionSpecValidationError(
+            "provenance.contract_identity.base_commit is not a commit in repo_root"
+        )
+
+
+def _validate_bound_files(payload: Mapping[str, Any], repo_root: str | Path) -> None:
+    """Verify Git identity and declared config/source bytes in a checkout root."""
+
+    if "\x00" in str(repo_root):
+        raise InterventionSpecValidationError("repo_root must not contain an embedded NUL")
+    root = Path(repo_root)
+    _validate_git_checkout(root, payload["provenance"]["contract_identity"]["base_commit"])
     provenance = payload["provenance"]
     source_refs = provenance["source_identity"]["source_refs"]
     for index, reference in enumerate(source_refs):
@@ -604,10 +710,12 @@ def validate_intervention_spec(
     """Validate and normalize one stage-1 intervention specification.
 
     ``repo_root`` is optional because source artifacts may be held in an
-    external durable store.  When supplied, every declared repository-relative
-    source/config digest is checked against bytes in that checkout.  Omitting
-    required identities or hashes always fails; the optional argument only
-    controls whether local bytes are additionally verified.
+    external durable store.  When supplied, it must be the top-level Git
+    worktree containing the declared contract commit, and every declared
+    repository-relative source/config digest is checked against bytes in that
+    checkout.  Omitting ``repo_root`` leaves the commit as explicitly opaque
+    metadata: its syntax is checked, but no local checkout or source bytes are
+    claimed.  Omitting required identities or hashes always fails.
 
     Returns:
         A deep-copied, normalized specification mapping.

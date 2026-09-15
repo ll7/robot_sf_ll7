@@ -1,0 +1,125 @@
+{
+  "coordinate_frame": "world",
+  "evidence_boundary": "analysis_workbench_only",
+  "frames": [
+    {
+      "pedestrians": [
+        {
+          "id": "ped-0000",
+          "position": [
+            3.0,
+            0.0
+          ],
+          "velocity": [
+            -0.5,
+            0.0
+          ]
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 1.0
+        }
+      },
+      "robot": {
+        "heading": 0.0,
+        "position": [
+          0.0,
+          0.0
+        ],
+        "velocity": [
+          1.0,
+          0.0
+        ]
+      },
+      "step": 0,
+      "time_s": 0.0
+    },
+    {
+      "pedestrians": [
+        {
+          "id": "ped-0000",
+          "position": [
+            2.75,
+            0.0
+          ],
+          "velocity": [
+            -0.5,
+            0.0
+          ]
+        }
+      ],
+      "planner": {
+        "event_id": "evt-0001",
+        "selected_action": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 1.0
+        }
+      },
+      "robot": {
+        "heading": 0.0,
+        "position": [
+          0.5,
+          0.0
+        ],
+        "velocity": [
+          1.0,
+          0.0
+        ]
+      },
+      "step": 1,
+      "time_s": 0.5
+    },
+    {
+      "pedestrians": [
+        {
+          "id": "ped-0000",
+          "position": [
+            2.5,
+            0.0
+          ],
+          "velocity": [
+            -0.5,
+            0.0
+          ]
+        }
+      ],
+      "planner": {
+        "event_id": "evt-0001",
+        "selected_action": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.2
+        }
+      },
+      "robot": {
+        "heading": 0.0,
+        "position": [
+          1.0,
+          0.0
+        ],
+        "velocity": [
+          0.2,
+          0.0
+        ]
+      },
+      "step": 2,
+      "time_s": 1.0
+    }
+  ],
+  "schema_version": "simulation_trace_export.v1",
+  "source": {
+    "episode_id": "episode-0000",
+    "generated_by": "srev-26 fixture",
+    "planner_id": "fixture-planner",
+    "scenario_id": "fixture-doorway",
+    "seed": 0
+  },
+  "trace_id": "trace-0000",
+  "units": {
+    "heading": "rad",
+    "position": "m",
+    "time": "s",
+    "velocity": "m/s"
+  }
+}

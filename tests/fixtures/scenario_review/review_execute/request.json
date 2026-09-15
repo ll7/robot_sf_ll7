@@ -1,0 +1,10 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev22-smoke",
+  "component_id": "srev22-review-execute",
+  "sources": [
+    {"artifact_id": "recipe-srev22-smoke", "uri": "recipe.json", "format": "experiment-recipe.v1"}
+  ],
+  "config": {},
+  "output_directory": "srev-22-smoke"
+}

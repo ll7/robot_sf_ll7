@@ -23,8 +23,10 @@ contract before any bounded campaign:
   **same `social_force` planner in both arms**;
 - the five `classic_cross_trap_medium` / `goal` entries in the registered archive
   are excluded from every fit-side decision (wrong planner + held-out family);
-- the comparison and the #2921 stop rule follow **independent native
-  planner-execution outcomes only**; archive-nearness is diagnostic-only;
+- the comparison and the #2921 stop rule follow **independent planner-execution
+  outcomes under the declared execution identity only**; archive-nearness is
+  diagnostic-only. Whether the declared native/adapter identity is authorized
+  remains a separate domain-aware approval gate;
 - the decision vocabulary is exactly `continue | stop | inconclusive`.
 
 ## Frozen inputs (derive from the corrected recertification, not the #6139 comment)
@@ -103,7 +105,7 @@ verdict. Both opposite-sign regressions are required tests:
 One row per candidate x execution seed binds: candidate/manifest ID + manifest
 SHA, selection arm + rank, candidate-pool seed/index, target planner ID + config
 SHA, scenario family + seed, **execution seed**, execution commit + command/config lineage +
-native/fallback/degraded status, primary failure + termination reason + independent failure
+declared execution-mode/fallback/degraded status, primary failure + termination reason + independent failure
 outcome, scenario and candidate certification status, replay/confirmation
 lineage + record hash, and exclusion reason when inadmissible. Each admitted
 manifest SHA, candidate-pool index, scenario seed, and record SHA must match a

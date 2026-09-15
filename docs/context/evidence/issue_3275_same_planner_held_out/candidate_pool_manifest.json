@@ -4177,6 +4177,14 @@
   "target_planner": {
     "config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
     "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+    "execution_identity": {
+      "adapter_name": "SocialForcePlannerAdapter",
+      "benchmark_command_space": "unicycle_vw",
+      "execution_mode": "adapter",
+      "policy_semantics": "social_force_adapter",
+      "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+      "upstream_command_space": "velocity_vector_xy"
+    },
     "id": "social_force"
   },
   "this_issue": 6104

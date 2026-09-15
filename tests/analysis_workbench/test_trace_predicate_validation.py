@@ -313,6 +313,28 @@ def test_missing_trace_cannot_get_positive_threshold_label() -> None:
         )
 
 
+@pytest.mark.parametrize("label", ("positive", "negative"))
+def test_unavailable_trace_cannot_enter_reference_ledgers(label: str) -> None:
+    """Unavailable traces require pending adjudication to stay out of reference metrics."""
+    payload = _load_fixture()
+    payload["cases"][3]["review"]["adjudication"] = {
+        "status": "adjudicated",
+        "reviewer_id": "adjudicator",
+        "labels": dict.fromkeys(TRACE_FAILURE_PREDICATE_IDS, label),
+        "effort_minutes": 1.0,
+        "note": "adversarial mutation",
+    }
+
+    with pytest.raises(
+        TracePredicateValidationError, match="unavailable trace requires pending adjudication"
+    ):
+        build_trace_predicate_validation_report(
+            payload,
+            repo_root=REPO_ROOT,
+            expected_source_commit=SOURCE_COMMIT,
+        )
+
+
 def test_identity_ablation_features_are_closed_and_disjoint() -> None:
     """Identity ablations cannot overlap or introduce undeclared feature names."""
     overlapping = _load_fixture()

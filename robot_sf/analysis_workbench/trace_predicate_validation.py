@@ -946,6 +946,10 @@ def _case_semantic_errors(  # noqa: C901, PLR0912
                 f"{prefix}/review/reviewers/{reviewer_index}/labels: unavailable trace requires unavailable review labels"
             )
     adjudication = review["adjudication"]
+    if not trace_available and adjudication["status"] != "pending":
+        errors.append(
+            f"{prefix}/review/adjudication/status: unavailable trace requires pending adjudication"
+        )
     if adjudication["status"] == "adjudicated":
         if adjudication["reviewer_id"] in reviewer_ids:
             errors.append(

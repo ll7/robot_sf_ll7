@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import scripts.dev.check_compat_import_profile as compat_profile
 from scripts.dev.check_compat_import_profile import COMPAT_TEST_DIRS, check_profile
 
 
 def _write_tree(root: Path, files: dict[str, str]) -> None:
     for dirname in COMPAT_TEST_DIRS:
-        (root / dirname).mkdir(parents=True, exist_ok=True)
+        directory = root / dirname
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "test_compat_placeholder.py").write_text("", encoding="utf-8")
     (root / "tests" / "conftest.py").write_text("", encoding="utf-8")
     for relative, text in files.items():
         target = root / relative
@@ -86,6 +89,68 @@ def test_deferred_test_import_fails_with_module_name(tmp_path: Path) -> None:
     )
 
 
+def test_deferred_local_import_joins_transitive_closure(tmp_path: Path) -> None:
+    """A local import reached only when a test runs still exposes owner imports."""
+    _write_tree(
+        tmp_path,
+        {
+            "tests/common/test_deferred_owner.py": (
+                "def test_deferred_owner():\n"
+                "    from robot_sf.synthetic.owner import value\n"
+                "    assert value\n"
+            ),
+            "robot_sf/synthetic/__init__.py": "",
+            "robot_sf/synthetic/owner.py": "import definitely_not_installed_xyz\nvalue = 1\n",
+        },
+    )
+    errors, _report = check_profile(tmp_path)
+    assert any(
+        "robot_sf/synthetic/owner.py" in error and "definitely_not_installed_xyz" in error
+        for error in errors
+    )
+
+
+def test_relative_import_joins_transitive_closure(tmp_path: Path) -> None:
+    """Relative package imports are resolved before scanning their owner files."""
+    _write_tree(
+        tmp_path,
+        {
+            "tests/common/test_relative_owner.py": (
+                "from robot_sf.synthetic import value\n"
+                "\n"
+                "def test_relative_owner():\n"
+                "    assert value\n"
+            ),
+            "robot_sf/synthetic/__init__.py": "from .owner import value\n",
+            "robot_sf/synthetic/owner.py": "import definitely_not_installed_xyz\nvalue = 1\n",
+        },
+    )
+    errors, _report = check_profile(tmp_path)
+    assert any(
+        "robot_sf/synthetic/owner.py" in error and "definitely_not_installed_xyz" in error
+        for error in errors
+    )
+
+
+def test_guarded_sibling_import_is_not_hidden(tmp_path: Path) -> None:
+    """A guarded optional import cannot hide a hard sibling in the same try body."""
+    _write_tree(
+        tmp_path,
+        {
+            "tests/common/test_guarded_sibling.py": (
+                "try:\n"
+                "    import definitely_not_installed_optional\n"
+                "    import definitely_not_installed_sibling\n"
+                "except ImportError:\n"
+                "    pass\n"
+            )
+        },
+    )
+    errors, _report = check_profile(tmp_path)
+    assert any("definitely_not_installed_optional" in error for error in errors)
+    assert any("definitely_not_installed_sibling" in error for error in errors)
+
+
 def test_package_initializer_is_scanned(tmp_path: Path) -> None:
     """A selected package initializer can contribute imports to collection."""
     _write_tree(
@@ -101,9 +166,20 @@ def test_package_initializer_is_scanned(tmp_path: Path) -> None:
 def test_missing_selected_directory_fails_closed(tmp_path: Path) -> None:
     """A missing lane root cannot become an empty-success scan."""
     _write_tree(tmp_path, {"tests/sim/test_ok.py": "import numpy\n"})
+    for path in (tmp_path / "tests" / "common").glob("*.py"):
+        path.unlink()
     (tmp_path / "tests" / "common").rmdir()
     errors, _report = check_profile(tmp_path)
     assert any("tests/common" in error and "directory is missing" in error for error in errors)
+
+
+def test_empty_selected_directory_fails_closed(tmp_path: Path) -> None:
+    """A present but empty lane root cannot become an empty-success scan."""
+    _write_tree(tmp_path, {"tests/sim/test_ok.py": "import numpy\n"})
+    for path in (tmp_path / "tests" / "common").glob("*.py"):
+        path.unlink()
+    errors, _report = check_profile(tmp_path)
+    assert any("tests/common" in error and "contains no selected" in error for error in errors)
 
 
 def test_syntax_error_fails_closed(tmp_path: Path) -> None:
@@ -127,6 +203,25 @@ def test_read_error_fails_closed(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(Path, "read_bytes", fail_for_target)
     errors, _report = check_profile(tmp_path)
     assert any("test_unreadable.py" in error and "cannot read source" in error for error in errors)
+
+
+def test_unreadable_nested_directory_fails_closed(tmp_path: Path, monkeypatch) -> None:
+    """A traversal error from a nested directory must be visible to the caller."""
+    _write_tree(tmp_path, {"tests/common/test_ok.py": "import numpy\n"})
+    target = tmp_path / "tests" / "common"
+    original_walk = compat_profile.os.walk
+
+    def fail_nested_directory(path, *args, **kwargs):
+        if Path(path) == target:
+            onerror = kwargs.get("onerror")
+            if onerror is not None:
+                onerror(PermissionError("nested directory is unreadable"))
+            return iter(())
+        return original_walk(path, *args, **kwargs)
+
+    monkeypatch.setattr(compat_profile.os, "walk", fail_nested_directory)
+    errors, _report = check_profile(tmp_path)
+    assert any("tests/common" in error and "cannot enumerate" in error for error in errors)
 
 
 def test_unknown_importorskip_fails_closed(tmp_path: Path) -> None:

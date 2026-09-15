@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import ast
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -88,7 +89,13 @@ ACCEPTED_SKIPS = {
 # In-repo namespaces that resolve from the checkout, not from the environment.
 LOCAL_NAMESPACES = frozenset({"robot_sf", "tests", "examples", "hooks", "scripts"})
 
-_BUCKETS = ("top_hard", "top_in_repo", "func_heavy", "skip_strings")
+_BUCKETS = (
+    "top_hard",
+    "top_in_repo",
+    "func_heavy",
+    "deferred_in_repo",
+    "skip_strings",
+)
 
 
 class _ProfileScanError(RuntimeError):
@@ -128,107 +135,215 @@ def _is_type_checking(node: ast.If) -> bool:
     )
 
 
-def _names(node: ast.Import | ast.ImportFrom) -> list[str]:
-    """Return dotted module names for one import statement."""
+def _module_context(root: Path, path: Path) -> tuple[str, str]:
+    """Return the module and package names represented by ``path``."""
+    relative = path.resolve().relative_to(root.resolve())
+    parts = list(relative.parts)
+    if not parts or parts[-1] != "__init__.py":
+        module_parts = [*parts[:-1], Path(parts[-1]).stem]
+    else:
+        module_parts = parts[:-1]
+    package_parts = parts[:-1]
+    return ".".join(module_parts), ".".join(package_parts)
+
+
+def _relative_base(package_name: str, level: int) -> str:
+    """Resolve the package prefix for a relative import."""
+    parts = package_name.split(".") if package_name else []
+    parent_count = level - 1
+    if parent_count > len(parts):
+        return ""
+    return ".".join(parts[: len(parts) - parent_count])
+
+
+def _names(
+    node: ast.Import | ast.ImportFrom,
+    *,
+    package_name: str,
+) -> list[str]:
+    """Return absolute dotted module names for one import statement."""
     if isinstance(node, ast.Import):
         return [a.name for a in node.names]
-    if node.level:
+
+    base = _relative_base(package_name, node.level) if node.level else ""
+    target = ".".join(part for part in (base, node.module or "") if part)
+    if not target:
         return []
-    return [node.module] if node.module else []
+
+    # ``from package import child`` imports the package and may load a child
+    # submodule. Include both so package initializers and relative imports in
+    # the child enter the transitive closure.
+    names = [target]
+    names.extend(f"{target}.{alias.name}" for alias in node.names if alias.name != "*")
+    return names
 
 
-def _record(names: list[str], buckets: dict[str, set[str]], *, collection_time: bool) -> None:
-    """File names into hard/in-repo buckets (optional guarded attempts are dropped)."""
+def _is_local(name: str) -> bool:
+    """Return whether a dotted name belongs to a checkout namespace."""
+    return any(
+        name == namespace or name.startswith(f"{namespace}.") for namespace in LOCAL_NAMESPACES
+    )
+
+
+def _local_closure_names(name: str) -> set[str]:
+    """Return ``name`` and its package prefixes for import closure traversal."""
+    parts = name.split(".")
+    return {".".join(parts[:index]) for index in range(1, len(parts) + 1)}
+
+
+def _record(
+    names: list[str],
+    buckets: dict[str, set[str]],
+    *,
+    collection_time: bool,
+    optional: bool = False,
+) -> None:
+    """File names into hard/in-repo buckets, preserving optional guards."""
     for name in names:
-        if name == "robot_sf" or name.startswith("robot_sf."):
-            if collection_time:
-                buckets["top_in_repo"].add(name)
+        if _is_local(name):
+            bucket = "top_in_repo" if collection_time else "deferred_in_repo"
+            buckets[bucket].update(_local_closure_names(name))
+        elif optional:
+            continue
         elif collection_time:
             buckets["top_hard"].add(name.split(".")[0])
         else:
             buckets["func_heavy"].add(name.split(".")[0])
 
 
-def _visit_value(node: ast.AST, buckets: dict[str, set[str]]) -> None:
-    """Collect importorskip module names from expression positions."""
-    if isinstance(node, ast.Call):
+def _imports_in_body(statements: list[ast.stmt]) -> list[ast.Import | ast.ImportFrom]:
+    """Return import statements nested in a guarded body."""
+    return [
+        node
+        for statement in statements
+        for node in ast.walk(statement)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+    ]
+
+
+def _optional_import_ids(
+    nodes: list[ast.Import | ast.ImportFrom], *, package_name: str
+) -> set[int]:
+    """Return guarded imports that share one optional top-level package."""
+    if not nodes:
+        return set()
+    roots = {
+        name.split(".")[0]
+        for node in nodes
+        for name in _names(node, package_name=package_name)
+        if name
+    }
+    # A guarded block may import several submodules of one optional package
+    # (for example ``torch`` and ``torch.nn``). Distinct roots are siblings,
+    # so there is no safe exemption and every import remains checked.
+    return {id(node) for node in nodes} if len(roots) == 1 else set()
+
+
+class _ImportCollector(ast.NodeVisitor):
+    """Collect imports while retaining execution and optional-guard context."""
+
+    def __init__(self, *, package_name: str) -> None:
+        self.buckets = _new_buckets()
+        self.package_name = package_name
+        self.collection_time = True
+        self.optional_import_ids: set[int] = set()
+
+    def _visit_statements(self, statements: list[ast.stmt]) -> None:
+        for statement in statements:
+            self.visit(statement)
+
+    def _visit_with_context(
+        self,
+        statements: list[ast.stmt],
+        *,
+        collection_time: bool | None = None,
+        optional_import_ids: set[int] | None = None,
+    ) -> None:
+        previous_collection_time = self.collection_time
+        previous_optional_import_ids = self.optional_import_ids
+        if collection_time is not None:
+            self.collection_time = collection_time
+        if optional_import_ids is not None:
+            self.optional_import_ids = optional_import_ids
+        try:
+            self._visit_statements(statements)
+        finally:
+            self.collection_time = previous_collection_time
+            self.optional_import_ids = previous_optional_import_ids
+
+    def _visit_import(self, node: ast.Import | ast.ImportFrom) -> None:
+        _record(
+            _names(node, package_name=self.package_name),
+            self.buckets,
+            collection_time=self.collection_time,
+            optional=id(node) in self.optional_import_ids,
+        )
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self._visit_import(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        self._visit_import(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """Collect literal ``pytest.importorskip`` targets."""
         func = node.func
         attr = func.attr if isinstance(func, ast.Attribute) else ""
         if attr == "importorskip" and node.args:
             first = node.args[0]
             if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                buckets["skip_strings"].add(first.value.split(".")[0])
-    for child in ast.iter_child_nodes(node):
-        if isinstance(child, ast.stmt):
-            _visit_nested(child, buckets)
-        else:
-            _visit_value(child, buckets)
+                self.buckets["skip_strings"].add(first.value.split(".")[0])
+        self.generic_visit(node)
 
+    def visit_If(self, node: ast.If) -> None:
+        """Skip type-only imports while still inspecting the runtime else branch."""
+        if _is_type_checking(node):
+            self._visit_statements(node.orelse)
+            return
+        self.generic_visit(node)
 
-def _visit_nested(node: ast.stmt, buckets: dict[str, set[str]]) -> None:
-    """Collect deferred (function-body) imports for selected test checks."""
-    if isinstance(node, (ast.Import, ast.ImportFrom)):
-        _record(_names(node), buckets, collection_time=False)
-        return
-    for child in ast.iter_child_nodes(node):
-        if isinstance(child, ast.stmt):
-            _visit_nested(child, buckets)
-        else:
-            _visit_value(child, buckets)
+    def visit_Try(self, node: ast.Try) -> None:
+        """Inspect guarded cleanup and sibling imports without hiding hard deps."""
+        if not _handler_catches_import_error(node):
+            self.generic_visit(node)
+            return
 
-
-def _visit_branch(
-    statements: list[ast.stmt],
-    buckets: dict[str, set[str]],
-    *,
-    guarded: bool,
-    top_level: bool,
-) -> None:
-    """Visit one statement list while preserving import execution context."""
-    for sub in statements:
-        if isinstance(sub, (ast.Import, ast.ImportFrom)):
-            if not guarded:
-                _record(_names(sub), buckets, collection_time=top_level)
-        else:
-            _visit_statement(sub, buckets, top_level=top_level, guarded=guarded)
-
-
-def _visit_statement(
-    node: ast.stmt, buckets: dict[str, set[str]], *, top_level: bool, guarded: bool
-) -> None:
-    """Classify one statement, tracking collection-time execution."""
-    if isinstance(node, ast.If) and _is_type_checking(node):
-        return
-    if isinstance(node, ast.Try) and _handler_catches_import_error(node):
-        # The import attempt itself is an explicitly tolerated optional path.
-        # Its handler and cleanup still execute when the attempt fails, so
-        # inspect those statements instead of dropping the complete try node.
-        _visit_branch(node.body, buckets, guarded=True, top_level=top_level)
+        body_imports = _imports_in_body(node.body)
+        # Imports from one optional package retain the existing exemption (for
+        # example ``torch`` and ``torch.nn``). Distinct roots are siblings, so
+        # there is no safe static way to prove which one is optional and every
+        # sibling is checked fail-closed.
+        optional_ids = _optional_import_ids(body_imports, package_name=self.package_name)
+        self._visit_with_context(node.body, optional_import_ids=optional_ids)
         for handler in node.handlers:
-            _visit_branch(handler.body, buckets, guarded=guarded, top_level=top_level)
-        for sub in node.orelse:
-            _visit_statement(sub, buckets, top_level=top_level, guarded=guarded)
-        for sub in node.finalbody:
-            _visit_statement(sub, buckets, top_level=top_level, guarded=guarded)
-        return
-    if isinstance(node, (ast.Import, ast.ImportFrom)):
-        if not guarded:
-            _record(_names(node), buckets, collection_time=top_level)
-        return
-    for child in ast.iter_child_nodes(node):
-        if isinstance(child, ast.stmt):
-            _visit_statement(child, buckets, top_level=False, guarded=guarded)
-        else:
-            _visit_value(child, buckets)
+            self._visit_statements(handler.body)
+        self._visit_statements(node.orelse)
+        self._visit_statements(node.finalbody)
+
+    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        """Visit function declarations now and their bodies when called."""
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        self.visit(node.args)
+        if node.returns is not None:
+            self.visit(node.returns)
+        self._visit_with_context(node.body, collection_time=False)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_function(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_function(node)
 
 
-def _scan_file(path: Path) -> dict[str, set[str]]:
+def _scan_file(path: Path, *, root: Path) -> dict[str, set[str]]:
     """Scan one file, separating collection-time imports from deferred ones.
 
     Returns:
         Buckets with ``top_hard`` (collection-time third-party imports),
         ``top_in_repo`` (collection-time in-repo modules), ``func_heavy``
-        (deferred third-party imports), and ``skip_strings``.
+        (deferred third-party imports), ``deferred_in_repo`` (deferred local
+        modules), and ``skip_strings``.
     """
     import sys as _sys
 
@@ -244,8 +359,10 @@ def _scan_file(path: Path) -> dict[str, set[str]]:
         detail = str(detail).replace("\n", " ")[:160]
         raise _ProfileScanError(f"{path}: cannot parse source ({detail})") from error
     try:
-        for statement in tree.body:
-            _visit_statement(statement, buckets, top_level=True, guarded=False)
+        _module_name, package_name = _module_context(root, path)
+        collector = _ImportCollector(package_name=package_name)
+        collector._visit_statements(tree.body)
+        buckets = collector.buckets
         stdlib = set(_sys.stdlib_module_names)
         drop = stdlib | LOCAL_NAMESPACES | {"__future__", "typing", "typing_extensions"}
         for key in ("top_hard", "func_heavy", "skip_strings"):
@@ -255,10 +372,10 @@ def _scan_file(path: Path) -> dict[str, set[str]]:
     return buckets
 
 
-def _scan_path(path: Path, errors: list[str]) -> dict[str, set[str]] | None:
+def _scan_path(root: Path, path: Path, errors: list[str]) -> dict[str, set[str]] | None:
     """Scan one selected path, retaining a bounded diagnostic on failure."""
     try:
-        return _scan_file(path)
+        return _scan_file(path, root=root)
     except _ProfileScanError as error:
         errors.append(str(error))
         return None
@@ -286,7 +403,7 @@ def _check_violation(display: str, module: str, context: str) -> str:
 
 
 def _selected_files(root: Path, dirname: str, errors: list[str]) -> list[Path]:
-    """Return the selected test files, failing closed for missing roots."""
+    """Return selected test files, failing closed on traversal gaps or emptiness."""
     target = root / dirname
     if dirname.endswith(".py"):
         if not target.is_file():
@@ -296,15 +413,36 @@ def _selected_files(root: Path, dirname: str, errors: list[str]) -> list[Path]:
     if not target.is_dir():
         errors.append(f"{dirname}: required compat profile directory is missing")
         return []
+
+    traversal_errors: list[OSError] = []
+
+    def onerror(error: OSError) -> None:
+        """Retain traversal errors instead of letting ``os.walk`` hide them."""
+        traversal_errors.append(error)
+
+    files: list[Path] = []
     try:
-        return sorted(
-            path
-            for path in target.rglob("*.py")
-            if path.name == "__init__.py" or path.name.startswith("test_")
-        )
-    except OSError as error:
+        for directory, _subdirectories, filenames in os.walk(target, onerror=onerror):
+            directory_path = Path(directory)
+            files.extend(
+                directory_path / filename
+                for filename in filenames
+                if filename.endswith(".py")
+                and (filename == "__init__.py" or filename.startswith("test_"))
+            )
+    except (OSError, TypeError, ValueError) as error:
         errors.append(f"{dirname}: cannot enumerate compat profile files ({type(error).__name__})")
-        return []
+        return sorted(files)
+
+    for error in traversal_errors:
+        errors.append(
+            f"{dirname}: cannot enumerate compat profile files ({type(error).__name__}: {error})"
+        )
+    if not files:
+        errors.append(
+            f"{dirname}: required compat profile directory contains no selected Python files"
+        )
+    return sorted(files)
 
 
 def _check_deferred_test_imports(
@@ -326,7 +464,7 @@ def _collect_roots(root: Path, errors: list[str], report: dict[str, list[str]]) 
     for dirname in COMPAT_TEST_DIRS + ("tests/conftest.py",):
         files = _selected_files(root, dirname, errors)
         for path in files:
-            buckets = _scan_path(path, errors)
+            buckets = _scan_path(root, path, errors)
             if buckets is None:
                 continue
             display = str(path.relative_to(root))
@@ -346,18 +484,19 @@ def _collect_roots(root: Path, errors: list[str], report: dict[str, list[str]]) 
                         "a skip here would shrink lane coverage without failing"
                     )
             pending.extend(sorted(buckets["top_in_repo"]))
+            pending.extend(sorted(buckets["deferred_in_repo"]))
     return pending
 
 
 def _collect_closure(
     root: Path, pending: list[str], errors: list[str], report: dict[str, list[str]]
 ) -> None:
-    """Follow collection-time in-repo imports from the selected test roots.
+    """Follow local imports from the selected test roots through their owners.
 
     Source-owner function bodies can expose optional runtime adapters that are
-    outside this slim compatibility lane. Deferred imports in the selected test
-    files are checked by ``_collect_roots``; this closure only guarantees the
-    imports executed while those tests are collected.
+    outside this slim compatibility lane. Deferred third-party imports in the
+    selected test files are checked by ``_collect_roots``; local imports from
+    either phase still enter the closure so their owners cannot hide imports.
     """
     seen_files: set[Path] = set()
     while pending:
@@ -370,7 +509,7 @@ def _collect_closure(
             display = str(location.relative_to(root))
         except ValueError:
             display = str(location)
-        buckets = _scan_path(location, errors)
+        buckets = _scan_path(root, location, errors)
         if buckets is None:
             continue
         for module in sorted(buckets["top_hard"]):
@@ -380,6 +519,7 @@ def _collect_closure(
                     _check_violation(display, module, "collection time (reached from compat tests)")
                 )
         pending.extend(sorted(buckets["top_in_repo"]))
+        pending.extend(sorted(buckets["deferred_in_repo"]))
 
 
 def check_profile(root: Path) -> tuple[list[str], dict[str, list[str]]]:

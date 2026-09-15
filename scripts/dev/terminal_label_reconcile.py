@@ -322,6 +322,7 @@ def _apply_plan(
 ) -> dict[str, Any]:
     """Apply a label plan with compare-and-swap state checks."""
     applied: dict[str, Any] = {"add": [], "remove": [], "failures": []}
+    expected_final_labels = sorted(set(plan["preserved"]) | set(plan["add"]))
     for label in plan["remove"]:
         abort = _apply_label_change(
             number, repo=repo, label=label, action="remove", applied=applied
@@ -374,6 +375,18 @@ def _apply_plan(
                 ),
             }
         )
+    else:
+        final_labels = sorted(final_state["labels"])
+        if final_labels != expected_final_labels:
+            failures.append(
+                {
+                    "label": "__final_labels__",
+                    "stage": "final_readback",
+                    "error": "final labels did not match the expected reconciliation",
+                    "expected_labels": expected_final_labels,
+                    "observed_labels": final_labels,
+                }
+            )
     return {
         "schema": SCHEMA,
         "number": number,

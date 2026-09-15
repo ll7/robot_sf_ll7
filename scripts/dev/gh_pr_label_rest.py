@@ -872,7 +872,11 @@ def _with_terminal_pr_receipt_fields(
     identity: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach target/CAS evidence to terminal PR removal receipts."""
-    receipt = {**result, "target": "pr"}
+    receipt = {
+        **result,
+        "operation": "terminal_label_remove",
+        "target": "pr",
+    }
     if expected_head_sha is not None:
         receipt.setdefault("expected_head_sha", expected_head_sha)
     if expected_base_sha is not None:
@@ -1143,12 +1147,17 @@ def remove_terminal_pr_label(
     the CAS values and a second read confirms them before the mutation.
     """
     if type(number) is not int or number < 1:
-        return {"status": "error", "error": f"issue/PR number must be positive, got {number}"}
+        return {
+            "status": "error",
+            "operation": "terminal_label_remove",
+            "error": f"issue/PR number must be positive, got {number}",
+        }
     if (label_error := _label_name_error(label, context="label")) is not None:
-        return {"status": "error", "error": label_error}
+        return {"status": "error", "operation": "terminal_label_remove", "error": label_error}
     if (expected_head_sha is None) != (expected_base_sha is None):
         return {
             "status": "error",
+            "operation": "terminal_label_remove",
             "error": "terminal PR label removal requires both expected_head_sha and expected_base_sha",
         }
     if expected_head_sha is not None and expected_base_sha is not None:

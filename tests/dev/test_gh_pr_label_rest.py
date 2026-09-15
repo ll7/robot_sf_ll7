@@ -937,6 +937,7 @@ class TestRemoveTerminalPrLabel:
             )
 
         assert result["status"] == "ok"
+        assert result["operation"] == "terminal_label_remove"
         assert result["target"] == "pr"
         assert result["observed_state"] == "CLOSED"
         assert result["merged_at"] == "2026-09-15T00:00:00Z"

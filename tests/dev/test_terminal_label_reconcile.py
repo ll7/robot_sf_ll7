@@ -782,6 +782,64 @@ def test_apply_final_label_readback_failure_is_not_success() -> None:
     }
 
 
+def test_apply_final_label_readback_rejects_target_label_readdition() -> None:
+    """A target label re-added after mutation cannot be reported as reconciled."""
+    before = _pr_state("merge-ready", "review-bot-auto")
+    after_removal = _pr_state("review-bot-auto")
+    final = _pr_state("merge-ready", "review-bot-auto", "state:done")
+    with (
+        patch(
+            "scripts.dev.terminal_label_reconcile.fetch_item_state",
+            side_effect=[before, before, after_removal, final],
+        ),
+        patch(
+            "scripts.dev.terminal_label_reconcile.remove_terminal_pr_label",
+            return_value=_terminal_remove_ok("merge-ready"),
+        ),
+        patch("scripts.dev.terminal_label_reconcile.add_label", return_value={"status": "ok"}),
+    ):
+        report = reconcile_item(9356, "pr_merged", repo="o/r", apply=True)
+
+    assert report["ok"] is False
+    assert report["final_labels"] == ["merge-ready", "review-bot-auto", "state:done"]
+    assert report["applied_changes"]["failures"][-1] == {
+        "label": "__final_labels__",
+        "stage": "final_readback",
+        "error": "final labels did not match the expected reconciliation",
+        "expected_labels": ["review-bot-auto", "state:done"],
+        "observed_labels": ["merge-ready", "review-bot-auto", "state:done"],
+    }
+
+
+def test_apply_final_label_readback_rejects_unrelated_label_loss() -> None:
+    """An unrelated label lost during reconciliation must fail the final invariant."""
+    before = _pr_state("merge-ready", "review-bot-auto")
+    after_removal = _pr_state("review-bot-auto")
+    final = _pr_state("state:done")
+    with (
+        patch(
+            "scripts.dev.terminal_label_reconcile.fetch_item_state",
+            side_effect=[before, before, after_removal, final],
+        ),
+        patch(
+            "scripts.dev.terminal_label_reconcile.remove_terminal_pr_label",
+            return_value=_terminal_remove_ok("merge-ready"),
+        ),
+        patch("scripts.dev.terminal_label_reconcile.add_label", return_value={"status": "ok"}),
+    ):
+        report = reconcile_item(9356, "pr_merged", repo="o/r", apply=True)
+
+    assert report["ok"] is False
+    assert report["final_labels"] == ["state:done"]
+    assert report["applied_changes"]["failures"][-1] == {
+        "label": "__final_labels__",
+        "stage": "final_readback",
+        "error": "final labels did not match the expected reconciliation",
+        "expected_labels": ["review-bot-auto", "state:done"],
+        "observed_labels": ["state:done"],
+    }
+
+
 def test_apply_issue_removals_keep_legacy_issue_helper() -> None:
     """Issue terminal rows keep the existing unguarded issue-target path."""
     before = _pr_state(

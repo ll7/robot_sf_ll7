@@ -1,8 +1,14 @@
 {
+  "schema_version": "campaign-result.v1",
   "campaign_id": "camp-fixture",
+  "source_commit": "671308664d83399366a263637e4dcbadea386101",
+  "config_identity": "srev06-fixture-config",
+  "execution_status": "native",
   "episodes": [
     {
       "episode_id": "ep-1",
+      "planner": "orca",
+      "scenario_id": "crossing",
       "seed": 11,
       "config": {
         "config_id": "cfg-a"
@@ -15,6 +21,8 @@
     },
     {
       "episode_id": "ep-2",
+      "planner": "orca",
+      "scenario_id": "crossing",
       "seed": 12,
       "config": {
         "config_id": "cfg-a"
@@ -27,6 +35,8 @@
     },
     {
       "episode_id": "ep-3",
+      "planner": "social-force",
+      "scenario_id": "doorway",
       "seed": 13,
       "config": {
         "config_id": "cfg-b"
@@ -38,6 +48,8 @@
     },
     {
       "episode_id": "ep-4",
+      "planner": "social-force",
+      "scenario_id": "doorway",
       "seed": 14,
       "config": {
         "config_id": "cfg-b"

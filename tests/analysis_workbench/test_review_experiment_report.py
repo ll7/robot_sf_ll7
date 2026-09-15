@@ -17,6 +17,7 @@ from robot_sf.analysis_workbench.review_contracts import (
     ComponentRequest,
     SourceRef,
     component_descriptor_from_dict,
+    component_request_from_dict,
     component_result_from_dict,
 )
 from robot_sf.analysis_workbench.review_experiment_report import (
@@ -459,6 +460,41 @@ def test_lone_unicode_surrogate_in_metric_order_fails_before_json_publish(
     assert not list(tmp_path.glob(".out.staging-*"))
 
 
+@pytest.mark.parametrize(
+    ("source_uri", "expected_reason"),
+    [
+        ("bad\x00name", "invalid_input: /sources/0/uri contains an embedded NUL byte"),
+        ("bad\ud800", "invalid_input: /sources/0/uri contains invalid Unicode text"),
+    ],
+)
+def test_invalid_source_uri_returns_failed_result_without_output(
+    tmp_path: Path, source_uri: str, expected_reason: str
+) -> None:
+    """Direct callers receive a bounded result for unsafe source path text."""
+    request = component_request_from_dict(
+        {
+            "schema_version": "component-request.v1",
+            "request_id": "invalid-uri-request",
+            "component_id": COMPONENT_ID,
+            "sources": [
+                {
+                    "artifact_id": "recorded-results",
+                    "uri": source_uri,
+                    "format": EXPERIMENT_RESULTS_SCHEMA_VERSION,
+                }
+            ],
+            "output_directory": "out",
+        }
+    )
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason == expected_reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
 def test_cli_reads_request_and_config_and_emits_result(
     tmp_path: Path, capsys: CaptureResult[str]
 ) -> None:
@@ -613,6 +649,56 @@ def test_cli_parser_limit_emits_stable_failed_result(
     assert result.status == "failed"
     assert result.reason == f"invalid_input: {parser_input} JSON cannot be parsed safely"
     assert not (tmp_path / "parser-limit-output").exists()
+
+
+@pytest.mark.parametrize("source_uri", ["bad\x00name", "bad\ud800"])
+def test_cli_invalid_source_uri_emits_failed_component_result(
+    tmp_path: Path, capsys: CaptureResult[str], source_uri: str
+) -> None:
+    """Unsafe source URI text still produces the versioned CLI result envelope."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "component-request.v1",
+                "request_id": "invalid-uri-cli-request",
+                "component_id": COMPONENT_ID,
+                "sources": [
+                    {
+                        "artifact_id": "recorded-results",
+                        "uri": source_uri,
+                        "format": EXPERIMENT_RESULTS_SCHEMA_VERSION,
+                    }
+                ],
+                "config": {},
+                "output_directory": "ignored-by-cli",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--input",
+            str(request_path),
+            "--output",
+            "cli-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    printed = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert printed["schema_version"] == COMPONENT_RESULT_SCHEMA_VERSION
+    result = component_result_from_dict(printed)
+    assert result.status == "failed"
+    assert result.reason.startswith("invalid_input:")
+    assert "/sources/0/uri" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "cli-output").exists()
 
 
 def test_run_accepts_relocated_output_without_changing_report_content(tmp_path: Path) -> None:

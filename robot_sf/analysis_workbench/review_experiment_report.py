@@ -673,6 +673,14 @@ def _render_html(report: Mapping[str, Any]) -> str:
 
 
 def _resolve_inside(root: Path, value: str, *, path: str) -> Path:
+    if "\x00" in value:
+        raise ExperimentReportError("invalid_input", f"{path} contains an embedded NUL byte")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ExperimentReportError(
+            "invalid_input", f"{path} contains invalid Unicode text"
+        ) from None
     candidate = (root / value).resolve()
     try:
         candidate.relative_to(root)

@@ -5,6 +5,7 @@
   "description": "Digest-bound local fixture or diagnostic source receipt. This contract proves source integrity and request binding; it does not grant scientific evidence admission.",
   "type": "object",
   "additionalProperties": false,
+  "maxProperties": 9,
   "required": [
     "schema_version",
     "receipt_id",
@@ -23,6 +24,7 @@
     "receipt_id": {
       "type": "string",
       "minLength": 1,
+      "maxLength": 256,
       "pattern": "^[A-Za-z0-9_.:-]+$"
     },
     "source": {
@@ -59,6 +61,7 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
+      "maxProperties": 6,
       "required": [
         "uri",
         "format",
@@ -70,15 +73,18 @@
       "properties": {
         "uri": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 4096
         },
         "format": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 256
         },
         "schema": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 256
         },
         "sha256": {
           "$ref": "#/$defs/sha256"
@@ -88,7 +94,8 @@
         },
         "config_identity": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 256
         }
       }
     }

@@ -28,7 +28,6 @@ from urllib.parse import urlsplit
 
 from jsonschema import Draft202012Validator
 
-from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.errors import RobotSfError
 
 SCHEMA_DIR = Path(__file__).with_name("schemas")
@@ -57,6 +56,14 @@ _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _TEST_PRESET = {"width": 320, "height": 180, "fps": 10.0, "speed": 1.0}
 
+MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS = 200
+MAX_REVIEW_CONTRACT_VALIDATION_ERRORS = 32
+MAX_ADMITTED_SOURCE_RECEIPT_BYTES = 256 * 1024
+MAX_ADMITTED_SOURCE_BYTES = 16 * 1024 * 1024
+MAX_ADMITTED_SOURCE_RECEIPT_ID_CHARS = 256
+MAX_ADMITTED_SOURCE_URI_CHARS = 4_096
+MAX_ADMITTED_SOURCE_METADATA_CHARS = 256
+
 ADMITTED_SOURCE_REASON_RECEIPT_MISSING = "receipt_missing"
 ADMITTED_SOURCE_REASON_RECEIPT_UNREADABLE = "receipt_unreadable"
 ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED = "receipt_malformed"
@@ -66,12 +73,27 @@ ADMITTED_SOURCE_REASON_SOURCE_MISSING = "source_missing"
 ADMITTED_SOURCE_REASON_SOURCE_MUTATED = "source_mutated"
 ADMITTED_SOURCE_REASON_SOURCE_ESCAPED_ROOT = "source_escaped_root"
 ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR = "source_not_regular"
+ADMITTED_SOURCE_REASON_SOURCE_TOO_LARGE = "source_too_large"
 ADMITTED_SOURCE_REASON_ALLOWED_ROOT_MISSING = "allowed_root_missing"
 ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID = "allowed_root_invalid"
 
 ADMITTED_SOURCE_STATUS = "admitted"
 ADMITTED_SOURCE_KINDS = frozenset({"fixture", "diagnostic"})
 ADMITTED_SOURCE_EVIDENCE_BOUNDARY = "diagnostic_only"
+ADMITTED_SOURCE_DEPENDENT_FAMILY_STATUS = "standalone_fixture_only"
+
+
+def _bounded_text_detail(value: Any, *, limit: int = MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS) -> str:
+    """Return a compact bounded representation of arbitrary diagnostic text."""
+    detail = value if isinstance(value, str) else str(value)
+    detail = " ".join(detail.split())
+    if not detail:
+        return type(value).__name__
+    return detail[:limit]
+
+
+class _AdmittedSourceInputLimitError(ValueError):
+    """Identify a receipt or source that exceeds the resolver input ceiling."""
 
 
 class ReviewContractsValidationError(RobotSfError, ValueError):
@@ -80,10 +102,15 @@ class ReviewContractsValidationError(RobotSfError, ValueError):
     def __init__(self, errors: list[str], *, source: str | Path | None = None):
         """Build an actionable validation error."""
 
-        self.errors = tuple(errors)
-        self.source = str(source) if source is not None else None
+        bounded_errors = [
+            _bounded_text_detail(error) for error in errors[:MAX_REVIEW_CONTRACT_VALIDATION_ERRORS]
+        ]
+        if len(errors) > MAX_REVIEW_CONTRACT_VALIDATION_ERRORS:
+            bounded_errors.append("additional validation errors omitted")
+        self.errors = tuple(bounded_errors)
+        self.source = _bounded_text_detail(source) if source is not None else None
         prefix = f"{self.source}: " if self.source else ""
-        super().__init__(prefix + "; ".join(errors))
+        super().__init__(prefix + "; ".join(self.errors))
 
 
 @cache
@@ -113,14 +140,23 @@ def load_review_contracts_schema(version: str) -> dict[str, Any]:
 
 def _schema_errors(version: str, payload: Mapping[str, Any]) -> list[str]:
     validator = Draft202012Validator(load_review_contracts_schema(version))
-    return [
+    violations = []
+    for error in validator.iter_errors(payload):
+        violations.append(error)
+        if len(violations) > MAX_REVIEW_CONTRACT_VALIDATION_ERRORS:
+            break
+    violations.sort(key=lambda err: list(err.absolute_path))
+    errors = [
         f"{_pointer(error.absolute_path)}: {_bounded_text_detail(error.message)}"
-        for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
+        for error in violations
     ]
+    if len(violations) > MAX_REVIEW_CONTRACT_VALIDATION_ERRORS:
+        errors.append("/: additional validation errors omitted")
+    return errors
 
 
 def _pointer(path: Any) -> str:
-    return "/" + "/".join(str(token) for token in path)
+    return _bounded_text_detail("/" + "/".join(str(token) for token in path))
 
 
 def _require_schema(version: str, payload: Mapping[str, Any], *, source: Any = None) -> None:
@@ -147,7 +183,9 @@ def _check_finite(value: Any, *, path: str, errors: list[str]) -> None:
 def _check_no_traversal(value: str, *, path: str, errors: list[str]) -> None:
     pure = Path(value)
     if pure.is_absolute() or ".." in pure.parts:
-        errors.append(f"{path}: path traversal or absolute path is rejected: {value}")
+        errors.append(
+            f"{path}: path traversal or absolute path is rejected: {_bounded_text_detail(value)}"
+        )
 
 
 def _check_safe_artifact_id(value: Any, *, path: str, errors: list[str]) -> None:
@@ -601,6 +639,7 @@ def admitted_source_receipt_from_dict(
     if not isinstance(payload, Mapping):
         raise ReviewContractsValidationError(["expected a mapping payload"], source=source)
     _reject_unicode_surrogates(payload, source=source)
+    _check_admitted_source_input_limits(payload, source=source)
     _require_schema(ADMITTED_SOURCE_RECEIPT_SCHEMA_VERSION, payload, source=source)
     source_payload = payload["source"]
     errors: list[str] = []
@@ -632,17 +671,70 @@ def admitted_source_receipt_from_dict(
     )
 
 
-def _bounded_error_detail(error: BaseException, *, limit: int = 200) -> str:
+def _check_admitted_source_input_limits(payload: Mapping[str, Any], *, source: Any = None) -> None:
+    """Reject oversized receipt identity fields before schema traversal."""
+    errors: list[str] = []
+    receipt_id = payload.get("receipt_id")
+    if isinstance(receipt_id, str) and len(receipt_id) > MAX_ADMITTED_SOURCE_RECEIPT_ID_CHARS:
+        errors.append(
+            f"/receipt_id: exceeds maximum length of {MAX_ADMITTED_SOURCE_RECEIPT_ID_CHARS} characters"
+        )
+    source_payload = payload.get("source")
+    if isinstance(source_payload, Mapping):
+        for key, maximum in (
+            ("uri", MAX_ADMITTED_SOURCE_URI_CHARS),
+            ("format", MAX_ADMITTED_SOURCE_METADATA_CHARS),
+            ("schema", MAX_ADMITTED_SOURCE_METADATA_CHARS),
+            ("config_identity", MAX_ADMITTED_SOURCE_METADATA_CHARS),
+        ):
+            value = source_payload.get(key)
+            if isinstance(value, str) and len(value) > maximum:
+                errors.append(f"/source/{key}: exceeds maximum length of {maximum} characters")
+    if errors:
+        raise ReviewContractsValidationError(errors, source=source)
+
+
+def _bounded_error_detail(
+    error: BaseException, *, limit: int = MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS
+) -> str:
     """Return a compact parse or filesystem detail for a stable rejection."""
+    if isinstance(error, ReviewContractsValidationError):
+        return _bounded_text_detail("; ".join(error.errors), limit=limit)
     return _bounded_text_detail(error, limit=limit)
 
 
-def _bounded_text_detail(value: Any, *, limit: int = 200) -> str:
-    """Return a compact bounded representation of arbitrary diagnostic text."""
-    detail = " ".join(str(value).split())
-    if not detail:
-        return type(value).__name__
-    return detail[:limit]
+def _read_bounded_text(path: Path, *, maximum_bytes: int, label: str) -> str:
+    """Read UTF-8 text while refusing inputs larger than the contract ceiling.
+
+    Returns:
+        The decoded UTF-8 content.
+    """
+    with path.open("rb") as handle:
+        content = handle.read(maximum_bytes + 1)
+    if len(content) > maximum_bytes:
+        raise _AdmittedSourceInputLimitError(
+            f"{label} exceeds maximum size of {maximum_bytes} bytes"
+        )
+    return content.decode("utf-8")
+
+
+def _sha256_file_bounded(path: Path) -> str:
+    """Hash a source with a hard read ceiling so a replacement cannot force EOF reads.
+
+    Returns:
+        The lower-case SHA-256 digest of the bounded source bytes.
+    """
+    digest = hashlib.sha256()
+    bytes_read = 0
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            bytes_read += len(chunk)
+            if bytes_read > MAX_ADMITTED_SOURCE_BYTES:
+                raise _AdmittedSourceInputLimitError(
+                    f"source exceeds maximum size of {MAX_ADMITTED_SOURCE_BYTES} bytes"
+                )
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _receipt_read_error_detail(error: BaseException) -> str:
@@ -651,6 +743,8 @@ def _receipt_read_error_detail(error: BaseException) -> str:
     Returns:
         A bounded, stable error detail.
     """
+    if isinstance(error, _AdmittedSourceInputLimitError):
+        return _bounded_error_detail(error)
     if isinstance(error, (RecursionError, ValueError)):
         return "receipt JSON is invalid or exceeds parser limits"
     return _bounded_error_detail(error)
@@ -670,10 +764,19 @@ def load_admitted_source_receipt(path: str | Path) -> AdmittedSourceReceipt:
     Raises:
         ReviewContractsValidationError: If the file is unreadable or invalid.
     """
-    receipt_path = Path(path)
+    try:
+        receipt_path = Path(path)
+    except (OSError, TypeError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"cannot read admitted-source receipt: {_bounded_error_detail(error)}"]
+        ) from error
     try:
         payload = json.loads(
-            receipt_path.read_text(encoding="utf-8"),
+            _read_bounded_text(
+                receipt_path,
+                maximum_bytes=MAX_ADMITTED_SOURCE_RECEIPT_BYTES,
+                label="admitted-source receipt",
+            ),
             parse_constant=_reject_nonstandard_json_constant,
         )
     except (OSError, RecursionError, UnicodeError, ValueError) as error:
@@ -760,7 +863,7 @@ def _resolution(
         reason=reason,
         source_path=source_path,
         receipt=receipt,
-        detail=detail,
+        detail=_bounded_text_detail(detail) if detail else "",
     )
 
 
@@ -783,13 +886,17 @@ def _receipt_payload(
         return None, _resolution(
             "unavailable",
             ADMITTED_SOURCE_REASON_RECEIPT_UNREADABLE,
-            detail=str(error),
+            detail=_bounded_error_detail(error),
         )
     try:
         if not receipt_path.exists():
             return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_RECEIPT_MISSING)
         raw_payload = json.loads(
-            receipt_path.read_text(encoding="utf-8"),
+            _read_bounded_text(
+                receipt_path,
+                maximum_bytes=MAX_ADMITTED_SOURCE_RECEIPT_BYTES,
+                label="admitted-source receipt",
+            ),
             parse_constant=_reject_nonstandard_json_constant,
         )
     except (OSError, RecursionError, UnicodeError, ValueError) as error:
@@ -966,7 +1073,7 @@ def _check_one_digest_binding(
             "unavailable",
             ADMITTED_SOURCE_REASON_RECEIPT_STALE,
             receipt=receipt,
-            detail=f"{name} identity is unusable: {error}",
+            detail=f"{name} identity is unusable: {_bounded_error_detail(error)}",
         )
     if effective_digest is None:
         return None, _resolution(
@@ -1149,6 +1256,17 @@ def _check_recipe_source_bindings(
             receipt=receipt,
             detail="receipt ID does not match recipe admission_reference",
         )
+    source_identity = document.get("source_identity")
+    if not isinstance(source_identity, Mapping):
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="recipe source_identity is required for admission",
+        )
+    boundary_result = _check_recipe_boundary_bindings(receipt, source_identity)
+    if boundary_result is not None:
+        return boundary_result
     for key, actual in (
         ("source_uri", receipt.source.uri),
         ("source_format", receipt.source.format),
@@ -1163,6 +1281,67 @@ def _check_recipe_source_bindings(
                 detail=f"recipe {key} does not match the receipt",
             )
     return None
+
+
+def _check_recipe_boundary_bindings(
+    receipt: AdmittedSourceReceipt,
+    source_identity: Mapping[str, Any],
+) -> AdmittedSourceResolution | None:
+    """Require a recipe to preserve the receipt's diagnostic-only boundary.
+
+    Returns:
+        A stale resolution on a boundary mismatch, or ``None``.
+    """
+    recipe_boundary = (
+        ("kind", receipt.source_kind),
+        ("evidence_boundary", ADMITTED_SOURCE_EVIDENCE_BOUNDARY),
+        ("scientific_claim_allowed", False),
+        ("dependent_family_status", ADMITTED_SOURCE_DEPENDENT_FAMILY_STATUS),
+    )
+    for key, expected in recipe_boundary:
+        actual = source_identity.get(key)
+        if key == "kind":
+            boundary_matches = isinstance(actual, str) and actual in ADMITTED_SOURCE_KINDS
+            boundary_matches = boundary_matches and actual == expected
+        elif key == "scientific_claim_allowed":
+            boundary_matches = actual is expected
+        else:
+            boundary_matches = actual == expected
+        if not boundary_matches:
+            return _resolution(
+                "unavailable",
+                ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+                receipt=receipt,
+                detail=f"recipe source_identity.{key} does not preserve the diagnostic-only boundary",
+            )
+    return None
+
+
+def _hash_source_or_rejection(
+    receipt: AdmittedSourceReceipt,
+    source_path: Path,
+) -> str | AdmittedSourceResolution:
+    """Hash one resolved source or return its bounded unavailable result.
+
+    Returns:
+        The source digest, or a stable resolution when hashing is unavailable.
+    """
+    try:
+        return _sha256_file_bounded(source_path)
+    except _AdmittedSourceInputLimitError as error:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_SOURCE_TOO_LARGE,
+            receipt=receipt,
+            detail=_bounded_error_detail(error),
+        )
+    except (OSError, ValueError) as error:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_SOURCE_MISSING,
+            receipt=receipt,
+            detail=_bounded_error_detail(error),
+        )
 
 
 def _resolve_allowed_root(
@@ -1181,7 +1360,9 @@ def _resolve_allowed_root(
         return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_MISSING)
     except (OSError, RuntimeError, TypeError, ValueError) as error:
         return None, _resolution(
-            "unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID, detail=str(error)
+            "unavailable",
+            ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID,
+            detail=_bounded_error_detail(error),
         )
     if not root.is_dir():
         return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_ALLOWED_ROOT_INVALID)
@@ -1206,7 +1387,7 @@ def _resolve_source_path(
             "unavailable",
             ADMITTED_SOURCE_REASON_RECEIPT_UNSUPPORTED,
             receipt=receipt,
-            detail=f"source URI cannot be interpreted locally: {error}",
+            detail=(f"source URI cannot be interpreted locally: {_bounded_error_detail(error)}"),
         )
     if uri_info.scheme or uri_info.netloc or uri_info.query or uri_info.fragment:
         return None, _resolution(
@@ -1340,15 +1521,10 @@ def resolve_admitted_source(
     if isinstance(source_or_result, AdmittedSourceResolution):
         return source_or_result
     source_path = source_or_result
-    try:
-        observed_sha256 = sha256_file(source_path)
-    except OSError as error:
-        return _resolution(
-            "unavailable",
-            ADMITTED_SOURCE_REASON_SOURCE_MISSING,
-            receipt=parsed_receipt,
-            detail=str(error),
-        )
+    observed_or_result = _hash_source_or_rejection(parsed_receipt, source_path)
+    if isinstance(observed_or_result, AdmittedSourceResolution):
+        return observed_or_result
+    observed_sha256 = observed_or_result
     if observed_sha256 != parsed_receipt.source.sha256:
         return _resolution(
             "failed",
@@ -1434,8 +1610,8 @@ def _unsupported_capabilities(
 
 
 def _write_json(path: Path, payload: Any) -> str:
-    path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(text, encoding="utf-8")
     tmp_path.replace(path)
@@ -1499,12 +1675,20 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             ),
             provenance={"output_directory": request.output_directory},
         )
-    except (OSError, ReviewContractsValidationError, ValueError) as error:
+    except ReviewContractsValidationError as error:
+        reason = _bounded_error_detail(error)
         return ComponentResult(
             request_id=request.request_id,
             component_id=request.component_id,
             status="failed",
-            reason="; ".join(error.errors),
+            reason=reason,
+        )
+    except (OSError, TypeError, ValueError, RecursionError) as error:
+        return ComponentResult(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status="failed",
+            reason=_bounded_error_detail(error),
         )
 
 

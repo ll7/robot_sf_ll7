@@ -56,6 +56,10 @@ only when all of these checks pass:
 - the source commit and config identity in the current recipe's
   `source_identity` match the receipt. Optional explicit resolver expectations
   may corroborate those identities but cannot replace the recipe context; and
+- the recipe's `source_identity` preserves the receipt's source kind and the
+  diagnostic-only boundary: `kind` is the receipt kind,
+  `evidence_boundary` is `diagnostic_only`, `scientific_claim_allowed` is
+  `false`, and `dependent_family_status` is `standalone_fixture_only`; and
 - the URI is a relative local path beneath the caller-supplied `allowed_root`,
   and a fresh SHA-256 rehash matches the receipt's source bytes.
 
@@ -66,15 +70,21 @@ rejects URI schemes, query/fragment components, absolute paths, traversal, and
 symlink escapes. `format` and `schema` are required receipt metadata; the request
 format and any recipe `source_schema` are checked for exact equality. The
 resolver does not parse arbitrary source formats or choose a simulator map.
+Receipt files are limited to 256 KiB, receipt identity fields have bounded
+lengths, and source hashing stops at 16 MiB. Validation and resolver
+diagnostics are bounded to 200 characters and at most 32 retained validation
+errors. These are resource-safety limits; they do not widen source admission.
+An oversized source returns `unavailable` with reason `source_too_large`.
 
 The resolver keeps source integrity separate from scientific evidence
 admission. `status: admitted` means that this fixture source is available and
 exactly bound for a diagnostic invocation. It does not admit a benchmark,
 planner, simulator, or paper-facing claim. Existing public v1 request and
-recipe schemas remain unchanged. A v1 recipe without `admission_reference` or
-source commit/config expectations is returned as `unavailable` with reason
-`receipt_stale` and a migration detail; callers must add the receipt companion
-and source identities before integrating this resolver into execution preflight.
+recipe schemas remain unchanged. A v1 recipe without `admission_reference`,
+source commit/config expectations, or the required diagnostic-only boundary
+fields is returned as `unavailable` with reason `receipt_stale` and a migration
+detail; callers must add the receipt companion and source identities before
+integrating this resolver into execution preflight.
 Native selection and executor integration belong to
 [#9293](https://github.com/ll7/robot_sf_ll7/issues/9293) / [PR #9333](https://github.com/ll7/robot_sf_ll7/pull/9333).
 
@@ -88,6 +98,7 @@ Stable result pairs are:
 | `unavailable` | `receipt_unsupported` | The version or diagnostic-only boundary is unsupported. |
 | `unavailable` | `receipt_stale` | Request, recipe, admission, source-identity, or request-source binding differs. |
 | `unavailable` | `source_missing`, `source_not_regular` | The approved source is absent or not a regular file. |
+| `unavailable` | `source_too_large` | The approved source exceeds the bounded hashing input limit. |
 | `failed` | `source_mutated` | The source exists but its rehashed bytes differ from the receipt. |
 | `unavailable` | `source_escaped_root` | The URI or resolved symlink leaves `allowed_root`. |
 | `unavailable` | `allowed_root_missing`, `allowed_root_invalid` | The caller supplied no usable local trust root. |
@@ -156,6 +167,7 @@ executing a request.
 ## Errors
 
 Validation failures carry stable reason codes with source pointers
-(`ReviewContractsValidationError.errors`). Missing measurements are
-unavailable with reasons; source integrity is separate from evidence
-admission.
+(`ReviewContractsValidationError.errors`). Receipt-loader path and parse
+failures use the typed `ReviewContractsValidationError`; invalid filesystem
+and JSON diagnostics are bounded. Missing measurements are unavailable with
+reasons; source integrity is separate from evidence admission.

@@ -170,6 +170,57 @@ def test_run_rejects_missing_capability_and_output_collision(tmp_path: Path) -> 
     assert "output collision" in second.reason
 
 
+def test_run_normalizes_non_json_failures_to_component_result(tmp_path: Path) -> None:
+    """A valid request that fails while writing still returns the result envelope."""
+    request = component_request_from_dict(
+        {
+            "schema_version": "component-request.v1",
+            "request_id": "r-nan",
+            "component_id": "srev01-inspect",
+            "sources": [{"artifact_id": "a", "uri": "a.json", "format": "f"}],
+            "output_directory": "nan-output",
+            "config": {"seed": float("nan")},
+        }
+    )
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason
+    assert len(result.reason) <= review_contracts.MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS
+    parsed = component_result_from_dict(
+        {
+            "schema_version": "component-result.v1",
+            "request_id": result.request_id,
+            "component_id": result.component_id,
+            "status": result.status,
+            "reason": result.reason,
+        }
+    )
+    assert parsed.status == "failed"
+    assert not (tmp_path / "nan-output").exists()
+
+
+def test_run_normalizes_filesystem_failures_to_component_result(tmp_path: Path) -> None:
+    """An OS-level output-path failure cannot escape as an exception or huge detail."""
+    request = component_request_from_dict(
+        {
+            "schema_version": "component-request.v1",
+            "request_id": "r-long-output",
+            "component_id": "srev01-capability-report",
+            "sources": [{"artifact_id": "a", "uri": "a.json", "format": "f"}],
+            "output_directory": "x" * 4_096,
+        }
+    )
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason
+    assert len(result.reason) <= review_contracts.MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS
+    assert not any(path.name == request.output_directory for path in tmp_path.iterdir())
+
+
 def test_component_result_rejects_partial_with_artifacts() -> None:
     with pytest.raises(ReviewContractsValidationError, match="cannot carry complete status"):
         component_result_from_dict(
@@ -366,6 +417,101 @@ def test_admitted_source_bounds_schema_validation_detail() -> None:
 
     assert (result.status, result.reason) == ("failed", "receipt_malformed")
     assert len(result.detail) <= 200
+    assert result.source_path is None
+
+
+@pytest.mark.parametrize("path", [None, 123])
+def test_admitted_source_loader_uses_typed_errors_for_invalid_paths(path: object) -> None:
+    """Invalid public loader path values use the contract error type."""
+    with pytest.raises(ReviewContractsValidationError, match="cannot read admitted-source receipt"):
+        load_admitted_source_receipt(path)  # type: ignore[arg-type]
+
+
+def test_admitted_source_bounds_aggregate_identity_diagnostics() -> None:
+    """Many invalid current source entries produce one bounded stale detail."""
+    request = _admitted_source_fixture("request.json")
+    request["sources"] = [{"artifact_id": str(index)} for index in range(1_000)]
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert "request identity is unusable" in result.detail
+    assert len(result.detail) <= review_contracts.MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS
+    assert result.source_path is None
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("kind", "benchmark"),
+        ("evidence_boundary", "benchmark"),
+        ("scientific_claim_allowed", True),
+        ("dependent_family_status", "shared_family"),
+    ],
+)
+def test_admitted_source_rejects_recipe_boundary_mutation(field: str, value: object) -> None:
+    """Recipe identity cannot widen a receipt beyond the diagnostic-only boundary."""
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    recipe["source_identity"][field] = value
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["recipe_sha256"] = experiment_recipe_canonical_digest(recipe)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert "diagnostic-only boundary" in result.detail
+    assert result.source_path is None
+
+
+def test_admitted_source_rejects_oversized_receipt_input(tmp_path: Path) -> None:
+    """Receipt loading and resolution enforce a bounded serialized input size."""
+    receipt_path = tmp_path / "oversized-receipt.json"
+    receipt_path.write_bytes(b"{}" + b" " * review_contracts.MAX_ADMITTED_SOURCE_RECEIPT_BYTES)
+
+    with pytest.raises(ReviewContractsValidationError, match="maximum size"):
+        load_admitted_source_receipt(receipt_path)
+
+    result = resolve_admitted_source(receipt_path, allowed_root=ADMITTED_SOURCE_FIXTURE_DIR)
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_unreadable")
+    assert "maximum size" in result.detail
+    assert len(result.detail) <= review_contracts.MAX_REVIEW_CONTRACT_DIAGNOSTIC_CHARS
+    assert result.source_path is None
+
+
+def test_admitted_source_rejects_oversized_source_before_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A replaced source is bounded before hashing and never becomes admission evidence."""
+    source_path = tmp_path / "source.json"
+    source_path.write_bytes(b"x" * 17)
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+    monkeypatch.setattr(review_contracts, "MAX_ADMITTED_SOURCE_BYTES", 16)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=tmp_path,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "source_too_large")
+    assert "maximum size" in result.detail
     assert result.source_path is None
 
 

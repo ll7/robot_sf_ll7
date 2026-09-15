@@ -45,6 +45,16 @@ Environment:
                          (default: 0).
   ROBOT_SF_WORKTREE_MIN_FREE_BYTES
                          Minimum free bytes required for worktree recovery (default: 2 GiB).
+  ROBOT_SF_VENV_SEED_CACHE
+                         Directory holding checksum-keyed reusable recovery environments
+                         (default: $XDG_CACHE_HOME/robot-sf/worktree-venv-seeds or
+                         $HOME/.cache/robot-sf/worktree-venv-seeds). Set to "off" to
+                         disable seed publish and restore. A successful recovery publishes
+                         its verified worktree .venv as a hardlinked seed; a later recovery
+                         with identical dependency inputs restores the seed instead of
+                         materializing every package again, then still runs the standard
+                         sync (which rebinds the editable install) and verification. Any
+                         seed failure falls back to the full-sync path.
 
 The helper is normally invoked through:
   scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- <command>
@@ -59,6 +69,23 @@ EOF
 dependency_profile="core"
 locked_recovery=0
 wait_timeout="${ROBOT_SF_RECOVERY_LOCK_TIMEOUT_SECONDS:-0}"
+
+# Checksum-keyed reusable recovery environments (issue #9338). Seeds live
+# outside every checkout so worktree teardown never orphans them; each seed is
+# a hardlinked clone, so publishing and restoring cost seconds and only
+# megabytes of marginal disk while uv's package cache stays warm.
+seed_cache_root="${ROBOT_SF_VENV_SEED_CACHE:-}"
+if [[ -z "$seed_cache_root" ]]; then
+  if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
+    seed_cache_root="$XDG_CACHE_HOME/robot-sf/worktree-venv-seeds"
+  elif [[ -n "${HOME:-}" ]]; then
+    seed_cache_root="$HOME/.cache/robot-sf/worktree-venv-seeds"
+  fi
+fi
+seed_caching_disabled=0
+case "$seed_cache_root" in
+  ""|off|OFF|0) seed_caching_disabled=1 ;;
+esac
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
@@ -386,6 +413,217 @@ format_lock_diagnostics() {
   fi
 }
 
+# Identity inputs mirror exactly what a recovery sync consumes: the manifests
+# and lockfiles uv resolves, the vendored rvo2 sources uv builds, and the
+# requested dependency profile. Toolchain drift (uv or interpreter updates) is
+# intentionally not part of the key; a drifted seed fails the coherence gates
+# below and falls back to the full-sync path.
+venv_identity_key() {
+  [[ "$seed_caching_disabled" -eq 0 ]] || return 1
+  cd -- "$repo_root" 2>/dev/null || return 1
+  local input
+  for input in pyproject.toml uv.lock fast-pysf/pyproject.toml fast-pysf/uv.lock; do
+    [[ -f "$input" ]] || return 1
+  done
+  local rvo2_manifest
+  rvo2_manifest="$(git ls-files -s third_party/python-rvo2 2>/dev/null)" || return 1
+  [[ -n "$rvo2_manifest" ]] || return 1
+  local file_digests
+  # Hash only the content digests (never filenames): the key must be identical
+  # for every worktree checking out the same dependency inputs.
+  file_digests="$(sha256sum pyproject.toml uv.lock \
+    fast-pysf/pyproject.toml fast-pysf/uv.lock 2>/dev/null | cut -d' ' -f1)" \
+    || return 1
+  {
+    printf '%s\n' "$file_digests"
+    printf 'profile=%s\n' "$dependency_profile"
+    printf '%s\n' "$rvo2_manifest"
+  } | sha256sum | cut -d' ' -f1
+}
+
+seed_receipt_identity() {
+  seed_receipt_field "$1" "identity"
+}
+
+seed_receipt_field() {
+  python3 - "$1" "$2" <<'PY' 2>/dev/null
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        value = json.load(stream).get(sys.argv[2], "")
+    print(value if isinstance(value, str) else "")
+except (OSError, ValueError):
+    print("")
+PY
+}
+
+# Reuse the worktree layout ownership check against a seed directory by
+# temporarily retargeting the global it inspects. Seeds must satisfy the same
+# symlink-containment contract as worktree environments.
+check_seed_venv_layout() {
+  local saved_venv="$local_venv"
+  local_venv="$1"
+  local layout_rc=0
+  check_local_venv_layout || layout_rc=$?
+  local_venv="$saved_venv"
+  return "$layout_rc"
+}
+
+# Rewrite absolute source-environment paths in worktree entry-point scripts so
+# a restored clone never executes another checkout's interpreter. Only
+# NUL-free files under bin/ are rewritten; binaries and symlinks are left
+# untouched. The rewritten prefix is the seed's originating venv recorded in
+# the receipt, not the seed directory itself: cloned files still reference
+# the checkout they were materialized from.
+rebind_seed_prefix() {
+  local source_venv="$1" target_venv="$2"
+  python3 - "$source_venv" "$target_venv" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+old, new = sys.argv[1], sys.argv[2]
+rewritten = 0
+bin_dir = Path(new) / "bin"
+for child in sorted(bin_dir.iterdir()):
+    if child.is_symlink() or not child.is_file():
+        continue
+    try:
+        data = child.read_bytes()
+    except OSError:
+        continue
+    if b"\0" in data or old.encode() not in data:
+        continue
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        continue
+    updated = text.replace(old, new)
+    if updated == text:
+        continue
+    try:
+        mode = stat.S_IMODE(child.stat().st_mode)
+        # Break the seed hardlink before writing: an in-place write would
+        # mutate the shared seed (and the worktree it was published from).
+        child.unlink()
+        child.write_bytes(updated.encode())
+        os.chmod(child, mode)
+    except OSError as exc:
+        print(f"could not rebind seed path in {child}: {exc}")
+        raise SystemExit(1)
+    rewritten += 1
+print(f"rebound {rewritten} seed interpreter paths")
+PY
+}
+
+# Best-effort seed restore. Returns 0 with a cloned worktree .venv ready for
+# the standard sync (which rebinds the editable robot-sf install to this
+# worktree) and verification below; returns nonzero to take the normal
+# full-sync path with the local environment untouched or removed.
+restore_seed_venv() {
+  [[ "$seed_caching_disabled" -eq 0 ]] || return 1
+  local key seed_dir receipt recorded source_venv
+  key="$(venv_identity_key)" || return 1
+  seed_dir="$seed_cache_root/$key"
+  receipt="$seed_dir/seed-receipt.json"
+  [[ -f "$receipt" && -x "$seed_dir/bin/python" ]] || return 1
+  recorded="$(seed_receipt_identity "$receipt")" || return 1
+  [[ -n "$recorded" && "$recorded" == "$key" ]] || return 1
+  source_venv="$(seed_receipt_field "$receipt" "source_venv")" || return 1
+  [[ -n "$source_venv" ]] || return 1
+  if ! check_seed_venv_layout "$seed_dir"; then
+    echo "recover_fast_pysf_worktree: seed environment failed ownership verification; using full sync" >&2
+    return 1
+  fi
+  local seed_report
+  if ! seed_report="$(env -u PYTHONPATH "$seed_dir/bin/python" "$checker" 2>&1)"; then
+    echo "recover_fast_pysf_worktree: seed environment is not fast-pysf coherent; using full sync" >&2
+    return 1
+  fi
+  if ! env -u PYTHONPATH "$seed_dir/bin/python" "$profile_checker" \
+    --profile "$dependency_profile" >/dev/null 2>&1; then
+    echo "recover_fast_pysf_worktree: seed environment lacks dependency profile '$dependency_profile'; using full sync" >&2
+    return 1
+  fi
+  if [[ -n "$local_venv" && "$local_venv" == "$repo_root/.venv" && -e "$local_venv" ]]; then
+    rm -rf "$local_venv" || return 1
+  fi
+  if ! cp -al "$seed_dir" "$local_venv" 2>/dev/null; then
+    echo "recover_fast_pysf_worktree: seed clone failed (cross-filesystem seeds are unsupported); using full sync" >&2
+    rm -rf "$local_venv" 2>/dev/null || true
+    return 1
+  fi
+  if ! rebind_seed_prefix "$source_venv" "$local_venv"; then
+    rm -rf "$local_venv" 2>/dev/null || true
+    return 1
+  fi
+  printf '%s\n' "$seed_report" >&2
+  echo "recover_fast_pysf_worktree: restored checksum-keyed seed environment for identity ${key:0:12}" >&2
+  return 0
+}
+
+# Best-effort seed publish after a fully verified recovery. Always succeeds
+# from the caller's perspective: a publish failure only warns, never fails an
+# already-verified recovery.
+publish_seed_venv() {
+  [[ "$seed_caching_disabled" -eq 0 ]] || return 0
+  local key seed_dir staging receipt head_sha uv_version python_version venv_bytes
+  key="$(venv_identity_key)" || return 0
+  seed_dir="$seed_cache_root/$key"
+  [[ -d "$seed_dir" ]] && return 0
+  [[ -L "$seed_cache_root" ]] && return 0
+  if ! mkdir -p "$seed_cache_root" 2>/dev/null; then
+    echo "recover_fast_pysf_worktree: warning: could not create seed cache; skipping seed publish" >&2
+    return 0
+  fi
+  staging="$seed_cache_root/.staging-$key-$$"
+  rm -rf "$staging" 2>/dev/null || true
+  if ! cp -al "$local_venv" "$staging" 2>/dev/null; then
+    echo "recover_fast_pysf_worktree: warning: seed clone failed; skipping seed publish" >&2
+    rm -rf "$staging" 2>/dev/null || true
+    return 0
+  fi
+  receipt="$staging/seed-receipt.json"
+  head_sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+  uv_version="$(uv --version 2>/dev/null | head -n 1 || echo unknown)"
+  python_version="$("$local_venv/bin/python" --version 2>&1 || echo unknown)"
+  venv_bytes="$(du -sb "$local_venv" 2>/dev/null | cut -f1 || echo 0)"
+  if ! python3 - "$receipt" "$key" "$repo_root" "$local_venv" "$head_sha" "$dependency_profile" \
+    "$uv_version" "$python_version" "$venv_bytes" <<'PY' 2>/dev/null; then
+import json
+import sys
+import time
+
+_, receipt, identity, source, venv, head, profile, uv_version, python_version, size = sys.argv
+payload = {
+    "identity": identity,
+    "source_worktree": source,
+    "source_venv": venv,
+    "head_sha": head,
+    "dependency_profile": profile,
+    "uv_version": uv_version.strip(),
+    "python_version": python_version.strip(),
+    "venv_bytes": size.strip(),
+    "created_at": int(time.time()),
+}
+with open(receipt, "w", encoding="utf-8") as stream:
+    json.dump(payload, stream, indent=2, sort_keys=True)
+PY
+    echo "recover_fast_pysf_worktree: warning: seed receipt write failed; skipping seed publish" >&2
+    rm -rf "$staging" 2>/dev/null || true
+    return 0
+  fi
+  if ! mv "$staging" "$seed_dir" 2>/dev/null; then
+    rm -rf "$staging" 2>/dev/null || true
+    return 0
+  fi
+  echo "recover_fast_pysf_worktree: published checksum-keyed seed environment for identity ${key:0:12}" >&2
+  return 0
+}
+
 lock_path="$git_common_dir/robot-sf-fast-pysf-recovery.lock"
 if [[ -L "$lock_path" ]]; then
   echo "recover_fast_pysf_worktree: refusing a symlinked repository recovery lock: $lock_path" >&2
@@ -499,6 +737,9 @@ if [[ -x "$local_venv/bin/python" ]]; then
   if [[ "$fast_pysf_coherent" -eq 1 && "$dependency_profile_complete" -eq 1 ]]; then
     printf '%s\n' "$existing_report" >&2
     echo "recover_fast_pysf_worktree: local environment is already fast-pysf coherent and dependency profile '$dependency_profile' is complete; sync skipped" >&2
+    # The environment just passed the same gates a recovery would certify,
+    # so share it as a seed for identical worktrees (best-effort, warn-only).
+    publish_seed_venv
     sync_needed=0
   elif [[ "$fast_pysf_coherent" -eq 1 ]]; then
     echo "recover_fast_pysf_worktree: existing local environment is missing dependency profile '$dependency_profile'; refreshing it" >&2
@@ -510,6 +751,11 @@ if [[ -x "$local_venv/bin/python" ]]; then
 fi
 
 if [[ "$sync_needed" -eq 1 ]]; then
+  # A verified seed for this exact identity skips package materialization;
+  # the sync below still rebinds the editable install and re-verifies.
+  if restore_seed_venv; then
+    echo "recover_fast_pysf_worktree: seed restore will be rebound and verified by the standard sync below" >&2
+  fi
   if [[ ! -x "$local_venv/bin/python" ]]; then
     echo "recover_fast_pysf_worktree: creating worktree-local environment: $local_venv" >&2
     if ! env -u UV_NO_SYNC -u VIRTUAL_ENV -u UV_PROJECT \
@@ -566,6 +812,10 @@ if [[ -n "$remaining_dirty_inputs" ]]; then
   echo "Inspect and preserve the changes before retrying; no wrapped command was started." >&2
   exit 2
 fi
+
+# The recovery is fully verified; share it as a seed for identical worktrees.
+# Publish failures only warn and never fail this recovery.
+publish_seed_venv
 
 echo "recover_fast_pysf_worktree: verified worktree-owned fast-pysf environment: $local_venv" >&2
 echo "recover_fast_pysf_worktree: verified dependency profile '$dependency_profile': $local_venv" >&2

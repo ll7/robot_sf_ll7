@@ -261,22 +261,61 @@ def test_numeric_factor_values_are_finite_json_numbers() -> None:
         validate_intervention_spec(payload)
 
 
-def test_programmatic_huge_integer_fails_as_bounded_validation_error() -> None:
-    """A huge Python integer must not leak jsonschema's raw conversion error."""
+@pytest.mark.parametrize(
+    "integer_path",
+    [
+        "factor",
+        "negative_control",
+        "source_identity.seed",
+        "comparison.required_shared_prefix_steps",
+    ],
+)
+def test_programmatic_huge_integer_fails_as_bounded_validation_error(integer_path: str) -> None:
+    """Every schema-approved integer path must fail before canonical serialization."""
 
     payload = _payload()
     huge = 10**4301
-    payload["factor"] = {
-        **payload["factor"],
-        "baseline": huge,
-        "intervention": huge + 1,
-    }
-    payload["negative_control"] = {**payload["negative_control"], "value": huge}
+    if integer_path == "factor":
+        payload["factor"] = {
+            **payload["factor"],
+            "baseline": huge,
+            "intervention": huge + 1,
+        }
+    elif integer_path == "negative_control":
+        payload["negative_control"] = {**payload["negative_control"], "value": huge}
+    elif integer_path == "source_identity.seed":
+        payload["provenance"]["source_identity"]["seed"] = huge
+    elif integer_path == "comparison.required_shared_prefix_steps":
+        payload["comparison"] = {
+            **payload["comparison"],
+            "classification": "genuine_shared_prefix",
+            "required_shared_prefix_steps": huge,
+        }
+    else:  # pragma: no cover - guarded by the parameter list
+        raise AssertionError(f"unsupported integer path: {integer_path}")
 
-    with pytest.raises(InterventionSpecValidationError) as exc_info:
+    with pytest.raises(InterventionSpecValidationError, match="bounded JSON integer"):
         validate_intervention_spec(payload)
-    assert "schema validation failed" in str(exc_info.value)
-    assert "Exceeds the limit" not in str(exc_info.value)
+    with pytest.raises(InterventionSpecValidationError, match="bounded JSON integer"):
+        compute_intervention_spec_digest(payload)
+
+
+def test_reasonable_seed_and_shared_prefix_values_remain_valid() -> None:
+    """The integer cap preserves ordinary wide seeds and replay step counts."""
+
+    payload = _payload()
+    payload["provenance"]["source_identity"]["seed"] = 2**63 - 1
+    payload["comparison"] = {
+        **payload["comparison"],
+        "classification": "genuine_shared_prefix",
+        "required_shared_prefix_steps": 2**32,
+    }
+
+    normalized = validate_intervention_spec(payload)
+
+    assert normalized["provenance"]["source_identity"]["seed"] == 2**63 - 1
+    assert normalized["comparison"]["required_shared_prefix_steps"] == 2**32
+    assert len(compute_intervention_spec_digest(payload)) == 64
 
 
 @pytest.mark.parametrize(

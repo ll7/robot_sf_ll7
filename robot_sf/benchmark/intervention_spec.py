@@ -62,6 +62,8 @@ _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _ID_RE = re.compile(r"^[A-Za-z0-9_.:-]+$")
 _PATH_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.\[\]-]*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+# Keep canonical JSON serialization below CPython's decimal conversion limit.
+_MAX_JSON_INTEGER_BITS = 4096
 # Exact case-insensitive tokens only; meaningful identifiers are not rejected by substring.
 _FALLBACK_IDENTITIES = frozenset(
     {
@@ -186,10 +188,24 @@ def _canonical_bytes(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def _assert_json_value(value: Any, field: str, *, _active_ids: set[int] | None = None) -> None:
+def _assert_json_integer(value: int, field: str) -> None:
+    """Reject integers too large for bounded canonical JSON serialization."""
+
+    if value.bit_length() > _MAX_JSON_INTEGER_BITS:
+        raise InterventionSpecValidationError(
+            f"{field} must contain a bounded JSON integer (at most {_MAX_JSON_INTEGER_BITS} bits)"
+        )
+
+
+def _assert_json_value(  # noqa: C901
+    value: Any, field: str, *, _active_ids: set[int] | None = None
+) -> None:
     """Reject values that are not finite, unambiguous JSON values."""
 
-    if value is None or isinstance(value, str | bool | int):
+    if value is None or isinstance(value, str | bool):
+        return
+    if isinstance(value, int):
+        _assert_json_integer(value, field)
         return
     if isinstance(value, float):
         if not math.isfinite(value):

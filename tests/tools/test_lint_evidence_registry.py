@@ -109,15 +109,16 @@ def _historical_binding_fixture(
     producer_consumer_contents: list[bytes] | None = None,
     duplicate_producer_reference_keys: bool = False,
 ):
-    """Create two historical source transitions and their current mismatching consumers."""
+    """Create three historical source transitions and their current mismatching consumers."""
     repo, evidence, _base_commit, _config_sha256 = _make_repo(tmp_path / "historical")
     sources = [
         repo / "docs/context/historical-source-one.md",
         repo / "docs/context/historical-source-two.md",
+        repo / "docs/context/historical-source-three.md",
     ]
-    baseline_bytes = [b"before-one\n", b"before-two\n"]
-    historical_bytes = [b"historical-one\n", b"historical-two\n"]
-    current_bytes = [b"current-one\n", b"current-two\n"]
+    baseline_bytes = [b"before-one\n", b"before-two\n", b"before-three\n"]
+    historical_bytes = [b"historical-one\n", b"historical-two\n", b"historical-three\n"]
+    current_bytes = [b"current-one\n", b"current-two\n", b"current-three\n"]
     for source, content in zip(sources, baseline_bytes, strict=True):
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_bytes(content)
@@ -126,6 +127,7 @@ def _historical_binding_fixture(
         "add",
         "docs/context/historical-source-one.md",
         "docs/context/historical-source-two.md",
+        "docs/context/historical-source-three.md",
     )
     _git(repo, "commit", "-qm", "historical source baseline")
     parent_commit = _git(repo, "rev-parse", "HEAD")
@@ -133,6 +135,7 @@ def _historical_binding_fixture(
     consumers = [
         evidence / "historical-consumer-one.json",
         evidence / "historical-consumer-two.json",
+        evidence / "historical-consumer-three.json",
     ]
     for index, (source, before, content, consumer) in enumerate(
         zip(sources, baseline_bytes, historical_bytes, consumers, strict=True)
@@ -165,12 +168,14 @@ def _historical_binding_fixture(
         "add",
         "docs/context/historical-source-one.md",
         "docs/context/historical-source-two.md",
+        "docs/context/historical-source-three.md",
     )
     _git(
         repo,
         "add",
         "docs/context/evidence/historical-consumer-one.json",
         "docs/context/evidence/historical-consumer-two.json",
+        "docs/context/evidence/historical-consumer-three.json",
     )
     _git(repo, "commit", "-qm", "historical source transition")
     producer_commit = _git(repo, "rev-parse", "HEAD")
@@ -243,8 +248,10 @@ def _historical_binding_fixture(
         "add",
         "docs/context/historical-source-one.md",
         "docs/context/historical-source-two.md",
+        "docs/context/historical-source-three.md",
         "docs/context/evidence/historical-consumer-one.json",
         "docs/context/evidence/historical-consumer-two.json",
+        "docs/context/evidence/historical-consumer-three.json",
     )
     _git(repo, "commit", "-qm", "current source transition")
     return repo, evidence, manifest, consumers, sources
@@ -585,6 +592,23 @@ def test_historical_binding_digest_validation_matches_schema_for_every_field() -
         )
 
 
+def test_tracked_historical_binding_manifest_resolves_all_three_records() -> None:
+    """The tracked manifest validates its complete current binding set."""
+    historical = importlib.import_module("robot_sf.evidence.historical_bindings")
+
+    bindings, report = historical._load_historical_bindings(ROOT, authority_ref="HEAD")
+
+    assert report["status"] == "validated"
+    assert report["validated"] == 3
+    assert {
+        (binding["reference_path"], binding["reference_locator"]) for binding in bindings.values()
+    } == {
+        ("scripts/validation/dependency_license_policy.v1.json", "/review_binding/policy"),
+        ("docs/context/dependency_license_inventory.md", "/evidence_references/1"),
+        ("pyproject.toml", "/evidence_references/5"),
+    }
+
+
 def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:
     """A campaign with committed config and matching artifact hash passes."""
     linter = _load_linter()
@@ -605,7 +629,7 @@ def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:
     assert report["campaign_ids"] == ["campaign-valid"]
 
 
-def test_historical_bindings_resolve_only_the_two_exact_consumer_mismatches(
+def test_historical_bindings_resolve_only_the_three_exact_consumer_mismatches(
     tmp_path: Path,
 ) -> None:
     """Verified producer transitions may resolve their exact current consumers."""
@@ -616,10 +640,10 @@ def test_historical_bindings_resolve_only_the_two_exact_consumer_mismatches(
 
     assert report["issues"] == []
     assert report["historical_bindings"]["status"] == "validated"
-    assert report["historical_bindings"]["validated"] == 2
-    assert [item["consumer_path"] for item in report["historical_bindings"]["applied"]] == [
+    assert report["historical_bindings"]["validated"] == 3
+    assert [item["consumer_path"] for item in report["historical_bindings"]["applied"]] == sorted(
         path.relative_to(repo).as_posix() for path in consumers
-    ]
+    )
 
 
 def test_historical_binding_rejects_current_consumer_drift(tmp_path: Path) -> None:
@@ -705,7 +729,11 @@ def test_historical_binding_rejects_producer_consumer_reference_drift(tmp_path: 
     repo, evidence, _manifest, _consumers, _sources = _historical_binding_fixture(
         tmp_path,
         linter,
-        producer_consumer_contents=[b'{"unrelated": true}\n', b'{"unrelated": true}\n'],
+        producer_consumer_contents=[
+            b'{"unrelated": true}\n',
+            b'{"unrelated": true}\n',
+            b'{"unrelated": true}\n',
+        ],
     )
 
     with pytest.raises(
@@ -798,7 +826,7 @@ def test_historical_binding_does_not_apply_to_copied_consumer_path(tmp_path: Pat
         and item["code"] == "artifact_hash_mismatch"
         for item in report["issues"]
     )
-    assert len(report["historical_bindings"]["applied"]) == 2
+    assert len(report["historical_bindings"]["applied"]) == 3
 
 
 def test_dangling_commit_is_classified(tmp_path: Path) -> None:

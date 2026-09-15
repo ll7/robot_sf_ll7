@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -192,6 +193,32 @@ def test_manifest_loader_rejects_source_drift(tmp_path: Path) -> None:
 
     with pytest.raises(canary.CanaryError, match="source drift"):
         canary.load_execution_manifest(manifest_path, current_head="b" * 40)
+
+
+def test_registry_checkpoint_accepts_release_asset_filename(monkeypatch, tmp_path: Path) -> None:
+    model_bytes = b"frozen model bytes"
+    expected_sha = hashlib.sha256(model_bytes).hexdigest()
+    registry_path = tmp_path / "model" / "registry.yaml"
+    registry_path.parent.mkdir()
+    registry_path.write_text(
+        "models:\n"
+        "  - model_id: fixture-model\n"
+        "    local_path: output/model_cache/fixture-model/model.zip\n"
+        "    github_release:\n"
+        "      asset_name: fixture-model-release.zip\n"
+        f"      sha256: {expected_sha}\n",
+        encoding="utf-8",
+    )
+    staged = tmp_path / "staged" / "fixture-model"
+    staged.mkdir(parents=True)
+    artifact = staged / "fixture-model-release.zip"
+    artifact.write_bytes(model_bytes)
+    monkeypatch.setattr(canary, "REPO_ROOT", tmp_path)
+
+    result = canary._registry_checkpoint("fixture-model", tmp_path / "staged")
+
+    assert result["path_label"] == "fixture-model/fixture-model-release.zip"
+    assert result["sha256"] == expected_sha
 
 
 def test_journal_event_is_json_lines_and_flushes(tmp_path: Path) -> None:

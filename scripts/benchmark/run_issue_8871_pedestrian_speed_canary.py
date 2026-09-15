@@ -549,12 +549,14 @@ def extract_activation_diagnostics(  # noqa: PLR0915
 def _registry_checkpoint(model_id: str, checkpoint_root: Path) -> dict[str, Any]:
     from robot_sf.models.registry import get_registry_entry
 
+    checkpoint_root = checkpoint_root.expanduser().resolve()
     try:
         entry = get_registry_entry(model_id, REPO_ROOT / "model/registry.yaml")
     except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
         raise CanaryError(f"checkpoint registry entry unavailable for {model_id}: {exc}") from exc
     release = entry.get("github_release")
     expected = release.get("sha256") if isinstance(release, Mapping) else None
+    asset_name = release.get("asset_name") if isinstance(release, Mapping) else None
     _require(
         isinstance(expected, str) and len(expected) == 64,
         f"checkpoint {model_id} lacks a pinned SHA-256",
@@ -562,6 +564,8 @@ def _registry_checkpoint(model_id: str, checkpoint_root: Path) -> dict[str, Any]
     local_path = Path(str(entry.get("local_path", "")))
     filename = local_path.name
     candidates = [checkpoint_root / model_id / filename, checkpoint_root / filename]
+    if isinstance(asset_name, str) and asset_name.strip():
+        candidates.extend([checkpoint_root / model_id / asset_name, checkpoint_root / asset_name])
     if local_path.parts:
         candidates.append(checkpoint_root / local_path)
     selected = next((candidate for candidate in candidates if candidate.is_file()), None)
@@ -573,7 +577,11 @@ def _registry_checkpoint(model_id: str, checkpoint_root: Path) -> dict[str, Any]
     )
     return {
         "model_id": model_id,
-        "path_label": f"{model_id}/{filename}",
+        "path_label": (
+            selected.relative_to(checkpoint_root).as_posix()
+            if selected.is_relative_to(checkpoint_root)
+            else selected.name
+        ),
         "sha256": observed,
         "size_bytes": selected.stat().st_size,
         "expected_sha256": expected.lower(),
@@ -596,6 +604,21 @@ def _required_model_ids(planner_specs: Sequence[Mapping[str, Any]]) -> list[str]
             if isinstance(value, str) and value.strip() and value not in ids:
                 ids.append(value)
     return ids
+
+
+def _planner_source_identity(spec: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the frozen planner config identity for the preflight receipt."""
+    config_path = spec.get("config_path")
+    return {
+        "config_path": (
+            str(config_path.relative_to(REPO_ROOT))
+            if isinstance(config_path, Path) and config_path.is_relative_to(REPO_ROOT)
+            else None
+            if config_path is None
+            else str(config_path)
+        ),
+        "config_sha256": spec.get("config_sha256"),
+    }
 
 
 def _bind_checkpoint_paths(
@@ -673,9 +696,19 @@ def _environment_report(planner_specs: Sequence[Mapping[str, Any]]) -> dict[str,
             package_versions[distribution] = importlib_metadata.version(distribution)
         except importlib_metadata.PackageNotFoundError:
             package_versions[distribution] = None
+    module_paths: dict[str, str | None] = {}
+    for module_name in ("robot_sf", "pysocialforce", "stable_baselines3", "sb3_contrib", "torch"):
+        try:
+            module = __import__(module_name)
+        except ImportError:
+            module_paths[module_name] = None
+        else:
+            module_file = getattr(module, "__file__", None)
+            module_paths[module_name] = str(Path(module_file).resolve()) if module_file else None
     return {
         "device": _device_report(planner_specs),
         "package_versions": package_versions,
+        "module_paths": module_paths,
         "native_trace_requirements": {
             "oracle_force_trace_enabled": True,
             "sampler_capture_enabled": True,
@@ -685,7 +718,7 @@ def _environment_report(planner_specs: Sequence[Mapping[str, Any]]) -> dict[str,
     }
 
 
-def preflight_canary(  # noqa: C901
+def preflight_canary(  # noqa: C901, PLR0912, PLR0915
     manifest: Mapping[str, Any],
     *,
     config_path: Path = DEFAULT_CANARY_CONFIG,
@@ -693,6 +726,7 @@ def preflight_canary(  # noqa: C901
     checkpoint_root: Path,
 ) -> dict[str, Any]:
     """Validate native planner, model, scenario, and trace prerequisites."""
+    checkpoint_root = checkpoint_root.expanduser().resolve()
     _require(config_path.is_file(), f"canary config not found: {config_path}")
     _require(
         preflight_config_path.is_file(), f"preflight config not found: {preflight_config_path}"
@@ -706,10 +740,13 @@ def preflight_canary(  # noqa: C901
     scenarios = _load_scenarios(protocol)
     planner_specs = _load_planner_specs(protocol)
     checkpoints: dict[str, dict[str, Any]] = {}
-    for model_id in _required_model_ids(planner_specs):
-        checkpoints[model_id] = _registry_checkpoint(model_id, checkpoint_root)
-    planner_report: list[dict[str, Any]] = []
     blockers: list[str] = []
+    for model_id in _required_model_ids(planner_specs):
+        try:
+            checkpoints[model_id] = _registry_checkpoint(model_id, checkpoint_root)
+        except CanaryError as exc:
+            blockers.append(str(exc))
+    planner_report: list[dict[str, Any]] = []
     from robot_sf.benchmark.map_runner.map_runner import (
         _preflight_policy,
         _resolve_policy_search_candidate_runtime,
@@ -718,6 +755,23 @@ def preflight_canary(  # noqa: C901
     for spec in planner_specs:
         planner_id = str(spec["planner_id"])
         algorithm = str(spec["algorithm"])
+        required_for_planner = _required_model_ids([spec])
+        missing_for_planner = [
+            model_id for model_id in required_for_planner if model_id not in checkpoints
+        ]
+        if missing_for_planner:
+            reason = "required checkpoint(s) unavailable: " + ", ".join(missing_for_planner)
+            blockers.append(f"{planner_id}: {reason}")
+            planner_report.append(
+                {
+                    "planner_id": planner_id,
+                    "status": "blocked",
+                    "errors": [reason],
+                    "model_ids": required_for_planner,
+                    **_planner_source_identity(spec),
+                }
+            )
+            continue
         config_path_value = spec.get("config_path")
         raw_config = dict(spec.get("raw_config") or {})
         effective_by_scenario: dict[str, dict[str, Any]] = {}
@@ -791,12 +845,15 @@ def preflight_canary(  # noqa: C901
                 "model_ids": [
                     model_id for model_id in _required_model_ids([spec]) if model_id in checkpoints
                 ],
+                **_planner_source_identity(spec),
             }
         )
     # Explicit model deserialization catches schema/load failures that construction-only
     # preflight cannot see for lazy prediction adapters.
     for spec in planner_specs:
         planner_id = str(spec["planner_id"])
+        if any(model_id not in checkpoints for model_id in _required_model_ids([spec])):
+            continue
         algorithm = str(spec["algorithm"])
         raw_config = dict(spec.get("raw_config") or {})
         first_scenario = next(iter(scenarios.values()))
@@ -953,6 +1010,7 @@ def run_canary(  # noqa: PLR0915
     journal_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run all selected packet rows and write a fail-closed diagnostics receipt."""
+    checkpoint_root = checkpoint_root.expanduser().resolve()
     _require(not output_path.exists(), f"refusing to overwrite existing output: {output_path}")
     journal_path = journal_path or output_path.with_name(output_path.name + ".journal.jsonl")
     _require(
@@ -1183,6 +1241,7 @@ def run_canary(  # noqa: PLR0915
             "event_contract": "header; row_started; row_finished; unfinished rows require reconciliation",
         },
     }
+    result["receipt_payload_sha256"] = _canonical_hash(result)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_name(output_path.name + ".tmp")
     temporary.write_text(

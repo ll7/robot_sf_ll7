@@ -13,6 +13,7 @@ import pytest
 
 from robot_sf.analysis_workbench.review_contracts import (
     ComponentResult,
+    ReviewContractsValidationError,
     component_descriptor_from_dict,
     component_result_from_dict,
 )
@@ -96,6 +97,8 @@ def test_success_maps_frames_to_steps_without_touching_sources(tmp_path: Path) -
     mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
     assert [e["frame_index"] for e in mapping["entries"]] == [0, 1, 2]
     assert [e["sim_step"] for e in mapping["entries"]] == [0, 1, 2]
+    assert [e["sim_stamp_time_s"] for e in mapping["entries"]] == [0.0, 0.1, 0.2]
+    assert all(e["temporal_error_s"] == 0.0 for e in mapping["entries"])
     assert mapping["reset_ids"] == ["r-t"]
     assert mapping["first_frame"]["frame_index"] == 0
     assert mapping["last_frame"]["frame_index"] == 2
@@ -170,6 +173,103 @@ def test_after_last_frames_are_unavailable_without_a_stale_anchor(tmp_path: Path
     assert unavailable["capture_episode_id"] == "capture-ep"
     assert unavailable["capture_reset_id"] == "capture-reset"
     assert mapping["last_frame"]["status"] == "unavailable"
+
+
+def test_before_first_frames_are_unavailable_with_temporal_error(tmp_path: Path) -> None:
+    capture = dict(CAPTURE)
+    capture["frames"] = [
+        {"frame_index": 0, "pts_s": -0.1, "episode_id": "capture-ep", "reset_id": "capture-reset"}
+    ]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "frame_0_before_first_sim_stamp" in result.reason
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    unavailable = mapping["unavailable_frames"][0]
+    assert unavailable["reason"] == "before_first_sim_stamp"
+    assert unavailable["temporal_error_s"] == pytest.approx(0.1)
+    assert unavailable["capture_episode_id"] == "capture-ep"
+    assert unavailable["capture_reset_id"] == "capture-reset"
+
+
+def test_matching_capture_identity_is_retained_on_mapped_entry(tmp_path: Path) -> None:
+    capture = dict(CAPTURE)
+    capture["frames"] = [{"frame_index": 0, "pts_s": 0.0, "episode_id": "ep-t", "reset_id": "r-t"}]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "complete"
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    assert mapping["entries"][0]["capture_episode_id"] == "ep-t"
+    assert mapping["entries"][0]["capture_reset_id"] == "r-t"
+
+
+def test_nonexact_timestamp_is_unavailable_without_silent_floor_anchor(tmp_path: Path) -> None:
+    capture = dict(CAPTURE)
+    capture["frames"] = [{"frame_index": 0, "pts_s": 0.15}]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "frame_0_no_sim_stamp_within_tolerance" in result.reason
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    assert mapping["entries"] == []
+    assert mapping["timestamp_alignment"] == {
+        "policy": "unique_sim_stamp_within_tolerance",
+        "tolerance_s": 0.0,
+    }
+    unavailable = mapping["unavailable_frames"][0]
+    assert unavailable["reason"] == "no_sim_stamp_within_tolerance"
+    assert unavailable["temporal_error_s"] == pytest.approx(0.05)
+
+
+def test_timestamp_tolerance_requires_a_unique_anchor_and_records_error(tmp_path: Path) -> None:
+    capture = dict(CAPTURE)
+    capture["frames"] = [{"frame_index": 0, "pts_s": 0.14}]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+
+    result = run(_request(config_extra={"timestamp_tolerance_s": 0.05}), base=tmp_path)
+
+    assert result.status == "complete"
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    entry = mapping["entries"][0]
+    assert entry["sim_step"] == 1
+    assert entry["sim_stamp_time_s"] == pytest.approx(0.1)
+    assert entry["temporal_error_s"] == pytest.approx(0.04)
+    assert mapping["timestamp_alignment"]["tolerance_s"] == pytest.approx(0.05)
+
+
+def test_timestamp_tolerance_rejects_ambiguous_anchor(tmp_path: Path) -> None:
+    capture = dict(CAPTURE)
+    capture["frames"] = [{"frame_index": 0, "pts_s": 0.15}]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+
+    result = run(_request(config_extra={"timestamp_tolerance_s": 0.05}), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "frame_0_ambiguous_sim_stamp_match" in result.reason
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    assert mapping["entries"] == []
+    assert mapping["unavailable_frames"][0]["temporal_error_s"] == pytest.approx(0.05)
+
+
+def test_invalid_timestamp_tolerance_fails_closed(tmp_path: Path) -> None:
+    _stage(tmp_path)
+
+    result = run(_request(config_extra={"timestamp_tolerance_s": -0.01}), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "timestamp_tolerance_invalid" in result.reason
+    assert not (tmp_path / "out").exists()
 
 
 def test_episode_and_reset_boundaries_are_preserved_in_source_order(tmp_path: Path) -> None:
@@ -292,6 +392,163 @@ def test_missing_required_capability_is_unavailable(tmp_path: Path) -> None:
     result = run(_request(required=("rvo2-binary",)), base=tmp_path)
     assert result.status == "unavailable"
     assert "missing_required_capabilities" in result.reason
+
+
+def test_known_required_camera_calibration_is_unavailable_when_missing(tmp_path: Path) -> None:
+    _stage(tmp_path)
+
+    result = run(_request(required=("camera-calibration",)), base=tmp_path)
+
+    assert result.status == "unavailable"
+    assert result.reason == "missing_required_capabilities: camera-calibration"
+    assert "missing_required_capability:camera-calibration" in {
+        item["code"] for item in result.diagnostics
+    }
+    assert not (tmp_path / "out").exists()
+
+
+def test_known_required_camera_calibration_with_unreadable_source_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    _stage(tmp_path)
+    sources = [
+        {"artifact_id": "capture", "uri": "capture.json", "format": "capture-frames"},
+        {"artifact_id": "stamps", "uri": "stamps.json", "format": "sim-stamps"},
+        {
+            "artifact_id": "camera",
+            "uri": "missing-camera.json",
+            "format": "camera-calibration",
+        },
+    ]
+
+    result = run(_request(required=("camera-calibration",), sources=sources), base=tmp_path)
+
+    assert result.status == "unavailable"
+    assert result.reason == "missing_required_capabilities: camera-calibration"
+    camera = next(
+        source for source in result.provenance["sources"] if source["artifact_id"] == "camera"
+    )
+    assert camera["availability"] == "source_unreadable"
+
+
+def test_required_camera_calibration_is_admitted_when_source_is_usable(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    (tmp_path / "camera.json").write_text(json.dumps({"camera_id": "cam-t"}), encoding="utf-8")
+    sources = [
+        {"artifact_id": "capture", "uri": "capture.json", "format": "capture-frames"},
+        {"artifact_id": "stamps", "uri": "stamps.json", "format": "sim-stamps"},
+        {"artifact_id": "camera", "uri": "camera.json", "format": "camera-calibration"},
+    ]
+
+    result = run(_request(required=("camera-calibration",), sources=sources), base=tmp_path)
+
+    assert result.status == "complete"
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    camera = next(source for source in mapping["sources"] if source["artifact_id"] == "camera")
+    assert camera["availability"] == "ok"
+    assert camera["selected"] is True
+
+
+def test_capture_simulation_identity_mismatch_is_unavailable_and_explicit(
+    tmp_path: Path,
+) -> None:
+    capture = dict(CAPTURE)
+    capture["frames"] = [
+        {"frame_index": 0, "pts_s": 0.0, "episode_id": "capture-ep", "reset_id": "capture-reset"}
+    ]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "frame_0_capture_sim_identity_mismatch" in result.reason
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    assert mapping["entries"] == []
+    assert mapping["identity_namespace"]["capture"] == "shared-episode-reset-v1"
+    assert mapping["identity_namespace"]["simulation"] == "shared-episode-reset-v1"
+    unavailable = mapping["unavailable_frames"][0]
+    assert unavailable["reason"] == "capture_sim_identity_mismatch"
+    assert unavailable["capture_episode_id"] == "capture-ep"
+    assert unavailable["capture_reset_id"] == "capture-reset"
+    assert "episode_id" not in unavailable
+    assert "reset_id" not in unavailable
+
+
+def test_source_symlink_escape_is_rejected(tmp_path: Path) -> None:
+    import shutil
+
+    _stage(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-source-outside"
+    outside.mkdir()
+    try:
+        (outside / "capture.json").write_text(json.dumps(CAPTURE), encoding="utf-8")
+        (tmp_path / "capture-link.json").symlink_to(outside / "capture.json")
+        sources = [
+            {
+                "artifact_id": "capture",
+                "uri": "capture-link.json",
+                "format": "capture-frames",
+            },
+            {"artifact_id": "stamps", "uri": "stamps.json", "format": "sim-stamps"},
+        ]
+
+        result = run(_request(sources=sources), base=tmp_path)
+
+        assert result.status == "failed"
+        assert "capture: source_uri_rejected" in result.reason
+        assert not (tmp_path / "out").exists()
+    finally:
+        shutil.rmtree(outside, ignore_errors=True)
+
+
+def test_missing_required_source_family_is_failed_closed(tmp_path: Path) -> None:
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+    sources = [
+        {"artifact_id": "capture", "uri": "missing-capture.json", "format": "capture-frames"},
+        {"artifact_id": "stamps", "uri": "stamps.json", "format": "sim-stamps"},
+    ]
+
+    result = run(_request(sources=sources), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "required_source_family_missing: capture-frames" in result.reason
+    assert "capture: source_unreadable" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_output_symlink_escape_is_rejected(tmp_path: Path) -> None:
+    import shutil
+
+    _stage(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-output-outside"
+    outside.mkdir()
+    try:
+        (tmp_path / "output-link").symlink_to(outside, target_is_directory=True)
+
+        result = run(_request(output="output-link/escaped"), base=tmp_path)
+
+        assert result.status == "failed"
+        assert "unsafe_output_path" in result.reason
+        assert not (outside / "escaped").exists()
+    finally:
+        shutil.rmtree(outside, ignore_errors=True)
+
+
+def test_absolute_paths_are_rejected_by_shared_request_contract(tmp_path: Path) -> None:
+    with pytest.raises(ReviewContractsValidationError, match="traversal"):
+        _request(output=str(tmp_path / "out"))
+    with pytest.raises(ReviewContractsValidationError, match="traversal"):
+        _request(
+            sources=[
+                {
+                    "artifact_id": "capture",
+                    "uri": str(tmp_path / "capture.json"),
+                    "format": "capture-frames",
+                },
+                {"artifact_id": "stamps", "uri": "stamps.json", "format": "sim-stamps"},
+            ]
+        )
 
 
 def test_incompatible_component_version_fails(tmp_path: Path) -> None:

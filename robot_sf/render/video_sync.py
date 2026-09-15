@@ -16,7 +16,7 @@ import json
 import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from robot_sf.analysis_workbench.review_contracts import (
@@ -52,6 +52,8 @@ ADMISSION_NOT_EVALUATED = "not_evaluated"
 EVIDENCE_STATUS = "diagnostic_only"
 
 DEFAULT_PRESENTATION = {"width": 1920, "height": 1080, "fps": 30.0, "speed": 1.0}
+DEFAULT_TIMESTAMP_TOLERANCE_S = 0.0
+IDENTITY_NAMESPACE = "shared-episode-reset-v1"
 
 _DESCRIPTOR = ComponentDescriptor(
     component_id=COMPONENT_ID,
@@ -221,11 +223,28 @@ def _validate_source_ref(ref: Any, index: int, seen_artifacts: set[str]) -> list
         seen_artifacts.add(ref.artifact_id)
     if not isinstance(ref.uri, str) or not ref.uri:
         errors.append(f"invalid_request: source_{index} uri is invalid")
-    elif Path(ref.uri).is_absolute() or ".." in Path(ref.uri).parts:
+    elif _unsafe_relative_path(ref.uri):
         errors.append(f"invalid_request: source_{index} uri traversal is rejected")
     if not isinstance(ref.format, str) or not ref.format:
         errors.append(f"invalid_request: source_{index} format is invalid")
     return errors
+
+
+def _unsafe_relative_path(value: str) -> bool:
+    """Return whether a path is absolute or contains parent traversal.
+
+    The Windows check keeps requests portable when a Windows-style URI is
+    validated on a POSIX worker.
+    """
+    candidate = Path(value)
+    windows = PureWindowsPath(value)
+    return (
+        candidate.is_absolute()
+        or windows.is_absolute()
+        or bool(windows.drive)
+        or ".." in candidate.parts
+        or ".." in windows.parts
+    )
 
 
 def _validate_request_config(config: Any) -> list[str]:
@@ -258,9 +277,7 @@ def _validate_request_shape(request: Any) -> list[str]:
         errors.append("invalid_request: component_id must be a non-empty string")
     if not isinstance(request.output_directory, str) or not request.output_directory:
         errors.append("invalid_request: output_directory must be a non-empty string")
-    elif (
-        Path(request.output_directory).is_absolute() or ".." in Path(request.output_directory).parts
-    ):
+    elif _unsafe_relative_path(request.output_directory):
         errors.append("invalid_request: output_directory path traversal is rejected")
     errors.extend(_validate_request_config(request.config))
     if not isinstance(request.sources, (tuple, list)) or not request.sources:
@@ -330,18 +347,43 @@ def _reject_not_applicable(request: ComponentRequest) -> ComponentResult | None:
     return None
 
 
-def _resolve_source(path_value: str, base: Path) -> Path:
-    """Resolve a source URI under the base directory.
+def _resolve_path_under_base(path_value: str, base: Path, *, kind: str) -> Path:
+    """Resolve a path under ``base`` after checking its realpath containment.
 
     Returns:
-        Resolved path; absolute URIs and traversal are rejected.
+        Resolved path contained by the resolved base directory.
     """
-    candidate = Path(path_value)
-    if candidate.is_absolute() or ".." in candidate.parts:
+    if _unsafe_relative_path(path_value):
         raise ReviewContractsValidationError(
-            [f"source uri rejected (absolute or traversal): {path_value}"]
+            [f"unsafe_{kind}_path: absolute or traversal path is rejected: {path_value}"]
         )
-    return base / candidate
+    try:
+        resolved_base = base.resolve(strict=False)
+        resolved = (resolved_base / Path(path_value)).resolve(strict=False)
+        resolved.relative_to(resolved_base)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise ReviewContractsValidationError(
+            [f"unsafe_{kind}_path: path resolves outside base: {path_value}"]
+        ) from error
+    return resolved
+
+
+def _resolve_source(path_value: str, base: Path) -> Path:
+    """Resolve a source URI under the base directory, including symlinks.
+
+    Returns:
+        Resolved source path contained by the realpath of ``base``.
+    """
+    return _resolve_path_under_base(path_value, base, kind="source")
+
+
+def _resolve_output_directory(root: Path, output_directory: str) -> Path:
+    """Resolve an output directory under the base, including symlinks.
+
+    Returns:
+        Resolved output directory contained by the realpath of ``root``.
+    """
+    return _resolve_path_under_base(output_directory, root, kind="output")
 
 
 def _valid_sha256(value: Any) -> bool:
@@ -646,8 +688,62 @@ def _timeline_diagnostics(steps: list[dict[str, Any]]) -> tuple[list[str], bool]
     return sorted(set(diagnostics)), invalid
 
 
+def _within_timestamp_tolerance(error: float, tolerance: float) -> bool:
+    """Return whether a timestamp error satisfies the inclusive policy.
+
+    The zero-tolerance policy remains exact. For a positive tolerance, a small
+    representational boundary allowance avoids rejecting a decimal boundary
+    solely because subtraction rounded a few bits above the supplied tolerance.
+    """
+    if tolerance == 0.0:
+        return error == 0.0
+    return error <= tolerance or math.isclose(
+        error,
+        tolerance,
+        rel_tol=0.0,
+        abs_tol=2.0 * math.ulp(max(abs(error), abs(tolerance))),
+    )
+
+
+def _select_sim_anchor(
+    frame: dict[str, Any],
+    steps: list[dict[str, Any]],
+    sim_time: float,
+    timestamp_tolerance_s: float,
+) -> tuple[dict[str, Any] | None, str | None, float]:
+    """Select one simulation stamp or return an explicit unavailable reason.
+
+    Returns:
+        The selected anchor, an unavailable reason, and the nearest temporal
+        error in seconds.
+    """
+    candidates = [
+        step
+        for step in steps
+        if _within_timestamp_tolerance(abs(step["time_s"] - sim_time), timestamp_tolerance_s)
+    ]
+    nearest_error = min(abs(step["time_s"] - sim_time) for step in steps)
+    if not candidates:
+        return None, "no_sim_stamp_within_tolerance", nearest_error
+    if len(candidates) > 1:
+        return None, "ambiguous_sim_stamp_match", nearest_error
+    anchor = candidates[0]
+    temporal_error = abs(anchor["time_s"] - sim_time)
+    if any(
+        identity in frame and frame[identity] != anchor[identity]
+        for identity in ("episode_id", "reset_id")
+    ):
+        return None, "capture_sim_identity_mismatch", temporal_error
+    return anchor, None, temporal_error
+
+
 def _unavailable_frame(
-    frame: dict[str, Any], sim_time: float, reason: str, camera: dict[str, Any]
+    frame: dict[str, Any],
+    sim_time: float,
+    reason: str,
+    camera: dict[str, Any],
+    *,
+    temporal_error_s: float | None = None,
 ) -> dict[str, Any]:
     """Represent a captured frame that has no trustworthy simulation anchor.
 
@@ -662,6 +758,8 @@ def _unavailable_frame(
         "reason": reason,
         "camera": camera,
     }
+    if temporal_error_s is not None:
+        result["temporal_error_s"] = temporal_error_s
     for identity in ("episode_id", "reset_id"):
         if identity in frame:
             result[f"capture_{identity}"] = frame[identity]
@@ -674,8 +772,9 @@ def _map_frames(
     time_origin: float,
     speed: float,
     camera: dict[str, Any],
+    timestamp_tolerance_s: float,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
-    """Anchor frames only when the source timeline supplies one unambiguous stamp.
+    """Anchor frames only to one simulation stamp within explicit tolerance.
 
     Returns:
         Tuple of (mapped entries, unavailable frame records, diagnostic codes).
@@ -699,25 +798,53 @@ def _map_frames(
             continue
         if sim_time < steps[0]["time_s"]:
             reason = "before_first_sim_stamp"
-            unavailable.append(_unavailable_frame(frame, sim_time, reason, camera))
+            unavailable.append(
+                _unavailable_frame(
+                    frame,
+                    sim_time,
+                    reason,
+                    camera,
+                    temporal_error_s=steps[0]["time_s"] - sim_time,
+                )
+            )
             diagnostics.append(f"frame_{frame['frame_index']}_{reason}")
             continue
         if sim_time > steps[-1]["time_s"]:
             reason = "after_last_sim_stamp"
-            unavailable.append(_unavailable_frame(frame, sim_time, reason, camera))
+            unavailable.append(
+                _unavailable_frame(
+                    frame,
+                    sim_time,
+                    reason,
+                    camera,
+                    temporal_error_s=sim_time - steps[-1]["time_s"],
+                )
+            )
             diagnostics.append(f"frame_{frame['frame_index']}_{reason}")
             continue
-        earlier = [step for step in steps if step["time_s"] <= sim_time]
-        if not earlier:  # pragma: no cover - covered by the before-first guard
-            reason = "before_first_sim_stamp"
-            unavailable.append(_unavailable_frame(frame, sim_time, reason, camera))
+        anchor, reason, temporal_error = _select_sim_anchor(
+            frame, steps, sim_time, timestamp_tolerance_s
+        )
+        if reason is not None:
+            unavailable.append(
+                _unavailable_frame(
+                    frame,
+                    sim_time,
+                    reason,
+                    camera,
+                    temporal_error_s=temporal_error,
+                )
+            )
             diagnostics.append(f"frame_{frame['frame_index']}_{reason}")
             continue
-        anchor = earlier[-1]
+        if anchor is None:  # pragma: no cover - invariant guard
+            raise RuntimeError("timestamp anchor missing without an unavailable reason")
         entry: dict[str, Any] = {
             "frame_index": frame["frame_index"],
             "pts_s": frame["pts_s"],
             "sim_time_s": sim_time,
+            "sim_stamp_time_s": anchor["time_s"],
+            "temporal_error_s": temporal_error,
             "sim_step": anchor["step"],
             "episode_id": anchor["episode_id"],
             "reset_id": anchor["reset_id"],
@@ -841,6 +968,11 @@ def _build_mapping(
     time_origin = _finite_number(config.get("time_origin_s", 0.0))
     if time_origin is None:
         return {}, ["time_origin_invalid"]
+    timestamp_tolerance = _finite_number(
+        config.get("timestamp_tolerance_s", DEFAULT_TIMESTAMP_TOLERANCE_S)
+    )
+    if timestamp_tolerance is None or timestamp_tolerance < 0:
+        return {}, ["timestamp_tolerance_invalid"]
     frames, diagnostics = _parse_frame_rows(raw_frames)
     steps, step_diagnostics = _parse_step_rows(raw_steps)
     diagnostics.extend(step_diagnostics)
@@ -851,7 +983,14 @@ def _build_mapping(
     camera = frames_doc.get("camera", {})
     if not isinstance(camera, dict):
         return {}, [*diagnostics, "camera_invalid: expected an object"]
-    mapping, unavailable, map_diagnostics = _map_frames(frames, steps, time_origin, speed, camera)
+    mapping, unavailable, map_diagnostics = _map_frames(
+        frames,
+        steps,
+        time_origin,
+        speed,
+        camera,
+        timestamp_tolerance,
+    )
     diagnostics.extend(map_diagnostics)
     all_frame_records = sorted([*mapping, *unavailable], key=lambda row: row["frame_index"])
     boundaries = _boundary_records(steps)
@@ -870,6 +1009,15 @@ def _build_mapping(
         "fps_nominal": fps_nominal,
         "speed": speed,
         "time_origin_s": time_origin,
+        "timestamp_alignment": {
+            "policy": "unique_sim_stamp_within_tolerance",
+            "tolerance_s": timestamp_tolerance,
+        },
+        "identity_namespace": {
+            "capture": IDENTITY_NAMESPACE,
+            "simulation": IDENTITY_NAMESPACE,
+            "rule": "capture episode_id/reset_id must match the selected simulation anchor",
+        },
         "presentation": presentation,
         "skipped_frame_indexes": skipped,
         "unavailable_frame_indexes": [row["frame_index"] for row in unavailable],
@@ -928,6 +1076,23 @@ def _load_sources(
     return by_format, outcomes, diagnostics
 
 
+def _missing_required_capabilities(
+    request: ComponentRequest, selected_by_format: dict[str, _ImportOutcome]
+) -> list[str]:
+    """Return requested capabilities without a usable selected source family.
+
+    Returns:
+        Sorted known capabilities that are absent or unreadable.
+    """
+    missing = {
+        capability
+        for capability in request.required_capabilities
+        if capability in _DESCRIPTOR.required_capabilities + _DESCRIPTOR.optional_capabilities
+        and (capability not in selected_by_format or selected_by_format[capability].payload is None)
+    }
+    return sorted(missing)
+
+
 def _source_provenance(
     outcomes: list[_ImportOutcome],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str]]:
@@ -965,13 +1130,11 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 STATUS_FAILED,
                 reason="; ".join(shape_errors),
             )
-        root = base if base is not None else Path.cwd()
-        if not isinstance(root, Path):
-            root = Path(root)
+        root = (base if base is not None else Path.cwd()).resolve(strict=False)
         rejected = _reject_not_applicable(request)
         if rejected is not None:
             return rejected
-        output_dir = root / request.output_directory
+        output_dir = _resolve_output_directory(root, request.output_directory)
         if output_dir.exists():
             return _result(
                 request.request_id,
@@ -986,13 +1149,36 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             "selected_sources": selected_sources,
             "source_integrity": source_integrity,
         }
-        if "capture-frames" not in by_format or "sim-stamps" not in by_format:
+        missing_capabilities = _missing_required_capabilities(request, by_format)
+        if missing_capabilities:
+            diagnostics.extend(
+                f"missing_required_capability:{capability}" for capability in missing_capabilities
+            )
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_UNAVAILABLE,
+                reason="missing_required_capabilities: " + ", ".join(missing_capabilities),
+                diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
+                provenance=provenance,
+            )
+        missing_source_families = sorted(
+            capability
+            for capability in REQUIRED_CAPABILITIES
+            if capability not in by_format or by_format[capability].payload is None
+        )
+        if missing_source_families:
             diagnostics.append("required_source_family_missing")
             return _result(
                 request.request_id,
                 request.component_id,
                 STATUS_FAILED,
-                reason="required_source_family_missing: " + "; ".join(sorted(set(diagnostics))[:5]),
+                reason=(
+                    "required_source_family_missing: "
+                    + ", ".join(missing_source_families)
+                    + "; "
+                    + "; ".join(sorted(set(diagnostics))[:5])
+                ),
                 diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
                 provenance=provenance,
             )

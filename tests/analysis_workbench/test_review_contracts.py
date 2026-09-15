@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -326,6 +327,56 @@ def test_admitted_source_bounds_oversized_json_integer_errors(tmp_path: Path) ->
 
     assert (result.status, result.reason) == ("unavailable", "receipt_unreadable")
     assert result.detail == "receipt JSON is invalid or exceeds parser limits"
+    assert len(result.detail) < 300
+    assert result.source_path is None
+
+
+def test_admitted_source_rejects_deeply_nested_receipt(tmp_path: Path) -> None:
+    """Parser recursion limits become bounded loader and resolver rejections."""
+    receipt_path = tmp_path / "deep-receipt.json"
+    receipt_path.write_text("[" * 10_000 + "0" + "]" * 10_000, encoding="utf-8")
+
+    with pytest.raises(ReviewContractsValidationError) as error:
+        load_admitted_source_receipt(receipt_path)
+    assert "invalid or exceeds parser limits" in str(error.value)
+    assert len(str(error.value)) < 300
+
+    result = resolve_admitted_source(receipt_path, allowed_root=ADMITTED_SOURCE_FIXTURE_DIR)
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_unreadable")
+    assert result.detail == "receipt JSON is invalid or exceeds parser limits"
+    assert result.source_path is None
+
+
+@pytest.mark.parametrize("source_kind", [[], {}])
+def test_admitted_source_rejects_unhashable_source_kind(source_kind: object) -> None:
+    """Untyped boundary values fail as malformed receipts before set membership."""
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["source_kind"] = source_kind
+
+    result = resolve_admitted_source(receipt, allowed_root=ADMITTED_SOURCE_FIXTURE_DIR)
+
+    assert (result.status, result.reason) == ("failed", "receipt_malformed")
+    assert result.detail == "source_kind must be a string"
+    assert result.source_path is None
+
+
+def test_admitted_source_rejects_unreprable_schema_version() -> None:
+    """Malformed schema versions cannot leak integer repr conversion errors."""
+    previous_limit = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)
+    try:
+        huge_version = int("9" * 5_000)
+    finally:
+        sys.set_int_max_str_digits(previous_limit)
+
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["schema_version"] = huge_version
+
+    result = resolve_admitted_source(receipt, allowed_root=ADMITTED_SOURCE_FIXTURE_DIR)
+
+    assert (result.status, result.reason) == ("failed", "receipt_malformed")
+    assert result.detail == "schema_version must be a string"
     assert len(result.detail) < 300
     assert result.source_path is None
 

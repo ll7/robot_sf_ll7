@@ -553,7 +553,7 @@ def _receipt_read_error_detail(error: BaseException) -> str:
     Returns:
         A bounded, stable error detail.
     """
-    if isinstance(error, ValueError):
+    if isinstance(error, (RecursionError, ValueError)):
         return "receipt JSON is invalid or exceeds parser limits"
     return _bounded_error_detail(error)
 
@@ -570,7 +570,7 @@ def load_admitted_source_receipt(path: str | Path) -> AdmittedSourceReceipt:
     receipt_path = Path(path)
     try:
         payload = json.loads(receipt_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError) as error:
+    except (OSError, RecursionError, UnicodeError, ValueError) as error:
         raise ReviewContractsValidationError(
             [f"cannot read admitted-source receipt: {_receipt_read_error_detail(error)}"],
             source=receipt_path,
@@ -579,7 +579,13 @@ def load_admitted_source_receipt(path: str | Path) -> AdmittedSourceReceipt:
         raise ReviewContractsValidationError(
             ["admitted-source receipt must be a JSON object"], source=receipt_path
         )
-    return admitted_source_receipt_from_dict(payload, source=receipt_path)
+    try:
+        return admitted_source_receipt_from_dict(payload, source=receipt_path)
+    except RecursionError as error:
+        raise ReviewContractsValidationError(
+            [f"cannot validate admitted-source receipt: {_receipt_read_error_detail(error)}"],
+            source=receipt_path,
+        ) from error
 
 
 def component_request_canonical_digest(
@@ -677,7 +683,7 @@ def _receipt_payload(
         if not receipt_path.exists():
             return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_RECEIPT_MISSING)
         raw_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError) as error:
+    except (OSError, RecursionError, UnicodeError, ValueError) as error:
         return None, _resolution(
             "unavailable",
             ADMITTED_SOURCE_REASON_RECEIPT_UNREADABLE,
@@ -707,11 +713,17 @@ def _parse_admitted_source_receipt(
             ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
             detail="schema_version is missing",
         )
+    if not isinstance(schema_version, str):
+        return None, _resolution(
+            "failed",
+            ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+            detail="schema_version must be a string",
+        )
     if schema_version != ADMITTED_SOURCE_RECEIPT_SCHEMA_VERSION:
         return None, _resolution(
             "unavailable",
             ADMITTED_SOURCE_REASON_RECEIPT_UNSUPPORTED,
-            detail=f"schema version {schema_version!r} is unsupported",
+            detail="schema version is unsupported",
         )
     boundary_fields = (
         "status",
@@ -726,6 +738,13 @@ def _parse_admitted_source_receipt(
             ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
             detail="required boundary fields are missing: " + ", ".join(missing_boundary_fields),
         )
+    source_kind = payload.get("source_kind")
+    if not isinstance(source_kind, str):
+        return None, _resolution(
+            "failed",
+            ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+            detail="source_kind must be a string",
+        )
     if (
         any(
             payload.get(field) != expected
@@ -735,7 +754,7 @@ def _parse_admitted_source_receipt(
                 ("scientific_claim_allowed", False),
             )
         )
-        or payload.get("source_kind") not in ADMITTED_SOURCE_KINDS
+        or source_kind not in ADMITTED_SOURCE_KINDS
     ):
         return None, _resolution(
             "unavailable",
@@ -749,6 +768,24 @@ def _parse_admitted_source_receipt(
             "failed",
             ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
             detail="; ".join(error.errors),
+        )
+
+
+def _parse_admitted_source_receipt_safely(
+    payload: Mapping[str, Any],
+) -> tuple[AdmittedSourceReceipt | None, AdmittedSourceResolution | None]:
+    """Convert parser recursion into the stable malformed-receipt result.
+
+    Returns:
+        A parsed receipt and no early result, or a bounded malformed result.
+    """
+    try:
+        return _parse_admitted_source_receipt(payload)
+    except RecursionError as error:
+        return None, _resolution(
+            "failed",
+            ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
+            detail=_receipt_read_error_detail(error),
         )
 
 
@@ -1133,7 +1170,7 @@ def resolve_admitted_source(
     )
     if isinstance(raw_or_result, AdmittedSourceResolution):
         return raw_or_result
-    parsed_receipt, early = _parse_admitted_source_receipt(raw_or_result)
+    parsed_receipt, early = _parse_admitted_source_receipt_safely(raw_or_result)
     parsed_or_result = _resolver_value_or_rejection(
         parsed_receipt,
         early,

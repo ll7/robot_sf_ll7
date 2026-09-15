@@ -1,6 +1,8 @@
 {
   "schema_version": "episode-selection.v1",
   "campaign_id": "camp-fixture",
+  "source_commit": "671308664d83399366a263637e4dcbadea386101",
+  "config_identity": "srev06-fixture-config",
   "execution_status": "native",
   "selected_episode_ids": [
     "ep-1",

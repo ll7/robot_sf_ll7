@@ -56,6 +56,7 @@ RESULT_STATUSES = ("complete", "partial", "unavailable", "failed", "cancelled")
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _TEST_PRESET = {"width": 320, "height": 180, "fps": 10.0, "speed": 1.0}
+_DETAIL_LIMIT = 200
 
 ADMITTED_SOURCE_REASON_RECEIPT_MISSING = "receipt_missing"
 ADMITTED_SOURCE_REASON_RECEIPT_UNREADABLE = "receipt_unreadable"
@@ -114,13 +115,27 @@ def load_review_contracts_schema(version: str) -> dict[str, Any]:
 def _schema_errors(version: str, payload: Mapping[str, Any]) -> list[str]:
     validator = Draft202012Validator(load_review_contracts_schema(version))
     return [
-        f"{_pointer(error.absolute_path)}: {error.message}"
+        _bounded_text(f"{_pointer(error.absolute_path)}: {error.message}")
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
     ]
 
 
 def _pointer(path: Any) -> str:
     return "/" + "/".join(str(token) for token in path)
+
+
+def _bounded_text(value: Any, *, limit: int = _DETAIL_LIMIT) -> str:
+    """Return compact text while preserving both context and the reason suffix."""
+    detail = " ".join(str(value).split())
+    if len(detail) <= limit:
+        return detail
+    marker = " ... [truncated] ... "
+    if limit <= len(marker):
+        return detail[:limit]
+    available = limit - len(marker)
+    prefix_length = (available + 1) // 2
+    suffix_length = available - prefix_length
+    return detail[:prefix_length] + marker + detail[-suffix_length:]
 
 
 def _require_schema(version: str, payload: Mapping[str, Any], *, source: Any = None) -> None:
@@ -598,12 +613,12 @@ def admitted_source_receipt_from_dict(
     )
 
 
-def _bounded_error_detail(error: BaseException, *, limit: int = 200) -> str:
+def _bounded_error_detail(error: BaseException, *, limit: int = _DETAIL_LIMIT) -> str:
     """Return a compact parse or filesystem detail for a stable rejection."""
-    detail = " ".join(str(error).split())
+    detail = _bounded_text(error, limit=limit)
     if not detail:
         return type(error).__name__
-    return detail[:limit]
+    return detail
 
 
 def _receipt_read_error_detail(error: BaseException) -> str:
@@ -826,7 +841,7 @@ def _parse_admitted_source_receipt(
         return None, _resolution(
             "failed",
             ADMITTED_SOURCE_REASON_RECEIPT_MALFORMED,
-            detail=_bounded_error_detail(error),
+            detail=_bounded_error_detail("; ".join(error.errors)),
         )
 
 
@@ -1183,13 +1198,21 @@ def _resolve_source_path(
             receipt=receipt,
             detail=str(error),
         )
-    if not resolved.exists():
+    try:
+        if not resolved.exists():
+            return None, _resolution(
+                "unavailable", ADMITTED_SOURCE_REASON_SOURCE_MISSING, receipt=receipt
+            )
+        if not resolved.is_file():
+            return None, _resolution(
+                "unavailable", ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR, receipt=receipt
+            )
+    except OSError as error:
         return None, _resolution(
-            "unavailable", ADMITTED_SOURCE_REASON_SOURCE_MISSING, receipt=receipt
-        )
-    if not resolved.is_file():
-        return None, _resolution(
-            "unavailable", ADMITTED_SOURCE_REASON_SOURCE_NOT_REGULAR, receipt=receipt
+            "unavailable",
+            ADMITTED_SOURCE_REASON_SOURCE_MISSING,
+            receipt=receipt,
+            detail=f"source path cannot be inspected: {_bounded_error_detail(error)}",
         )
     return resolved, None
 

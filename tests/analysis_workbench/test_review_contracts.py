@@ -369,6 +369,29 @@ def test_admitted_source_bounds_schema_validation_detail() -> None:
     assert result.source_path is None
 
 
+def test_admitted_source_bounds_oversized_schema_error_details(tmp_path: Path) -> None:
+    """Loader and resolver diagnostics keep field and reason context bounded."""
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["source"]["sha256"] = "x" * 1_000_000
+    receipt_path = tmp_path / "oversized-sha-receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ReviewContractsValidationError) as error:
+        load_admitted_source_receipt(receipt_path)
+    loader_detail = str(error.value)
+    assert len(loader_detail) < 500
+    assert "/source/sha256" in loader_detail
+    assert "does not match" in loader_detail
+
+    result = resolve_admitted_source(receipt, allowed_root=ADMITTED_SOURCE_FIXTURE_DIR)
+
+    assert (result.status, result.reason) == ("failed", "receipt_malformed")
+    assert len(result.detail) < 300
+    assert "/source/sha256" in result.detail
+    assert "does not match" in result.detail
+    assert result.source_path is None
+
+
 @pytest.mark.parametrize("field", ["format", "schema", "config_identity"])
 def test_admitted_source_rejects_unicode_surrogates(field: str) -> None:
     """Receipt source identity strings cannot be mutually admitted with surrogates."""
@@ -685,6 +708,31 @@ def test_admitted_source_rejects_escape_and_malformed_receipt(tmp_path: Path) ->
         "source_escaped_root",
     )
     assert (malformed_result.status, malformed_result.reason) == ("failed", "receipt_malformed")
+
+
+def test_admitted_source_bounds_unstatable_source_path() -> None:
+    """Filesystem path inspection errors become stable unavailable results."""
+    long_uri = "u" * 300
+    receipt = _admitted_source_fixture("receipt.json")
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    request["sources"][0]["uri"] = long_uri
+    recipe["source_identity"]["source_uri"] = long_uri
+    receipt["source"]["uri"] = long_uri
+    receipt["request_sha256"] = component_request_canonical_digest(request)
+    receipt["recipe_sha256"] = experiment_recipe_canonical_digest(recipe)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "source_missing")
+    assert result.source_path is None
+    assert result.detail.startswith("source path cannot be inspected:")
+    assert len(result.detail) < 300
 
 
 def test_admitted_source_requires_v1_recipe_admission_reference() -> None:

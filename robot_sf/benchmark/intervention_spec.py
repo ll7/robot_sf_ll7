@@ -15,8 +15,10 @@ import json
 import math
 import os
 import re
+import stat
 import subprocess
 from collections.abc import Mapping
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -90,6 +92,16 @@ _FALLBACK_IDENTITIES = frozenset(
     }
 )
 _LOCAL_ONLY_PATH_PARTS = frozenset({".git", ".venv", "output", "results"})
+
+
+@dataclass(frozen=True)
+class _GitCheckout:
+    """Resolved Git paths for a sanitized provenance probe context."""
+
+    root: Path
+    git_dir: Path
+    common_dir: Path
+    object_dir: Path
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -353,12 +365,45 @@ def _normalise_set(value: Any, field: str, *, allow_empty: bool) -> list[str]:
     return sorted(values)
 
 
+def _is_json_number(value: Any) -> bool:
+    """Return whether ``value`` is a JSON number rather than a boolean."""
+
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _json_values_equal(left: Any, right: Any) -> bool:
+    """Compare validated JSON values using JSON number semantics.
+
+    JSON has one number type, so integral and floating-point spellings compare
+    by numeric value. JSON strings, booleans, arrays, and objects retain their
+    type distinctions for the no-op and changed-factor checks.
+
+    Returns:
+        Whether the values are equal under the contract's JSON semantics.
+    """
+
+    if _is_json_number(left) and _is_json_number(right):
+        return left == right
+    if type(left) is not type(right):
+        return False
+    if type(left) is list:
+        return len(left) == len(right) and all(
+            _json_values_equal(left_item, right_item)
+            for left_item, right_item in zip(left, right, strict=True)
+        )
+    if isinstance(left, Mapping):
+        return set(left) == set(right) and all(
+            _json_values_equal(left[key], right[key]) for key in left
+        )
+    return left == right
+
+
 def _validate_json_distinct(left: Any, right: Any, field: str) -> None:
-    """Require two JSON values to be observably different under canonical JSON."""
+    """Require two JSON values to differ under semantic JSON equality."""
 
     _assert_json_value(left, f"{field}.left")
     _assert_json_value(right, f"{field}.right")
-    if _canonical_bytes(left) == _canonical_bytes(right):
+    if _json_values_equal(left, right):
         raise InterventionSpecValidationError(f"{field} must declare a changed value")
 
 
@@ -388,10 +433,30 @@ def _normalise_file_path(value: Any, field: str) -> str:
     return text
 
 
+def _reject_symlink_components(root: Path, relative: str, field: str) -> None:
+    """Reject symlinks in every lexical component of a bound repository path."""
+
+    candidate = root
+    for component in Path(relative).parts:
+        candidate /= component
+        try:
+            mode = candidate.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise InterventionSpecValidationError(
+                f"{field}.path components cannot be inspected: {relative}"
+            ) from exc
+        if stat.S_ISLNK(mode):
+            raise InterventionSpecValidationError(
+                f"{field}.path contains a symlink component: {relative}"
+            )
+
+
 def _validate_source_file(
     reference: Mapping[str, Any],
     *,
-    repo_root: Path,
+    checkout: _GitCheckout,
     base_commit: str,
     field: str,
 ) -> None:
@@ -400,12 +465,14 @@ def _validate_source_file(
     The working-tree file is checked as a regular file and against its declared
     SHA-256. Git then proves that the same repository-relative path is a tracked
     regular-file blob at ``base_commit`` and that the current bytes have the
-    exact Git blob identity recorded by that historical tree entry.
+    exact Git blob identity recorded by that historical tree entry. Git probes
+    use the sanitized, replacement-ref-free checkout context.
     """
 
     relative = _normalise_file_path(reference["path"], f"{field}.path")
-    root = repo_root.resolve()
+    root = checkout.root
     unresolved = root / relative
+    _reject_symlink_components(root, relative, field)
     resolved = unresolved.resolve()
     try:
         resolved.relative_to(root)
@@ -413,7 +480,7 @@ def _validate_source_file(
         raise InterventionSpecValidationError(
             f"{field}.path resolves outside the repository"
         ) from exc
-    if unresolved.is_symlink() or not resolved.is_file():
+    if not resolved.is_file():
         raise InterventionSpecValidationError(f"{field}.path is not a regular file: {relative}")
     try:
         current_bytes = resolved.read_bytes()
@@ -428,10 +495,12 @@ def _validate_source_file(
         )
 
     historical_object_id = _historical_blob_identity(
-        root, base_commit=base_commit, relative=relative, field=field
+        checkout, base_commit=base_commit, relative=relative, field=field
     )
     historical_blob = _git_command_bytes(
-        root, ("cat-file", "blob", historical_object_id.decode("ascii"))
+        checkout.root,
+        ("cat-file", "blob", historical_object_id.decode("ascii")),
+        checkout=checkout,
     )
     if historical_blob.returncode != 0 or historical_blob.stdout != current_bytes:
         raise InterventionSpecValidationError(
@@ -441,7 +510,7 @@ def _validate_source_file(
 
 
 def _historical_blob_identity(
-    repo_root: Path,
+    checkout: _GitCheckout,
     *,
     base_commit: str,
     relative: str,
@@ -450,7 +519,7 @@ def _historical_blob_identity(
     """Return the Git blob identity for a tracked regular file at ``base_commit``."""
 
     historical = _git_command_bytes(
-        repo_root,
+        checkout.root,
         (
             "--literal-pathspecs",
             "ls-tree",
@@ -460,6 +529,7 @@ def _historical_blob_identity(
             "--",
             relative,
         ),
+        checkout=checkout,
     )
     if historical.returncode != 0:
         raise InterventionSpecValidationError(
@@ -642,9 +712,7 @@ def _validate_semantics(payload: dict[str, Any]) -> None:  # noqa: C901, PLR0912
         raise InterventionSpecValidationError(
             "negative_control.factor_path must name the declared factor for the no-op control"
         )
-    if _canonical_bytes(negative_control_copy["value"]) != _canonical_bytes(
-        factor_copy["baseline"]
-    ):
+    if not _json_values_equal(negative_control_copy["value"], factor_copy["baseline"]):
         raise InterventionSpecValidationError(
             "negative_control.value must equal factor.baseline for the no-op control"
         )
@@ -735,8 +803,66 @@ def _validate_semantics(payload: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     payload["provenance"] = provenance_copy
 
 
-def _git_command(repo_root: Path, args: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
-    """Run a bounded Git probe without invoking a shell.
+def _git_environment(checkout: _GitCheckout | None) -> dict[str, str]:
+    """Build a Git environment with inherited repository controls removed.
+
+    Returns:
+        Environment variables safe for a provenance-only Git probe.
+    """
+
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    environment.update(
+        {
+            "GIT_ATTR_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "LANG": "C",
+            "LC_ALL": "C",
+        }
+    )
+    if checkout is not None:
+        environment.update(
+            {
+                "GIT_COMMON_DIR": str(checkout.common_dir),
+                "GIT_DIR": str(checkout.git_dir),
+                "GIT_OBJECT_DIRECTORY": str(checkout.object_dir),
+                "GIT_WORK_TREE": str(checkout.root),
+            }
+        )
+    return environment
+
+
+def _git_arguments(
+    repo_root: Path, args: tuple[str, ...], checkout: _GitCheckout | None
+) -> list[str]:
+    """Build Git arguments bound to the discovered checkout when available.
+
+    Returns:
+        A no-replacement Git command argument vector.
+    """
+
+    command = ["git", "--no-replace-objects"]
+    if checkout is not None:
+        command.extend(
+            [
+                "--git-dir",
+                str(checkout.git_dir),
+                "--work-tree",
+                str(checkout.root),
+            ]
+        )
+    command.extend(["-C", str(repo_root), *args])
+    return command
+
+
+def _git_command(
+    repo_root: Path,
+    args: tuple[str, ...],
+    *,
+    checkout: _GitCheckout | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a bounded, replacement-free Git probe without invoking a shell.
 
     Returns:
         The completed Git process result.
@@ -744,12 +870,13 @@ def _git_command(repo_root: Path, args: tuple[str, ...]) -> subprocess.Completed
 
     try:
         return subprocess.run(
-            ["git", "-C", str(repo_root), *args],
+            _git_arguments(repo_root, args, checkout),
             capture_output=True,
             check=False,
             shell=False,
             text=True,
             timeout=_GIT_PROBE_TIMEOUT_SECONDS,
+            env=_git_environment(checkout),
         )
     except subprocess.TimeoutExpired as exc:
         raise InterventionSpecValidationError(
@@ -762,8 +889,10 @@ def _git_command(repo_root: Path, args: tuple[str, ...]) -> subprocess.Completed
 def _git_command_bytes(
     repo_root: Path,
     args: tuple[str, ...],
+    *,
+    checkout: _GitCheckout | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
-    """Run a bounded no-shell Git probe while preserving arbitrary file bytes.
+    """Run a bounded, replacement-free Git probe while preserving file bytes.
 
     Returns:
         The completed Git process result.
@@ -771,11 +900,12 @@ def _git_command_bytes(
 
     try:
         return subprocess.run(
-            ["git", "-C", str(repo_root), *args],
+            _git_arguments(repo_root, args, checkout),
             capture_output=True,
             check=False,
             shell=False,
             timeout=_GIT_PROBE_TIMEOUT_SECONDS,
+            env=_git_environment(checkout),
         )
     except subprocess.TimeoutExpired as exc:
         raise InterventionSpecValidationError(
@@ -785,8 +915,61 @@ def _git_command_bytes(
         raise InterventionSpecValidationError("repo_root is not a usable Git checkout") from exc
 
 
-def _validate_git_checkout(repo_root: Path, commit: str) -> None:
-    """Require a repository-root Git worktree containing the declared commit."""
+def _resolve_git_path(root: Path, args: tuple[str, ...], label: str) -> Path:
+    """Resolve one absolute path reported by Git for a validated checkout.
+
+    Returns:
+        The resolved Git path.
+    """
+
+    probe = _git_command(root, ("rev-parse", "--path-format=absolute", *args))
+    values = probe.stdout.splitlines()
+    if probe.returncode != 0 or len(values) != 1 or not values[0].strip():
+        raise InterventionSpecValidationError(f"repo_root Git {label} path cannot be resolved")
+    value = values[0].strip()
+    path = Path(value)
+    if not path.is_absolute():
+        raise InterventionSpecValidationError(f"repo_root Git {label} path is not absolute")
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise InterventionSpecValidationError(f"repo_root Git {label} path is unusable") from exc
+    if not resolved.is_dir():
+        raise InterventionSpecValidationError(f"repo_root Git {label} path is not a directory")
+    return resolved
+
+
+def _validate_git_object_store(object_dir: Path) -> None:
+    """Reject configured alternate object databases during provenance probes."""
+
+    alternates = object_dir / "info" / "alternates"
+    try:
+        try:
+            mode = alternates.lstat().st_mode
+        except FileNotFoundError:
+            return
+        if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+            raise InterventionSpecValidationError(
+                "repo_root Git object database has an unusable alternates file"
+            )
+        if alternates.read_bytes().strip():
+            raise InterventionSpecValidationError(
+                "repo_root Git object database uses alternate object storage"
+            )
+    except InterventionSpecValidationError:
+        raise
+    except OSError as exc:
+        raise InterventionSpecValidationError(
+            "repo_root Git object database alternates cannot be inspected"
+        ) from exc
+
+
+def _validate_git_checkout(repo_root: Path, commit: str) -> _GitCheckout:  # noqa: C901
+    """Require a worktree and return its pinned, replacement-free Git context.
+
+    Returns:
+        The resolved checkout paths used for all subsequent Git probes.
+    """
 
     try:
         root = repo_root.resolve()
@@ -810,33 +993,66 @@ def _validate_git_checkout(repo_root: Path, commit: str) -> None:
     if top_level_root != root:
         raise InterventionSpecValidationError("repo_root must be the Git checkout root")
 
-    commit_probe = _git_command(root, ("rev-parse", "--verify", "--quiet", f"{commit}^{{commit}}"))
+    git_dir = _resolve_git_path(root, ("--absolute-git-dir",), "directory")
+    common_dir = _resolve_git_path(root, ("--git-common-dir",), "common directory")
+    object_dir = _resolve_git_path(root, ("--git-path", "objects"), "object directory")
+    if object_dir != common_dir / "objects":
+        raise InterventionSpecValidationError(
+            "repo_root Git object directory is not bound to its common directory"
+        )
+    _validate_git_object_store(object_dir)
+    checkout = _GitCheckout(
+        root=root,
+        git_dir=git_dir,
+        common_dir=common_dir,
+        object_dir=object_dir,
+    )
+
+    bound_top_level = _git_command(root, ("rev-parse", "--show-toplevel"), checkout=checkout)
+    bound_top_level_text = bound_top_level.stdout.strip()
+    if bound_top_level.returncode != 0 or not bound_top_level_text:
+        raise InterventionSpecValidationError("repo_root Git context is not a worktree")
+    try:
+        bound_top_level_root = Path(bound_top_level_text).resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise InterventionSpecValidationError(
+            "repo_root Git context has an invalid worktree"
+        ) from exc
+    if bound_top_level_root != root:
+        raise InterventionSpecValidationError("repo_root Git context is not bound to repo_root")
+
+    commit_probe = _git_command(
+        root,
+        ("rev-parse", "--verify", "--quiet", f"{commit}^{{commit}}"),
+        checkout=checkout,
+    )
     if commit_probe.returncode != 0 or commit_probe.stdout.strip() != commit:
         raise InterventionSpecValidationError(
             "provenance.contract_identity.base_commit is not a commit in repo_root"
         )
+    return checkout
 
 
 def _validate_bound_files(payload: Mapping[str, Any], repo_root: str | Path) -> None:
-    """Verify Git identity and historical source/config blobs in a checkout root."""
+    """Verify source/config blobs against a sanitized checkout-root Git context."""
 
     if "\x00" in str(repo_root):
         raise InterventionSpecValidationError("repo_root must not contain an embedded NUL")
     root = Path(repo_root)
     base_commit = payload["provenance"]["contract_identity"]["base_commit"]
-    _validate_git_checkout(root, base_commit)
+    checkout = _validate_git_checkout(root, base_commit)
     provenance = payload["provenance"]
     source_refs = provenance["source_identity"]["source_refs"]
     for index, reference in enumerate(source_refs):
         _validate_source_file(
             reference,
-            repo_root=root,
+            checkout=checkout,
             base_commit=base_commit,
             field=f"provenance.source_identity.source_refs[{index}]",
         )
     _validate_source_file(
         provenance["config_identity"],
-        repo_root=root,
+        checkout=checkout,
         base_commit=base_commit,
         field="provenance.config_identity",
     )
@@ -855,7 +1071,9 @@ def validate_intervention_spec(
     worktree containing the declared contract commit. Every declared
     repository-relative source/config path must be a tracked regular-file blob
     at that commit, and the current checkout bytes must match that historical
-    blob and the declared SHA-256. Omitting ``repo_root`` leaves the commit as
+    blob and the declared SHA-256. Git directory/object environment overrides
+    and replacement refs are ignored; lexical symlink components are rejected.
+    Omitting ``repo_root`` leaves the commit as
     explicitly opaque metadata: its syntax is checked, but no local checkout or
     source bytes are claimed. Omitting required identities or hashes always
     fails.
@@ -898,7 +1116,9 @@ def load_intervention_spec(
     ``provenance.contract_identity.base_commit`` is the authority for every
     repository-relative source/config path. Each path must resolve to a
     tracked regular-file blob at that commit, and the current bytes must match
-    both that blob and the declared SHA-256.
+    both that blob and the declared SHA-256; inherited Git repository/object
+    settings and replacement refs are ignored, and lexical symlink components
+    are rejected.
 
     Returns:
         A normalized specification mapping.

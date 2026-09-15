@@ -120,6 +120,12 @@ untracked or historically different path admissible. When `repo_root` is
 omitted, the commit remains opaque metadata for an external durable source;
 the validator still requires explicit paths and lowercase digests but does not
 claim local historical-byte verification.
+The local Git probes ignore inherited repository and alternate-object settings,
+disable replacement refs, and bind all tree/blob reads to the checkout's own
+Git directories. Every lexical path component is checked for symlinks before
+the file is resolved. Factor and no-op comparisons use numeric JSON equality,
+so `1` and `1.0` (or `-0.0` and `0.0`) are equal while nonnumeric JSON types
+remain distinct.
 
 This API validates and normalizes a specification only. It does not replay,
 execute paired runs, verify an intervention, or support a causal, benchmark,

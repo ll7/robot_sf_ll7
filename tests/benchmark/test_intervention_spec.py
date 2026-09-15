@@ -129,6 +129,37 @@ def _init_git_checkout(repo_root: Path) -> str:
     return result.stdout.strip()
 
 
+def _bound_payload(
+    repo_root: Path, base_commit: str, *, source_path: str = "source.json"
+) -> dict[str, object]:
+    """Return a payload bound to the fixture source and config files."""
+
+    source = repo_root / source_path
+    config = repo_root / "config.yaml"
+    payload = _payload()
+    payload["provenance"]["source_identity"]["source_refs"] = [
+        {
+            "path": source_path,
+            "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "role": "mechanism_trace",
+        }
+    ]
+    payload["provenance"]["config_identity"].update(
+        {"path": "config.yaml", "sha256": hashlib.sha256(config.read_bytes()).hexdigest()}
+    )
+    payload["provenance"]["contract_identity"]["base_commit"] = base_commit
+    return payload
+
+
+def _write_binding_fixture(repo_root: Path, marker: str) -> None:
+    """Create source/config files and a marker that differentiates fixture commits."""
+
+    repo_root.mkdir()
+    (repo_root / "source.json").write_text("source\n", encoding="utf-8")
+    (repo_root / "config.yaml").write_text("config: true\n", encoding="utf-8")
+    (repo_root / "marker.txt").write_text(marker, encoding="utf-8")
+
+
 def test_schema_loads_and_valid_payload_is_normalized() -> None:
     """The schema is valid and declared sets have deterministic ordering."""
 
@@ -259,6 +290,55 @@ def test_numeric_factor_values_are_finite_json_numbers() -> None:
     payload["factor"]["intervention"] = float("inf")
     with pytest.raises(InterventionSpecValidationError, match="finite JSON numbers"):
         validate_intervention_spec(payload)
+
+
+@pytest.mark.parametrize(("baseline", "intervention"), [(1, 1.0), (-0.0, 0.0)])
+def test_numeric_factor_spellings_compare_by_json_number_value(
+    baseline: int | float, intervention: int | float
+) -> None:
+    """Integral and floating JSON number spellings cannot disguise a no-op factor."""
+
+    payload = _payload()
+    payload["factor"] = {
+        **payload["factor"],
+        "unit": "m/s",
+        "baseline": baseline,
+        "intervention": intervention,
+    }
+    payload["negative_control"] = {**payload["negative_control"], "value": baseline}
+
+    with pytest.raises(InterventionSpecValidationError, match="changed value"):
+        validate_intervention_spec(payload)
+
+
+def test_factor_json_type_difference_remains_observable() -> None:
+    """A JSON number and string with the same text remain distinct values."""
+
+    payload = _payload()
+    payload["factor"] = {
+        **payload["factor"],
+        "unit": "arbitrary",
+        "baseline": 1,
+        "intervention": "1",
+    }
+    payload["negative_control"] = {**payload["negative_control"], "value": 1}
+
+    assert validate_intervention_spec(payload)["factor"]["intervention"] == "1"
+
+
+def test_negative_control_accepts_equivalent_numeric_spelling() -> None:
+    """A no-op control may use a different JSON number spelling for the baseline."""
+
+    payload = _payload()
+    payload["factor"] = {
+        **payload["factor"],
+        "unit": "m/s",
+        "baseline": 1.0,
+        "intervention": 2.0,
+    }
+    payload["negative_control"] = {**payload["negative_control"], "value": 1}
+
+    validate_intervention_spec(payload)
 
 
 @pytest.mark.parametrize(
@@ -515,4 +595,100 @@ def test_bound_files_require_tracked_historical_blobs(tmp_path: Path) -> None:
     payload["provenance"]["contract_identity"]["base_commit"] = base_commit
 
     with pytest.raises(InterventionSpecValidationError, match="not tracked at base_commit"):
+        validate_intervention_spec(payload, repo_root=tmp_path)
+
+
+def test_bound_files_ignore_inherited_git_repository_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ambient Git directory variables cannot redirect a local provenance probe."""
+
+    target = tmp_path / "target"
+    unrelated = tmp_path / "unrelated"
+    _write_binding_fixture(target, "target\n")
+    _write_binding_fixture(unrelated, "unrelated\n")
+    _init_git_checkout(target)
+    unrelated_commit = _init_git_checkout(unrelated)
+
+    payload = _bound_payload(target, unrelated_commit)
+    monkeypatch.setenv("GIT_DIR", str(unrelated / ".git"))
+    monkeypatch.setenv("GIT_COMMON_DIR", str(unrelated / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(target))
+
+    with pytest.raises(InterventionSpecValidationError, match="not a commit in repo_root"):
+        validate_intervention_spec(payload, repo_root=target)
+
+
+def test_bound_files_ignore_inherited_alternate_object_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An inherited alternate object store cannot supply a foreign base commit."""
+
+    target = tmp_path / "target"
+    unrelated = tmp_path / "unrelated"
+    _write_binding_fixture(target, "target\n")
+    _write_binding_fixture(unrelated, "unrelated\n")
+    _init_git_checkout(target)
+    unrelated_commit = _init_git_checkout(unrelated)
+
+    payload = _bound_payload(target, unrelated_commit)
+    monkeypatch.setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", str(unrelated / ".git" / "objects"))
+    monkeypatch.setenv("GIT_OBJECT_DIRECTORY", str(unrelated / ".git" / "objects"))
+
+    with pytest.raises(InterventionSpecValidationError, match="not a commit in repo_root"):
+        validate_intervention_spec(payload, repo_root=target)
+
+
+def test_bound_files_disable_git_replacement_refs(tmp_path: Path) -> None:
+    """A replacement ref cannot make changed current bytes look historical."""
+
+    source = tmp_path / "source.json"
+    config = tmp_path / "config.yaml"
+    source.write_text("source\n", encoding="utf-8")
+    config.write_text("config: true\n", encoding="utf-8")
+    base_commit = _init_git_checkout(tmp_path)
+
+    old_blob = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", f"{base_commit}:source.json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    replacement_blob = (
+        subprocess.run(
+            ["git", "-C", str(tmp_path), "hash-object", "-w", "--stdin"],
+            check=True,
+            input=b"replacement\n",
+            capture_output=True,
+        )
+        .stdout.strip()
+        .decode("ascii")
+    )
+    subprocess.run(["git", "-C", str(tmp_path), "replace", old_blob, replacement_blob], check=True)
+
+    source.write_text("replacement\n", encoding="utf-8")
+    payload = _bound_payload(tmp_path, base_commit)
+
+    with pytest.raises(InterventionSpecValidationError, match="do not match the base_commit"):
+        validate_intervention_spec(payload, repo_root=tmp_path)
+
+
+def test_bound_files_reject_internal_symlink_path_components(tmp_path: Path) -> None:
+    """A symlinked parent cannot redirect a path declared as a repository file."""
+
+    alias = tmp_path / "alias"
+    alias.mkdir()
+    (alias / "source.json").write_text("source\n", encoding="utf-8")
+    (tmp_path / "config.yaml").write_text("config: true\n", encoding="utf-8")
+    base_commit = _init_git_checkout(tmp_path)
+
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "source.json").write_text("source\n", encoding="utf-8")
+    (alias / "source.json").unlink()
+    alias.rmdir()
+    alias.symlink_to(real, target_is_directory=True)
+    payload = _bound_payload(tmp_path, base_commit, source_path="alias/source.json")
+
+    with pytest.raises(InterventionSpecValidationError, match="symlink component"):
         validate_intervention_spec(payload, repo_root=tmp_path)

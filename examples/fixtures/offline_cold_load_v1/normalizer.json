@@ -1,0 +1,8 @@
+{
+  "clip": 5.0,
+  "count": 1.0,
+  "mean": [0.0, 0.0, 0.0, 0.0],
+  "schema": "normalizer_state.v1",
+  "shape": [4],
+  "variance": [1.0, 1.0, 1.0, 1.0]
+}

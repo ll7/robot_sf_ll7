@@ -762,3 +762,14 @@ examples:
     ci_reason: null
     doc_reference: null
     tags: [artifacts, provenance, fixture]
+  - path: advanced/42_offline_checkpoint_cold_load.py
+    name: "42 Offline Checkpoint Cold Load"
+    summary: "Load one preserved synthetic Proximal Policy Optimization (PPO) checkpoint for a loader-contract smoke; source/config lineage is unavailable."
+    category_slug: advanced
+    prerequisites:
+      - uv sync --all-extras
+    ci_enabled: true
+    ci_reason: null
+    doc_reference: null
+    tags: [offline, checkpoint, validation]
+    expected_runtime: "~10s"

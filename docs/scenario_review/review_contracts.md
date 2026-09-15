@@ -52,6 +52,34 @@ components offline; `capability_report()` lists what this module executes.
 Outputs are written atomically into the component-owned directory; sources
 are never modified.
 
+## Review workbench (SREV-15)
+
+```bash
+uv run python -m robot_sf.render.review_workbench \
+  --input <component-request.json> \
+  --config <config.json> \
+  --output review-workbench --base output/scenario_review
+```
+
+The `srev15-review-workbench` component consumes `review-bundle.v1` and
+`visualization-spec.v1` sources and writes an offline, network-free
+`review-workbench.v1.html` plus the `review-workbench.v1.json` document:
+episode-scoped index, per-artifact availability and integrity, the shared
+simulation-time base, and named extension slots. Behaviour boundaries:
+
+- a video stream without an explicit `presentation_timestamp_map` is reported
+  `unavailable` (`presentation_timestamp_map_missing`); frame/fps alignment is
+  never guessed, and the presentation plan records declared cuts/pauses/crops
+  with the default 1920x1080/30 fps/original-speed export (smaller `test` preset);
+- integrity is reported per bundle reference and never grants admission;
+- a declared but absent source degrades the run to `partial` with a reason; an
+  explicitly required `threejs-scene` capability delegates to
+  `robot_sf.render.threejs_viewer` instead of reimplementing playback;
+- output collisions fail closed, and only the requested output directory is written.
+
+`--descriptor` prints the component descriptor (`component-descriptor.v1`) without
+executing a request.
+
 ## Errors
 
 Validation failures carry stable reason codes with source pointers

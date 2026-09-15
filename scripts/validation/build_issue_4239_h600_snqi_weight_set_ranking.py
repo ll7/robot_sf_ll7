@@ -34,6 +34,7 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping,
     load_weight_mapping,
 )
+from scripts.dev.git_common import resolve_repo_root
 
 SCHEMA_VERSION = "h600-snqi-weight-set-ranking.v1"
 PREFLIGHT_SCHEMA_VERSION = f"{SCHEMA_VERSION}.preflight"
@@ -61,7 +62,8 @@ COMPARISON_METRICS = tuple(TERM_BY_WEIGHT.values())
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    """Return the current Git repository root."""
+    return resolve_repo_root()
 
 
 def _rel(path: Path) -> str:

@@ -15,6 +15,7 @@ import yaml
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256
 from robot_sf.evidence.writers import write_json
+from scripts.dev.git_common import resolve_repo_root
 
 DEFAULT_PACKET = Path("configs/benchmarks/issue_3653_snqi_decision_disagreement_packet.yaml")
 SCHEMA_VERSION = "issue-3653-snqi-decision-disagreement-application-packet.v1"
@@ -70,7 +71,8 @@ class PacketError(ValueError):
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    """Return the current Git repository root."""
+    return resolve_repo_root()
 
 
 def _require(condition: bool, message: str) -> None:

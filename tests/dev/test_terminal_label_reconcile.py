@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -15,6 +16,7 @@ from scripts.dev.terminal_label_reconcile import (
     _collect_closed_items,
     _terminal_class_from_state,
     fetch_item_state,
+    fetch_pr_merge_identity,
     main,
     plan_for_terminal,
     reconcile_item,
@@ -557,3 +559,153 @@ def test_terminal_class_from_state() -> None:
     assert _terminal_class_from_state({"state": "open", "state_reason": None}) == "reopened"
     pr = {"state": "closed", "state_reason": None, "pull_request": {}, "merged_at": "x"}
     assert _terminal_class_from_state(pr) == "pr_merged"
+
+
+def _merged_pr_item_state(*, labels: list[str]) -> dict[str, Any]:
+    """Closed merged-PR read shaped like fetch_item_state output."""
+    return {
+        "ok": True,
+        "number": 9356,
+        "state": "closed",
+        "reason": None,
+        "labels": labels,
+        "is_pull_request": True,
+        "pull_request": {"merged_at": "2026-09-15T00:00:00Z"},
+        "merged_at": "2026-09-15T00:00:00Z",
+        "html_url": "https://github.com/o/r/pull/9356",
+    }
+
+
+def _merged_pr_identity() -> dict[str, Any]:
+    """Live pulls-API identity for a closed merged PR."""
+    return {
+        "ok": True,
+        "number": 9356,
+        "state": "closed",
+        "merged_at": "2026-09-15T00:00:00Z",
+        "head_sha": "a" * 40,
+        "base_sha": "b" * 40,
+    }
+
+
+def test_apply_removes_merge_ready_from_merged_pr_with_pr_guard() -> None:
+    """Merged-PR merge-ready removal must pass live head/base SHAs (issue #9370)."""
+    remove_calls: list[dict[str, Any]] = []
+
+    def fake_remove(number: int, label: str, **kwargs: Any) -> dict[str, Any]:
+        remove_calls.append({"number": number, "label": label, **kwargs})
+        return {"status": "ok"}
+
+    with (
+        patch(
+            "scripts.dev.terminal_label_reconcile.fetch_item_state",
+            return_value=_merged_pr_item_state(labels=["merge-ready", "state:running"]),
+        ),
+        patch(
+            "scripts.dev.terminal_label_reconcile.fetch_pr_merge_identity",
+            return_value=_merged_pr_identity(),
+        ),
+        patch("scripts.dev.terminal_label_reconcile.remove_label", side_effect=fake_remove),
+        patch(
+            "scripts.dev.terminal_label_reconcile.add_label",
+            return_value={"status": "ok"},
+        ),
+    ):
+        report = reconcile_item(9356, "pr_merged", repo="o/r", apply=True)
+
+    assert report["ok"] is True, report
+    guarded = [call for call in remove_calls if call["label"] == "merge-ready"]
+    assert len(guarded) == 1
+    assert guarded[0]["target"] == "pr"
+    assert guarded[0]["expected_head_sha"] == "a" * 40
+    assert guarded[0]["expected_base_sha"] == "b" * 40
+    removals = {entry["label"]: entry for entry in report["applied_changes"]["remove"]}
+    assert removals["merge-ready"]["skipped"] is False
+    assert removals["merge-ready"]["target"] == "pr"
+    assert removals["merge-ready"]["pr_head_sha"] == "a" * 40
+    assert removals["merge-ready"]["pr_merged_at"] == "2026-09-15T00:00:00Z"
+    assert report["final_labels"] is not None
+
+
+def test_apply_records_failure_when_pr_identity_unavailable() -> None:
+    """A missing pulls-API identity must fail closed without mutating labels."""
+    with (
+        patch(
+            "scripts.dev.terminal_label_reconcile.fetch_item_state",
+            return_value=_merged_pr_item_state(labels=["merge-ready"]),
+        ),
+        patch(
+            "scripts.dev.terminal_label_reconcile.fetch_pr_merge_identity",
+            return_value={"ok": False, "error": "boom"},
+        ),
+        patch("scripts.dev.terminal_label_reconcile.remove_label") as mock_remove,
+        patch(
+            "scripts.dev.terminal_label_reconcile.add_label",
+            return_value={"status": "ok"},
+        ),
+    ):
+        report = reconcile_item(9356, "pr_merged", repo="o/r", apply=True)
+
+    assert report["ok"] is False
+    assert report["applied_changes"]["failures"] == [{"label": "merge-ready", "error": "boom"}]
+    mock_remove.assert_not_called()
+
+
+def test_apply_aborts_merge_ready_removal_when_pr_reopened() -> None:
+    """A PR that left the closed state must not lose merge-ready."""
+    identity = _merged_pr_identity()
+    identity["state"] = "open"
+    with (
+        patch(
+            "scripts.dev.terminal_label_reconcile.fetch_item_state",
+            return_value=_merged_pr_item_state(labels=["merge-ready"]),
+        ),
+        patch(
+            "scripts.dev.terminal_label_reconcile.fetch_pr_merge_identity",
+            return_value=identity,
+        ),
+        patch("scripts.dev.terminal_label_reconcile.remove_label") as mock_remove,
+        patch(
+            "scripts.dev.terminal_label_reconcile.add_label",
+            return_value={"status": "ok"},
+        ),
+    ):
+        report = reconcile_item(9356, "pr_merged", repo="o/r", apply=True)
+
+    assert report["ok"] is False
+    assert "no longer closed" in report["applied_changes"]["failures"][0]["error"]
+    mock_remove.assert_not_called()
+
+
+def test_apply_keeps_issue_target_for_non_pr_merge_ready() -> None:
+    """merge-ready on a non-PR item keeps the legacy issue-target call."""
+    state = _merged_pr_item_state(labels=["merge-ready"])
+    state["is_pull_request"] = False
+    state["pull_request"] = None
+    state["merged_at"] = None
+    with (
+        patch("scripts.dev.terminal_label_reconcile.fetch_item_state", return_value=state),
+        patch("scripts.dev.terminal_label_reconcile.remove_label") as mock_remove,
+        patch(
+            "scripts.dev.terminal_label_reconcile.add_label",
+            return_value={"status": "ok"},
+        ),
+    ):
+        mock_remove.return_value = {"status": "ok"}
+        reconcile_item(9356, "completed", repo="o/r", apply=True)
+
+    mock_remove.assert_called_once()
+    assert mock_remove.call_args.kwargs.get("target", "issue") == "issue"
+
+
+def test_fetch_pr_merge_identity_rejects_missing_shas() -> None:
+    """A pulls-API row without head/base SHAs cannot feed the CAS guard."""
+    payload = {"number": 9356, "state": "closed", "merged_at": None, "head": {}}
+    with patch("scripts.dev.terminal_label_reconcile.gh_api_get") as mock_get:
+        mock_get.return_value = type(
+            "R", (), {"returncode": 0, "stdout": json.dumps(payload), "stderr": ""}
+        )()
+        identity = fetch_pr_merge_identity(9356, repo="o/r")
+
+    assert identity["ok"] is False
+    assert "head/base SHA" in identity["error"]

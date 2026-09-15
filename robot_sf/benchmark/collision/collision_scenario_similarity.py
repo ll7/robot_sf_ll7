@@ -780,6 +780,8 @@ def compare_similarity_groupings(
             raise ValueError("grouping record universes do not match")
         universe_ids = reference_ids
     else:
+        if isinstance(record_ids, (str, bytes)):
+            raise ValueError("record_ids must be a non-string sequence")
         universe_ids = _normalized_record_ids(record_ids)
         if reference_ids != universe_ids or comparison_ids != universe_ids:
             raise ValueError("grouping assignments do not cover the explicit record universe")

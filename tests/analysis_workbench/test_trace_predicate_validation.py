@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -139,6 +142,61 @@ def test_duplicate_json_keys_are_rejected(tmp_path: Path) -> None:
             repo_root=REPO_ROOT,
             expected_source_commit=SOURCE_COMMIT,
         )
+
+
+@pytest.mark.parametrize("constant", ("NaN", "Infinity", "-Infinity"))
+def test_nonstandard_json_constants_are_rejected_by_api(tmp_path: Path, constant: str) -> None:
+    """The evaluation-set loader rejects JSON constants outside the standard."""
+    invalid_path = tmp_path / "nonstandard-constant.json"
+    invalid_path.write_text(
+        json.dumps({"threshold_sensitivity": {"variants": [{"parameters": float(constant)}]}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TracePredicateValidationError, match="non-standard JSON constant"):
+        load_trace_predicate_validation_set(
+            invalid_path,
+            repo_root=REPO_ROOT,
+            expected_source_commit=SOURCE_COMMIT,
+        )
+
+
+@pytest.mark.parametrize("constant", ("NaN", "Infinity", "-Infinity"))
+def test_nonstandard_json_constants_are_normalized_at_cli_boundary(
+    tmp_path: Path, constant: str
+) -> None:
+    """Malformed JSON reaches the documented exit-2 CLI error boundary."""
+    evaluation_set = _load_fixture()
+    parameters = evaluation_set["threshold_sensitivity"]["variants"][0]["parameters"]
+    parameters["threshold"] = float(constant)
+    evaluation_path = tmp_path / "nonstandard-constant.json"
+    evaluation_path.write_text(json.dumps(evaluation_set), encoding="utf-8")
+    output_path = tmp_path / "report.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/analysis/validate_trace_predicate_evaluation_issue_9305.py",
+            "--evaluation-set",
+            str(evaluation_path),
+            "--output-json",
+            str(output_path),
+            "--repo-root",
+            str(REPO_ROOT),
+            "--expected-source-commit",
+            SOURCE_COMMIT,
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "trace predicate validation unavailable" in result.stderr
+    assert "non-standard JSON constant" in result.stderr
+    assert not output_path.exists()
 
 
 def test_current_base_pin_is_checked() -> None:
@@ -491,6 +549,19 @@ def test_similarity_group_comparison_rejects_incomplete_partition() -> None:
             [{"group_id": "r1", "record_ids": ["a"]}],
             [{"group_id": "c1", "record_ids": ["a"]}],
             record_ids=["a", "b"],
+        )
+
+
+@pytest.mark.parametrize("record_ids", ("a", b"a"))
+def test_similarity_group_comparison_rejects_scalar_record_id_universe(
+    record_ids: object,
+) -> None:
+    """An explicit record universe must be a sequence, not a scalar string/bytes value."""
+    with pytest.raises(ValueError, match="non-string sequence"):
+        compare_similarity_groupings(
+            [{"group_id": "r1", "record_ids": ["a"]}],
+            [{"group_id": "c1", "record_ids": ["a"]}],
+            record_ids=record_ids,  # type: ignore[arg-type]
         )
 
 

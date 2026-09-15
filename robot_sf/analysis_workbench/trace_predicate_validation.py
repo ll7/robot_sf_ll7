@@ -89,13 +89,22 @@ def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any
     return mapping
 
 
+def _reject_nonstandard_json_constant(value: str) -> None:
+    """Reject JSON extensions such as ``NaN`` and infinities."""
+    raise ValueError(f"non-standard JSON constant: {value}")
+
+
 def _strict_json_loads(text: str) -> Any:
     """Parse JSON while preserving fail-closed duplicate-key semantics.
 
     Returns:
         The parsed JSON value.
     """
-    return json.loads(text, object_pairs_hook=_reject_duplicate_json_object)
+    return json.loads(
+        text,
+        object_pairs_hook=_reject_duplicate_json_object,
+        parse_constant=_reject_nonstandard_json_constant,
+    )
 
 
 @lru_cache(maxsize=1)

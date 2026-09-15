@@ -21,6 +21,53 @@ from robot_sf.benchmark.release_doctor import ReleaseDoctorCheck
 from robot_sf.cli import main as robot_sf_main
 
 
+def _scheduler_closeout_fixture(*, state: str = "COMPLETED") -> dict[str, Any]:
+    """Return a small receipt fixture for the final scheduler gate."""
+    import hashlib
+
+    campaign = "campaign-fixture"
+    source = "a" * 40
+    job_id = "15180"
+    return {
+        "schema": "robot-sf-slurm-terminal-closeout.v1",
+        "status": "terminal",
+        "campaign_id": campaign,
+        "source_sha": source,
+        "job_id": job_id,
+        "identity_sha256": hashlib.sha256(f"{campaign}\0{source}\0{job_id}".encode()).hexdigest(),
+        "scheduler": {
+            "state": state,
+            "exit_code": "0:0",
+            "derived_exit_code": "0:0",
+            "elapsed": "00:01:00",
+        },
+        "query": {
+            "tool": "sacct",
+            "tool_version": "robot-sf-sacct-query.v1",
+            "queried_at": "2026-09-15T10:00:00Z",
+        },
+        "allocation": {"cluster": "imech192", "partition": "l40s", "cpus": 36, "gpus": 1, "mem_gb": 256},
+        "reconciliation": {"status": "reconciled", "prior_scheduler_state": "RUNNING"},
+        "output": {"digest_sha256": "b" * 64},
+    }
+
+
+def test_scheduler_closeout_check_rejects_stale_active_state(tmp_path: Path) -> None:
+    receipt = tmp_path / "closeout.json"
+    receipt.write_text(
+        json.dumps(_scheduler_closeout_fixture(state="RUNNING")), encoding="utf-8"
+    )
+    check = release_doctor._scheduler_closeout_check(
+        receipt,
+        expected_source_sha="a" * 40,
+        expected_campaign_id="campaign-fixture",
+        expected_job_id="15180",
+        required=True,
+    )
+    assert check.status == "fail"
+    assert "active scheduler state" in check.summary
+
+
 def test_manifest_doctor_confirms_s30_h600_cardinality() -> None:
     """The current 14-arm predecessor resolves to exactly 20,160 cells."""
     check, manifest, cfg = release_doctor._manifest_check(

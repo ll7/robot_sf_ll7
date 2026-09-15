@@ -135,7 +135,11 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         axes.set_xlabel("x (m)")
         axes.set_ylabel("y (m)")
         figure_path = output_dir / "telemetry-figure.png"
-        figure.savefig(str(figure_path), dpi=100)
+        # Pin the savefig bounding box: a worker-global `savefig.bbox=tight`
+        # (e.g. from a shared plotting style) would otherwise crop the canvas
+        # and change the raster dimensions. `rc_context` restores globals after.
+        with matplotlib.rc_context({"savefig.bbox": "standard"}):
+            figure.savefig(str(figure_path), dpi=100)
         pyplot.close(figure)
         width, height = _png_dimensions(figure_path)
         figure_bytes = figure_path.read_bytes()

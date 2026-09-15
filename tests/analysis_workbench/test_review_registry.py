@@ -191,6 +191,24 @@ def test_execute_renderer_reports_figure_content(tmp_path: Path) -> None:
     )
 
 
+def test_renderer_ignores_global_savefig_bbox(tmp_path: Path) -> None:
+    """A worker-global `savefig.bbox=tight` must not crop the fixture figure."""
+    import matplotlib as mpl
+
+    root = _stage_fixture_tree(tmp_path)
+    payload = json.loads((FIXTURES / "request.json").read_text(encoding="utf-8"))
+    config = json.loads((FIXTURES / "config.json").read_text(encoding="utf-8"))
+    config["target_component_id"] = "srev29-example-renderer"
+    payload["config"] = config
+    with mpl.rc_context({"savefig.bbox": "tight"}):
+        result = run(component_request_from_dict(payload), base=root)
+    assert result.status == "complete"
+    by_id = {entry["artifact_id"]: entry for entry in result.artifacts}
+    caption = json.loads((root / by_id["renderer-caption.json"]["uri"]).read_bytes())
+    assert caption["figure"]["width"] == 320
+    assert caption["figure"]["height"] == 180
+
+
 def test_discover_mode_lists_index_artifact(tmp_path: Path) -> None:
     request = _fixture_request(mode="discover", target_component_id=None)
     result = run(request, base=tmp_path)

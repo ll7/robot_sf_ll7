@@ -81,7 +81,10 @@ central dispatch or browser edits):
   (episode counts, displacements, mean step lengths, digests).
 - `srev29-example-renderer` (`examples/scenario_review/components/telemetry_renderer.py`):
   renders the same trace to a 320x180 Matplotlib PNG plus
-  `renderer-caption.json` (dimensions, digest, episode count).
+  `renderer-caption.json` (dimensions, digest, episode count). The savefig
+  bounding box is pinned to `standard` inside an `rc_context`, so a
+  worker-global plotting style cannot crop the canvas and change the raster
+  dimensions.
 
 Both follow the `run(request, base=...)` convention, validate their own
 capabilities, refuse collisions, and return schema-validated results, so the

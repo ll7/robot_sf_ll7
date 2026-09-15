@@ -36,6 +36,7 @@ from robot_sf.benchmark.release_tag_identity import (
     check_tag_source_consistency,
 )
 from robot_sf.benchmark.zenodo_publisher import build_session, read_token_file
+from scripts.tools.slurm_closeout_receipt import validate_file as validate_slurm_closeout_file
 
 # These are the two repository-wide security and correctness workflows that
 # must have evaluated the immutable source commit before publication.  The
@@ -2407,6 +2408,51 @@ def _dissertation_check(path: Path | None) -> ReleaseDoctorCheck:
     )
 
 
+def _scheduler_closeout_check(
+    path: Path | None,
+    *,
+    expected_source_sha: str,
+    expected_campaign_id: str | None,
+    expected_job_id: str | None = None,
+    required: bool = False,
+) -> ReleaseDoctorCheck:
+    """Require a terminal scheduler readback bound to the release identity.
+
+    The private queue/admission record is intentionally not treated as the
+    terminal authority.  A receipt from ``sacct`` (or an explicit unavailable
+    result) must be supplied so a stale ``RUNNING`` admission cannot pass a
+    final release check.
+
+    Returns:
+        Sanitized scheduler-closeout check result.
+    """
+    if path is None:
+        if required:
+            return ReleaseDoctorCheck(
+                "scheduler_closeout",
+                "fail",
+                "terminal scheduler closeout receipt is required",
+            )
+        return ReleaseDoctorCheck(
+            "scheduler_closeout",
+            "pass",
+            "scheduler closeout receipt not requested in preparation mode",
+        )
+    problems = validate_slurm_closeout_file(
+        path,
+        expected_campaign_id=expected_campaign_id,
+        expected_source_sha=expected_source_sha,
+        expected_job_id=expected_job_id,
+    )
+    if problems:
+        return ReleaseDoctorCheck("scheduler_closeout", "fail", "; ".join(problems))
+    return ReleaseDoctorCheck(
+        "scheduler_closeout",
+        "pass",
+        "terminal scheduler readback is hash-bound and admission reconciliation is proven",
+    )
+
+
 def _contains_hard_coded_robot_sf_path(root: Path) -> bool:
     """Detect absolute local Robot SF checkout paths without echoing file text.
 
@@ -2451,6 +2497,8 @@ def collect_release_doctor_report(  # noqa: PLR0913
     private_queue: Path | None = None,
     private_ops_repository: Path | None = None,
     expected_campaign_id: str | None = None,
+    scheduler_closeout_receipt: Path | None = None,
+    expected_job_id: str | None = None,
     final: bool = False,
     publication_mode: str | None = None,
 ) -> dict[str, Any]:
@@ -2493,6 +2541,13 @@ def collect_release_doctor_report(  # noqa: PLR0913
         # Preserve the lightweight preparation-mode contract for callers that
         # only have a draft packet and no queue row yet.
         cluster_check = _cluster_check(private_launch_packet, expected_release_sha)
+    scheduler_closeout_check = _scheduler_closeout_check(
+        scheduler_closeout_receipt,
+        expected_source_sha=expected_release_sha,
+        expected_campaign_id=expected_campaign_id,
+        expected_job_id=expected_job_id,
+        required=final,
+    )
     if final and checkpoint_path_map:
         checkpoint_check = ReleaseDoctorCheck(
             "checkpoints",
@@ -2516,6 +2571,7 @@ def collect_release_doctor_report(  # noqa: PLR0913
         _release_identity_check(manifest, expected_base_sha, tag, expected_release_sha),
         checkpoint_check,
         cluster_check,
+        scheduler_closeout_check,
         _disk_check(repo, minimum_free_gib),
         *_zenodo_check(
             repo,

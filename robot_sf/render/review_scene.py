@@ -75,6 +75,16 @@ DEFAULT_ROBOT_RADIUS_M = 0.3
 DEFAULT_PEDESTRIAN_RADIUS_M = 0.3
 DEFAULT_FIGURE = {"width_in": 3.2, "height_in": 2.4, "dpi": 80}
 
+# Pinned savefig behavior: other suites mutate global rcParams (notably
+# savefig.bbox=tight via the latex style helper), which would silently crop
+# our fixed-canvas figures under pytest-xdist worker reuse. Rendering stays
+# hermetic by restoring these keys around every save.
+_HERMETIC_SAVEFIG_RCPARAMS = {
+    "savefig.bbox": None,
+    "savefig.dpi": "figure",
+    "figure.constrained_layout.use": False,
+}
+
 
 def descriptor() -> dict[str, Any]:
     """Return the versioned capability descriptor for this component.
@@ -351,39 +361,42 @@ def _render_trace_scenes(
         raise IndexError(f"frame indices out of range for {len(trace.frames)} frames: {unknown}")
     artifacts: list[dict[str, Any]] = []
     rows: list[dict[str, Any]] = []
-    for ordinal, frame_index in enumerate(indices):
-        geometry, error = _frame_geometry(trace.frames[frame_index], frame_index)
-        if error is not None or geometry is None:
-            raise ValueError(error or "unreadable frame geometry")
-        figure = _render_scene_figure(geometry, scene["figure"])
-        try:
-            for scene_format in scene["formats"]:
-                filename = f"{artifact_id}-scene_{ordinal:06d}.{scene_format}"
-                figure.savefig(staging_dir / filename, format=scene_format)
-                artifacts.append(
-                    {
-                        "artifact_id": filename,
-                        "uri": str(Path(output_directory) / filename),
-                        "sha256": hashlib.sha256((staging_dir / filename).read_bytes()).hexdigest(),
-                    }
-                )
-        finally:
-            plt.close(figure)
-        rows.append(
-            {
-                "artifact_id": artifact_id,
-                "trace_id": trace.trace_id,
-                "ordinal": ordinal,
-                "step": geometry["step"],
-                "time_s": geometry["time_s"],
-                "units": dict(trace.units),
-                "robot": geometry["robot"],
-                "pedestrians": geometry["pedestrians"],
-                "files": [
-                    artifact["artifact_id"] for artifact in artifacts[-len(scene["formats"]) :]
-                ],
-            }
-        )
+    with matplotlib.rc_context(_HERMETIC_SAVEFIG_RCPARAMS):
+        for ordinal, frame_index in enumerate(indices):
+            geometry, error = _frame_geometry(trace.frames[frame_index], frame_index)
+            if error is not None or geometry is None:
+                raise ValueError(error or "unreadable frame geometry")
+            figure = _render_scene_figure(geometry, scene["figure"])
+            try:
+                for scene_format in scene["formats"]:
+                    filename = f"{artifact_id}-scene_{ordinal:06d}.{scene_format}"
+                    figure.savefig(staging_dir / filename, format=scene_format)
+                    artifacts.append(
+                        {
+                            "artifact_id": filename,
+                            "uri": str(Path(output_directory) / filename),
+                            "sha256": hashlib.sha256(
+                                (staging_dir / filename).read_bytes()
+                            ).hexdigest(),
+                        }
+                    )
+            finally:
+                plt.close(figure)
+            rows.append(
+                {
+                    "artifact_id": artifact_id,
+                    "trace_id": trace.trace_id,
+                    "ordinal": ordinal,
+                    "step": geometry["step"],
+                    "time_s": geometry["time_s"],
+                    "units": dict(trace.units),
+                    "robot": geometry["robot"],
+                    "pedestrians": geometry["pedestrians"],
+                    "files": [
+                        artifact["artifact_id"] for artifact in artifacts[-len(scene["formats"]) :]
+                    ],
+                }
+            )
     return artifacts, rows
 
 

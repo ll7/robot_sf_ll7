@@ -221,6 +221,29 @@ def test_extra_skipped_sources_keep_partial_status(tmp_path: Path) -> None:
     assert [item["artifact_id"] for item in result.diagnostics] == ["video-0000"]
 
 
+def test_rendering_is_hermetic_against_polluted_rcparams(tmp_path: Path) -> None:
+    """Foreign global style mutations must not change canvas geometry.
+
+    Other suites set savefig.bbox=tight globally (e.g. the latex style
+    helper); under xdist worker reuse those mutations leak into this
+    component. Rendering pins its savefig contract explicitly.
+    """
+    import matplotlib
+
+    with matplotlib.rc_context(
+        {
+            "savefig.bbox": "tight",
+            "savefig.dpi": 300,
+            "figure.constrained_layout.use": True,
+        }
+    ):
+        result, out_dir = _run_request(_request_doc(), tmp_path)
+
+    assert result.status == "complete", result.reason
+    with Image.open(out_dir / "trace-0002-scene_000001.png") as image:
+        assert image.size == (256, 192)
+
+
 def test_output_collision_is_failed(tmp_path: Path) -> None:
     """Scenes must never silently overwrite an existing directory."""
     (tmp_path / "out").mkdir()

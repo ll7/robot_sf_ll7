@@ -11,14 +11,14 @@ scientific, benchmark, safety, or paper-facing evidence.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import math
 import os
 import re
-import shutil
+import secrets
 import stat
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 from typing import Any
@@ -39,6 +39,12 @@ from robot_sf.analysis_workbench.review_contracts import (
 )
 from robot_sf.benchmark.trace_exemplar_interest import (
     DEFAULT_WEIGHTS as TRACE_EXEMPLAR_INTEREST_DEFAULT_WEIGHTS,
+)
+
+_SUPPORTED_DIR_FD_OPERATIONS = frozenset(
+    name
+    for name in ("link", "mkdir", "open", "rmdir", "unlink")
+    if getattr(os, name, None) in getattr(os, "supports_dir_fd", ())
 )
 
 COMPONENT_ID = "srev07-review-storyboard"
@@ -91,6 +97,38 @@ CANONICAL_SCORE_PAIR_FIELDS = frozenset(
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
+_CANONICAL_NON_ADMISSIBLE_STATUS_TOKENS = frozenset(
+    {
+        "aborted",
+        "blocked",
+        "cancelled",
+        "canceled",
+        "degraded",
+        "error",
+        "failed",
+        "fallback",
+        "incomplete",
+        "invalid",
+        "not_applicable",
+        "not_admissible",
+        "not_available",
+        "not_run",
+        "not_usable",
+        "non_admissible",
+        "non_canonical",
+        "noncanonical",
+        "partial",
+        "partial_failure",
+        "provisional",
+        "skipped",
+        "timeout",
+        "timed_out",
+        "unavailable",
+        "unusable",
+        "unknown",
+    }
+)
+
 # The component is intentionally bounded because it is an offline diagnostic
 # consumer.  These limits prevent malformed or accidentally unbounded fixture
 # inputs from turning a contract probe into an uncontrolled file/memory read.
@@ -125,6 +163,18 @@ _DESCRIPTOR_DOCUMENT: dict[str, Any] = {
 # Validate the public descriptor at import time so descriptor drift fails
 # before a caller can invoke the component.
 _DESCRIPTOR = component_descriptor_from_dict(_DESCRIPTOR_DOCUMENT)
+
+
+class _SecurePathError(OSError):
+    """Identify a path operation that could not preserve the containment contract."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class _OutputCollisionError(FileExistsError):
+    """Identify an output-directory collision separately from staging failures."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,26 +278,150 @@ def _strict_json_loads(raw: bytes) -> Any:
         raise ValueError("invalid strict JSON") from error
 
 
-def _read_regular_file(
-    path: Path, *, max_bytes: int | None = None
+def _safe_relative_parts(path_value: str) -> tuple[str, ...] | None:
+    """Return safe lexical path components for descriptor-relative access."""
+    try:
+        if not isinstance(path_value, str) or not path_value:
+            return None
+        windows_candidate = PureWindowsPath(path_value)
+        candidate = Path(path_value)
+        if (
+            candidate.is_absolute()
+            or windows_candidate.is_absolute()
+            or windows_candidate.drive
+            or "\\" in path_value
+            or any(ord(character) < 32 or ord(character) == 127 for character in path_value)
+            or ".." in candidate.parts
+            or ".." in windows_candidate.parts
+        ):
+            return None
+        parts = tuple(part for part in candidate.parts if part not in {"", "."})
+        return parts or None
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None
+
+
+def _supports_dir_fd(*operation_names: str) -> bool:
+    """Return whether all requested operations expose descriptor-relative APIs."""
+    return all(name in _SUPPORTED_DIR_FD_OPERATIONS for name in operation_names)
+
+
+def _secure_directory_flags() -> int:
+    """Return directory-open flags required for no-follow traversal."""
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    directory = getattr(os, "O_DIRECTORY", None)
+    if nofollow is None or directory is None or not _supports_dir_fd("open"):
+        raise _SecurePathError("secure_path_unavailable")
+    return os.O_RDONLY | nofollow | directory | getattr(os, "O_CLOEXEC", 0)
+
+
+def _secure_file_flags() -> int:
+    """Return regular-file flags that cannot follow a final symlink or block on a FIFO."""
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    nonblock = getattr(os, "O_NONBLOCK", None)
+    if nofollow is None or nonblock is None or not _supports_dir_fd("open"):
+        raise _SecurePathError("secure_path_unavailable")
+    return os.O_RDONLY | nofollow | nonblock | getattr(os, "O_CLOEXEC", 0)
+
+
+def _open_directory_anchor(root: Path) -> int:
+    """Open an absolute directory one component at a time without following symlinks.
+
+    Returns:
+        An open descriptor for the pinned directory.
+    """
+    flags = _secure_directory_flags()
+    absolute = root if root.is_absolute() else Path(os.path.abspath(root))
+    parts = absolute.parts
+    if not parts or parts[0] != os.sep:
+        raise _SecurePathError("secure_path_unavailable")
+    descriptor = os.open(os.sep, flags)
+    try:
+        for part in parts[1:]:
+            child = os.open(part, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _open_directory_relative(
+    directory_fd: int, parts: tuple[str, ...], *, create: bool = False
+) -> int:
+    """Open a directory below ``directory_fd`` with no-follow components.
+
+    Returns:
+        An open descriptor for the requested directory.
+    """
+    flags = _secure_directory_flags()
+    if create and not _supports_dir_fd("mkdir"):
+        raise _SecurePathError("secure_path_unavailable")
+    descriptor = os.dup(directory_fd)
+    try:
+        for part in parts:
+            try:
+                child = os.open(part, flags, dir_fd=descriptor)
+            except FileNotFoundError:
+                if not create:
+                    raise
+                try:
+                    os.mkdir(part, 0o700, dir_fd=descriptor)
+                except FileExistsError:
+                    pass
+                child = os.open(part, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _open_relative_file(root_fd: int, parts: tuple[str, ...]) -> int:
+    """Open one relative file below a pinned root directory.
+
+    Returns:
+        An open descriptor for the requested file.
+    """
+    if not parts:
+        raise _SecurePathError("source_uri_unsafe")
+    parent_fd = _open_directory_relative(root_fd, parts[:-1])
+    try:
+        return os.open(parts[-1], _secure_file_flags(), dir_fd=parent_fd)
+    finally:
+        os.close(parent_fd)
+
+
+def _read_regular_file(  # noqa: C901
+    path: Path,
+    *,
+    max_bytes: int | None = None,
+    root_fd: int | None = None,
+    relative_parts: tuple[str, ...] | None = None,
 ) -> tuple[bytes | None, str | None]:
-    """Read a bounded regular file without opening a special file.
+    """Read a bounded regular file through a pinned, no-follow descriptor path.
 
     Returns:
         Raw bytes and no error, or ``None`` and a stable read error code.
     """
     if max_bytes is None:
         max_bytes = MAX_SOURCE_BYTES
-    flags = os.O_RDONLY
-    flags |= getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
-    # O_NONBLOCK makes a FIFO safe to probe before fstat rejects it.
-    flags |= getattr(os, "O_NONBLOCK", 0)
+    descriptor: int | None = None
     try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return None, "source_unreadable"
-    try:
+        if root_fd is not None:
+            parts = relative_parts or _safe_relative_parts(str(path))
+            if parts is None:
+                return None, "source_uri_unsafe"
+            descriptor = _open_relative_file(root_fd, parts)
+        else:
+            absolute = Path(os.path.abspath(path))
+            parent_fd = _open_directory_anchor(absolute.parent)
+            try:
+                descriptor = os.open(absolute.name, _secure_file_flags(), dir_fd=parent_fd)
+            finally:
+                os.close(parent_fd)
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
             return None, "source_not_regular_file"
@@ -264,62 +438,198 @@ def _read_regular_file(
         if total >= max_bytes and os.fstat(descriptor).st_size > max_bytes:
             return None, "source_too_large"
         return b"".join(chunks), None
-    except OSError:
-        return None, "source_unreadable"
+    except _SecurePathError as error:
+        return (
+            None,
+            "source_uri_unsafe" if error.reason == "source_uri_unsafe" else "source_unreadable",
+        )
+    except OSError as error:
+        unsafe_errors = {errno.ELOOP, errno.ENOTDIR}
+        return None, "source_uri_unsafe" if error.errno in unsafe_errors else "source_unreadable"
     finally:
-        os.close(descriptor)
+        if descriptor is not None:
+            os.close(descriptor)
 
 
-def _write_json(path: Path, payload: Any) -> str:
-    """Atomically write strict JSON and return the written-byte digest.
+def _json_bytes(payload: Any) -> bytes:
+    """Serialize one sidecar as deterministic strict JSON bytes.
 
     Returns:
-        SHA-256 digest of the exact UTF-8 bytes written to ``path``.
+        Exact UTF-8 bytes for the sidecar payload.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(text, encoding="utf-8")
-    tmp_path.replace(path)
-    return _sha256_bytes(text.encode("utf-8"))
+    return (json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n").encode("utf-8")
 
 
-def _stage_outputs(output_dir: Path, payloads: dict[str, Any]) -> dict[str, str]:
-    """Write all sidecars into one new output directory transactionally.
+def _write_json_at(directory_fd: int, filename: str, payload: Any) -> str:
+    """Create one sidecar below a pinned directory and return its byte digest.
+
+    Returns:
+        SHA-256 digest of the exact bytes created below ``directory_fd``.
+    """
+    if _safe_relative_parts(filename) != (filename,):
+        raise _SecurePathError("unsafe_output_filename")
+    if not _supports_dir_fd("open"):
+        raise _SecurePathError("secure_path_unavailable")
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    encoded = _json_bytes(payload)
+    descriptor = os.open(filename, flags, 0o600, dir_fd=directory_fd)
+    try:
+        written = 0
+        while written < len(encoded):
+            count = os.write(descriptor, encoded[written:])
+            if count <= 0:
+                raise OSError("sidecar write made no progress")
+            written += count
+    finally:
+        os.close(descriptor)
+    return _sha256_bytes(encoded)
+
+
+def _remove_known_entries(directory_fd: int, filenames: tuple[str, ...]) -> None:
+    """Remove only known sidecar names through a pinned directory descriptor."""
+    if not _supports_dir_fd("unlink"):
+        return
+    for filename in filenames:
+        try:
+            os.unlink(filename, dir_fd=directory_fd)
+        except OSError:
+            pass
+
+
+def _same_directory(left_fd: int, right_fd: int) -> bool:
+    """Return whether two descriptors identify the same directory inode."""
+    try:
+        left = os.fstat(left_fd)
+        right = os.fstat(right_fd)
+    except OSError:
+        return False
+    return (left.st_dev, left.st_ino) == (right.st_dev, right.st_ino)
+
+
+def _assert_directory_identity(
+    root_fd: int, parts: tuple[str, ...], expected_fd: int, reason: str
+) -> None:
+    """Fail closed when the visible path no longer names the opened directory."""
+    try:
+        observed_fd = _open_directory_relative(root_fd, parts)
+    except OSError as error:
+        raise _SecurePathError(reason) from error
+    try:
+        if not _same_directory(observed_fd, expected_fd):
+            raise _SecurePathError(reason)
+    finally:
+        os.close(observed_fd)
+
+
+def _assert_anchor_identity(root: Path, expected_fd: int, reason: str) -> None:
+    """Fail closed when the visible root no longer names the pinned root."""
+    try:
+        observed_fd = _open_directory_anchor(root)
+    except OSError as error:
+        raise _SecurePathError(reason) from error
+    try:
+        if not _same_directory(observed_fd, expected_fd):
+            raise _SecurePathError(reason)
+    finally:
+        os.close(observed_fd)
+
+
+def _create_staging_directory(parent_fd: int, output_name: str) -> tuple[str, int]:
+    """Reserve a private staging directory below a pinned output parent.
+
+    Returns:
+        The private directory name and its open descriptor.
+    """
+    flags = _secure_directory_flags()
+    for _ in range(128):
+        staging_name = f".{output_name}-{secrets.token_hex(8)}"
+        try:
+            os.mkdir(staging_name, 0o700, dir_fd=parent_fd)
+        except FileExistsError:
+            continue
+        try:
+            return staging_name, os.open(staging_name, flags, dir_fd=parent_fd)
+        except BaseException:
+            try:
+                os.rmdir(staging_name, dir_fd=parent_fd)
+            except OSError:
+                pass
+            raise
+    raise OSError("could not reserve a private staging directory")
+
+
+def _stage_outputs(  # noqa: C901
+    root_fd: int, output_parts: tuple[str, ...], payloads: dict[str, Any]
+) -> dict[str, str]:
+    """Publish sidecars atomically using only pinned descriptor-relative paths.
 
     Returns:
         Mapping from sidecar filename to its exact-byte SHA-256 digest.
     """
-    output_dir.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    if not output_parts or not _supports_dir_fd("link", "mkdir", "rmdir", "unlink"):
+        raise _SecurePathError("secure_path_unavailable")
+    parent_parts = output_parts[:-1]
+    output_name = output_parts[-1]
+    parent_fd = _open_directory_relative(root_fd, parent_parts, create=True)
+    staging_name: str | None = None
+    staging_fd: int | None = None
+    output_fd: int | None = None
     output_created = False
     committed = False
+    filenames = tuple(sorted(payloads))
     try:
+        staging_name, staging_fd = _create_staging_directory(parent_fd, output_name)
         digests = {
-            filename: _write_json(staging / filename, payloads[filename])
-            for filename in sorted(payloads)
+            filename: _write_json_at(staging_fd, filename, payloads[filename])
+            for filename in filenames
         }
-        # Reserve the final directory without replacement semantics.  A
-        # pre-check alone is racy and ``Path.replace`` could overwrite an
-        # empty directory created by another invocation between the checks.
-        output_dir.mkdir(exist_ok=False)
+        try:
+            os.mkdir(output_name, 0o700, dir_fd=parent_fd)
+        except FileExistsError as error:
+            raise _OutputCollisionError(output_name) from error
         output_created = True
-        for filename in sorted(payloads):
+        output_fd = os.open(output_name, _secure_directory_flags(), dir_fd=parent_fd)
+        for filename in filenames:
             os.link(
-                staging / filename,
-                output_dir / filename,
+                filename,
+                filename,
+                src_dir_fd=staging_fd,
+                dst_dir_fd=output_fd,
                 follow_symlinks=False,
             )
+        _assert_directory_identity(
+            root_fd, parent_parts, parent_fd, "output_parent_changed_during_publication"
+        )
+        _assert_directory_identity(
+            root_fd, output_parts, output_fd, "output_changed_during_publication"
+        )
         committed = True
         return digests
     finally:
-        shutil.rmtree(staging, ignore_errors=True)
+        if output_fd is not None:
+            if not committed:
+                _remove_known_entries(output_fd, filenames)
+            os.close(output_fd)
         if output_created and not committed:
             try:
-                if output_dir.exists() and not output_dir.is_symlink():
-                    shutil.rmtree(output_dir)
+                os.rmdir(output_name, dir_fd=parent_fd)
             except OSError:
                 pass
+        if staging_fd is not None:
+            _remove_known_entries(staging_fd, filenames)
+            os.close(staging_fd)
+        if staging_name is not None:
+            try:
+                os.rmdir(staging_name, dir_fd=parent_fd)
+            except OSError:
+                pass
+        os.close(parent_fd)
 
 
 def _canonical_digest(payload: Any) -> str:
@@ -376,68 +686,6 @@ def _reject_not_applicable(request: ComponentRequest) -> ComponentResult | None:
     return None
 
 
-def _has_symlink_component(path: Path, root: Path) -> bool:
-    """Return whether an existing path component is a symlink."""
-    try:
-        relative = path.relative_to(root)
-        current = root
-        for part in relative.parts:
-            current /= part
-            if current.is_symlink():
-                return True
-    except (OSError, ValueError):
-        return True
-    return False
-
-
-def _resolve_under_root(path_value: str, root: Path) -> Path | None:
-    """Return a path only when lexical and resolved containment both hold."""
-    try:
-        if not isinstance(path_value, str):
-            return None
-        windows_candidate = PureWindowsPath(path_value)
-        candidate = Path(path_value)
-        if (
-            candidate.is_absolute()
-            or windows_candidate.is_absolute()
-            or windows_candidate.drive
-            or "\\" in path_value
-            or any(ord(character) < 32 or ord(character) == 127 for character in path_value)
-            or ".." in candidate.parts
-            or ".." in windows_candidate.parts
-        ):
-            return None
-        root_resolved = root.resolve()
-        candidate_path = root_resolved / candidate
-        candidate_path.resolve(strict=False).relative_to(root_resolved)
-        if _has_symlink_component(candidate_path, root_resolved):
-            return None
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return None
-    return candidate_path
-
-
-def _resolve_output_directory(root: Path, path_value: str) -> tuple[Path | None, str | None]:
-    """Resolve an output directory without allowing traversal or symlink escape.
-
-    Returns:
-        The contained path and no error, or ``None`` and a stable rejection reason.
-    """
-    path = _resolve_under_root(path_value, root)
-    if path is None:
-        return None, f"unsafe_output_path: {path_value}"
-    return path, None
-
-
-def _resolve_source(path_value: str, base: Path) -> Path | None:
-    """Resolve a source URI under ``base`` with symlink-aware containment.
-
-    Returns:
-        The lexical path when its resolved target remains contained, otherwise ``None``.
-    """
-    return _resolve_under_root(path_value, base)
-
-
 def _ref_value(ref: Any, key: str, default: Any = "") -> Any:
     """Read a field from either a SourceRef or a validated bundle mapping.
 
@@ -488,6 +736,7 @@ def _verify_reference(
     ref: Any,
     root: Path,
     *,
+    root_fd: int | None = None,
     episode_id: str | None = None,
     scope: str = "request",
     max_bytes: int | None = None,
@@ -499,8 +748,8 @@ def _verify_reference(
     """
     artifact_id = str(_ref_value(ref, "artifact_id"))
     uri = str(_ref_value(ref, "uri"))
-    path = _resolve_source(uri, root)
-    if path is None:
+    relative_parts = _safe_relative_parts(uri)
+    if relative_parts is None:
         return (
             None,
             _source_record(ref, integrity_status="unsafe_path", episode_id=episode_id, scope=scope),
@@ -512,7 +761,13 @@ def _verify_reference(
             _source_record(ref, integrity_status="unavailable", episode_id=episode_id, scope=scope),
             f"{artifact_id}: source_too_large",
         )
-    raw, read_problem = _read_regular_file(path, max_bytes=max_bytes)
+    path = root.joinpath(*relative_parts)
+    raw, read_problem = _read_regular_file(
+        path,
+        max_bytes=max_bytes,
+        root_fd=root_fd,
+        relative_parts=relative_parts,
+    )
     if read_problem is not None:
         integrity_status = "unsafe_path" if read_problem == "source_uri_unsafe" else "unavailable"
         record = _source_record(
@@ -562,14 +817,21 @@ def _verify_reference(
 
 
 def _read_json(
-    ref: Any, root: Path, *, scope: str = "request", episode_id: str | None = None
+    ref: Any,
+    root: Path,
+    *,
+    root_fd: int | None = None,
+    scope: str = "request",
+    episode_id: str | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any], str | None]:
     """Read one JSON object and return its provenance record and diagnostic.
 
     Returns:
         Parsed object when valid, its source record, and an optional diagnostic code.
     """
-    raw, record, problem = _verify_reference(ref, root, episode_id=episode_id, scope=scope)
+    raw, record, problem = _verify_reference(
+        ref, root, root_fd=root_fd, episode_id=episode_id, scope=scope
+    )
     if raw is None:
         return None, record, problem
     try:
@@ -827,7 +1089,11 @@ def _spec_intervals(
 
 
 def _read_family_docs(
-    by_format: dict[str, list[Any]], root: Path, diagnostics: list[str]
+    by_format: dict[str, list[Any]],
+    root: Path,
+    diagnostics: list[str],
+    *,
+    root_fd: int | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
     """Read each source family once and retain every source provenance record.
 
@@ -842,7 +1108,7 @@ def _read_family_docs(
             diagnostics.append(f"{family}: source_family_collision")
             records.extend(_source_record(ref, integrity_status="family_collision") for ref in refs)
             continue
-        payload, record, problem = _read_json(refs[0], root)
+        payload, record, problem = _read_json(refs[0], root, root_fd=root_fd)
         records.append(record)
         if problem is not None:
             diagnostics.append(problem)
@@ -852,7 +1118,11 @@ def _read_family_docs(
 
 
 def _load_inputs(
-    request: ComponentRequest, root: Path, diagnostics: list[str]
+    request: ComponentRequest,
+    root: Path,
+    diagnostics: list[str],
+    *,
+    root_fd: int | None = None,
 ) -> tuple[
     dict[str, Any] | None,
     dict[str, Any] | None,
@@ -882,7 +1152,7 @@ def _load_inputs(
             diagnostics.append(f"required_source_family_missing:{family}")
     if any(code.startswith("required_source_family_missing") for code in diagnostics):
         return None, None, None, records, by_format
-    docs, loaded_records = _read_family_docs(by_format, root, diagnostics)
+    docs, loaded_records = _read_family_docs(by_format, root, diagnostics, root_fd=root_fd)
     records.extend(loaded_records)
     bundle_doc = docs.get("review-bundle")
     if bundle_doc is not None:
@@ -895,7 +1165,11 @@ def _load_inputs(
 
 
 def _bundle_episode_index(  # noqa: C901, PLR0912, PLR0915
-    bundle_doc: dict[str, Any], root: Path, diagnostics: list[str]
+    bundle_doc: dict[str, Any],
+    root: Path,
+    diagnostics: list[str],
+    *,
+    root_fd: int | None = None,
 ) -> tuple[dict[str, tuple[dict[str, Any], ...]] | None, list[dict[str, Any]], bool]:
     """Validate episode identity and verify every referenced bundle artifact.
 
@@ -942,6 +1216,7 @@ def _bundle_episode_index(  # noqa: C901, PLR0912, PLR0915
             raw, record, problem = _verify_reference(
                 ref,
                 root,
+                root_fd=root_fd,
                 episode_id=episode_id,
                 scope="bundle-reference",
                 max_bytes=min(MAX_SOURCE_BYTES, remaining_bytes),
@@ -1108,6 +1383,18 @@ def _record_missing_scores(
         diagnostics.append(f"score_missing:{episode_id}")
 
 
+def _canonical_non_admissible_status(status: Any) -> str | None:
+    """Return a normalized execution status that cannot support canonical scoring."""
+    if not isinstance(status, str) or not status.strip():
+        return None
+    normalized = re.sub(r"[^a-z0-9]+", "_", status.strip().lower()).strip("_")
+    if normalized in _CANONICAL_NON_ADMISSIBLE_STATUS_TOKENS:
+        return normalized
+    if set(normalized.split("_")) & _CANONICAL_NON_ADMISSIBLE_STATUS_TOKENS:
+        return normalized
+    return None
+
+
 def _canonical_score_document_valid(  # noqa: C901, PLR0912, PLR0915
     scores_doc: dict[str, Any], known: set[str], diagnostics: list[str]
 ) -> bool:
@@ -1169,6 +1456,12 @@ def _canonical_score_document_valid(  # noqa: C901, PLR0912, PLR0915
             if not isinstance(entry[field_name], str) or not entry[field_name]:
                 diagnostics.append(f"exemplar_scores_canonical_row_malformed:{position}")
                 valid = False
+        non_admissible_status = _canonical_non_admissible_status(entry["episode_status"])
+        if non_admissible_status is not None:
+            diagnostics.append(
+                f"exemplar_scores_canonical_row_non_admissible:{position}:{non_admissible_status}"
+            )
+            valid = False
         seed = entry["seed"]
         if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
             diagnostics.append(f"exemplar_scores_canonical_row_malformed:{position}")
@@ -1207,6 +1500,14 @@ def _canonical_score_document_valid(  # noqa: C901, PLR0912, PLR0915
         ):
             if not isinstance(pair[field_name], str) or not pair[field_name]:
                 diagnostics.append(f"exemplar_scores_canonical_pair_malformed:{position}")
+                valid = False
+        for field_name in ("left_episode_id", "right_episode_id"):
+            episode_id = pair[field_name]
+            if isinstance(episode_id, str) and episode_id not in known:
+                diagnostics.append(
+                    "exemplar_scores_canonical_pair_unknown_episode:"
+                    f"{position}:{field_name}:{episode_id}"
+                )
                 valid = False
         seed = pair["seed"]
         if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
@@ -1379,25 +1680,34 @@ def run(  # noqa: C901, PLR0912, PLR0915
     rejected = _reject_not_applicable(request)
     if rejected is not None:
         return rejected
-    output_dir, output_error = _resolve_output_directory(root, request.output_directory)
-    if output_error is not None or output_dir is None:
+    output_parts = _safe_relative_parts(request.output_directory)
+    if output_parts is None:
         return _result(
             request_id=request.request_id,
             component_id=request.component_id,
             status=STATUS_FAILED,
-            reason=output_error or "unsafe_output_path",
+            reason=f"unsafe_output_path: {request.output_directory}",
         )
-    if output_dir.exists() or output_dir.is_symlink():
+    try:
+        root_fd = _open_directory_anchor(root)
+    except _SecurePathError as error:
         return _result(
             request_id=request.request_id,
             component_id=request.component_id,
             status=STATUS_FAILED,
-            reason=f"output_collision: already exists: {request.output_directory}",
+            reason=error.reason,
+        )
+    except OSError:
+        return _result(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status=STATUS_FAILED,
+            reason="invalid_request: base path cannot be securely opened",
         )
     diagnostics: list[str] = []
     try:
         bundle_doc, scores_doc, index_doc, source_records, refs_by_format = _load_inputs(
-            request, root, diagnostics
+            request, root, diagnostics, root_fd=root_fd
         )
         if bundle_doc is None:
             return _result(
@@ -1420,7 +1730,7 @@ def run(  # noqa: C901, PLR0912, PLR0915
                 + "; ".join(sorted(set(diagnostics))[:5]),
             )
         episode_by_id, bundle_reference_records, bundle_hard_failure = _bundle_episode_index(
-            bundle_doc, root, diagnostics
+            bundle_doc, root, diagnostics, root_fd=root_fd
         )
         source_records.extend(bundle_reference_records)
         if bundle_hard_failure or episode_by_id is None:
@@ -1532,6 +1842,7 @@ def run(  # noqa: C901, PLR0912, PLR0915
             ]
             spec_payload["annotations"][0]["event_intervals"] = event_intervals
         visualization_spec_from_dict(spec_payload)
+        _assert_anchor_identity(root, root_fd, "source_root_changed_during_run")
 
         blocking = _blocking_diagnostics(
             diagnostics,
@@ -1567,7 +1878,7 @@ def run(  # noqa: C901, PLR0912, PLR0915
             OUTPUT_OVERRIDES_FILENAME: override_payload,
             OUTPUT_SPEC_FILENAME: spec_payload,
         }
-        file_digests = _stage_outputs(output_dir, payloads)
+        file_digests = _stage_outputs(root_fd, output_parts, payloads)
         output_artifacts = tuple(
             {
                 "artifact_id": filename,
@@ -1607,6 +1918,22 @@ def run(  # noqa: C901, PLR0912, PLR0915
             provenance=provenance,
             reason=reason,
         )
+    except _OutputCollisionError:
+        return _result(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status=STATUS_FAILED,
+            diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
+            reason=f"output_collision: already exists: {request.output_directory}",
+        )
+    except _SecurePathError as error:
+        return _result(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status=STATUS_FAILED,
+            diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
+            reason=error.reason,
+        )
     except FileExistsError:
         return _result(
             request_id=request.request_id,
@@ -1640,6 +1967,8 @@ def run(  # noqa: C901, PLR0912, PLR0915
             diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
             reason=f"internal_failure: {type(error).__name__}",
         )
+    finally:
+        os.close(root_fd)
 
 
 def _build_parser() -> argparse.ArgumentParser:

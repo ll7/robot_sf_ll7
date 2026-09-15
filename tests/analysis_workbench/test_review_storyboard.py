@@ -92,12 +92,12 @@ CANONICAL_FEATURES = (
 )
 
 
-def _canonical_episode(episode_id: str, score: float) -> dict[str, Any]:
+def _canonical_episode(episode_id: str, score: float, *, status: str = "failure") -> dict[str, Any]:
     """Build a complete owner-native score row for adapter tests."""
     return {
         "episode_dir": f"diagnostic-fixture/{episode_id}",
         "episode_id": episode_id,
-        "episode_status": "failure",
+        "episode_status": status,
         "planner": "fixture-planner",
         "scenario_id": "fixture-scenario",
         "seed": 1,
@@ -122,6 +122,21 @@ def _canonical_report(entries: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "episodes": entries,
         "comparison_pairs": [],
+    }
+
+
+def _canonical_pair(left_episode_id: str, right_episode_id: str) -> dict[str, Any]:
+    """Build a complete owner-native comparison row."""
+    return {
+        "scenario_id": "fixture-scenario",
+        "seed": 1,
+        "left_episode_id": left_episode_id,
+        "left_planner": "fixture-planner",
+        "right_episode_id": right_episode_id,
+        "right_planner": "fixture-planner",
+        "outcome_divergence": 0.2,
+        "trajectory_divergence": 0.3,
+        "pair_score": 0.4,
     }
 
 
@@ -618,6 +633,49 @@ def test_symlink_source_escape_fails_closed(tmp_path: Path) -> None:
     assert not (tmp_path / "out").exists()
 
 
+def test_source_ancestor_swap_fails_closed_before_outside_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A source ancestor swapped to a symlink cannot redirect a descriptor walk."""
+    _stage(tmp_path)
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source_bundle = source_dir / "bundle.json"
+    shutil.copy2(tmp_path / "bundle.json", source_bundle)
+    outside = tmp_path.parent / f"storyboard-source-race-{tmp_path.name}"
+    outside.mkdir()
+    outside_bundle = outside / "bundle.json"
+    shutil.copy2(source_bundle, outside_bundle)
+    outside_before = outside_bundle.read_bytes()
+    sources = [
+        {
+            "artifact_id": "bundle",
+            "uri": "source/bundle.json",
+            "format": "review-bundle",
+            "sha256": _sha256(source_bundle),
+        }
+    ]
+    request = _request(sources=sources, base_path=tmp_path)
+    original_open = storyboard.os.open
+    swapped = False
+
+    def swap_source_ancestor(path: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal swapped
+        if path == "source" and kwargs.get("dir_fd") is not None and not swapped:
+            source_dir.rename(tmp_path / "source-real")
+            os.symlink(outside, source_dir)
+            swapped = True
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(storyboard.os, "open", swap_source_ancestor)
+    result = run(request, base=tmp_path)
+    assert swapped
+    assert result.status == "failed"
+    assert "source_uri_unsafe" in result.reason
+    assert outside_bundle.read_bytes() == outside_before
+    assert not (tmp_path / "out").exists()
+
+
 def test_windows_style_source_traversal_fails_closed(tmp_path: Path) -> None:
     _stage(tmp_path)
     result = run(
@@ -701,6 +759,103 @@ def test_canonical_exemplar_interest_shape_uses_explicit_adapter(tmp_path: Path)
         "ep-2",
         "ep-1",
     ]
+
+
+@pytest.mark.parametrize(
+    "episode_status",
+    [
+        "fallback",
+        "degraded",
+        "unavailable",
+        "failed",
+        "not available",
+        "partial_success",
+        "non-admissible",
+    ],
+)
+def test_canonical_non_admissible_status_stays_diagnostic_only(
+    tmp_path: Path, episode_status: str
+) -> None:
+    """Execution fallback rows cannot establish canonical score provenance."""
+    _stage(tmp_path)
+    canonical = _canonical_report(
+        [
+            _canonical_episode("ep-1", 0.9, status=episode_status),
+            _canonical_episode("ep-2", 0.1),
+        ]
+    )
+    _write_json(tmp_path / "non-admissible-scores.json", canonical)
+    sources = [
+        {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
+        {
+            "artifact_id": "scores",
+            "uri": "non-admissible-scores.json",
+            "format": "exemplar-scores",
+        },
+    ]
+    result = run(
+        _request(required=("exemplar-scores",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert any(
+        diagnostic["code"].startswith("exemplar_scores_canonical_row_non_admissible:0:")
+        for diagnostic in result.diagnostics
+    )
+    assert result.provenance["score_input_format"] == "unavailable"
+    assert result.provenance["score_adapter_version"] == ""
+    assert result.provenance["evidence_boundary"] == "diagnostic_only"
+    assert all(item["score"] is None for item in _spec(tmp_path)["annotations"][0]["ranking"])
+
+
+def test_canonical_comparison_pair_unknown_endpoint_is_rejected(tmp_path: Path) -> None:
+    """Comparison rows must refer to episodes declared by the review bundle."""
+    _stage(tmp_path)
+    canonical = _canonical_report(
+        [_canonical_episode("ep-1", 0.9), _canonical_episode("ep-2", 0.1)]
+    )
+    canonical["comparison_pairs"] = [_canonical_pair("ep-1", "ep-unknown")]
+    _write_json(tmp_path / "unknown-pair-scores.json", canonical)
+    sources = [
+        {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
+        {
+            "artifact_id": "scores",
+            "uri": "unknown-pair-scores.json",
+            "format": "exemplar-scores",
+        },
+    ]
+    result = run(
+        _request(required=("exemplar-scores",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "exemplar_scores_canonical_pair_unknown_episode:0:right_episode_id:ep-unknown" in (
+        result.reason
+    )
+    assert result.provenance["score_adapter_version"] == ""
+
+
+def test_canonical_top_n_pair_endpoints_use_bundle_ids(tmp_path: Path) -> None:
+    """A top-N report may pair a scored row with a known omitted bundle episode."""
+    _stage(tmp_path)
+    canonical = _canonical_report([_canonical_episode("ep-1", 0.9)])
+    canonical["comparison_pairs"] = [_canonical_pair("ep-1", "ep-2")]
+    _write_json(tmp_path / "top-n-scores.json", canonical)
+    sources = [
+        {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
+        {"artifact_id": "scores", "uri": "top-n-scores.json", "format": "exemplar-scores"},
+    ]
+    result = run(
+        _request(required=("exemplar-scores",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "score_missing:ep-2" in result.reason
+    assert not any(
+        diagnostic["code"].startswith("exemplar_scores_canonical_pair_unknown_episode:")
+        for diagnostic in result.diagnostics
+    )
+    assert result.provenance["score_adapter_version"] == CANONICAL_SCORE_ADAPTER_VERSION
 
 
 def test_canonical_score_lookalike_is_not_advertised_as_adapter(tmp_path: Path) -> None:
@@ -906,6 +1061,37 @@ def test_output_write_failure_cleans_partial_directory(
     assert result.status == "failed"
     assert result.reason == "internal_failure: OSError"
     assert not (tmp_path / "out").exists()
+
+
+def test_output_ancestor_swap_fails_closed_without_outside_sidecars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publication detects an ancestor swap and never leaves sidecars in the target."""
+    _stage(tmp_path)
+    output_parent = tmp_path / "output-parent"
+    output_parent.mkdir()
+    outside = tmp_path.parent / f"storyboard-output-race-{tmp_path.name}"
+    outside.mkdir()
+    output = "output-parent/storyboard"
+    request = _request(output=output, base_path=tmp_path)
+    original_mkdir = storyboard.os.mkdir
+    swapped = False
+
+    def swap_output_ancestor(path: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal swapped
+        if path == "storyboard" and kwargs.get("dir_fd") is not None and not swapped:
+            output_parent.rename(tmp_path / "output-parent-real")
+            os.symlink(outside, output_parent)
+            swapped = True
+        return original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(storyboard.os, "mkdir", swap_output_ancestor)
+    result = run(request, base=tmp_path)
+    assert swapped
+    assert result.status == "failed"
+    assert "output_parent_changed_during_publication" in result.reason
+    assert list(outside.iterdir()) == []
+    assert not (tmp_path / "output-parent-real" / "storyboard").exists()
 
 
 def test_duplicate_episode_ids_fail_closed(tmp_path: Path) -> None:

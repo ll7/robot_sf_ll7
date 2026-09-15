@@ -83,6 +83,15 @@ def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _sha256_file(path: Path) -> str:
+    """Return the hex SHA-256 digest of a file without loading it all at once."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _write_json(path: Path, payload: Any) -> str:
     """Atomically write strict-JSON.
 
@@ -223,6 +232,18 @@ def _is_safe_source(path: Path) -> str | None:
     return None
 
 
+def _stage_verified_file(target: Path, destination: Path, expected_sha256: str) -> None:
+    """Copy one source file and verify the published payload digest."""
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "rb") as source, open(destination, "wb") as staged:
+            shutil.copyfileobj(source, staged)
+        if _sha256_file(destination) != expected_sha256:
+            raise _PackageOperationError("staging_failed")
+    except (OSError, TypeError, ValueError) as error:
+        raise _PackageOperationError("staging_failed") from error
+
+
 def _relocate_reference(
     reference: dict[str, Any],
     root: Path,
@@ -280,12 +301,7 @@ def _relocate_reference(
             size_bytes=len(raw),
             source_provenance=source_provenance,
         )
-    try:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        with open(target, "rb") as source, open(destination, "wb") as staged:
-            shutil.copyfileobj(source, staged)
-    except (OSError, TypeError, ValueError) as error:
-        raise _PackageOperationError("staging_failed") from error
+    _stage_verified_file(target, destination, observed)
     return _RelocatedEntry(
         artifact_id=artifact_id,
         source_uri=uri,
@@ -469,6 +485,79 @@ def _manifest_entry(entry: _RelocatedEntry) -> dict[str, Any]:
     }
 
 
+def _published_artifact(
+    path: Path,
+    output_dir: Path,
+    artifact_id: str,
+    uri: str,
+    expected_sha256: str,
+) -> dict[str, str]:
+    """Digest one complete output only after validating its published path.
+
+    Returns:
+        Artifact record containing the validated URI and observed digest.
+    """
+    if not _realpath_within(path, output_dir):
+        raise _PackageOperationError("publication_failed")
+    try:
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("published output is not a regular file")
+        observed = _sha256_file(path)
+    except (OSError, TypeError, ValueError) as error:
+        raise _PackageOperationError("publication_failed") from error
+    if observed != expected_sha256:
+        raise _PackageOperationError("publication_failed")
+    return {"artifact_id": artifact_id, "uri": uri, "sha256": observed}
+
+
+def _complete_artifacts(
+    output_dir: Path,
+    output_directory: str,
+    relocated: list[_RelocatedEntry],
+    manifest_digest: str,
+    report_digest: str,
+) -> tuple[dict[str, str], ...]:
+    """Expose and digest every file promised by a complete package result.
+
+    Returns:
+        Ordered artifact records for the manifest, report, and payload files.
+    """
+    output_root = Path(output_directory)
+    artifacts = [
+        _published_artifact(
+            output_dir / OUTPUT_MANIFEST_FILENAME,
+            output_dir,
+            OUTPUT_MANIFEST_FILENAME,
+            str(output_root / OUTPUT_MANIFEST_FILENAME),
+            manifest_digest,
+        ),
+        _published_artifact(
+            output_dir / OUTPUT_REPORT_FILENAME,
+            output_dir,
+            OUTPUT_REPORT_FILENAME,
+            str(output_root / OUTPUT_REPORT_FILENAME),
+            report_digest,
+        ),
+    ]
+    package_entries: dict[str, _RelocatedEntry] = {}
+    for entry in relocated:
+        previous = package_entries.get(entry.relocated_path)
+        if previous is not None and previous.sha256 != entry.sha256:
+            raise _PackageOperationError("publication_failed")
+        package_entries[entry.relocated_path] = entry
+    for relocated_path, entry in sorted(package_entries.items()):
+        artifacts.append(
+            _published_artifact(
+                output_dir / relocated_path,
+                output_dir,
+                relocated_path,
+                str(output_root / relocated_path),
+                entry.sha256,
+            )
+        )
+    return tuple(artifacts)
+
+
 def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:  # noqa: C901
     """Relocate bundle payloads into a verified package.
 
@@ -540,17 +629,14 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         reason = "" if status == STATUS_COMPLETE else "; ".join(sorted(set(diagnostics))[:8])
         artifacts: tuple[dict[str, Any], ...] = ()
         if status == STATUS_COMPLETE and not dry_run:
-            artifacts = (
-                {
-                    "artifact_id": OUTPUT_MANIFEST_FILENAME,
-                    "uri": str(Path(request.output_directory) / OUTPUT_MANIFEST_FILENAME),
-                    "sha256": manifest_digest,
-                },
-                {
-                    "artifact_id": OUTPUT_REPORT_FILENAME,
-                    "uri": str(Path(request.output_directory) / OUTPUT_REPORT_FILENAME),
-                    "sha256": report_digest,
-                },
+            if manifest_digest is None or report_digest is None:
+                raise _PackageOperationError("publication_failed")
+            artifacts = _complete_artifacts(
+                output_dir,
+                request.output_directory,
+                relocated,
+                manifest_digest,
+                report_digest,
             )
         return ComponentResult(
             request_id=request.request_id,

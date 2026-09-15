@@ -33,10 +33,12 @@ uv run python -m robot_sf.analysis_workbench.review_package \
   provenance (including video references that were not staged).
 - `verification-report.json`: verified-entry count, diagnostics, and the
   declared provenance of video references that were not staged.
-- A non-dry-run `complete` result advertises both JSON outputs in its
-  `artifacts` list, with SHA-256 values matching the written bytes. Dry runs
-  perform no writes and therefore advertise no output artifacts. `partial`,
-  `unavailable`, and `failed` results never claim complete outputs.
+- A non-dry-run `complete` result advertises `manifest.json`,
+  `verification-report.json`, and one package-file entry for each unique
+  staged payload in its `artifacts` list. Every entry carries a SHA-256 value
+  matching the published bytes. Dry runs perform no writes and therefore
+  advertise no output artifacts. `partial`, `unavailable`, and `failed`
+  results never claim complete outputs.
 - The printed result envelope carries `complete`, `partial`, `unavailable`, or
   `failed` with stable reason codes (`tampered_payload`, `source_unreadable`,
   `symlink_refused`, `video_not_staged`, `reference_not_local`,

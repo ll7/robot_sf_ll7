@@ -127,9 +127,16 @@ def test_success_relocates_verified_payloads(tmp_path: Path) -> None:
     }
     assert component_result_from_dict(envelope).status == "complete"
     artifacts = {str(item["artifact_id"]): item for item in result.artifacts}
-    assert set(artifacts) == {"manifest.json", "verification-report.json"}
-    for name, item in artifacts.items():
-        assert item["sha256"] == hashlib.sha256((tmp_path / "out" / name).read_bytes()).hexdigest()
+    assert set(artifacts) == {
+        "manifest.json",
+        "verification-report.json",
+        "package/a.json",
+        "package/b.json",
+    }
+    for item in artifacts.values():
+        assert (
+            item["sha256"] == hashlib.sha256((tmp_path / str(item["uri"])).read_bytes()).hexdigest()
+        )
 
 
 def test_declared_source_provenance_is_preserved_in_manifest_and_result(
@@ -442,6 +449,15 @@ def test_cli_produces_package_from_fixture_request() -> None:
         assert completed.returncode == 0, completed.stderr[-2000:]
         payload = json.loads(completed.stdout)
         assert payload["status"] == "complete"
+        artifact_ids = {str(item["artifact_id"]) for item in payload["artifacts"]}
+        assert artifact_ids == {
+            "manifest.json",
+            "verification-report.json",
+            "package/tests/fixtures/scenario_review/review_package/payload-a.json",
+            "package/tests/fixtures/scenario_review/review_package/payload-b.json",
+        }
+        for item in payload["artifacts"]:
+            assert item["sha256"] == hashlib.sha256((repo / item["uri"]).read_bytes()).hexdigest()
         manifest = json.loads((repo / output_rel / "manifest.json").read_text())
         assert len(manifest["entries"]) == 3
     finally:

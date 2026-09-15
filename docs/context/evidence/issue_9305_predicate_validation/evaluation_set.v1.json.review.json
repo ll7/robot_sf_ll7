@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9305_predicate_validation/evaluation_set.v1.json",
+  "artifact_sha256": "8121610f570f99cd421e2d2f8eea6c717e98d0f0da0cfdc8d102f940e272b0e0",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

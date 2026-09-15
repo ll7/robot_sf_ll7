@@ -7623,3 +7623,7 @@ entries:
   status: historical
   freshness: dated
   area: training
+- path: docs/context/evidence/issue_9305_predicate_validation
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

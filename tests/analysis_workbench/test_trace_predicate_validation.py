@@ -1,3 +1,4 @@
+# evidence-writer-exempt: tmp_path parser fixtures only; no repository evidence writes.
 """Tests for the issue #9305 trace-predicate validation contract."""
 
 from __future__ import annotations

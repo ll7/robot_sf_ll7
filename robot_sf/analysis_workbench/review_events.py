@@ -14,12 +14,14 @@ import argparse
 import hashlib
 import json
 import math
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from robot_sf.analysis_workbench.review_contracts import (
     COMPONENT_REQUEST_SCHEMA_VERSION,
+    COMPONENT_RESULT_SCHEMA_VERSION,
     ComponentDescriptor,
     ComponentRequest,
     ComponentResult,
@@ -52,6 +54,8 @@ _DESCRIPTOR = ComponentDescriptor(
     required_capabilities=REQUIRED_CAPABILITIES,
     optional_capabilities=OPTIONAL_CAPABILITIES,
 )
+
+_SEMVER_RE = re.compile(r"^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
 @dataclass
@@ -87,11 +91,26 @@ def _write_json(path: Path, payload: Any) -> str:
     Returns:
         Hex digest of the written bytes.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.parent.is_dir() or path.parent.is_symlink():
+        raise ReviewContractsValidationError(
+            [f"output parent is not a real directory: {path.parent}"]
+        )
     text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
     tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(text, encoding="utf-8")
-    tmp_path.replace(path)
+    try:
+        with tmp_path.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+        tmp_path.replace(path)
+    except FileExistsError as error:
+        raise ReviewContractsValidationError(
+            [f"output_collision: temporary artifact already exists: {tmp_path.name}"]
+        ) from error
+    except OSError:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
     return _sha256_bytes(text.encode("utf-8"))
 
 
@@ -104,13 +123,17 @@ def _check_version_compatible(config: dict[str, Any]) -> str | None:
     minimum = config.get("min_component_version")
     if minimum is None:
         return None
-    try:
-        wanted = int(str(minimum).split(".", maxsplit=1)[0])
-        ours = int(COMPONENT_VERSION.split(".", maxsplit=1)[0])
-    except ValueError:
+    wanted_match = _SEMVER_RE.fullmatch(str(minimum))
+    ours_match = _SEMVER_RE.fullmatch(COMPONENT_VERSION)
+    if wanted_match is None or ours_match is None:
         return f"incompatible_component_version: malformed min_component_version: {minimum!r}"
+    wanted = tuple(int(value) for value in wanted_match.groups())
+    ours = tuple(int(value) for value in ours_match.groups())
     if wanted > ours:
-        return f"incompatible_component_version: request needs v{wanted}, component is v{ours}"
+        return (
+            "incompatible_component_version: "
+            f"request needs v{str(minimum).lstrip('v')}, component is v{COMPONENT_VERSION}"
+        )
     return None
 
 
@@ -154,11 +177,99 @@ def _resolve_source(path_value: str, base: Path) -> Path:
         Resolved path; absolute URIs and traversal are rejected.
     """
     candidate = Path(path_value)
-    if candidate.is_absolute() or ".." in candidate.parts:
+    if candidate.is_absolute() or not candidate.parts or ".." in candidate.parts:
         raise ReviewContractsValidationError(
             [f"source uri rejected (absolute or traversal): {path_value}"]
         )
-    return base / candidate
+    try:
+        root = base.resolve(strict=True)
+        if not root.is_dir():
+            raise ReviewContractsValidationError([f"source base is not a directory: {base}"])
+        unresolved = root.joinpath(candidate)
+        current = root
+        for part in candidate.parts:
+            current /= part
+            if current.is_symlink():
+                raise ReviewContractsValidationError(
+                    [f"source uri rejected (symlink component): {path_value}"]
+                )
+        resolved = unresolved.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ReviewContractsValidationError(
+            [f"source uri cannot be resolved safely: {path_value}: {type(error).__name__}"]
+        ) from error
+    if not resolved.is_relative_to(root) or not resolved.is_file():
+        raise ReviewContractsValidationError(
+            [f"source uri rejected (outside base or not a file): {path_value}"]
+        )
+    return resolved
+
+
+def _reserve_output_directory(output_directory: str, base: Path) -> Path:  # noqa: C901 - path guard
+    """Atomically reserve a real output directory below ``base``.
+
+    Returns:
+        The newly created output directory.
+    """
+    relative = Path(output_directory)
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise ReviewContractsValidationError(
+            [f"output directory rejected (absolute or traversal): {output_directory}"]
+        )
+    try:
+        root = base.resolve(strict=True)
+        if not root.is_dir():
+            raise ReviewContractsValidationError([f"output base is not a directory: {base}"])
+        parent = root
+        for part in relative.parts[:-1]:
+            parent = parent / part
+            if parent.is_symlink():
+                raise ReviewContractsValidationError(
+                    [f"output directory rejected (symlink component): {output_directory}"]
+                )
+            try:
+                parent.mkdir()
+            except FileExistsError:
+                pass
+            if parent.is_symlink() or not parent.is_dir():
+                raise ReviewContractsValidationError(
+                    [f"output directory parent is not a real directory: {output_directory}"]
+                )
+            if not parent.resolve(strict=True).is_relative_to(root):
+                raise ReviewContractsValidationError(
+                    [f"output directory escapes base: {output_directory}"]
+                )
+        output = parent / relative.parts[-1]
+        if output.is_symlink() or output.exists():
+            raise ReviewContractsValidationError(
+                [f"output_collision: already exists: {output_directory}"]
+            )
+        output.mkdir()
+        resolved = output.resolve(strict=True)
+    except FileExistsError as error:
+        raise ReviewContractsValidationError(
+            [f"output_collision: already exists: {output_directory}"]
+        ) from error
+    except (OSError, RuntimeError) as error:
+        raise ReviewContractsValidationError(
+            [
+                f"output directory cannot be reserved safely: {output_directory}: {type(error).__name__}"
+            ]
+        ) from error
+    if not resolved.is_relative_to(root) or resolved != output:
+        raise ReviewContractsValidationError([f"output directory escapes base: {output_directory}"])
+    return output
+
+
+def _release_empty_output(output_directory: Path | None) -> None:
+    """Release an output reservation when no artifact has been written."""
+    if output_directory is None:
+        return
+    try:
+        if output_directory.is_dir() and not output_directory.is_symlink():
+            output_directory.rmdir()
+    except OSError:
+        pass
 
 
 def _finite_number(value: Any) -> float | None:
@@ -193,17 +304,24 @@ def _normalize_interval(
         return None, f"{kind}_row_{index}_malformed"
     if not isinstance(recoveries, list):
         return None, f"{kind}_row_{index}_malformed"
+    if not all(isinstance(actor_id, str) for actor_id in actor_ids):
+        return None, f"{kind}_row_{index}_typed_actor_id"
+    if not all(isinstance(link_id, str) for link_id in [*precursors, *recoveries]):
+        return None, f"{kind}_row_{index}_typed_link_id"
+    category = item.get("category", "")
+    if not isinstance(category, str):
+        return None, f"{kind}_row_{index}_typed_category"
     return (
         _IndexedInterval(
             interval_id=interval_id,
             kind=kind,
             start_s=start,
             end_s=end,
-            actor_ids=[str(a) for a in actor_ids],
-            category=str(item.get("category", "")),
+            actor_ids=list(actor_ids),
+            category=category,
             metric_value=item.get("metric_value"),
-            precursor_ids=[str(p) for p in precursors],
-            recovery_ids=[str(r) for r in recoveries],
+            precursor_ids=list(precursors),
+            recovery_ids=list(recoveries),
         ),
         None,
     )
@@ -261,7 +379,12 @@ def _resolve_links(
 
 
 def _load_family(
-    refs: list[Any], family: str, root: Path, diagnostics: list[str]
+    refs: list[Any],
+    family: str,
+    root: Path,
+    diagnostics: list[str],
+    source_provenance: list[dict[str, Any]],
+    loaded_families: dict[str, int],
 ) -> list[dict[str, Any]]:
     """Load and parse all sources of one family.
 
@@ -270,20 +393,69 @@ def _load_family(
     """
     items: list[dict[str, Any]] = []
     for ref in refs:
+        provenance = {
+            "artifact_id": ref.artifact_id,
+            "uri": ref.uri,
+            "format": ref.format,
+            "schema_declared": ref.schema or None,
+            "sha256_declared": ref.sha256.lower() if ref.sha256 else None,
+            "source_commit": ref.source_commit or None,
+            "config_identity": ref.config_identity or None,
+            "units": ref.units or None,
+            "coordinate_frame": ref.coordinate_frame or None,
+            "sha256_observed": None,
+            "integrity_status": "unverified",
+        }
         try:
-            raw = _resolve_source(ref.uri, root).read_bytes()
-        except OSError:
-            diagnostics.append(f"{ref.artifact_id}: source_unreadable")
+            source_path = _resolve_source(ref.uri, root)
+            raw = source_path.read_bytes()
+        except (OSError, ReviewContractsValidationError):
+            diagnostics.append(f"{ref.artifact_id}: source_unreadable_or_unsafe")
+            source_provenance.append(provenance)
+            continue
+        observed_sha = _sha256_bytes(raw)
+        provenance["sha256_observed"] = observed_sha
+        if not ref.sha256:
+            diagnostics.append(f"{ref.artifact_id}: source_digest_missing")
+            source_provenance.append(provenance)
+            continue
+        if ref.sha256.lower() != observed_sha:
+            diagnostics.append(f"{ref.artifact_id}: source_digest_mismatch")
+            provenance["integrity_status"] = "digest_mismatch"
+            source_provenance.append(provenance)
+            continue
+        expected_schema = f"{family}.v1"
+        if ref.schema != expected_schema:
+            diagnostics.append(f"{ref.artifact_id}: source_schema_mismatch:{expected_schema}")
+            provenance["integrity_status"] = "schema_mismatch"
+            source_provenance.append(provenance)
             continue
         try:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             diagnostics.append(f"{ref.artifact_id}: source_not_json")
+            provenance["integrity_status"] = "invalid_json"
+            source_provenance.append(provenance)
             continue
-        entries = payload.get("intervals", payload)
+        if not isinstance(payload, dict):
+            diagnostics.append(f"{ref.artifact_id}: source_not_json_object")
+            provenance["integrity_status"] = "source_shape_invalid"
+            source_provenance.append(provenance)
+            continue
+        if payload.get("schema_version") != expected_schema:
+            diagnostics.append(f"{ref.artifact_id}: source_payload_schema_mismatch")
+            provenance["integrity_status"] = "schema_mismatch"
+            source_provenance.append(provenance)
+            continue
+        entries = payload.get("intervals")
         if not isinstance(entries, list):
             diagnostics.append(f"{ref.artifact_id}: intervals_not_a_list")
+            provenance["integrity_status"] = "source_shape_invalid"
+            source_provenance.append(provenance)
             continue
+        provenance["integrity_status"] = "digest_and_schema_verified"
+        source_provenance.append(provenance)
+        loaded_families[family] = loaded_families.get(family, 0) + 1
         items.extend(entries)
     return items
 
@@ -308,7 +480,8 @@ def _collect_family_refs(
             diagnostics.append(f"{ref.artifact_id}: optional_stream_skipped:{ref.format}")
             continue
         by_format.setdefault(ref.format, []).append(ref)
-    for family in REQUIRED_CAPABILITIES:
+    required_families = set(REQUIRED_CAPABILITIES) | set(request.required_capabilities)
+    for family in sorted(required_families):
         if family not in by_format:
             diagnostics.append(f"required_source_family_missing:{family}")
     if any(code.startswith("required_source_family_missing") for code in diagnostics):
@@ -322,6 +495,8 @@ def _normalize_families(
     t0: float,
     terminal: float,
     diagnostics: list[str],
+    source_provenance: list[dict[str, Any]],
+    loaded_families: dict[str, int],
 ) -> list[_IndexedInterval]:
     """Normalize, clip, and deduplicate intervals across families.
 
@@ -331,7 +506,9 @@ def _normalize_families(
     intervals: list[_IndexedInterval] = []
     for family in REQUIRED_CAPABILITIES + OPTIONAL_CAPABILITIES:
         for ref in by_format.get(family, []):
-            raw_items = _load_family([ref], family, root, diagnostics)
+            raw_items = _load_family(
+                [ref], family, root, diagnostics, source_provenance, loaded_families
+            )
             for position, item in enumerate(raw_items):
                 interval, problem = _normalize_interval(
                     item, index=position, kind=_FAMILY_KINDS[family]
@@ -344,13 +521,35 @@ def _normalize_families(
                     diagnostics.append(f"{ref.artifact_id}: {clip_note}")
                 if clipped is not None:
                     intervals.append(clipped)
-    seen: set[str] = set()
+    seen: dict[str, _IndexedInterval] = {}
     unique: list[_IndexedInterval] = []
     for interval in intervals:
-        if interval.interval_id in seen:
-            diagnostics.append(f"duplicate_interval_id:{interval.interval_id}")
+        previous = seen.get(interval.interval_id)
+        if previous is not None:
+            if (
+                previous.kind,
+                previous.start_s,
+                previous.end_s,
+                previous.actor_ids,
+                previous.category,
+                previous.metric_value,
+                previous.precursor_ids,
+                previous.recovery_ids,
+            ) != (
+                interval.kind,
+                interval.start_s,
+                interval.end_s,
+                interval.actor_ids,
+                interval.category,
+                interval.metric_value,
+                interval.precursor_ids,
+                interval.recovery_ids,
+            ):
+                diagnostics.append(f"conflicting_duplicate_interval_id:{interval.interval_id}")
+            else:
+                diagnostics.append(f"duplicate_interval_id:{interval.interval_id}")
             continue
-        seen.add(interval.interval_id)
+        seen[interval.interval_id] = interval
         unique.append(interval)
     return unique
 
@@ -372,14 +571,6 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
     rejected = _reject_not_applicable(request)
     if rejected is not None:
         return rejected
-    output_dir = root / request.output_directory
-    if output_dir.exists():
-        return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
-            status=STATUS_FAILED,
-            reason=f"output_collision: already exists: {request.output_directory}",
-        )
     t0 = _finite_number(request.config.get("t0_s", 0.0))
     terminal = _finite_number(request.config.get("terminal_s"))
     if t0 is None or terminal is None or not terminal > t0:
@@ -390,22 +581,60 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             reason="invalid_config: t0_s/terminal_s must be finite with terminal_s > t0_s",
         )
     diagnostics: list[str] = []
+    source_provenance: list[dict[str, Any]] = []
+    loaded_families: dict[str, int] = {}
+    output_dir: Path | None = None
     try:
+        output_dir = _reserve_output_directory(request.output_directory, root)
         by_format = _collect_family_refs(request, diagnostics)
         if by_format is None:
+            _release_empty_output(output_dir)
             return ComponentResult(
                 request_id=request.request_id,
                 component_id=request.component_id,
                 status=STATUS_FAILED,
                 reason="required_source_family_missing: " + "; ".join(sorted(set(diagnostics))[:5]),
             )
-        unique = _normalize_families(by_format, root, t0, terminal, diagnostics)
+        unique = _normalize_families(
+            by_format,
+            root,
+            t0,
+            terminal,
+            diagnostics,
+            source_provenance,
+            loaded_families,
+        )
+        required_families = set(REQUIRED_CAPABILITIES) | set(request.required_capabilities)
+        unavailable_required = sorted(
+            family for family in required_families if loaded_families.get(family, 0) == 0
+        )
+        diagnostics.extend(
+            f"required_source_unavailable:{family}" for family in unavailable_required
+        )
         if not unique:
+            _release_empty_output(output_dir)
             return ComponentResult(
                 request_id=request.request_id,
                 component_id=request.component_id,
                 status=STATUS_FAILED,
                 reason="no_intervals_indexed: " + "; ".join(sorted(set(diagnostics))[:5]),
+                diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
+                provenance={"sources": source_provenance},
+            )
+        if unavailable_required:
+            _release_empty_output(output_dir)
+            return ComponentResult(
+                request_id=request.request_id,
+                component_id=request.component_id,
+                status=STATUS_FAILED,
+                reason=(
+                    "required_source_unavailable: "
+                    + ", ".join(unavailable_required)
+                    + "; "
+                    + "; ".join(sorted(set(diagnostics))[:5])
+                ),
+                diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
+                provenance={"sources": source_provenance},
             )
         diagnostics.extend(_resolve_links(unique))
         unique.sort(key=lambda row: (row.start_s, row.end_s))
@@ -430,23 +659,34 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 for row in unique
             ],
         }
+        declared_optional = {
+            ref.format for ref in request.sources if ref.format in OPTIONAL_CAPABILITIES
+        }
+        requested_capabilities = set(request.required_capabilities)
         capability_payload = {
-            "missing_capabilities": [],
+            "schema_version": "missing-capability-report.v1",
+            "missing_capabilities": sorted(set(OPTIONAL_CAPABILITIES) - declared_optional),
+            "skipped_optional_streams": sorted(declared_optional - requested_capabilities),
             "diagnostics": sorted(set(diagnostics)),
         }
-        index_digest = _write_json(output_dir / "event-index.json", document)
-        _write_json(output_dir / OUTPUT_CAPABILITY_FILENAME, capability_payload)
         informational = {"optional_stream_skipped", "clipped_to_range"}
         blocking = [item for item in diagnostics if not any(tag in item for tag in informational)]
         partial = bool(blocking)
         status = STATUS_PARTIAL if partial else STATUS_COMPLETE
         reason = "" if status == STATUS_COMPLETE else "; ".join(sorted(set(diagnostics))[:8])
+        index_digest = _write_json(output_dir / "event-index.json", document)
+        capability_digest = _write_json(output_dir / OUTPUT_CAPABILITY_FILENAME, capability_payload)
         artifacts: tuple[dict[str, Any], ...] = (
             (
                 {
                     "artifact_id": "event-index.json",
                     "uri": str(Path(request.output_directory) / "event-index.json"),
                     "sha256": index_digest,
+                },
+                {
+                    "artifact_id": OUTPUT_CAPABILITY_FILENAME,
+                    "uri": str(Path(request.output_directory) / OUTPUT_CAPABILITY_FILENAME),
+                    "sha256": capability_digest,
                 },
             )
             if status == STATUS_COMPLETE
@@ -461,15 +701,32 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             provenance={
                 "output_directory": request.output_directory,
                 "intervals": len(unique),
+                "sources": source_provenance,
+                "output_artifacts": {
+                    "event-index.json": index_digest,
+                    OUTPUT_CAPABILITY_FILENAME: capability_digest,
+                },
+                "source_integrity": "digest_and_schema_verified",
             },
             reason=reason,
         )
     except ReviewContractsValidationError as error:
+        _release_empty_output(output_dir)
         return ComponentResult(
             request_id=request.request_id,
             component_id=request.component_id,
             status=STATUS_FAILED,
+            provenance={"sources": source_provenance},
             reason="; ".join(error.errors),
+        )
+    except Exception as error:  # noqa: BLE001 - defensive API boundary
+        _release_empty_output(output_dir)
+        return ComponentResult(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status=STATUS_FAILED,
+            provenance={"sources": source_provenance},
+            reason=f"internal_error: {type(error).__name__}",
         )
 
 
@@ -483,6 +740,41 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _result_document(result: ComponentResult) -> dict[str, Any]:
+    """Serialize a result using the shared component-result.v1 envelope.
+
+    Returns:
+        JSON-safe component-result.v1 document.
+    """
+    return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)}
+
+
+def _cli_failure_result(payload: Any, reason: str) -> ComponentResult:
+    """Build a safe failure result when request parsing cannot complete.
+
+    Returns:
+        Failed component result with safe identity fields.
+    """
+    if isinstance(payload, dict):
+        request_id = (
+            payload.get("request_id") if isinstance(payload.get("request_id"), str) else "unknown"
+        )
+        component_id = (
+            payload.get("component_id")
+            if isinstance(payload.get("component_id"), str)
+            else COMPONENT_ID
+        )
+    else:
+        request_id = "unknown"
+        component_id = COMPONENT_ID
+    return ComponentResult(
+        request_id=request_id,
+        component_id=component_id,
+        status=STATUS_FAILED,
+        reason=reason,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for the review-events component.
 
@@ -490,21 +782,32 @@ def main(argv: list[str] | None = None) -> int:
         Process exit code (0 only when the result status is complete).
     """
     args = _build_parser().parse_args(argv)
+    payload: Any = None
     try:
         payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ReviewContractsValidationError([f"cannot read request: {error}"]) from error
-    if args.config is not None:
-        try:
-            config = json.loads(Path(args.config).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ReviewContractsValidationError([f"cannot read config: {error}"]) from error
-        if isinstance(config, dict):
-            payload = {**payload, "config": {**payload.get("config", {}), **config}}
-    payload = {**payload, "output_directory": args.output}
-    request = component_request_from_dict(payload, source=args.input)
-    result = run(request, base=Path(args.base) if args.base is not None else None)
-    print(json.dumps(asdict(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
+        if not isinstance(payload, dict):
+            raise ReviewContractsValidationError(["request must be a JSON object"])
+        if args.config is not None:
+            try:
+                config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ReviewContractsValidationError([f"cannot read config: {error}"]) from error
+            if not isinstance(config, dict):
+                raise ReviewContractsValidationError(["config must be a JSON object"])
+            request_config = payload.get("config", {})
+            if not isinstance(request_config, dict):
+                raise ReviewContractsValidationError(["request config must be a JSON object"])
+            payload = {**payload, "config": {**request_config, **config}}
+        payload = {**payload, "output_directory": args.output}
+        request = component_request_from_dict(payload, source=args.input)
+        result = run(request, base=Path(args.base) if args.base is not None else None)
+    except ReviewContractsValidationError as error:
+        result = _cli_failure_result(payload, "; ".join(error.errors))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
+        result = _cli_failure_result(payload, f"invalid_request: {type(error).__name__}")
+    except Exception as error:  # noqa: BLE001 - defensive CLI boundary
+        result = _cli_failure_result(payload, f"internal_error: {type(error).__name__}")
+    print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
     return 0 if result.status == STATUS_COMPLETE else 1
 
 

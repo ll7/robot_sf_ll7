@@ -32,10 +32,30 @@ links are preserved as unavailable rather than invented.
 
 - `event-index.json`: intervals ordered by start/end with ids, kinds, actors,
   categories, metric values, declared links, and per-interval link availability.
-- `missing-capability-report.json`: skipped optional streams and diagnostics.
-- The printed result envelope carries `complete`, `partial`, `unavailable`, or
-  `failed` with stable reason codes. Only `complete` results list envelope
-  artifacts; index files stay on disk either way.
+- `missing-capability-report.json`: schema `missing-capability-report.v1`, with
+  `missing_capabilities`, `skipped_optional_streams`, and sorted diagnostics
+  for optional streams and non-complete indexing conditions.
+- The printed result envelope is the shared `component-result.v1` contract and
+  carries `complete`, `partial`, `unavailable`, or `failed` with stable reason
+  codes. Only `complete` results list envelope artifacts; index files stay on
+  disk for partial results when indexing reached the write step.
+
+## Versioned source and output contracts
+
+Each required source reference declares its family schema (`event-list.v1` or
+`phase-list.v1`) and the SHA-256 digest of the exact source bytes. The loader
+checks both declarations before parsing and records the declared and observed
+digests plus available source commit, configuration identity, units, and
+coordinate-frame metadata in result provenance. A source that cannot be
+contained below the request base, does not match its digest/schema, or is not a
+JSON object with a versioned `intervals` list is not admitted.
+
+`event-index.json` has schema `event-index.v1` and contains `t0_s`,
+`terminal_s`, and `intervals`; each interval contains `interval_id`, `kind`,
+`start_s`, `end_s`, `actor_ids`, `category`, `metric_value`, declared link
+ids, and `links_available`/`links_reason`. The leaf documents these output
+shapes here while the shared SREV-01 owner remains authoritative for the
+`component-request.v1` and `component-result.v1` schemas.
 
 ## Unavailable reasons and limits
 

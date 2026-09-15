@@ -23,7 +23,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from functools import cache
 from pathlib import Path, PureWindowsPath
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from urllib.parse import urlsplit
 
 from jsonschema import Draft202012Validator

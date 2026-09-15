@@ -1,7 +1,21 @@
 {
-  "scores": {
-    "ep-1": 0.9,
-    "ep-2": 0.9,
-    "ep-3": 0.2
-  }
+  "roots": [
+    "diagnostic-fixture"
+  ],
+  "weights": {},
+  "episodes": [
+    {
+      "episode_id": "ep-1",
+      "composite_score": 0.9
+    },
+    {
+      "episode_id": "ep-2",
+      "composite_score": 0.9
+    },
+    {
+      "episode_id": "ep-3",
+      "composite_score": 0.2
+    }
+  ],
+  "comparison_pairs": []
 }

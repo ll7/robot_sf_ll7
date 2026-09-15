@@ -7,10 +7,10 @@
       "references": [
         {
           "artifact_id": "a1",
-          "uri": "fixture",
+          "uri": "tests/fixtures/scenario_review/review_storyboard/episode-a1.json",
           "format": "episode-json",
           "schema": "episode.fixture",
-          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "sha256": "d0b8381f38a6d7e7904f7a2def7a49d560d40e6070e645ede105bd248fd9055f",
           "source_commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "units": "seconds/metres/radians",
           "coordinate_frame": "map"
@@ -22,10 +22,10 @@
       "references": [
         {
           "artifact_id": "a2",
-          "uri": "fixture",
+          "uri": "tests/fixtures/scenario_review/review_storyboard/episode-a2.json",
           "format": "episode-json",
           "schema": "episode.fixture",
-          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "sha256": "17b91b90e9005be06b86745797c85e03137226079b35c69a8a22bee033d64e27",
           "source_commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "units": "seconds/metres/radians",
           "coordinate_frame": "map"
@@ -37,10 +37,10 @@
       "references": [
         {
           "artifact_id": "a3",
-          "uri": "fixture",
+          "uri": "tests/fixtures/scenario_review/review_storyboard/episode-a3.json",
           "format": "episode-json",
           "schema": "episode.fixture",
-          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "sha256": "35fdad8ca5da34d39bd792ff1290648392b11149afd1a169e27e891f2581d73d",
           "source_commit": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "units": "seconds/metres/radians",
           "coordinate_frame": "map"

@@ -6,17 +6,20 @@
     {
       "artifact_id": "bundle",
       "uri": "tests/fixtures/scenario_review/review_storyboard/bundle.json",
-      "format": "review-bundle"
+      "format": "review-bundle",
+      "sha256": "31a87a3db6eac81930f8aa7d8682fe38bfdfcd4b6f9ed6013c452c0c37c5583f"
     },
     {
       "artifact_id": "scores",
       "uri": "tests/fixtures/scenario_review/review_storyboard/scores.json",
-      "format": "exemplar-scores"
+      "format": "exemplar-scores",
+      "sha256": "78ae57d917a9caab6766bef5c88cc6bad98a635d4a703f77836b6d55689785e5"
     },
     {
       "artifact_id": "events",
       "uri": "tests/fixtures/scenario_review/review_storyboard/events.json",
-      "format": "event-index"
+      "format": "event-index",
+      "sha256": "43819adad32906c960997518a632104c6b4f2ff8df331795c02b4b3bdccbd78a"
     }
   ],
   "output_directory": "output/scenario_review/srev-07-smoke",

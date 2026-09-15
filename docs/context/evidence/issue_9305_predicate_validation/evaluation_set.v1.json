@@ -7,7 +7,7 @@
   "claim_boundary": "Diagnostic-only contract and fixture mechanics; no retained-production precision/recall, grouping, or causal claim.",
   "provenance": {
     "source_kind": "bounded_labeled_fixture",
-    "source_commit": "754509029710564ef801b79cc8d86a78011899f4",
+    "source_commit": "1e86f17e9460c9828f0c1b03cabe87c21da594ce",
     "label_origin": "hand_authored_fixture",
     "data_boundary": "No retained production trace corpus is staged; available rows are tracked analysis-workbench fixtures and missing rows are explicit.",
     "excluded_from_training": true,
@@ -43,7 +43,7 @@
         "format": "json",
         "schema_version": "simulation_trace_export.v1",
         "sha256": "3bd3f5b635109fc8b37313c76c9cd00de7f617a7e46da3e7fa9a0bcf34e1ef4a",
-        "source_commit": "754509029710564ef801b79cc8d86a78011899f4",
+        "source_commit": "1e86f17e9460c9828f0c1b03cabe87c21da594ce",
         "trace_id": "issue_2937_crossing_proxy_motion_rich"
       },
       "detector": {
@@ -129,7 +129,7 @@
         "format": "json",
         "schema_version": "simulation_trace_export.v1",
         "sha256": "6862871a88169f8b6f6c99651225f681ec902c0db91d5fc6c3950c1ea060789d",
-        "source_commit": "754509029710564ef801b79cc8d86a78011899f4",
+        "source_commit": "1e86f17e9460c9828f0c1b03cabe87c21da594ce",
         "trace_id": "planner_sanity_open-ep0-seed7-source-aae87cf6"
       },
       "detector": {
@@ -215,7 +215,7 @@
         "format": "json",
         "schema_version": "simulation_trace_export.v1",
         "sha256": "a8f14b1d0a54ee7da51a3c341adbae46423ac356b05f753eb01d770b3f13878a",
-        "source_commit": "754509029710564ef801b79cc8d86a78011899f4",
+        "source_commit": "1e86f17e9460c9828f0c1b03cabe87c21da594ce",
         "trace_id": "issue_2937_bottleneck_motion_rich"
       },
       "detector": {

@@ -50,7 +50,7 @@ uv run python scripts/analysis/validate_trace_predicate_evaluation_issue_9305.py
   --output-json docs/context/evidence/issue_9305_predicate_validation/report.v1.json \
   --output-markdown docs/context/evidence/issue_9305_predicate_validation/report.v1.md \
   --repo-root . \
-  --expected-source-commit 754509029710564ef801b79cc8d86a78011899f4
+  --expected-source-commit 1e86f17e9460c9828f0c1b03cabe87c21da594ce
 ```
 
 This command performs static validation and report construction only. It does

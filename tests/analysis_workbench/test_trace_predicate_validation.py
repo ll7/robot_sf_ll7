@@ -98,7 +98,7 @@ def test_bounded_fixture_reports_all_required_validation_dimensions() -> None:
     assert report["observations"]["causal_hypotheses"]["used_for_metrics"] is False
     assert set(report["predicate_metrics"]) == set(TRACE_FAILURE_PREDICATE_IDS)
     assert evaluation_set["provenance"]["source_commit"] == (
-        "754509029710564ef801b79cc8d86a78011899f4"
+        "1e86f17e9460c9828f0c1b03cabe87c21da594ce"
     )
 
 

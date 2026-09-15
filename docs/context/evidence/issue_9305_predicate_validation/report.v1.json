@@ -34,8 +34,8 @@
     "evaluation_set_version": 1,
     "evidence_status": "diagnostic-only",
     "retained_trace_status": "unavailable",
-    "sha256": "141a80f67b0720b37c1b37e9d47904412f819d27158a609a8c495fd12f820be6",
-    "source_commit": "754509029710564ef801b79cc8d86a78011899f4",
+    "sha256": "7e7515b294303213a557906e30637ff7704e1409d3b8eca0049b0e2aa63b7c07",
+    "source_commit": "1e86f17e9460c9828f0c1b03cabe87c21da594ce",
     "source_kind": "bounded_labeled_fixture"
   },
   "grouping_stability": {

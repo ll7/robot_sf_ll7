@@ -678,6 +678,10 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
 
   [issue_3278_real_trace_validation_contract.md](issue_3278_real_trace_validation_contract.md)
 
+* Issue #9305 trace-predicate validation contract and bounded fixture:
+
+  [issue_9305_predicate_validation.md](issue_9305_predicate_validation.md)
+
 * Issue #2544 mechanism-aware suite smoke:
 
   [issue_2544_mechanism_aware_suite_smoke.md](issue_2544_mechanism_aware_suite_smoke.md)

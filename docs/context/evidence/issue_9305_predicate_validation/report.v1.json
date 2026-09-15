@@ -1,0 +1,713 @@
+{
+  "claim_boundary": "Diagnostic-only contract and fixture mechanics; no retained-production precision/recall, grouping, or causal claim.",
+  "coverage": {
+    "case_count": 4,
+    "detector_ambiguous_label_count": 0,
+    "detector_negative_label_count": 15,
+    "detector_positive_label_count": 9,
+    "detector_unavailable_label_count": 8,
+    "map_count": 3,
+    "map_ids": [
+      "fixture_atrium",
+      "fixture_bottleneck",
+      "fixture_open"
+    ],
+    "planner_count": 3,
+    "planner_ids": [
+      "hybrid_rule_v0_minimal",
+      "orca",
+      "trace_fixture_gen"
+    ],
+    "reference_ambiguous_label_count": 0,
+    "reference_negative_label_count": 8,
+    "reference_positive_label_count": 8,
+    "reference_unavailable_label_count": 0,
+    "reference_unavailable_or_pending_label_count": 16,
+    "scenario_family_count": 4,
+    "seed_count": 2,
+    "trace_available_count": 3,
+    "trace_unavailable_count": 1
+  },
+  "evaluation_set": {
+    "case_count": 4,
+    "evaluation_set_id": "issue_9305_bounded_predicate_validation",
+    "evaluation_set_version": 1,
+    "evidence_status": "diagnostic-only",
+    "retained_trace_status": "unavailable",
+    "sha256": "6cc0a06c454142dd7895bac5a68b573dbb30423017608659b4af4e7740d8be71",
+    "source_commit": "b8811949e087fabae6c6b57656bd7090d92e43ac",
+    "source_kind": "bounded_labeled_fixture"
+  },
+  "grouping_stability": {
+    "ablated_group_count": 3,
+    "ablated_variant_id": "identity_ablated",
+    "agreement_pair_count": 5,
+    "assignment_origin": "bounded_fixture_projection",
+    "baseline_group_count": 4,
+    "baseline_variant_id": "full_identity",
+    "changed_pair_count": 1,
+    "comparison_only_pair_count": 1,
+    "comparison_same_group_pair_count": 1,
+    "identity_feature_coverage": {
+      "map_id": {
+        "fixture_annotation_count": 3,
+        "source_bound_count": 0,
+        "unavailable_count": 1
+      },
+      "planner_id": {
+        "fixture_annotation_count": 0,
+        "source_bound_count": 3,
+        "unavailable_count": 1
+      }
+    },
+    "identity_features": [
+      "planner_id",
+      "map_id"
+    ],
+    "interpretation": "Pairwise changes describe grouping sensitivity in the admitted assignments; they do not validate a failure family or a causal mechanism.",
+    "pair_count": 6,
+    "pairwise_jaccard": 0.0,
+    "record_count": 4,
+    "reference_only_pair_count": 0,
+    "reference_same_group_pair_count": 0,
+    "same_group_pair_agreement": 0.8333333333333334,
+    "source_schema_version": "collision_scenario_similarity.v1",
+    "status": "available",
+    "variant_count": 2,
+    "variants": [
+      {
+        "excluded_features": [],
+        "group_count": 4,
+        "group_sizes": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "groups": [
+          {
+            "group_id": "full-1",
+            "record_ids": [
+              "fixture-crossing-true-positive"
+            ]
+          },
+          {
+            "group_id": "full-2",
+            "record_ids": [
+              "fixture-open-true-negative"
+            ]
+          },
+          {
+            "group_id": "full-3",
+            "record_ids": [
+              "fixture-bottleneck-disagreement"
+            ]
+          },
+          {
+            "group_id": "full-4",
+            "record_ids": [
+              "fixture-missing-inputs"
+            ]
+          }
+        ],
+        "included_features": [
+          "observed_pattern",
+          "planner_id",
+          "map_id"
+        ],
+        "variant_id": "full_identity"
+      },
+      {
+        "excluded_features": [
+          "planner_id",
+          "map_id"
+        ],
+        "group_count": 3,
+        "group_sizes": [
+          2,
+          1,
+          1
+        ],
+        "groups": [
+          {
+            "group_id": "ablated-1",
+            "record_ids": [
+              "fixture-crossing-true-positive",
+              "fixture-bottleneck-disagreement"
+            ]
+          },
+          {
+            "group_id": "ablated-2",
+            "record_ids": [
+              "fixture-open-true-negative"
+            ]
+          },
+          {
+            "group_id": "ablated-3",
+            "record_ids": [
+              "fixture-missing-inputs"
+            ]
+          }
+        ],
+        "included_features": [
+          "observed_pattern"
+        ],
+        "variant_id": "identity_ablated"
+      }
+    ]
+  },
+  "limitations": [
+    "Retained production traces are unavailable; available references are bounded tracked fixtures.",
+    "Fixture detector and adjudication labels are contract plumbing, not an empirical accuracy or prevalence estimate.",
+    "Pending, ambiguous, and unavailable labels are excluded from confusion-matrix metrics; no majority-vote imputation is performed.",
+    "Reviewer agreement is pairwise label agreement, not a reliability or generalization claim; effort is fixture metadata.",
+    "Planner and map identity are recorded separately; map IDs in this fixture are annotations rather than fields in the trace export.",
+    "Grouping assignments are supplied under the collision-similarity schema; this contract runs no campaign or similarity rerun.",
+    "Observed pattern annotations are separate from causal hypotheses, and neither is used to infer mechanism from correlation."
+  ],
+  "observations": {
+    "causal_hypotheses": {
+      "annotation_count": 0,
+      "status": "not_evaluated",
+      "used_for_metrics": false
+    },
+    "observed_pattern_annotation_count": 4,
+    "unique_observed_patterns": [
+      "collision-like interaction",
+      "missing required trace",
+      "no predicate signal"
+    ]
+  },
+  "predicate_metrics": {
+    "bottleneck_deadlock": {
+      "evaluated_count": 2,
+      "excluded_count": 2,
+      "excluded_reasons": {
+        "detector_unavailable": 1,
+        "reference_pending": 2,
+        "trace_unavailable": 1
+      },
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reference_negative_count": 1,
+      "reference_positive_count": 1,
+      "true_negative": 1,
+      "true_positive": 1
+    },
+    "clearance_critical_interaction": {
+      "evaluated_count": 2,
+      "excluded_count": 2,
+      "excluded_reasons": {
+        "detector_unavailable": 1,
+        "reference_pending": 2,
+        "trace_unavailable": 1
+      },
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reference_negative_count": 1,
+      "reference_positive_count": 1,
+      "true_negative": 1,
+      "true_positive": 1
+    },
+    "collision": {
+      "evaluated_count": 2,
+      "excluded_count": 2,
+      "excluded_reasons": {
+        "detector_unavailable": 1,
+        "reference_pending": 2,
+        "trace_unavailable": 1
+      },
+      "false_negative": 0,
+      "false_positive": 1,
+      "precision": 0.5,
+      "recall": 1.0,
+      "reference_negative_count": 1,
+      "reference_positive_count": 1,
+      "true_negative": 0,
+      "true_positive": 1
+    },
+    "late_evasive_reaction": {
+      "evaluated_count": 2,
+      "excluded_count": 2,
+      "excluded_reasons": {
+        "detector_unavailable": 1,
+        "reference_pending": 2,
+        "trace_unavailable": 1
+      },
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reference_negative_count": 1,
+      "reference_positive_count": 1,
+      "true_negative": 1,
+      "true_positive": 1
+    },
+    "low_progress": {
+      "evaluated_count": 2,
+      "excluded_count": 2,
+      "excluded_reasons": {
+        "detector_unavailable": 1,
+        "reference_pending": 2,
+        "trace_unavailable": 1
+      },
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": null,
+      "recall": 0.0,
+      "reference_negative_count": 1,
+      "reference_positive_count": 1,
+      "true_negative": 1,
+      "true_positive": 0
+    },
+    "occlusion_triggered_near_miss": {
+      "evaluated_count": 2,
+      "excluded_count": 2,
+      "excluded_reasons": {
+        "detector_unavailable": 1,
+        "reference_pending": 2,
+        "trace_unavailable": 1
+      },
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reference_negative_count": 1,
+      "reference_positive_count": 1,
+      "true_negative": 1,
+      "true_positive": 1
+    },
+    "oscillatory_local_control": {
+      "evaluated_count": 2,
+      "excluded_count": 2,
+      "excluded_reasons": {
+        "detector_unavailable": 1,
+        "reference_pending": 2,
+        "trace_unavailable": 1
+      },
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reference_negative_count": 1,
+      "reference_positive_count": 1,
+      "true_negative": 1,
+      "true_positive": 1
+    },
+    "zero_motion_timeout_behavior": {
+      "evaluated_count": 2,
+      "excluded_count": 2,
+      "excluded_reasons": {
+        "detector_unavailable": 1,
+        "reference_pending": 2,
+        "trace_unavailable": 1
+      },
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "reference_negative_count": 1,
+      "reference_positive_count": 1,
+      "true_negative": 1,
+      "true_positive": 1
+    }
+  },
+  "report_kind": "trace_predicate_validation",
+  "reviewer_agreement": {
+    "bottleneck_deadlock": {
+      "agreement_pair_count": 3,
+      "agreement_rate": 0.75,
+      "case_count": 4,
+      "disagreement_cases": [
+        {
+          "adjudication_status": "pending",
+          "case_id": "fixture-bottleneck-disagreement",
+          "labels_by_reviewer": {
+            "reviewer_a": "positive",
+            "reviewer_b": "negative"
+          }
+        }
+      ],
+      "disagreement_pair_count": 1,
+      "pair_count": 4,
+      "reviewer_count": 2,
+      "unresolved_disagreement_count": 1
+    },
+    "clearance_critical_interaction": {
+      "agreement_pair_count": 4,
+      "agreement_rate": 1.0,
+      "case_count": 4,
+      "disagreement_cases": [],
+      "disagreement_pair_count": 0,
+      "pair_count": 4,
+      "reviewer_count": 2,
+      "unresolved_disagreement_count": 0
+    },
+    "collision": {
+      "agreement_pair_count": 4,
+      "agreement_rate": 1.0,
+      "case_count": 4,
+      "disagreement_cases": [],
+      "disagreement_pair_count": 0,
+      "pair_count": 4,
+      "reviewer_count": 2,
+      "unresolved_disagreement_count": 0
+    },
+    "late_evasive_reaction": {
+      "agreement_pair_count": 4,
+      "agreement_rate": 1.0,
+      "case_count": 4,
+      "disagreement_cases": [],
+      "disagreement_pair_count": 0,
+      "pair_count": 4,
+      "reviewer_count": 2,
+      "unresolved_disagreement_count": 0
+    },
+    "low_progress": {
+      "agreement_pair_count": 4,
+      "agreement_rate": 1.0,
+      "case_count": 4,
+      "disagreement_cases": [],
+      "disagreement_pair_count": 0,
+      "pair_count": 4,
+      "reviewer_count": 2,
+      "unresolved_disagreement_count": 0
+    },
+    "occlusion_triggered_near_miss": {
+      "agreement_pair_count": 4,
+      "agreement_rate": 1.0,
+      "case_count": 4,
+      "disagreement_cases": [],
+      "disagreement_pair_count": 0,
+      "pair_count": 4,
+      "reviewer_count": 2,
+      "unresolved_disagreement_count": 0
+    },
+    "oscillatory_local_control": {
+      "agreement_pair_count": 4,
+      "agreement_rate": 1.0,
+      "case_count": 4,
+      "disagreement_cases": [],
+      "disagreement_pair_count": 0,
+      "pair_count": 4,
+      "reviewer_count": 2,
+      "unresolved_disagreement_count": 0
+    },
+    "zero_motion_timeout_behavior": {
+      "agreement_pair_count": 4,
+      "agreement_rate": 1.0,
+      "case_count": 4,
+      "disagreement_cases": [],
+      "disagreement_pair_count": 0,
+      "pair_count": 4,
+      "reviewer_count": 2,
+      "unresolved_disagreement_count": 0
+    }
+  },
+  "reviewer_effort": {
+    "adjudicator_count": 1,
+    "adjudicator_minutes": {
+      "adjudicator_1": 0.9
+    },
+    "reviewer_count": 2,
+    "reviewer_minutes": {
+      "reviewer_a": 3.3,
+      "reviewer_b": 3.8
+    },
+    "total_minutes": 8.0,
+    "unit": "minutes"
+  },
+  "schema_version": "trace_predicate_validation_report.v1",
+  "threshold_stability": {
+    "baseline_variant_id": "default",
+    "by_predicate": {
+      "bottleneck_deadlock": {
+        "variants": [
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 1,
+            "positive_count": 2,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "default"
+          },
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 1,
+            "label_stability_fraction": 0.75,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 0.5,
+            "unavailable_count": 1,
+            "variant_id": "looser"
+          }
+        ]
+      },
+      "clearance_critical_interaction": {
+        "variants": [
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "default"
+          },
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "looser"
+          }
+        ]
+      },
+      "collision": {
+        "variants": [
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 1,
+            "positive_count": 2,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "default"
+          },
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 1,
+            "positive_count": 2,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "looser"
+          }
+        ]
+      },
+      "late_evasive_reaction": {
+        "variants": [
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "default"
+          },
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "looser"
+          }
+        ]
+      },
+      "low_progress": {
+        "variants": [
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 3,
+            "positive_count": 0,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "default"
+          },
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 3,
+            "positive_count": 0,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "looser"
+          }
+        ]
+      },
+      "occlusion_triggered_near_miss": {
+        "variants": [
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "default"
+          },
+          {
+            "ambiguous_count": 1,
+            "changed_case_count": 1,
+            "label_stability_fraction": 0.75,
+            "negative_count": 2,
+            "positive_count": 0,
+            "positive_set_jaccard_to_baseline": 0.0,
+            "unavailable_count": 1,
+            "variant_id": "looser"
+          }
+        ]
+      },
+      "oscillatory_local_control": {
+        "variants": [
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "default"
+          },
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "looser"
+          }
+        ]
+      },
+      "zero_motion_timeout_behavior": {
+        "variants": [
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "default"
+          },
+          {
+            "ambiguous_count": 0,
+            "changed_case_count": 0,
+            "label_stability_fraction": 1.0,
+            "negative_count": 2,
+            "positive_count": 1,
+            "positive_set_jaccard_to_baseline": 1.0,
+            "unavailable_count": 1,
+            "variant_id": "looser"
+          }
+        ]
+      }
+    },
+    "variant_count": 2
+  },
+  "unavailable_rates": {
+    "bottleneck_deadlock": {
+      "denominator": "all_evaluation_cases",
+      "detector_unavailable_count": 1,
+      "metric_excluded_count": 2,
+      "review_ambiguous_count": 0,
+      "review_unavailable_or_pending_count": 2,
+      "total_case_count": 4,
+      "trace_unavailable_count": 1,
+      "unavailable_case_count": 1,
+      "unavailable_fraction": 0.25
+    },
+    "clearance_critical_interaction": {
+      "denominator": "all_evaluation_cases",
+      "detector_unavailable_count": 1,
+      "metric_excluded_count": 2,
+      "review_ambiguous_count": 0,
+      "review_unavailable_or_pending_count": 2,
+      "total_case_count": 4,
+      "trace_unavailable_count": 1,
+      "unavailable_case_count": 1,
+      "unavailable_fraction": 0.25
+    },
+    "collision": {
+      "denominator": "all_evaluation_cases",
+      "detector_unavailable_count": 1,
+      "metric_excluded_count": 2,
+      "review_ambiguous_count": 0,
+      "review_unavailable_or_pending_count": 2,
+      "total_case_count": 4,
+      "trace_unavailable_count": 1,
+      "unavailable_case_count": 1,
+      "unavailable_fraction": 0.25
+    },
+    "late_evasive_reaction": {
+      "denominator": "all_evaluation_cases",
+      "detector_unavailable_count": 1,
+      "metric_excluded_count": 2,
+      "review_ambiguous_count": 0,
+      "review_unavailable_or_pending_count": 2,
+      "total_case_count": 4,
+      "trace_unavailable_count": 1,
+      "unavailable_case_count": 1,
+      "unavailable_fraction": 0.25
+    },
+    "low_progress": {
+      "denominator": "all_evaluation_cases",
+      "detector_unavailable_count": 1,
+      "metric_excluded_count": 2,
+      "review_ambiguous_count": 0,
+      "review_unavailable_or_pending_count": 2,
+      "total_case_count": 4,
+      "trace_unavailable_count": 1,
+      "unavailable_case_count": 1,
+      "unavailable_fraction": 0.25
+    },
+    "occlusion_triggered_near_miss": {
+      "denominator": "all_evaluation_cases",
+      "detector_unavailable_count": 1,
+      "metric_excluded_count": 2,
+      "review_ambiguous_count": 0,
+      "review_unavailable_or_pending_count": 2,
+      "total_case_count": 4,
+      "trace_unavailable_count": 1,
+      "unavailable_case_count": 1,
+      "unavailable_fraction": 0.25
+    },
+    "oscillatory_local_control": {
+      "denominator": "all_evaluation_cases",
+      "detector_unavailable_count": 1,
+      "metric_excluded_count": 2,
+      "review_ambiguous_count": 0,
+      "review_unavailable_or_pending_count": 2,
+      "total_case_count": 4,
+      "trace_unavailable_count": 1,
+      "unavailable_case_count": 1,
+      "unavailable_fraction": 0.25
+    },
+    "zero_motion_timeout_behavior": {
+      "denominator": "all_evaluation_cases",
+      "detector_unavailable_count": 1,
+      "metric_excluded_count": 2,
+      "review_ambiguous_count": 0,
+      "review_unavailable_or_pending_count": 2,
+      "total_case_count": 4,
+      "trace_unavailable_count": 1,
+      "unavailable_case_count": 1,
+      "unavailable_fraction": 0.25
+    }
+  }
+}

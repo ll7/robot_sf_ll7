@@ -1,0 +1,962 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/trace_predicate_validation_report.v1.json",
+  "title": "Robot SF Trace Predicate Validation Report v1",
+  "description": "Versioned diagnostic-only report envelope for a trace predicate validation set. Numeric fields describe admitted labels and exclusions; they are not benchmark or causal claims.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_kind",
+    "evaluation_set",
+    "claim_boundary",
+    "coverage",
+    "predicate_metrics",
+    "unavailable_rates",
+    "reviewer_agreement",
+    "reviewer_effort",
+    "threshold_stability",
+    "grouping_stability",
+    "observations",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "trace_predicate_validation_report.v1"
+    },
+    "report_kind": {
+      "const": "trace_predicate_validation"
+    },
+    "evaluation_set": {
+      "$ref": "#/$defs/evaluation_set"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
+    },
+    "predicate_metrics": {
+      "$ref": "#/$defs/predicate_metric_map"
+    },
+    "unavailable_rates": {
+      "$ref": "#/$defs/unavailable_rate_map"
+    },
+    "reviewer_agreement": {
+      "$ref": "#/$defs/reviewer_agreement_map"
+    },
+    "reviewer_effort": {
+      "$ref": "#/$defs/reviewer_effort"
+    },
+    "threshold_stability": {
+      "$ref": "#/$defs/threshold_stability"
+    },
+    "grouping_stability": {
+      "$ref": "#/$defs/grouping_stability"
+    },
+    "observations": {
+      "$ref": "#/$defs/observations"
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "predicate_id_properties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "collision",
+        "late_evasive_reaction",
+        "oscillatory_local_control",
+        "occlusion_triggered_near_miss",
+        "bottleneck_deadlock",
+        "zero_motion_timeout_behavior",
+        "low_progress",
+        "clearance_critical_interaction"
+      ]
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ratio": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "label": {
+      "enum": [
+        "positive",
+        "negative",
+        "ambiguous",
+        "unavailable"
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "evaluation_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluation_set_id",
+        "evaluation_set_version",
+        "sha256",
+        "case_count",
+        "evidence_status",
+        "retained_trace_status",
+        "source_commit",
+        "source_kind"
+      ],
+      "properties": {
+        "evaluation_set_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evaluation_set_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "case_count": {
+          "$ref": "#/$defs/count"
+        },
+        "evidence_status": {
+          "const": "diagnostic-only"
+        },
+        "retained_trace_status": {
+          "enum": [
+            "available",
+            "partial",
+            "unavailable"
+          ]
+        },
+        "source_commit": {
+          "$ref": "#/$defs/commit"
+        },
+        "source_kind": {
+          "enum": [
+            "bounded_labeled_fixture",
+            "retained_trace_corpus"
+          ]
+        }
+      }
+    },
+    "id_list": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_count",
+        "trace_available_count",
+        "trace_unavailable_count",
+        "scenario_family_count",
+        "planner_count",
+        "planner_ids",
+        "map_count",
+        "map_ids",
+        "seed_count",
+        "detector_positive_label_count",
+        "detector_negative_label_count",
+        "detector_ambiguous_label_count",
+        "detector_unavailable_label_count",
+        "reference_positive_label_count",
+        "reference_negative_label_count",
+        "reference_ambiguous_label_count",
+        "reference_unavailable_label_count",
+        "reference_unavailable_or_pending_label_count"
+      ],
+      "properties": {
+        "case_count": {
+          "$ref": "#/$defs/count"
+        },
+        "trace_available_count": {
+          "$ref": "#/$defs/count"
+        },
+        "trace_unavailable_count": {
+          "$ref": "#/$defs/count"
+        },
+        "scenario_family_count": {
+          "$ref": "#/$defs/count"
+        },
+        "planner_count": {
+          "$ref": "#/$defs/count"
+        },
+        "planner_ids": {
+          "$ref": "#/$defs/id_list"
+        },
+        "map_count": {
+          "$ref": "#/$defs/count"
+        },
+        "map_ids": {
+          "$ref": "#/$defs/id_list"
+        },
+        "seed_count": {
+          "$ref": "#/$defs/count"
+        },
+        "detector_positive_label_count": {
+          "$ref": "#/$defs/count"
+        },
+        "detector_negative_label_count": {
+          "$ref": "#/$defs/count"
+        },
+        "detector_ambiguous_label_count": {
+          "$ref": "#/$defs/count"
+        },
+        "detector_unavailable_label_count": {
+          "$ref": "#/$defs/count"
+        },
+        "reference_positive_label_count": {
+          "$ref": "#/$defs/count"
+        },
+        "reference_negative_label_count": {
+          "$ref": "#/$defs/count"
+        },
+        "reference_ambiguous_label_count": {
+          "$ref": "#/$defs/count"
+        },
+        "reference_unavailable_label_count": {
+          "$ref": "#/$defs/count"
+        },
+        "reference_unavailable_or_pending_label_count": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "predicate_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluated_count",
+        "excluded_count",
+        "excluded_reasons",
+        "reference_positive_count",
+        "reference_negative_count",
+        "true_positive",
+        "true_negative",
+        "false_positive",
+        "false_negative",
+        "precision",
+        "recall"
+      ],
+      "properties": {
+        "evaluated_count": {
+          "$ref": "#/$defs/count"
+        },
+        "excluded_count": {
+          "$ref": "#/$defs/count"
+        },
+        "excluded_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/count"
+          }
+        },
+        "reference_positive_count": {
+          "$ref": "#/$defs/count"
+        },
+        "reference_negative_count": {
+          "$ref": "#/$defs/count"
+        },
+        "true_positive": {
+          "$ref": "#/$defs/count"
+        },
+        "true_negative": {
+          "$ref": "#/$defs/count"
+        },
+        "false_positive": {
+          "$ref": "#/$defs/count"
+        },
+        "false_negative": {
+          "$ref": "#/$defs/count"
+        },
+        "precision": {
+          "$ref": "#/$defs/ratio"
+        },
+        "recall": {
+          "$ref": "#/$defs/ratio"
+        }
+      }
+    },
+    "predicate_metric_map": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        {
+          "type": "object",
+          "required": [
+            "collision",
+            "late_evasive_reaction",
+            "oscillatory_local_control",
+            "occlusion_triggered_near_miss",
+            "bottleneck_deadlock",
+            "zero_motion_timeout_behavior",
+            "low_progress",
+            "clearance_critical_interaction"
+          ]
+        },
+        {
+          "properties": {
+            "collision": {
+              "$ref": "#/$defs/predicate_metric"
+            },
+            "late_evasive_reaction": {
+              "$ref": "#/$defs/predicate_metric"
+            },
+            "oscillatory_local_control": {
+              "$ref": "#/$defs/predicate_metric"
+            },
+            "occlusion_triggered_near_miss": {
+              "$ref": "#/$defs/predicate_metric"
+            },
+            "bottleneck_deadlock": {
+              "$ref": "#/$defs/predicate_metric"
+            },
+            "zero_motion_timeout_behavior": {
+              "$ref": "#/$defs/predicate_metric"
+            },
+            "low_progress": {
+              "$ref": "#/$defs/predicate_metric"
+            },
+            "clearance_critical_interaction": {
+              "$ref": "#/$defs/predicate_metric"
+            }
+          }
+        }
+      ]
+    },
+    "unavailable_rate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "denominator",
+        "total_case_count",
+        "unavailable_case_count",
+        "unavailable_fraction",
+        "trace_unavailable_count",
+        "detector_unavailable_count",
+        "review_unavailable_or_pending_count",
+        "review_ambiguous_count",
+        "metric_excluded_count"
+      ],
+      "properties": {
+        "denominator": {
+          "const": "all_evaluation_cases"
+        },
+        "total_case_count": {
+          "$ref": "#/$defs/count"
+        },
+        "unavailable_case_count": {
+          "$ref": "#/$defs/count"
+        },
+        "unavailable_fraction": {
+          "$ref": "#/$defs/ratio"
+        },
+        "trace_unavailable_count": {
+          "$ref": "#/$defs/count"
+        },
+        "detector_unavailable_count": {
+          "$ref": "#/$defs/count"
+        },
+        "review_unavailable_or_pending_count": {
+          "$ref": "#/$defs/count"
+        },
+        "review_ambiguous_count": {
+          "$ref": "#/$defs/count"
+        },
+        "metric_excluded_count": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "unavailable_rate_map": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        {
+          "type": "object",
+          "required": [
+            "collision",
+            "late_evasive_reaction",
+            "oscillatory_local_control",
+            "occlusion_triggered_near_miss",
+            "bottleneck_deadlock",
+            "zero_motion_timeout_behavior",
+            "low_progress",
+            "clearance_critical_interaction"
+          ]
+        },
+        {
+          "properties": {
+            "collision": {
+              "$ref": "#/$defs/unavailable_rate"
+            },
+            "late_evasive_reaction": {
+              "$ref": "#/$defs/unavailable_rate"
+            },
+            "oscillatory_local_control": {
+              "$ref": "#/$defs/unavailable_rate"
+            },
+            "occlusion_triggered_near_miss": {
+              "$ref": "#/$defs/unavailable_rate"
+            },
+            "bottleneck_deadlock": {
+              "$ref": "#/$defs/unavailable_rate"
+            },
+            "zero_motion_timeout_behavior": {
+              "$ref": "#/$defs/unavailable_rate"
+            },
+            "low_progress": {
+              "$ref": "#/$defs/unavailable_rate"
+            },
+            "clearance_critical_interaction": {
+              "$ref": "#/$defs/unavailable_rate"
+            }
+          }
+        }
+      ]
+    },
+    "disagreement_case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "labels_by_reviewer",
+        "adjudication_status"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "labels_by_reviewer": {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {
+            "$ref": "#/$defs/label"
+          }
+        },
+        "adjudication_status": {
+          "enum": [
+            "pending",
+            "adjudicated"
+          ]
+        }
+      }
+    },
+    "reviewer_agreement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer_count",
+        "case_count",
+        "pair_count",
+        "agreement_pair_count",
+        "disagreement_pair_count",
+        "agreement_rate",
+        "disagreement_cases",
+        "unresolved_disagreement_count"
+      ],
+      "properties": {
+        "reviewer_count": {
+          "$ref": "#/$defs/count"
+        },
+        "case_count": {
+          "$ref": "#/$defs/count"
+        },
+        "pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "agreement_pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "disagreement_pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "agreement_rate": {
+          "$ref": "#/$defs/ratio"
+        },
+        "disagreement_cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/disagreement_case"
+          }
+        },
+        "unresolved_disagreement_count": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "reviewer_agreement_map": {
+      "unevaluatedProperties": false,
+      "allOf": [
+        {
+          "type": "object",
+          "required": [
+            "collision",
+            "late_evasive_reaction",
+            "oscillatory_local_control",
+            "occlusion_triggered_near_miss",
+            "bottleneck_deadlock",
+            "zero_motion_timeout_behavior",
+            "low_progress",
+            "clearance_critical_interaction"
+          ]
+        },
+        {
+          "properties": {
+            "collision": {
+              "$ref": "#/$defs/reviewer_agreement"
+            },
+            "late_evasive_reaction": {
+              "$ref": "#/$defs/reviewer_agreement"
+            },
+            "oscillatory_local_control": {
+              "$ref": "#/$defs/reviewer_agreement"
+            },
+            "occlusion_triggered_near_miss": {
+              "$ref": "#/$defs/reviewer_agreement"
+            },
+            "bottleneck_deadlock": {
+              "$ref": "#/$defs/reviewer_agreement"
+            },
+            "zero_motion_timeout_behavior": {
+              "$ref": "#/$defs/reviewer_agreement"
+            },
+            "low_progress": {
+              "$ref": "#/$defs/reviewer_agreement"
+            },
+            "clearance_critical_interaction": {
+              "$ref": "#/$defs/reviewer_agreement"
+            }
+          }
+        }
+      ]
+    },
+    "minutes_map": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0
+      }
+    },
+    "reviewer_effort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "total_minutes",
+        "reviewer_minutes",
+        "adjudicator_minutes",
+        "reviewer_count",
+        "adjudicator_count"
+      ],
+      "properties": {
+        "unit": {
+          "const": "minutes"
+        },
+        "total_minutes": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reviewer_minutes": {
+          "$ref": "#/$defs/minutes_map"
+        },
+        "adjudicator_minutes": {
+          "$ref": "#/$defs/minutes_map"
+        },
+        "reviewer_count": {
+          "$ref": "#/$defs/count"
+        },
+        "adjudicator_count": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "threshold_variant_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variant_id",
+        "positive_count",
+        "negative_count",
+        "ambiguous_count",
+        "unavailable_count",
+        "changed_case_count",
+        "label_stability_fraction",
+        "positive_set_jaccard_to_baseline"
+      ],
+      "properties": {
+        "variant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "positive_count": {
+          "$ref": "#/$defs/count"
+        },
+        "negative_count": {
+          "$ref": "#/$defs/count"
+        },
+        "ambiguous_count": {
+          "$ref": "#/$defs/count"
+        },
+        "unavailable_count": {
+          "$ref": "#/$defs/count"
+        },
+        "changed_case_count": {
+          "$ref": "#/$defs/count"
+        },
+        "label_stability_fraction": {
+          "$ref": "#/$defs/ratio"
+        },
+        "positive_set_jaccard_to_baseline": {
+          "$ref": "#/$defs/ratio"
+        }
+      }
+    },
+    "threshold_predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variants"
+      ],
+      "properties": {
+        "variants": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/threshold_variant_result"
+          }
+        }
+      }
+    },
+    "threshold_stability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_variant_id",
+        "variant_count",
+        "by_predicate"
+      ],
+      "properties": {
+        "baseline_variant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variant_count": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "by_predicate": {
+          "allOf": [
+            {
+              "type": "object",
+              "required": [
+                "collision",
+                "late_evasive_reaction",
+                "oscillatory_local_control",
+                "occlusion_triggered_near_miss",
+                "bottleneck_deadlock",
+                "zero_motion_timeout_behavior",
+                "low_progress",
+                "clearance_critical_interaction"
+              ]
+            },
+            {
+              "properties": {
+                "collision": {
+                  "$ref": "#/$defs/threshold_predicate"
+                },
+                "late_evasive_reaction": {
+                  "$ref": "#/$defs/threshold_predicate"
+                },
+                "oscillatory_local_control": {
+                  "$ref": "#/$defs/threshold_predicate"
+                },
+                "occlusion_triggered_near_miss": {
+                  "$ref": "#/$defs/threshold_predicate"
+                },
+                "bottleneck_deadlock": {
+                  "$ref": "#/$defs/threshold_predicate"
+                },
+                "zero_motion_timeout_behavior": {
+                  "$ref": "#/$defs/threshold_predicate"
+                },
+                "low_progress": {
+                  "$ref": "#/$defs/threshold_predicate"
+                },
+                "clearance_critical_interaction": {
+                  "$ref": "#/$defs/threshold_predicate"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "identity_feature_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_bound_count",
+        "fixture_annotation_count",
+        "unavailable_count"
+      ],
+      "properties": {
+        "source_bound_count": {
+          "$ref": "#/$defs/count"
+        },
+        "fixture_annotation_count": {
+          "$ref": "#/$defs/count"
+        },
+        "unavailable_count": {
+          "$ref": "#/$defs/count"
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "group_id",
+        "record_ids"
+      ],
+      "properties": {
+        "group_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "record_ids": {
+          "$ref": "#/$defs/id_list"
+        }
+      }
+    },
+    "grouping_variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variant_id",
+        "included_features",
+        "excluded_features",
+        "group_count",
+        "group_sizes",
+        "groups"
+      ],
+      "properties": {
+        "variant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "included_features": {
+          "$ref": "#/$defs/id_list"
+        },
+        "excluded_features": {
+          "$ref": "#/$defs/id_list"
+        },
+        "group_count": {
+          "$ref": "#/$defs/count"
+        },
+        "group_sizes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/count"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/group"
+          }
+        }
+      }
+    },
+    "grouping_stability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "source_schema_version",
+        "assignment_origin",
+        "identity_features",
+        "identity_feature_coverage",
+        "baseline_variant_id",
+        "ablated_variant_id",
+        "variant_count",
+        "record_count",
+        "pair_count",
+        "baseline_group_count",
+        "ablated_group_count",
+        "reference_same_group_pair_count",
+        "comparison_same_group_pair_count",
+        "agreement_pair_count",
+        "changed_pair_count",
+        "same_group_pair_agreement",
+        "pairwise_jaccard",
+        "reference_only_pair_count",
+        "comparison_only_pair_count",
+        "variants",
+        "interpretation"
+      ],
+      "properties": {
+        "status": {
+          "const": "available"
+        },
+        "source_schema_version": {
+          "const": "collision_scenario_similarity.v1"
+        },
+        "assignment_origin": {
+          "enum": [
+            "bounded_fixture_projection",
+            "collision_scenario_similarity_report"
+          ]
+        },
+        "identity_features": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "planner_id",
+              "map_id"
+            ]
+          }
+        },
+        "identity_feature_coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "planner_id",
+            "map_id"
+          ],
+          "properties": {
+            "planner_id": {
+              "$ref": "#/$defs/identity_feature_coverage"
+            },
+            "map_id": {
+              "$ref": "#/$defs/identity_feature_coverage"
+            }
+          }
+        },
+        "baseline_variant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ablated_variant_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variant_count": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "record_count": {
+          "$ref": "#/$defs/count"
+        },
+        "pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "baseline_group_count": {
+          "$ref": "#/$defs/count"
+        },
+        "ablated_group_count": {
+          "$ref": "#/$defs/count"
+        },
+        "reference_same_group_pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "comparison_same_group_pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "agreement_pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "changed_pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "same_group_pair_agreement": {
+          "$ref": "#/$defs/ratio"
+        },
+        "pairwise_jaccard": {
+          "$ref": "#/$defs/ratio"
+        },
+        "reference_only_pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "comparison_only_pair_count": {
+          "$ref": "#/$defs/count"
+        },
+        "variants": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/grouping_variant"
+          }
+        },
+        "interpretation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "observations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observed_pattern_annotation_count",
+        "unique_observed_patterns",
+        "causal_hypotheses"
+      ],
+      "properties": {
+        "observed_pattern_annotation_count": {
+          "$ref": "#/$defs/count"
+        },
+        "unique_observed_patterns": {
+          "$ref": "#/$defs/id_list"
+        },
+        "causal_hypotheses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "annotation_count",
+            "used_for_metrics"
+          ],
+          "properties": {
+            "status": {
+              "const": "not_evaluated"
+            },
+            "annotation_count": {
+              "$ref": "#/$defs/count"
+            },
+            "used_for_metrics": {
+              "const": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

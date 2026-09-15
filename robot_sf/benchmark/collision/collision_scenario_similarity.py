@@ -11,8 +11,9 @@ from __future__ import annotations
 import json
 import math
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from itertools import pairwise
+from itertools import combinations, pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,7 +22,7 @@ from robot_sf.benchmark.failure_extractor import is_failure
 from robot_sf.common.validation import finite_float as _finite_float
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Sequence
+    from collections.abc import Callable, Iterable
 
 SCHEMA_VERSION = "collision_scenario_similarity.v1"
 ISSUE_URL = "https://github.com/ll7/robot_sf_ll7/issues/4359"
@@ -745,6 +746,116 @@ def _group_descriptors(
     return groups
 
 
+def compare_similarity_groupings(
+    reference_groups: Sequence[Mapping[str, Any]],
+    comparison_groups: Sequence[Mapping[str, Any]],
+    *,
+    record_ids: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Compare two precomputed grouping assignments by co-membership pairs.
+
+    The comparison is label-free: it measures whether the same record pairs are
+    placed in the same group. This keeps planner/map identity ablation separate
+    from any claim that a group is a validated failure family. Group members
+    must form a complete, duplicate-free partition of ``record_ids`` in each
+    assignment.
+
+    Args:
+        reference_groups: Baseline groups using the full feature set.
+        comparison_groups: Groups from the ablated or alternate feature set.
+        record_ids: Optional explicit record universe. When omitted, both
+            assignments must imply the same universe.
+
+    Returns:
+        Pairwise co-membership agreement and Jaccard statistics.
+
+    Raises:
+        ValueError: If either grouping is malformed or the record universes do
+            not match.
+    """
+    reference_ids, reference_pairs = _group_pair_set(reference_groups, "reference")
+    comparison_ids, comparison_pairs = _group_pair_set(comparison_groups, "comparison")
+    if record_ids is None:
+        if reference_ids != comparison_ids:
+            raise ValueError("grouping record universes do not match")
+        universe_ids = reference_ids
+    else:
+        universe_ids = _normalized_record_ids(record_ids)
+        if reference_ids != universe_ids or comparison_ids != universe_ids:
+            raise ValueError("grouping assignments do not cover the explicit record universe")
+
+    all_pairs = set(combinations(universe_ids, 2))
+    if not reference_pairs <= all_pairs or not comparison_pairs <= all_pairs:
+        raise ValueError("grouping contains a record outside the record universe")
+    agreement_pairs = sum(
+        (pair in reference_pairs) == (pair in comparison_pairs) for pair in all_pairs
+    )
+    union_pairs = reference_pairs | comparison_pairs
+    return {
+        "status": "available",
+        "record_count": len(universe_ids),
+        "pair_count": len(all_pairs),
+        "reference_same_group_pair_count": len(reference_pairs),
+        "comparison_same_group_pair_count": len(comparison_pairs),
+        "agreement_pair_count": agreement_pairs,
+        "disagreement_pair_count": len(all_pairs) - agreement_pairs,
+        "same_group_pair_agreement": agreement_pairs / len(all_pairs) if all_pairs else None,
+        "pairwise_jaccard": len(reference_pairs & comparison_pairs) / len(union_pairs)
+        if union_pairs
+        else 1.0,
+        "reference_only_pair_count": len(reference_pairs - comparison_pairs),
+        "comparison_only_pair_count": len(comparison_pairs - reference_pairs),
+    }
+
+
+def _normalized_record_ids(record_ids: Sequence[str]) -> tuple[str, ...]:
+    """Validate and sort an explicit grouping record universe.
+
+    Returns:
+        Sorted, duplicate-free record IDs.
+    """
+    normalized = [record_id for record_id in record_ids if isinstance(record_id, str)]
+    if len(normalized) != len(record_ids) or any(not record_id.strip() for record_id in normalized):
+        raise ValueError("record_ids must contain non-empty strings")
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("record_ids must be unique")
+    return tuple(sorted(normalized))
+
+
+def _group_pair_set(
+    groups: Sequence[Mapping[str, Any]],
+    assignment_name: str,
+) -> tuple[tuple[str, ...], set[tuple[str, str]]]:
+    """Validate one grouping partition and return its co-membership pairs.
+
+    Returns:
+        The sorted record universe and same-group pair set.
+    """
+    if not isinstance(groups, Sequence) or isinstance(groups, str) or not groups:
+        raise ValueError(f"{assignment_name} groups must be a non-empty sequence")
+    seen_ids: set[str] = set()
+    group_ids: set[str] = set()
+    pairs: set[tuple[str, str]] = set()
+    for group in groups:
+        if not isinstance(group, Mapping):
+            raise ValueError(f"{assignment_name} groups must contain objects")
+        group_id = group.get("group_id")
+        members = group.get("record_ids")
+        if not isinstance(group_id, str) or not group_id.strip():
+            raise ValueError(f"{assignment_name} group IDs must be non-empty strings")
+        if group_id in group_ids:
+            raise ValueError(f"{assignment_name} group IDs must be unique")
+        group_ids.add(group_id)
+        if not isinstance(members, Sequence) or isinstance(members, str) or not members:
+            raise ValueError(f"{assignment_name} group members must be a non-empty sequence")
+        member_ids = _normalized_record_ids(members)
+        if seen_ids.intersection(member_ids):
+            raise ValueError(f"{assignment_name} groups must partition records without duplicates")
+        seen_ids.update(member_ids)
+        pairs.update(combinations(member_ids, 2))
+    return tuple(sorted(seen_ids)), pairs
+
+
 def _representative(
     member_indexes: Sequence[int],
     pair_distances: dict[tuple[int, int], float],
@@ -1149,6 +1260,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "ScenarioDescriptor",
     "build_collision_scenario_similarity_report",
+    "compare_similarity_groupings",
     "describe_collision_scenarios",
     "format_collision_scenario_similarity_markdown",
     "write_collision_scenario_similarity_report",

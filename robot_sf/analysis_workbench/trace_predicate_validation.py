@@ -74,6 +74,29 @@ class TracePredicateValidationError(RobotSfError, ValueError):
         super().__init__(prefix + "; ".join(normalized_errors))
 
 
+def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON object keys instead of silently keeping the last value.
+
+    Returns:
+        The object mapping when every key is unique.
+    """
+    mapping: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in mapping:
+            raise ValueError(f"duplicate JSON object key: {key!r}")
+        mapping[key] = value
+    return mapping
+
+
+def _strict_json_loads(text: str) -> Any:
+    """Parse JSON while preserving fail-closed duplicate-key semantics.
+
+    Returns:
+        The parsed JSON value.
+    """
+    return json.loads(text, object_pairs_hook=_reject_duplicate_json_object)
+
+
 @lru_cache(maxsize=1)
 def load_trace_predicate_validation_schema() -> dict[str, Any]:
     """Load the versioned evaluation-set JSON Schema.
@@ -81,7 +104,20 @@ def load_trace_predicate_validation_schema() -> dict[str, Any]:
     Returns:
         Parsed JSON Schema dictionary.
     """
-    return json.loads(TRACE_PREDICATE_VALIDATION_SCHEMA_FILE.read_text(encoding="utf-8"))
+    try:
+        schema = _strict_json_loads(
+            TRACE_PREDICATE_VALIDATION_SCHEMA_FILE.read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise TracePredicateValidationError(
+            f"unable to load evaluation-set schema: {exc}",
+            source=TRACE_PREDICATE_VALIDATION_SCHEMA_FILE,
+        ) from exc
+    if not isinstance(schema, dict):
+        raise TracePredicateValidationError(
+            "evaluation-set schema must be an object", source=TRACE_PREDICATE_VALIDATION_SCHEMA_FILE
+        )
+    return schema
 
 
 @lru_cache(maxsize=1)
@@ -91,7 +127,20 @@ def load_trace_predicate_validation_report_schema() -> dict[str, Any]:
     Returns:
         Parsed JSON Schema dictionary.
     """
-    return json.loads(TRACE_PREDICATE_VALIDATION_REPORT_SCHEMA_FILE.read_text(encoding="utf-8"))
+    try:
+        schema = _strict_json_loads(
+            TRACE_PREDICATE_VALIDATION_REPORT_SCHEMA_FILE.read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise TracePredicateValidationError(
+            f"unable to load report schema: {exc}",
+            source=TRACE_PREDICATE_VALIDATION_REPORT_SCHEMA_FILE,
+        ) from exc
+    if not isinstance(schema, dict):
+        raise TracePredicateValidationError(
+            "report schema must be an object", source=TRACE_PREDICATE_VALIDATION_REPORT_SCHEMA_FILE
+        )
+    return schema
 
 
 def load_trace_predicate_validation_set(
@@ -111,8 +160,8 @@ def load_trace_predicate_validation_set(
     """
     evaluation_path = Path(path)
     try:
-        payload = json.loads(evaluation_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = _strict_json_loads(evaluation_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise TracePredicateValidationError(
             f"unable to load JSON evaluation set: {exc}", source=evaluation_path
         ) from exc

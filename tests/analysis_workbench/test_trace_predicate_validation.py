@@ -109,6 +109,19 @@ def test_trace_digest_drift_is_rejected() -> None:
         validate_trace_predicate_evaluation_set(payload, repo_root=REPO_ROOT)
 
 
+def test_duplicate_json_keys_are_rejected(tmp_path: Path) -> None:
+    """Ambiguous JSON input cannot silently replace an earlier object value."""
+    duplicate_path = tmp_path / "duplicate.json"
+    duplicate_path.write_text(
+        '{"schema_version": "trace_predicate_validation.v1", '
+        '"schema_version": "trace_predicate_validation.v1"}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TracePredicateValidationError, match="duplicate JSON object key"):
+        load_trace_predicate_validation_set(duplicate_path, repo_root=REPO_ROOT)
+
+
 def test_current_base_pin_is_checked() -> None:
     """A fixture from another base cannot be admitted silently."""
     with pytest.raises(TracePredicateValidationError, match="different source commit"):

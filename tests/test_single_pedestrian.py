@@ -14,13 +14,19 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
+from robot_sf.common.types import Line2D, Rect
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.global_route import GlobalRoute
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
+from robot_sf.ped_npc.ped_behavior import SinglePedestrianBehavior
 from robot_sf.ped_npc.ped_population import (
     PedSpawnConfig,
     populate_simulation,
     populate_single_pedestrians,
 )
+from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.sim.simulator import init_simulators
 
 if TYPE_CHECKING:
     from robot_sf.common.types import Vec2D
@@ -113,8 +119,8 @@ class TestSinglePedestrianSpawning:
         assert metadata[0]["speed_m_s"] == pytest.approx(1.2)
         assert metadata[0]["note"] == "slow"
 
-    def test_populate_single_pedestrians_start_delay_holds_at_start(self):
-        """Verify start-delay dwell initializes as a held pedestrian."""
+    def test_populate_single_pedestrians_start_delay_preserves_speed_capability(self):
+        """Verify a start-delay state keeps its walking speed while holding its goal at start."""
         start: Vec2D = (2.0, 2.0)
         goal: Vec2D = (8.0, 8.0)
         ped = SinglePedestrianDefinition(
@@ -126,7 +132,7 @@ class TestSinglePedestrianSpawning:
 
         ped_states, metadata = populate_single_pedestrians([ped], initial_speed=0.5)
 
-        assert np.allclose(ped_states[0, 2:4], [0.0, 0.0])
+        assert np.linalg.norm(ped_states[0, 2:4]) == pytest.approx(0.5)
         assert np.allclose(ped_states[0, 4:6], start)
         assert metadata[0]["start_delay_s"] == pytest.approx(1.5)
 
@@ -187,6 +193,98 @@ class TestSinglePedestrianSpawning:
 
 class TestSimulatorIntegration:
     """Tests for simulator integration with single pedestrians."""
+
+    @staticmethod
+    def _build_simulator(single_pedestrian: SinglePedestrianDefinition):
+        """Build a zero-background simulator with one explicit single pedestrian."""
+        width = height = 20.0
+        robot_spawn_zone: Rect = ((1.0, 1.0), (2.0, 1.0), (1.0, 2.0))
+        robot_goal_zone: Rect = ((16.0, 16.0), (17.0, 16.0), (16.0, 17.0))
+        bounds: list[Line2D] = [
+            ((0.0, 0.0), (width, 0.0)),
+            ((width, 0.0), (width, height)),
+            ((width, height), (0.0, height)),
+            ((0.0, height), (0.0, 0.0)),
+        ]
+        robot_route = GlobalRoute(
+            spawn_id=0,
+            goal_id=0,
+            waypoints=[(1.2, 1.2), (16.8, 16.8)],
+            spawn_zone=robot_spawn_zone,
+            goal_zone=robot_goal_zone,
+        )
+        map_def = MapDefinition(
+            width=width,
+            height=height,
+            obstacles=[],
+            robot_spawn_zones=[robot_spawn_zone],
+            ped_spawn_zones=[robot_spawn_zone],
+            robot_goal_zones=[robot_goal_zone],
+            bounds=bounds,
+            robot_routes=[robot_route],
+            ped_goal_zones=[robot_goal_zone],
+            ped_crowded_zones=[],
+            ped_routes=[],
+            single_pedestrians=[single_pedestrian],
+        )
+        config = RobotSimulationConfig(
+            map_pool=MapDefinitionPool(map_defs={"test": map_def}),
+            sim_config=SimulationSettings(
+                difficulty=0,
+                ped_density_by_difficulty=[0.0],
+                population_size=1,
+            ),
+        )
+        simulator = init_simulators(config, map_def, num_robots=1, random_start_pos=False)[0]
+        behavior = next(
+            behavior
+            for behavior in simulator.peds_behaviors
+            if isinstance(behavior, SinglePedestrianBehavior)
+        )
+        behavior.bind_pysf_peds(simulator.pysf_sim.peds)
+        simulator.reset_state()
+        return simulator
+
+    def test_delayed_single_pedestrian_moves_after_release(self):
+        """A delayed single pedestrian keeps its speed cap and moves after release."""
+        ped = SinglePedestrianDefinition(
+            id="delayed_ped",
+            start=(10.0, 1.0),
+            goal=(10.0, 19.0),
+            speed_m_s=1.0,
+            start_delay_s=1.0,
+        )
+        simulator = self._build_simulator(ped)
+        initial_position = simulator.ped_pos[0].copy()
+
+        assert np.allclose(simulator.pysf_sim.peds.max_speeds, [0.0])
+        for _ in range(9):
+            simulator.step_once([(0.0, 0.0)])
+        assert np.allclose(simulator.ped_pos[0], initial_position)
+        assert not np.allclose(simulator.pysf_state.goal_of(0), ped.goal)
+
+        for _ in range(6):
+            simulator.step_once([(0.0, 0.0)])
+
+        assert np.linalg.norm(simulator.ped_pos[0] - initial_position) > 0.0
+        assert np.allclose(simulator.pysf_state.goal_of(0), ped.goal)
+        assert np.allclose(simulator.pysf_sim.peds.max_speeds, [1.3])
+
+    def test_non_delayed_single_pedestrian_behavior_is_unchanged(self):
+        """A single pedestrian without a delay still moves from its initial step."""
+        ped = SinglePedestrianDefinition(
+            id="immediate_ped",
+            start=(10.0, 1.0),
+            goal=(10.0, 19.0),
+            speed_m_s=1.0,
+        )
+        simulator = self._build_simulator(ped)
+        initial_position = simulator.ped_pos[0].copy()
+
+        simulator.step_once([(0.0, 0.0)])
+
+        assert np.linalg.norm(simulator.ped_pos[0] - initial_position) > 0.0
+        assert np.allclose(simulator.pysf_sim.peds.max_speeds, [1.3])
 
     def test_simulator_spawns_single_pedestrian_correctly(self, simple_map_def):
         """Test that the simulator correctly spawns single pedestrians."""

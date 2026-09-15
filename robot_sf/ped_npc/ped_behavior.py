@@ -15,6 +15,7 @@ from robot_sf.ped_npc.ped_zone import sample_zone
 
 if TYPE_CHECKING:
     import numpy as np
+    from pysocialforce.scene import PedState
     from shapely.prepared import PreparedGeometry
 
 #: Fail-open release time (seconds) for a proximity hold when no ``hold_timeout_s`` is configured.
@@ -277,6 +278,12 @@ class SinglePedestrianBehavior:
     _runtimes: list[SinglePedestrianRuntime] = field(init=False, default_factory=list)
     _id_to_global: dict[str, int] = field(init=False, default_factory=dict)
     _warned_missing_targets: set[int] = field(init=False, default_factory=set)
+    _pysf_peds: "PedState | None" = field(init=False, default=None, repr=False)
+    _start_delay_max_speeds: dict[int, float] = field(
+        init=False,
+        default_factory=dict,
+        repr=False,
+    )
 
     def __post_init__(self):
         """Initialize runtime state for each single pedestrian."""
@@ -300,6 +307,24 @@ class SinglePedestrianBehavior:
     def set_robot_pose_provider(self, provider: Callable[[], list[RobotPose]] | None) -> None:
         """Set or update the robot pose provider callback."""
         self.robot_pose_provider = provider
+
+    def bind_pysf_peds(self, peds: "PedState") -> None:
+        """Bind PySocialForce state for per-pedestrian start-delay speed caps.
+
+        Delayed pedestrians retain a nonzero initial velocity so PySocialForce can derive their
+        configured speed capability.  Their capability is suspended during the delay to keep
+        other force terms from moving them, then restored by :meth:`_release_start_delay`.
+        """
+        max_speeds = getattr(peds, "max_speeds", None)
+        if max_speeds is None:
+            raise ValueError("PySocialForce pedestrian state must expose max_speeds")
+        self._pysf_peds = peds
+        for runtime in self._runtimes:
+            if runtime.start_delay_remaining_s <= 0:
+                continue
+            if runtime.ped_id not in self._start_delay_max_speeds:
+                self._start_delay_max_speeds[runtime.ped_id] = float(max_speeds[runtime.ped_id])
+            max_speeds[runtime.ped_id] = 0.0
 
     def step(self) -> None:
         """Advance single-pedestrian behaviors for one timestep."""
@@ -333,6 +358,9 @@ class SinglePedestrianBehavior:
             runtime.proximity_hold_released = False
             runtime.proximity_hold_elapsed_s = 0.0
             runtime.hold_released_by = None
+            if runtime.start_delay_remaining_s > 0:
+                self._hold_position(runtime)
+            self._set_start_delay_speed_cap(runtime, 0.0)
 
     def _advance_trajectory(self, runtime: SinglePedestrianRuntime) -> None:
         """Advance trajectory waypoints and honor wait rules."""
@@ -371,6 +399,9 @@ class SinglePedestrianBehavior:
             0.0,
             runtime.start_delay_remaining_s - self.time_step_s,
         )
+        # PySocialForce refreshes max_speeds from the initial state after each update.  Reapply
+        # the hold cap before force computation so obstacle forces cannot move a delayed ped.
+        self._set_start_delay_speed_cap(runtime, 0.0)
         self._hold_position(runtime)
         if runtime.start_delay_remaining_s <= 0:
             self._release_start_delay(runtime)
@@ -379,10 +410,22 @@ class SinglePedestrianBehavior:
 
     def _release_start_delay(self, runtime: SinglePedestrianRuntime) -> None:
         """Restore the pedestrian's configured goal after a start-delay dwell."""
+        self._set_start_delay_speed_cap(
+            runtime,
+            self._start_delay_max_speeds.get(runtime.ped_id, 0.0),
+        )
         if runtime.trajectory:
             self.states.redirect(runtime.ped_id, runtime.trajectory[runtime.waypoint_index])
         elif runtime.definition.goal is not None:
             self.states.redirect(runtime.ped_id, runtime.definition.goal)
+
+    def _set_start_delay_speed_cap(self, runtime: SinglePedestrianRuntime, speed: float) -> None:
+        """Set a delayed pedestrian's backend speed cap when PySocialForce is bound."""
+        if self._pysf_peds is None or runtime.definition.start_delay_s <= 0:
+            return
+        max_speeds = getattr(self._pysf_peds, "max_speeds", None)
+        if max_speeds is not None:
+            max_speeds[runtime.ped_id] = speed
 
     def _advance_waypoint(self, runtime: SinglePedestrianRuntime) -> None:
         """Advance to the next waypoint if available."""

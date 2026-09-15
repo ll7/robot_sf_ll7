@@ -90,9 +90,14 @@ Receipt identity fields and result request/component identities are bounded to
 256 characters; source hashing stops at 16 MiB; validation and resolver
 diagnostics are bounded to 200 characters and at most 32 retained validation
 errors. These are resource-safety limits; they do not widen source admission.
-Direct envelope constructors and the CLI reject nested non-finite numbers
-before schema or result serialization. An oversized source returns
-`unavailable` with reason `source_too_large`.
+Source-bound request and receipt admission, plus the CLI, reject nested
+non-finite numbers before schema or result serialization. Source-less
+in-memory component requests validate envelope fields here and defer
+component-owned config values to the runner so malformed values can receive a
+component-specific failed result. Canonical request digests and admitted
+source resolution still reject non-finite config, and internal result reasons
+are bounded before validation while retaining their leading reason codes. An
+oversized source returns `unavailable` with reason `source_too_large`.
 
 The resolver keeps source integrity separate from scientific evidence
 admission. `status: admitted` means that this fixture source is available and

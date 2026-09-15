@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import os
 import subprocess
 import sys
@@ -128,7 +129,7 @@ def test_visualization_spec_validates_intervals_and_units() -> None:
     ],
 )
 def test_direct_api_envelopes_reject_nested_non_finite(payload_kind: str) -> None:
-    """Every direct envelope boundary rejects nested NaN and infinity values."""
+    """Every untrusted envelope boundary rejects nested NaN and infinity values."""
     if payload_kind == "bundle":
         payload = _bundle_doc()
         payload["episodes"][0]["references"][0]["units"] = {"nested": [float("nan")]}  # type: ignore[index,union-attr]
@@ -154,7 +155,9 @@ def test_direct_api_envelopes_reject_nested_non_finite(payload_kind: str) -> Non
     elif payload_kind == "request":
         payload = _admitted_source_fixture("request.json")
         payload["config"] = {"nested": [float("nan")]}
-        validator = component_request_from_dict
+        with pytest.raises(ReviewContractsValidationError, match="non-finite"):
+            component_request_from_dict(payload, source="request.json")
+        return
     elif payload_kind == "result":
         payload = {
             "schema_version": "component-result.v1",
@@ -188,7 +191,7 @@ def test_component_request_rejects_oversized_identity(field: str) -> None:
 
 
 def test_component_result_rejects_oversized_reason() -> None:
-    """Direct result construction rejects unbounded failure details."""
+    """Source-bound result construction rejects unbounded failure details."""
     payload = {
         "schema_version": "component-result.v1",
         "request_id": "request-0000",
@@ -198,7 +201,33 @@ def test_component_result_rejects_oversized_reason() -> None:
     }
 
     with pytest.raises(ReviewContractsValidationError, match="maximum length"):
-        component_result_from_dict(payload)
+        component_result_from_dict(payload, source="result.json")
+
+
+def test_in_memory_component_config_defers_non_finite_values_to_runner() -> None:
+    """In-memory component config stays available for runner-level failure classification."""
+    payload = _admitted_source_fixture("request.json")
+    payload["config"] = {"nested": [float("nan")]}
+
+    request = component_request_from_dict(payload)
+
+    assert math.isnan(request.config["nested"][0])
+
+
+def test_in_memory_result_bounds_reason_before_validation() -> None:
+    """Internal result details retain their code while satisfying the reason ceiling."""
+    payload = {
+        "schema_version": "component-result.v1",
+        "request_id": "request-0000",
+        "component_id": "component-0000",
+        "status": "failed",
+        "reason": "corrupt_recipe: " + ("detail " * 100),
+    }
+
+    result = component_result_from_dict(payload)
+
+    assert result.reason.startswith("corrupt_recipe: ")
+    assert len(result.reason) <= review_contracts.MAX_REVIEW_CONTRACT_REASON_CHARS
 
 
 def test_component_request_rejects_traversal_and_unknown_component_runs_unavailable(

@@ -323,6 +323,47 @@ def _reject_non_finite(payload: Any, *, source: Any = None) -> None:
         raise ReviewContractsValidationError(["payload contains non-finite number"], source=source)
 
 
+def _request_finite_validation_payload(
+    payload: Mapping[str, Any], *, source: Any = None
+) -> Mapping[str, Any]:
+    """Select request fields whose finite values this shared boundary owns.
+
+    Source-bound requests are treated as untrusted persisted or CLI data and
+    are checked recursively in full.  An in-memory request without a source
+    marker has its component-owned config deferred to the component runner;
+    envelope fields remain subject to this boundary's checks.
+
+    Returns:
+        The request mapping to use for recursive finite-value validation.
+    """
+    if source is not None:
+        return payload
+    return {key: value for key, value in payload.items() if key != "config"}
+
+
+def _result_validation_payload(
+    payload: Mapping[str, Any], *, source: Any = None
+) -> Mapping[str, Any]:
+    """Bound an internal result reason before strict result validation.
+
+    Source-bound result documents remain strict.  Internal component results
+    may assemble long diagnostic details, so their leading reason code is
+    retained while the detail is bounded for the result envelope.
+
+    Returns:
+        The result mapping to validate.
+    """
+    if source is not None:
+        return payload
+    reason = payload.get("reason")
+    if isinstance(reason, str) and len(reason) > MAX_REVIEW_CONTRACT_REASON_CHARS:
+        return {
+            **payload,
+            "reason": _bounded_text_detail(reason, limit=MAX_REVIEW_CONTRACT_REASON_CHARS),
+        }
+    return payload
+
+
 def _check_envelope_identity_limits(
     payload: Mapping[str, Any], *, source: Any = None, include_reason: bool = False
 ) -> None:
@@ -641,11 +682,16 @@ def component_request_from_dict(
 ) -> ComponentRequest:
     """Validate and build a component request, rejecting unsafe output paths.
 
+    A source marker identifies persisted or CLI input and enables recursive
+    validation of component-owned config.  Source-less in-memory requests
+    defer config value validation to the component runner, while envelope
+    fields and all source declarations remain strictly validated.
+
     Returns:
         Validated component request.
     """
     _reject_unicode_surrogates(payload, source=source)
-    _reject_non_finite(payload, source=source)
+    _reject_non_finite(_request_finite_validation_payload(payload, source=source), source=source)
     _check_envelope_identity_limits(payload, source=source)
     _require_schema(COMPONENT_REQUEST_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []
@@ -688,10 +734,15 @@ def component_result_from_dict(
 ) -> ComponentResult:
     """Validate and build a component result, enforcing status semantics.
 
+    Source-bound result documents are strict.  Source-less internal results
+    have oversized diagnostic reasons bounded before validation so stable
+    leading reason codes survive the shared result boundary.
+
     Returns:
         Validated component result.
     """
     _reject_non_finite(payload, source=source)
+    payload = _result_validation_payload(payload, source=source)
     _check_envelope_identity_limits(payload, source=source, include_reason=True)
     _require_schema(COMPONENT_RESULT_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []

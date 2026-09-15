@@ -330,6 +330,61 @@ def test_admitted_source_bounds_oversized_json_integer_errors(tmp_path: Path) ->
     assert result.source_path is None
 
 
+@pytest.mark.parametrize(
+    ("stage", "expected"),
+    [
+        (
+            "payload",
+            ("failed", "receipt_malformed", "receipt payload resolver returned no payload"),
+        ),
+        ("parse", ("failed", "receipt_malformed", "receipt parser returned no receipt")),
+        (
+            "root",
+            ("unavailable", "allowed_root_invalid", "allowed-root resolver returned no path"),
+        ),
+        (
+            "source",
+            ("unavailable", "source_missing", "source-path resolver returned no path"),
+        ),
+    ],
+)
+def test_admitted_source_fails_closed_when_resolver_returns_no_value(
+    monkeypatch: pytest.MonkeyPatch,
+    stage: str,
+    expected: tuple[str, str, str],
+) -> None:
+    """Impossible helper states return bounded rejection results without asserts."""
+    receipt = _admitted_source_fixture("receipt.json")
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    if stage == "payload":
+        monkeypatch.setattr(review_contracts, "_receipt_payload", lambda _: (None, None))
+    elif stage == "parse":
+        monkeypatch.setattr(
+            review_contracts,
+            "_parse_admitted_source_receipt",
+            lambda _: (None, None),
+        )
+    elif stage == "root":
+        monkeypatch.setattr(review_contracts, "_resolve_allowed_root", lambda _: (None, None))
+    else:
+        monkeypatch.setattr(
+            review_contracts,
+            "_resolve_source_path",
+            lambda _, __: (None, None),
+        )
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason, result.detail) == expected
+    assert result.source_path is None
+
+
 def test_admitted_source_rejects_mutated_bytes(tmp_path: Path) -> None:
     source_path = tmp_path / "source.json"
     source_path.write_bytes((ADMITTED_SOURCE_FIXTURE_DIR / "source.json").read_bytes())

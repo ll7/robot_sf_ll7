@@ -472,6 +472,19 @@ def _as_flag(value: Any) -> float | None:
     return 1.0 if number > 0.0 else 0.0
 
 
+def _as_binary_flag(value: Any) -> float | None:
+    """Coerce a strict boolean or numeric 0/1 flag without sign inference.
+
+    Returns:
+        ``1.0`` or ``0.0`` for binary values, or ``None`` for malformed flags.
+    """
+
+    number = _as_float(value)
+    if number not in {0.0, 1.0}:
+        return None
+    return number
+
+
 def _resolve_collision_rate(
     definition: MetricDefinition,
     view: Mapping[str, Any],
@@ -525,7 +538,7 @@ def _resolve_failure_to_progress_rate(
 
     if "outcome.route_complete" not in view:
         return None, None
-    route_complete = _as_flag(view["outcome.route_complete"])
+    route_complete = _as_binary_flag(view["outcome.route_complete"])
     if route_complete is None:
         return None, None
     collision_value, collision_source = _resolve_collision_rate(

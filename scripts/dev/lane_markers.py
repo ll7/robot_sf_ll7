@@ -59,6 +59,26 @@ _EXACT_HEAD_RE = re.compile(
 )
 EXACT_HEAD_RE = _EXACT_HEAD_RE
 
+
+def gate_verdict_matches(text: str) -> list[re.Match[str]]:
+    """Return complete gate-verdict carriers from dedicated Markdown lines.
+
+    The broad SHA carrier parser remains available for provenance inspection, but
+    gate-event consumers must not promote inline prose into control state. A
+    dedicated marker with an invalid or missing SHA is intentionally omitted here;
+    event consumers that need fail-closed malformed detection inspect the marker
+    stream directly.
+    """
+    if not isinstance(text, str) or not text:
+        return []
+    matches: list[re.Match[str]] = []
+    for marker in _GATE_VERDICT_MARKER_RE.finditer(text):
+        match = _GATE_VERDICT_RE.match(text, marker.start("marker"))
+        if match is not None:
+            matches.append(match)
+    return matches
+
+
 # A ``review-claim`` comment announces a lane's mutable-write window; admission
 # gates treat an unexpired trusted claim as a hold. The same comment thread is
 # released with ``review-claim: released @ <head-sha>``. The ``until`` timestamp

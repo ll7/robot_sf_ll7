@@ -403,6 +403,9 @@ _FAST_FILES = {
     "test_compare_resolved_configs.py",
     "test_custom_scenario_authoring.py",
     "test_compare_coverage_cli.py",
+    # Deterministic source-binding, report-recomputation, and unavailable-boundary
+    # contracts cover the trace predicate validation workbench (issue #9305).
+    "test_trace_predicate_validation.py",
     "test_global_route.py",
     "test_open_coverage_report.py",
     "test_route_geometry.py",

@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import re
 from collections.abc import Mapping
 from functools import lru_cache
@@ -168,7 +169,7 @@ def _assert_json_value(value: Any, field: str, *, _active_ids: set[int] | None =
     if value is None or isinstance(value, str | bool | int):
         return
     if isinstance(value, float):
-        if not value.isfinite():
+        if not math.isfinite(value):
             raise InterventionSpecValidationError(f"{field} must contain finite JSON numbers")
         return
     if type(value) is list or isinstance(value, Mapping):

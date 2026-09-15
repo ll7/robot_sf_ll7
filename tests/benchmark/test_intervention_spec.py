@@ -211,6 +211,29 @@ def test_factor_must_change_and_must_not_be_declared_fixed() -> None:
         validate_intervention_spec(missing_identity)
 
 
+def test_numeric_factor_values_are_finite_json_numbers() -> None:
+    """Numeric factor values validate without relying on a float instance method."""
+
+    payload = _payload()
+    payload["factor"] = {
+        **payload["factor"],
+        "unit": "m/s",
+        "baseline": 0.5,
+        "intervention": 1.0,
+    }
+    payload["negative_control"] = {
+        **payload["negative_control"],
+        "value": 0.5,
+    }
+
+    normalized = validate_intervention_spec(payload)
+    assert normalized["factor"]["baseline"] == 0.5
+
+    payload["factor"]["intervention"] = float("inf")
+    with pytest.raises(InterventionSpecValidationError, match="finite JSON numbers"):
+        validate_intervention_spec(payload)
+
+
 def test_comparison_classification_carries_no_unverified_shared_prefix() -> None:
     """Shared-prefix wording is a declared design, never an observed result."""
 

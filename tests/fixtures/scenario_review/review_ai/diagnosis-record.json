@@ -1,0 +1,66 @@
+{
+  "causal_evidence": [
+    {
+      "evidence_fields": {
+        "min_separation_m": 0.05
+      },
+      "evidence_kind": "trace_failure_predicate",
+      "involved_actors": [
+        "robot",
+        "ped-0000"
+      ],
+      "non_causal_note": "causal_evidence cites trace/predicate evidence pointers only; it is not causal inference.",
+      "predicate_id": "collision",
+      "steps": [
+        10,
+        20
+      ],
+      "time_interval_s": [
+        1.0,
+        2.0
+      ]
+    }
+  ],
+  "caveats": [
+    "causal_evidence cites trace/predicate evidence pointers only; it is not causal inference.",
+    "failure_type reuses an existing classifier label as a diagnostic label; it is not a canonical mechanism attribution without trace review."
+  ],
+  "confidence": "supported_hypothesis",
+  "contributing_factors": [],
+  "correction_status": "unreviewed",
+  "detection_method": "predicate",
+  "diagnosis_schema_version": "failure_diagnosis.v1",
+  "diagnosis_source": "failure_diagnosis.deterministic.v1",
+  "evidence_mode": "direct_probe",
+  "failure_level": "interaction",
+  "failure_type": "collision",
+  "onset_interval": [
+    1.0,
+    2.0
+  ],
+  "onset_time_s": 1.0,
+  "proposed_correction": null,
+  "severity": "critical",
+  "source_predicate": {
+    "evidence_fields": {
+      "min_separation_m": 0.05
+    },
+    "involved_actors": [
+      "robot",
+      "ped-0000"
+    ],
+    "predicate_id": "collision",
+    "severity": "high",
+    "steps": [
+      10,
+      20
+    ],
+    "time_interval_s": [
+      1.0,
+      2.0
+    ],
+    "validity_status": "valid"
+  },
+  "unknown_reason": null,
+  "validity_status": "valid"
+}

@@ -14,12 +14,15 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
+import stat
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from robot_sf.analysis_workbench.review_contracts import (
+    COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
     COMPONENT_REQUEST_SCHEMA_VERSION,
     COMPONENT_RESULT_SCHEMA_VERSION,
     ComponentDescriptor,
@@ -77,7 +80,15 @@ class _IndexedInterval:
 
 def descriptor() -> dict[str, Any]:
     """Return this component's self-contained capability descriptor."""
-    return asdict(_DESCRIPTOR)
+    return {
+        "schema_version": COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
+        "component_id": _DESCRIPTOR.component_id,
+        "component_version": _DESCRIPTOR.component_version,
+        "supported_input_versions": list(_DESCRIPTOR.supported_input_versions),
+        "required_capabilities": list(_DESCRIPTOR.required_capabilities),
+        "optional_capabilities": list(_DESCRIPTOR.optional_capabilities),
+        "output_types": list(_DESCRIPTOR.output_types),
+    }
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -100,7 +111,6 @@ def _write_json(path: Path, payload: Any) -> str:
     try:
         with tmp_path.open("x", encoding="utf-8") as handle:
             handle.write(text)
-        tmp_path.replace(path)
     except FileExistsError as error:
         raise ReviewContractsValidationError(
             [f"output_collision: temporary artifact already exists: {tmp_path.name}"]
@@ -111,6 +121,21 @@ def _write_json(path: Path, payload: Any) -> str:
         except OSError:
             pass
         raise
+    try:
+        # Hard-linking a complete temporary file creates the final name with
+        # no-replace semantics.  ``Path.replace`` would silently overwrite a
+        # file created by a concurrent producer between the two operations.
+        try:
+            os.link(tmp_path, path, follow_symlinks=False)
+        except FileExistsError as error:
+            raise ReviewContractsValidationError(
+                [f"output_collision: artifact already exists: {path.name}"]
+            ) from error
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
     return _sha256_bytes(text.encode("utf-8"))
 
 
@@ -203,6 +228,51 @@ def _resolve_source(path_value: str, base: Path) -> Path:
             [f"source uri rejected (outside base or not a file): {path_value}"]
         )
     return resolved
+
+
+def _read_source_bytes(path_value: str, base: Path) -> bytes:
+    """Read one source through a directory-FD chain without TOCTOU escapes.
+
+    The lexical and resolved-path checks remain useful diagnostics, but a
+    second path-based ``read_bytes`` would reopen a potentially swapped path.
+    Opening every directory component and the final file with ``O_NOFOLLOW``
+    binds the read to the checked base directory and rejects symlink races.
+
+    Returns:
+        Raw bytes read from the regular source file.
+    """
+    _resolve_source(path_value, base)
+    candidate = Path(path_value)
+    root = base.resolve(strict=True)
+    try:
+        nofollow = os.O_NOFOLLOW
+        directory = os.O_DIRECTORY
+    except AttributeError as error:
+        raise ReviewContractsValidationError(
+            ["source safe read unavailable: platform lacks no-follow directory opens"]
+        ) from error
+    common_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | nofollow
+    directory_flags = common_flags | directory
+    directory_fd = os.open(root, directory_flags)
+    try:
+        for component in candidate.parts[:-1]:
+            next_directory_fd = os.open(component, directory_flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_directory_fd
+        source_fd = os.open(candidate.parts[-1], common_flags, dir_fd=directory_fd)
+        try:
+            if not stat.S_ISREG(os.fstat(source_fd).st_mode):
+                raise ReviewContractsValidationError(
+                    [f"source uri rejected (not a regular file): {path_value}"]
+                )
+            with os.fdopen(source_fd, "rb") as handle:
+                source_fd = -1
+                return handle.read()
+        finally:
+            if source_fd != -1:
+                os.close(source_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def _reserve_output_directory(output_directory: str, base: Path) -> Path:  # noqa: C901 - path guard
@@ -407,8 +477,7 @@ def _load_family(
             "integrity_status": "unverified",
         }
         try:
-            source_path = _resolve_source(ref.uri, root)
-            raw = source_path.read_bytes()
+            raw = _read_source_bytes(ref.uri, root)
         except (OSError, ReviewContractsValidationError):
             diagnostics.append(f"{ref.artifact_id}: source_unreadable_or_unsafe")
             source_provenance.append(provenance)
@@ -554,6 +623,21 @@ def _normalize_families(
     return unique
 
 
+_INFORMATIONAL_DIAGNOSTIC_CODES = frozenset({"optional_stream_skipped", "clipped_to_range"})
+
+
+def _diagnostic_code(diagnostic: str) -> str:
+    """Extract the structured code suffix from a rendered diagnostic.
+
+    Returns:
+        The diagnostic code, or an empty string for an unstructured value.
+    """
+    _, separator, suffix = diagnostic.rpartition(": ")
+    if not separator:
+        return ""
+    return suffix.split(":", 1)[0]
+
+
 def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
     """Index event/phase intervals with explicit precursor/recovery links.
 
@@ -567,6 +651,23 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         ``unavailable`` when the component or a required capability does not
         apply, ``failed`` on validation, version, collision, or internal errors.
     """
+    if not isinstance(request, ComponentRequest):
+        request_id = (
+            request.get("request_id")
+            if isinstance(request, dict) and isinstance(request.get("request_id"), str)
+            else "unknown"
+        )
+        component_id = (
+            request.get("component_id")
+            if isinstance(request, dict) and isinstance(request.get("component_id"), str)
+            else COMPONENT_ID
+        )
+        return ComponentResult(
+            request_id=request_id,
+            component_id=component_id,
+            status=STATUS_FAILED,
+            reason="invalid_request: expected validated ComponentRequest",
+        )
     root = base if base is not None else Path.cwd()
     rejected = _reject_not_applicable(request)
     if rejected is not None:
@@ -669,8 +770,11 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             "skipped_optional_streams": sorted(declared_optional - requested_capabilities),
             "diagnostics": sorted(set(diagnostics)),
         }
-        informational = {"optional_stream_skipped", "clipped_to_range"}
-        blocking = [item for item in diagnostics if not any(tag in item for tag in informational)]
+        blocking = [
+            item
+            for item in diagnostics
+            if _diagnostic_code(item) not in _INFORMATIONAL_DIAGNOSTIC_CODES
+        ]
         partial = bool(blocking)
         status = STATUS_PARTIAL if partial else STATUS_COMPLETE
         reason = "" if status == STATUS_COMPLETE else "; ".join(sorted(set(diagnostics))[:8])

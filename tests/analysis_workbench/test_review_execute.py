@@ -857,7 +857,7 @@ def test_specs_match_except_predicate() -> None:
 
 
 def test_cli_rejects_invalid_config_without_execution(tmp_path: Path, capsys: Any) -> None:
-    from robot_sf.analysis_workbench.review_execute import ReviewExecuteError, main
+    from robot_sf.analysis_workbench.review_execute import main
 
     request_path = tmp_path / "request.json"
     config_path = tmp_path / "config.json"
@@ -878,10 +878,60 @@ def test_cli_rejects_invalid_config_without_execution(tmp_path: Path, capsys: An
         ]
     )
     assert code == 1
-    with pytest.raises(ReviewExecuteError, match="cannot read request"):
-        main(
-            ["--input", str(tmp_path / "missing.json"), "--output", "out", "--base", str(tmp_path)]
+    invalid_config = json.loads(capsys.readouterr().out)
+    assert invalid_config["schema_version"] == "component-result.v1"
+    assert invalid_config["status"] == "failed"
+    missing_code = main(
+        ["--input", str(tmp_path / "missing.json"), "--output", "out", "--base", str(tmp_path)]
+    )
+    missing = json.loads(capsys.readouterr().out)
+    assert missing_code == 1
+    assert missing["schema_version"] == "component-result.v1"
+    assert missing["status"] == "failed"
+
+
+@pytest.mark.parametrize("parser_input", ["request", "config"])
+def test_cli_parser_limit_emits_stable_failed_result(
+    tmp_path: Path, capsys: Any, parser_input: str
+) -> None:
+    """Request and override config parser limits never leak a traceback."""
+    from robot_sf.analysis_workbench.review_execute import main
+
+    request_path = tmp_path / "request.json"
+    config_path = tmp_path / "config.json"
+    huge_integer = "9" * 5001
+    request_text = json.dumps(_fixture_json("request.json"))
+    if parser_input == "request":
+        request_path.write_text(
+            request_text.replace('"config": {}', f'"config": {{"seed": {huge_integer}}}'),
+            encoding="utf-8",
         )
+    else:
+        request_path.write_text(request_text, encoding="utf-8")
+        config_path.write_text(f'{{"seed": {huge_integer}}}', encoding="utf-8")
+
+    arguments = [
+        "--input",
+        str(request_path),
+        "--output",
+        "parser-limit-output",
+        "--base",
+        str(tmp_path),
+    ]
+    if parser_input == "config":
+        arguments.extend(["--config", str(config_path)])
+
+    exit_code = main(arguments)
+    captured = capsys.readouterr()
+    printed = json.loads(captured.out)
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert printed["schema_version"] == "component-result.v1"
+    result = component_result_from_dict(printed)
+    assert result.status == "failed"
+    assert result.reason == f"invalid_input: {parser_input} JSON cannot be parsed safely"
+    assert not (tmp_path / "parser-limit-output").exists()
 
 
 def test_cli_stdout_is_a_component_result_v1_envelope(

@@ -42,6 +42,7 @@ import platform
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -2189,6 +2190,35 @@ def _result_document(result: ComponentResult) -> dict[str, Any]:
     return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)}
 
 
+def _cli_identity(payload: Any) -> tuple[str, str]:
+    """Return safe identity fields for a failure emitted before request validation."""
+    if not isinstance(payload, Mapping):
+        return "unknown", COMPONENT_ID
+    request_id = payload.get("request_id")
+    component_id = payload.get("component_id")
+    return (
+        request_id if isinstance(request_id, str) and request_id else "unknown",
+        component_id if isinstance(component_id, str) and component_id else COMPONENT_ID,
+    )
+
+
+def _print_cli_failure(reason: str, *, payload: Any = None) -> int:
+    """Print a contract-valid failed result for pre-request CLI errors.
+
+    Returns:
+        The CLI failure exit code.
+    """
+    request_id, component_id = _cli_identity(payload)
+    result = ComponentResult(
+        request_id=request_id,
+        component_id=component_id,
+        status="failed",
+        reason=reason,
+    )
+    print(json.dumps(_result_document(result), indent=2, sort_keys=True))  # noqa: T201
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for the review-execute component.
 
@@ -2199,25 +2229,39 @@ def main(argv: list[str] | None = None) -> int:
         Process exit code (0 when the result status is complete).
     """
     args = _build_parser().parse_args(argv)
+    payload: Any = None
     try:
         payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ReviewExecuteError([f"cannot read request: {error}"]) from error
+    except (OSError, ValueError, RecursionError):
+        return _print_cli_failure("invalid_input: request JSON cannot be parsed safely")
     if not isinstance(payload, dict):
-        raise ReviewExecuteError(["request JSON must be a mapping"])
+        return _print_cli_failure("invalid_input: request must be a JSON object")
+    request_id, component_id = _cli_identity(payload)
     if args.config is not None:
         try:
             config = json.loads(Path(args.config).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ReviewExecuteError([f"cannot read config: {error}"]) from error
+        except (OSError, ValueError, RecursionError):
+            return _print_cli_failure(
+                "invalid_input: config JSON cannot be parsed safely", payload=payload
+            )
         if not isinstance(config, dict):
-            raise ReviewExecuteError(["config JSON must be a mapping"])
+            return _print_cli_failure(
+                "invalid_input: config must be a JSON object", payload=payload
+            )
         request_config = payload.get("config", {})
         if not isinstance(request_config, dict):
-            raise ReviewExecuteError(["request config must be a mapping"])
+            return _print_cli_failure(
+                "invalid_input: request config must be a JSON object", payload=payload
+            )
         payload = {**payload, "config": {**request_config, **config}}
     payload = {**payload, "output_directory": args.output}
-    request = component_request_from_dict(payload, source=args.input)
+    try:
+        request = component_request_from_dict(payload, source=args.input)
+    except (ReviewContractsValidationError, RecursionError):
+        return _print_cli_failure(
+            "invalid_input: request does not satisfy component-request.v1",
+            payload={"request_id": request_id, "component_id": component_id},
+        )
     result = run(
         request, base=Path(args.base) if args.base is not None else None, resume=args.resume
     )

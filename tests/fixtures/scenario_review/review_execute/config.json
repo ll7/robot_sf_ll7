@@ -1,0 +1,53 @@
+{
+  "planner": "simple_policy",
+  "seed": 7,
+  "horizon_steps": 60,
+  "robot_speed_m_s": 1.0,
+  "max_candidates": 3,
+  "max_executions": 6,
+  "wall_timeout_s": 600.0,
+  "per_execution_timeout_s": 120.0,
+  "activation_speed_tolerance_m_s": 0.05,
+  "motion_epsilon_m": 0.05,
+  "intervention_parameters": {
+    "ped-speed-up": {"speed_delta_m_s": 0.5},
+    "ped-speed-down": {"speed_delta_m_s": -0.5},
+    "ped-start-delay": {"dt_s": 1.0}
+  },
+  "recipe": {
+    "schema_version": "experiment-recipe.v1",
+    "recipe_id": "srev22-smoke",
+    "hypothesis": "Raising the crossing pedestrian speed increases the minimum robot-pedestrian distance on the tiny fixture crossing.",
+    "source_identity": {
+      "scenario_id": "srev22-tiny-crossing",
+      "source_ref": {
+        "artifact_id": "recipe-srev22-smoke",
+        "uri": "recipe.json",
+        "format": "experiment-recipe.v1"
+      },
+      "kind": "fixture",
+      "origin": "synthetic-constructed",
+      "evidence_boundary": "diagnostic_only",
+      "scientific_claim_allowed": false,
+      "dependent_family_status": "standalone_fixture_only"
+    },
+    "interventions": [
+      {"intervention_id": "ped-speed-up", "factor": "single_pedestrian_speed_offset", "priority": 1},
+      {"intervention_id": "ped-speed-down", "factor": "single_pedestrian_speed_offset", "priority": 2},
+      {"intervention_id": "ped-start-delay", "factor": "single_pedestrian_start_delay_offset", "priority": 3}
+    ],
+    "control_conditions": {"ped_speed_m_s": 1.0, "ped_start_delay_s": 0.0},
+    "measurements": [
+      {"name": "min_robot_ped_distance_m", "units": "metres", "expected_direction": "increase"}
+    ],
+    "budget": {"max_candidates": 3, "max_executions": 6, "wall_timeout_s": 600},
+    "stop_rules": [
+      "exhausted_candidates",
+      "execution_budget_exhausted",
+      "wall_timeout",
+      "control_fidelity_failure_blocks_treatment"
+    ],
+    "preservation_destination": "external:post-execution-preservation",
+    "admission_reference": "srev22-fixture-admission"
+  }
+}

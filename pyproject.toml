@@ -70,11 +70,11 @@ benchmark = [
     "scipy>=1.17.1",
 ]
 gpu = [
-    "torch[cuda]>=2.13.0,<2.14.0",
+    "torch>=2.13.0,<2.15.0",
 ]
 training = [
     "stable-baselines3>=2.9.0",
-    "torch>=2.13.0,<2.14.0",
+    "torch>=2.13.0,<2.15.0",
     "scikit-learn>=1.9.0",
     "optuna>=4.9.0",
     "tensorboard>=2.21.0",
@@ -715,7 +715,7 @@ examples = [
     "robot_sf[viz,benchmark]",
     "scikit-learn>=1.9.0",
     "stable-baselines3>=2.9.0",
-    "torch>=2.13.0,<2.14.0",
+    "torch>=2.13.0,<2.15.0",
 ]
 
 [project.scripts]

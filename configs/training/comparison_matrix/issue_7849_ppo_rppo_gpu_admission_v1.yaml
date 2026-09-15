@@ -1,0 +1,440 @@
+# Issue #7849 GPU admission candidate.
+#
+# This packet binds the proposed full campaign and its diagnostic Gate-1
+# canaries to exact source bytes. It is deliberately fail-closed: the current
+# runners do not yet provide every producer required by the frozen comparison
+# contract, so this file cannot authorize a Slurm submission.
+
+schema_version: training_gpu_admission.v1
+packet_id: issue_7849_ppo_rppo_gpu_admission_v1
+issue: 7849
+evidence_tier: preparation-only
+claim_boundary: >-
+  Preparation-only candidate for the registered matched PPO versus
+  RecurrentPPO comparison. No training, performance, benchmark, safety, or
+  paper-facing claim is admitted by this packet.
+execution_authorized: false
+claim_eligible: false
+
+source:
+  repository: ll7/robot_sf_ll7
+  base_ref: origin/main
+  base_commit: 104fa80f8f686e694a221c1eedc3b5cb2b3c5349
+  inventory: configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml
+  inventory_sha256: 1ed2f991ba4ec50757aadaaa12697b3d142cdf0698b7deaf82facfa6930c6d89
+  binding_rule: >-
+    The submit host must use one clean exact-head public worktree. Rehash the
+    inventory, every listed source/config/scenario/map input, and the resolved
+    environment manifest at that head immediately before any route admission.
+    A changed byte invalidates this packet and requires a new review.
+  checksums:
+    configs/training/comparison_matrix/issue_7846_ppo_rppo_contract_v1.yaml: a35aaf4ad03e1333fd0f2b1284432cdc9e18c9c7213bfd355d0a410f063da9fa
+    configs/scenarios/classic_interactions_francis2023.yaml: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+    configs/scenarios/sets/classic_cross_trap_subset.yaml: fc5c2ccec86d2bf8eac069f04fb24ecb742705844adc11b59d34c0faad685726
+    configs/training/ppo/issue_7849_ppo_full_v1.yaml: 9f74f7a99830c6ba9c576bb0d78db60a17d69a9fc2d861f35dbde1d7fa6dca2e
+    configs/training/ppo/issue_7849_ppo_gate1_canary_v1.yaml: e27c5ee24c066e56aa787fa278e08a8befaf4f941b5876e794d6f30b010c50fa
+    configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml: 2602223fd6e08c84ab50e92af1b54662d68a06f7427753773846c5cd5c6aa5d8
+    configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v1.yaml: 0ff090b58a0db47c31446200ff724f932e2c3a78c9167b772d6b3d8f62714f90
+    scripts/training/train_ppo.py: 3aacbd3af98c6ecb59a691fb9505123fa1a1adf5489df42e8ddaddae48bd8d76
+    scripts/training/train_recurrent_ppo.py: 70b47f4c973cf98da9bec299f3894e57fe974d6513bf88cfd9cc2cec1644da90
+    robot_sf/benchmark/research_answerability.py: bf38986b0968c057d2df317d2feea56d7d1a5a29ab53d8351a7d145a16f3e5e3
+    pyproject.toml: 77ace5438bcef4c1176a42ae58edb31d1864212b4bb65e253c761e79d262a0cf
+    uv.lock: 61bc32dcdb5c983d8085449b89a9d58a73af396755a33f15fa8b3f3a544f964b
+    maps/registry.yaml: 471d863ece35395e09d040610e77e8822f8cdf32a39a5caf88e8b56b1dbdfaad
+    maps/svg_maps/classic_crossing.svg: dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911
+
+frozen_contract:
+  contract_path: configs/training/comparison_matrix/issue_7846_ppo_rppo_contract_v1.yaml
+  contract_sha256: a35aaf4ad03e1333fd0f2b1284432cdc9e18c9c7213bfd355d0a410f063da9fa
+  observation:
+    mode: default_gym
+    keys: [drive_state, rays]
+    normalized_identically: true
+  action:
+    policy_command: desired_unicycle_velocity
+    components: [v, omega]
+    environment_command: commanded_linear_and_angular_acceleration
+    conversion: canonical_policy_command_to_env_action
+    dt_correct: true
+  reward: route_completion_v2
+  safety_wrapper: disabled
+  scenario_manifest: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_manifest_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  training_seeds: [123, 231, 777, 992, 1337]
+  total_timesteps_per_arm_seed: 15000000
+  independent_training_runs: 10
+  total_planned_environment_steps: 150000000
+  one_config_and_job_per_arm_seed: true
+  single_invocation_seed_list_is_valid_only_after_independence_proof: true
+  held_out_scenario_family_split_feasible: false
+  claim_scope_if_admitted: disjoint-seed in-distribution matching on the frozen scenario matrix
+
+arms:
+  ppo:
+    display_name: feed-forward PPO
+    algorithm: ppo
+    policy_id: ppo_issue_7849_full_v1
+    training_config: configs/training/ppo/issue_7849_ppo_full_v1.yaml
+    training_config_sha256: 9f74f7a99830c6ba9c576bb0d78db60a17d69a9fc2d861f35dbde1d7fa6dca2e
+    runner_script: scripts/training/train_ppo.py
+    runner_script_sha256: 3aacbd3af98c6ecb59a691fb9505123fa1a1adf5489df42e8ddaddae48bd8d76
+    current_seed_execution: blocked_single_runner_uses_seeds_zero
+    current_seed_execution_detail: >-
+      run_expert_training constructs one model from config.seeds[0] when
+      randomize_seeds is false and has no seed or run-id override. The five
+      configured values therefore do not currently prove five independent
+      jobs.
+    model_device_resolution: >-
+      The merged runner delegates device selection to Stable-Baselines3
+      default auto resolution; Gate 1 must record the resolved CUDA device and
+      reject a CPU fallback for this GPU packet.
+  recurrent_ppo:
+    display_name: true RecurrentPPO-LSTM
+    algorithm: recurrent_ppo
+    recurrent_policy: MultiInputLstmPolicy
+    policy_id: recurrent_ppo_issue_7849_full_v1
+    training_config: configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml
+    training_config_sha256: 2602223fd6e08c84ab50e92af1b54662d68a06f7427753773846c5cd5c6aa5d8
+    runner_script: scripts/training/train_recurrent_ppo.py
+    runner_script_sha256: 70b47f4c973cf98da9bec299f3894e57fe974d6513bf88cfd9cc2cec1644da90
+    current_seed_execution: per_seed_plan_present
+    current_seed_execution_detail: >-
+      The runner creates a separate plan, run identity, output directory, and
+      seed for each configured seed; this remains subject to the metric and
+      evaluation gates below.
+
+full_budget:
+  status: blocked_before_submission
+  per_arm_seed_steps: 15000000
+  training_seed_count: 5
+  arm_count: 2
+  independent_run_count: 10
+  total_environment_steps: 150000000
+  full_budget_training_outcomes: forbidden_before_all_gates
+  config_resolution:
+    ppo: configs/training/ppo/issue_7849_ppo_full_v1.yaml
+    recurrent_ppo: configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml
+  command_shapes:
+    ppo: >-
+      .venv/bin/python scripts/training/train_ppo.py --config
+      configs/training/ppo/issue_7849_ppo_full_v1.yaml --log-level INFO
+    recurrent_ppo: >-
+      .venv/bin/python scripts/training/train_recurrent_ppo.py --config
+      configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml --run-id
+      issue7849-recurrent-seed-run --output-dir output/training/issue_7849_full/recurrent
+      --log-level INFO
+  command_use: >-
+    These are command shapes for a later private route packet. They are not
+    submit commands and must not be run until the seed, answerability, domain,
+    route, and artifact gates are green. The feed-forward shape cannot be
+    multiplied over five seeds until its seed-independent invocation blocker
+    is repaired and revalidated.
+
+checkpoint_evaluation:
+  status: blocked_metric_and_seed_producers
+  evaluation_scenario_manifest: configs/scenarios/classic_interactions_francis2023.yaml
+  evaluation_scenario_manifest_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  episodes_per_evaluation: 100
+  deterministic_inference: true
+  scheduled_evaluation_steps:
+    - 1000000
+    - 2000000
+    - 3000000
+    - 4000000
+    - 5000000
+    - 6000000
+    - 7000000
+    - 8000000
+    - 9000000
+    - 10000000
+    - 11000000
+    - 12000000
+    - 13000000
+    - 14000000
+    - 15000000
+  checkpoint_kinds_required: [latest, scheduled, best, final]
+  selection_rule:
+    metric: success_rate
+    direction: maximize
+    tie_break: earliest evaluation step
+    collision_guardrail: report collision_rate separately and reject any rule that lets success compensate a material collision regression
+    no_outcome_tuning: true
+  evaluation_seed_manifest:
+    status: missing_explicit_disjoint_manifest
+    required: true
+    current_runner_behavior: >-
+      Feed-forward evaluation derives deterministic seed blocks from the
+      training seed list, while recurrent evaluation derives its seed from the
+      training seed. Neither runner accepts or records a separate immutable
+      disjoint evaluation-seed manifest.
+  recurrent_metric_producer:
+    status: blocked
+    current_behavior: >-
+      The recurrent runner records mean_episode_return as its selection proxy
+      while labeling the configured metric. It does not emit the required
+      success_rate and collision_rate checkpoint metrics for this campaign.
+    required_remedy: native contract-aligned evaluation metrics and checkpoint selection
+  feed_forward_metric_producer:
+    status: requires_contract_audit
+    current_behavior: >-
+      The feed-forward lane exposes the configured metric surface, but its
+      full per-seed execution and explicit disjoint evaluation identities still
+      require the Gate-0 audit.
+
+gate_0_exact_source:
+  status: blocked
+  required:
+    - clean exact-head public worktree at source.base_commit plus reviewed candidate files
+    - all inventory source, scenario, map, dependency, and artifact bytes rehashed
+    - #7846 contract and answerability validator pass
+    - #7847 runtime smoke and #7848 stateful adapter smoke pass at the same head
+    - one independent feed-forward config/job per training seed
+    - native recurrent metric producer for success and collision checkpoint selection
+    - explicit disjoint evaluation-seed manifest consumed by both arms
+    - outcome-free Domain-Aware Approval naming this exact packet
+    - live private route, account, QoS, allocation, and storage preflight
+
+gate_1_canary:
+  status: not_run
+  evidence_tier: diagnostic-only
+  outcome_use: forbidden
+  canary_seed: 4014
+  canary_seed_is_disjoint_from_full_training_seeds: true
+  canary_config_sha256s:
+    ppo: e27c5ee24c066e56aa787fa278e08a8befaf4f941b5876e794d6f30b010c50fa
+    recurrent_ppo: 0ff090b58a0db47c31446200ff724f932e2c3a78c9167b772d6b3d8f62714f90
+  canary_configs:
+    ppo: configs/training/ppo/issue_7849_ppo_gate1_canary_v1.yaml
+    recurrent_ppo: configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v1.yaml
+  canary_inputs:
+    ppo:
+      config: configs/training/ppo/issue_7849_ppo_gate1_canary_v1.yaml
+      config_sha256: e27c5ee24c066e56aa787fa278e08a8befaf4f941b5876e794d6f30b010c50fa
+    recurrent_ppo:
+      config: configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v1.yaml
+      config_sha256: 0ff090b58a0db47c31446200ff724f932e2c3a78c9167b772d6b3d8f62714f90
+  canary_budget:
+    total_timesteps: 2048
+    evaluation_episodes: 3
+    scheduled_evaluation_steps: [1024, 2048]
+  route_boundary: >-
+    Run only inside an already-authorized private GPU allocation after source,
+    domain, and route preflight. This block describes in-allocation commands;
+    it does not contain a scheduler submission command.
+  gpu_probe_command: >-
+    .venv/bin/python -c "import torch; assert torch.cuda.is_available(); assert
+    torch.cuda.device_count() >= 1; print(torch.cuda.get_device_name(0))"
+  ppo_command: >-
+    CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/training/train_ppo.py
+    --config configs/training/ppo/issue_7849_ppo_gate1_canary_v1.yaml
+    --log-level INFO --log-file output/training/issue_7849_gate1/ppo.log
+  recurrent_ppo_command: >-
+    CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/training/train_recurrent_ppo.py
+    --config configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v1.yaml
+    --run-id issue7849-gate1-recurrent-seed4014
+    --output-dir output/training/issue_7849_gate1/recurrent --log-level INFO
+  required_receipt:
+    - source and resolved config digests
+    - native algorithm and resolved CUDA device
+    - environment-step progress and finite actions/losses/states
+    - recurrent reset accounting at episode boundaries
+    - evaluation and checkpoint cardinality at both scheduled steps
+    - CPU/RAM/GPU allocation and peak usage
+    - durable artifact upload and terminal finalization
+  canary_failure_policy: preserve diagnostic receipt, classify failure, and do not tune or retry for a favorable outcome
+
+gpu_resource_preflight:
+  status: required_before_route_admission
+  public_requirements:
+    gpu_count: 1
+    cuda_required: true
+    minimum_gpu_memory_gib: 16
+    cpus_per_task: 4
+    memory_gib: 16
+    cpu_fallback_forbidden: true
+    wall_time: private_route_feasibility_check
+  live_route_evidence:
+    availability: observed_on_authorized_candidate_route
+    entitlement: association_observed_but_must_be_rechecked_at_submission
+    submit_host_checkout: clean_dedicated_worktree_required
+    storage_quota: unknown_until_private_preflight
+    submit_ready: false
+  required_commands:
+    source_head: git rev-parse HEAD
+    source_state: git status --porcelain=v1 --branch
+    executable_python: test -x .venv/bin/python
+    cuda_runtime: .venv/bin/python -c "import torch; assert torch.cuda.is_available(); print(torch.version.cuda)"
+    gpu_inventory: nvidia-smi --query-gpu=name,memory.total,memory.free,driver_version --format=csv,noheader
+  private_route_fields_to_record:
+    - account
+    - partition
+    - qos
+    - allocation host
+    - requested and allocated CPU/RAM/GPU
+    - wall-time feasibility
+    - durable artifact destination and quota
+  private_values_in_public_packet: forbidden
+
+domain_aware_approval:
+  status: required_missing
+  approved: false
+  issue_label: domain-review-required
+  decision_owner: maintainer with domain authority
+  exact_campaign_name: issue_7849_ppo_rppo_gpu_admission_v1
+  decisions_required:
+    - confirm the recurrence-only question remains answerable under default_gym drive_state and rays
+    - approve disjoint-seed in-distribution claims when no held-out family split is feasible
+    - approve success_rate selection with collision guardrail and the full checkpoint timeline
+    - approve the immutable five training seeds and no outcome-dependent replacement
+    - approve the answerability, artifact custody, and failure classifications
+  decision_record: explicit review on issue 7849 or its linked admission review
+  no_full_training_until: explicit approved decision and compute authorization at this exact source head
+
+answerability:
+  schema_version: research_answerability.v1
+  question:
+    research_question: >-
+      Under the frozen matched simulator contract, does true RecurrentPPO
+      improve collision-free route completion or reduce low-progress and
+      timeout failure relative to feed-forward PPO without a material collision
+      or severe-intrusion regression?
+    bounded_claim: >-
+      Only a paired disjoint-training-seed, in-distribution comparison on the
+      frozen scenario matrix and named observation/action/reward contracts.
+    negative_result_meaning: >-
+      A valid null or negative result is terminal evidence under the frozen
+      decision predicates; an invalid or incomplete matrix is inconclusive and
+      cannot be relabeled as a policy failure.
+    decision_vocabulary: [continue, stop, inconclusive, invalid]
+  estimand:
+    primary: paired difference in collision-free route completion probability
+    reference_or_null: zero paired arm difference under the frozen comparison contract
+    decision_predicates: >-
+      Require the primary comparison and collision/severe-intrusion guardrails
+      to satisfy the #7846 rule before any continuation decision.
+    minimally_important_effect: >-
+      The registered #7846 margin and collision guardrail must be explicitly
+      confirmed by Domain-Aware Approval before execution.
+  producers:
+    - field: full_matrix_episode_rows
+      producer: native matched PPO and RecurrentPPO evaluation runners
+      source: scripts/training/train_ppo.py and scripts/training/train_recurrent_ppo.py
+      unit: one immutable scenario and evaluation-seed episode row
+      direction: paired arm rows share scenario and evaluation-seed identity
+      denominator: all planned valid evaluation cells with explicit missingness
+      pairing_key: training_seed plus scenario_id plus evaluation_seed
+      missingness_rule: retain missing and invalid rows in the ledger and exclude them from success evidence
+      status: blocked
+      execution_mode: unavailable
+      required: true
+    - field: checkpoint_selection_metrics
+      producer: native metric-aligned checkpoint evaluator
+      source: scripts/training/train_recurrent_ppo.py and scripts/training/train_ppo.py
+      unit: scheduled checkpoint evaluation
+      direction: maximize success_rate with separate collision guardrail
+      denominator: configured evaluation episodes per checkpoint
+      pairing_key: arm plus training_seed plus checkpoint_step
+      missingness_rule: missing metric invalidates selection and preserves the checkpoint lineage
+      status: blocked
+      execution_mode: unavailable
+      required: true
+    - field: disjoint_evaluation_seed_manifest
+      producer: immutable shared evaluation-seed manifest consumed by both arms
+      source: admission packet source inventory and later resolved launch manifest
+      unit: evaluation seed identity
+      direction: disjoint from all training seeds and identical across arms
+      denominator: complete configured scenario and evaluation-seed cross product
+      pairing_key: scenario_id plus evaluation_seed
+      missingness_rule: absent, reused, or unpaired identities block the campaign
+      status: missing
+      execution_mode: unavailable
+      required: true
+    - field: recurrent_state_integrity
+      producer: RecurrentPPO stateful evaluation adapter
+      source: robot_sf/training/recurrent_runtime.py
+      unit: recurrent evaluation episode
+      direction: finite state with reset at every episode boundary
+      denominator: every recurrent evaluation episode
+      pairing_key: training_seed plus scenario_id plus evaluation_seed
+      missingness_rule: any non-finite or leaked state invalidates the affected row
+      status: blocked
+      execution_mode: unavailable
+      required: true
+  analysis:
+    analysis_unit: paired evaluation-seed scenario cell nested within training seed
+    resampling_unit: training seed with paired scenario/evaluation-seed cells
+    command: >-
+      Run the registered #7846 paired analysis owner only after all required
+      producers and exact row accounting are available.
+    multiplicity: report the preregistered primary and secondary metrics without outcome-driven selection
+    sensitivity_plan: hierarchical paired bootstrap and explicit missingness/attrition sensitivity
+    dry_run_status: blocked
+    comparability_status: blocked
+  design:
+    mode: decision_capable
+    power_status: unknown
+    budget: 2 arms x 5 independent training seeds x 15000000 steps
+    sample_size: 10 training runs and the complete frozen scenario/evaluation-seed matrix
+  artifacts:
+    raw_owner: private operations durable artifact owner
+    durable_path: approved external durable destination recorded in the private launch receipt
+    durability_status: planned
+    incomplete_policy: preserve all attempts and missingness; exclude invalid rows from claims and stop unresolved gaps
+    checksums: [source inventory, resolved config, environment manifest, checkpoint index, raw rows, compact analysis]
+
+compute_authorization:
+  status: blocked
+  authorized: false
+  blocking_reasons:
+    - feed-forward five-seed independent execution is not represented by the current CLI
+    - recurrent checkpoint selection currently uses a mean_episode_return proxy
+    - no explicit shared disjoint evaluation-seed manifest is consumed by both runners
+    - Domain-Aware Approval is missing
+    - live private route, quota, and artifact custody are not yet bound to this source head
+
+expert_data_6127_to_1496:
+  upstream_issue: 6127
+  downstream_issue: 1496
+  current_state: blocked_recovery_and_data_acceptance
+  acceptance_requirement: at least 10000 usable balanced transitions and at least 10 nondegenerate episodes per selected stratum with a durable manifest
+  current_evidence: existing registered expert_traj_v1 dataset has only 12 episodes and is insufficient for the matched warm-start claim
+  next_step: recover_or_repair_6127_outputs_and_run_loader_balance_split_checkpoint_preflight
+  reuse_for_7849: forbidden
+  training_submission: blocked_until_6127_acceptance
+
+preserved_vs_executable:
+  preserved_outputs:
+    - identifier: issue_6127_registered_expert_traj_v1
+      status: preserved_but_insufficient_for_issue_1496
+      disposition: recover_and_verify_receipt_before_acquiring_more_data
+    - identifier: historical_checkpoints_or_partial_training_manifests
+      status: preserve_and_inspect_if_found
+      disposition: recover_metrics_and_checkpoint_lineage_before considering any rerun
+  executable_training_packets:
+    issue_7849_full_matrix: none
+    issue_7849_gate1: in_allocation_command_shapes_only_after_gate_0_and_private_route_preflight
+  replacement_policy: no preserved output is replaced by a new training campaign without differential evidence
+
+smallest_executable_next_step:
+  action: >-
+    Repair the three Gate-0 producer gaps in a reviewed source change: give the
+    feed-forward lane one exact seed invocation per independent job, make the
+    recurrent lane emit native success/collision checkpoint metrics, and add
+    one immutable disjoint evaluation-seed manifest consumed by both arms.
+  then: >-
+    Re-run focused contract, answerability, source-inventory, and merged smoke
+    checks; obtain explicit Domain-Aware Approval; perform private account/QoS,
+    GPU, memory, quota, worktree, and artifact-route preflight; then run one
+    diagnostic Gate-1 canary per arm. Do not start the 150M-step matrix from
+    this candidate.
+
+execution_boundary:
+  submit_slurm_from_this_issue: false
+  gate1_submission_in_this_pr: false
+  full_training_in_this_pr: false
+  inspect_outcomes_for_tuning: false
+  preserve_failed_or_incomplete_attempts: true
+  scientific_claim: false
+
+validation_command: >-
+  .venv/bin/python -m pytest tests/training/test_issue_7849_gpu_admission_packet.py -q

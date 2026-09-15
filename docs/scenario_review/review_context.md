@@ -1,21 +1,18 @@
 # Review context (SREV-06)
 
-Command-line glossary: SREV is the scenario-review portfolio; a cohort context
-report (`review-context.v1`) carries denominators, outcome frequencies, metric
-positions, and selection coverage; a component request (`component-request.v1`)
-is the fixture envelope that invokes one workbench component; shared contract
-shapes live in `robot_sf/analysis_workbench/review_contracts.py` (SREV-01).
+SREV is the scenario-review portfolio. SREV-06 produces a diagnostic-only
+cohort context report from one explicitly selected, recorded campaign-result
+source. It does not execute a simulator or establish population, benchmark,
+causal, safety, or paper-facing claims.
 
-## What it does
+## Contract and command
 
-`python -m robot_sf.analysis_workbench.review_context` builds a cohort context
-report from campaign-result inputs. Repeated excerpts never inflate unique
-counts; cohort, config, and seed grain are recorded explicitly; missing metrics
-retain denominator and missing count; tie percentiles use documented linear
-interpolation; selection coverage reports known/unknown ids; an unresolvable
-campaign reference yields unavailable context instead of a population inference.
-
-## Command
+The component consumes the shared `component-request.v1` request and emits the
+shared `component-result.v1` envelope. Its descriptor is available from
+`robot_sf.analysis_workbench.review_context.descriptor()` and its leaf-owned
+machine-readable payload registry from `output_schemas()`. The registry covers
+`review-context.v1` and `missing-capability-report.v1`; the shared envelope
+schemas remain owned by SREV-01.
 
 ```bash
 uv run python -m robot_sf.analysis_workbench.review_context \
@@ -24,20 +21,33 @@ uv run python -m robot_sf.analysis_workbench.review_context \
   --output output/scenario_review/srev-06-smoke
 ```
 
-## Output
+Every source reference must declare its expected family schema, SHA-256,
+40-character source commit, and non-empty configuration identity. The loader
+checks the exact bytes, rejects absolute/traversal/symlink paths, and requires
+the source payload's schema and execution status. Multiple campaign or
+selection candidates require an explicit `canonical_*_artifact_id` config key;
+they are never silently merged.
 
-- `context-report.json`: grain, denominator, outcome frequencies, per-metric
-  summaries (count/missing/min/max/mean/p25/p50/p75 plus the percentile method),
-  selection coverage, and campaign availability.
-- `context-report.html`: standalone table of outcomes and metric positions.
-- The printed result envelope carries `complete`, `partial`, `unavailable`, or
-  `failed` with stable reason codes. Only `complete` results list envelope
-  artifacts; report files stay on disk either way.
+## Outputs
 
-## Unavailable reasons and limits
+- `context-report.json` (`review-context.v1`) records planner/scenario/config/
+  seed grain, the denominator of admitted rows, outcome frequencies, missing-aware
+  metric summaries, deterministic linear-interpolation percentiles, selection
+  coverage, the selected campaign source, and excluded row statuses.
+- `context-report.html` is a deterministic standalone rendering of the same
+  diagnostic context.
+- `missing-capability-report.json` (`missing-capability-report.v1`) records
+  optional streams that were not supplied and structured diagnostics.
+- A `complete` result lists all three files in its component-result envelope.
+  Partial, unavailable, and failed results do not list usable artifacts;
+  partial reports may remain on disk as diagnostic output.
 
-- Corrupt sources, unresolved campaign references, unknown selections, and
-  missing families make the result `partial` or `failed`, never silently complete.
-- Evidence boundary: the report describes the provided cohort exactly; it does
-  not establish population claims, causal mechanisms, or benchmark readiness. No
-  safety or paper-facing claim follows from a context report.
+Fallback, degraded, unavailable, and failed rows are excluded from the
+denominator and are recorded in `exclusions`. A requested capability without an
+actual valid source returns `unavailable`; malformed or conflicting source
+content returns `failed`. An absent or unresolved `campaign_id` returns
+`unavailable` without writing a cohort report. Unknown selections and invalid
+metric values prevent a complete result and remain visible as diagnostics.
+
+The checked-in fixture is synthetic and diagnostic-only. Generated output is
+temporary under `output/` and is not a durable evidence dependency.

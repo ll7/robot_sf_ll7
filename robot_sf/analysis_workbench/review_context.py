@@ -1,12 +1,13 @@
-"""SREV-06 review-context component: cohort context reports from campaign results.
+"""SREV-06 review-context component: diagnostic cohort context reports.
 
-This module owns the SREV-06 leaf surface only: a ``run(request)`` adapter plus a
-standalone CLI that consumes the SREV-01 shared contracts and builds a cohort
-context report (denominators, outcome frequencies, metric positions, selection
-coverage) from explicit campaign-result inputs. Repeated excerpts never inflate
-counts; missing metrics retain denominator and missing count; tie percentiles
-are deterministic and documented; absent campaign references yield unavailable
-context, never population inference.
+This module is a deliberately narrow contract consumer.  It reads an explicitly
+selected, integrity-checked campaign-result document and optionally an
+episode-selection document, then writes a diagnostic-only JSON/HTML context
+report.  It never executes a simulator, planner, benchmark, or learned model.
+
+The shared SREV-01 component request/result envelopes remain authoritative.  The
+leaf-owned ``OUTPUT_SCHEMAS`` registry documents the two payload schemas that
+this component advertises without changing the shared contract owner.
 """
 
 from __future__ import annotations
@@ -16,24 +17,37 @@ import hashlib
 import html
 import json
 import math
+import os
+import re
+import stat
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from jsonschema import Draft202012Validator
+
 from robot_sf.analysis_workbench.review_contracts import (
+    COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
     COMPONENT_REQUEST_SCHEMA_VERSION,
-    ComponentDescriptor,
+    COMPONENT_RESULT_SCHEMA_VERSION,
     ComponentRequest,
     ComponentResult,
     ReviewContractsValidationError,
+    SourceRef,
+    component_descriptor_from_dict,
     component_request_from_dict,
 )
 
 COMPONENT_ID = "srev06-review-context"
 COMPONENT_VERSION = "1.0.0"
 
-REQUIRED_CAPABILITIES = ("campaign-result",)
-OPTIONAL_CAPABILITIES = ("episode-selection",)
+CAMPAIGN_RESULT_FORMAT = "campaign-result"
+EPISODE_SELECTION_FORMAT = "episode-selection"
+CAMPAIGN_RESULT_SCHEMA = "campaign-result.v1"
+EPISODE_SELECTION_SCHEMA = "episode-selection.v1"
+
+REQUIRED_CAPABILITIES = (CAMPAIGN_RESULT_FORMAT,)
+OPTIONAL_CAPABILITIES = (EPISODE_SELECTION_FORMAT,)
 
 OUTPUT_REPORT_FILENAME = "context-report.json"
 OUTPUT_HTML_FILENAME = "context-report.html"
@@ -45,131 +59,589 @@ STATUS_UNAVAILABLE = "unavailable"
 STATUS_FAILED = "failed"
 
 PERCENTILE_METHOD = "linear-interpolation-on-sorted-values"
-
-_DESCRIPTOR = ComponentDescriptor(
-    component_id=COMPONENT_ID,
-    component_version=COMPONENT_VERSION,
-    supported_input_versions=(COMPONENT_REQUEST_SCHEMA_VERSION,),
-    output_types=("review-context.v1", "missing-capability-report.v1"),
-    required_capabilities=REQUIRED_CAPABILITIES,
-    optional_capabilities=OPTIONAL_CAPABILITIES,
+CLAIM_BOUNDARY = "diagnostic_only_recorded_cohort_context"
+EVIDENCE_STATUS = "diagnostic_only"
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+_SEMVER_RE = re.compile(r"^(?:v)?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+_EXECUTION_STATUSES = frozenset(
+    {"native", "adapter", "fallback", "degraded", "unavailable", "failed"}
 )
+_NON_ADMISSIBLE_STATUSES = frozenset({"fallback", "degraded", "unavailable", "failed"})
+_MAX_SOURCE_BYTES = 64 * 1024 * 1024
+
+
+# These schemas belong to this leaf's payloads.  The shared request/result
+# schemas intentionally remain in review_contracts.py, which is owned by SREV-01.
+OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "review-context.v1": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://robot-sf.local/schemas/review-context.v1.json",
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "schema_version",
+            "evidence_status",
+            "claim_boundary",
+            "grain",
+            "denominator",
+            "outcomes",
+            "metrics",
+            "selection_coverage",
+            "campaign",
+            "exclusions",
+            "source_provenance",
+        ],
+        "properties": {
+            "schema_version": {"const": "review-context.v1"},
+            "evidence_status": {"const": EVIDENCE_STATUS},
+            "claim_boundary": {"type": "string", "minLength": 1},
+            "grain": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "planner_ids",
+                    "scenario_ids",
+                    "seeds",
+                    "config_ids",
+                    "episodes",
+                ],
+                "properties": {
+                    "planner_ids": {"type": "array", "items": {"type": "string"}},
+                    "scenario_ids": {"type": "array", "items": {"type": "string"}},
+                    "seeds": {"type": "array", "items": {"type": "integer"}},
+                    "config_ids": {"type": "array", "items": {"type": "string"}},
+                    "episodes": {"type": "integer", "minimum": 0},
+                },
+            },
+            "denominator": {"type": "integer", "minimum": 0},
+            "outcomes": {
+                "type": "object",
+                "additionalProperties": {"type": "integer", "minimum": 0},
+            },
+            "metrics": {
+                "type": "object",
+                "additionalProperties": {"type": "object"},
+            },
+            "selection_coverage": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["selected", "denominator", "unknown_selected_ids"],
+                "properties": {
+                    "selected": {"type": "integer", "minimum": 0},
+                    "denominator": {"type": "integer", "minimum": 0},
+                    "unknown_selected_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+            },
+            "campaign": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["campaign_id", "source_artifact_id", "availability"],
+                "properties": {
+                    "campaign_id": {"type": "string", "minLength": 1},
+                    "source_artifact_id": {"type": "string", "minLength": 1},
+                    "availability": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["status", "reason"],
+                        "properties": {
+                            "status": {"const": STATUS_COMPLETE},
+                            "reason": {"type": "string"},
+                        },
+                    },
+                },
+            },
+            "exclusions": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["count", "by_status", "rows"],
+                "properties": {
+                    "count": {"type": "integer", "minimum": 0},
+                    "by_status": {
+                        "type": "object",
+                        "additionalProperties": {"type": "integer", "minimum": 0},
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["episode_id", "status", "reason"],
+                            "properties": {
+                                "episode_id": {"type": "string", "minLength": 1},
+                                "status": {"type": "string", "minLength": 1},
+                                "reason": {"type": "string", "minLength": 1},
+                            },
+                        },
+                    },
+                },
+            },
+            "source_provenance": {
+                "type": "array",
+                "items": {"type": "object"},
+            },
+        },
+    },
+    "missing-capability-report.v1": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "https://robot-sf.local/schemas/missing-capability-report.v1.json",
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "schema_version",
+            "missing_capabilities",
+            "skipped_optional_streams",
+            "diagnostics",
+        ],
+        "properties": {
+            "schema_version": {"const": "missing-capability-report.v1"},
+            "missing_capabilities": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "skipped_optional_streams": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "diagnostics": {
+                "type": "array",
+                "items": {"type": "object", "required": ["code"]},
+            },
+        },
+    },
+}
+
+# Explicit alias for callers looking for a registry-shaped name.
+OUTPUT_SCHEMA_REGISTRY = OUTPUT_SCHEMAS
+
+_DESCRIPTOR_DOC: dict[str, Any] = {
+    "schema_version": COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
+    "component_id": COMPONENT_ID,
+    "component_version": COMPONENT_VERSION,
+    "supported_input_versions": [COMPONENT_REQUEST_SCHEMA_VERSION],
+    "output_types": list(OUTPUT_SCHEMAS),
+    "required_capabilities": list(REQUIRED_CAPABILITIES),
+    "optional_capabilities": list(OPTIONAL_CAPABILITIES),
+}
+DESCRIPTOR = component_descriptor_from_dict(_DESCRIPTOR_DOC)
+
+
+@dataclass(frozen=True, slots=True)
+class _Diagnostic:
+    """One structured diagnostic with a stable machine-readable code."""
+
+    code: str
+    severity: str = "error"
+    detail: str = ""
+
+    def as_dict(self) -> dict[str, str]:
+        """Return the JSON representation of this diagnostic."""
+        document = {"code": self.code, "severity": self.severity}
+        if self.detail:
+            document["detail"] = self.detail
+        return document
+
+
+@dataclass(frozen=True, slots=True)
+class _LoadedSource:
+    """One source document after integrity and schema admission."""
+
+    ref: SourceRef
+    payload: dict[str, Any]
+    provenance: dict[str, Any]
+    execution_status: str
 
 
 @dataclass
 class _Episode:
-    """One deduplicated episode with metric values."""
+    """One admitted episode at the canonical episode grain."""
 
     episode_id: str
-    seed: Any = None
+    planner_id: str = "unknown"
+    scenario_id: str = "unknown"
+    seed: int | None = None
     config_id: str = "unknown"
     outcome: str = "unknown"
     metrics: dict[str, Any] = field(default_factory=dict)
+    execution_status: str = "native"
+    source_artifact_id: str = ""
+
+    @property
+    def identity(self) -> tuple[Any, ...]:
+        """Return the full identity used for duplicate detection."""
+        return (
+            self.episode_id,
+            self.planner_id,
+            self.scenario_id,
+            self.seed,
+            self.config_id,
+        )
+
+    def fingerprint(self) -> str:
+        """Return a deterministic fingerprint for exact duplicate detection."""
+        payload = {
+            "identity": self.identity,
+            "outcome": self.outcome,
+            "metrics": self.metrics,
+            "execution_status": self.execution_status,
+        }
+        try:
+            encoded = json.dumps(
+                payload, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode("utf-8")
+        except (TypeError, ValueError, OverflowError):
+            encoded = repr(payload).encode("utf-8", errors="backslashreplace")
+        return _sha256_bytes(encoded)
 
 
 def descriptor() -> dict[str, Any]:
-    """Return this component's self-contained capability descriptor."""
-    return asdict(_DESCRIPTOR)
+    """Return a JSON-safe, schema-valid component descriptor."""
+    return json.loads(json.dumps(_DESCRIPTOR_DOC))
+
+
+def output_schemas() -> dict[str, dict[str, Any]]:
+    """Return a JSON-safe copy of the leaf-owned output schema registry."""
+    return json.loads(json.dumps(OUTPUT_SCHEMAS))
 
 
 def _sha256_bytes(payload: bytes) -> str:
-    """Return the hex SHA-256 digest of raw bytes."""
+    """Return the hexadecimal SHA-256 digest of raw bytes."""
     return hashlib.sha256(payload).hexdigest()
 
 
-def _write_json(path: Path, payload: Any) -> str:
-    """Atomically write strict-JSON.
+def _safe_detail(value: Any, *, limit: int = 160) -> str:
+    """Render bounded diagnostic detail without letting input control policy.
 
     Returns:
-        Hex digest of the written bytes.
+        A bounded, NUL-escaped diagnostic string.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(text, encoding="utf-8")
-    tmp_path.replace(path)
-    return _sha256_bytes(text.encode("utf-8"))
+    text = str(value).replace("\x00", "\\x00")
+    return text[:limit]
+
+
+def _add_diagnostic(
+    diagnostics: list[_Diagnostic], code: str, *, severity: str = "error", detail: Any = ""
+) -> None:
+    """Append one bounded structured diagnostic."""
+    diagnostics.append(_Diagnostic(code, severity, _safe_detail(detail) if detail else ""))
+
+
+def _diagnostic_documents(diagnostics: list[_Diagnostic]) -> tuple[dict[str, str], ...]:
+    """Return sorted, deduplicated diagnostic documents."""
+    unique = {
+        (
+            item.code,
+            item.severity,
+            item.detail,
+        ): item.as_dict()
+        for item in diagnostics
+    }
+    return tuple(unique[key] for key in sorted(unique))
+
+
+def _reason_with_diagnostics(prefix: str, diagnostics: list[_Diagnostic]) -> str:
+    """Return a bounded reason that retains stable diagnostic codes."""
+    codes = sorted({item.code for item in diagnostics})[:8]
+    return prefix if not codes else f"{prefix}; {', '.join(codes)}"
+
+
+def _result(
+    request_id: str,
+    component_id: str,
+    status: str,
+    *,
+    reason: str = "",
+    diagnostics: list[_Diagnostic] | None = None,
+    provenance: dict[str, Any] | None = None,
+    artifacts: tuple[dict[str, Any], ...] = (),
+) -> ComponentResult:
+    """Build a typed result envelope with stable structured diagnostics.
+
+    Returns:
+        A component result containing JSON-safe diagnostic mappings.
+    """
+    return ComponentResult(
+        request_id=request_id,
+        component_id=component_id,
+        status=status,
+        artifacts=artifacts,
+        diagnostics=_diagnostic_documents(diagnostics or []),
+        provenance=provenance or {},
+        reason=reason,
+    )
+
+
+def _request_identity(request: Any) -> tuple[str, str]:
+    """Extract safe identity fields for malformed direct API calls.
+
+    Returns:
+        The request and component identifiers safe for a failure envelope.
+    """
+    if isinstance(request, ComponentRequest):
+        return request.request_id, request.component_id
+    if isinstance(request, dict):
+        request_id = request.get("request_id")
+        component_id = request.get("component_id")
+        return (
+            request_id if isinstance(request_id, str) and request_id else "unknown",
+            component_id if isinstance(component_id, str) and component_id else COMPONENT_ID,
+        )
+    return "unknown", COMPONENT_ID
 
 
 def _check_version_compatible(config: dict[str, Any]) -> str | None:
-    """Return a failure reason when the request demands a newer component.
-
-    Returns:
-        Failure reason string, or None when the component version satisfies it.
-    """
+    """Return a stable failure reason for an incompatible component version."""
     minimum = config.get("min_component_version")
     if minimum is None:
         return None
-    try:
-        wanted = int(str(minimum).split(".", maxsplit=1)[0])
-        ours = int(COMPONENT_VERSION.split(".", maxsplit=1)[0])
-    except ValueError:
-        return f"incompatible_component_version: malformed min_component_version: {minimum!r}"
+    wanted_match = _SEMVER_RE.fullmatch(str(minimum))
+    ours_match = _SEMVER_RE.fullmatch(COMPONENT_VERSION)
+    if wanted_match is None or ours_match is None:
+        return f"incompatible_component_version: malformed min_component_version: {_safe_detail(minimum)!r}"
+    wanted = tuple(int(value) for value in wanted_match.groups())
+    ours = tuple(int(value) for value in ours_match.groups())
     if wanted > ours:
-        return f"incompatible_component_version: request needs v{wanted}, component is v{ours}"
+        return (
+            "incompatible_component_version: "
+            f"request needs v{str(minimum).lstrip('v')}, component is v{COMPONENT_VERSION}"
+        )
     return None
 
 
 def _reject_not_applicable(request: ComponentRequest) -> ComponentResult | None:
-    """Reject requests this component cannot serve.
+    """Reject unsupported components, capabilities, and versions.
 
     Returns:
-        An unavailable/failed result, or None when the request applies.
+        An unavailable/failed result, or ``None`` when the request applies.
     """
     if request.component_id != COMPONENT_ID:
-        return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
-            status=STATUS_UNAVAILABLE,
-            reason=f"unsupported_component: {request.component_id}",
+        return _result(
+            request.request_id,
+            request.component_id,
+            STATUS_UNAVAILABLE,
+            reason=f"unsupported_component: {_safe_detail(request.component_id)}",
         )
-    supported = set(_DESCRIPTOR.required_capabilities) | set(_DESCRIPTOR.optional_capabilities)
-    missing = [name for name in request.required_capabilities if name not in supported]
+    supported = set(REQUIRED_CAPABILITIES) | set(OPTIONAL_CAPABILITIES)
+    missing = sorted(set(request.required_capabilities) - supported)
     if missing:
-        return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
-            status=STATUS_UNAVAILABLE,
-            reason=f"missing_required_capabilities: {', '.join(sorted(missing))}",
+        return _result(
+            request.request_id,
+            request.component_id,
+            STATUS_UNAVAILABLE,
+            reason=f"missing_required_capabilities: {', '.join(missing)}",
         )
     version_error = _check_version_compatible(request.config)
     if version_error is not None:
-        return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
-            status=STATUS_FAILED,
+        return _result(
+            request.request_id,
+            request.component_id,
+            STATUS_FAILED,
             reason=version_error,
         )
     return None
 
 
-def _resolve_source(path_value: str, base: Path) -> Path:
-    """Resolve a source URI under the base directory.
+def _path_parts(path_value: str, *, kind: str) -> tuple[str, ...]:
+    """Validate a relative POSIX path and return normalized parts.
 
     Returns:
-        Resolved path; absolute URIs and traversal are rejected.
+        Normalized path components.
     """
-    candidate = Path(path_value)
-    if candidate.is_absolute() or ".." in candidate.parts:
+    try:
+        candidate = Path(path_value)
+        windows = PureWindowsPath(path_value)
+    except (TypeError, ValueError) as error:
         raise ReviewContractsValidationError(
-            [f"source uri rejected (absolute or traversal): {path_value}"]
+            [f"{kind} rejected: malformed path: {type(error).__name__}"]
+        ) from error
+    if (
+        not isinstance(path_value, str)
+        or not candidate.parts
+        or candidate.is_absolute()
+        or windows.is_absolute()
+        or bool(windows.drive)
+        or ".." in candidate.parts
+        or ".." in windows.parts
+    ):
+        raise ReviewContractsValidationError(
+            [f"{kind} rejected (absolute or traversal): {_safe_detail(path_value)}"]
         )
-    return base / candidate
+    return candidate.parts
+
+
+def _resolve_source(path_value: str, base: Path) -> Path:
+    """Resolve a source path and reject lexical or real-path escapes.
+
+    Returns:
+        The contained regular-file path.
+    """
+    parts = _path_parts(path_value, kind="source uri")
+    try:
+        root = base.resolve(strict=True)
+        if not root.is_dir():
+            raise ReviewContractsValidationError([f"source base is not a directory: {base}"])
+        current = root
+        for part in parts:
+            current = current / part
+            if current.is_symlink():
+                raise ReviewContractsValidationError(
+                    [f"source uri rejected (symlink component): {_safe_detail(path_value)}"]
+                )
+        resolved = current.resolve(strict=True)
+    except ReviewContractsValidationError:
+        raise
+    except (OSError, RuntimeError) as error:
+        raise ReviewContractsValidationError(
+            [f"source uri cannot be resolved safely: {type(error).__name__}"]
+        ) from error
+    if not resolved.is_relative_to(root) or not resolved.is_file():
+        raise ReviewContractsValidationError(
+            [f"source uri rejected (outside base or not a file): {_safe_detail(path_value)}"]
+        )
+    return resolved
+
+
+def _read_contained_bytes(path_value: str, base: Path) -> bytes:
+    """Read one regular file through no-follow directory descriptors.
+
+    The descriptor walk binds each path component to a directory file
+    descriptor.  This keeps the containment check paired with the subsequent
+    read instead of resolving a path and reopening it by name later.
+
+    Returns:
+        The source bytes.
+    """
+    _resolve_source(path_value, base)
+    parts = _path_parts(path_value, kind="source uri")
+    root = base.resolve(strict=True)
+    no_follow = getattr(os, "O_NOFOLLOW", 0)
+    close_on_exec = getattr(os, "O_CLOEXEC", 0)
+    directory_flag = getattr(os, "O_DIRECTORY", 0)
+    root_fd = os.open(root, os.O_RDONLY | close_on_exec | directory_flag)
+    current_fd = root_fd
+    file_fd = -1
+    try:
+        for part in parts[:-1]:
+            next_fd = os.open(
+                part,
+                os.O_RDONLY | close_on_exec | directory_flag | no_follow,
+                dir_fd=current_fd,
+            )
+            os.close(current_fd)
+            current_fd = next_fd
+        file_fd = os.open(parts[-1], os.O_RDONLY | close_on_exec | no_follow, dir_fd=current_fd)
+        if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+            raise ReviewContractsValidationError(
+                [f"source uri rejected (not a regular file): {_safe_detail(path_value)}"]
+            )
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(file_fd, 1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_SOURCE_BYTES:
+                raise ReviewContractsValidationError(
+                    [f"source too large: maximum {_MAX_SOURCE_BYTES} bytes"]
+                )
+            chunks.append(chunk)
+        os.close(file_fd)
+        file_fd = -1
+        return b"".join(chunks)
+    finally:
+        if file_fd >= 0:
+            os.close(file_fd)
+        if current_fd >= 0:
+            os.close(current_fd)
+
+
+def _reserve_output_directory(output_directory: str, base: Path) -> Path:  # noqa: C901
+    """Atomically reserve a real output directory below ``base``.
+
+    Returns:
+        The newly created output directory.
+    """
+    parts = _path_parts(output_directory, kind="output directory")
+    try:
+        root = base.resolve(strict=True)
+        if not root.is_dir():
+            raise ReviewContractsValidationError([f"output base is not a directory: {base}"])
+        parent = root
+        for part in parts[:-1]:
+            candidate = parent / part
+            if candidate.is_symlink():
+                raise ReviewContractsValidationError(
+                    [f"output directory rejected (symlink component): {output_directory}"]
+                )
+            try:
+                candidate.mkdir()
+            except FileExistsError:
+                pass
+            if candidate.is_symlink() or not candidate.is_dir():
+                raise ReviewContractsValidationError(
+                    [f"output directory parent is not a real directory: {output_directory}"]
+                )
+            resolved = candidate.resolve(strict=True)
+            if resolved != candidate or not resolved.is_relative_to(root):
+                raise ReviewContractsValidationError(
+                    [f"output directory escapes base: {output_directory}"]
+                )
+            parent = candidate
+        output = parent / parts[-1]
+        try:
+            output.mkdir()
+        except FileExistsError as error:
+            raise ReviewContractsValidationError(
+                [f"output_collision: already exists: {output_directory}"]
+            ) from error
+        resolved = output.resolve(strict=True)
+        if output.is_symlink() or resolved != output or not resolved.is_relative_to(root):
+            raise ReviewContractsValidationError(
+                [f"output directory escapes base: {output_directory}"]
+            )
+        return output
+    except ReviewContractsValidationError:
+        raise
+    except (OSError, RuntimeError) as error:
+        raise ReviewContractsValidationError(
+            [
+                "output directory cannot be reserved safely: "
+                f"{_safe_detail(output_directory)}: {type(error).__name__}"
+            ]
+        ) from error
+
+
+def _release_empty_output(output_directory: Path | None) -> None:
+    """Release an empty output reservation after a pre-publication failure."""
+    if output_directory is None:
+        return
+    try:
+        if output_directory.is_dir() and not output_directory.is_symlink():
+            output_directory.rmdir()
+    except OSError:
+        pass
 
 
 def _finite_number(value: Any) -> float | None:
-    """Return a finite float, or None for malformed input."""
+    """Return a finite float, or ``None`` for every malformed numeric value."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, TypeError, ValueError):
+        return None
     return result if math.isfinite(result) else None
 
 
 def _percentile(sorted_values: list[float], fraction: float) -> float:
-    """Linear-interpolate one percentile over sorted values (deterministic).
+    """Compute one deterministic linearly interpolated percentile.
 
     Returns:
-        Interpolated percentile value.
+        The interpolated percentile value.
     """
     if len(sorted_values) == 1:
         return sorted_values[0]
@@ -180,371 +652,1010 @@ def _percentile(sorted_values: list[float], fraction: float) -> float:
     return sorted_values[low] * (1.0 - weight) + sorted_values[high] * weight
 
 
-def _parse_episodes(raw: Any, diagnostics: list[str]) -> list[_Episode]:
-    """Parse and deduplicate campaign episodes, preserving grain fields.
+def _normalize_execution_status(value: Any) -> str | None:
+    """Normalize one declared execution status, without guessing unknown values.
 
     Returns:
-        Deduplicated episodes in first-seen order.
+        A recognized normalized status, or ``None``.
     """
-    episodes: list[_Episode] = []
-    seen: set[str] = set()
-    entries = raw.get("episodes") if isinstance(raw, dict) else None
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower().replace("-", "_")
+    return normalized if normalized in _EXECUTION_STATUSES else None
+
+
+def _validate_source_declarations(
+    ref: SourceRef,
+    expected_schema: str,
+    diagnostics: list[_Diagnostic],
+    *,
+    expected_config_identity: str | None = None,
+) -> bool:
+    """Validate the declarations required before source computation.
+
+    Returns:
+        ``True`` when all required declarations are present and well formed.
+    """
+    valid = True
+    if ref.schema != expected_schema:
+        _add_diagnostic(
+            diagnostics,
+            "source_schema_mismatch",
+            detail=f"{ref.artifact_id}:{expected_schema}",
+        )
+        valid = False
+    if not ref.sha256:
+        _add_diagnostic(diagnostics, "source_digest_missing", detail=ref.artifact_id)
+        valid = False
+    elif _SHA256_RE.fullmatch(ref.sha256) is None:
+        _add_diagnostic(diagnostics, "source_digest_malformed", detail=ref.artifact_id)
+        valid = False
+    if not ref.source_commit:
+        _add_diagnostic(diagnostics, "source_commit_missing", detail=ref.artifact_id)
+        valid = False
+    elif _SHA40_RE.fullmatch(ref.source_commit) is None:
+        _add_diagnostic(diagnostics, "source_commit_malformed", detail=ref.artifact_id)
+        valid = False
+    if not ref.config_identity.strip():
+        _add_diagnostic(diagnostics, "config_identity_missing", detail=ref.artifact_id)
+        valid = False
+    if expected_config_identity is not None and ref.config_identity != expected_config_identity:
+        _add_diagnostic(diagnostics, "config_identity_mismatch", detail=ref.artifact_id)
+        valid = False
+    return valid
+
+
+def _source_provenance(ref: SourceRef) -> dict[str, Any]:
+    """Create a provenance record before attempting to read a source.
+
+    Returns:
+        A mutable provenance record that can be completed after reading.
+    """
+    return {
+        "artifact_id": ref.artifact_id,
+        "uri": ref.uri,
+        "format": ref.format,
+        "schema_declared": ref.schema,
+        "sha256_declared": ref.sha256.lower() if ref.sha256 else None,
+        "source_commit": ref.source_commit or None,
+        "config_identity": ref.config_identity or None,
+        "units": ref.units or None,
+        "coordinate_frame": ref.coordinate_frame or None,
+        "sha256_observed": None,
+        "integrity_status": "unverified",
+        "execution_status": None,
+    }
+
+
+def _load_source(  # noqa: C901
+    ref: SourceRef,
+    *,
+    expected_format: str,
+    expected_schema: str,
+    root: Path,
+    diagnostics: list[_Diagnostic],
+    provenance: dict[str, Any] | None = None,
+    expected_config_identity: str | None = None,
+) -> _LoadedSource | None:
+    """Read, hash, schema-check, and admit one canonical source document.
+
+    Returns:
+        An admitted source or ``None`` when the source is unavailable.
+    """
+    provenance = provenance if provenance is not None else _source_provenance(ref)
+    if not _validate_source_declarations(
+        ref,
+        expected_schema,
+        diagnostics,
+        expected_config_identity=expected_config_identity,
+    ):
+        provenance["integrity_status"] = "declaration_invalid"
+        return None
+    try:
+        raw = _read_contained_bytes(ref.uri, root)
+    except ReviewContractsValidationError as error:
+        _add_diagnostic(
+            diagnostics,
+            "source_unreadable_or_unsafe",
+            detail=f"{ref.artifact_id}:{'; '.join(error.errors)}",
+        )
+        provenance["integrity_status"] = "unavailable"
+        return None
+    except (OSError, RuntimeError, ValueError) as error:
+        _add_diagnostic(
+            diagnostics,
+            "source_unreadable_or_unsafe",
+            detail=f"{ref.artifact_id}:{type(error).__name__}",
+        )
+        provenance["integrity_status"] = "unavailable"
+        return None
+    observed_sha = _sha256_bytes(raw)
+    provenance["sha256_observed"] = observed_sha
+    if observed_sha.lower() != ref.sha256.lower():
+        _add_diagnostic(diagnostics, "source_digest_mismatch", detail=ref.artifact_id)
+        provenance["integrity_status"] = "digest_mismatch"
+        return None
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        _add_diagnostic(diagnostics, "source_not_json", detail=ref.artifact_id)
+        provenance["integrity_status"] = "invalid_json"
+        return None
+    if not isinstance(payload, dict):
+        _add_diagnostic(diagnostics, "source_not_json_object", detail=ref.artifact_id)
+        provenance["integrity_status"] = "source_shape_invalid"
+        return None
+    if payload.get("schema_version") != expected_schema:
+        _add_diagnostic(diagnostics, "source_payload_schema_mismatch", detail=ref.artifact_id)
+        provenance["integrity_status"] = "schema_mismatch"
+        return None
+    declared_payload_commit = payload.get("source_commit")
+    if declared_payload_commit is not None and declared_payload_commit != ref.source_commit:
+        _add_diagnostic(diagnostics, "source_commit_mismatch", detail=ref.artifact_id)
+        provenance["integrity_status"] = "provenance_mismatch"
+        return None
+    declared_payload_config = payload.get("config_identity")
+    if declared_payload_config is not None and declared_payload_config != ref.config_identity:
+        _add_diagnostic(diagnostics, "config_identity_mismatch", detail=ref.artifact_id)
+        provenance["integrity_status"] = "provenance_mismatch"
+        return None
+    source_status = _normalize_execution_status(payload.get("execution_status"))
+    if source_status is None:
+        _add_diagnostic(
+            diagnostics, "source_execution_status_missing_or_invalid", detail=ref.artifact_id
+        )
+        provenance["integrity_status"] = "execution_status_invalid"
+        return None
+    if ref.format != expected_format:
+        _add_diagnostic(diagnostics, "source_format_mismatch", detail=ref.artifact_id)
+        provenance["integrity_status"] = "format_mismatch"
+        return None
+    provenance["integrity_status"] = "digest_and_schema_verified"
+    provenance["execution_status"] = source_status
+    payload_provenance = payload.get("provenance")
+    if isinstance(payload_provenance, dict):
+        provenance["payload_provenance"] = {
+            key: payload_provenance[key]
+            for key in ("source_commit", "config_identity", "execution_status", "producer")
+            if key in payload_provenance
+        }
+    return _LoadedSource(ref, payload, provenance, source_status)
+
+
+def _canonical_ref(
+    refs: list[SourceRef], *, family: str, config: dict[str, Any], diagnostics: list[_Diagnostic]
+) -> SourceRef | None:
+    """Select exactly one canonical source, never silently merge candidates.
+
+    Returns:
+        The selected source reference, or ``None`` on ambiguity.
+    """
+    if len(refs) == 1:
+        return refs[0]
+    selector_key = (
+        "canonical_campaign_artifact_id"
+        if family == CAMPAIGN_RESULT_FORMAT
+        else "canonical_selection_artifact_id"
+    )
+    selector = config.get(selector_key)
+    if not isinstance(selector, str) or not selector.strip():
+        _add_diagnostic(diagnostics, "ambiguous_canonical_sources", detail=family)
+        return None
+    selected = [ref for ref in refs if ref.artifact_id == selector]
+    if len(selected) != 1:
+        _add_diagnostic(diagnostics, "canonical_source_not_found", detail=f"{family}:{selector}")
+        return None
+    return selected[0]
+
+
+def _collect_sources(
+    request: ComponentRequest, diagnostics: list[_Diagnostic]
+) -> tuple[dict[str, list[SourceRef]], set[str], set[str]]:
+    """Group only requested/required source families and report omissions.
+
+    Returns:
+        Grouped refs, missing required families, and skipped optional families.
+    """
+    required_families = set(REQUIRED_CAPABILITIES) | set(request.required_capabilities)
+    by_format: dict[str, list[SourceRef]] = {}
+    skipped_optional: set[str] = set()
+    for ref in request.sources:
+        if ref.format not in REQUIRED_CAPABILITIES + OPTIONAL_CAPABILITIES:
+            _add_diagnostic(
+                diagnostics,
+                "unknown_source_format",
+                detail=f"{ref.artifact_id}:{ref.format}",
+            )
+            continue
+        if ref.format in OPTIONAL_CAPABILITIES and ref.format not in required_families:
+            skipped_optional.add(ref.format)
+            _add_diagnostic(
+                diagnostics,
+                "optional_stream_skipped",
+                severity="info",
+                detail=ref.format,
+            )
+            continue
+        by_format.setdefault(ref.format, []).append(ref)
+    missing = required_families - set(by_format)
+    for family in sorted(missing):
+        _add_diagnostic(diagnostics, "required_source_family_missing", detail=family)
+    return by_format, missing, skipped_optional
+
+
+def _row_status(
+    item: dict[str, Any], source_status: str, index: int, diagnostics: list[_Diagnostic]
+) -> str | None:
+    """Resolve row execution status without treating descriptive text as status.
+
+    Returns:
+        The effective status, or ``None`` for malformed/conflicting status fields.
+    """
+    declared: list[str] = []
+    for key in ("execution_status", "row_status", "status"):
+        if key not in item:
+            continue
+        normalized = _normalize_execution_status(item[key])
+        if normalized is None:
+            _add_diagnostic(diagnostics, "episode_row_execution_status_invalid", detail=index)
+            return None
+        declared.append(normalized)
+    if len(set(declared)) > 1:
+        _add_diagnostic(diagnostics, "episode_row_execution_status_conflict", detail=index)
+        return None
+    if source_status in _NON_ADMISSIBLE_STATUSES:
+        if declared and declared[0] != source_status:
+            _add_diagnostic(
+                diagnostics,
+                "source_row_execution_status_conflict",
+                detail=index,
+            )
+        return source_status
+    return declared[0] if declared else source_status
+
+
+def _text_field(item: dict[str, Any], *keys: str) -> str:
+    """Return a non-empty text field or an explicit unknown identity value."""
+    for key in keys:
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown"
+
+
+def _parse_episodes(  # noqa: C901, PLR0912, PLR0915
+    raw: dict[str, Any],
+    *,
+    campaign_id: str,
+    source: _LoadedSource,
+    diagnostics: list[_Diagnostic],
+) -> tuple[list[_Episode], list[dict[str, str]], bool]:
+    """Parse rows, exclude non-admissible execution modes, and reject conflicts.
+
+    Returns:
+        Admitted episodes, excluded-row records, and a conflict flag.
+    """
+    entries = raw.get("episodes")
     if not isinstance(entries, list) or not entries:
-        diagnostics.append("episodes_missing_or_empty")
-        return []
+        _add_diagnostic(diagnostics, "episodes_missing_or_empty")
+        return [], [], False
+    episodes: list[_Episode] = []
+    exclusions: list[dict[str, str]] = []
+    seen_rows: dict[str, _Episode] = {}
+    by_episode_id: dict[str, _Episode] = {}
+    by_fingerprint: set[str] = set()
+    conflicting = False
     for index, item in enumerate(entries):
         if not isinstance(item, dict):
-            diagnostics.append(f"episode_row_{index}_malformed")
+            _add_diagnostic(diagnostics, "episode_row_malformed", detail=index)
+            continue
+        row_campaign = item.get("campaign_id")
+        if row_campaign is not None and row_campaign != campaign_id:
+            _add_diagnostic(diagnostics, "mixed_campaign_row", detail=index)
+            conflicting = True
             continue
         episode_id = item.get("episode_id")
-        if not isinstance(episode_id, str) or not episode_id:
-            diagnostics.append(f"episode_row_{index}_missing_id")
+        if not isinstance(episode_id, str) or not episode_id.strip():
+            _add_diagnostic(diagnostics, "episode_row_missing_id", detail=index)
             continue
-        if episode_id in seen:
-            diagnostics.append(f"duplicate_episode_excerpt:{episode_id}")
+        episode_id = episode_id.strip()
+        seed = item.get("seed")
+        if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+            _add_diagnostic(diagnostics, "episode_row_seed_invalid", detail=episode_id)
             continue
-        seen.add(episode_id)
         config = item.get("config", {})
+        if config is not None and not isinstance(config, dict):
+            _add_diagnostic(diagnostics, "episode_row_config_invalid", detail=episode_id)
+            continue
+        config_id = _text_field(config or {}, "config_id")
         metrics = item.get("metrics", {})
-        episodes.append(
-            _Episode(
-                episode_id=episode_id,
-                seed=item.get("seed"),
-                config_id=str(config.get("config_id", "unknown"))
-                if isinstance(config, dict)
-                else "unknown",
-                outcome=str(item.get("outcome", "unknown")),
-                metrics=dict(metrics) if isinstance(metrics, dict) else {},
-            )
+        if metrics is not None and not isinstance(metrics, dict):
+            _add_diagnostic(diagnostics, "episode_row_metrics_invalid", detail=episode_id)
+            continue
+        outcome_value = item.get("outcome", "unknown")
+        if isinstance(outcome_value, dict):
+            outcome_value = outcome_value.get("label", outcome_value.get("status"))
+        if not isinstance(outcome_value, str) or not outcome_value.strip():
+            _add_diagnostic(diagnostics, "episode_row_outcome_invalid", detail=episode_id)
+            continue
+        execution_status = _row_status(item, source.execution_status, index, diagnostics)
+        if execution_status is None:
+            continue
+        episode = _Episode(
+            episode_id=episode_id,
+            planner_id=_text_field(item, "planner_id", "planner", "algo"),
+            scenario_id=_text_field(item, "scenario_id", "scenario"),
+            seed=seed,
+            config_id=config_id,
+            outcome=outcome_value.strip(),
+            metrics=dict(metrics or {}),
+            execution_status=execution_status,
+            source_artifact_id=source.ref.artifact_id,
         )
-    return episodes
+        previous = seen_rows.get(episode_id)
+        if previous is not None:
+            if (
+                previous.identity != episode.identity
+                or previous.fingerprint() != episode.fingerprint()
+            ):
+                _add_diagnostic(diagnostics, "conflicting_duplicate_episode", detail=episode_id)
+                conflicting = True
+            else:
+                _add_diagnostic(
+                    diagnostics,
+                    "duplicate_episode_excerpt",
+                    severity="info",
+                    detail=episode_id,
+                )
+            continue
+        seen_rows[episode_id] = episode
+        if execution_status in _NON_ADMISSIBLE_STATUSES:
+            exclusions.append(
+                {
+                    "episode_id": episode_id,
+                    "status": execution_status,
+                    "reason": "non_admissible_execution_status",
+                }
+            )
+            _add_diagnostic(
+                diagnostics,
+                "row_excluded_non_admissible_status",
+                detail=f"{episode_id}:{execution_status}",
+            )
+            continue
+        fingerprint = episode.fingerprint()
+        if fingerprint in by_fingerprint:
+            _add_diagnostic(
+                diagnostics,
+                "duplicate_episode_excerpt",
+                severity="info",
+                detail=episode_id,
+            )
+            continue
+        by_episode_id[episode_id] = episode
+        by_fingerprint.add(fingerprint)
+        episodes.append(episode)
+    return episodes, exclusions, conflicting
 
 
-def _summarize_metric(values: list[float]) -> dict[str, Any]:
-    """Summarize one metric column with deterministic tie percentiles.
+def _parse_selection(
+    source: _LoadedSource | None,
+    *,
+    episodes: list[_Episode],
+    campaign_id: str,
+    diagnostics: list[_Diagnostic],
+) -> tuple[list[str], list[str], bool]:
+    """Validate a selection document and split known and unknown episode IDs.
 
     Returns:
-        Summary mapping with count, missing-aware stats, and method note.
+        Known IDs, unknown IDs, and a malformed-selection flag.
     """
-    ordered = sorted(values)
-    count = len(ordered)
-    return {
-        "count": count,
-        "min": ordered[0],
-        "max": ordered[-1],
-        "mean": sum(ordered) / count,
-        "p25": _percentile(ordered, 0.25),
-        "p50": _percentile(ordered, 0.50),
-        "p75": _percentile(ordered, 0.75),
-        "percentile_method": PERCENTILE_METHOD,
+    if source is None:
+        return [], [], False
+    if source.execution_status in _NON_ADMISSIBLE_STATUSES:
+        _add_diagnostic(
+            diagnostics,
+            "required_selection_source_non_admissible",
+            detail=source.execution_status,
+        )
+        return [], [], True
+    payload = source.payload
+    if payload.get("campaign_id") not in (None, campaign_id):
+        _add_diagnostic(diagnostics, "selection_campaign_mismatch", detail=source.ref.artifact_id)
+        return [], [], True
+    raw = payload.get("selected_episode_ids")
+    if not isinstance(raw, list) or not all(isinstance(item, str) and item.strip() for item in raw):
+        _add_diagnostic(diagnostics, "selection_ids_malformed", detail=source.ref.artifact_id)
+        return [], [], True
+    selected = [item.strip() for item in raw]
+    if len(set(selected)) != len(selected):
+        _add_diagnostic(diagnostics, "duplicate_selection_id", detail=source.ref.artifact_id)
+    known_ids = {episode.episode_id for episode in episodes}
+    unique_selected = list(dict.fromkeys(selected))
+    known = [item for item in unique_selected if item in known_ids]
+    unknown = [item for item in unique_selected if item not in known_ids]
+    if unknown:
+        _add_diagnostic(
+            diagnostics,
+            "unknown_selected_ids",
+            detail=",".join(sorted(unknown)),
+        )
+    return known, unknown, False
+
+
+def _summarize_metric(
+    name: str, episodes: list[_Episode], diagnostics: list[_Diagnostic]
+) -> dict[str, Any]:
+    """Summarize one metric while preserving denominator and invalid values.
+
+    Returns:
+        A missing-aware metric summary.
+    """
+    observed: list[float] = []
+    invalid = 0
+    for episode in episodes:
+        if name not in episode.metrics:
+            continue
+        value = _finite_number(episode.metrics[name])
+        if value is None:
+            invalid += 1
+        else:
+            observed.append(value)
+    if invalid:
+        _add_diagnostic(diagnostics, "metric_value_invalid", detail=name)
+    missing = len(episodes) - len(observed)
+    summary: dict[str, Any] = {
+        "count": len(observed),
+        "missing": missing,
+        "denominator": len(episodes),
     }
+    if observed:
+        ordered = sorted(observed)
+        summary.update(
+            {
+                "min": ordered[0],
+                "max": ordered[-1],
+                "mean": sum(ordered) / len(ordered),
+                "p25": _percentile(ordered, 0.25),
+                "p50": _percentile(ordered, 0.50),
+                "p75": _percentile(ordered, 0.75),
+                "percentile_method": PERCENTILE_METHOD,
+            }
+        )
+    return summary
 
 
 def _build_report(
     episodes: list[_Episode],
     selection: list[str],
     unknown_selection: list[str],
-    campaign_id: str | None,
-    campaign_present: bool,
-    diagnostics: list[str],
-) -> tuple[dict[str, Any], list[str]]:
-    """Build the cohort context report document.
+    *,
+    campaign_id: str,
+    campaign_source_artifact_id: str,
+    exclusions: list[dict[str, str]],
+    diagnostics: list[_Diagnostic],
+    source_provenance: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build the schema-validated diagnostic context document.
 
     Returns:
-        Tuple of (report document, diagnostic codes).
+        A report document matching ``review-context.v1``.
     """
-    seeds = sorted({e.seed for e in episodes if isinstance(e.seed, int)})
-    configs = sorted({e.config_id for e in episodes})
+    seeds = sorted({episode.seed for episode in episodes if episode.seed is not None})
+    planner_ids = sorted({episode.planner_id for episode in episodes})
+    scenario_ids = sorted({episode.scenario_id for episode in episodes})
+    config_ids = sorted({episode.config_id for episode in episodes})
     outcomes: dict[str, int] = {}
     for episode in episodes:
         outcomes[episode.outcome] = outcomes.get(episode.outcome, 0) + 1
-    metric_names = sorted({name for e in episodes for name in e.metrics})
-    metrics: dict[str, Any] = {}
-    for name in metric_names:
-        observed = [
-            float(e.metrics[name])
-            for e in episodes
-            if _finite_number(e.metrics.get(name)) is not None
-        ]
-        missing = len(episodes) - len(observed)
-        summary: dict[str, Any] = {"missing": missing, "denominator": len(episodes)}
-        if observed:
-            summary.update(_summarize_metric(observed))
-        else:
-            summary.update({"count": 0})
-        metrics[name] = summary
-    known_ids = {e.episode_id for e in episodes}
+    metric_names = sorted({name for episode in episodes for name in episode.metrics})
+    metrics = {name: _summarize_metric(name, episodes, diagnostics) for name in metric_names}
+    known_ids = {episode.episode_id for episode in episodes}
     covered = sorted(set(selection) & known_ids)
-    coverage = {
-        "selected": len(covered),
-        "denominator": len(episodes),
-        "unknown_selected_ids": sorted(unknown_selection),
-    }
-    if unknown_selection:
-        diagnostics.append(f"unknown_selected_ids:{','.join(sorted(unknown_selection))}")
-    availability: dict[str, Any] = {"status": "complete", "reason": ""}
-    if campaign_id is not None and not campaign_present:
-        availability = {
-            "status": "unavailable",
-            "reason": f"campaign reference {campaign_id!r} has no source payload",
-        }
-        diagnostics.append("campaign_context_unavailable")
-    document = {
+    by_status: dict[str, int] = {}
+    for exclusion in exclusions:
+        status = exclusion["status"]
+        by_status[status] = by_status.get(status, 0) + 1
+    return {
         "schema_version": "review-context.v1",
-        "grain": {"seeds": seeds, "config_ids": configs, "episodes": len(episodes)},
+        "evidence_status": EVIDENCE_STATUS,
+        "claim_boundary": CLAIM_BOUNDARY,
+        "grain": {
+            "planner_ids": planner_ids,
+            "scenario_ids": scenario_ids,
+            "seeds": seeds,
+            "config_ids": config_ids,
+            "episodes": len(episodes),
+        },
         "denominator": len(episodes),
         "outcomes": dict(sorted(outcomes.items())),
         "metrics": metrics,
-        "selection_coverage": coverage,
-        "campaign": {"campaign_id": campaign_id, "availability": availability},
+        "selection_coverage": {
+            "selected": len(covered),
+            "denominator": len(episodes),
+            "unknown_selected_ids": sorted(unknown_selection),
+        },
+        "campaign": {
+            "campaign_id": campaign_id,
+            "source_artifact_id": campaign_source_artifact_id,
+            "availability": {"status": STATUS_COMPLETE, "reason": ""},
+        },
+        "exclusions": {
+            "count": len(exclusions),
+            "by_status": dict(sorted(by_status.items())),
+            "rows": exclusions,
+        },
+        "source_provenance": source_provenance,
     }
-    return document, diagnostics
 
 
 def _render_html(document: dict[str, Any]) -> str:
-    """Render the standalone HTML report table.
+    """Render deterministic standalone HTML from a validated report.
 
     Returns:
-        Self-contained HTML document string.
+        A standalone HTML document string.
     """
     rows = "\n".join(
         f"<tr><td>{html.escape(name)}</td>"
-        f"<td>{m.get('count', 0)}</td><td>{m.get('missing', 0)}</td>"
-        f"<td>{m.get('min', '')}</td><td>{m.get('p50', '')}</td>"
-        f"<td>{m.get('max', '')}</td></tr>"
-        for name, m in sorted(document["metrics"].items())
+        f"<td>{metric.get('count', 0)}</td><td>{metric.get('missing', 0)}</td>"
+        f"<td>{metric.get('min', '')}</td><td>{metric.get('p50', '')}</td>"
+        f"<td>{metric.get('max', '')}</td></tr>"
+        for name, metric in sorted(document["metrics"].items())
     )
     outcomes = "\n".join(
         f"<tr><td>{html.escape(str(outcome))}</td><td>{count}</td></tr>"
         for outcome, count in sorted(document["outcomes"].items())
     )
+    exclusions = "\n".join(
+        f"<tr><td>{html.escape(row['episode_id'])}</td>"
+        f"<td>{html.escape(row['status'])}</td>"
+        f"<td>{html.escape(row['reason'])}</td></tr>"
+        for row in document["exclusions"]["rows"]
+    )
     grain = document["grain"]
     return (
         '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
         "<title>Review context report</title></head><body>"
-        f"<h1>Review context report</h1><p>Denominator: {document['denominator']} episodes; "
-        f"seeds: {html.escape(str(grain['seeds']))}; configs: "
-        f"{html.escape(str(grain['config_ids']))}.</p>"
+        f"<h1>Review context report</h1><p>Diagnostic-only denominator: "
+        f"{document['denominator']} admitted episodes; planners: "
+        f"{html.escape(str(grain['planner_ids']))}; scenarios: "
+        f"{html.escape(str(grain['scenario_ids']))}.</p>"
         "<h2>Outcomes</h2><table><tr><th>Outcome</th><th>Count</th></tr>"
         f"{outcomes}</table>"
         "<h2>Metrics</h2><table><tr><th>Metric</th><th>n</th><th>missing</th>"
         f"<th>min</th><th>p50</th><th>max</th></tr>{rows}</table>"
+        "<h2>Exclusions</h2><table><tr><th>Episode</th><th>Status</th>"
+        f"<th>Reason</th></tr>{exclusions}</table>"
+        f"<p>Excluded rows: {document['exclusions']['count']}; evidence status: "
+        f"{html.escape(document['evidence_status'])}.</p>"
         "</body></html>\n"
     )
 
 
-def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:
-    """Build a cohort context report from campaign-result inputs.
+def _validate_output_document(document: dict[str, Any]) -> None:
+    """Validate one leaf output against its registered machine-readable schema."""
+    version = document.get("schema_version")
+    schema = OUTPUT_SCHEMAS.get(version)
+    if schema is None:
+        raise ReviewContractsValidationError([f"unknown output schema: {version}"])
+    errors = [
+        error.message
+        for error in sorted(
+            Draft202012Validator(schema).iter_errors(document),
+            key=lambda item: list(item.absolute_path),
+        )
+    ]
+    if errors:
+        raise ReviewContractsValidationError(errors)
 
-    Args:
-        request: Validated component request with campaign-result sources.
-        base: Base directory source URIs and the output directory resolve under.
+
+def _write_json(path: Path, payload: dict[str, Any]) -> str:
+    """Write JSON to an exclusive final name and return its byte digest.
 
     Returns:
-        Component result: ``complete`` only when every input verified and the
-        campaign context (when referenced) resolved, ``partial`` on missing
-        metrics-unavailable rows or unresolved references, ``unavailable`` when
-        the component or a required capability does not apply, ``failed`` on
-        validation, version, collision, or internal errors.
+        The SHA-256 digest of the written bytes.
     """
-    root = base if base is not None else Path.cwd()
+    if path.parent.is_symlink() or not path.parent.is_dir():
+        raise ReviewContractsValidationError(
+            [f"output parent is not a real directory: {path.parent}"]
+        )
+    text = json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n"
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+    except FileExistsError as error:
+        raise ReviewContractsValidationError(
+            [f"output_collision: already exists: {path.name}"]
+        ) from error
+    return _sha256_bytes(text.encode("utf-8"))
+
+
+def _write_text_exclusive(path: Path, text: str) -> str:
+    """Write text to an exclusive final name and return its byte digest.
+
+    Returns:
+        The SHA-256 digest of the written bytes.
+    """
+    if path.parent.is_symlink() or not path.parent.is_dir():
+        raise ReviewContractsValidationError(
+            [f"output parent is not a real directory: {path.parent}"]
+        )
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(text)
+    except FileExistsError as error:
+        raise ReviewContractsValidationError(
+            [f"output_collision: already exists: {path.name}"]
+        ) from error
+    return _sha256_bytes(text.encode("utf-8"))
+
+
+def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:  # noqa: C901, PLR0912, PLR0915
+    """Build one diagnostic-only cohort context report.
+
+    The public API expects a validated :class:`ComponentRequest`; malformed
+    direct calls still receive a typed failed result so callers never need to
+    catch an implementation ``AttributeError``.
+
+    Returns:
+        A typed result with no complete artifacts unless all admission gates pass.
+    """
+    request_id, component_id = _request_identity(request)
+    if not isinstance(request, ComponentRequest):
+        return _result(
+            request_id,
+            component_id,
+            STATUS_FAILED,
+            reason="invalid_request: expected ComponentRequest",
+        )
+    if not isinstance(request.config, dict):
+        return _result(
+            request_id,
+            component_id,
+            STATUS_FAILED,
+            reason="invalid_request: config must be an object",
+            diagnostics=[_Diagnostic("invalid_request")],
+        )
     rejected = _reject_not_applicable(request)
     if rejected is not None:
         return rejected
-    output_dir = root / request.output_directory
-    if output_dir.exists():
-        return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
-            status=STATUS_FAILED,
-            reason=f"output_collision: already exists: {request.output_directory}",
-        )
-    diagnostics: list[str] = []
+    diagnostics: list[_Diagnostic] = []
+    source_provenance: list[dict[str, Any]] = []
+    output_dir: Path | None = None
+    root = base if base is not None else Path.cwd()
+    base_provenance: dict[str, Any] = {
+        "evidence_status": EVIDENCE_STATUS,
+        "claim_boundary": CLAIM_BOUNDARY,
+        "source_integrity": "unverified",
+        "sources": source_provenance,
+    }
     try:
-        payloads = _load_sources(request, root, diagnostics)
-        if payloads is None:
-            return ComponentResult(
-                request_id=request.request_id,
-                component_id=request.component_id,
-                status=STATUS_FAILED,
-                reason="required_source_family_missing: " + "; ".join(sorted(set(diagnostics))[:5]),
-            )
-        episodes = _parse_episodes(payloads["campaign"], diagnostics)
-        episodes = _parse_episodes(payloads["campaign"], diagnostics)
-        selection, unknown = _parse_selection(payloads.get("selection"), episodes)
         campaign_id = request.config.get("campaign_id")
-        if campaign_id is not None and not isinstance(campaign_id, str):
-            return ComponentResult(
-                request_id=request.request_id,
-                component_id=request.component_id,
-                status=STATUS_FAILED,
-                reason="invalid_config: campaign_id must be a string",
+        if not isinstance(campaign_id, str) or not campaign_id.strip():
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_UNAVAILABLE,
+                reason="campaign_context_unavailable: campaign_id is required",
+                diagnostics=[
+                    _Diagnostic("campaign_context_unavailable", "error", "campaign_id missing")
+                ],
+                provenance=base_provenance,
             )
-        campaign_present = any(
-            isinstance(doc, dict) and doc.get("campaign_id") == campaign_id
-            for doc in payloads["docs"]
+        campaign_id = campaign_id.strip()
+        config_identity = request.config.get("config_identity")
+        if config_identity is not None and (
+            not isinstance(config_identity, str) or not config_identity.strip()
+        ):
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason="invalid_config: config_identity must be a non-empty string",
+                diagnostics=[_Diagnostic("config_identity_invalid")],
+                provenance=base_provenance,
+            )
+        by_format, missing, skipped_optional = _collect_sources(request, diagnostics)
+        if missing:
+            _release_empty_output(output_dir)
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_UNAVAILABLE,
+                reason=_reason_with_diagnostics(
+                    "required_source_family_missing: " + ", ".join(sorted(missing)),
+                    diagnostics,
+                ),
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
+        output_dir = _reserve_output_directory(request.output_directory, root)
+        campaign_ref = _canonical_ref(
+            by_format[CAMPAIGN_RESULT_FORMAT],
+            family=CAMPAIGN_RESULT_FORMAT,
+            config=request.config,
+            diagnostics=diagnostics,
         )
-        if not episodes:
-            return ComponentResult(
-                request_id=request.request_id,
-                component_id=request.component_id,
-                status=STATUS_FAILED,
-                reason="no_episodes_indexed: " + "; ".join(sorted(set(diagnostics))[:5]),
+        selection_ref = None
+        if EPISODE_SELECTION_FORMAT in by_format:
+            selection_ref = _canonical_ref(
+                by_format[EPISODE_SELECTION_FORMAT],
+                family=EPISODE_SELECTION_FORMAT,
+                config=request.config,
+                diagnostics=diagnostics,
             )
-        document, diagnostics = _build_report(
-            episodes, selection, unknown, campaign_id, campaign_present, diagnostics
+        if campaign_ref is None:
+            _release_empty_output(output_dir)
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason=_reason_with_diagnostics(
+                    "canonical_campaign_source_unavailable", diagnostics
+                ),
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
+        campaign_provenance = _source_provenance(campaign_ref)
+        source_provenance.append(campaign_provenance)
+        campaign_source = _load_source(
+            campaign_ref,
+            expected_format=CAMPAIGN_RESULT_FORMAT,
+            expected_schema=CAMPAIGN_RESULT_SCHEMA,
+            root=root,
+            diagnostics=diagnostics,
+            provenance=campaign_provenance,
+            expected_config_identity=config_identity,
+        )
+        if campaign_source is None:
+            _release_empty_output(output_dir)
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason=_reason_with_diagnostics(
+                    "required_source_unavailable: campaign-result", diagnostics
+                ),
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
+        source_campaign_id = campaign_source.payload.get("campaign_id")
+        if source_campaign_id != campaign_id:
+            _release_empty_output(output_dir)
+            _add_diagnostic(
+                diagnostics,
+                "campaign_context_unavailable",
+                detail=f"requested:{campaign_id}:source:{source_campaign_id}",
+            )
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_UNAVAILABLE,
+                reason="campaign_context_unavailable: requested campaign is not in canonical source",
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
+        selection_source: _LoadedSource | None = None
+        if selection_ref is not None:
+            selection_provenance = _source_provenance(selection_ref)
+            source_provenance.append(selection_provenance)
+            selection_source = _load_source(
+                selection_ref,
+                expected_format=EPISODE_SELECTION_FORMAT,
+                expected_schema=EPISODE_SELECTION_SCHEMA,
+                root=root,
+                diagnostics=diagnostics,
+                provenance=selection_provenance,
+                expected_config_identity=config_identity,
+            )
+            if (
+                selection_source is None
+                and EPISODE_SELECTION_FORMAT in request.required_capabilities
+            ):
+                _release_empty_output(output_dir)
+                return _result(
+                    request.request_id,
+                    request.component_id,
+                    STATUS_UNAVAILABLE,
+                    reason="required_source_unavailable: episode-selection",
+                    diagnostics=diagnostics,
+                    provenance=base_provenance,
+                )
+        episodes, exclusions, conflicting = _parse_episodes(
+            campaign_source.payload,
+            campaign_id=campaign_id,
+            source=campaign_source,
+            diagnostics=diagnostics,
+        )
+        if conflicting:
+            _release_empty_output(output_dir)
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason=_reason_with_diagnostics(
+                    "conflicting_duplicate_episode_or_mixed_campaign", diagnostics
+                ),
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
+        if not episodes:
+            _release_empty_output(output_dir)
+            if exclusions:
+                reason = "no_admissible_episodes: all rows excluded by execution status"
+            else:
+                reason = "no_episodes_indexed"
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_UNAVAILABLE,
+                reason=reason,
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
+        selected, unknown, selection_invalid = _parse_selection(
+            selection_source,
+            episodes=episodes,
+            campaign_id=campaign_id,
+            diagnostics=diagnostics,
+        )
+        if EPISODE_SELECTION_FORMAT in request.required_capabilities and selection_source is None:
+            _release_empty_output(output_dir)
+            _add_diagnostic(
+                diagnostics, "required_source_unavailable", detail=EPISODE_SELECTION_FORMAT
+            )
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_UNAVAILABLE,
+                reason="required_source_unavailable: episode-selection",
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
+        if selection_invalid and EPISODE_SELECTION_FORMAT in request.required_capabilities:
+            _release_empty_output(output_dir)
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason="invalid_episode_selection",
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
+        document = _build_report(
+            episodes,
+            selected,
+            unknown,
+            campaign_id=campaign_id,
+            campaign_source_artifact_id=campaign_source.ref.artifact_id,
+            exclusions=exclusions,
+            diagnostics=diagnostics,
+            source_provenance=source_provenance,
         )
         capability_payload = {
-            "missing_capabilities": [],
-            "diagnostics": sorted(set(diagnostics)),
+            "schema_version": "missing-capability-report.v1",
+            "missing_capabilities": sorted(set(OPTIONAL_CAPABILITIES) - set(by_format)),
+            "skipped_optional_streams": sorted(skipped_optional),
+            "diagnostics": list(_diagnostic_documents(diagnostics)),
         }
-        report_digest = _write_json(output_dir / "context-report.json", document)
-        (output_dir / "context-report.html").write_text(_render_html(document), encoding="utf-8")
-        _write_json(output_dir / OUTPUT_CAPABILITY_FILENAME, capability_payload)
-        informational = {"optional_stream_skipped", "duplicate_episode_excerpt"}
-        blocking = [item for item in diagnostics if not any(tag in item for tag in informational)]
-        partial = bool(blocking)
-        status = STATUS_PARTIAL if partial else STATUS_COMPLETE
-        reason = "" if status == STATUS_COMPLETE else "; ".join(sorted(set(diagnostics))[:8])
-        artifacts: tuple[dict[str, Any], ...] = (
-            (
+        _validate_output_document(document)
+        _validate_output_document(capability_payload)
+        report_digest = _write_json(output_dir / OUTPUT_REPORT_FILENAME, document)
+        html_digest = _write_text_exclusive(
+            output_dir / OUTPUT_HTML_FILENAME, _render_html(document)
+        )
+        capability_digest = _write_json(output_dir / OUTPUT_CAPABILITY_FILENAME, capability_payload)
+        base_provenance.update(
+            {
+                "output_directory": request.output_directory,
+                "episodes": len(episodes),
+                "denominator": len(episodes),
+                "excluded_rows": len(exclusions),
+                "output_artifacts": {
+                    OUTPUT_REPORT_FILENAME: report_digest,
+                    OUTPUT_HTML_FILENAME: html_digest,
+                    OUTPUT_CAPABILITY_FILENAME: capability_digest,
+                },
+                "source_integrity": "digest_and_schema_verified",
+                "source_execution_status": {
+                    source.ref.artifact_id: source.execution_status
+                    for source in (campaign_source, selection_source)
+                    if source is not None
+                },
+            }
+        )
+        blocking = [item for item in diagnostics if item.severity == "error"]
+        status = STATUS_PARTIAL if blocking else STATUS_COMPLETE
+        reason = "; ".join(sorted({item.code for item in blocking})[:8])
+        artifacts: tuple[dict[str, Any], ...] = ()
+        if status == STATUS_COMPLETE:
+            artifacts = (
                 {
-                    "artifact_id": "context-report.json",
-                    "uri": str(Path(request.output_directory) / "context-report.json"),
+                    "artifact_id": OUTPUT_REPORT_FILENAME,
+                    "uri": str(Path(request.output_directory) / OUTPUT_REPORT_FILENAME),
                     "sha256": report_digest,
                 },
                 {
-                    "artifact_id": "context-report.html",
-                    "uri": str(Path(request.output_directory) / "context-report.html"),
-                    "sha256": _sha256_bytes((output_dir / "context-report.html").read_bytes()),
+                    "artifact_id": OUTPUT_HTML_FILENAME,
+                    "uri": str(Path(request.output_directory) / OUTPUT_HTML_FILENAME),
+                    "sha256": html_digest,
+                },
+                {
+                    "artifact_id": OUTPUT_CAPABILITY_FILENAME,
+                    "uri": str(Path(request.output_directory) / OUTPUT_CAPABILITY_FILENAME),
+                    "sha256": capability_digest,
                 },
             )
-            if status == STATUS_COMPLETE
-            else ()
-        )
-        return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
-            status=status,
-            artifacts=artifacts,
-            diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
-            provenance={
-                "output_directory": request.output_directory,
-                "episodes": len(episodes),
-            },
+        return _result(
+            request.request_id,
+            request.component_id,
+            status,
             reason=reason,
+            diagnostics=diagnostics,
+            provenance=base_provenance,
+            artifacts=artifacts,
         )
     except ReviewContractsValidationError as error:
-        return ComponentResult(
-            request_id=request.request_id,
-            component_id=request.component_id,
-            status=STATUS_FAILED,
+        _release_empty_output(output_dir)
+        for item in error.errors:
+            _add_diagnostic(diagnostics, "contract_validation_error", detail=item)
+        return _result(
+            request_id,
+            component_id,
+            STATUS_FAILED,
             reason="; ".join(error.errors),
+            diagnostics=diagnostics,
+            provenance=base_provenance,
+        )
+    except (OSError, UnicodeError, TypeError, ValueError, OverflowError) as error:
+        _release_empty_output(output_dir)
+        _add_diagnostic(diagnostics, "internal_boundary_error", detail=type(error).__name__)
+        return _result(
+            request_id,
+            component_id,
+            STATUS_FAILED,
+            reason=f"internal_boundary_error: {type(error).__name__}",
+            diagnostics=diagnostics,
+            provenance=base_provenance,
+        )
+    except Exception as error:  # noqa: BLE001
+        _release_empty_output(output_dir)
+        _add_diagnostic(diagnostics, "internal_boundary_error", detail=type(error).__name__)
+        return _result(
+            request_id,
+            component_id,
+            STATUS_FAILED,
+            reason=f"internal_boundary_error: {type(error).__name__}",
+            diagnostics=diagnostics,
+            provenance=base_provenance,
         )
 
 
-def _read_json_doc(
-    artifact_id: str, uri: str, root: Path
-) -> tuple[dict[str, Any] | None, str | None]:
-    """Read and parse one JSON source document.
+def _result_document(result: ComponentResult) -> dict[str, Any]:
+    """Serialize a result as a JSON-safe shared component-result.v1 document.
 
     Returns:
-        Tuple of (payload or None, diagnostic code or None).
+        A JSON-schema-compatible result mapping.
     """
-    try:
-        payload = json.loads(_resolve_source(uri, root).read_bytes().decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return None, f"{artifact_id}: source_unreadable"
-    if not isinstance(payload, dict):
-        return None, f"{artifact_id}: source_not_json_object"
-    return payload, None
+    document = asdict(result)
+    document["artifacts"] = [dict(item) for item in result.artifacts]
+    document["diagnostics"] = [dict(item) for item in result.diagnostics]
+    return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **document}
 
 
-def _group_sources(
-    request: ComponentRequest, diagnostics: list[str]
-) -> dict[str, list[Any]] | None:
-    """Group sources by family, recording format problems.
+def _cli_failure_result(payload: Any, reason: str) -> ComponentResult:
+    """Build a safe typed failure result for malformed CLI input.
 
     Returns:
-        Family-to-refs mapping, or None when a required family is absent.
+        A failed component result with safe identity fields.
     """
-    by_format: dict[str, list[Any]] = {}
-    for ref in request.sources:
-        if ref.format not in REQUIRED_CAPABILITIES + OPTIONAL_CAPABILITIES:
-            diagnostics.append(f"{ref.artifact_id}: unknown_source_format:{ref.format}")
-            continue
-        if ref.format in OPTIONAL_CAPABILITIES and ref.format not in request.required_capabilities:
-            diagnostics.append(f"{ref.artifact_id}: optional_stream_skipped:{ref.format}")
-            continue
-        by_format.setdefault(ref.format, []).append(ref)
-    for family in REQUIRED_CAPABILITIES:
-        if family not in by_format:
-            diagnostics.append(f"required_source_family_missing:{family}")
-    if any(code.startswith("required_source_family_missing") for code in diagnostics):
-        return None
-    return by_format
-
-
-def _load_sources(
-    request: ComponentRequest, root: Path, diagnostics: list[str]
-) -> dict[str, Any] | None:
-    """Load and validate source documents by family.
-
-    Returns:
-        Mapping with the merged campaign document, selection list, and raw docs,
-        or None when a required family is absent.
-    """
-    by_format = _group_sources(request, diagnostics)
-    if by_format is None:
-        return None
-    docs: list[dict[str, Any]] = []
-    for ref in by_format.get("campaign-result", []):
-        payload, problem = _read_json_doc(ref.artifact_id, ref.uri, root)
-        if problem is not None or payload is None:
-            diagnostics.append(problem or f"{ref.artifact_id}: source_unreadable")
-            continue
-        docs.append(payload)
-    if not docs:
-        diagnostics.append("campaign_payload_missing")
-        return None
-    merged: dict[str, Any] = {"episodes": []}
-    for doc in docs:
-        entries = doc.get("episodes")
-        if isinstance(entries, list):
-            merged["episodes"].extend(entries)
-        if isinstance(doc.get("campaign_id"), str):
-            merged["campaign_id"] = doc["campaign_id"]
-    selection_doc: dict[str, Any] | None = None
-    for ref in by_format.get("episode-selection", []):
-        payload, problem = _read_json_doc(ref.artifact_id, ref.uri, root)
-        if problem is not None:
-            diagnostics.append(problem)
-            continue
-        selection_doc = payload
-    return {"campaign": merged, "selection": selection_doc, "docs": docs}
-
-
-def _parse_selection(
-    selection_doc: dict[str, Any] | None, episodes: list[_Episode]
-) -> tuple[list[str], list[str]]:
-    """Split a selection list into known and unknown episode ids.
-
-    Returns:
-        Tuple of (known selected ids, unknown selected ids).
-    """
-    if selection_doc is None:
-        return [], []
-    raw = selection_doc.get("selected_episode_ids", [])
-    if not isinstance(raw, list):
-        return [], []
-    known = {episode.episode_id for episode in episodes}
-    selected = [str(item) for item in raw if isinstance(item, str)]
-    return [i for i in selected if i in known], [i for i in selected if i not in known]
+    request_id, component_id = _request_identity(payload)
+    return _result(request_id, component_id, STATUS_FAILED, reason=reason)
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """Return the CLI parser for the review-context component."""
-    parser = argparse.ArgumentParser(description="Build cohort context reports.")
+    """Return the standalone CLI argument parser."""
+    parser = argparse.ArgumentParser(description="Build diagnostic cohort context reports.")
     parser.add_argument("--input", required=True, help="Component request JSON file.")
     parser.add_argument("--config", required=False, default=None, help="Optional config JSON.")
     parser.add_argument("--output", required=True, help="Output directory (must not exist).")
@@ -553,27 +1664,42 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for the review-context component.
+    """Run the CLI and always print a schema-versioned result envelope.
 
     Returns:
-        Process exit code (0 only when the result status is complete).
+        Process exit code, zero only for a complete result.
     """
-    args = _build_parser().parse_args(argv)
     try:
-        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ReviewContractsValidationError([f"cannot read request: {error}"]) from error
-    if args.config is not None:
-        try:
-            config = json.loads(Path(args.config).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ReviewContractsValidationError([f"cannot read config: {error}"]) from error
-        if isinstance(config, dict):
-            payload = {**payload, "config": {**payload.get("config", {}), **config}}
-    payload = {**payload, "output_directory": args.output}
-    request = component_request_from_dict(payload, source=args.input)
-    result = run(request, base=Path(args.base) if args.base is not None else None)
-    print(json.dumps(asdict(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
+        args = _build_parser().parse_args(argv)
+    except SystemExit as error:
+        if error.code == 0:
+            raise
+        result = _cli_failure_result(None, "invalid_cli_arguments")
+        print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201
+        return 1
+    payload: Any = None
+    try:
+        payload = json.loads(Path(args.input).read_bytes().decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ReviewContractsValidationError(["request must be a JSON object"])
+        if args.config is not None:
+            config = json.loads(Path(args.config).read_bytes().decode("utf-8"))
+            if not isinstance(config, dict):
+                raise ReviewContractsValidationError(["config must be a JSON object"])
+            request_config = payload.get("config", {})
+            if not isinstance(request_config, dict):
+                raise ReviewContractsValidationError(["request config must be a JSON object"])
+            payload = {**payload, "config": {**request_config, **config}}
+        payload = {**payload, "output_directory": args.output}
+        request = component_request_from_dict(payload, source=args.input)
+        result = run(request, base=Path(args.base) if args.base is not None else None)
+    except ReviewContractsValidationError as error:
+        result = _cli_failure_result(payload, "; ".join(error.errors))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
+        result = _cli_failure_result(payload, f"invalid_request: {type(error).__name__}")
+    except Exception as error:  # noqa: BLE001 - CLI must preserve the result contract
+        result = _cli_failure_result(payload, f"internal_error: {type(error).__name__}")
+    print(json.dumps(_result_document(result), sort_keys=True, indent=2))  # noqa: T201
     return 0 if result.status == STATUS_COMPLETE else 1
 
 

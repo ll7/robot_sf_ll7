@@ -1,4 +1,7 @@
 {
+  "schema_version": "episode-selection.v1",
+  "campaign_id": "camp-fixture",
+  "execution_status": "native",
   "selected_episode_ids": [
     "ep-1",
     "ep-3"

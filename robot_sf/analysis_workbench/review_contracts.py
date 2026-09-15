@@ -886,7 +886,7 @@ def _check_one_digest_binding(
                     detail=f"supplied {name} digest does not match the {name} payload",
                 )
             effective_digest = computed_digest
-    except (ReviewContractsValidationError, TypeError, ValueError) as error:
+    except (RecursionError, ReviewContractsValidationError, TypeError, ValueError) as error:
         return None, _resolution(
             "unavailable",
             ADMITTED_SOURCE_REASON_RECEIPT_STALE,

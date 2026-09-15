@@ -381,6 +381,33 @@ def test_admitted_source_rejects_unreprable_schema_version() -> None:
     assert result.source_path is None
 
 
+@pytest.mark.parametrize("deep_field", ["request", "recipe"])
+def test_admitted_source_rejects_deep_current_identity_mapping(deep_field: str) -> None:
+    """Deep request or recipe identity data cannot escape digest binding."""
+    receipt = _admitted_source_fixture("receipt.json")
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    deep_value: object = []
+    for _ in range(10_000):
+        deep_value = [deep_value]
+    if deep_field == "request":
+        request["config"] = {"deep": deep_value}
+    else:
+        recipe["control_conditions"] = {"deep": deep_value}
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert "identity is unusable" in result.detail
+    assert len(result.detail) < 300
+    assert result.source_path is None
+
+
 @pytest.mark.parametrize(
     ("stage", "expected"),
     [

@@ -1,0 +1,20 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev05-smoke",
+  "component_id": "srev05-review-events",
+  "sources": [
+    {
+      "artifact_id": "events",
+      "uri": "tests/fixtures/scenario_review/review_events/events.json",
+      "format": "event-list"
+    },
+    {
+      "artifact_id": "phases",
+      "uri": "tests/fixtures/scenario_review/review_events/phases.json",
+      "format": "phase-list"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-05-smoke",
+  "config": {},
+  "required_capabilities": []
+}

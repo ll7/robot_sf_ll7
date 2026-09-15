@@ -1,0 +1,10 @@
+{
+  "t0_s": 0.0,
+  "terminal_s": 1.0,
+  "presentation": {
+    "width": 320,
+    "height": 180,
+    "fps": 10.0,
+    "speed": 1.0
+  }
+}

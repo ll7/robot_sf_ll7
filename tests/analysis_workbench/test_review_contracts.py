@@ -268,6 +268,21 @@ def test_admitted_source_digest_helpers_match_fixture_receipt() -> None:
     assert experiment_recipe_canonical_digest(recipe) == receipt.recipe_sha256
 
 
+def test_component_request_digest_binds_config_but_ignores_output_directory() -> None:
+    request = _admitted_source_fixture("request.json")
+    relocated = copy.deepcopy(request)
+    relocated["output_directory"] = "another-output"
+    changed_config = copy.deepcopy(request)
+    changed_config["config"] = {"changed": True}
+
+    assert component_request_canonical_digest(relocated) == component_request_canonical_digest(
+        request
+    )
+    assert component_request_canonical_digest(changed_config) != component_request_canonical_digest(
+        request
+    )
+
+
 def test_admitted_source_reports_missing_receipt_and_source(tmp_path: Path) -> None:
     request = _admitted_source_fixture("request.json")
     recipe = _admitted_source_fixture("recipe.json")
@@ -291,6 +306,30 @@ def test_admitted_source_reports_missing_receipt_and_source(tmp_path: Path) -> N
     assert missing_source.source_path is None
 
 
+def test_admitted_source_bounds_oversized_json_integer_errors(tmp_path: Path) -> None:
+    receipt_path = tmp_path / "oversized-receipt.json"
+    receipt_path.write_text('{"oversized": ' + "9" * 5001 + "}", encoding="utf-8")
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+
+    with pytest.raises(ReviewContractsValidationError) as error:
+        load_admitted_source_receipt(receipt_path)
+    assert "invalid or exceeds parser limits" in str(error.value)
+    assert len(str(error.value)) < 500
+
+    result = resolve_admitted_source(
+        receipt_path,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_unreadable")
+    assert result.detail == "receipt JSON is invalid or exceeds parser limits"
+    assert len(result.detail) < 300
+    assert result.source_path is None
+
+
 def test_admitted_source_rejects_mutated_bytes(tmp_path: Path) -> None:
     source_path = tmp_path / "source.json"
     source_path.write_bytes((ADMITTED_SOURCE_FIXTURE_DIR / "source.json").read_bytes())
@@ -307,21 +346,63 @@ def test_admitted_source_rejects_mutated_bytes(tmp_path: Path) -> None:
     assert result.source_path is None
 
 
+def test_admitted_source_rejects_request_config_mutation() -> None:
+    request = _admitted_source_fixture("request.json")
+    stale_request = copy.deepcopy(request)
+    stale_request["config"] = {"changed": True}
+    recipe = _admitted_source_fixture("recipe.json")
+    receipt = _admitted_source_fixture("receipt.json")
+    receipt["request_sha256"] = component_request_canonical_digest(request)
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=stale_request,
+        recipe=recipe,
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert "request SHA-256" in result.detail
+    assert result.source_path is None
+
+
+@pytest.mark.parametrize("missing", ["request", "recipe", "both"])
+def test_admitted_source_rejects_expected_values_without_current_context(missing: str) -> None:
+    receipt = _admitted_source_fixture("receipt.json")
+    request = None if missing in {"request", "both"} else _admitted_source_fixture("request.json")
+    recipe = None if missing in {"recipe", "both"} else _admitted_source_fixture("recipe.json")
+
+    result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+        expected_request_sha256=receipt["request_sha256"],
+        expected_recipe_sha256=receipt["recipe_sha256"],
+        expected_source_commit=receipt["source"]["source_commit"],
+        expected_config_identity=receipt["source"]["config_identity"],
+    )
+
+    assert (result.status, result.reason) == ("unavailable", "receipt_stale")
+    assert "current request and recipe context" in result.detail
+    assert result.source_path is None
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [("schema_version", "admitted-source-receipt.v2"), ("source_kind", "benchmark")],
 )
 def test_admitted_source_rejects_unsupported_receipt_boundary(field: str, value: str) -> None:
     receipt = _admitted_source_fixture("receipt.json")
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
     receipt[field] = value
 
     result = resolve_admitted_source(
         receipt,
         allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
-        expected_request_sha256=receipt["request_sha256"],
-        expected_recipe_sha256=receipt["recipe_sha256"],
-        expected_source_commit=receipt["source"]["source_commit"],
-        expected_config_identity=receipt["source"]["config_identity"],
+        request=request,
+        recipe=recipe,
     )
 
     assert (result.status, result.reason) == ("unavailable", "receipt_unsupported")
@@ -370,27 +451,40 @@ def test_admitted_source_rejects_source_metadata_mismatch() -> None:
     commit_result = resolve_admitted_source(
         receipt,
         allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
-        expected_request_sha256=receipt["request_sha256"],
-        expected_recipe_sha256=receipt["recipe_sha256"],
+        request=request,
+        recipe=recipe,
         expected_source_commit="c" * 40,
-        expected_config_identity=receipt["source"]["config_identity"],
+    )
+    config_result = resolve_admitted_source(
+        receipt,
+        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
+        request=request,
+        recipe=recipe,
+        expected_config_identity="different-config",
     )
 
     assert (format_result.status, format_result.reason) == ("unavailable", "receipt_stale")
     assert (commit_result.status, commit_result.reason) == ("unavailable", "receipt_stale")
+    assert (config_result.status, config_result.reason) == ("unavailable", "receipt_stale")
 
 
-def test_admitted_source_rejects_escape_and_malformed_receipt() -> None:
+def test_admitted_source_rejects_escape_and_malformed_receipt(tmp_path: Path) -> None:
     receipt = _admitted_source_fixture("receipt.json")
-    escaped = copy.deepcopy(receipt)
-    escaped["source"]["uri"] = "../source.json"
+    request = _admitted_source_fixture("request.json")
+    recipe = _admitted_source_fixture("recipe.json")
+    allowed_root = tmp_path / "allowed"
+    allowed_root.mkdir()
+    outside_source = tmp_path / "outside-source.json"
+    outside_source.write_bytes((ADMITTED_SOURCE_FIXTURE_DIR / "source.json").read_bytes())
+    try:
+        (allowed_root / "source.json").symlink_to(outside_source)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
     escaped_result = resolve_admitted_source(
-        escaped,
-        allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
-        expected_request_sha256=receipt["request_sha256"],
-        expected_recipe_sha256=receipt["recipe_sha256"],
-        expected_source_commit=receipt["source"]["source_commit"],
-        expected_config_identity=receipt["source"]["config_identity"],
+        receipt,
+        allowed_root=allowed_root,
+        request=request,
+        recipe=recipe,
     )
 
     malformed = copy.deepcopy(receipt)
@@ -398,13 +492,14 @@ def test_admitted_source_rejects_escape_and_malformed_receipt() -> None:
     malformed_result = resolve_admitted_source(
         malformed,
         allowed_root=ADMITTED_SOURCE_FIXTURE_DIR,
-        expected_request_sha256=receipt["request_sha256"],
-        expected_recipe_sha256=receipt["recipe_sha256"],
-        expected_source_commit=receipt["source"]["source_commit"],
-        expected_config_identity=receipt["source"]["config_identity"],
+        request=request,
+        recipe=recipe,
     )
 
-    assert (escaped_result.status, escaped_result.reason) == ("unavailable", "source_escaped_root")
+    assert (escaped_result.status, escaped_result.reason) == (
+        "unavailable",
+        "source_escaped_root",
+    )
     assert (malformed_result.status, malformed_result.reason) == ("failed", "receipt_malformed")
 
 

@@ -28,6 +28,7 @@ from urllib.parse import urlsplit
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.errors import RobotSfError
 
 SCHEMA_DIR = Path(__file__).with_name("schemas")
@@ -555,6 +556,25 @@ def admitted_source_receipt_from_dict(
     )
 
 
+def _bounded_error_detail(error: BaseException, *, limit: int = 200) -> str:
+    """Return a compact parse or filesystem detail for a stable rejection."""
+    detail = " ".join(str(error).split())
+    if not detail:
+        return type(error).__name__
+    return detail[:limit]
+
+
+def _receipt_read_error_detail(error: BaseException) -> str:
+    """Classify parser-limit failures without exposing unbounded input detail.
+
+    Returns:
+        A bounded, stable error detail.
+    """
+    if isinstance(error, ValueError):
+        return "receipt JSON is invalid or exceeds parser limits"
+    return _bounded_error_detail(error)
+
+
 def load_admitted_source_receipt(path: str | Path) -> AdmittedSourceReceipt:
     """Load and validate one JSON admitted-source receipt from *path*.
 
@@ -567,9 +587,10 @@ def load_admitted_source_receipt(path: str | Path) -> AdmittedSourceReceipt:
     receipt_path = Path(path)
     try:
         payload = json.loads(receipt_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, ValueError) as error:
         raise ReviewContractsValidationError(
-            [f"cannot read admitted-source receipt: {error}"], source=receipt_path
+            [f"cannot read admitted-source receipt: {_receipt_read_error_detail(error)}"],
+            source=receipt_path,
         ) from error
     if not isinstance(payload, Mapping):
         raise ReviewContractsValidationError(
@@ -626,15 +647,6 @@ def _recipe_identity_value(
     return None
 
 
-def _sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest of the bytes currently readable at *path*."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _resolution(
     status: str,
     reason: str,
@@ -682,11 +694,11 @@ def _receipt_payload(
         if not receipt_path.exists():
             return None, _resolution("unavailable", ADMITTED_SOURCE_REASON_RECEIPT_MISSING)
         raw_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeError, ValueError) as error:
         return None, _resolution(
             "unavailable",
             ADMITTED_SOURCE_REASON_RECEIPT_UNREADABLE,
-            detail=str(error),
+            detail=_receipt_read_error_detail(error),
         )
     if not isinstance(raw_payload, Mapping):
         return None, _resolution(
@@ -776,6 +788,7 @@ def _request_identity_document(request: ComponentRequest | Mapping[str, Any]) ->
     """Return the location-independent request identity used by SREV-22."""
     validated = _validated_request(request)
     return {
+        "schema_version": COMPONENT_REQUEST_SCHEMA_VERSION,
         "request_id": validated.request_id,
         "component_id": validated.component_id,
         "sources": [
@@ -786,6 +799,7 @@ def _request_identity_document(request: ComponentRequest | Mapping[str, Any]) ->
             }
             for source in validated.sources
         ],
+        "config": dict(validated.config),
         "required_capabilities": list(validated.required_capabilities),
     }
 
@@ -859,6 +873,13 @@ def _check_receipt_digest_bindings(
     Returns:
         A stale resolution on mismatch, or ``None`` when all bindings pass.
     """
+    if request is None or recipe is None:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="current request and recipe context are required for admission",
+        )
     _, early = _check_one_digest_binding(
         receipt,
         name="request",
@@ -879,8 +900,6 @@ def _check_receipt_digest_bindings(
     )
     if early is not None:
         return early
-    if request is None:
-        return None
     validated_request = _validated_request(request)
     if not any(
         source.uri == receipt.source.uri and source.format == receipt.source.format
@@ -907,11 +926,19 @@ def _check_source_identity_bindings(
     Returns:
         A stale resolution on mismatch or missing expectations, or ``None``.
     """
-    expected_source = (
-        expected_source_commit
-        if expected_source_commit is not None
-        else _recipe_identity_value(recipe, "source_commit")
-    )
+    recipe_source = _recipe_identity_value(recipe, "source_commit")
+    if expected_source_commit is not None and (
+        not isinstance(expected_source_commit, str)
+        or not isinstance(recipe_source, str)
+        or expected_source_commit.lower() != recipe_source.lower()
+    ):
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="explicit source commit identity does not match the recipe",
+        )
+    expected_source = recipe_source
     if not isinstance(expected_source, str) or _SHA40_RE.fullmatch(expected_source) is None:
         return _resolution(
             "unavailable",
@@ -926,11 +953,15 @@ def _check_source_identity_bindings(
             receipt=receipt,
             detail="source commit identity does not match the receipt",
         )
-    expected_config = (
-        expected_config_identity
-        if expected_config_identity is not None
-        else _recipe_identity_value(recipe, "config_identity")
-    )
+    recipe_config = _recipe_identity_value(recipe, "config_identity")
+    if expected_config_identity is not None and expected_config_identity != recipe_config:
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="explicit config identity does not match the recipe",
+        )
+    expected_config = recipe_config
     if not isinstance(expected_config, str) or not expected_config.strip():
         return _resolution(
             "unavailable",
@@ -960,7 +991,12 @@ def _check_recipe_source_bindings(
         ``None`` when the recipe carries no conflicting value.
     """
     if recipe is None:
-        return None
+        return _resolution(
+            "unavailable",
+            ADMITTED_SOURCE_REASON_RECEIPT_STALE,
+            receipt=receipt,
+            detail="current recipe context is required for admission",
+        )
     document = recipe.document if isinstance(recipe, ExperimentRecipe) else recipe
     if not isinstance(document, Mapping):
         return _resolution(
@@ -1094,9 +1130,11 @@ def resolve_admitted_source(
 
     ``allowed_root`` is an explicit caller-owned trust boundary.  The receipt
     URI is interpreted as a relative local path beneath that root; remote URIs,
-    absolute paths, traversal, and symlink escapes are rejected.  Request and
-    recipe digests are required and source commit/config identity expectations
-    come from explicit arguments or the recipe's ``source_identity`` mapping.
+    absolute paths, traversal, and symlink escapes are rejected.  Current
+    request and recipe documents are required.  Their canonical digests,
+    URI/format binding, admission reference, and source commit/config identity
+    are checked against the receipt.  Optional expected identity arguments may
+    corroborate those documents but cannot replace them.
 
     Returns:
         ``status='admitted'`` and a resolved path only after the current source
@@ -1139,7 +1177,7 @@ def resolve_admitted_source(
         assert early is not None
         return early
     try:
-        observed_sha256 = _sha256_file(source_path)
+        observed_sha256 = sha256_file(source_path)
     except OSError as error:
         return _resolution(
             "unavailable",

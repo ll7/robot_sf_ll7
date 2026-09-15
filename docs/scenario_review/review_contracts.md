@@ -47,18 +47,23 @@ only when all of these checks pass:
 
 - the receipt has `status: admitted`, `source_kind: fixture` or `diagnostic`,
   `evidence_boundary: diagnostic_only`, and `scientific_claim_allowed: false`;
-- the receipt's request and recipe SHA-256 values match the current
-  `component-request.v1` and `experiment-recipe.v1` identities;
+- the receipt's request and recipe SHA-256 values match the current validated
+  `component-request.v1` and `experiment-recipe.v1` identities. The request
+  identity includes every request field except `output_directory`, including
+  `config`;
 - the request contains the receipt URI and format, and a recipe supplied to the
   resolver contains an `admission_reference` equal to `receipt_id`;
-- the source commit and config identity in `source_identity` (or explicit
-  resolver arguments) match the receipt; and
+- the source commit and config identity in the current recipe's
+  `source_identity` match the receipt. Optional explicit resolver expectations
+  may corroborate those identities but cannot replace the recipe context; and
 - the URI is a relative local path beneath the caller-supplied `allowed_root`,
   and a fresh SHA-256 rehash matches the receipt's source bytes.
 
-The resolver supports relative local paths such as `source.json`. It rejects
-URI schemes, query/fragment components, absolute paths, traversal, and symlink
-escapes. `format` and `schema` are required receipt metadata; the request
+The resolver requires both the current request and recipe documents for public
+admission; caller-supplied digests or source identities cannot stand in for
+those documents. It supports relative local paths such as `source.json` and
+rejects URI schemes, query/fragment components, absolute paths, traversal, and
+symlink escapes. `format` and `schema` are required receipt metadata; the request
 format and any recipe `source_schema` are checked for exact equality. The
 resolver does not parse arbitrary source formats or choose a simulator map.
 

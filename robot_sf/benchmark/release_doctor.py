@@ -35,8 +35,8 @@ from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
     check_tag_source_consistency,
 )
+from robot_sf.benchmark.slurm_closeout_receipt import validate_file as validate_slurm_closeout_file
 from robot_sf.benchmark.zenodo_publisher import build_session, read_token_file
-from scripts.tools.slurm_closeout_receipt import validate_file as validate_slurm_closeout_file
 
 # These are the two repository-wide security and correctness workflows that
 # must have evaluated the immutable source commit before publication.  The

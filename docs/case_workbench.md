@@ -107,9 +107,19 @@ state only) or `genuine_shared_prefix`; the latter remains
 The no-op negative-control arm and fixed stop rule are required, and missing or
 ambiguous fields fail validation and are prescribed to end in `not_available`,
 rather than using an implicit substitute.
-Pass `repo_root` to `load_intervention_spec` when local verification of the
-declared source/config bytes is available; otherwise the validator still
-requires explicit paths and lowercase digests but does not invent their bytes.
+Spec and negative-control identifiers, like source and config identities, must
+name real entities rather than fallback or unavailable sentinels.
+Pass `repo_root` to `load_intervention_spec` for local provenance verification.
+In that mode, `provenance.contract_identity.base_commit` is the semantic
+authority for every repository-relative source/config path: each path must be
+a tracked regular-file blob at that exact commit, and the current checkout
+bytes must match the historical blob and the declared SHA-256. Missing paths,
+trees, symlinks, submodules, and current-byte drift fail closed with a
+field-specific validation error. A current file's SHA-256 alone cannot make an
+untracked or historically different path admissible. When `repo_root` is
+omitted, the commit remains opaque metadata for an external durable source;
+the validator still requires explicit paths and lowercase digests but does not
+claim local historical-byte verification.
 
 This API validates and normalizes a specification only. It does not replay,
 execute paired runs, verify an intervention, or support a causal, benchmark,

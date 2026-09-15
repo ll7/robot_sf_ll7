@@ -13,6 +13,7 @@ import copy
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
 from collections.abc import Mapping
@@ -64,6 +65,7 @@ _PATH_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.\[\]-]*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 # Keep canonical JSON serialization below CPython's decimal conversion limit.
 _MAX_JSON_INTEGER_BITS = 4096
+_GIT_PROBE_TIMEOUT_SECONDS = 5
 # Exact case-insensitive tokens only; meaningful identifiers are not rejected by substring.
 _FALLBACK_IDENTITIES = frozenset(
     {
@@ -284,13 +286,13 @@ def _identifier(value: Any, field: str) -> str:
     """Require a stable identifier rather than a free-form or fallback value.
 
     Returns:
-        The validated identifier.
+        The validated, non-sentinel identifier.
     """
 
     text = _text(value, field)
     if _ID_RE.fullmatch(text) is None:
         raise InterventionSpecValidationError(f"{field} must be a stable identifier")
-    return text
+    return _reject_fallback_identity(text, field)
 
 
 def _field_path(value: Any, field: str) -> str:
@@ -390,9 +392,16 @@ def _validate_source_file(
     reference: Mapping[str, Any],
     *,
     repo_root: Path,
+    base_commit: str,
     field: str,
 ) -> None:
-    """Verify one declared source file when an explicit repository root is supplied."""
+    """Verify one declared source file against its immutable base-commit blob.
+
+    The working-tree file is checked as a regular file and against its declared
+    SHA-256. Git then proves that the same repository-relative path is a tracked
+    regular-file blob at ``base_commit`` and that the current bytes have the
+    exact Git blob identity recorded by that historical tree entry.
+    """
 
     relative = _normalise_file_path(reference["path"], f"{field}.path")
     root = repo_root.resolve()
@@ -406,9 +415,92 @@ def _validate_source_file(
         ) from exc
     if unresolved.is_symlink() or not resolved.is_file():
         raise InterventionSpecValidationError(f"{field}.path is not a regular file: {relative}")
-    actual = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    try:
+        current_bytes = resolved.read_bytes()
+    except (OSError, UnicodeError) as exc:
+        raise InterventionSpecValidationError(
+            f"{field}.path current bytes cannot be read: {relative}"
+        ) from exc
+    actual = hashlib.sha256(current_bytes).hexdigest()
     if actual != reference["sha256"]:
-        raise InterventionSpecValidationError(f"{field}.sha256 does not match source bytes")
+        raise InterventionSpecValidationError(
+            f"{field}.sha256 does not match source bytes in the current checkout"
+        )
+
+    historical_object_id = _historical_blob_identity(
+        root, base_commit=base_commit, relative=relative, field=field
+    )
+    historical_blob = _git_command_bytes(
+        root, ("cat-file", "blob", historical_object_id.decode("ascii"))
+    )
+    if historical_blob.returncode != 0 or historical_blob.stdout != current_bytes:
+        raise InterventionSpecValidationError(
+            f"{field}.path current bytes do not match the base_commit {base_commit} blob: "
+            f"{relative}"
+        )
+
+
+def _historical_blob_identity(
+    repo_root: Path,
+    *,
+    base_commit: str,
+    relative: str,
+    field: str,
+) -> bytes:
+    """Return the Git blob identity for a tracked regular file at ``base_commit``."""
+
+    historical = _git_command_bytes(
+        repo_root,
+        (
+            "--literal-pathspecs",
+            "ls-tree",
+            "-z",
+            "--full-tree",
+            base_commit,
+            "--",
+            relative,
+        ),
+    )
+    if historical.returncode != 0:
+        raise InterventionSpecValidationError(
+            f"{field}.path cannot be inspected at base_commit {base_commit}"
+        )
+    records = [record for record in historical.stdout.split(b"\0") if record]
+    if not records:
+        raise InterventionSpecValidationError(
+            f"{field}.path is not tracked at base_commit {base_commit}: {relative}"
+        )
+    if len(records) != 1:
+        raise InterventionSpecValidationError(
+            f"{field}.path resolves ambiguously at base_commit {base_commit}: {relative}"
+        )
+    try:
+        metadata, historical_path = records[0].split(b"\t", 1)
+        mode, object_type, object_id = metadata.split()
+    except ValueError as exc:
+        raise InterventionSpecValidationError(
+            f"{field}.path has an invalid Git tree entry at base_commit {base_commit}"
+        ) from exc
+    try:
+        encoded_path = os.fsencode(relative)
+    except UnicodeError as exc:
+        raise InterventionSpecValidationError(
+            f"{field}.path cannot be encoded for Git at base_commit {base_commit}"
+        ) from exc
+    if historical_path != encoded_path:
+        raise InterventionSpecValidationError(
+            f"{field}.path is not the declared Git tree path at base_commit {base_commit}"
+        )
+    if mode not in {b"100644", b"100755"} or object_type != b"blob":
+        raise InterventionSpecValidationError(
+            f"{field}.path is not a tracked regular file blob at base_commit {base_commit}: "
+            f"{relative}"
+        )
+    if re.fullmatch(rb"[0-9a-f]{40}", object_id) is None:
+        raise InterventionSpecValidationError(
+            f"{field}.path has an invalid Git blob identity at base_commit {base_commit}"
+        )
+    return object_id
 
 
 @lru_cache(maxsize=1)
@@ -615,9 +707,8 @@ def _validate_semantics(payload: dict[str, Any]) -> None:  # noqa: C901, PLR0912
 
     config_identity = _mapping(provenance["config_identity"], "provenance.config_identity")
     config_identity_copy = dict(config_identity)
-    config_identity_copy["config_id"] = _reject_fallback_identity(
-        _identifier(config_identity["config_id"], "provenance.config_identity.config_id"),
-        "provenance.config_identity.config_id",
+    config_identity_copy["config_id"] = _identifier(
+        config_identity["config_id"], "provenance.config_identity.config_id"
     )
     config_identity_copy["path"] = _normalise_file_path(
         config_identity["path"], "provenance.config_identity.path"
@@ -656,9 +747,40 @@ def _git_command(repo_root: Path, args: tuple[str, ...]) -> subprocess.Completed
             ["git", "-C", str(repo_root), *args],
             capture_output=True,
             check=False,
+            shell=False,
             text=True,
-            timeout=5,
+            timeout=_GIT_PROBE_TIMEOUT_SECONDS,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise InterventionSpecValidationError(
+            "Git probe timed out while inspecting repo_root"
+        ) from exc
+    except (OSError, subprocess.SubprocessError, UnicodeError, ValueError) as exc:
+        raise InterventionSpecValidationError("repo_root is not a usable Git checkout") from exc
+
+
+def _git_command_bytes(
+    repo_root: Path,
+    args: tuple[str, ...],
+) -> subprocess.CompletedProcess[bytes]:
+    """Run a bounded no-shell Git probe while preserving arbitrary file bytes.
+
+    Returns:
+        The completed Git process result.
+    """
+
+    try:
+        return subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            capture_output=True,
+            check=False,
+            shell=False,
+            timeout=_GIT_PROBE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise InterventionSpecValidationError(
+            "Git probe timed out while inspecting repo_root"
+        ) from exc
     except (OSError, subprocess.SubprocessError, UnicodeError, ValueError) as exc:
         raise InterventionSpecValidationError("repo_root is not a usable Git checkout") from exc
 
@@ -696,23 +818,26 @@ def _validate_git_checkout(repo_root: Path, commit: str) -> None:
 
 
 def _validate_bound_files(payload: Mapping[str, Any], repo_root: str | Path) -> None:
-    """Verify Git identity and declared config/source bytes in a checkout root."""
+    """Verify Git identity and historical source/config blobs in a checkout root."""
 
     if "\x00" in str(repo_root):
         raise InterventionSpecValidationError("repo_root must not contain an embedded NUL")
     root = Path(repo_root)
-    _validate_git_checkout(root, payload["provenance"]["contract_identity"]["base_commit"])
+    base_commit = payload["provenance"]["contract_identity"]["base_commit"]
+    _validate_git_checkout(root, base_commit)
     provenance = payload["provenance"]
     source_refs = provenance["source_identity"]["source_refs"]
     for index, reference in enumerate(source_refs):
         _validate_source_file(
             reference,
             repo_root=root,
+            base_commit=base_commit,
             field=f"provenance.source_identity.source_refs[{index}]",
         )
     _validate_source_file(
         provenance["config_identity"],
         repo_root=root,
+        base_commit=base_commit,
         field="provenance.config_identity",
     )
 
@@ -726,12 +851,14 @@ def validate_intervention_spec(
     """Validate and normalize one stage-1 intervention specification.
 
     ``repo_root`` is optional because source artifacts may be held in an
-    external durable store.  When supplied, it must be the top-level Git
-    worktree containing the declared contract commit, and every declared
-    repository-relative source/config digest is checked against bytes in that
-    checkout.  Omitting ``repo_root`` leaves the commit as explicitly opaque
-    metadata: its syntax is checked, but no local checkout or source bytes are
-    claimed.  Omitting required identities or hashes always fails.
+    external durable store. When supplied, it must be the top-level Git
+    worktree containing the declared contract commit. Every declared
+    repository-relative source/config path must be a tracked regular-file blob
+    at that commit, and the current checkout bytes must match that historical
+    blob and the declared SHA-256. Omitting ``repo_root`` leaves the commit as
+    explicitly opaque metadata: its syntax is checked, but no local checkout or
+    source bytes are claimed. Omitting required identities or hashes always
+    fails.
 
     Returns:
         A deep-copied, normalized specification mapping.
@@ -766,6 +893,12 @@ def load_intervention_spec(
     repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Load YAML/JSON and validate it without executing an intervention.
+
+    When ``repo_root`` is supplied, the specification's declared
+    ``provenance.contract_identity.base_commit`` is the authority for every
+    repository-relative source/config path. Each path must resolve to a
+    tracked regular-file blob at that commit, and the current bytes must match
+    both that blob and the declared SHA-256.
 
     Returns:
         A normalized specification mapping.

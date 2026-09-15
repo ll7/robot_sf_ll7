@@ -337,6 +337,23 @@ def test_placeholder_identities_are_rejected(identity_group: str, field: str, va
         validate_intervention_spec(payload)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("spec_id", "fallback"), ("negative_control.id", "unknown_id")],
+)
+def test_contract_identifiers_reject_placeholder_identities(field: str, value: str) -> None:
+    """Top-level and negative-control IDs use the same fallback sentinel policy."""
+
+    payload = _payload()
+    if field == "spec_id":
+        payload["spec_id"] = value
+    else:
+        payload["negative_control"]["id"] = value
+
+    with pytest.raises(InterventionSpecValidationError, match="fallback identity"):
+        validate_intervention_spec(payload)
+
+
 def test_commit_identity_rejects_zero_and_missing_commits(tmp_path: Path) -> None:
     """A local binding requires a real Git worktree and an existing commit object."""
 
@@ -421,7 +438,7 @@ def test_stop_rule_is_fixed_and_complete() -> None:
 
 
 def test_bound_files_require_matching_hashes(tmp_path: Path) -> None:
-    """Optional local binding verifies the declared config and source bytes."""
+    """Local binding verifies the declared config and current source bytes."""
 
     source = tmp_path / "source.json"
     config = tmp_path / "config.yaml"
@@ -440,4 +457,62 @@ def test_bound_files_require_matching_hashes(tmp_path: Path) -> None:
     assert validate_intervention_spec(payload, repo_root=tmp_path)["spec_id"] == payload["spec_id"]
     source.write_text("tampered\n", encoding="utf-8")
     with pytest.raises(InterventionSpecValidationError, match="does not match source bytes"):
+        validate_intervention_spec(payload, repo_root=tmp_path)
+
+
+def test_bound_files_require_historical_blob_match(tmp_path: Path) -> None:
+    """A current file cannot pass by changing its declared SHA-256 after the base commit."""
+
+    source = tmp_path / "source.json"
+    config = tmp_path / "config.yaml"
+    source.write_text("source\n", encoding="utf-8")
+    config.write_text("config: true\n", encoding="utf-8")
+    base_commit = _init_git_checkout(tmp_path)
+
+    payload = _payload()
+    config_hash = hashlib.sha256(config.read_bytes()).hexdigest()
+    payload["provenance"]["source_identity"]["source_refs"] = [
+        {
+            "path": "source.json",
+            "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "role": "mechanism_trace",
+        }
+    ]
+    payload["provenance"]["config_identity"].update({"path": "config.yaml", "sha256": config_hash})
+    payload["provenance"]["contract_identity"]["base_commit"] = base_commit
+
+    source.write_text("tampered\n", encoding="utf-8")
+    payload["provenance"]["source_identity"]["source_refs"][0]["sha256"] = hashlib.sha256(
+        source.read_bytes()
+    ).hexdigest()
+
+    with pytest.raises(InterventionSpecValidationError, match="do not match the base_commit"):
+        validate_intervention_spec(payload, repo_root=tmp_path)
+
+
+def test_bound_files_require_tracked_historical_blobs(tmp_path: Path) -> None:
+    """A current untracked file cannot satisfy a source binding."""
+
+    config = tmp_path / "config.yaml"
+    marker = tmp_path / "tracked.txt"
+    config.write_text("config: true\n", encoding="utf-8")
+    marker.write_text("tracked\n", encoding="utf-8")
+    base_commit = _init_git_checkout(tmp_path)
+
+    source = tmp_path / "untracked.json"
+    source.write_text("source\n", encoding="utf-8")
+    payload = _payload()
+    payload["provenance"]["source_identity"]["source_refs"] = [
+        {
+            "path": "untracked.json",
+            "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            "role": "mechanism_trace",
+        }
+    ]
+    payload["provenance"]["config_identity"].update(
+        {"path": "config.yaml", "sha256": hashlib.sha256(config.read_bytes()).hexdigest()}
+    )
+    payload["provenance"]["contract_identity"]["base_commit"] = base_commit
+
+    with pytest.raises(InterventionSpecValidationError, match="not tracked at base_commit"):
         validate_intervention_spec(payload, repo_root=tmp_path)

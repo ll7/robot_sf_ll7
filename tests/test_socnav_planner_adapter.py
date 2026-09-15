@@ -1835,3 +1835,92 @@ def test_social_force_corrected_obstacle_force_is_finite_and_monotonic_near_cont
         magnitudes.append(float(np.linalg.norm(force)))
 
     assert all(left < right for left, right in pairwise(magnitudes))
+
+
+class _ObstaclePayloadHarness:
+    """Minimal host for the occupancy payload helper (no planner needed)."""
+
+
+def _payload_harness():
+    from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
+
+    class _Harness(_ObstaclePayloadHarness, OccupancyAwarePlannerMixin):
+        pass
+
+    return _Harness()
+
+
+_PAYLOAD_FAILURE_REASON = "malformed_or_nonfinite_occupancy_grid_metadata"
+
+
+def test_obstacle_payload_records_reason_when_metadata_missing() -> None:
+    """A grid without any metadata fails closed with an explicit reason."""
+    harness = _payload_harness()
+    obs = _make_obs()
+    obs["occupancy_grid"] = np.zeros((4, 4, 4), dtype=np.float32)
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+def test_obstacle_payload_records_reason_for_shallow_grid() -> None:
+    """A grid that cannot carry channels fails closed even with metadata."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    harness_call = harness._extract_grid_payload
+    harness._extract_grid_payload = lambda observation: (
+        np.zeros((4, 4), dtype=np.float32),
+        dict(harness_call(observation)[1]),
+    )
+    try:
+        assert harness._obstacle_grid_payload(obs) is None
+        assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+    finally:
+        del harness._extract_grid_payload
+
+
+def test_obstacle_payload_records_reason_for_nonfinite_channel_indices() -> None:
+    """Non-finite channel indices fail closed instead of indexing blindly."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    obs["occupancy_grid_meta_channel_indices"] = np.array([np.inf, 1.0, 2.0, 3.0], dtype=np.float32)
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+def test_obstacle_payload_records_reason_for_unresolvable_channel_indices() -> None:
+    """Unparseable channel indices fail closed instead of raising."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    obs["occupancy_grid_meta_channel_indices"] = "not-a-number"
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+def test_obstacle_payload_records_reason_when_channel_missing() -> None:
+    """A grid without a usable obstacle channel fails closed with a reason."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    del obs["occupancy_grid_meta_channel_indices"]
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+def test_obstacle_payload_records_reason_for_non_positive_resolution() -> None:
+    """A non-positive resolution fails closed instead of scaling by garbage."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs())
+    obs["occupancy_grid_meta_resolution"] = np.array([-1.0], dtype=np.float32)
+
+    assert harness._obstacle_grid_payload(obs) is None
+    assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+def test_grid_channel_index_returns_minus_one_on_overflow() -> None:
+    """Unrepresentable channel indices degrade to missing instead of raising."""
+    harness = _payload_harness()
+
+    assert harness._grid_channel_index({"channel_indices": [float("inf")]}, "obstacles") == -1

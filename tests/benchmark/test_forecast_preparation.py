@@ -90,6 +90,34 @@ def _patch_pr8958_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(forecast_module, "sha256_file", _sha256_file)
 
 
+def _patch_pr9326_pyproject(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Model the tooling-only pyproject.toml digest introduced by PR9326."""
+    pyproject_path = REPO_ROOT / "pyproject.toml"
+    current_builder = forecast_module._build_evidence_references
+    current_sha256_file = forecast_module.sha256_file
+    updated_sha256 = "2873280ffea34b2ee343cc5e30e95b3eb365ac20956c5ba8dd876f36738efdc9"
+
+    def _references_with_updated_pyproject(root: Path) -> list[dict[str, str]]:
+        references = current_builder(root)
+        index = next(
+            index for index, item in enumerate(references) if item["path"] == "pyproject.toml"
+        )
+        references[index] = {"path": "pyproject.toml", "sha256": updated_sha256}
+        return references
+
+    def _sha256_file(path: Path) -> str:
+        if path.resolve() == pyproject_path:
+            return updated_sha256
+        return current_sha256_file(path)
+
+    monkeypatch.setattr(
+        forecast_module,
+        "_build_evidence_references",
+        _references_with_updated_pyproject,
+    )
+    monkeypatch.setattr(forecast_module, "sha256_file", _sha256_file)
+
+
 def test_packet_emits_matched_rows_and_explicit_ego_unavailability() -> None:
     """The packet has one identity-matched oracle/ego pair per selected source."""
     payload = _packet()
@@ -162,6 +190,70 @@ def test_tracked_packet_accepts_exact_historical_reference(monkeypatch: pytest.M
     summary = validate_forecast_preparation_packet(payload, repo_root=REPO_ROOT)
 
     assert summary["status"] == "passed"
+
+
+def test_tracked_packet_accepts_exact_historical_pyproject_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The frozen packet may retain the exact historical pyproject.toml reference."""
+    packet_path = (
+        REPO_ROOT
+        / "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json"
+    )
+    payload = json.loads(packet_path.read_text(encoding="utf-8"))
+    _patch_pr9326_pyproject(monkeypatch)
+
+    summary = validate_forecast_preparation_packet(payload, repo_root=REPO_ROOT)
+
+    assert summary["status"] == "passed"
+
+
+def test_tracked_packet_accepts_both_exact_historical_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both frozen references may use their independently verified historical bindings."""
+    packet_path = (
+        REPO_ROOT
+        / "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json"
+    )
+    payload = json.loads(packet_path.read_text(encoding="utf-8"))
+    _patch_pr8958_inventory(monkeypatch)
+    _patch_pr9326_pyproject(monkeypatch)
+
+    summary = validate_forecast_preparation_packet(payload, repo_root=REPO_ROOT)
+
+    assert summary["status"] == "passed"
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    (
+        {"path": "pyproject.toml", "sha256": "0" * 64},
+        {
+            "path": "THIRD_PARTY_NOTICES.md",
+            "sha256": "0" * 64,
+        },
+    ),
+)
+def test_historical_reference_rejects_unregistered_reference_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    replacement: dict[str, str],
+) -> None:
+    """Only the registered historical pyproject.toml occurrence may replace current bytes."""
+    packet_path = (
+        REPO_ROOT
+        / "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json"
+    )
+    payload = json.loads(packet_path.read_text(encoding="utf-8"))
+    _patch_pr9326_pyproject(monkeypatch)
+    references = list(payload["evidence_references"])
+    pyproject_index = next(
+        index for index, item in enumerate(references) if item["path"] == "pyproject.toml"
+    )
+    references[pyproject_index] = replacement
+
+    with pytest.raises(ValueError, match="evidence_references are not bound"):
+        forecast_module._validate_evidence_references(references, REPO_ROOT, payload=payload)
 
 
 def test_historical_reference_requires_the_frozen_packet(monkeypatch: pytest.MonkeyPatch) -> None:

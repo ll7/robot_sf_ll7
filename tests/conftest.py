@@ -499,6 +499,9 @@ _FAST_FILES = {
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",
+    # Three.js viewer payload contracts are deterministic schema/fidelity
+    # coverage for the changed viewer exporter (issue #9368).
+    "test_threejs_viewer.py",
     # SVG geometry contract tests provide changed-line coverage for the
     # parser's explicit legacy/corrected transform paths (issue #8314).
     "test_svg_transform_contract.py",

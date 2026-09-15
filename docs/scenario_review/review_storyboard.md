@@ -2,20 +2,27 @@
 
 Command-line glossary: SREV is the scenario-review portfolio; a storyboard
 spec (`visualization-spec.v1`) is the ranked-candidate document with source
-intervals; a component request (`component-request.v1`) is the fixture envelope
-that invokes one workbench component; shared contract shapes live in
+intervals; a component request (`component-request.v1`) invokes one workbench
+component; shared contract shapes live in
 `robot_sf/analysis_workbench/review_contracts.py` (SREV-01).
 
 ## What it does
 
-`python -m robot_sf.analysis_workbench.review_storyboard` ranks bundle episodes
-into storyboard candidates with deterministic tie-breaking
-(score-descending, then episode-id-ascending) and emits a validated
-`visualization-spec.v1` document plus override provenance. User pins/excludes
-apply deterministically every regeneration; a declared override source digest
-that no longer matches disables overrides with an explicit stale diagnostic
-instead of applying them blindly. Event intervals clip into the configured
-source duration with identity preserved.
+`python -m robot_sf.analysis_workbench.review_storyboard` ranks review-bundle
+episodes with deterministic tie-breaking (score descending, then episode ID
+ascending). The emitted spec binds each selected episode to the actual bundle
+reference artifact IDs. A declared override source digest must match the
+current bundle before pins or exclusions apply; otherwise overrides are
+ignored with an explicit diagnostic. Event intervals are clipped to the
+configured source duration, while their interval IDs and source row identity
+remain in the annotation payload next to the renderer-neutral time intervals.
+
+The component accepts either the canonical
+`trace_exemplar_interest` report shape (`episodes` entries with
+`composite_score`) through the explicitly versioned adapter
+`trace-exemplar-interest.report-adapter.v1`, or the explicitly versioned
+`srev07-exemplar-scores.v1` score map. Missing or unversioned scores remain
+unavailable; they never silently become zero.
 
 ## Command
 
@@ -28,18 +35,47 @@ uv run python -m robot_sf.analysis_workbench.review_storyboard \
 
 ## Output
 
-- `storyboard-spec.json`: validated spec with ranked candidates (episode, score,
-  score source, pinned flag), tie-break method, and clipped source intervals.
-- `override-provenance.json`: applied pins/excludes, freshness flag, diagnostics.
-- The printed result envelope carries `complete`, `partial`, `unavailable`, or
-  `failed` with stable reason codes. Only `complete` results list envelope
-  artifacts; spec files stay on disk either way.
+The CLI and Python API expose `component-result.v1` envelopes. Source bytes
+are checked against declared SHA-256 values, resolved paths must remain under
+the selected base, and bundle references are retained in result provenance
+with their schema, commit, configuration, units, coordinate frame, and
+observed integrity status.
+
+Three sidecars are emitted together into a new output directory:
+
+- `storyboard-spec.json`: validated `visualization-spec.v1` with ranked
+  candidates, actual source artifact IDs, score source, pin state, and clipped
+  intervals.
+- `override-provenance.json`: versioned applied/ignored override state and the
+  declared versus observed bundle digest.
+- `missing-capability-report.json`: versioned requested, available, and
+  missing capability state with the same diagnostics as the result envelope.
+
+For a `complete` result, all three sidecars appear in the result `artifacts`
+array with their raw-byte digests and also in `provenance.emitted_artifacts`.
+For `partial` results, the sidecars remain diagnostic output but the shared
+result contract requires an empty `artifacts` array; their complete inventory
+is still present in `provenance.emitted_artifacts`.
 
 ## Unavailable reasons and limits
 
-- Missing families, corrupt sources, unknown override ids, stale override
-  sources, and out-of-range intervals make the result `partial` or `failed`,
-  never silently complete. Intended exclusions are provenance-recorded, not errors.
-- Evidence boundary: ranking reflects provided scores and explicit overrides,
-  not scientific merit. No benchmark, safety, or paper-facing claim follows from
-  a storyboard.
+- Missing required families or capabilities, corrupt or unbound sources,
+  digest mismatches, unsafe paths, duplicate episode IDs, malformed score
+  shapes, stale or unbound override sources, and invalid intervals never
+  silently produce a complete ranking.
+- An optional family that is not requested may be absent. Its capability
+  remains unavailable in the capability report, and no score fallback is
+  synthesized.
+- Output directories must not already exist. This prevents a rerun from
+  overwriting an earlier receipt.
+- Evidence boundary: ranking reflects provided diagnostic scores and explicit
+  overrides, not scientific merit. No benchmark, safety, or paper-facing claim
+  follows from a storyboard or its fixtures.
+
+## Discoverability boundary
+
+The central scenario-review index and component registry are owned by SREV-29
+and its approved owner path. This SREV-07 leaf intentionally does not edit
+`docs/scenario_review/README.md` or registry files. A bounded follow-up remains:
+the SREV-29 owner should add this page to the central index when an approved
+owner packet authorizes that cross-leaf change.

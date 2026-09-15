@@ -349,6 +349,9 @@ class SinglePedestrianBehavior:
         """Reset per-pedestrian runtime state for a new episode."""
         for runtime in self._runtimes:
             runtime.waypoint_index = 0
+            runtime.pending_waits = {
+                rule.waypoint_index: rule.wait_s for rule in runtime.definition.wait_at or []
+            }
             runtime.start_delay_remaining_s = float(runtime.definition.start_delay_s)
             runtime.wait_remaining_s = 0.0
             runtime.waiting_for_advance = False

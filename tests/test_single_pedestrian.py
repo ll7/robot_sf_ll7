@@ -17,8 +17,14 @@ import pytest
 from robot_sf.common.types import Line2D, Rect
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
+from robot_sf.nav.map_config import (
+    MapDefinition,
+    MapDefinitionPool,
+    PedestrianWaitRule,
+    SinglePedestrianDefinition,
+)
 from robot_sf.nav.obstacle import Obstacle
+from robot_sf.ped_npc.ped_behavior import SinglePedestrianBehavior
 from robot_sf.ped_npc.ped_population import (
     PedSpawnConfig,
     populate_simulation,
@@ -226,7 +232,11 @@ class TestSimulatorIntegration:
     """Tests for simulator integration with single pedestrians."""
 
     @staticmethod
-    def _build_simulator(single_pedestrian: SinglePedestrianDefinition):
+    def _build_simulator(
+        single_pedestrian: SinglePedestrianDefinition,
+        *,
+        peds_speed_mult: float = 1.3,
+    ):
         """Build a zero-background simulator with one explicit single pedestrian."""
         width = height = 20.0
         robot_spawn_zone: Rect = ((1.0, 1.0), (2.0, 1.0), (1.0, 2.0))
@@ -264,6 +274,7 @@ class TestSimulatorIntegration:
                 difficulty=0,
                 ped_density_by_difficulty=[0.0],
                 population_size=1,
+                peds_speed_mult=peds_speed_mult,
             ),
         )
         simulator = init_simulators(config, map_def, num_robots=1, random_start_pos=False)[0]
@@ -310,6 +321,53 @@ class TestSimulatorIntegration:
 
         assert np.linalg.norm(simulator.ped_pos[0] - initial_position) > 0.0
         assert np.allclose(simulator.pysf_sim.peds.max_speeds, [1.3])
+
+    def test_delayed_release_honors_configured_speed_multiplier(self):
+        """The first released transition must use the configured pedestrian speed cap."""
+        ped = SinglePedestrianDefinition(
+            id="slow_delayed_ped",
+            start=(10.0, 1.0),
+            goal=(10.0, 19.0),
+            speed_m_s=1.0,
+            start_delay_s=0.2,
+        )
+        simulator = self._build_simulator(ped, peds_speed_mult=0.1)
+
+        simulator.step_once([(0.0, 0.0)])
+        simulator.step_once([(0.0, 0.0)])
+
+        assert simulator.pysf_sim.config.scene_config.max_speed_multiplier == pytest.approx(0.1)
+        assert np.linalg.norm(simulator.ped_vel[0]) <= 0.1 + 1e-9
+        assert np.allclose(simulator.pysf_sim.peds.max_speeds, [0.1])
+
+    def test_reset_rearms_delayed_trajectory_wait(self):
+        """A delayed trajectory's wait rule must be restored for every episode."""
+        ped = SinglePedestrianDefinition(
+            id="delayed_wait_ped",
+            start=(10.0, 1.0),
+            trajectory=[(10.0, 1.0), (10.0, 19.0)],
+            wait_at=[PedestrianWaitRule(waypoint_index=0, wait_s=1.0)],
+            speed_m_s=1.0,
+            start_delay_s=0.2,
+        )
+        simulator = self._build_simulator(ped)
+        behavior = next(
+            behavior
+            for behavior in simulator.peds_behaviors
+            if isinstance(behavior, SinglePedestrianBehavior)
+        )
+        runtime = behavior._runtimes[0]
+
+        simulator.step_once([(0.0, 0.0)])
+        simulator.step_once([(0.0, 0.0)])
+        assert runtime.wait_remaining_s == pytest.approx(1.0)
+
+        simulator.reset_state()
+        assert runtime.pending_waits == {0: 1.0}
+
+        simulator.step_once([(0.0, 0.0)])
+        simulator.step_once([(0.0, 0.0)])
+        assert runtime.wait_remaining_s == pytest.approx(1.0)
 
     def test_simulator_spawns_single_pedestrian_correctly(self, simple_map_def):
         """Test that the simulator correctly spawns single pedestrians."""

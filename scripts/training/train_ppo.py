@@ -30,7 +30,7 @@ import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -2994,6 +2994,14 @@ def _prepare_seed_state(config: ExpertTrainingConfig) -> None:
         common.set_global_seed(int(config.seeds[0]), deterministic=deterministic)
 
 
+def _validate_run_id(run_id: str) -> str:
+    """Validate a caller-supplied run id before it becomes a path component."""
+    value = str(run_id).strip()
+    if not value or value in {".", ".."} or Path(value).name != value:
+        raise ValueError("run_id must be a non-empty single path component")
+    return value
+
+
 def _persist_expert_checkpoint(
     outputs: TrainingOutputs,
     *,
@@ -3029,6 +3037,7 @@ def _build_training_notes(  # noqa: C901, PLR0912
     outputs: TrainingOutputs,
     scenario_coverage: dict[str, int],
     dry_run: bool,
+    training_seed: int | None = None,
 ) -> list[str]:
     """Assemble training run notes for the manifest."""
     notes: list[str] = [
@@ -3040,6 +3049,8 @@ def _build_training_notes(  # noqa: C901, PLR0912
     ]
     if config_sha256 is not None:
         notes.append(f"config_sha256={config_sha256}")
+    if training_seed is not None:
+        notes.append(f"training_seed_override={training_seed}")
     # Record the resolved reward profile so training artifacts are self-describing
     # (issue #4967). Pairs the human-readable name with any reward_kwargs weights.
     notes.append(f"reward_profile={_resolved_reward_name(config.env_factory_kwargs)}")
@@ -3155,8 +3166,29 @@ def run_expert_training(
     config_sha256: str | None = None,
     dry_run: bool = False,
     resume_from: Path | None = None,
+    training_seed: int | None = None,
+    run_id: str | None = None,
 ) -> ExpertTrainingResult:
-    """Execute the expert PPO training workflow and persist manifests."""
+    """Execute one expert PPO workflow and persist manifests.
+
+    ``training_seed`` selects exactly one seed from a multi-seed source
+    configuration. This keeps the checked-in config immutable while making a
+    per-seed scheduler invocation explicit and artifact-isolated.
+    """
+
+    if training_seed is not None:
+        training_seed = int(training_seed)
+        if training_seed not in config.seeds:
+            raise ValueError(
+                f"training_seed={training_seed} is not declared in config.seeds={config.seeds}"
+            )
+        config = replace(
+            config,
+            seeds=(training_seed,),
+            policy_id=f"{config.policy_id}_seed_{training_seed}",
+        )
+    if run_id is not None:
+        run_id = _validate_run_id(run_id)
 
     _ensure_cuda_determinism_env()
     _prepare_seed_state(config)
@@ -3170,7 +3202,7 @@ def run_expert_training(
 
     start_time = time.perf_counter()
     timestamp = datetime.now(UTC)
-    run_id = f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
+    run_id = run_id or f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
     runtime_ctx = TrainingRuntimeContext(
         run_id=run_id,
         dry_run=dry_run,
@@ -3238,6 +3270,7 @@ def run_expert_training(
         outputs=outputs,
         scenario_coverage=scenario_coverage,
         dry_run=dry_run,
+        training_seed=training_seed,
     )
     metrics_synthetic = _apply_synthetic_metrics_fallback(
         aggregates,
@@ -3333,7 +3366,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     Returns:
         Parser with ``--config``, ``--dry-run``, ``--log-level``, ``--log-file``,
-        and ``--resume-from`` options.
+        ``--resume-from``, ``--seed``, and ``--run-id`` options.
     """
     parser = argparse.ArgumentParser(
         description="Train an expert PPO policy with manifest outputs."
@@ -3361,6 +3394,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--resume-from",
         default=None,
         help="Optional checkpoint path to resume PPO training from.",
+    )
+    parser.add_argument(
+        "--seed",
+        dest="training_seed",
+        type=int,
+        default=None,
+        help="Run exactly one seed declared in the config (required for independent multi-seed jobs).",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Override the run id used for artifact and tracking paths.",
     )
     return parser
 
@@ -3413,6 +3458,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             config_sha256=config_sha256,
             dry_run=bool(args.dry_run),
             resume_from=resume_from,
+            training_seed=args.training_seed,
+            run_id=args.run_id,
         )
         return 0
     finally:

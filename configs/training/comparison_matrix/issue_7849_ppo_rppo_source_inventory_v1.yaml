@@ -4,7 +4,7 @@ schema_version: training_source_inventory.v1
 campaign: issue_7849_ppo_rppo_gpu_admission_v1
 issue: 7849
 source_base_ref: origin/main
-source_base_commit: 104fa80f8f686e694a221c1eedc3b5cb2b3c5349
+source_base_commit: 1bb17787b6000a2aa7b5149d201a408e3eedcef5
 claim_boundary: Preparation-only source inventory; no training, benchmark, or performance
   claim.
 files:
@@ -51,14 +51,17 @@ files:
   sha256: 32e901f7199905298a45d0662bd8787ef0b69c673b6f0ad84df4f3121d9d3626
   role: generic path/checksum preflight
 - path: scripts/training/train_ppo.py
-  sha256: 3aacbd3af98c6ecb59a691fb9505123fa1a1adf5489df42e8ddaddae48bd8d76
+  sha256: 164a4d832ec389638bc2fa651e9ac69b04f84caea7feb1fa6acfafcac7e09293
   role: feed-forward runner
 - path: scripts/training/train_recurrent_ppo.py
-  sha256: 70b47f4c973cf98da9bec299f3894e57fe974d6513bf88cfd9cc2cec1644da90
+  sha256: 5783ba7715126220a834e45abc65a8d958ef2dac6d2a97f42628ef2d94f4931e
   role: RecurrentPPO runner
 - path: tests/training/test_issue_7849_gpu_admission_packet.py
-  sha256: 981787519c35026804813aa7878fc2ff7f0eb56669f89e85894f8e1129b1a613
+  sha256: 5a8305029dedeb3081212e6b8b89ef4a62d8a2cfba17015704562846d2834e56
   role: focused admission and source-inventory validation
+- path: tests/training/test_train_recurrent_ppo_runtime.py
+  sha256: 1b593d77ae37ced9d137348ccd2bc39b0007bb659c89625c4d1dad24899a242b
+  role: focused recurrent metric and checkpoint-selection validation
 - path: uv.lock
   sha256: 61bc32dcdb5c983d8085449b89a9d58a73af396755a33f15fa8b3f3a544f964b
   role: locked dependency resolution

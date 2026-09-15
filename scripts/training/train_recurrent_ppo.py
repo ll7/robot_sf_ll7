@@ -23,6 +23,7 @@ import importlib
 import json
 import platform
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -379,12 +380,38 @@ def run_dry_run(
     return manifest_paths
 
 
-def _evaluate_recurrently(
+def _first_vector_info(infos: Any) -> Mapping[str, Any]:
+    """Return the first environment info mapping from either VecEnv API."""
+    if isinstance(infos, Mapping):
+        return infos
+    if isinstance(infos, np.ndarray):
+        infos = infos.tolist()
+    if isinstance(infos, (list, tuple)) and infos and isinstance(infos[0], Mapping):
+        return infos[0]
+    return {}
+
+
+def _vector_env_max_steps(eval_env: Any, fallback: int) -> int:
+    """Resolve an evaluation step budget without assuming a concrete VecEnv class."""
+    envs = getattr(eval_env, "envs", ())
+    if envs:
+        state = getattr(envs[0], "state", None)
+        value = getattr(state, "max_sim_steps", None)
+        if value is not None:
+            try:
+                return max(1, int(value))
+            except (TypeError, ValueError):
+                pass
+    return max(1, int(fallback))
+
+
+def _evaluate_recurrently(  # noqa: PLR0915
     *,
     model: Any,
     eval_env: Any,
     episodes: int,
     deterministic: bool = True,
+    snqi_context: Any | None = None,
 ) -> dict[str, Any]:
     """Evaluate with explicit recurrent-state propagation and reset accounting.
 
@@ -397,7 +424,9 @@ def _evaluate_recurrently(
     episode_starts = np.ones((1,), dtype=bool)
     episode_returns: list[float] = []
     episode_lengths: list[int] = []
+    episode_metrics: list[dict[str, float]] = []
     non_finite_actions = 0
+    resolved_snqi_context = snqi_context or train_ppo.resolve_training_snqi_context()
 
     current_return = 0.0
     current_length = 0
@@ -407,6 +436,7 @@ def _evaluate_recurrently(
         reset_accounting.record("env_reset")
         episode_starts = np.ones((1,), dtype=bool)
         done = False
+        terminal_info: Mapping[str, Any] = {}
         while not done:
             action, lstm_states = model.predict(
                 obs,
@@ -422,9 +452,18 @@ def _evaluate_recurrently(
                 )
             step_result = eval_env.step(action_array)
             if len(step_result) == 5:
-                obs, reward, terminated, truncated, _infos = step_result
+                obs, reward, terminated, truncated, infos = step_result
+                terminal_info = _first_vector_info(infos)
             else:
-                obs, reward, terminated, truncated = step_result
+                obs, reward, done_flags, infos = step_result
+                terminal_info = _first_vector_info(infos)
+                done_flag = bool(np.asarray(done_flags).reshape(-1)[0])
+                truncated_flag = bool(
+                    terminal_info.get("TimeLimit.truncated", False)
+                    or terminal_info.get("truncated", False)
+                )
+                terminated = np.asarray([done_flag and not truncated_flag])
+                truncated = np.asarray([truncated_flag])
             reward_value = np.asarray(reward).reshape(-1)[0]
             current_return += float(reward_value)
             current_length += 1
@@ -440,6 +479,17 @@ def _evaluate_recurrently(
                 episode_starts = np.zeros((1,), dtype=bool)
         episode_returns.append(current_return)
         episode_lengths.append(current_length)
+        max_steps = _vector_env_max_steps(eval_env, current_length)
+        episode_metrics.append(
+            train_ppo._gather_episode_metrics(
+                terminal_info,
+                steps_taken=current_length,
+                max_steps=max_steps,
+                episode_return=current_return,
+                avg_step_reward=current_return / max(current_length, 1),
+                snqi_context=resolved_snqi_context,
+            )
+        )
         current_return = 0.0
         current_length = 0
 
@@ -451,7 +501,11 @@ def _evaluate_recurrently(
         "mean_episode_length": float(np.mean(lengths_arr)) if lengths_arr.size else 0.0,
         "reset_counts": reset_accounting.as_dict(),
         "non_finite_action_count": non_finite_actions,
+        "episode_metrics": episode_metrics,
     }
+    for metric_name in train_ppo._EVAL_METRIC_KEYS:
+        values = [row[metric_name] for row in episode_metrics]
+        summary[metric_name] = float(np.mean(values)) if values else 0.0
     if lstm_states is not None:
         hidden, cell = lstm_states
         summary["state_norms"] = summarize_state_norms(np.asarray(hidden), np.asarray(cell))
@@ -544,6 +598,7 @@ def _train_and_evaluate_segments(  # noqa: PLR0913
     higher_is_better: bool,
     source_sha: str,
     seed: int,
+    snqi_context: Any,
 ) -> tuple[int, float | None, Path | None, list[dict[str, Any]]]:
     """Run the frozen step_schedule loop: learn, save, evaluate, select best."""
     best_score: float | None = None
@@ -579,18 +634,21 @@ def _train_and_evaluate_segments(  # noqa: PLR0913
             model=model,
             eval_env=eval_vec_env,
             episodes=max(1, config.base.evaluation.evaluation_episodes),
+            snqi_context=snqi_context,
         )
         eval_sec = time.perf_counter() - eval_start
-        proxy_score = float(eval_summary["mean_episode_return"])
+        selection_score = eval_summary.get(metric_name)
+        if selection_score is None or not np.isfinite(float(selection_score)):
+            raise RecurrentStateError(
+                f"Configured checkpoint metric {metric_name!r} is missing or non-finite"
+            )
+        selection_score = float(selection_score)
         eval_record = {
             "schema_version": "recurrent-eval-history.v1",
             "eval_step": int(eval_step),
-            "score": proxy_score,
+            "score": selection_score,
             "metric": metric_name,
-            "metric_note": (
-                "mean_episode_return used as deterministic selection proxy for local smoke; "
-                "campaign selection stays governed by the frozen #7846 rule"
-            ),
+            "metric_note": "native terminal-info evaluation metric used for checkpoint selection",
             "higher_is_better": higher_is_better,
             "episodes": eval_summary["episodes"],
             "mean_episode_return": eval_summary["mean_episode_return"],
@@ -598,6 +656,8 @@ def _train_and_evaluate_segments(  # noqa: PLR0913
             "reset_counts": eval_summary["reset_counts"],
             "state_norms": eval_summary.get("state_norms"),
             "non_finite_action_count": eval_summary["non_finite_action_count"],
+            "metrics": {key: float(eval_summary[key]) for key in train_ppo._EVAL_METRIC_KEYS},
+            "episode_metrics": eval_summary["episode_metrics"],
             "eval_sec": eval_sec,
             "recorded_at": utc_now_iso(),
         }
@@ -613,18 +673,18 @@ def _train_and_evaluate_segments(  # noqa: PLR0913
             },
         )
         is_better = best_score is None or (
-            proxy_score > best_score if higher_is_better else proxy_score < best_score
+            selection_score > best_score if higher_is_better else selection_score < best_score
         )
         if is_better:
-            best_score = proxy_score
+            best_score = selection_score
             best_checkpoint_path = output_dir / "best.zip"
             model.save(best_checkpoint_path)
             best_entry = build_checkpoint_index_entry(
                 kind="best",
                 checkpoint_path=best_checkpoint_path,
                 eval_step=int(eval_step),
-                score=proxy_score,
-                metric_name="mean_episode_return",
+                score=selection_score,
+                metric_name=metric_name,
                 source_sha=source_sha,
                 seed=seed,
             )
@@ -696,6 +756,10 @@ def run_training_for_seed(
 
     hyperparams = dict(config.recurrent_ppo_hyperparams)
     hyperparams["seed"] = base_seed
+    snqi_context = train_ppo.resolve_training_snqi_context(
+        weights_path=config.base.snqi_weights_path,
+        baseline_path=config.base.snqi_baseline_path,
+    )
     metric_name, higher_is_better = train_ppo._resolve_best_checkpoint_metric(
         config.base.best_checkpoint_metric,
     )
@@ -713,6 +777,7 @@ def run_training_for_seed(
                 higher_is_better=higher_is_better,
                 source_sha=source_sha,
                 seed=base_seed,
+                snqi_context=snqi_context,
             )
         )
         final_path = output_dir / "final.zip"
@@ -759,7 +824,7 @@ def run_training_for_seed(
             "best_checkpoint": {
                 "path": str(best_checkpoint_path) if best_checkpoint_path else None,
                 "score": best_score,
-                "metric": "mean_episode_return",
+                "metric": metric_name,
             },
         },
     }

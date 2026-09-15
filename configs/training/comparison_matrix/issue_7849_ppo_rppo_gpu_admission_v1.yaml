@@ -19,9 +19,9 @@ claim_eligible: false
 source:
   repository: ll7/robot_sf_ll7
   base_ref: origin/main
-  base_commit: 104fa80f8f686e694a221c1eedc3b5cb2b3c5349
+  base_commit: 1bb17787b6000a2aa7b5149d201a408e3eedcef5
   inventory: configs/training/comparison_matrix/issue_7849_ppo_rppo_source_inventory_v1.yaml
-  inventory_sha256: 1ed2f991ba4ec50757aadaaa12697b3d142cdf0698b7deaf82facfa6930c6d89
+  inventory_sha256: 9f28e83f8d92d73eb078b7a23b0c09f7788e3c13a3f6c30e88fc3648fec5e962
   binding_rule: >-
     The submit host must use one clean exact-head public worktree. Rehash the
     inventory, every listed source/config/scenario/map input, and the resolved
@@ -35,8 +35,10 @@ source:
     configs/training/ppo/issue_7849_ppo_gate1_canary_v1.yaml: e27c5ee24c066e56aa787fa278e08a8befaf4f941b5876e794d6f30b010c50fa
     configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml: 2602223fd6e08c84ab50e92af1b54662d68a06f7427753773846c5cd5c6aa5d8
     configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v1.yaml: 0ff090b58a0db47c31446200ff724f932e2c3a78c9167b772d6b3d8f62714f90
-    scripts/training/train_ppo.py: 3aacbd3af98c6ecb59a691fb9505123fa1a1adf5489df42e8ddaddae48bd8d76
-    scripts/training/train_recurrent_ppo.py: 70b47f4c973cf98da9bec299f3894e57fe974d6513bf88cfd9cc2cec1644da90
+    scripts/training/train_ppo.py: 164a4d832ec389638bc2fa651e9ac69b04f84caea7feb1fa6acfafcac7e09293
+    scripts/training/train_recurrent_ppo.py: 5783ba7715126220a834e45abc65a8d958ef2dac6d2a97f42628ef2d94f4931e
+    tests/training/test_issue_7849_gpu_admission_packet.py: 5a8305029dedeb3081212e6b8b89ef4a62d8a2cfba17015704562846d2834e56
+    tests/training/test_train_recurrent_ppo_runtime.py: 1b593d77ae37ced9d137348ccd2bc39b0007bb659c89625c4d1dad24899a242b
     robot_sf/benchmark/research_answerability.py: bf38986b0968c057d2df317d2feea56d7d1a5a29ab53d8351a7d145a16f3e5e3
     pyproject.toml: 77ace5438bcef4c1176a42ae58edb31d1864212b4bb65e253c761e79d262a0cf
     uv.lock: 61bc32dcdb5c983d8085449b89a9d58a73af396755a33f15fa8b3f3a544f964b
@@ -77,13 +79,14 @@ arms:
     training_config: configs/training/ppo/issue_7849_ppo_full_v1.yaml
     training_config_sha256: 9f74f7a99830c6ba9c576bb0d78db60a17d69a9fc2d861f35dbde1d7fa6dca2e
     runner_script: scripts/training/train_ppo.py
-    runner_script_sha256: 3aacbd3af98c6ecb59a691fb9505123fa1a1adf5489df42e8ddaddae48bd8d76
-    current_seed_execution: blocked_single_runner_uses_seeds_zero
+    runner_script_sha256: 164a4d832ec389638bc2fa651e9ac69b04f84caea7feb1fa6acfafcac7e09293
+    current_seed_execution: per_seed_cli_override_available
     current_seed_execution_detail: >-
-      run_expert_training constructs one model from config.seeds[0] when
-      randomize_seeds is false and has no seed or run-id override. The five
-      configured values therefore do not currently prove five independent
-      jobs.
+      The runner accepts --seed only when the value is declared by the source
+      config, reduces the effective run to that singleton seed, and suffixes
+      the policy identity with the seed. --run-id supplies an explicit
+      scheduler identity. The five full-budget jobs therefore have explicit
+      per-seed invocation and artifact-isolation shapes, subject to Gate 0.
     model_device_resolution: >-
       The merged runner delegates device selection to Stable-Baselines3
       default auto resolution; Gate 1 must record the resolved CUDA device and
@@ -96,12 +99,13 @@ arms:
     training_config: configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml
     training_config_sha256: 2602223fd6e08c84ab50e92af1b54662d68a06f7427753773846c5cd5c6aa5d8
     runner_script: scripts/training/train_recurrent_ppo.py
-    runner_script_sha256: 70b47f4c973cf98da9bec299f3894e57fe974d6513bf88cfd9cc2cec1644da90
+    runner_script_sha256: 5783ba7715126220a834e45abc65a8d958ef2dac6d2a97f42628ef2d94f4931e
     current_seed_execution: per_seed_plan_present
     current_seed_execution_detail: >-
       The runner creates a separate plan, run identity, output directory, and
-      seed for each configured seed; this remains subject to the metric and
-      evaluation gates below.
+      seed for each configured seed. Evaluation now emits native terminal-info
+      metrics and selects the configured metric; this remains subject to the
+      shared evaluation-seed and domain gates below.
 
 full_budget:
   status: blocked_before_submission
@@ -116,8 +120,51 @@ full_budget:
     recurrent_ppo: configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml
   command_shapes:
     ppo: >-
+      ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_231
       .venv/bin/python scripts/training/train_ppo.py --config
-      configs/training/ppo/issue_7849_ppo_full_v1.yaml --log-level INFO
+      configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 231 --run-id
+      issue7849-ppo-seed-231 --log-level INFO
+    ppo_per_seed:
+      - seed: 123
+        run_id: issue7849-ppo-seed-123
+        artifact_root: output/training/issue_7849_full/ppo_seed_123
+        command: >-
+          ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_123
+          .venv/bin/python scripts/training/train_ppo.py --config
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 123 --run-id
+          issue7849-ppo-seed-123 --log-level INFO
+      - seed: 231
+        run_id: issue7849-ppo-seed-231
+        artifact_root: output/training/issue_7849_full/ppo_seed_231
+        command: >-
+          ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_231
+          .venv/bin/python scripts/training/train_ppo.py --config
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 231 --run-id
+          issue7849-ppo-seed-231 --log-level INFO
+      - seed: 777
+        run_id: issue7849-ppo-seed-777
+        artifact_root: output/training/issue_7849_full/ppo_seed_777
+        command: >-
+          ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_777
+          .venv/bin/python scripts/training/train_ppo.py --config
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 777 --run-id
+          issue7849-ppo-seed-777 --log-level INFO
+      - seed: 992
+        run_id: issue7849-ppo-seed-992
+        artifact_root: output/training/issue_7849_full/ppo_seed_992
+        command: >-
+          ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_992
+          .venv/bin/python scripts/training/train_ppo.py --config
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 992 --run-id
+          issue7849-ppo-seed-992 --log-level INFO
+      - seed: 1337
+        run_id: issue7849-ppo-seed-1337
+        artifact_root: output/training/issue_7849_full/ppo_seed_1337
+        command: >-
+          ROBOT_SF_ARTIFACT_ROOT=output/training/issue_7849_full/ppo_seed_1337
+          .venv/bin/python scripts/training/train_ppo.py --config
+          configs/training/ppo/issue_7849_ppo_full_v1.yaml --seed 1337 --run-id
+          issue7849-ppo-seed-1337 --log-level INFO
     recurrent_ppo: >-
       .venv/bin/python scripts/training/train_recurrent_ppo.py --config
       configs/training/ppo/issue_7849_recurrent_ppo_full_v1.yaml --run-id
@@ -126,12 +173,12 @@ full_budget:
   command_use: >-
     These are command shapes for a later private route packet. They are not
     submit commands and must not be run until the seed, answerability, domain,
-    route, and artifact gates are green. The feed-forward shape cannot be
-    multiplied over five seeds until its seed-independent invocation blocker
-    is repaired and revalidated.
+    route, and artifact gates are green. The feed-forward list is the exact
+    five-job expansion; each command must retain its declared seed, run ID,
+    and isolated artifact root.
 
 checkpoint_evaluation:
-  status: blocked_metric_and_seed_producers
+  status: blocked_evaluation_seed_manifest
   evaluation_scenario_manifest: configs/scenarios/classic_interactions_francis2023.yaml
   evaluation_scenario_manifest_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
   episodes_per_evaluation: 100
@@ -168,18 +215,39 @@ checkpoint_evaluation:
       training seed. Neither runner accepts or records a separate immutable
       disjoint evaluation-seed manifest.
   recurrent_metric_producer:
-    status: blocked
+    status: available_native
     current_behavior: >-
-      The recurrent runner records mean_episode_return as its selection proxy
-      while labeling the configured metric. It does not emit the required
-      success_rate and collision_rate checkpoint metrics for this campaign.
-    required_remedy: native contract-aligned evaluation metrics and checkpoint selection
+      The recurrent evaluator preserves terminal metadata for both supported
+      vector-environment step APIs, emits the canonical success_rate and
+      collision_rate episode/summary metrics, and selects the configured
+      metric without a return proxy. Focused tests cover metric production and
+      checkpoint selection; full rows still require an immutable shared
+      evaluation-seed manifest.
+    required_remedy: bind the native producer to the shared evaluation-seed manifest
   feed_forward_metric_producer:
-    status: requires_contract_audit
+    status: available_per_seed
     current_behavior: >-
-      The feed-forward lane exposes the configured metric surface, but its
-      full per-seed execution and explicit disjoint evaluation identities still
-      require the Gate-0 audit.
+      The feed-forward lane accepts one declared --seed per invocation and a
+      path-safe --run-id, isolates the effective policy/checkpoint
+      identity, and retains the canonical metric surface. Full rows and
+      explicit disjoint evaluation identities still require Gate 0.
+
+technical_fixes:
+  feed_forward_seed_independence:
+    status: implemented_and_focused_tested
+    interface: --seed plus --run-id
+    semantic_boundary: >-
+      The registered config, hyperparameters, reward, scenarios, and seed set
+      remain unchanged; the override selects one declared seed and isolates
+      its run identity.
+  recurrent_metric_production:
+    status: implemented_and_focused_tested
+    metrics: [success_rate, collision_rate, path_efficiency, comfort_exposure, snqi, eval_episode_return, eval_avg_step_reward]
+    selection: configured_best_checkpoint_metric
+    semantic_boundary: >-
+      Metrics reuse train_ppo's canonical terminal metadata helper. No metric
+      definition, collision flag, selection direction, or scientific threshold
+      was changed.
 
 gate_0_exact_source:
   status: blocked
@@ -188,8 +256,8 @@ gate_0_exact_source:
     - all inventory source, scenario, map, dependency, and artifact bytes rehashed
     - #7846 contract and answerability validator pass
     - #7847 runtime smoke and #7848 stateful adapter smoke pass at the same head
-    - one independent feed-forward config/job per training seed
-    - native recurrent metric producer for success and collision checkpoint selection
+    - focused proof that each feed-forward seed invocation has an isolated identity
+    - focused proof that recurrent success/collision metrics drive native checkpoint selection
     - explicit disjoint evaluation-seed manifest consumed by both arms
     - outcome-free Domain-Aware Approval naming this exact packet
     - live private route, account, QoS, allocation, and storage preflight
@@ -227,7 +295,8 @@ gate_1_canary:
   ppo_command: >-
     CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/training/train_ppo.py
     --config configs/training/ppo/issue_7849_ppo_gate1_canary_v1.yaml
-    --log-level INFO --log-file output/training/issue_7849_gate1/ppo.log
+    --seed 4014 --run-id issue7849-gate1-ppo-seed4014 --log-level INFO
+    --log-file output/training/issue_7849_gate1/ppo.log
   recurrent_ppo_command: >-
     CUDA_VISIBLE_DEVICES=0 .venv/bin/python scripts/training/train_recurrent_ppo.py
     --config configs/training/ppo/issue_7849_recurrent_ppo_gate1_canary_v1.yaml
@@ -335,8 +404,9 @@ answerability:
       denominator: configured evaluation episodes per checkpoint
       pairing_key: arm plus training_seed plus checkpoint_step
       missingness_rule: missing metric invalidates selection and preserves the checkpoint lineage
-      status: blocked
-      execution_mode: unavailable
+      status: available
+      execution_mode: native
+      evidence: exact-head focused runtime test; no campaign checkpoint rows exist
       required: true
     - field: disjoint_evaluation_seed_manifest
       producer: immutable shared evaluation-seed manifest consumed by both arms
@@ -357,8 +427,9 @@ answerability:
       denominator: every recurrent evaluation episode
       pairing_key: training_seed plus scenario_id plus evaluation_seed
       missingness_rule: any non-finite or leaked state invalidates the affected row
-      status: blocked
-      execution_mode: unavailable
+      status: available
+      execution_mode: native
+      evidence: existing state/reset smoke plus exact-head focused recurrent tests; no campaign rows exist
       required: true
   analysis:
     analysis_unit: paired evaluation-seed scenario cell nested within training seed
@@ -386,8 +457,6 @@ compute_authorization:
   status: blocked
   authorized: false
   blocking_reasons:
-    - feed-forward five-seed independent execution is not represented by the current CLI
-    - recurrent checkpoint selection currently uses a mean_episode_return proxy
     - no explicit shared disjoint evaluation-seed manifest is consumed by both runners
     - Domain-Aware Approval is missing
     - live private route, quota, and artifact custody are not yet bound to this source head
@@ -417,10 +486,10 @@ preserved_vs_executable:
 
 smallest_executable_next_step:
   action: >-
-    Repair the three Gate-0 producer gaps in a reviewed source change: give the
-    feed-forward lane one exact seed invocation per independent job, make the
-    recurrent lane emit native success/collision checkpoint metrics, and add
-    one immutable disjoint evaluation-seed manifest consumed by both arms.
+    Add one immutable disjoint evaluation-seed manifest consumed by both arms
+    and bind it to the reviewed native metric producers. The feed-forward
+    per-seed CLI and recurrent success/collision checkpoint selection fixes are
+    implemented and focused-tested at this candidate head.
   then: >-
     Re-run focused contract, answerability, source-inventory, and merged smoke
     checks; obtain explicit Domain-Aware Approval; perform private account/QoS,

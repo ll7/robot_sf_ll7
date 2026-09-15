@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.research_answerability import evaluate_answerability
@@ -44,17 +45,27 @@ def test_packet_is_exact_source_bound_and_fail_closed() -> None:
     assert packet["issue"] == 7849
     assert packet["execution_authorized"] is False
     assert packet["claim_eligible"] is False
-    assert packet["source"]["base_commit"] == "104fa80f8f686e694a221c1eedc3b5cb2b3c5349"
+    assert packet["source"]["base_commit"] == "1bb17787b6000a2aa7b5149d201a408e3eedcef5"
     assert packet["source"]["inventory_sha256"] == _sha256(INVENTORY_PATH)
     assert packet["full_budget"]["independent_run_count"] == 10
     assert packet["full_budget"]["total_environment_steps"] == 150_000_000
     assert packet["execution_boundary"]["submit_slurm_from_this_issue"] is False
     assert packet["execution_boundary"]["full_training_in_this_pr"] is False
+    assert packet["arms"]["ppo"]["current_seed_execution"] == "per_seed_cli_override_available"
+    seed_commands = packet["full_budget"]["command_shapes"]["ppo_per_seed"]
+    assert [entry["seed"] for entry in seed_commands] == [123, 231, 777, 992, 1337]
+    for entry in seed_commands:
+        assert f"--seed {entry['seed']}" in entry["command"]
+        assert entry["run_id"] in entry["command"]
+        assert entry["artifact_root"] in entry["command"]
+    assert packet["checkpoint_evaluation"]["recurrent_metric_producer"]["status"] == (
+        "available_native"
+    )
 
 
 def test_inventory_rehashes_every_declared_source_and_runtime_input() -> None:
     inventory = _load(INVENTORY_PATH)
-    assert inventory["source_base_commit"] == "104fa80f8f686e694a221c1eedc3b5cb2b3c5349"
+    assert inventory["source_base_commit"] == "1bb17787b6000a2aa7b5149d201a408e3eedcef5"
 
     entries = []
     for section in ("files", "scenario_inputs", "map_inputs"):
@@ -114,6 +125,51 @@ def test_full_and_canary_configs_resolve_to_registered_contract() -> None:
     assert canary_ppo.evaluation.evaluation_episodes == 3
     assert canary_recurrent.base.evaluation.evaluation_episodes == 3
     assert train_ppo._build_eval_steps(2_048, canary_ppo.evaluation.step_schedule) == [1_024, 2_048]
+
+
+def test_feed_forward_seed_override_isolated_and_declared(tmp_path: Path, monkeypatch) -> None:
+    """One CLI-equivalent seed override creates a distinct artifact identity."""
+    config = train_ppo.load_expert_training_config(FULL_PPO_PATH)
+    monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
+    parsed = train_ppo.build_arg_parser().parse_args(
+        [
+            "--config",
+            str(FULL_PPO_PATH),
+            "--seed",
+            "231",
+            "--run-id",
+            "issue7849-ppo-seed-231",
+        ],
+    )
+    assert parsed.training_seed == 231
+    assert parsed.run_id == "issue7849-ppo-seed-231"
+
+    result = train_ppo.run_expert_training(
+        config,
+        config_path=FULL_PPO_PATH,
+        config_sha256=_sha256(FULL_PPO_PATH),
+        dry_run=True,
+        training_seed=231,
+        run_id="issue7849-ppo-seed-231",
+    )
+
+    assert result.config.seeds == (231,)
+    assert result.config.policy_id == "ppo_issue_7849_full_v1_seed_231"
+    assert result.expert_artifact.seeds == (231,)
+    assert result.training_run_artifact.seeds == (231,)
+    assert result.training_run_artifact.run_id == "issue7849-ppo-seed-231"
+    assert result.checkpoint_path.name == "ppo_issue_7849_full_v1_seed_231.zip"
+    assert "training_seed_override=231" in result.training_run_artifact.notes
+
+    with pytest.raises(ValueError, match="not declared in config.seeds"):
+        train_ppo.run_expert_training(config, dry_run=True, training_seed=999)
+    with pytest.raises(ValueError, match="single path component"):
+        train_ppo.run_expert_training(
+            config,
+            dry_run=True,
+            training_seed=231,
+            run_id="../unsafe",
+        )
 
 
 def test_canary_inputs_and_answerability_are_explicitly_blocked() -> None:

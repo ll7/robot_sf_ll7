@@ -9,7 +9,7 @@
     "source_uri": "source.json",
     "source_format": "fixture-json",
     "source_schema": "fixture-source.v1",
-    "source_commit": "1a9e9f718eefd55e2df80ac437fa57977168a6af",
+    "source_commit": "8514936f1d0ea6f150fe9d34efb03877648f2696",
     "config_identity": "srev22-admitted-source-config.v1",
     "evidence_boundary": "diagnostic_only",
     "scientific_claim_allowed": false,

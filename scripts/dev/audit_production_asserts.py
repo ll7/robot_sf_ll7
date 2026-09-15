@@ -312,6 +312,51 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_status="unowned_residual",
         ownership_references=_NEW_RESIDUAL_REFS,
     ),
+    (
+        "robot_sf/analysis_workbench/review_execute.py",
+        "run",
+        "early is not None",
+    ): _review(
+        "Every _admit_request early return sets the early result with the triple nulled, and the success path sets the triple with early nulled; reaching the failure branch proves the early result exists.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_execute.py",
+        "run",
+        "dir_early is not None",
+    ): _review(
+        "Every _prepare_output_dir early return sets the directory early result with the directory nulled, and the success paths return the directory with early nulled; reaching the failure branch proves the early result exists.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_ai.py",
+        "_redact_config",
+        "isinstance(cleaned, dict)",
+    ): _review(
+        "The top-level call passes a dict and _redact_value preserves mappings for dict inputs, so the redacted copy is a dict by construction.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_ai.py",
+        "_validate_highlight",
+        "isinstance(metric, str) and isinstance(units, str) and isinstance(source_id, str)",
+    ): _review(
+        "The preceding field checks return early with errors on any malformed field, so reaching the construction site proves all three fields are non-empty strings.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
+    (
+        "robot_sf/analysis_workbench/review_ai.py",
+        "_validate_highlight",
+        "isinstance(value, (int, float))",
+    ): _review(
+        "The preceding value check returns early on bools, non-numbers, and non-finite values, so reaching the construction site proves a finite number.",
+        ownership_status="unowned_residual",
+        ownership_references=("#9384",),
+    ),
 }
 
 

@@ -12,11 +12,13 @@ from pathlib import Path
 import pytest
 
 from robot_sf.analysis_workbench.review_contracts import (
+    ComponentResult,
     component_descriptor_from_dict,
     component_result_from_dict,
 )
 from robot_sf.render.video_sync import (
     COMPONENT_ID,
+    _result_document,
     descriptor,
     run,
 )
@@ -313,6 +315,20 @@ def test_descriptor_declares_capabilities() -> None:
     assert set(info["required_capabilities"]) == {"capture-frames", "sim-stamps"}
     assert "camera-calibration" in info["optional_capabilities"]
     assert component_descriptor_from_dict(info).component_id == COMPONENT_ID
+
+
+def test_result_document_is_json_safe_and_shared_contract_valid() -> None:
+    payload = _result_document(
+        ComponentResult(
+            request_id="schema-check",
+            component_id=COMPONENT_ID,
+            status="failed",
+            diagnostics=({"code": "diagnostic"},),
+        )
+    )
+
+    assert isinstance(payload["diagnostics"], list)
+    assert component_result_from_dict(payload).status == "failed"
 
 
 def test_source_identity_digest_integrity_and_admission_are_retained(tmp_path: Path) -> None:

@@ -1119,7 +1119,12 @@ def _result_document(result: ComponentResult) -> dict[str, Any]:
     Returns:
         JSON-safe shared result envelope.
     """
-    return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)}
+    return json.loads(
+        json.dumps(
+            {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **asdict(result)},
+            allow_nan=False,
+        )
+    )
 
 
 def _prepare_cli_payload(args: argparse.Namespace) -> tuple[Any, str | None]:

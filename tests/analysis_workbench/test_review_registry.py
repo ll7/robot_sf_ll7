@@ -260,7 +260,7 @@ def test_conformance_fails_closed_for_broken_descriptor(tmp_path: Path) -> None:
         case_name="broken",
     )
     assert report.passed is False
-    assert report.checks[0].name == "descriptor_validates"
+    assert report.checks[-1].name == "descriptor_validates"
 
 
 def test_unknown_target_is_unavailable(tmp_path: Path) -> None:
@@ -372,3 +372,424 @@ def test_cli_rejects_invalid_config_without_execution(tmp_path: Path) -> None:
         ]
     )
     assert code == 1
+
+
+def _stub_module(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    descriptor_payload: dict[str, Any],
+    run_impl: Any = None,
+) -> Any:
+    """Inject a stub component module under an allowlisted entry-point name."""
+    import sys
+    import types
+
+    module = types.ModuleType(name)
+    module.DESCRIPTOR = descriptor_payload
+    if run_impl is not None:
+        module.run = run_impl
+    monkeypatch.setitem(sys.modules, name, module)
+    return module
+
+
+def _stub_entry(name: str, module: str) -> Any:
+    from types import SimpleNamespace
+
+    return SimpleNamespace(name=name, value=f"{module}:DESCRIPTOR")
+
+
+def _good_descriptor(component_id: str, **overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_version": "component-descriptor.v1",
+        "component_id": component_id,
+        "component_version": "1.0.0",
+        "supported_input_versions": ["component-request.v1"],
+        "required_capabilities": ["bounded-execution"],
+        "optional_capabilities": [],
+        "output_types": ["stub.v1"],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_discover_config_target_must_be_string() -> None:
+    from robot_sf.analysis_workbench.review_registry import ReviewRegistryError
+
+    with pytest.raises(ReviewRegistryError, match="target_component_id must be a string"):
+        validate_registry_config({"mode": "discover", "target_component_id": 3})
+
+
+def test_commit_provenance_unknown_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess as subprocess_module
+
+    from robot_sf.analysis_workbench.review_registry import _commit_provenance
+
+    def _raise(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("no git today")
+
+    monkeypatch.setattr(subprocess_module, "run", _raise)
+    assert _commit_provenance() == {"commit": "unknown"}
+
+
+def test_entry_point_target_rejects_shapes() -> None:
+    from types import SimpleNamespace
+
+    from robot_sf.analysis_workbench.review_registry import _entry_point_target
+
+    assert _entry_point_target(SimpleNamespace(value=123)) is None
+    assert _entry_point_target(SimpleNamespace(value="os:system")) is None
+    assert _entry_point_target(SimpleNamespace(value="mod:attr:extra")) is None
+
+
+def test_descriptor_missing_attribute_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from robot_sf.analysis_workbench import review_registry as registry_module
+
+    entries = [
+        __import__("types").SimpleNamespace(
+            name="bad-attr",
+            value="examples.scenario_review.components.episode_analyzer:NONEXISTENT",
+        )
+    ]
+    monkeypatch.setattr(registry_module, "_installed_entry_points", lambda: entries)
+    components, rows = registry_module.discover_components()
+    assert components == {}
+    assert "no attribute" in rows[0]["reason"]
+
+
+def test_run_callable_missing_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from robot_sf.analysis_workbench import review_registry as registry_module
+
+    _stub_module(
+        monkeypatch, "examples.scenario_review.components.norun", _good_descriptor("stub-norun")
+    )
+    entries = [_stub_entry("norun", "examples.scenario_review.components.norun")]
+    monkeypatch.setattr(registry_module, "_installed_entry_points", lambda: entries)
+    components, rows = registry_module.discover_components()
+    assert components == {}
+    assert "no run(request) callable" in rows[0]["reason"]
+
+
+def test_battery_stage_failure_is_reported(tmp_path: Path) -> None:
+    from examples.scenario_review.components import episode_analyzer
+
+    report = check_component_conformance(
+        component_id=episode_analyzer.COMPONENT_ID,
+        descriptor_payload=dict(episode_analyzer.DESCRIPTOR),
+        run_callable=episode_analyzer.run,
+        probe_sources=[{"artifact_id": "gone", "uri": "missing.json", "format": "f"}],
+        probe_config={},
+        base_dir=tmp_path,
+        case_name="nostage",
+    )
+    assert report.passed is False
+    assert report.checks[-1].name == "probe_inputs_staged"
+
+
+def test_battery_reports_raising_component(tmp_path: Path) -> None:
+    from examples.scenario_review.components import episode_analyzer
+
+    def _raise(request: Any, **kwargs: Any) -> Any:
+        refused = _refuse_never(request)
+        if refused is not None:
+            return refused
+        raise RuntimeError("boom")
+
+    root = _stage_fixture_tree(tmp_path)
+    report = check_component_conformance(
+        component_id=episode_analyzer.COMPONENT_ID,
+        descriptor_payload=dict(episode_analyzer.DESCRIPTOR),
+        run_callable=_raise,
+        probe_sources=[
+            {
+                "artifact_id": "trace-srev29-smoke",
+                "uri": TRACE_URI,
+                "format": "episode-trace.fixture",
+            }
+        ],
+        probe_config={},
+        base_dir=root,
+        case_name="raiser",
+        source_root=root,
+    )
+    assert report.passed is False
+    assert any("raised RuntimeError" in check.detail for check in report.checks)
+
+
+def test_battery_rejects_unsupported_version(tmp_path: Path) -> None:
+    from examples.scenario_review.components import episode_analyzer
+
+    report = check_component_conformance(
+        component_id=episode_analyzer.COMPONENT_ID,
+        descriptor_payload=_good_descriptor(
+            episode_analyzer.COMPONENT_ID, supported_input_versions=["other-v9"]
+        ),
+        run_callable=episode_analyzer.run,
+        probe_sources=[],
+        probe_config={},
+        base_dir=tmp_path,
+        case_name="oldversion",
+    )
+    assert report.passed is False
+    assert report.checks[-1].name == "version_supported"
+
+
+def _refuse_never(request: Any) -> Any:
+    from robot_sf.analysis_workbench.review_contracts import ComponentResult
+
+    if "__never_supported_capability__" in request.required_capabilities:
+        return ComponentResult(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status="unavailable",
+            reason="missing capabilities: __never_supported_capability__",
+        )
+    return None
+
+
+def _envelope_breaker(request: Any, **kwargs: Any) -> Any:
+    from robot_sf.analysis_workbench.review_contracts import ComponentResult
+
+    refused = _refuse_never(request)
+    if refused is not None:
+        return refused
+    return ComponentResult(
+        request_id=request.request_id,
+        component_id=request.component_id,
+        status="complete",
+        artifacts=({"artifact_id": "x", "uri": "x.json"},),
+    )
+
+
+def test_battery_rejects_invalid_envelope(tmp_path: Path) -> None:
+    from examples.scenario_review.components import episode_analyzer
+
+    root = _stage_fixture_tree(tmp_path)
+    report = check_component_conformance(
+        component_id=episode_analyzer.COMPONENT_ID,
+        descriptor_payload=dict(episode_analyzer.DESCRIPTOR),
+        run_callable=_envelope_breaker,
+        probe_sources=[
+            {
+                "artifact_id": "trace-srev29-smoke",
+                "uri": TRACE_URI,
+                "format": "episode-trace.fixture",
+            }
+        ],
+        probe_config={},
+        base_dir=root,
+        case_name="badenvelope",
+        source_root=root,
+    )
+    assert report.passed is False
+    assert report.checks[-1].name == "envelope_valid"
+
+
+def _escape_artist(request: Any, **kwargs: Any) -> Any:
+    from robot_sf.analysis_workbench.review_contracts import ComponentResult
+
+    refused = _refuse_never(request)
+    if refused is not None:
+        return refused
+    base = Path(kwargs.get("base", "."))
+    output_dir = base / str(request.output_directory)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    outside = output_dir.parent / "escape-target"
+    outside.mkdir(parents=True, exist_ok=True)
+    (output_dir / "exfil-link").symlink_to(outside, target_is_directory=True)
+    return ComponentResult(
+        request_id=request.request_id,
+        component_id=request.component_id,
+        status="complete",
+        artifacts=({"artifact_id": "x", "uri": "exfil-link/evil.json", "sha256": "a" * 64},),
+    )
+
+
+def test_battery_rejects_namespace_escape(tmp_path: Path) -> None:
+    from examples.scenario_review.components import episode_analyzer
+
+    root = _stage_fixture_tree(tmp_path)
+    report = check_component_conformance(
+        component_id=episode_analyzer.COMPONENT_ID,
+        descriptor_payload=dict(episode_analyzer.DESCRIPTOR),
+        run_callable=_escape_artist,
+        probe_sources=[
+            {
+                "artifact_id": "trace-srev29-smoke",
+                "uri": TRACE_URI,
+                "format": "episode-trace.fixture",
+            }
+        ],
+        probe_config={},
+        base_dir=root,
+        case_name="escaper",
+        source_root=root,
+    )
+    assert report.passed is False
+    assert report.checks[-1].name == "namespace_contained"
+
+
+def test_battery_detects_divergent_rerun(tmp_path: Path) -> None:
+    from examples.scenario_review.components import episode_analyzer
+
+    calls: list[str] = []
+
+    seen: dict[str, int] = {}
+
+    def _flaky(request: Any, **kwargs: Any) -> Any:
+        from robot_sf.analysis_workbench.review_contracts import ComponentResult
+
+        refused = _refuse_never(request)
+        if refused is not None:
+            return refused
+        calls.append(str(request.output_directory))
+        directory = str(request.output_directory)
+        seen[directory] = seen.get(directory, 0) + 1
+        if seen[directory] > 1:
+            return ComponentResult(
+                request_id=request.request_id,
+                component_id=request.component_id,
+                status="failed",
+                reason="output collision, already exists",
+            )
+        digest = "c" * 64 if "run-b" in directory else "b" * 64
+        return ComponentResult(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status="complete",
+            artifacts=({"artifact_id": "a", "uri": "a.json", "sha256": digest},),
+        )
+
+    root = _stage_fixture_tree(tmp_path)
+    report = check_component_conformance(
+        component_id=episode_analyzer.COMPONENT_ID,
+        descriptor_payload=dict(episode_analyzer.DESCRIPTOR),
+        run_callable=_flaky,
+        probe_sources=[
+            {
+                "artifact_id": "trace-srev29-smoke",
+                "uri": TRACE_URI,
+                "format": "episode-trace.fixture",
+            }
+        ],
+        probe_config={},
+        base_dir=root,
+        case_name="flaky",
+        source_root=root,
+    )
+    assert report.passed is False
+    assert report.checks[-1].name == "deterministic_rerun"
+
+
+def test_execute_reports_target_exceptions(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from robot_sf.analysis_workbench import review_registry as registry_module
+
+    def _raise(request: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("target exploded")
+
+    _stub_module(
+        monkeypatch,
+        "examples.scenario_review.components.exploder",
+        _good_descriptor("stub-exploder"),
+        _raise,
+    )
+    entries = [_stub_entry("exploder", "examples.scenario_review.components.exploder")]
+    monkeypatch.setattr(registry_module, "_installed_entry_points", lambda: entries)
+    request = _fixture_request(target_component_id="stub-exploder")
+    result = registry_module.run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "execution_error" in result.reason
+
+
+def test_execute_rejects_non_result_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from robot_sf.analysis_workbench import review_registry as registry_module
+
+    def _junk(request: Any, **kwargs: Any) -> Any:
+        return {"not": "a result"}
+
+    _stub_module(
+        monkeypatch,
+        "examples.scenario_review.components.junk",
+        _good_descriptor("stub-junk"),
+        _junk,
+    )
+    entries = [_stub_entry("junk", "examples.scenario_review.components.junk")]
+    monkeypatch.setattr(registry_module, "_installed_entry_points", lambda: entries)
+    request = _fixture_request(target_component_id="stub-junk")
+    result = registry_module.run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "non-result payload" in result.reason
+
+
+def test_execute_rejects_incompatible_target_version(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from robot_sf.analysis_workbench import review_registry as registry_module
+
+    def _ok(request: Any, **kwargs: Any) -> Any:
+        raise AssertionError("must not be invoked")
+
+    _stub_module(
+        monkeypatch,
+        "examples.scenario_review.components.oldie",
+        _good_descriptor("stub-oldie", supported_input_versions=["other-v9"]),
+        _ok,
+    )
+    entries = [_stub_entry("oldie", "examples.scenario_review.components.oldie")]
+    monkeypatch.setattr(registry_module, "_installed_entry_points", lambda: entries)
+    request = _fixture_request(target_component_id="stub-oldie")
+    result = registry_module.run(request, base=tmp_path)
+    assert result.status == "unavailable"
+    assert "incompatible_version" in result.reason
+
+
+def test_discover_reports_conflicts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from robot_sf.analysis_workbench import review_registry as registry_module
+
+    entries = [
+        SimpleNamespace(
+            name="alpha",
+            value="examples.scenario_review.components.episode_analyzer:DESCRIPTOR",
+        ),
+        SimpleNamespace(
+            name="beta",
+            value="examples.scenario_review.components.episode_analyzer:DESCRIPTOR",
+        ),
+    ]
+    monkeypatch.setattr(registry_module, "_installed_entry_points", lambda: entries)
+    request = _fixture_request(mode="discover", target_component_id=None)
+    result = registry_module.run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "conflicting_component_id" in result.reason
+
+
+def test_main_read_errors_are_reported(tmp_path: Path) -> None:
+    from robot_sf.analysis_workbench.review_registry import ReviewRegistryError, main
+
+    with pytest.raises(ReviewRegistryError, match="cannot read request"):
+        main(
+            ["--input", str(tmp_path / "missing.json"), "--output", "out", "--base", str(tmp_path)]
+        )
+    request_path = tmp_path / "request.json"
+    request_path.write_text(
+        json.dumps(json.loads((FIXTURES / "request.json").read_text(encoding="utf-8"))),
+        encoding="utf-8",
+    )
+    bad_config = tmp_path / "config.json"
+    bad_config.write_text("{nope", encoding="utf-8")
+    with pytest.raises(ReviewRegistryError, match="cannot read config"):
+        main(
+            [
+                "--input",
+                str(request_path),
+                "--config",
+                str(bad_config),
+                "--output",
+                "out",
+                "--base",
+                str(tmp_path),
+            ]
+        )

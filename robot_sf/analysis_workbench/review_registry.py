@@ -382,11 +382,15 @@ def discover_components() -> tuple[dict[str, DiscoveredComponent], list[dict[str
     return components, rows
 
 
-def _artifact_within_output(root: Path, output_dir: Path, uri: str) -> bool:
+def _artifact_within_output(output_dir: Path, uri: str) -> bool:
+    """Return whether an artifact URI stays inside the output directory.
+
+    Symlinks are resolved, so links pointing outside fail the check.
+    """
     if Path(uri).is_absolute() or ".." in Path(uri).parts:
         return False
     try:
-        (output_dir / uri).resolve(strict=False).relative_to(root.resolve(strict=False))
+        (output_dir / uri).resolve(strict=False).relative_to(output_dir.resolve(strict=False))
     except (OSError, RuntimeError, ValueError):
         return False
     return True
@@ -631,7 +635,7 @@ class _Battery:
         self.record("envelope_valid", True)
         output_dir = self.base / f"{self.case_name}-run-a"
         if any(
-            not _artifact_within_output(self.base, output_dir, str(entry.get("uri", "")))
+            not _artifact_within_output(output_dir, str(entry.get("uri", "")))
             for entry in first.artifacts
         ):
             self.record("namespace_contained", False, "an artifact escapes the output directory")

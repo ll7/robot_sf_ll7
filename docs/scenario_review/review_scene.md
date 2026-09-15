@@ -39,11 +39,21 @@ radii fall back to documented defaults recorded in the source map.
   source time, actor states, and units. `descriptor()` exposes the versioned
   capability descriptor.
 
-Unknown required versions fail; output collisions and unsafe paths are
-rejected. The source map copies the source identities accepted by the v1
-request schema; that schema carries no source-byte hash. SVG output carries
-fixture coordinates as figure text; PNG dimensions follow the figure preset.
-Repeated fixture runs compare equal source-map bytes.
+Unknown required versions fail; output collisions, absolute paths, traversal,
+and symlink escapes are rejected. The source map records the SHA-256 of the
+exact source bytes parsed by the canonical trace owner, along with the trace
+schema, embedded source identity, evidence boundary, coordinate frame, and
+units. `embedded-observed` is intentionally not an external identity
+attestation: the current v1 request schema carries no source-byte declaration.
+Any available declaration that cannot be checked or that disagrees with the
+observed bytes is diagnosed and the source is not rendered. Malformed JSON
+object shapes at the CLI/API boundary return a schema-valid failed result.
+The CLI result envelope includes `schema_version: component-result.v1`.
+Adding independent source hash, commit, or configuration declarations remains
+a shared-contract-owner follow-up for SREV-01/#9270; this leaf does not widen
+that owner and therefore does not claim those declarations are verified.
+SVG output carries fixture coordinates as figure text; PNG dimensions follow
+the figure preset. Repeated fixture runs compare equal source-map bytes.
 
 ## Usage
 

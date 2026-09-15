@@ -22,6 +22,7 @@ import json
 import math
 import shutil
 import tempfile
+from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -34,16 +35,18 @@ from matplotlib.patches import Circle
 
 from robot_sf.analysis_workbench.review_contracts import (
     COMPONENT_REQUEST_SCHEMA_VERSION,
+    COMPONENT_RESULT_SCHEMA_VERSION,
     ComponentRequest,
     ComponentResult,
     ReviewContractsValidationError,
+    SourceRef,
     component_descriptor_from_dict,
     component_request_from_dict,
 )
 from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceExport,
     SimulationTraceExportValidationError,
-    load_simulation_trace_export,
+    simulation_trace_export_from_dict,
 )
 
 COMPONENT_ID = "srev09-review-scene"
@@ -197,9 +200,8 @@ def _validate_scene(scene: Any) -> tuple[dict[str, Any] | None, list[str]]:
         errors.append(f"corrupt-scene: 'formats' must be a non-empty subset of {SCENE_FORMATS}")
     figure_spec, figure_errors = _validate_figure(scene.get("figure"))
     errors.extend(figure_errors)
-    if errors:
-        return None, errors
-    assert figure_spec is not None
+    if errors or figure_spec is None:
+        return None, errors or ["corrupt-scene: figure preset could not be normalized"]
     return {
         "frame_indices": list(indices) if indices is not None else None,
         "formats": list(dict.fromkeys(formats)),
@@ -404,6 +406,7 @@ def _build_source_map(
     request: ComponentRequest,
     scene: dict[str, Any],
     rows: list[dict[str, Any]],
+    source_records: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Compose the per-frame source map with a logical content digest.
 
@@ -419,13 +422,21 @@ def _build_source_map(
         "formats": scene["formats"],
         "frames": rows,
         "provenance": {
-            "source_artifact_ids": sorted({row["artifact_id"] for row in rows}),
-            "note": "Source identities are copied from the request, not verified "
-            "against source bytes.",
+            "source_artifact_ids": sorted(record["artifact_id"] for record in source_records),
+            "source_artifacts": source_records,
+            "source_identity_status": "embedded-observed",
+            "note": "observed_sha256 is the digest of the exact bytes parsed by the "
+            "canonical trace owner; embedded trace metadata is observed, not an "
+            "independent identity attestation.",
         },
     }
     document["sourcemap_sha256"] = _canonical_sha256(
-        {"figure": document["figure"], "formats": document["formats"], "frames": rows}
+        {
+            "figure": document["figure"],
+            "formats": document["formats"],
+            "frames": rows,
+            "provenance": document["provenance"],
+        }
     )
     return document
 
@@ -434,7 +445,7 @@ def _stage_outputs(
     output_dir: Path,
     request: ComponentRequest,
     scene: dict[str, Any],
-    pairs: list[tuple[Any, str]],
+    pairs: list[tuple[Any, str, dict[str, Any]]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any], str]:
     """Render every trace and publish all artifacts atomically.
 
@@ -447,13 +458,14 @@ def _stage_outputs(
         staging_dir = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
         artifacts: list[dict[str, Any]] = []
         rows: list[dict[str, Any]] = []
-        for trace, artifact_id in pairs:
+        source_records = [source_record for _, _, source_record in pairs]
+        for trace, artifact_id, _source_record in pairs:
             trace_artifacts, trace_rows = _render_trace_scenes(
                 trace, artifact_id, scene, staging_dir, request.output_directory
             )
             artifacts.extend(trace_artifacts)
             rows.extend(trace_rows)
-        source_map = _build_source_map(request, scene, rows)
+        source_map = _build_source_map(request, scene, rows, source_records)
         sourcemap_digest = _write_json(staging_dir / SOURCE_MAP_FILENAME, source_map)
         descriptor_digest = _write_json(staging_dir / DESCRIPTOR_FILENAME, _DESCRIPTOR_DOC)
         artifacts.append(
@@ -486,6 +498,8 @@ def _resolve_output_directory(root: Path, output_directory: str) -> tuple[Path |
     Returns:
         A resolved output path and no error, or ``(None, reason)`` for an escape.
     """
+    if not _is_strict_relative_path(output_directory):
+        return None, "unsafe-output-path: output directory must be a relative path"
     try:
         resolved_root = root.resolve(strict=False)
         output_dir = (resolved_root / output_directory).resolve(strict=False)
@@ -526,6 +540,106 @@ def _failed(
     )
 
 
+def _safe_result_identity(request: Any) -> tuple[str, str]:
+    """Return valid result identifiers for a possibly malformed request."""
+    if isinstance(request, Mapping):
+        request_id = request.get("request_id")
+        component_id = request.get("component_id")
+    else:
+        request_id = getattr(request, "request_id", None)
+        component_id = getattr(request, "component_id", None)
+    if not isinstance(request_id, str) or not request_id.strip():
+        request_id = "invalid-request"
+    if not isinstance(component_id, str) or not component_id.strip():
+        component_id = COMPONENT_ID
+    return request_id, component_id
+
+
+def _invalid_request_result(request: Any, reason: str) -> ComponentResult:
+    """Build a schema-valid failed result for malformed API/CLI input.
+
+    Returns:
+        A failed component result with valid identifiers and no artifacts.
+    """
+    request_id, component_id = _safe_result_identity(request)
+    return ComponentResult(
+        request_id=request_id,
+        component_id=component_id,
+        status="failed",
+        reason=f"invalid-request: {reason}",
+    )
+
+
+def _source_ref_shape_errors(index: int, ref: Any) -> list[str]:
+    """Return shape errors for one manually constructed source reference."""
+    if not isinstance(ref, SourceRef):
+        return [f"sources[{index}] must be a SourceRef"]
+    errors: list[str] = []
+    if not isinstance(ref.artifact_id, str) or not ref.artifact_id.strip():
+        errors.append(f"sources[{index}].artifact_id must be a non-empty string")
+    if not isinstance(ref.uri, str) or not ref.uri.strip():
+        errors.append(f"sources[{index}].uri must be a non-empty string")
+    if not isinstance(ref.format, str) or not ref.format.strip():
+        errors.append(f"sources[{index}].format must be a non-empty string")
+    return errors
+
+
+def _request_shape_errors(request: ComponentRequest) -> list[str]:
+    """Return stable shape errors for a manually constructed API request.
+
+    Returns:
+        Shape errors, or an empty list for a structurally valid request.
+    """
+
+    errors: list[str] = []
+    if not isinstance(request.request_id, str) or not request.request_id.strip():
+        errors.append("request_id must be a non-empty string")
+    if not isinstance(request.component_id, str) or not request.component_id.strip():
+        errors.append("component_id must be a non-empty string")
+    if not isinstance(request.output_directory, str) or not request.output_directory.strip():
+        errors.append("output_directory must be a non-empty string")
+    if not isinstance(request.config, dict):
+        errors.append("config must be an object")
+    if not isinstance(request.sources, (tuple, list)):
+        errors.append("sources must be an array")
+    else:
+        for index, ref in enumerate(request.sources):
+            errors.extend(_source_ref_shape_errors(index, ref))
+    if not isinstance(request.required_capabilities, (tuple, list)) or any(
+        not isinstance(capability, str) or not capability.strip()
+        for capability in request.required_capabilities
+    ):
+        errors.append("required_capabilities must be an array of non-empty strings")
+    return errors
+
+
+def _normalize_request(
+    request: ComponentRequest | Mapping[str, Any] | Any,
+) -> ComponentRequest | ComponentResult:
+    """Normalize API input and convert malformed shapes into a stable result.
+
+    Returns:
+        A normalized request, or a failed result for malformed input.
+    """
+    if isinstance(request, ComponentRequest):
+        errors = _request_shape_errors(request)
+        if errors:
+            return _invalid_request_result(request, "; ".join(errors))
+        return request
+    if isinstance(request, Mapping):
+        try:
+            normalized = component_request_from_dict(request)
+        except (ReviewContractsValidationError, TypeError, ValueError) as error:
+            reason = (
+                "; ".join(error.errors)
+                if isinstance(error, ReviewContractsValidationError)
+                else str(error)
+            )
+            return _invalid_request_result(request, reason)
+        return normalized
+    return _invalid_request_result(request, "expected a component request object")
+
+
 def _availability_gate(request: ComponentRequest) -> ComponentResult | None:
     """Reject unsupported components, capabilities, and versions.
 
@@ -547,12 +661,26 @@ def _availability_gate(request: ComponentRequest) -> ComponentResult | None:
     return None
 
 
+def _is_strict_relative_path(value: Any) -> bool:
+    """Return whether a user-supplied path is relative and traversal-free."""
+    if not isinstance(value, str) or not value or Path(value).is_absolute():
+        return False
+    normalized = value.replace("\\", "/")
+    if normalized.startswith("/") or normalized.startswith("//"):
+        return False
+    if len(normalized) >= 2 and normalized[1] == ":":
+        return False
+    return ".." not in normalized.split("/")
+
+
 def _resolve_source_file(source_base: Path, uri: str) -> Path | None:
     """Resolve a source URI under the base without allowing escapes.
 
     Returns:
         The resolved path, or ``None`` when it escapes the base.
     """
+    if not _is_strict_relative_path(uri):
+        return None
     try:
         resolved_base = source_base.resolve(strict=False)
         resolved = (resolved_base / uri).resolve(strict=False)
@@ -564,28 +692,184 @@ def _resolve_source_file(source_base: Path, uri: str) -> Path | None:
 
 def _load_trace_source(
     artifact_id: str, path: Path
-) -> tuple[SimulationTraceExport | None, str | None]:
+) -> tuple[SimulationTraceExport | None, str | None, str | None]:
     """Validate one trace export through its canonical owner.
 
     Returns:
-        Tuple of (trace, error); exactly one side is meaningful.
+        Tuple of (trace, error, observed byte digest); exactly one of trace or
+        error is meaningful.
     """
     try:
-        return load_simulation_trace_export(path), None
-    except (SimulationTraceExportValidationError, OSError, ValueError) as error:
-        return None, f"corrupt-source: {artifact_id}: {error}"
+        raw = path.read_bytes()
+        observed_sha256 = hashlib.sha256(raw).hexdigest()
+        payload = json.loads(raw)
+        if not isinstance(payload, Mapping):
+            raise SimulationTraceExportValidationError(["expected a mapping payload"], source=path)
+        return simulation_trace_export_from_dict(payload, source=path), None, observed_sha256
+    except (
+        SimulationTraceExportValidationError,
+        OSError,
+        TypeError,
+        ValueError,
+        KeyError,
+    ) as error:
+        return None, f"corrupt-source: {artifact_id}: {error}", None
+
+
+def _source_declarations(ref: SourceRef) -> dict[str, Any]:
+    """Collect optional future contract declarations without widening the owner.
+
+    Returns:
+        Non-empty declaration fields exposed by the current or a compatible
+        future SourceRef contract.
+    """
+    declarations: dict[str, Any] = {}
+    for field_name in (
+        "schema",
+        "sha256",
+        "source_commit",
+        "config_identity",
+        "units",
+        "coordinate_frame",
+    ):
+        if hasattr(ref, field_name):
+            value = getattr(ref, field_name)
+            if value not in (None, ""):
+                declarations[field_name] = value
+    return declarations
+
+
+def _verify_sha256_declaration(
+    declared_sha256: Any, observed_sha256: str
+) -> tuple[str, str | None]:
+    """Verify an optional source byte declaration.
+
+    Returns:
+        A declaration status and an optional stable failure reason.
+    """
+    if declared_sha256 is None:
+        return "not-provided", None
+    if (
+        not isinstance(declared_sha256, str)
+        or len(declared_sha256) != 64
+        or any(character not in "0123456789abcdefABCDEF" for character in declared_sha256)
+    ):
+        return "invalid", "source-integrity-declaration-invalid: sha256 must be 64 hex characters"
+    if declared_sha256.lower() != observed_sha256:
+        return "mismatch", "source-integrity-mismatch: declared sha256 does not match source bytes"
+    return "verified", None
+
+
+def _verify_metadata_declarations(
+    declarations: Mapping[str, Any], trace: SimulationTraceExport
+) -> tuple[dict[str, str], list[str]]:
+    """Verify optional declarations with a direct canonical trace comparison.
+
+    Returns:
+        Declaration statuses and stable failures for mismatches or unverifiable
+        fields.
+    """
+    statuses: dict[str, str] = {}
+    failures: list[str] = []
+    if "schema" in declarations:
+        statuses["schema"] = (
+            "verified" if declarations["schema"] == trace.schema_version else "mismatch"
+        )
+        if statuses["schema"] != "verified":
+            failures.append("source-schema-declaration-mismatch")
+    if "coordinate_frame" in declarations:
+        statuses["coordinate_frame"] = (
+            "verified" if declarations["coordinate_frame"] == trace.coordinate_frame else "mismatch"
+        )
+        if statuses["coordinate_frame"] != "verified":
+            failures.append("source-coordinate-frame-mismatch")
+    if "units" in declarations:
+        declared_units = declarations["units"]
+        statuses["units"] = (
+            "verified"
+            if isinstance(declared_units, Mapping) and dict(declared_units) == trace.units
+            else "unverified"
+        )
+        if statuses["units"] != "verified":
+            failures.append("source-unverified-declaration: units")
+    for field_name in ("source_commit", "config_identity"):
+        if field_name in declarations:
+            statuses[field_name] = "unverified"
+            failures.append(f"source-unverified-declaration: {field_name}")
+    return statuses, failures
+
+
+def _verify_source_provenance(
+    ref: SourceRef,
+    trace: SimulationTraceExport,
+    observed_sha256: str,
+) -> tuple[dict[str, Any], str | None]:
+    """Build explicit source provenance and verify declarations when available.
+
+    Returns:
+        A source provenance record and an optional stable failure reason.
+    """
+    declarations = _source_declarations(ref)
+    declaration_status: dict[str, str] = {
+        "format": "verified" if ref.format == trace.schema_version else "mismatch"
+    }
+    failures: list[str] = []
+    if ref.format != trace.schema_version:
+        failures.append(
+            f"source-schema-mismatch: declared format {ref.format!r} != "
+            f"loaded schema {trace.schema_version!r}"
+        )
+
+    sha_status, sha_failure = _verify_sha256_declaration(
+        declarations.get("sha256"), observed_sha256
+    )
+    declaration_status["sha256"] = sha_status
+    integrity_status = "verified" if sha_status == "verified" else "observed-only"
+    if sha_failure is not None:
+        failures.append(sha_failure)
+        integrity_status = "mismatch" if sha_status == "mismatch" else "unverified"
+    metadata_status, metadata_failures = _verify_metadata_declarations(declarations, trace)
+    declaration_status.update(metadata_status)
+    failures.extend(metadata_failures)
+
+    source_record = {
+        "artifact_id": ref.artifact_id,
+        "uri": ref.uri,
+        "format": ref.format,
+        "observed_sha256": observed_sha256,
+        "declared": declarations,
+        "declaration_status": declaration_status,
+        "integrity_status": integrity_status,
+        "identity_status": "embedded-observed",
+        "trace": {
+            "schema_version": trace.schema_version,
+            "trace_id": trace.trace_id,
+            "source": asdict(trace.source),
+            "evidence_boundary": trace.evidence_boundary,
+            "coordinate_frame": trace.coordinate_frame,
+            "units": dict(trace.units),
+        },
+    }
+    return source_record, "; ".join(failures) if failures else None
 
 
 def _collect_traces(
     request: ComponentRequest, sources_root: Path
-) -> tuple[list[tuple[Any, str]], list[dict[str, Any]], ComponentResult | None]:
+) -> tuple[
+    list[tuple[Any, str, dict[str, Any]]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    ComponentResult | None,
+]:
     """Load and validate every trace source, diagnosing skipped ones.
 
     Returns:
-        Tuple of ((trace, artifact id) pairs, diagnostics, terminal result).
+        Tuple of ((trace, artifact id, provenance) pairs, source records,
+        diagnostics, terminal result).
         The terminal result is set when no trace is usable.
     """
-    pairs: list[tuple[Any, str]] = []
+    pairs: list[tuple[Any, str, dict[str, Any]]] = []
+    source_records: list[dict[str, Any]] = []
     diagnostics: list[dict[str, Any]] = []
     for ref in request.sources:
         source_file = _resolve_source_file(sources_root, ref.uri)
@@ -600,21 +884,40 @@ def _collect_traces(
                 }
             )
             continue
-        trace, error = _load_trace_source(ref.artifact_id, source_file)
+        trace, error, observed_sha256 = _load_trace_source(ref.artifact_id, source_file)
         if error is not None or trace is None:
             diagnostics.append({"artifact_id": ref.artifact_id, "reason": error})
+            continue
+        if observed_sha256 is None:
+            diagnostics.append(
+                {
+                    "artifact_id": ref.artifact_id,
+                    "reason": "corrupt-source: missing observed byte digest",
+                }
+            )
             continue
         if not trace.frames:
             diagnostics.append(
                 {"artifact_id": ref.artifact_id, "reason": "empty trace has no scenes"}
             )
             continue
-        pairs.append((trace, ref.artifact_id))
+        source_record, provenance_error = _verify_source_provenance(ref, trace, observed_sha256)
+        if provenance_error is not None:
+            diagnostics.append({"artifact_id": ref.artifact_id, "reason": provenance_error})
+            continue
+        source_records.append(source_record)
+        pairs.append((trace, ref.artifact_id, source_record))
     if not request.sources:
-        return pairs, diagnostics, _failed(request, "missing-evidence: request carries no sources")
+        return (
+            pairs,
+            source_records,
+            diagnostics,
+            _failed(request, "missing-evidence: request carries no sources"),
+        )
     if not pairs:
         return (
             pairs,
+            source_records,
             diagnostics,
             ComponentResult(
                 request_id=request.request_id,
@@ -624,16 +927,20 @@ def _collect_traces(
                 reason="unsupported-evidence: no source could be rendered",
             ),
         )
-    return pairs, diagnostics, None
+    return pairs, source_records, diagnostics, None
 
 
 def run(
-    request: ComponentRequest, *, base: Path | None = None, source_base: Path | None = None
+    request: ComponentRequest | Mapping[str, Any] | Any,
+    *,
+    base: Path | None = None,
+    source_base: Path | None = None,
 ) -> ComponentResult:
     """Render numbered scene frames over validated trace exports.
 
     Args:
-        request: Validated component request.
+        request: Validated component request, or a JSON-like mapping that is
+            normalized through the shared request contract.
         base: Base directory the request output directory resolves under.
         source_base: Base directory source URIs resolve under (CLI: the request
             file's directory). Defaults to the current working directory.
@@ -644,6 +951,10 @@ def run(
         versions, or evidence, or ``failed`` for corrupt inputs, missing
         geometry, and output collisions.
     """
+    normalized_request = _normalize_request(request)
+    if isinstance(normalized_request, ComponentResult):
+        return normalized_request
+    request = normalized_request
     root = base if base is not None else Path.cwd()
     sources_root = source_base if source_base is not None else Path.cwd()
     gate = _availability_gate(request)
@@ -654,7 +965,7 @@ def run(
     scene, scene_errors = _validate_scene(request.config.get("scene"))
     if scene_errors or scene is None:
         return _failed(request, "; ".join(scene_errors))
-    pairs, diagnostics, terminal = _collect_traces(request, sources_root)
+    pairs, source_records, diagnostics, terminal = _collect_traces(request, sources_root)
     if terminal is not None:
         return terminal
     output_dir, path_error = _resolve_output_directory(root, request.output_directory)
@@ -685,6 +996,8 @@ def run(
             "output_directory": request.output_directory,
             "sourcemap_sha256": source_map["sourcemap_sha256"],
             "component_version": COMPONENT_VERSION,
+            "source_artifacts": source_records,
+            "source_identity_status": "embedded-observed",
         },
     )
 
@@ -714,23 +1027,61 @@ def main(argv: list[str] | None = None) -> int:
     try:
         payload = json.loads(input_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise ReviewContractsValidationError([f"cannot read request: {error}"]) from error
+        result = _invalid_request_result(None, f"cannot read request: {error}")
+        print(json.dumps(_result_payload(result), sort_keys=True, indent=2))  # noqa: T201
+        return 1
+    if not isinstance(payload, dict):
+        result = _invalid_request_result(payload, "request document must be a JSON object")
+        print(json.dumps(_result_payload(result), sort_keys=True, indent=2))  # noqa: T201
+        return 1
+    request_config = payload.get("config", {})
+    if not isinstance(request_config, dict):
+        result = _invalid_request_result(payload, "request config must be a JSON object")
+        print(json.dumps(_result_payload(result), sort_keys=True, indent=2))  # noqa: T201
+        return 1
     if args.config is not None:
         try:
             config = json.loads(Path(args.config).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
-            raise ReviewContractsValidationError([f"cannot read config: {error}"]) from error
-        if isinstance(config, dict):
-            payload = {**payload, "config": {**payload.get("config", {}), **config}}
+            result = _invalid_request_result(payload, f"cannot read config: {error}")
+            print(json.dumps(_result_payload(result), sort_keys=True, indent=2))  # noqa: T201
+            return 1
+        if not isinstance(config, dict):
+            result = _invalid_request_result(payload, "config document must be a JSON object")
+            print(json.dumps(_result_payload(result), sort_keys=True, indent=2))  # noqa: T201
+            return 1
+        payload = {**payload, "config": {**request_config, **config}}
     payload = {**payload, "output_directory": args.output}
-    request = component_request_from_dict(payload, source=args.input)
+    try:
+        request = component_request_from_dict(payload, source=args.input)
+    except (ReviewContractsValidationError, TypeError, ValueError) as error:
+        reason = (
+            "; ".join(error.errors)
+            if isinstance(error, ReviewContractsValidationError)
+            else str(error)
+        )
+        result = _invalid_request_result(payload, reason)
+        print(json.dumps(_result_payload(result), sort_keys=True, indent=2))  # noqa: T201
+        return 1
     result = run(
         request,
         base=Path(args.base) if args.base is not None else None,
         source_base=input_path.parent,
     )
-    print(json.dumps(asdict(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
+    print(json.dumps(_result_payload(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
     return 0 if result.status == "complete" else 1
+
+
+def _result_payload(result: ComponentResult) -> dict[str, Any]:
+    """Serialize a result with the required shared component-result version.
+
+    Returns:
+        JSON-ready component-result.v1 envelope.
+    """
+    payload = asdict(result)
+    payload["artifacts"] = list(payload["artifacts"])
+    payload["diagnostics"] = list(payload["diagnostics"])
+    return {"schema_version": COMPONENT_RESULT_SCHEMA_VERSION, **payload}
 
 
 if __name__ == "__main__":

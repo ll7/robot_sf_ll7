@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from robot_sf.analysis_workbench.review_contracts import (
+    component_descriptor_from_dict,
+    component_result_from_dict,
+)
 from robot_sf.render.video_sync import (
     COMPONENT_ID,
     descriptor,
@@ -131,6 +138,137 @@ def test_frames_outside_stamp_range_are_partial(tmp_path: Path) -> None:
     assert "frames_outside_stamp_range" in result.reason
 
 
+def test_after_last_frames_are_unavailable_without_a_stale_anchor(tmp_path: Path) -> None:
+    capture = dict(CAPTURE)
+    capture["frames"] = [
+        {"frame_index": 0, "pts_s": 0.0},
+        {"frame_index": 6, "pts_s": 0.6},
+    ]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+    (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "frame_6_after_last_sim_stamp" in result.reason
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    assert [entry["frame_index"] for entry in mapping["entries"]] == [0]
+    assert mapping["unavailable_frame_indexes"] == [6]
+    unavailable = mapping["unavailable_frames"][0]
+    assert unavailable["status"] == "unavailable"
+    assert unavailable["reason"] == "after_last_sim_stamp"
+    assert "sim_step" not in unavailable
+    assert "episode_id" not in unavailable
+    assert mapping["last_frame"]["status"] == "unavailable"
+
+
+def test_episode_and_reset_boundaries_are_preserved_in_source_order(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    stamps = {
+        "steps": [
+            {"step": 0, "time_s": 0.0, "episode_id": "ep-a", "reset_id": "reset-a"},
+            {"step": 1, "time_s": 0.1, "episode_id": "ep-a", "reset_id": "reset-a"},
+            {"step": 0, "time_s": 0.2, "episode_id": "ep-b", "reset_id": "reset-b"},
+            {"step": 1, "time_s": 0.3, "episode_id": "ep-b", "reset_id": "reset-b"},
+        ]
+    }
+    (tmp_path / "stamps.json").write_text(json.dumps(stamps), encoding="utf-8")
+    capture = dict(CAPTURE)
+    capture["frames"] = [
+        {"frame_index": 0, "pts_s": 0.0},
+        {"frame_index": 1, "pts_s": 0.2},
+        {"frame_index": 2, "pts_s": 0.3},
+    ]
+    (tmp_path / "capture.json").write_text(json.dumps(capture), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "complete"
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    assert [entry["episode_id"] for entry in mapping["entries"]] == ["ep-a", "ep-b", "ep-b"]
+    assert mapping["episode_ids"] == ["ep-a", "ep-b"]
+    assert mapping["reset_ids"] == ["reset-a", "reset-b"]
+    assert mapping["episode_reset_boundaries"] == [
+        {
+            "source_index": 0,
+            "time_s": 0.0,
+            "step": 0,
+            "episode_id": "ep-a",
+            "reset_id": "reset-a",
+            "kind": "initial",
+        },
+        {
+            "source_index": 2,
+            "time_s": 0.2,
+            "step": 0,
+            "episode_id": "ep-b",
+            "reset_id": "reset-b",
+            "kind": "episode_or_reset_change",
+        },
+    ]
+
+
+def test_repeated_simulation_times_are_explicitly_unavailable(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    stamps = {
+        "steps": [
+            {"step": 0, "time_s": 0.0, "episode_id": "ep-a", "reset_id": "reset-a"},
+            {"step": 1, "time_s": 0.1, "episode_id": "ep-a", "reset_id": "reset-a"},
+            {"step": 0, "time_s": 0.1, "episode_id": "ep-b", "reset_id": "reset-b"},
+            {"step": 1, "time_s": 0.2, "episode_id": "ep-b", "reset_id": "reset-b"},
+        ]
+    }
+    (tmp_path / "stamps.json").write_text(json.dumps(stamps), encoding="utf-8")
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "ambiguous_repeated_sim_time:0.1" in result.reason
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    assert mapping["entries"] == []
+    assert {item["reason"] for item in mapping["unavailable_frames"]} == {
+        "ambiguous_sim_stamp_timeline"
+    }
+    assert [item["episode_id"] for item in mapping["episode_reset_boundaries"]] == [
+        "ep-a",
+        "ep-b",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("presentation", "reason"),
+    [
+        (None, "presentation_invalid"),
+        ({"width": 320.0}, "presentation_width_invalid"),
+        ({"height": False}, "presentation_height_invalid"),
+        ({"fps": "10"}, "presentation_fps_invalid"),
+        ({"fps": 0.0}, "presentation_fps_invalid"),
+        ({"speed": "fast"}, "presentation_speed_invalid"),
+        ({"speed": 0.0}, "presentation_speed_invalid"),
+    ],
+)
+def test_invalid_presentation_values_fail_closed(
+    tmp_path: Path, presentation: object, reason: str
+) -> None:
+    _stage(tmp_path)
+    result = run(_request(config_extra={"presentation": presentation}), base=tmp_path)
+
+    assert result.status == "failed"
+    assert reason in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_nonfinite_presentation_value_is_rejected_as_non_strict_request(
+    tmp_path: Path,
+) -> None:
+    _stage(tmp_path)
+    result = run(_request(config_extra={"presentation": {"fps": float("nan")}}), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason == "invalid_request: config must be strict-JSON safe"
+    assert not (tmp_path / "out").exists()
+
+
 def test_corrupt_source_yields_partial_or_failed(tmp_path: Path) -> None:
     (tmp_path / "capture.json").write_text("{not json", encoding="utf-8")
     (tmp_path / "stamps.json").write_text(json.dumps(STAMPS), encoding="utf-8")
@@ -170,9 +308,62 @@ def test_unsupported_component_is_unavailable(tmp_path: Path) -> None:
 
 def test_descriptor_declares_capabilities() -> None:
     info = descriptor()
+    assert info["schema_version"] == "component-descriptor.v1"
     assert info["component_id"] == COMPONENT_ID
     assert set(info["required_capabilities"]) == {"capture-frames", "sim-stamps"}
     assert "camera-calibration" in info["optional_capabilities"]
+    assert component_descriptor_from_dict(info).component_id == COMPONENT_ID
+
+
+def test_source_identity_digest_integrity_and_admission_are_retained(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    metadata = {
+        "capture": {
+            "schema": "capture-frames.fixture.v1",
+            "source_commit": "a" * 40,
+            "config_identity": "capture-config-1",
+            "sha256": hashlib.sha256((tmp_path / "capture.json").read_bytes()).hexdigest(),
+        },
+        "stamps": {
+            "schema": "sim-stamps.fixture.v1",
+            "source_commit": "b" * 40,
+            "config_identity": "stamps-config-1",
+            "sha256": hashlib.sha256((tmp_path / "stamps.json").read_bytes()).hexdigest(),
+        },
+    }
+    result = run(_request(config_extra={"source_metadata": metadata}), base=tmp_path)
+
+    assert result.status == "complete"
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    capture = next(source for source in mapping["sources"] if source["artifact_id"] == "capture")
+    assert capture["uri"] == "capture.json"
+    assert capture["format"] == "capture-frames"
+    assert capture["schema"] == "capture-frames.fixture.v1"
+    assert capture["source_commit"] == "a" * 40
+    assert capture["config_identity"] == "capture-config-1"
+    assert capture["source_sha256"] == metadata["capture"]["sha256"]
+    assert capture["integrity"] == capture["integrity_status"] == "match"
+    assert capture["admission"] == "not_evaluated"
+    assert mapping["provenance"]["admission"] == "not_evaluated"
+    assert result.provenance["source_integrity"] == {"capture": "match", "stamps": "match"}
+    assert result.provenance["admission"] == "not_evaluated"
+
+
+def test_source_digest_mismatch_is_diagnostic_partial(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    metadata = {
+        "capture": {"sha256": "0" * 64},
+        "stamps": {"sha256": hashlib.sha256((tmp_path / "stamps.json").read_bytes()).hexdigest()},
+    }
+
+    result = run(_request(config_extra={"source_metadata": metadata}), base=tmp_path)
+
+    assert result.status == "partial"
+    assert "capture: stale_digest" in result.reason
+    mapping = json.loads((tmp_path / "out" / "media-mapping.json").read_text())
+    capture = next(source for source in mapping["sources"] if source["artifact_id"] == "capture")
+    assert capture["integrity"] == "mismatch"
+    assert result.artifacts == ()
 
 
 def test_module_touches_no_simulator_paths() -> None:
@@ -220,8 +411,62 @@ def test_cli_produces_mapping_from_fixture_request(tmp_path: Path) -> None:
         # The gap-exercising fixture yields partial with explicit codes.
         assert completed.returncode == 1, completed.stderr[-2000:]
         payload = json.loads(completed.stdout)
+        assert payload["schema_version"] == "component-result.v1"
+        assert component_result_from_dict(payload).status == "partial"
         assert payload["status"] == "partial"
         assert "skipped_frames:3" in payload["reason"]
         assert "nonuniform_sampling" in payload["reason"]
     finally:
         shutil.rmtree(repo / output_rel, ignore_errors=True)
+
+
+def test_cli_descriptor_is_shared_contract_valid() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    completed = subprocess.run(
+        [sys.executable, "-m", "robot_sf.render.video_sync", "--descriptor"],
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert component_descriptor_from_dict(json.loads(completed.stdout)).component_id == COMPONENT_ID
+
+
+def test_cli_malformed_strict_json_returns_failed_result(tmp_path: Path) -> None:
+    input_path = tmp_path / "request.json"
+    input_path.write_text(
+        '{"request_id":"bad", "component_id":"srev03-video-sync", NaN}', encoding="utf-8"
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "robot_sf.render.video_sync",
+            "--input",
+            str(input_path),
+            "--output",
+            "out",
+            "--base",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[2],
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stderr == ""
+    result = json.loads(completed.stdout)
+    assert component_result_from_dict(result).status == "failed"
+    assert result["reason"] == "invalid_input: request JSON cannot be parsed safely"
+
+
+def test_run_malformed_request_returns_failed_result() -> None:
+    result = run({"request_id": "bad"})  # type: ignore[arg-type]
+
+    assert result.status == "failed"
+    assert result.reason == "invalid_request: expected ComponentRequest"

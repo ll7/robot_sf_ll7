@@ -14,6 +14,7 @@ from robot_sf.analysis_workbench.review_contracts import (
 from robot_sf.analysis_workbench.review_import import (
     COMPONENT_ID,
     descriptor,
+    main,
     run,
 )
 
@@ -249,3 +250,33 @@ def test_cli_produces_bundle_from_fixture_request(tmp_path: Path) -> None:
         assert review_bundle_from_dict(bundle).bundle_id == "srev02-smoke-bundle"
     finally:
         shutil.rmtree(repo / output_rel, ignore_errors=True)
+
+
+def test_cli_entrypoint_merges_fixture_config() -> None:
+    import shutil
+
+    repo = Path(__file__).resolve().parents[2]
+    fixture = repo / "tests/fixtures/scenario_review/review_import"
+    output_rel = "output/scenario_review/srev-02-inprocess-cli-test"
+    output = repo / output_rel
+    shutil.rmtree(output, ignore_errors=True)
+    try:
+        assert (
+            main(
+                [
+                    "--input",
+                    str(fixture / "request.json"),
+                    "--config",
+                    str(fixture / "config.json"),
+                    "--output",
+                    output_rel,
+                    "--base",
+                    str(repo),
+                ]
+            )
+            == 0
+        )
+        bundle = json.loads((output / "review-bundle.json").read_text(encoding="utf-8"))
+        assert review_bundle_from_dict(bundle).bundle_id == "srev02-smoke-bundle"
+    finally:
+        shutil.rmtree(output, ignore_errors=True)

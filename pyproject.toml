@@ -732,6 +732,10 @@ robot-sf-carla-parity-bundle-preflight = "robot_sf_carla_bridge.cli:preflight_ca
 robot-sf-carla-replay-diagnostics = "scripts.carla_bridge.diagnose_replay_semantics:main"
 robot-sf-migrate-artifacts = "scripts.tools.migrate_artifacts:main"
 
+[project.entry-points."robot_sf.scenario_review"]
+srev29-example-analyzer = "examples.scenario_review.components.episode_analyzer:DESCRIPTOR"
+srev29-example-renderer = "examples.scenario_review.components.telemetry_renderer:DESCRIPTOR"
+
 # Note: uv-specific config removed to avoid duplicate-config warnings with uv.toml
 
 [tool.uv]

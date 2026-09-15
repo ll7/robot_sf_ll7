@@ -499,9 +499,15 @@ _FAST_FILES = {
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",
+    # Presentation-style preset contracts are deterministic spec/coverage for
+    # the changed presentation renderer module (issue #9367).
+    "test_presentation_style.py",
     # Three.js viewer payload contracts are deterministic schema/fidelity
     # coverage for the changed viewer exporter (issue #9368).
     "test_threejs_viewer.py",
+    # Presentation-scene view contracts are deterministic coverage for the
+    # changed presentation view adapter (issue #9369).
+    "test_presentation_scene.py",
     # SVG geometry contract tests provide changed-line coverage for the
     # parser's explicit legacy/corrected transform paths (issue #8314).
     "test_svg_transform_contract.py",
@@ -889,6 +895,10 @@ _FAST_FILES = {
     # SREV-02 review-import tests are deterministic fixture and CLI contracts;
     # keep their changed coverage in fast shards (issue #9271).
     "test_review_import.py",
+    # SREV-29 registry tests are deterministic discovery/invocation coverage
+    # for the component registry leaf; keep changed coverage in fast shards
+    # (issue #9290).
+    "test_review_registry.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

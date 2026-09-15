@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from robot_sf.render.jsonl_playback import JSONLPlaybackLoader, PlaybackEpisode
+from robot_sf.render.presentation_scene import describe_view
 
 if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition
@@ -75,9 +76,17 @@ def build_threejs_scene(
 
 
 def export_threejs_viewer(
-    recording_path: str | Path, output_dir: str | Path
+    recording_path: str | Path,
+    output_dir: str | Path,
+    *,
+    view_preset: str | None = None,
 ) -> ThreeJSExportResult:
     """Export a JSONL or pickle recording into static browser viewer files.
+
+    When ``view_preset`` is ``"top-down"`` or ``"isometric"``, the scene gains
+    a presentation-view descriptor and the export additionally stages the
+    ``components/presentation_scene`` web module. ``None`` keeps the legacy
+    export byte-identical.
 
     Returns:
         ThreeJSExportResult: Paths to the generated viewer directory, HTML file, and scene JSON.
@@ -88,6 +97,9 @@ def export_threejs_viewer(
 
     episode, map_def = JSONLPlaybackLoader().load_single_episode(recording_path)
     scene = build_threejs_scene(episode, map_def, source=str(recording_path))
+    if view_preset is not None:
+        scene["view"] = describe_view(scene, view_preset)  # type: ignore[arg-type]
+        _copy_web_asset_tree("components", output_dir / "components")
 
     scene_path = output_dir / "scene.json"
     scene_path.write_text(json.dumps(scene, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -104,6 +116,13 @@ def _copy_web_asset(asset_name: str, destination: Path) -> None:
     asset = resources.files("robot_sf.render.web_assets").joinpath(asset_name)
     with resources.as_file(asset) as asset_path:
         shutil.copyfile(asset_path, destination)
+
+
+def _copy_web_asset_tree(asset_name: str, destination: Path) -> None:
+    """Copy a packaged static web asset directory into an export directory."""
+    asset = resources.files("robot_sf.render.web_assets").joinpath(asset_name)
+    with resources.as_file(asset) as asset_path:
+        shutil.copytree(asset_path, destination, dirs_exist_ok=True)
 
 
 def _map_to_payload(map_def: MapDefinition) -> dict[str, Any]:

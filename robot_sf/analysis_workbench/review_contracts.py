@@ -16,7 +16,7 @@ import math
 import re
 from dataclasses import asdict, dataclass, field
 from functools import cache
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -125,6 +125,28 @@ def _check_no_traversal(value: str, *, path: str, errors: list[str]) -> None:
     pure = Path(value)
     if pure.is_absolute() or ".." in pure.parts:
         errors.append(f"{path}: path traversal or absolute path is rejected: {value}")
+
+
+def _check_safe_artifact_id(value: Any, *, path: str, errors: list[str]) -> None:
+    """Reject source identifiers that cannot be used as one output filename.
+
+    ``artifact_id`` is an identifier rather than a relative path.  Rejecting
+    both POSIX and Windows separators keeps the contract safe when a request
+    created on one platform is consumed on another.
+    """
+
+    if not isinstance(value, str):
+        return
+    windows = PureWindowsPath(value)
+    if (
+        value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or windows.is_absolute()
+        or bool(windows.drive)
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        errors.append(f"{path}: unsafe artifact id for a filename: {value!r}")
 
 
 def _check_sha256(value: Any, *, path: str, errors: list[str]) -> None:
@@ -305,7 +327,13 @@ def component_request_from_dict(
     _require_schema(COMPONENT_REQUEST_SCHEMA_VERSION, payload, source=source)
     errors: list[str] = []
     _check_no_traversal(str(payload["output_directory"]), path="/output_directory", errors=errors)
+    seen_artifact_ids: set[str] = set()
     for index, ref in enumerate(payload["sources"]):
+        artifact_id = ref["artifact_id"]
+        _check_safe_artifact_id(artifact_id, path=f"/sources/{index}/artifact_id", errors=errors)
+        if artifact_id in seen_artifact_ids:
+            errors.append(f"/sources: duplicate scoped artifact id: {artifact_id}")
+        seen_artifact_ids.add(artifact_id)
         _check_no_traversal(ref["uri"], path=f"/sources/{index}/uri", errors=errors)
     if errors:
         raise ReviewContractsValidationError(errors, source=source)
@@ -317,6 +345,12 @@ def component_request_from_dict(
                 artifact_id=str(ref["artifact_id"]),
                 uri=str(ref["uri"]),
                 format=str(ref["format"]),
+                schema=str(ref.get("schema", "")),
+                sha256=str(ref.get("sha256", "")),
+                source_commit=str(ref.get("source_commit", "")),
+                config_identity=str(ref.get("config_identity", "")),
+                units=str(ref.get("units", "")),
+                coordinate_frame=str(ref.get("coordinate_frame", "")),
             )
             for ref in payload["sources"]
         ),

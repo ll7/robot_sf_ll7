@@ -15,7 +15,9 @@ from typing import Any
 
 import pytest
 
+from robot_sf.analysis_workbench import review_storyboard as storyboard
 from robot_sf.analysis_workbench.review_contracts import (
+    ComponentRequest,
     component_descriptor_from_dict,
     component_request_from_dict,
     component_result_from_dict,
@@ -24,6 +26,7 @@ from robot_sf.analysis_workbench.review_storyboard import (
     CANONICAL_SCORE_ADAPTER_VERSION,
     COMPONENT_ID,
     descriptor,
+    main,
     result_document,
     run,
 )
@@ -179,6 +182,8 @@ def test_success_ranks_with_stable_tie_break_and_versioned_result(tmp_path: Path
     assert spec["annotations"][0]["tie_break_method"].startswith("score-descending")
     assert all(r["score"] == 0.5 for r in ranking)
     assert len(result.artifacts) == 3
+    assert isinstance(result.artifacts, list)
+    assert isinstance(result.diagnostics, list)
     component_result_from_dict(result_document(result))
 
 
@@ -257,6 +262,75 @@ def test_corrupt_source_is_failed_without_result_artifacts(tmp_path: Path) -> No
     assert result.status == "failed"
     assert result.artifacts == []
     assert "source_unreadable" in result.reason
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"schema_version":"review-bundle.v1","schema_version":"review-bundle.v1",'
+        '"bundle_id":"b","episodes":[]}',
+        '{"schema_version":"review-bundle.v1","bundle_id":"b","episodes":[NaN]}',
+    ],
+)
+def test_non_strict_json_is_rejected_before_contract_validation(tmp_path: Path, raw: str) -> None:
+    _stage(tmp_path)
+    (tmp_path / "bundle.json").write_text(raw, encoding="utf-8")
+    result = run(_request(base_path=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "source_unreadable" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_special_file_source_is_rejected_without_reading(tmp_path: Path) -> None:
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("FIFO creation is unavailable")
+    fifo = tmp_path / "bundle.fifo"
+    try:
+        os.mkfifo(fifo)
+    except OSError as error:
+        pytest.skip(f"FIFO creation is unavailable: {error}")
+    result = run(
+        _request(
+            sources=[{"artifact_id": "bundle", "uri": fifo.name, "format": "review-bundle"}],
+            base_path=tmp_path,
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "failed"
+    assert "source_not_regular_file" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_source_size_limit_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(storyboard, "MAX_SOURCE_BYTES", 32)
+    _stage(tmp_path)
+    result = run(_request(base_path=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "source_too_large" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_overflowed_numeric_config_is_partial_not_an_api_exception(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    result = run(
+        _request(config_extra={"source_duration_s": 10**1000}, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "source_duration_missing_or_invalid" in result.reason
+
+
+def test_invalid_direct_api_request_returns_stable_failure(tmp_path: Path) -> None:
+    request = ComponentRequest(
+        request_id="api-test",
+        component_id=COMPONENT_ID,
+        sources=(),
+        output_directory="out",
+        config=None,  # type: ignore[arg-type]
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert result.reason == "invalid_request: config must be an object"
 
 
 def test_missing_required_capability_is_unavailable(tmp_path: Path) -> None:
@@ -359,6 +433,53 @@ def test_cli_produces_versioned_result_and_bound_fixture_sources() -> None:
         shutil.rmtree(repo / output_rel, ignore_errors=True)
 
 
+def test_cli_invalid_json_emits_stable_result_envelope(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text("{not json", encoding="utf-8")
+    exit_code = main(["--input", str(request_path), "--output", "out"])
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["schema_version"] == "component-result.v1"
+    assert payload["status"] == "failed"
+    assert payload["reason"] == "invalid_input: request JSON cannot be parsed safely"
+    component_result_from_dict(payload)
+
+
+def test_cli_invalid_config_emits_stable_result_envelope(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    request_path = tmp_path / "request.json"
+    config_path = tmp_path / "config.json"
+    _write_json(
+        request_path,
+        {
+            "schema_version": "component-request.v1",
+            "request_id": "cli-test",
+            "component_id": COMPONENT_ID,
+            "sources": [{"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"}],
+            "output_directory": "out",
+        },
+    )
+    _write_json(config_path, [])
+    exit_code = main(
+        [
+            "--input",
+            str(request_path),
+            "--config",
+            str(config_path),
+            "--output",
+            "out",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["request_id"] == "cli-test"
+    assert payload["reason"] == "invalid_input: config must be a JSON object"
+    component_result_from_dict(payload)
+
+
 def test_selected_sources_and_all_sidecars_are_hash_bound(tmp_path: Path) -> None:
     _stage(tmp_path)
     result = run(_request(base_path=tmp_path), base=tmp_path)
@@ -417,6 +538,46 @@ def test_symlink_source_escape_fails_closed(tmp_path: Path) -> None:
     result = run(_request(sources=sources, base_path=tmp_path), base=tmp_path)
     assert result.status == "failed"
     assert "source_uri_unsafe" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_windows_style_source_traversal_fails_closed(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    result = run(
+        _request(
+            sources=[
+                {
+                    "artifact_id": "bundle",
+                    "uri": r"..\bundle.json",
+                    "format": "review-bundle",
+                }
+            ],
+            base_path=tmp_path,
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "failed"
+    assert "source_uri_unsafe" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+def test_episode_reference_content_identity_is_bound(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    episode_path = tmp_path / "episode-1.json"
+    _write_json(
+        episode_path,
+        {
+            "artifact_id": "wrong-artifact",
+            "episode_id": "ep-1",
+            "evidence_boundary": "diagnostic_only",
+        },
+    )
+    bundle = json.loads((tmp_path / "bundle.json").read_text(encoding="utf-8"))
+    bundle["episodes"][0]["references"][0]["sha256"] = _sha256(episode_path)
+    _write_json(tmp_path / "bundle.json", bundle)
+    result = run(_request(base_path=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert "source_artifact_id_mismatch" in result.reason
     assert not (tmp_path / "out").exists()
 
 
@@ -485,6 +646,109 @@ def test_unversioned_score_map_is_not_silently_defaulted(tmp_path: Path) -> None
     assert result.status == "partial"
     assert "exemplar_scores_unversioned_or_malformed" in result.reason
     assert all(item["score"] is None for item in _spec(tmp_path)["annotations"][0]["ranking"])
+
+
+def test_duplicate_canonical_score_ids_are_partial(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    canonical = {
+        "episodes": [
+            {"episode_id": "ep-1", "composite_score": 0.9},
+            {"episode_id": "ep-1", "composite_score": 0.9},
+            {"episode_id": "ep-2", "composite_score": 0.1},
+        ]
+    }
+    _write_json(tmp_path / "duplicate-scores.json", canonical)
+    sources = [
+        {"artifact_id": "bundle", "uri": "bundle.json", "format": "review-bundle"},
+        {
+            "artifact_id": "scores",
+            "uri": "duplicate-scores.json",
+            "format": "exemplar-scores",
+        },
+    ]
+    result = run(
+        _request(required=("exemplar-scores",), sources=sources, base_path=tmp_path),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "score_duplicate_episode:ep-1" in result.reason
+
+
+def test_pin_and_exclude_conflict_is_partial(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    result = run(
+        _request(
+            config_extra={
+                "overrides": {
+                    "pin": ["ep-1"],
+                    "exclude": ["ep-1"],
+                    "source_digest": _bundle_digest(tmp_path / "bundle.json"),
+                }
+            },
+            base_path=tmp_path,
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "override_pin_exclude_conflict:ep-1" in result.reason
+
+
+def test_interval_limit_is_partial(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(storyboard, "MAX_INTERVALS", 1)
+    _stage(tmp_path)
+    _write_json(
+        tmp_path / "events.json",
+        {"intervals": [{"start_s": 0.0, "end_s": 0.5}, {"start_s": 0.5, "end_s": 1.0}]},
+    )
+    result = run(
+        _request(
+            required=("event-index",),
+            sources=_source_list_with_events(),
+            base_path=tmp_path,
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "event_index_limit_exceeded:intervals" in result.reason
+
+
+def test_malformed_event_identity_is_partial_without_api_exception(tmp_path: Path) -> None:
+    _stage(tmp_path)
+    _write_json(
+        tmp_path / "events.json",
+        {"intervals": [{"start_s": 0.0, "end_s": 0.5, "event_id": 17}]},
+    )
+    result = run(
+        _request(
+            required=("event-index",),
+            sources=_source_list_with_events(),
+            base_path=tmp_path,
+        ),
+        base=tmp_path,
+    )
+    assert result.status == "partial"
+    assert "event_row_0_malformed" in result.reason
+
+
+def test_output_write_failure_cleans_partial_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stage(tmp_path)
+    original_link = storyboard.os.link
+    calls = 0
+
+    def fail_on_second_link(*args: Any, **kwargs: Any) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("injected link failure")
+        original_link(*args, **kwargs)
+
+    monkeypatch.setattr(storyboard.os, "link", fail_on_second_link)
+    result = run(_request(base_path=tmp_path), base=tmp_path)
+    assert result.status == "failed"
+    assert result.reason == "internal_failure: OSError"
+    assert not (tmp_path / "out").exists()
 
 
 def test_duplicate_episode_ids_fail_closed(tmp_path: Path) -> None:

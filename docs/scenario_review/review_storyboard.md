@@ -36,10 +36,12 @@ uv run python -m robot_sf.analysis_workbench.review_storyboard \
 ## Output
 
 The CLI and Python API expose `component-result.v1` envelopes. Source bytes
-are checked against declared SHA-256 values, resolved paths must remain under
-the selected base, and bundle references are retained in result provenance
-with their schema, commit, configuration, units, coordinate frame, and
-observed integrity status.
+are parsed as strict UTF-8 JSON where applicable (duplicate keys and
+`NaN`/infinite constants are rejected), read only from bounded regular files,
+and checked against declared SHA-256 values. Resolved paths must remain under
+the selected base without symlink components, and bundle references are
+retained in result provenance with their schema, commit, configuration, units,
+coordinate frame, and observed integrity status.
 
 Three sidecars are emitted together into a new output directory:
 
@@ -67,7 +69,18 @@ is still present in `provenance.emitted_artifacts`.
   remains unavailable in the capability report, and no score fallback is
   synthesized.
 - Output directories must not already exist. This prevents a rerun from
-  overwriting an earlier receipt.
+  overwriting an earlier receipt; final publication reserves the directory
+  without replacement semantics and removes partial output on write failure.
+- Resource limits are explicit: 8 MiB per input file, 256 request sources,
+  10,000 bundle episodes, 64 references per episode, 100,000 score rows or
+  event intervals, and 10,000 override IDs per pin/exclude list. Exceeding a
+  required-input limit fails; exceeding an optional score or interval limit
+  yields a partial diagnostic result.
+- `episode-json` references are strictly parsed and, when present, their
+  `artifact_id` and `episode_id` must match the bundle binding. A malformed or
+  mismatched source fails closed.
+- Invalid request or config JSON supplied before API validation still produces
+  a schema-valid failed result envelope on stdout and exits with status 1.
 - Evidence boundary: ranking reflects provided diagnostic scores and explicit
   overrides, not scientific merit. No benchmark, safety, or paper-facing claim
   follows from a storyboard or its fixtures.

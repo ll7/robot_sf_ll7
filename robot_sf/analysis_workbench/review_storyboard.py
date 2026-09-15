@@ -14,10 +14,12 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import shutil
+import stat
 import tempfile
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from robot_sf.analysis_workbench.review_contracts import (
@@ -54,6 +56,17 @@ EVIDENCE_BOUNDARY = "diagnostic_only"
 MISSING_CAPABILITY_SCHEMA_VERSION = "missing-capability-report.v1"
 EXEMPLAR_SCORES_SCHEMA_VERSION = "srev07-exemplar-scores.v1"
 CANONICAL_SCORE_ADAPTER_VERSION = "trace-exemplar-interest.report-adapter.v1"
+
+# The component is intentionally bounded because it is an offline diagnostic
+# consumer.  These limits prevent malformed or accidentally unbounded fixture
+# inputs from turning a contract probe into an uncontrolled file/memory read.
+MAX_SOURCE_BYTES = 8 * 1024 * 1024
+MAX_REQUEST_SOURCES = 256
+MAX_BUNDLE_EPISODES = 10_000
+MAX_EPISODE_REFERENCES = 64
+MAX_SCORE_ENTRIES = 100_000
+MAX_INTERVALS = 100_000
+MAX_OVERRIDE_IDS = 10_000
 
 _DESCRIPTOR_DOCUMENT: dict[str, Any] = {
     "schema_version": COMPONENT_DESCRIPTOR_SCHEMA_VERSION,
@@ -137,6 +150,86 @@ def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON object keys instead of silently keeping one value.
+
+    Returns:
+        The object mapping when every key is unique.
+    """
+    payload: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise ValueError(f"duplicate JSON object key: {key!r}")
+        payload[key] = value
+    return payload
+
+
+def _reject_nonstandard_json_constant(value: str) -> None:
+    """Reject JSON extensions such as ``NaN`` and infinities."""
+    raise ValueError(f"non-standard JSON constant: {value}")
+
+
+def _strict_json_loads(raw: bytes) -> Any:
+    """Parse UTF-8 JSON without duplicate keys or non-standard constants.
+
+    Returns:
+        The parsed JSON value.
+
+    Raises:
+        ValueError: If the bytes are not strict, finite UTF-8 JSON.
+    """
+    try:
+        return json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_json_object,
+            parse_constant=_reject_nonstandard_json_constant,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, ValueError) as error:
+        raise ValueError("invalid strict JSON") from error
+
+
+def _read_regular_file(
+    path: Path, *, max_bytes: int | None = None
+) -> tuple[bytes | None, str | None]:
+    """Read a bounded regular file without opening a special file.
+
+    Returns:
+        Raw bytes and no error, or ``None`` and a stable read error code.
+    """
+    if max_bytes is None:
+        max_bytes = MAX_SOURCE_BYTES
+    flags = os.O_RDONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    # O_NONBLOCK makes a FIFO safe to probe before fstat rejects it.
+    flags |= getattr(os, "O_NONBLOCK", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return None, "source_unreadable"
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            return None, "source_not_regular_file"
+        if metadata.st_size > max_bytes:
+            return None, "source_too_large"
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, min(1024 * 1024, max_bytes - total + 1))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > max_bytes:
+                return None, "source_too_large"
+        return b"".join(chunks), None
+    except OSError:
+        return None, "source_unreadable"
+    finally:
+        os.close(descriptor)
+
+
 def _write_json(path: Path, payload: Any) -> str:
     """Atomically write strict JSON and return the written-byte digest.
 
@@ -159,20 +252,34 @@ def _stage_outputs(output_dir: Path, payloads: dict[str, Any]) -> dict[str, str]
     """
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    output_created = False
     committed = False
     try:
         digests = {
             filename: _write_json(staging / filename, payloads[filename])
             for filename in sorted(payloads)
         }
-        if output_dir.exists() or output_dir.is_symlink():
-            raise FileExistsError(f"output collision: already exists: {output_dir}")
-        staging.replace(output_dir)
+        # Reserve the final directory without replacement semantics.  A
+        # pre-check alone is racy and ``Path.replace`` could overwrite an
+        # empty directory created by another invocation between the checks.
+        output_dir.mkdir(exist_ok=False)
+        output_created = True
+        for filename in sorted(payloads):
+            os.link(
+                staging / filename,
+                output_dir / filename,
+                follow_symlinks=False,
+            )
         committed = True
         return digests
     finally:
-        if not committed:
-            shutil.rmtree(staging, ignore_errors=True)
+        shutil.rmtree(staging, ignore_errors=True)
+        if output_created and not committed:
+            try:
+                if output_dir.exists() and not output_dir.is_symlink():
+                    shutil.rmtree(output_dir)
+            except OSError:
+                pass
 
 
 def _canonical_digest(payload: Any) -> str:
@@ -229,16 +336,43 @@ def _reject_not_applicable(request: ComponentRequest) -> ComponentResult | None:
     return None
 
 
+def _has_symlink_component(path: Path, root: Path) -> bool:
+    """Return whether an existing path component is a symlink."""
+    try:
+        relative = path.relative_to(root)
+        current = root
+        for part in relative.parts:
+            current /= part
+            if current.is_symlink():
+                return True
+    except (OSError, ValueError):
+        return True
+    return False
+
+
 def _resolve_under_root(path_value: str, root: Path) -> Path | None:
     """Return a path only when lexical and resolved containment both hold."""
-    candidate = Path(path_value)
-    if candidate.is_absolute() or ".." in candidate.parts:
-        return None
-    root_resolved = root.resolve()
-    candidate_path = root / candidate
     try:
+        if not isinstance(path_value, str):
+            return None
+        windows_candidate = PureWindowsPath(path_value)
+        candidate = Path(path_value)
+        if (
+            candidate.is_absolute()
+            or windows_candidate.is_absolute()
+            or windows_candidate.drive
+            or "\\" in path_value
+            or any(ord(character) < 32 or ord(character) == 127 for character in path_value)
+            or ".." in candidate.parts
+            or ".." in windows_candidate.parts
+        ):
+            return None
+        root_resolved = root.resolve()
+        candidate_path = root_resolved / candidate
         candidate_path.resolve(strict=False).relative_to(root_resolved)
-    except ValueError:
+        if _has_symlink_component(candidate_path, root_resolved):
+            return None
+    except (OSError, RuntimeError, TypeError, ValueError):
         return None
     return candidate_path
 
@@ -331,14 +465,22 @@ def _verify_reference(
             _source_record(ref, integrity_status="unsafe_path", episode_id=episode_id, scope=scope),
             f"{artifact_id}: source_uri_unsafe",
         )
-    try:
-        raw = path.read_bytes()
-    except OSError:
+    raw, read_problem = _read_regular_file(path)
+    if read_problem is not None:
+        integrity_status = "unsafe_path" if read_problem == "source_uri_unsafe" else "unavailable"
+        record = _source_record(
+            ref,
+            integrity_status=integrity_status,
+            episode_id=episode_id,
+            scope=scope,
+        )
+        record["read_status"] = read_problem
         return (
             None,
-            _source_record(ref, integrity_status="unavailable", episode_id=episode_id, scope=scope),
-            f"{artifact_id}: source_unreadable",
+            record,
+            f"{artifact_id}: {read_problem}",
         )
+    assert raw is not None
     observed = _sha256_bytes(raw)
     declared = str(_ref_value(ref, "sha256")).lower()
     if not declared:
@@ -384,8 +526,8 @@ def _read_json(
     if raw is None:
         return None, record, problem
     try:
-        payload = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = _strict_json_loads(raw)
+    except ValueError:
         record = {**record, "content_status": "invalid_json"}
         return None, record, f"{record['artifact_id']}: source_unreadable"
     if not isinstance(payload, dict):
@@ -398,7 +540,10 @@ def _finite_number(value: Any) -> float | None:
     """Return a finite float, or None for malformed input."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, TypeError, ValueError):
+        return None
     return result if math.isfinite(result) else None
 
 
@@ -418,6 +563,8 @@ def _rank_candidates(
     known = set(episode_ids)
     pin_set = set(pins)
     exclude_set = set(excludes)
+    for conflict in sorted(pin_set & exclude_set):
+        diagnostics.append(f"override_pin_exclude_conflict:{conflict}")
     for pinned in pins:
         if pinned not in known:
             diagnostics.append(f"override_pin_unknown:{pinned}")
@@ -458,6 +605,7 @@ def _parse_overrides(
     Returns:
         Pin/exclude state, freshness, and declared/observed source digests.
     """
+    observed = _canonical_bundle_digest(bundle_doc)
     raw = config.get("overrides", {})
     if not isinstance(raw, dict):
         diagnostics.append("overrides_malformed:ignored")
@@ -466,7 +614,7 @@ def _parse_overrides(
             "exclude": [],
             "fresh": False,
             "declared_source_digest": "",
-            "observed_source_digest": _canonical_bundle_digest(bundle_doc),
+            "observed_source_digest": observed,
             "source_artifact_id": bundle_source_id,
         }
     pins_raw = raw.get("pin", [])
@@ -478,12 +626,31 @@ def _parse_overrides(
             "exclude": [],
             "fresh": False,
             "declared_source_digest": str(raw.get("source_digest", "")),
-            "observed_source_digest": _canonical_bundle_digest(bundle_doc),
+            "observed_source_digest": observed,
             "source_artifact_id": bundle_source_id,
         }
-    pins = [item for item in pins_raw if isinstance(item, str)]
-    excludes = [item for item in excludes_raw if isinstance(item, str)]
-    observed = _canonical_bundle_digest(bundle_doc)
+    if len(pins_raw) > MAX_OVERRIDE_IDS or len(excludes_raw) > MAX_OVERRIDE_IDS:
+        diagnostics.append("overrides_limit_exceeded:ignored")
+        return {
+            "pin": [],
+            "exclude": [],
+            "fresh": False,
+            "declared_source_digest": str(raw.get("source_digest", "")),
+            "observed_source_digest": observed,
+            "source_artifact_id": bundle_source_id,
+        }
+    if any(not isinstance(item, str) for item in (*pins_raw, *excludes_raw)):
+        diagnostics.append("overrides_malformed:ignored")
+        return {
+            "pin": [],
+            "exclude": [],
+            "fresh": False,
+            "declared_source_digest": str(raw.get("source_digest", "")),
+            "observed_source_digest": observed,
+            "source_artifact_id": bundle_source_id,
+        }
+    pins = list(pins_raw)
+    excludes = list(excludes_raw)
     declared = str(raw.get("source_digest", ""))
     has_overrides = bool(pins or excludes)
     if has_overrides and not declared:
@@ -521,7 +688,7 @@ def _canonical_bundle_digest(bundle_doc: dict[str, Any]) -> str:
     return _canonical_digest(bundle_doc)
 
 
-def _clip_intervals(
+def _clip_intervals(  # noqa: C901
     intervals: list[Any], duration_s: float, diagnostics: list[str]
 ) -> list[dict[str, Any]]:
     """Clip event rows while preserving explicit interval identity.
@@ -529,6 +696,9 @@ def _clip_intervals(
     Returns:
         Deterministically clipped interval annotations with source identity.
     """
+    if len(intervals) > MAX_INTERVALS:
+        diagnostics.append("event_index_limit_exceeded:intervals")
+        return []
     clipped: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     for position, item in enumerate(intervals):
@@ -544,7 +714,7 @@ def _clip_intervals(
             diagnostics.append("interval_outside_duration")
             continue
         interval_id = item.get("interval_id")
-        if interval_id is not None and not isinstance(interval_id, str):
+        if interval_id is not None and (not isinstance(interval_id, str) or not interval_id):
             diagnostics.append(f"event_row_{position}_malformed")
             continue
         if isinstance(interval_id, str):
@@ -560,6 +730,9 @@ def _clip_intervals(
         if isinstance(interval_id, str):
             entry["interval_id"] = interval_id
         event_id = item.get("event_id")
+        if event_id is not None and (not isinstance(event_id, str) or not event_id):
+            diagnostics.append(f"event_row_{position}_malformed")
+            continue
         if isinstance(event_id, str):
             entry["event_id"] = event_id
         clipped.append(entry)
@@ -622,6 +795,9 @@ def _load_inputs(
     Returns:
         Bundle, optional documents, source records, and grouped source references.
     """
+    if len(request.sources) > MAX_REQUEST_SOURCES:
+        diagnostics.append("request_limit_exceeded:sources")
+        return None, None, None, [], {}
     by_format: dict[str, list[Any]] = {}
     records: list[dict[str, Any]] = []
     known_formats = set(REQUIRED_CAPABILITIES) | set(OPTIONAL_CAPABILITIES)
@@ -648,7 +824,7 @@ def _load_inputs(
     return bundle_doc, docs.get("exemplar-scores"), docs.get("event-index"), records, by_format
 
 
-def _bundle_episode_index(
+def _bundle_episode_index(  # noqa: C901
     bundle_doc: dict[str, Any], root: Path, diagnostics: list[str]
 ) -> tuple[dict[str, tuple[dict[str, Any], ...]] | None, list[dict[str, Any]], bool]:
     """Validate episode identity and verify every referenced bundle artifact.
@@ -659,13 +835,21 @@ def _bundle_episode_index(
     episode_by_id: dict[str, tuple[dict[str, Any], ...]] = {}
     records: list[dict[str, Any]] = []
     hard_failure = False
-    for episode in bundle_doc["episodes"]:
+    episodes = bundle_doc["episodes"]
+    if len(episodes) > MAX_BUNDLE_EPISODES:
+        diagnostics.append("bundle_limit_exceeded:episodes")
+        return None, records, True
+    for episode in episodes:
         episode_id = str(episode["episode_id"])
         if episode_id in episode_by_id:
             diagnostics.append(f"duplicate_episode_id:{episode_id}")
             hard_failure = True
             continue
-        refs = tuple(dict(ref) for ref in episode["references"])
+        raw_refs = episode["references"]
+        if len(raw_refs) > MAX_EPISODE_REFERENCES:
+            diagnostics.append(f"bundle_limit_exceeded:references:{episode_id}")
+            return None, records, True
+        refs = tuple(dict(ref) for ref in raw_refs)
         episode_by_id[episode_id] = refs
         verified_refs: list[dict[str, Any]] = []
         for ref in refs:
@@ -680,7 +864,15 @@ def _bundle_episode_index(
                 if record["integrity_status"] != "verified":
                     hard_failure = True
             if raw is not None and record["integrity_status"] == "verified":
-                verified_refs.append(ref)
+                content_problem = _validate_episode_reference(ref, raw, episode_id)
+                if content_problem is not None:
+                    diagnostics.append(content_problem)
+                    record["content_status"] = "invalid_or_mismatched"
+                    hard_failure = True
+                else:
+                    if ref["format"] == "episode-json":
+                        record["content_status"] = "validated_json"
+                    verified_refs.append(ref)
         if len(verified_refs) != len(refs):
             hard_failure = True
     if hard_failure:
@@ -711,6 +903,27 @@ def _family_integrity_verified(records: list[dict[str, Any]], family: str) -> bo
     return len(family_records) == 1 and family_records[0]["integrity_status"] == "verified"
 
 
+def _validate_episode_reference(ref: dict[str, Any], raw: bytes, episode_id: str) -> str | None:
+    """Validate JSON episode references and bind their optional identity fields.
+
+    Returns:
+        A stable diagnostic code, or ``None`` when the content is valid.
+    """
+    if ref["format"] != "episode-json":
+        return None
+    try:
+        payload = _strict_json_loads(raw)
+    except ValueError:
+        return f"{ref['artifact_id']}: source_unreadable"
+    if not isinstance(payload, dict):
+        return f"{ref['artifact_id']}: source_not_json_object"
+    if "artifact_id" in payload and payload["artifact_id"] != ref["artifact_id"]:
+        return f"{ref['artifact_id']}: source_artifact_id_mismatch"
+    if "episode_id" in payload and payload["episode_id"] != episode_id:
+        return f"{ref['artifact_id']}: source_episode_id_mismatch"
+    return None
+
+
 def _score_entries(entries: list[Any], known: set[str], diagnostics: list[str]) -> dict[str, float]:
     """Parse canonical trace-exemplar-interest episode entries.
 
@@ -730,8 +943,11 @@ def _score_entries(entries: list[Any], known: set[str], diagnostics: list[str]) 
         if episode_id not in known:
             diagnostics.append(f"score_unknown_episode:{episode_id}")
             continue
-        if episode_id in scores and scores[episode_id] != number:
-            diagnostics.append(f"score_conflicting_duplicate:{episode_id}")
+        if episode_id in scores:
+            if scores[episode_id] != number:
+                diagnostics.append(f"score_conflicting_duplicate:{episode_id}")
+            else:
+                diagnostics.append(f"score_duplicate_episode:{episode_id}")
             continue
         scores[episode_id] = number
     return scores
@@ -783,6 +999,9 @@ def _score_table(
     known = set(episode_ids)
     raw_entries = scores_doc.get("episodes")
     if isinstance(raw_entries, list):
+        if len(raw_entries) > MAX_SCORE_ENTRIES:
+            diagnostics.append("exemplar_scores_limit_exceeded:episodes")
+            return {}, "unavailable"
         scores = _score_entries(raw_entries, known, diagnostics)
         _record_missing_scores(scores, known, diagnostics)
         return scores, CANONICAL_SCORE_ADAPTER_VERSION
@@ -791,6 +1010,9 @@ def _score_table(
         raw_map, dict
     ):
         diagnostics.append("exemplar_scores_unversioned_or_malformed")
+        return {}, "unavailable"
+    if len(raw_map) > MAX_SCORE_ENTRIES:
+        diagnostics.append("exemplar_scores_limit_exceeded:scores")
         return {}, "unavailable"
     scores = _score_map(raw_map, known, diagnostics)
     _record_missing_scores(scores, known, diagnostics)
@@ -819,6 +1041,47 @@ def _blocking_diagnostics(
     return blocking
 
 
+def _request_identity(request: Any) -> tuple[str, str]:
+    """Return contract-safe identity fields for an API failure result."""
+    if isinstance(request, dict):
+        request_id = request.get("request_id")
+        component_id = request.get("component_id")
+    else:
+        request_id = getattr(request, "request_id", None)
+        component_id = getattr(request, "component_id", None)
+    return (
+        request_id if isinstance(request_id, str) and request_id else "unknown",
+        component_id if isinstance(component_id, str) and component_id else COMPONENT_ID,
+    )
+
+
+def _request_shape_error(request: Any) -> str | None:
+    """Return a stable error for a manually constructed invalid API request."""
+    if not isinstance(request, ComponentRequest):
+        return "invalid_request: expected ComponentRequest"
+    if not isinstance(request.request_id, str) or not request.request_id:
+        return "invalid_request: request_id must be a non-empty string"
+    if not isinstance(request.component_id, str) or not request.component_id:
+        return "invalid_request: component_id must be a non-empty string"
+    if not isinstance(request.output_directory, str) or not request.output_directory:
+        return "invalid_request: output_directory must be a non-empty string"
+    if not isinstance(request.config, dict):
+        return "invalid_request: config must be an object"
+    if not isinstance(request.sources, (tuple, list)):
+        return "invalid_request: sources must be a sequence"
+    if not isinstance(request.required_capabilities, (tuple, list)) or any(
+        not isinstance(capability, str) for capability in request.required_capabilities
+    ):
+        return "invalid_request: required_capabilities must be strings"
+    for source in request.sources:
+        if any(
+            not isinstance(getattr(source, field_name, None), str)
+            for field_name in ("artifact_id", "uri", "format")
+        ):
+            return "invalid_request: sources require string artifact_id, uri, and format"
+    return None
+
+
 def run(  # noqa: C901, PLR0912, PLR0915
     request: ComponentRequest, *, base: Path | None = None
 ) -> ComponentResult:
@@ -827,7 +1090,24 @@ def run(  # noqa: C901, PLR0912, PLR0915
     Returns:
         A versioned component result describing status, sidecars, and provenance.
     """
-    root = (base if base is not None else Path.cwd()).resolve()
+    request_id, component_id = _request_identity(request)
+    shape_error = _request_shape_error(request)
+    if shape_error is not None:
+        return _result(
+            request_id=request_id,
+            component_id=component_id,
+            status=STATUS_FAILED,
+            reason=shape_error,
+        )
+    try:
+        root = (base if base is not None else Path.cwd()).resolve()
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return _result(
+            request_id=request_id,
+            component_id=component_id,
+            status=STATUS_FAILED,
+            reason="invalid_request: base path cannot be resolved",
+        )
     rejected = _reject_not_applicable(request)
     if rejected is not None:
         return rejected
@@ -1056,6 +1336,14 @@ def run(  # noqa: C901, PLR0912, PLR0915
             provenance=provenance,
             reason=reason,
         )
+    except FileExistsError:
+        return _result(
+            request_id=request.request_id,
+            component_id=request.component_id,
+            status=STATUS_FAILED,
+            diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
+            reason=f"output_collision: already exists: {request.output_directory}",
+        )
     except ReviewContractsValidationError as error:
         return _result(
             request_id=request.request_id,
@@ -1064,13 +1352,22 @@ def run(  # noqa: C901, PLR0912, PLR0915
             diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
             reason="; ".join(error.errors),
         )
-    except (OSError, TypeError, ValueError) as error:
+    except (
+        AttributeError,
+        IndexError,
+        KeyError,
+        OSError,
+        OverflowError,
+        RecursionError,
+        TypeError,
+        ValueError,
+    ) as error:
         return _result(
             request_id=request.request_id,
             component_id=request.component_id,
             status=STATUS_FAILED,
             diagnostics=tuple({"code": item} for item in sorted(set(diagnostics))),
-            reason=f"internal_failure: {error}",
+            reason=f"internal_failure: {type(error).__name__}",
         )
 
 
@@ -1084,6 +1381,41 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_cli_json(path: Path, label: str) -> Any:
+    """Read one bounded, regular, strict-JSON CLI input.
+
+    Returns:
+        The parsed JSON value.
+
+    Raises:
+        ValueError: If the path cannot be read as strict JSON.
+    """
+    raw, read_problem = _read_regular_file(path)
+    if read_problem is not None or raw is None:
+        raise ValueError(f"invalid_input: {label} JSON cannot be parsed safely")
+    try:
+        return _strict_json_loads(raw)
+    except ValueError as error:
+        raise ValueError(f"invalid_input: {label} JSON cannot be parsed safely") from error
+
+
+def _print_cli_failure(reason: str, *, payload: Any = None) -> int:
+    """Print a contract-valid failed result for pre-request CLI errors.
+
+    Returns:
+        The CLI failure exit code.
+    """
+    request_id, component_id = _request_identity(payload)
+    result = ComponentResult(
+        request_id=request_id,
+        component_id=component_id,
+        status=STATUS_FAILED,
+        reason=reason,
+    )
+    print(json.dumps(result_document(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI and print a schema-valid result envelope.
 
@@ -1091,19 +1423,37 @@ def main(argv: list[str] | None = None) -> int:
         Zero for a complete result, otherwise one.
     """
     args = _build_parser().parse_args(argv)
+    payload: Any = None
     try:
-        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ReviewContractsValidationError([f"cannot read request: {error}"]) from error
+        payload = _load_cli_json(Path(args.input), "request")
+    except (OSError, TypeError, ValueError, RecursionError):
+        return _print_cli_failure("invalid_input: request JSON cannot be parsed safely")
+    if not isinstance(payload, dict):
+        return _print_cli_failure("invalid_input: request must be a JSON object")
     if args.config is not None:
         try:
-            config = json.loads(Path(args.config).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ReviewContractsValidationError([f"cannot read config: {error}"]) from error
-        if isinstance(config, dict):
-            payload = {**payload, "config": {**payload.get("config", {}), **config}}
+            config = _load_cli_json(Path(args.config), "config")
+        except (OSError, TypeError, ValueError, RecursionError):
+            return _print_cli_failure(
+                "invalid_input: config JSON cannot be parsed safely", payload=payload
+            )
+        if not isinstance(config, dict):
+            return _print_cli_failure(
+                "invalid_input: config must be a JSON object", payload=payload
+            )
+        request_config = payload.get("config", {})
+        if not isinstance(request_config, dict):
+            return _print_cli_failure(
+                "invalid_input: request config must be a JSON object", payload=payload
+            )
+        payload = {**payload, "config": {**request_config, **config}}
     payload = {**payload, "output_directory": args.output}
-    request = component_request_from_dict(payload, source=args.input)
+    try:
+        request = component_request_from_dict(payload, source=args.input)
+    except (ReviewContractsValidationError, RecursionError, TypeError, ValueError):
+        return _print_cli_failure(
+            "invalid_input: request does not satisfy component-request.v1", payload=payload
+        )
     result = run(request, base=Path(args.base) if args.base is not None else None)
     print(json.dumps(result_document(result), sort_keys=True, indent=2))  # noqa: T201 - CLI output
     return 0 if result.status == STATUS_COMPLETE else 1

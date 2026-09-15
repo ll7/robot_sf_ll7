@@ -685,7 +685,23 @@ def populate_single_pedestrians(
 
         # Initial velocity pointing toward goal or first trajectory waypoint
         if ped.start_delay_s > 0.0:
-            ped_states[i, 2:4] = [0, 0]
+            # Keep the configured walking speed in the initial state so PySocialForce can
+            # derive the pedestrian's max_speeds capability.  The behavior controller zeros
+            # the live velocity while the delay is active; dropping it here would make the
+            # physics speed cap zero permanently after the delay is released.
+            delayed_target = ped.goal
+            if delayed_target is None and ped.trajectory:
+                delayed_target = ped.trajectory[0]
+            if delayed_target is not None:
+                direction = atan2(
+                    delayed_target[1] - ped.start[1], delayed_target[0] - ped.start[0]
+                )
+                ped_states[i, 2:4] = [
+                    ped_speed * cos(direction),
+                    ped_speed * sin(direction),
+                ]
+            elif role in {"follow", "lead", "accompany", "join", "leave"}:
+                ped_states[i, 2:4] = [ped_speed, 0]
             ped_states[i, 4:6] = ped.start
         elif ped.goal is not None:
             direction = atan2(ped.goal[1] - ped.start[1], ped.goal[0] - ped.start[0])

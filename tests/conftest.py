@@ -876,6 +876,10 @@ _FAST_FILES = {
     # SREV-21 recipe tests protect deterministic contract and provenance
     # behavior for the new analysis-workbench component (issue #9292).
     "test_review_hypotheses.py",
+    # SREV-08 alignment tests protect deterministic compatibility checks and
+    # visible inadmissibility for the new review-alignment component
+    # (issue #9277).
+    "test_review_alignment.py",
     # SREV-26 explanation tests protect deterministic draft citations and
     # fail-closed evidence handling for the new review-ai component
     # (issue #9297).

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -40,6 +41,8 @@ def _request(
     *,
     output_directory: str = "out",
     source_uri: str = "results.json",
+    source_sha256: str = "",
+    source_commit: str = "",
     required_capabilities: tuple[str, ...] = (),
     config: dict[str, Any] | None = None,
 ) -> ComponentRequest:
@@ -51,6 +54,8 @@ def _request(
                 artifact_id="recorded-results",
                 uri=source_uri,
                 format=EXPERIMENT_RESULTS_SCHEMA_VERSION,
+                sha256=source_sha256,
+                source_commit=source_commit,
             ),
         ),
         output_directory=output_directory,
@@ -128,6 +133,65 @@ def test_unknown_source_identity_key_fails_closed(tmp_path: Path) -> None:
 
     assert result.status == "failed"
     assert "source_identity has unsupported keys: unvalidated_note" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source_kind", "forged-kind"),
+        ("execution_mode", "unbounded-mode"),
+        ("source_commit", "not-a-commit"),
+    ],
+)
+def test_source_provenance_uses_bounded_values(tmp_path: Path, field: str, value: str) -> None:
+    """A verified report requires semantically bounded source provenance."""
+    payload = json.loads(FIXTURE_RESULTS.read_text(encoding="utf-8"))
+    payload["source_identity"][field] = value
+    _write_results(tmp_path, payload)
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason.startswith("invalid_input:")
+    assert not (tmp_path / "out").exists()
+
+
+def test_declared_source_ref_integrity_is_verified(tmp_path: Path) -> None:
+    """Optional request-level source digests and commits bind the source bytes."""
+    _copy_fixture(tmp_path)
+    source_sha256 = hashlib.sha256((tmp_path / "results.json").read_bytes()).hexdigest()
+
+    result = run(
+        _request(source_sha256=source_sha256, source_commit="a" * 40),
+        base=tmp_path,
+    )
+
+    assert result.status == "complete"
+    assert _load_report(tmp_path / "out")["source"]["sha256"] == source_sha256
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("source_sha256", "0" * 64, "declared source sha256"),
+        ("source_commit", "b" * 40, "declared source_commit"),
+    ],
+)
+def test_declared_source_ref_mismatch_fails_closed(
+    tmp_path: Path, field: str, value: str, message: str
+) -> None:
+    """A substituted source cannot pass an explicit request-level integrity check."""
+    _copy_fixture(tmp_path)
+    request = _request(**{field: value})
+
+    result = run(request, base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason == f"source_integrity: {message} does not match " + (
+        "observed source bytes" if field == "source_sha256" else "source identity"
+    )
+    assert result.artifacts == ()
     assert not (tmp_path / "out").exists()
 
 
@@ -524,6 +588,50 @@ def test_corrupt_source_fails_without_partial_output(tmp_path: Path) -> None:
     assert not (tmp_path / "out").exists()
 
 
+def test_duplicate_source_json_object_names_fail_closed(tmp_path: Path) -> None:
+    """Duplicate source members cannot be resolved by parser order."""
+    source = FIXTURE_RESULTS.read_text(encoding="utf-8")
+    needle = '"readiness_status": "verified",'
+    replacement = needle + '\n    "readiness_status": "missing",'
+    assert needle in source
+    _write_raw_results(tmp_path, source.replace(needle, replacement, 1))
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason == "invalid_input: source JSON contains duplicate object names"
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
+def test_oversized_source_fails_before_reading_contents(tmp_path: Path) -> None:
+    """The source byte cap is enforced before parsing or report publication."""
+    source_path = tmp_path / "results.json"
+    source_path.write_bytes(b" " * (report_module.MAX_SOURCE_BYTES + 1))
+
+    result = run(_request(), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason == (
+        f"source_too_large: source exceeds the {report_module.MAX_SOURCE_BYTES}-byte limit"
+    )
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="named pipes are unavailable")
+def test_non_regular_source_is_rejected_before_read(tmp_path: Path) -> None:
+    """Special files receive a bounded refusal instead of a potentially blocking read."""
+    os.mkfifo(tmp_path / "results.fifo")
+
+    result = run(_request(source_uri="results.fifo"), base=tmp_path)
+
+    assert result.status == "unavailable"
+    assert result.reason == "source_unavailable: source path must be a regular file"
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
 def test_missing_capability_is_unavailable_without_output(tmp_path: Path) -> None:
     _copy_fixture(tmp_path)
 
@@ -615,6 +723,22 @@ def test_lone_unicode_surrogate_in_metric_order_fails_before_json_publish(
     assert result.artifacts == ()
     assert not (tmp_path / "out").exists()
     assert not list(tmp_path.glob(".out.staging-*"))
+
+
+@pytest.mark.parametrize("unsafe_text", ["title\x00with-control", "title\x01with-control"])
+def test_control_text_in_report_title_fails_before_html_publish(
+    tmp_path: Path, unsafe_text: str
+) -> None:
+    """NUL and other C0 controls cannot reach the HTML-safe report fields."""
+    _copy_fixture(tmp_path)
+
+    result = run(_request(config={"report_title": unsafe_text}), base=tmp_path)
+
+    assert result.status == "failed"
+    assert result.reason.startswith("invalid_input: /config/report_title")
+    assert "control" in result.reason or "NUL" in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
 
 
 @pytest.mark.parametrize(
@@ -806,6 +930,60 @@ def test_cli_parser_limit_emits_stable_failed_result(
     assert result.status == "failed"
     assert result.reason == f"invalid_input: {parser_input} JSON cannot be parsed safely"
     assert not (tmp_path / "parser-limit-output").exists()
+
+
+def test_cli_duplicate_config_object_names_emit_failed_result(
+    tmp_path: Path, capsys: CaptureResult[str]
+) -> None:
+    """The optional config file uses the same duplicate-name rejection as sources."""
+    _copy_fixture(tmp_path)
+    request_path = tmp_path / "request.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "component-request.v1",
+                "request_id": "duplicate-config-request",
+                "component_id": COMPONENT_ID,
+                "sources": [
+                    {
+                        "artifact_id": "recorded-results",
+                        "uri": "results.json",
+                        "format": EXPERIMENT_RESULTS_SCHEMA_VERSION,
+                    }
+                ],
+                "config": {},
+                "output_directory": "ignored-by-cli",
+            }
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        '{"report_title": "first", "report_title": "shadowed"}',
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "--input",
+            str(request_path),
+            "--config",
+            str(config_path),
+            "--output",
+            "duplicate-config-output",
+            "--base",
+            str(tmp_path),
+        ]
+    )
+    captured = capsys.readouterr()
+    result = component_result_from_dict(json.loads(captured.out))
+
+    assert exit_code == 1
+    assert captured.err == ""
+    assert result.request_id == "duplicate-config-request"
+    assert result.status == "failed"
+    assert result.reason == "invalid_input: config JSON contains duplicate object names"
+    assert not (tmp_path / "duplicate-config-output").exists()
 
 
 @pytest.mark.parametrize("source_uri", ["bad\x00name", "bad\ud800"])

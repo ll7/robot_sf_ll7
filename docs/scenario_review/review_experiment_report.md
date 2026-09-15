@@ -23,9 +23,19 @@ The output directory must not already exist. The command writes:
 Each result envelope includes SHA-256 digests for both artifacts and provenance
 for the recorded source. A source identity is a closed contract: it must carry
 `source_kind`, `source_commit`, `execution_mode`, `readiness_status`, and
-`availability_status`. The fixture is intentionally labelled `source_kind:
-fixture`, `execution_mode: recorded_results_only`,
+`availability_status`. `source_kind` is `fixture` or `recorded_results`;
+`execution_mode` is one of `recorded_results_only`, `native`, `adapter`, or
+`mixed`; and `source_commit` must be a 40-hex commit identifier. The fixture is
+intentionally labelled `source_kind: fixture`, `execution_mode: recorded_results_only`,
 `readiness_status: verified`, and `availability_status: available`.
+
+When a request-level `SourceRef` declares `sha256` or `source_commit`, the
+component compares those values with the bytes it actually reads and the
+source identity in the source document. A mismatch fails closed. The source
+must be a regular file no larger than 8 MiB (8,388,608 bytes); the size check
+happens before source contents are read. Source, request, and optional config
+JSON reject duplicate object names. Retained API and HTML text rejects NUL and
+other C0/C1 control characters, as well as malformed Unicode surrogates.
 
 The HTML artifact is a human-readable summary. The JSON artifact is authoritative
 for complete per-condition measurement values, units, expected directions, source

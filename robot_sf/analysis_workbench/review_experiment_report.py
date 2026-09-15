@@ -15,6 +15,8 @@ import html
 import json
 import math
 import os
+import re
+import stat
 import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict
@@ -46,6 +48,8 @@ EVIDENCE_BOUNDARY = "diagnostic-only recorded-results comparison; not benchmark 
 OUTCOMES = ("survived", "falsified", "inconclusive", "contradictory")
 VALID_GATE_STATUSES = ("pass", "fail", "missing", "unknown", "not_applicable")
 VALID_EXPECTED_DIRECTIONS = ("increase", "decrease")
+VALID_SOURCE_KINDS = ("fixture", "recorded_results")
+VALID_SOURCE_EXECUTION_MODES = ("recorded_results_only", "native", "adapter", "mixed")
 VALID_SOURCE_READINESS_STATUSES = (
     "verified",
     "missing",
@@ -76,6 +80,28 @@ _COUNT_UNITS = {
     "negative_finding_count": "condition_record_with_non_survived_outcome",
 }
 _MAX_JSON_NESTING_DEPTH = 1000
+MAX_SOURCE_BYTES = 8 * 1024 * 1024
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+_SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+
+
+class _DuplicateJsonObjectName(ValueError):
+    """Raised when a JSON object contains an ambiguous repeated member."""
+
+
+def _reject_duplicate_json_object_names(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build a JSON object while rejecting duplicate member names.
+
+    Returns:
+        The object represented by ``pairs`` when all names are unique.
+    """
+
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateJsonObjectName
+        result[key] = value
+    return result
 
 
 class ExperimentReportError(RobotSfError, ValueError):
@@ -159,6 +185,7 @@ def _finite_number(value: Any, *, path: str) -> float:
 def _non_empty_string(value: Any, *, path: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ExperimentReportError("invalid_input", f"{path} must be a non-empty string")
+    _validate_unicode_string(value, path=path)
     return value
 
 
@@ -169,7 +196,7 @@ def _mapping(value: Any, *, path: str) -> Mapping[str, Any]:
 
 
 def _validate_unicode_string(value: str, *, path: str) -> None:
-    """Reject unpaired UTF-16 surrogate code points in a retained string."""
+    """Reject malformed Unicode and C0/C1 controls in retained text."""
     index = 0
     while index < len(value):
         codepoint = ord(value[index])
@@ -183,6 +210,12 @@ def _validate_unicode_string(value: str, *, path: str) -> None:
             raise ExperimentReportError(
                 "invalid_input", f"{path} contains an unpaired Unicode surrogate"
             )
+        elif codepoint == 0:
+            raise ExperimentReportError("invalid_input", f"{path} contains an embedded NUL byte")
+        elif codepoint < 0x20 or 0x7F <= codepoint <= 0x9F:
+            raise ExperimentReportError(
+                "invalid_input", f"{path} contains a disallowed control character"
+            )
         else:
             index += 1
 
@@ -192,14 +225,14 @@ def _validate_request_text(value: Any, *, path: str) -> None:
 
     if not isinstance(value, str) or not value:
         raise ExperimentReportError("invalid_input", f"{path} must be a non-empty string")
-    if "\x00" in value:
-        raise ExperimentReportError("invalid_input", f"{path} contains an embedded NUL byte")
     try:
-        value.encode("utf-8")
-    except UnicodeEncodeError:
-        raise ExperimentReportError(
-            "invalid_input", f"{path} contains invalid Unicode text"
-        ) from None
+        _validate_unicode_string(value, path=path)
+    except ExperimentReportError as error:
+        if "unpaired Unicode surrogate" in str(error):
+            raise ExperimentReportError(
+                "invalid_input", f"{path} contains invalid Unicode text"
+            ) from None
+        raise
 
 
 def _safe_request_identity(value: Any, *, fallback: str) -> str:
@@ -209,11 +242,11 @@ def _safe_request_identity(value: Any, *, fallback: str) -> str:
         The original value when it is safe to retain, otherwise ``fallback``.
     """
 
-    if not isinstance(value, str) or not value or "\x00" in value:
+    if not isinstance(value, str) or not value:
         return fallback
     try:
-        value.encode("utf-8")
-    except UnicodeEncodeError:
+        _validate_unicode_string(value, path="/identity")
+    except ExperimentReportError:
         return fallback
     return value
 
@@ -228,6 +261,20 @@ def _validate_request(request: ComponentRequest) -> None:
         _validate_request_text(source_ref.artifact_id, path=f"/sources/{index}/artifact_id")
         _validate_request_text(source_ref.uri, path=f"/sources/{index}/uri")
         _validate_request_text(source_ref.format, path=f"/sources/{index}/format")
+        if source_ref.sha256 and (
+            not isinstance(source_ref.sha256, str)
+            or _SHA256_RE.fullmatch(source_ref.sha256) is None
+        ):
+            raise ExperimentReportError(
+                "invalid_input", f"/sources/{index}/sha256 must be a 64-hex SHA-256"
+            )
+        if source_ref.source_commit and (
+            not isinstance(source_ref.source_commit, str)
+            or _SHA40_RE.fullmatch(source_ref.source_commit) is None
+        ):
+            raise ExperimentReportError(
+                "invalid_input", f"/sources/{index}/source_commit must be a 40-hex commit SHA"
+            )
     for index, capability in enumerate(request.required_capabilities):
         _validate_request_text(capability, path=f"/required_capabilities/{index}")
 
@@ -496,6 +543,25 @@ def _validate_source_identity(value: Any) -> dict[str, str]:
             "invalid_input",
             "/source/source_identity/availability_status must be one of "
             + ", ".join(VALID_SOURCE_AVAILABILITY_STATUSES),
+        )
+    source_kind = normalized["source_kind"]
+    if source_kind not in VALID_SOURCE_KINDS:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/source_kind must be one of " + ", ".join(VALID_SOURCE_KINDS),
+        )
+    execution_mode = normalized["execution_mode"]
+    if execution_mode not in VALID_SOURCE_EXECUTION_MODES:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/execution_mode must be one of "
+            + ", ".join(VALID_SOURCE_EXECUTION_MODES),
+        )
+    source_commit = normalized["source_commit"]
+    if _SHA40_RE.fullmatch(source_commit) is None:
+        raise ExperimentReportError(
+            "invalid_input",
+            "/source/source_identity/source_commit must be a 40-hex commit SHA",
         )
     return normalized
 
@@ -847,7 +913,7 @@ def _resolve_inside(root: Path, value: str, *, path: str) -> Path:
     return candidate
 
 
-def _read_source(
+def _read_source(  # noqa: C901
     root: Path, request: ComponentRequest
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
     if not request.sources:
@@ -866,12 +932,7 @@ def _read_source(
             f"{EXPERIMENT_RESULTS_SCHEMA_VERSION}",
         )
     source_path = _resolve_inside(root, source_ref["uri"], path="/sources/0/uri")
-    try:
-        raw = source_path.read_bytes()
-    except OSError as error:
-        raise _UnavailableReportError(
-            "source_unavailable", f"cannot read source {source_ref['uri']!r}: {error}"
-        ) from error
+    raw = _read_source_bytes(source_path, source_uri=source_ref["uri"])
     source_sha256 = hashlib.sha256(raw).hexdigest()
     try:
         decoded = raw.decode("utf-8")
@@ -880,7 +941,11 @@ def _read_source(
             "invalid_input", f"source is not valid UTF-8 JSON: {error}"
         ) from error
     try:
-        payload = json.loads(decoded)
+        payload = json.loads(decoded, object_pairs_hook=_reject_duplicate_json_object_names)
+    except _DuplicateJsonObjectName:
+        raise ExperimentReportError(
+            "invalid_input", "source JSON contains duplicate object names"
+        ) from None
     except RecursionError:
         raise ExperimentReportError(
             "invalid_input", "source JSON exceeds the supported nesting depth"
@@ -895,7 +960,65 @@ def _read_source(
         raise ExperimentReportError(
             "invalid_input", "source JSON exceeds the supported nesting depth"
         ) from None
+    declared_sha256 = source_ref["sha256"]
+    if declared_sha256 and declared_sha256.lower() != source_sha256:
+        raise ExperimentReportError(
+            "source_integrity", "declared source sha256 does not match observed source bytes"
+        )
+    declared_source_commit = source_ref["source_commit"]
+    if (
+        declared_source_commit
+        and declared_source_commit.lower() != normalized["source_identity"]["source_commit"].lower()
+    ):
+        raise ExperimentReportError(
+            "source_integrity", "declared source_commit does not match source identity"
+        )
     return normalized, source_ref, source_sha256
+
+
+def _validate_source_stat(source_stat: os.stat_result) -> None:
+    """Reject special files and files exceeding the bounded source contract."""
+
+    if not stat.S_ISREG(source_stat.st_mode):
+        raise _UnavailableReportError("source_unavailable", "source path must be a regular file")
+    if source_stat.st_size > MAX_SOURCE_BYTES:
+        raise ExperimentReportError(
+            "source_too_large",
+            f"source exceeds the {MAX_SOURCE_BYTES}-byte limit",
+        )
+
+
+def _read_source_bytes(source_path: Path, *, source_uri: str) -> bytes:
+    """Read a regular source file after stat and descriptor size checks.
+
+    Returns:
+        The bounded source bytes.
+    """
+
+    try:
+        source_stat = source_path.stat()
+    except OSError as error:
+        raise _UnavailableReportError(
+            "source_unavailable", f"cannot read source {source_uri!r}: {error}"
+        ) from error
+    _validate_source_stat(source_stat)
+    try:
+        with source_path.open("rb") as source_file:
+            opened_stat = os.fstat(source_file.fileno())
+            _validate_source_stat(opened_stat)
+            raw = source_file.read(MAX_SOURCE_BYTES + 1)
+    except (_UnavailableReportError, ExperimentReportError):
+        raise
+    except OSError as error:
+        raise _UnavailableReportError(
+            "source_unavailable", f"cannot read source {source_uri!r}: {error}"
+        ) from error
+    if len(raw) > MAX_SOURCE_BYTES:
+        raise ExperimentReportError(
+            "source_too_large",
+            f"source exceeds the {MAX_SOURCE_BYTES}-byte limit",
+        )
+    return raw
 
 
 def _write_artifact(path: Path, content: str) -> str:
@@ -1133,7 +1256,12 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _build_parser().parse_args(argv)
     try:
-        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+        payload = json.loads(
+            Path(args.input).read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_json_object_names,
+        )
+    except _DuplicateJsonObjectName:
+        return _print_cli_failure("invalid_input: request JSON contains duplicate object names")
     except (OSError, ValueError, RecursionError):
         return _print_cli_failure("invalid_input: request JSON cannot be parsed safely")
     if not isinstance(payload, dict):
@@ -1141,7 +1269,14 @@ def main(argv: list[str] | None = None) -> int:
     request_id, component_id = _cli_identity(payload)
     if args.config is not None:
         try:
-            config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+            config = json.loads(
+                Path(args.config).read_text(encoding="utf-8"),
+                object_pairs_hook=_reject_duplicate_json_object_names,
+            )
+        except _DuplicateJsonObjectName:
+            return _print_cli_failure(
+                "invalid_input: config JSON contains duplicate object names", payload=payload
+            )
         except (OSError, ValueError, RecursionError):
             return _print_cli_failure(
                 "invalid_input: config JSON cannot be parsed safely", payload=payload

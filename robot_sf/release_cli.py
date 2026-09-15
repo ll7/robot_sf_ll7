@@ -219,7 +219,13 @@ def build_subparser(subparsers: Any) -> None:
     doctor.add_argument("--publication-preflight", type=Path)
     doctor.add_argument("--private-jobs", type=Path)
     doctor.add_argument("--private-evaluation-receipt", type=Path)
-    doctor.add_argument("--expected-job-id", default="14890")
+    doctor.add_argument(
+        "--expected-job-id",
+        help=(
+            "Require this scheduler job ID when validating a closeout receipt. "
+            "Post-execution compatibility defaults to the historical campaign job when omitted."
+        ),
+    )
     doctor.add_argument("--expected-validator-sha")
     doctor.add_argument("--dissertation", type=Path)
     doctor.add_argument("--token-file", type=Path)
@@ -389,7 +395,7 @@ def _handle_post_execution_doctor(args: argparse.Namespace, repo_root: Path) -> 
         expected_base_sha=args.expected_base_sha,
         tag=args.tag,
         expected_campaign_id=args.expected_campaign_id or EXPECTED_CAMPAIGN_ID,
-        expected_job_id=args.expected_job_id,
+        expected_job_id=args.expected_job_id or "14890",
         expected_validator_sha=args.expected_validator_sha or EXPECTED_VALIDATOR_SHA,
     )
     _print(report)

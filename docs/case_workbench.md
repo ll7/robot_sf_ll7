@@ -81,6 +81,41 @@ gate passed. Before admission, use the package's audit dossier and interactive
 viewer for review, or request an explicitly diagnostic-only preview through the
 private API flag; such a preview is not evidence.
 
+## Stage-1 bounded intervention specification
+
+Issue [#9308](https://github.com/ll7/robot_sf_ll7/issues/9308) adds a small,
+design-only contract for selecting one failure-mechanism intervention from
+existing diagnostic traces or case dossiers. The owner is
+`robot_sf.benchmark.intervention_spec`, and the contract is
+`intervention_spec.v1`:
+
+```python
+from robot_sf.benchmark.intervention_spec import load_intervention_spec
+
+spec = load_intervention_spec("<repository-relative-spec>.yaml")
+```
+
+Every spec declares exactly one changed factor (`visibility`, `delay`,
+`control_clipping`, or `planner_response`), explicit `held_fixed` and
+`known_unfixable` field sets. The fixed set must include `scenario_id`, `seed`,
+`planner_id`, and `initial_state`; anything that cannot be fixed is listed
+instead in `known_unfixable`. The spec also carries a source-bound identity for the selected
+scenario, planner, episode, seed, config, and existing source files. The
+comparison classification is either `matched_start_replay` (matched initial
+state only) or `genuine_shared_prefix`; the latter remains
+`verification_status: not_verified` until a later receipt checks the prefix.
+The no-op negative-control arm and fixed stop rule are required, and missing or
+ambiguous fields fail validation and are prescribed to end in `not_available`,
+rather than using an implicit substitute.
+Pass `repo_root` to `load_intervention_spec` when local verification of the
+declared source/config bytes is available; otherwise the validator still
+requires explicit paths and lowercase digests but does not invent their bytes.
+
+This API validates and normalizes a specification only. It does not replay,
+execute paired runs, verify an intervention, or support a causal, benchmark,
+paper, safety, or mechanism-confidence claim. Stage 2 must add its own
+execution and compatibility receipts before any result can be interpreted.
+
 ## Issue #6814 compact closeout
 
 The strict #6814 re-export can additionally write a frame-free compact projection for issue

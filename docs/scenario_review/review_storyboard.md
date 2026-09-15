@@ -24,10 +24,14 @@ The component accepts either the canonical
 `srev07-exemplar-scores.v1` score map. The canonical adapter requires the full
 owner report envelope (`roots`, `weights`, `episodes`, and
 `comparison_pairs`), complete owner-native episode rows and normalized feature
-and composite scores in the inclusive range `[0, 1]`. A lookalike, foreign,
-duplicate, or out-of-range report is rejected as unavailable input and is
-never advertised as the canonical adapter. Missing or unversioned scores
-remain unavailable; they never silently become zero.
+and composite scores in the inclusive range `[0, 1]`. Rows marked with a
+fallback, degraded, unavailable, failed, or equivalent non-admissible
+execution status are rejected before canonical provenance is advertised.
+Comparison-pair endpoints must be episode IDs from the review bundle; a valid
+top-N report may omit known bundle episodes from its scored rows. A lookalike,
+foreign, duplicate, unknown-endpoint, or out-of-range report is rejected as
+unavailable input and is never advertised as the canonical adapter. Missing or
+unversioned scores remain unavailable; they never silently become zero.
 
 Event rows must carry an episode ID when they carry an interval or event ID.
 Duplicate `interval_id` or `event_id` values are checked within the episode
@@ -51,10 +55,11 @@ uv run python -m robot_sf.analysis_workbench.review_storyboard \
 The CLI and Python API expose `component-result.v1` envelopes. Source bytes
 are parsed as strict UTF-8 JSON where applicable (duplicate keys and
 `NaN`/infinite constants are rejected), read only from bounded regular files,
-and checked against declared SHA-256 values. Resolved paths must remain under
-the selected base without symlink components, and bundle references are
-retained in result provenance with their schema, commit, configuration, units,
-coordinate frame, and observed integrity status.
+and checked against declared SHA-256 values. Source and output paths are walked
+relative to pinned directory descriptors with no-follow flags; an unavailable
+descriptor-relative operation or detected ancestor replacement fails closed.
+Bundle references are retained in result provenance with their schema, commit,
+configuration, units, coordinate frame, and observed integrity status.
 
 Three sidecars are emitted together into a new output directory:
 
@@ -76,15 +81,18 @@ is still present in `provenance.emitted_artifacts`.
 
 - Missing required families or capabilities, corrupt or unbound sources,
   digest mismatches, unsafe paths, duplicate episode IDs, malformed or
-  out-of-range score shapes, unscoped or duplicate event IDs, stale or unbound
-  override sources, and invalid intervals never
-  silently produce a complete ranking.
+  out-of-range score shapes, non-admissible canonical score rows, unknown
+  comparison-pair endpoints, unscoped or duplicate event IDs, stale or
+  unbound override sources, and invalid intervals never silently produce a
+  complete ranking.
 - An optional family that is not requested may be absent. Its capability
   remains unavailable in the capability report, and no score fallback is
   synthesized.
 - Output directories must not already exist. This prevents a rerun from
   overwriting an earlier receipt; final publication reserves the directory
-  without replacement semantics and removes partial output on write failure.
+  without replacement semantics, links staged sidecars through pinned
+  descriptors, checks ancestor identity, and removes partial output on write
+  failure.
 - Resource limits are explicit: 8 MiB per input file, 256 request sources,
   10,000 bundle episodes, 64 references per episode, 100,000 score rows or
   event intervals, and 10,000 override IDs per pin/exclude list. Nested bundle

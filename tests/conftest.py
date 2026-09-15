@@ -861,6 +861,10 @@ _FAST_FILES = {
     # for the shared-contract leaf; keep them in the exact-head fast lane
     # (issue #9270).
     "test_review_contracts.py",
+    # SREV-15 workbench tests are deterministic offline rendering and provenance
+    # contracts for the review component; keep changed coverage in fast shards
+    # (issue #9284).
+    "test_review_workbench.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

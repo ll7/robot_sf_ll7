@@ -23,6 +23,7 @@ from scripts.benchmark.prepare_radius_sweep_admission_issue_7198 import (
     _private_ops_snapshot,
     _queue_summary_blockers,
     _submission_command,
+    parse_args,
     validate_gate1_report,
     validate_preflight_payload,
 )
@@ -343,6 +344,12 @@ def test_production_queue_validation_accepts_ready_submit_eligible_row() -> None
         )
         == []
     )
+
+
+def test_ready_queue_validation_requires_explicit_cli_selection() -> None:
+    """The default remains blocked-row preparation; ready validation is opt-in."""
+    assert parse_args([]).check_ready_queue is False
+    assert parse_args(["--check-ready-queue"]).check_ready_queue is True
 
 
 def test_preparation_contract_rejects_unscoped_or_nonblocked_queue_state() -> None:

@@ -934,6 +934,7 @@ def prepare_packet(  # noqa: PLR0915
     repo_root: Path = REPO_ROOT,
     packet_config_path: Path | None = None,
     output_root: Path | None = None,
+    check_ready_queue: bool = False,
 ) -> tuple[dict[str, Any], int]:
     """Build and write the admission packet; return the packet and process status."""
     packet_config_path = packet_config_path or repo_root / DEFAULT_PACKET_CONFIG
@@ -1042,12 +1043,13 @@ def prepare_packet(  # noqa: PLR0915
 
     preflights = _run_preflights(repo_root, packet_config, output_root, blockers)
     preparation_only = _is_preparation_only_packet(packet_config)
+    queue_check_mode = "ready" if check_ready_queue or not preparation_only else "blocked"
     private_ops = _private_ops_snapshot(
         repo_root,
         packet_config,
         output_root,
         blockers,
-        preparation_only=preparation_only,
+        preparation_only=queue_check_mode == "blocked",
         campaign_issue=packet_config.get("campaign_issue"),
     )
     remote_env = str(packet_config["artifacts"]["remote_results_uri_env"])
@@ -1086,6 +1088,7 @@ def prepare_packet(  # noqa: PLR0915
         "title": packet_config["title"],
         "claim_boundary": packet_config["claim_boundary"],
         "preparation_only": preparation_only,
+        "queue_check_mode": queue_check_mode,
         "verdict": verdict,
         "status": verdict,
         "candidate_commit": candidate,
@@ -1130,6 +1133,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet-config", type=Path, default=Path(DEFAULT_PACKET_CONFIG))
     parser.add_argument("--out", type=Path, default=Path(DEFAULT_OUTPUT_ROOT))
+    parser.add_argument(
+        "--check-ready-queue",
+        action="store_true",
+        help="Validate exactly one ready and submit-eligible issue row after reviewed promotion; this never submits or authorizes compute.",
+    )
     return parser.parse_args(argv)
 
 
@@ -1142,7 +1150,10 @@ def main(argv: list[str] | None = None) -> int:
     output_root = args.out if args.out.is_absolute() else REPO_ROOT / args.out
     try:
         packet, status = prepare_packet(
-            repo_root=REPO_ROOT, packet_config_path=packet_path, output_root=output_root
+            repo_root=REPO_ROOT,
+            packet_config_path=packet_path,
+            output_root=output_root,
+            check_ready_queue=args.check_ready_queue,
         )
     except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
         print(

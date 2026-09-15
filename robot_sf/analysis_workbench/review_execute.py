@@ -1225,8 +1225,6 @@ def _drive_candidates(
         Tuple of terminal (status, reason) for the drive.
     """
     candidates = _select_candidates(executor.recipe, config.max_candidates)
-    if not candidates:
-        raise ReviewExecuteError(["recipe carries no candidates"])
     status = "complete"
     reason = "all selected candidates reached a terminal state"
     try:
@@ -1260,10 +1258,7 @@ def _settle(
     succeeded = [
         report for report in executor._candidate_reports if report.get("status") == "complete"
     ]
-    if status == "complete" and not executor._candidate_reports:
-        status = "failed"
-        reason = "no candidate reached a terminal state"
-    elif status == "complete" and not succeeded:
+    if status == "complete" and not succeeded:
         status = "failed"
         reason = "no candidate completed: " + "; ".join(
             str(report.get("reason", report.get("status", "")))

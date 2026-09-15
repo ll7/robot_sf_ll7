@@ -502,6 +502,9 @@ _FAST_FILES = {
     # Presentation-style preset contracts are deterministic spec/coverage for
     # the changed presentation renderer module (issue #9367).
     "test_presentation_style.py",
+    # Three.js viewer payload contracts are deterministic schema/fidelity
+    # coverage for the changed viewer exporter (issue #9368).
+    "test_threejs_viewer.py",
     # SVG geometry contract tests provide changed-line coverage for the
     # parser's explicit legacy/corrected transform paths (issue #8314).
     "test_svg_transform_contract.py",
@@ -870,10 +873,21 @@ _FAST_FILES = {
     # SREV-21 recipe tests protect deterministic contract and provenance
     # behavior for the new analysis-workbench component (issue #9292).
     "test_review_hypotheses.py",
+    # SREV-26 explanation tests protect deterministic draft citations and
+    # fail-closed evidence handling for the new review-ai component
+    # (issue #9297).
+    "test_review_ai.py",
     # SREV-15 workbench tests are deterministic offline rendering and provenance
     # contracts for the review component; keep changed coverage in fast shards
     # (issue #9284).
     "test_review_workbench.py",
+    # SREV-22 review-execute tests are deterministic fixture and fail-closed
+    # execution coverage for the bounded experiment leaf; keep changed coverage
+    # in fast shards (issue #9293).
+    "test_review_execute.py",
+    # SREV-02 review-import tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9271).
+    "test_review_import.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

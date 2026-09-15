@@ -1,0 +1,39 @@
+{
+  "source_metadata": {
+    "episodes": {
+      "sha256": "f477e2867d864c16d7bfda16ad751bb0358aaedcbfc300deeff67378039acb43",
+      "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "units": "seconds/metres/radians",
+      "coordinate_frame": "map",
+      "schema": "episode-jsonl.fixture"
+    },
+    "analysis": {
+      "sha256": "038820b33dfdbf8292331c8f1ba46ecb2d48847c33358f38740a4bc6dea51ff0",
+      "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "units": "seconds/metres/radians",
+      "coordinate_frame": "map",
+      "schema": "analysis-trace.fixture"
+    },
+    "simtrace": {
+      "sha256": "e3eed6a12c0dd3999da870e9f3ef40fb862657a648e5d2562bfc24d93fadc8bd",
+      "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "units": "seconds/metres/radians",
+      "coordinate_frame": "map",
+      "schema": "simulation-trace.fixture"
+    },
+    "dossier": {
+      "sha256": "e1bd552ca8a376eaf9d9bb5764b7817c1184104927918c8667601ee2fc6b7b32",
+      "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "units": "seconds/metres/radians",
+      "coordinate_frame": "map",
+      "schema": "trace-dossier.fixture"
+    },
+    "video": {
+      "sha256": "423476b8467f4bf1d4044f39a62e1794d5b676584227f6d6d67a656e1b198d48",
+      "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "units": "seconds/metres/radians",
+      "coordinate_frame": "map",
+      "schema": "video-metadata.fixture"
+    }
+  }
+}

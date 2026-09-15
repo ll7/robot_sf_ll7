@@ -17,8 +17,10 @@ The operation is exact-item scoped and idempotent. ``--report`` mode performs
 no GitHub mutation and lists every proposed change; ``--apply`` mode re-reads
 the live item state immediately before mutating each label, aborts on reopen or
 concurrent label drift, and keeps manual labels outside the controlled
-namespace untouched. The planner never closes issues, merges PRs, or creates
-labels.
+namespace untouched. ``merge-ready`` removal additionally proves the item is
+still a closed PR through the pulls API and passes its live head/base SHAs to
+the PR-target compare-and-swap guard. The planner never closes issues, merges
+PRs, or creates labels.
 """
 
 from __future__ import annotations
@@ -241,6 +243,13 @@ def _apply_label_change(
         if label not in current["labels"]:
             applied["remove"].append({"label": label, "skipped": True})
             return None
+        if label == "merge-ready":
+            return _apply_merge_ready_removal(
+                number,
+                repo=repo,
+                is_pull_request=bool(current.get("is_pull_request")),
+                applied=applied,
+            )
         result = remove_label(number, label, repo=repo)
         if result.get("status") != "ok":
             applied["failures"].append({"label": label, "error": result.get("error")})
@@ -440,6 +449,95 @@ def _pull_request_identity(item: dict[str, Any]) -> tuple[bool, Any]:
     if merged_at is None and isinstance(pull_request, dict):
         merged_at = pull_request.get("merged_at")
     return is_pull_request, merged_at
+
+
+def fetch_pr_merge_identity(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
+    """Read the live PR head/base SHAs plus merged state via the pulls API.
+
+    The issues API row that ``fetch_item_state`` returns carries no head/base
+    SHAs, but ``merge-ready`` removal requires the PR-target compare-and-swap
+    guard. This helper supplies that identity immediately before the removal.
+
+    Returns a payload with ``state``, ``merged_at``, ``head_sha``, and
+    ``base_sha`` plus an ``ok`` flag; ``ok=False`` carries an error string.
+    """
+    result = gh_api_get(f"repos/{repo}/pulls/{number}", timeout=30)
+    payload, error = parse_json(result, what=f"PR #{number} read")
+    if error:
+        return {"ok": False, "error": error}
+    if not isinstance(payload, dict):
+        return {"ok": False, "error": f"PR #{number} response was not an object"}
+    head = payload.get("head")
+    base = payload.get("base")
+    head_sha = head.get("sha") if isinstance(head, dict) else None
+    base_sha = base.get("sha") if isinstance(base, dict) else None
+    if not head_sha or not base_sha:
+        return {"ok": False, "error": f"PR #{number} head/base SHA unavailable"}
+    return {
+        "ok": True,
+        "number": number,
+        "state": str(payload.get("state") or "").lower(),
+        "merged_at": payload.get("merged_at"),
+        "head_sha": head_sha,
+        "base_sha": base_sha,
+    }
+
+
+def _apply_merge_ready_removal(
+    number: int,
+    *,
+    repo: str,
+    is_pull_request: bool,
+    applied: dict[str, Any],
+) -> None:
+    """Remove ``merge-ready`` through the PR-target compare-and-swap guard.
+
+    ``merge-ready`` is a PR-scoped label: the label helper rejects the
+    issue-target removal, so terminal reconciliation must prove the item is
+    still a closed PR and pass its live head/base SHAs. Any identity failure
+    is recorded without mutating labels.
+    """
+    if not is_pull_request:
+        result = remove_label(number, "merge-ready", repo=repo)
+        if result.get("status") != "ok":
+            applied["failures"].append({"label": "merge-ready", "error": result.get("error")})
+            return None
+        applied["remove"].append({"label": "merge-ready", "skipped": False})
+        return None
+    identity = fetch_pr_merge_identity(number, repo=repo)
+    if not identity["ok"]:
+        applied["failures"].append({"label": "merge-ready", "error": identity["error"]})
+        return None
+    if identity["state"] != "closed":
+        applied["failures"].append(
+            {
+                "label": "merge-ready",
+                "error": (f"PR no longer closed (state={identity['state']}); removal aborted"),
+            }
+        )
+        return None
+    result = remove_label(
+        number,
+        "merge-ready",
+        repo=repo,
+        target="pr",
+        expected_head_sha=identity["head_sha"],
+        expected_base_sha=identity["base_sha"],
+    )
+    if result.get("status") != "ok":
+        applied["failures"].append({"label": "merge-ready", "error": result.get("error")})
+        return None
+    applied["remove"].append(
+        {
+            "label": "merge-ready",
+            "skipped": False,
+            "target": "pr",
+            "pr_head_sha": identity["head_sha"],
+            "pr_base_sha": identity["base_sha"],
+            "pr_merged_at": identity["merged_at"],
+        }
+    )
+    return None
 
 
 def _page_closed_items(repo: str, page: int, *, per_page: int = _PAGE_SIZE) -> list[dict[str, Any]]:

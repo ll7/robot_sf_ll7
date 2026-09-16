@@ -456,6 +456,9 @@ _FAST_FILES = {
     # schema/compatibility coverage for changed benchmark producers.
     "test_algorithm_contract_registry.py",
     "test_algorithm_readiness_contract.py",
+    # Deterministic Slurm closeout receipt schema and provenance tests provide
+    # exact-head changed-line coverage for the packaged release validator.
+    "test_slurm_closeout_receipt.py",
     # Paired-effect metric-contract tests are deterministic schema, provenance,
     # and materialization coverage for the native counterfactual producer.
     "test_paired_effect_metric_contract.py",

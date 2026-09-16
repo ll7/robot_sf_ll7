@@ -116,6 +116,14 @@ def _import_torch_optional():
         return None
 
 
+def _import_matplotlib_optional():
+    """Import matplotlib if available in the environment, returning None on failure."""
+    try:
+        return importlib.import_module("matplotlib")  # type: ignore
+    except Exception:  # pragma: no cover - matplotlib optional in some envs
+        return None
+
+
 def _snapshot_torch_determinism(torch_module):
     """Snapshot determinism-related flags for PyTorch and cuDNN backends.
 
@@ -275,6 +283,25 @@ def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
         yield
     finally:
         _restore_torch_determinism(torch_module, state)
+
+
+@pytest.fixture(autouse=True)
+def matplotlib_rcparams_isolation():  # type: ignore[missing-return-type-doc]
+    """Restore matplotlib rcParams after each test.
+
+    Production render paths mutate global rcParams (notably savefig.bbox via
+    the latex style helper); without isolation, fixed-canvas assertions in
+    unrelated suites flip depending on xdist worker execution order
+    (issue #9411).
+    """
+
+    matplotlib_module = _import_matplotlib_optional()
+    if matplotlib_module is None:
+        yield
+        return
+
+    with matplotlib_module.rc_context():
+        yield
 
 
 @pytest.fixture(scope="session")

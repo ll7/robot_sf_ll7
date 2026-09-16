@@ -1081,6 +1081,237 @@ def _config_document(config: ExecuteConfig) -> dict[str, Any]:
     }
 
 
+def _resume_attempt_index(
+    attempts: list[dict[str, Any]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Index validated resume attempts by (candidate_id, kind).
+
+    Returns:
+        Mapping from ``(candidate_id, kind)`` to the validated attempt entry.
+    """
+    return {
+        (str(entry["candidate_id"]), str(entry["kind"])): entry
+        for entry in attempts
+        if isinstance(entry.get("candidate_id"), str) and isinstance(entry.get("kind"), str)
+    }
+
+
+def _verify_resume_envelope(  # noqa: C901, PLR0912, PLR0915
+    *,
+    attempts: list[dict[str, Any]],
+    reports: list[dict[str, Any]],
+    traces: list[dict[str, Any]],
+    config: ExecuteConfig,
+    recipe: dict[str, Any],
+) -> None:
+    """Reject forged nested report/trace fields against recorded attempt digests.
+
+    The attempt ledger entries carry the measured telemetry; candidate reports
+    and activation traces must reproduce those measurements field-by-field.
+    Any digest mismatch, recomputed activation-flag mismatch, or recomputed
+    pair-verdict mismatch fails closed so a tampered envelope cannot resume
+    as ``complete``.
+
+    Raises:
+        ReviewExecuteError: When any envelope layer is inconsistent.
+    """
+    attempt_index = _resume_attempt_index(attempts)
+    reports_by_id = {
+        str(report["intervention_id"]): report
+        for report in reports
+        if isinstance(report.get("intervention_id"), str)
+    }
+    traces_by_id = {
+        str(trace["intervention_id"]): trace
+        for trace in traces
+        if isinstance(trace.get("intervention_id"), str)
+    }
+    measurement, _measurement_error = _measurement_for_recipe(recipe)
+    has_complete = any(report.get("status") == "complete" for report in reports)
+    if has_complete and measurement is None:
+        raise ReviewExecuteError(["cannot resume: resume envelope measurement is invalid"])
+    metric_name = str(measurement["name"]) if measurement is not None else ""
+    expected_direction = str(measurement["expected_direction"]) if measurement is not None else ""
+
+    for report in reports:
+        candidate_id = str(report.get("intervention_id", ""))
+        status = report.get("status")
+        if status == "unavailable":
+            if any(cid == candidate_id for cid, _kind in attempt_index):
+                raise ReviewExecuteError(
+                    [
+                        f"cannot resume: candidate report {candidate_id} is inconsistent with attempts"
+                    ]
+                )
+            if "control_metrics" in report or "treatment_metrics" in report:
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                )
+            continue
+        control_entry = attempt_index.get((candidate_id, "control"))
+        treatment_entry = attempt_index.get((candidate_id, "treatment"))
+        report_control = report.get("control_metrics")
+        report_treatment = report.get("treatment_metrics")
+        if status == "complete":
+            if (
+                control_entry is None
+                or treatment_entry is None
+                or control_entry.get("status") != "ok"
+                or treatment_entry.get("status") != "ok"
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
+                )
+            control_metrics = control_entry.get("metrics")
+            treatment_metrics = treatment_entry.get("metrics")
+            if not isinstance(control_metrics, dict) or not isinstance(treatment_metrics, dict):
+                raise ReviewExecuteError(
+                    [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
+                )
+            if not isinstance(report_control, dict) or not isinstance(report_treatment, dict):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                )
+            if _canonical_digest(report_control) != _canonical_digest(control_metrics) or (
+                _canonical_digest(report_treatment) != _canonical_digest(treatment_metrics)
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                )
+            try:
+                expected_control_activated = (
+                    float(control_metrics["ped_displacement_m"]) > config.motion_epsilon_m
+                )
+                expected_treatment_activated = (
+                    abs(
+                        float(treatment_metrics["ped_mean_speed_m_s"])
+                        - float(control_metrics["ped_mean_speed_m_s"])
+                    )
+                    > config.activation_speed_tolerance_m_s
+                )
+            except (KeyError, TypeError, ValueError):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                ) from None
+            if (
+                report.get("control_activated") is not expected_control_activated
+                or report.get("treatment_activated") is not expected_treatment_activated
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} activation is inconsistent"]
+                )
+            try:
+                pair_result = evaluate_counterfactual_pair(
+                    {
+                        "mechanism_activated": expected_control_activated,
+                        "metrics": {metric_name: control_metrics[metric_name]},
+                    },
+                    {
+                        "mechanism_activated": expected_treatment_activated,
+                        "metrics": {metric_name: treatment_metrics[metric_name]},
+                    },
+                    PairHypothesis(
+                        expected_mechanism=str(report.get("factor", "")),
+                        outcome_metric=metric_name,
+                        expected_direction=expected_direction,
+                    ),
+                )
+            except (KeyError, TypeError, ValueError):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} verdict is inconsistent"]
+                ) from None
+            if report.get("verdict") != pair_result.verdict:
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} verdict is inconsistent"]
+                )
+        elif status == "failed":
+            if isinstance(report_control, dict) and control_entry is not None:
+                attempt_metrics = control_entry.get("metrics")
+                if (
+                    control_entry.get("status") == "ok"
+                    and isinstance(attempt_metrics, dict)
+                    and _canonical_digest(report_control) != _canonical_digest(attempt_metrics)
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                    )
+            if isinstance(report_treatment, dict) and treatment_entry is not None:
+                attempt_metrics = treatment_entry.get("metrics")
+                if (
+                    treatment_entry.get("status") == "ok"
+                    and isinstance(attempt_metrics, dict)
+                    and _canonical_digest(report_treatment) != _canonical_digest(attempt_metrics)
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                    )
+    for trace in traces:
+        candidate_id = str(trace.get("intervention_id", ""))
+        report = reports_by_id.get(candidate_id)
+        if report is None or report.get("status") != "complete":
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} has no complete report"]
+            )
+        control_entry = attempt_index.get((candidate_id, "control"))
+        treatment_entry = attempt_index.get((candidate_id, "treatment"))
+        if (
+            control_entry is None
+            or treatment_entry is None
+            or not isinstance(control_entry.get("metrics"), dict)
+            or not isinstance(treatment_entry.get("metrics"), dict)
+        ):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} is inconsistent"]
+            )
+        control_metrics = control_entry["metrics"]
+        treatment_metrics = treatment_entry["metrics"]
+        trace_control = trace.get("control_metrics")
+        trace_treatment = trace.get("treatment_metrics")
+        if not isinstance(trace_control, dict) or not isinstance(trace_treatment, dict):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
+            )
+        if _canonical_digest(trace_control) != _canonical_digest(
+            control_metrics
+        ) or _canonical_digest(trace_treatment) != _canonical_digest(treatment_metrics):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
+            )
+        try:
+            expected_control_activated = (
+                float(control_metrics["ped_displacement_m"]) > config.motion_epsilon_m
+            )
+            expected_treatment_activated = (
+                abs(
+                    float(treatment_metrics["ped_mean_speed_m_s"])
+                    - float(control_metrics["ped_mean_speed_m_s"])
+                )
+                > config.activation_speed_tolerance_m_s
+            )
+        except (KeyError, TypeError, ValueError):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
+            ) from None
+        if (
+            trace.get("control_activated") is not expected_control_activated
+            or trace.get("treatment_activated") is not expected_treatment_activated
+        ):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} activation is inconsistent"]
+            )
+        if trace.get("control_activated") is not bool(report.get("control_activated")) or trace.get(
+            "treatment_activated"
+        ) is not bool(report.get("treatment_activated")):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} activation is inconsistent"]
+            )
+    for candidate_id, report in reports_by_id.items():
+        if report.get("status") == "complete" and candidate_id not in traces_by_id:
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} is inconsistent"]
+            )
+
+
 @dataclass
 class _Executor:
     request: ComponentRequest
@@ -1328,23 +1559,45 @@ class _Executor:
                 raise ReviewExecuteError(
                     [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
                 )
-            if any(
-                set(report[key]) != REQUIRED_TELEMETRY_METRICS
-                or any(
-                    not _is_finite_number(report[key][metric])
-                    for metric in REQUIRED_TELEMETRY_METRICS
-                )
-                for key in ("control_metrics", "treatment_metrics")
-            ):
-                raise ReviewExecuteError(
-                    [f"cannot resume: complete candidate {candidate_id} metrics are invalid"]
-                )
+            if report["status"] == "complete":
+                if any(
+                    not isinstance(report.get(key), dict)
+                    or set(report[key]) != REQUIRED_TELEMETRY_METRICS
+                    or any(
+                        not _is_finite_number(report[key][metric])
+                        for metric in REQUIRED_TELEMETRY_METRICS
+                    )
+                    for key in ("control_metrics", "treatment_metrics")
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: complete candidate {candidate_id} metrics are invalid"]
+                    )
+            elif report["status"] == "failed":
+                for key in ("control_metrics", "treatment_metrics"):
+                    if key in report and (
+                        not isinstance(report[key], dict)
+                        or set(report[key]) != REQUIRED_TELEMETRY_METRICS
+                        or any(
+                            not _is_finite_number(report[key][metric])
+                            for metric in REQUIRED_TELEMETRY_METRICS
+                        )
+                    ):
+                        raise ReviewExecuteError(
+                            [f"cannot resume: candidate report {candidate_id} metrics are invalid"]
+                        )
         if seen_traces != {
             report["intervention_id"]
             for report in validated_reports
             if report["status"] == "complete"
         }:
             raise ReviewExecuteError(["cannot resume: activation traces do not match reports"])
+        _verify_resume_envelope(
+            attempts=validated_attempts,
+            reports=validated_reports,
+            traces=validated_traces,
+            config=self.config,
+            recipe=self.recipe,
+        )
         consumed = ledger.get("executions_consumed", 0)
         if not _is_int(consumed) or consumed != len(validated_attempts) or consumed < 0:
             raise ReviewExecuteError(["cannot resume: ledger execution count is inconsistent"])

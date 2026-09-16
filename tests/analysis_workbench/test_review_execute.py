@@ -503,6 +503,287 @@ def test_resume_rejects_tampered_ledger_identity(
     assert "recipe identity mismatch" in result.reason
 
 
+def test_resume_rejects_forged_report_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Forged nested report fields must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    forged = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    forged["control_metrics"]["ped_mean_speed_m_s"] += 5.0
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "metrics are inconsistent" in result.reason
+
+
+def test_resume_rejects_forged_report_verdict(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A flipped pair verdict must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    forged = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    forged["verdict"] = "falsified" if forged["verdict"] == "survived" else "survived"
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "verdict is inconsistent" in result.reason
+
+
+def test_resume_rejects_forged_trace_activation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A flipped trace activation flag must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    assert ledger["traces"]
+    ledger["traces"][0]["treatment_activated"] = not ledger["traces"][0]["treatment_activated"]
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "activation is inconsistent" in result.reason
+
+
+def test_resume_rejects_forged_trace_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Forged nested trace metrics must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    assert ledger["traces"]
+    ledger["traces"][0]["control_metrics"]["ped_mean_speed_m_s"] += 5.0
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "metrics are inconsistent" in result.reason
+
+
+def test_resume_rejects_forged_report_activation_flag(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A flipped report activation flag must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    forged = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    forged["control_activated"] = not forged["control_activated"]
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "activation is inconsistent" in result.reason
+
+
+def test_resume_rejects_complete_downgraded_to_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Downgrading a complete report while attempts remain must fail (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    forged = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    forged["status"] = "unavailable"
+    forged.pop("control_metrics", None)
+    forged.pop("treatment_metrics", None)
+    forged.pop("verdict", None)
+    # Traces still reference the formerly complete candidate.
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "inconsistent" in result.reason or "do not match" in result.reason
+
+
+def test_resume_rejects_unavailable_report_carrying_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An unavailable report must not carry measured metrics (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    first = run(_fixture_request(max_executions=6), base=tmp_path)
+    assert first.status == "complete"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    unavailable = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "unavailable"
+    )
+    complete = next(
+        report for report in ledger["candidate_reports"] if report["status"] == "complete"
+    )
+    unavailable["control_metrics"] = dict(complete["control_metrics"])
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "metrics are inconsistent" in result.reason
+
+
+def test_resume_rejects_trace_without_complete_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An orphan trace with no complete report must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    ledger["candidate_reports"] = [
+        report for report in ledger["candidate_reports"] if report["status"] != "complete"
+    ]
+    assert ledger["traces"]
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert (
+        "invalid" in result.reason
+        or "inconsistent" in result.reason
+        or "do not match" in result.reason
+    )
+
+
+def test_resume_from_complete_ledger_still_completes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A clean resume from a complete ledger must succeed (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    first = run(_fixture_request(max_executions=6), base=tmp_path)
+    assert first.status == "complete"
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "complete"
+
+
+def test_resume_rejects_complete_without_trace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A complete report with its trace deleted must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch)
+    partial = run(_fixture_request(max_executions=2), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    assert ledger["traces"]
+    ledger["traces"] = []
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_executions=6), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert (
+        "inconsistent" in result.reason
+        or "do not match" in result.reason
+        or "not reproducible" in result.reason
+    )
+
+
+def test_resume_accepts_failed_report_with_matching_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failed report whose metrics match attempts must resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch, fail_treatment_speed=0.5)
+    partial = run(_fixture_request(max_candidates=2, max_executions=4), base=tmp_path)
+    assert partial.status == "partial"
+    result = run(_fixture_request(max_candidates=2, max_executions=4), base=tmp_path, resume=True)
+    assert result.status in {"partial", "complete", "failed"}
+    assert "metrics are inconsistent" not in result.reason
+    assert "activation is inconsistent" not in result.reason
+    assert "verdict is inconsistent" not in result.reason
+
+
+def test_resume_rejects_failed_report_with_forged_metrics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failed report with forged metrics must reject resume (issue #9418)."""
+    _patch_fake_execution(monkeypatch, fail_treatment_speed=0.5)
+    partial = run(_fixture_request(max_candidates=2, max_executions=4), base=tmp_path)
+    assert partial.status == "partial"
+    ledger_path = tmp_path / "srev-22-smoke" / "attempt-ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    failed = next(
+        report
+        for report in ledger["candidate_reports"]
+        if report["status"] == "failed" and "control_metrics" in report
+    )
+    failed["control_metrics"]["ped_mean_speed_m_s"] += 5.0
+    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+    result = run(_fixture_request(max_candidates=2, max_executions=4), base=tmp_path, resume=True)
+    assert result.status == "failed"
+    assert "metrics are inconsistent" in result.reason
+
+
+def test_verify_resume_envelope_rejects_missing_measurement() -> None:
+    """Complete reports without a driving measurement must fail (issue #9418)."""
+    from robot_sf.analysis_workbench.review_execute import (
+        ReviewExecuteError,
+        _verify_resume_envelope,
+        validate_execute_config,
+    )
+
+    config = validate_execute_config(_fixture_json("config.json"))
+    recipe = dict(config.recipe)
+    recipe["measurements"] = []
+    with pytest.raises(ReviewExecuteError, match="measurement is invalid"):
+        _verify_resume_envelope(
+            attempts=[],
+            reports=[
+                {
+                    "intervention_id": "ped-speed-up",
+                    "factor": "single_pedestrian_speed_offset",
+                    "status": "complete",
+                }
+            ],
+            traces=[],
+            config=config,
+            recipe=recipe,
+        )
+
+
+def test_verify_resume_envelope_rejects_complete_without_attempts() -> None:
+    """A complete report with no recorded attempts must fail (issue #9418)."""
+    from robot_sf.analysis_workbench.review_execute import (
+        ReviewExecuteError,
+        _verify_resume_envelope,
+        validate_execute_config,
+    )
+
+    config = validate_execute_config(_fixture_json("config.json"))
+    recipe = dict(config.recipe)
+    with pytest.raises(ReviewExecuteError, match="not reproducible"):
+        _verify_resume_envelope(
+            attempts=[],
+            reports=[
+                {
+                    "intervention_id": "ped-speed-up",
+                    "factor": "single_pedestrian_speed_offset",
+                    "status": "complete",
+                    "control_metrics": {"ped_mean_speed_m_s": 1.0},
+                    "treatment_metrics": {"ped_mean_speed_m_s": 1.5},
+                }
+            ],
+            traces=[],
+            config=config,
+            recipe=recipe,
+        )
+
+
 def test_intervention_update_branches() -> None:
     from robot_sf.analysis_workbench.review_execute import _intervention_update
 

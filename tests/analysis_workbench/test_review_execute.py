@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -986,3 +987,218 @@ def test_cli_stdout_is_a_component_result_v1_envelope(
     assert parsed.status == "complete"
     assert parsed.request_id == "srev22-smoke"
     assert parsed.diagnostics == ({"status": "complete", "source": "test"},)
+
+
+class _StubbornProcess:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def start(self) -> None:
+        pass
+
+    def join(self, _timeout: float | None = None) -> None:
+        pass
+
+    def is_alive(self) -> bool:
+        return True
+
+    def terminate(self) -> None:
+        pass
+
+    def kill(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+class _TimeoutConn:
+    def poll(self, _timeout: float) -> bool:
+        return False
+
+    def close(self) -> None:
+        pass
+
+
+def test_terminate_owned_process_detects_stubborn_child() -> None:
+    from robot_sf.analysis_workbench.review_execute import _terminate_owned_process
+
+    stubborn = _StubbornProcess()
+    terminated = _terminate_owned_process(stubborn, join_timeout_s=0.01)
+    assert terminated is False
+
+
+def test_delayed_process_start_exceeding_deadline_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import multiprocessing.process as mp_process
+
+    real_start = mp_process.BaseProcess.start
+    started_processes: list[Any] = []
+
+    def _delayed_start(self: Any) -> None:
+        started_processes.append(self)
+        time.sleep(0.08)
+        real_start(self)
+
+    monkeypatch.setattr(mp_process.BaseProcess, "start", _delayed_start)
+    outcome = _run_owned_child({"sleep_s": 5.0}, 0.03, target="sleep")
+    assert outcome["outcome"] == "timeout"
+    assert "child startup exceeded" in str(outcome.get("error"))
+    assert len(started_processes) == 1
+    proc = started_processes[0]
+    assert getattr(proc, "_closed", False) or not proc.is_alive()
+
+
+def test_delayed_process_start_in_run_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import multiprocessing.process as mp_process
+
+    real_start = mp_process.BaseProcess.start
+
+    def _delayed_start(self: Any) -> None:
+        time.sleep(0.08)
+        real_start(self)
+
+    monkeypatch.setattr(mp_process.BaseProcess, "start", _delayed_start)
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        per_execution_timeout_s=0.03,
+        wall_timeout_s=10.0,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status in {"partial", "failed"}
+    assert "timeout" in result.reason
+    assert result.artifacts == ()
+
+
+def test_owned_child_stubborn_child_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    import multiprocessing as multiprocessing_module
+
+    real_context = multiprocessing_module.get_context("spawn")
+    real_pipe = real_context.Pipe
+
+    def _fake_pipe(*args: Any, **kwargs: Any) -> Any:
+        parent, child = real_pipe(*args, **kwargs)
+        child.close()
+        return _TimeoutConn(), parent
+
+    monkeypatch.setattr(real_context, "Pipe", _fake_pipe)
+    monkeypatch.setattr(real_context, "Process", _StubbornProcess)
+    monkeypatch.setattr(multiprocessing_module, "get_context", lambda _method=None: real_context)
+
+    outcome = _run_owned_child({"sleep_s": 0.0}, 0.1, target="sleep")
+    assert outcome["outcome"] == "error"
+    assert "stubborn_child" in str(outcome.get("error"))
+
+
+def test_run_fails_closed_on_stubborn_child(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    def _stubborn_child_outcome(_job: Any, _timeout_s: float, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "outcome": "error",
+            "error": "stubborn_child: child process resisted termination after timeout",
+        }
+
+    monkeypatch.setattr(review_execute_module, "_run_owned_child", _stubborn_child_outcome)
+    request = _fixture_request(max_candidates=1, max_executions=2)
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "stubborn_child" in result.reason
+    assert result.artifacts == ()
+
+
+def test_monotonic_deadline_immune_to_wall_clock_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Demonstrate that shifts in wall-clock time (time.time()) have zero effect on execution deadlines."""
+    calls = _patch_fake_execution(monkeypatch)
+
+    monkeypatch.setattr("time.time", lambda: 0.0)
+
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        wall_timeout_s=60.0,
+        per_execution_timeout_s=10.0,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "complete"
+    assert len(calls) == 2
+
+
+def test_monotonic_deadline_bounds_admission_and_initialization(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Prove that monotonic time elapsed during admission/initialization exhausts wall budget."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    real_admit = review_execute_module._admit_request
+    monotonic_clock = [100.0]
+
+    def _fake_monotonic() -> float:
+        val = monotonic_clock[0]
+        monotonic_clock[0] += 0.01
+        return val
+
+    def _slow_admit(req: Any) -> Any:
+        res = real_admit(req)
+        monotonic_clock[0] += 20.0
+        return res
+
+    monkeypatch.setattr(time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module, "_admit_request", _slow_admit)
+
+    request = _fixture_request(wall_timeout_s=5.0)
+    result = run(request, base=tmp_path)
+    assert result.status == "failed"
+    assert "wall budget exhausted during admission or initialization" in result.reason
+    assert result.artifacts == ()
+
+
+def test_monotonic_deadline_bounds_finalization(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Prove that if monotonic time exhausts wall budget during finalization, complete outputs are denied."""
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
+    _patch_fake_execution(monkeypatch)
+    real_write_complete = review_execute_module._write_complete_outputs
+
+    monotonic_clock = [100.0]
+
+    def _fake_monotonic() -> float:
+        val = monotonic_clock[0]
+        monotonic_clock[0] += 0.01
+        return val
+
+    def _slow_write_complete(executor: Any, provenance: Any) -> list[dict[str, Any]]:
+        artifacts = real_write_complete(executor, provenance)
+        monotonic_clock[0] += 500.0
+        return artifacts
+
+    monkeypatch.setattr(time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(review_execute_module, "_write_complete_outputs", _slow_write_complete)
+
+    request = _fixture_request(
+        max_candidates=1,
+        max_executions=2,
+        wall_timeout_s=300.0,
+        per_execution_timeout_s=10.0,
+    )
+    result = run(request, base=tmp_path)
+    assert result.status == "partial"
+    assert "wall budget exhausted during finalization" in result.reason
+    assert result.artifacts == ()
+    output_dir = tmp_path / "srev-22-smoke"
+    assert not (output_dir / "execute-report.json").exists()
+    assert not (output_dir / "activation-traces.json").exists()
+    assert not (output_dir / "preservation-manifest.json").exists()
+    assert (output_dir / "attempt-ledger.json").exists()

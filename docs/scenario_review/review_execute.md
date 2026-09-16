@@ -96,8 +96,18 @@ Validation, output, or infrastructure failures are `failed`, while a recipe
 whose selected candidates are all unsupported is `unavailable`. No incomplete
 result is advertised with complete artifact references.
 
-Each execution runs in one owned child process. The parent terminates and
-reaps that child at every timeout, interruption, and normal return boundary.
+Each execution runs in one owned child process. Time budgets are tracked
+using an absolute monotonic deadline (`time.monotonic()`) rather than system
+calendar time, preventing drift from NTP adjustments or clock shifts. One
+monotonic deadline bounds the entire lifecycle: request admission, child process
+startup, IPC polling, cleanup, attempt ledger persistence, and artifact
+finalization. Child startup delay is deducted from the child execution budget;
+delayed process spawns that exhaust the budget fail closed without orphan
+execution. The parent terminates and reaps the child at every timeout,
+interruption, and normal return boundary. Stubborn child processes that resist
+termination within the cleanup allowance fail closed with typed `stubborn_child`
+diagnostics and halt further execution.
+
 The output directory must be a new relative directory beneath the caller's
 base, or an existing non-symlink directory containing a valid attempt ledger
 when `--resume` is used. Component artifacts are written atomically with
@@ -110,8 +120,8 @@ Stable reason codes include `invalid_config`, `corrupt_recipe`,
 `invalid_source_identity`, `output_collision`, `missing capabilities`,
 `incompatible_version`, `unsupported_factor`, `unsupported_measurement`,
 `control_fidelity_failure` (blocks treatment interpretation),
-`execution_budget_exhausted`, `wall_timeout`, and
-`per_execution_timeout`.
+`execution_budget_exhausted`, `wall_timeout`,
+`per_execution_timeout`, and `stubborn_child`.
 
 `single_pedestrian_start_delay_offset` candidates resolve to `unavailable`
 with `intervention_not_executable`: the canonical single-pedestrian

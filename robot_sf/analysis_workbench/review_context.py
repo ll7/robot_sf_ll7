@@ -2890,7 +2890,6 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         }
         _validate_output_document(document)
         _validate_output_document(capability_payload)
-        assert output_dir is not None
         report_digest = _write_json(
             output_dir.path / OUTPUT_REPORT_FILENAME,
             document,

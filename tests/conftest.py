@@ -960,6 +960,11 @@ _FAST_FILES = {
     # SREV-11 review-camera tests protect deterministic camera tracks and
     # pixel-metric freedom contracts for the new render component (issue #9280).
     "test_review_camera.py",
+    # SREV-12 review-overlays tests protect deterministic telemetry overlays,
+    # nonoverlapping labels, and timestamp mapping receipts (issue #9281).
+    "test_review_overlays.py",
+    # Static trace viewer web asset export contract tests.
+    "test_trace_viewer.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

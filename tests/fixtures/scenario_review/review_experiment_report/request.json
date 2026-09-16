@@ -1,0 +1,14 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev-25-fixture-request",
+  "component_id": "srev25-experiment-report",
+  "sources": [
+    {
+      "artifact_id": "recorded-experiment-results",
+      "uri": "tests/fixtures/scenario_review/review_experiment_report/results.json",
+      "format": "experiment-results.v1"
+    }
+  ],
+  "config": {},
+  "output_directory": "output/scenario_review/srev-25-smoke"
+}

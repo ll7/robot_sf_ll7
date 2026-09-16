@@ -116,6 +116,14 @@ def _import_torch_optional():
         return None
 
 
+def _import_matplotlib_optional():
+    """Import matplotlib if available in the environment, returning None on failure."""
+    try:
+        return importlib.import_module("matplotlib")  # type: ignore
+    except Exception:  # pragma: no cover - matplotlib optional in some envs
+        return None
+
+
 def _snapshot_torch_determinism(torch_module):
     """Snapshot determinism-related flags for PyTorch and cuDNN backends.
 
@@ -275,6 +283,34 @@ def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
         yield
     finally:
         _restore_torch_determinism(torch_module, state)
+
+
+@pytest.fixture(autouse=True)
+def matplotlib_rcparams_isolation():  # type: ignore[missing-return-type-doc]
+    """Restore matplotlib rcParams after each test.
+
+    Production render paths mutate global rcParams (notably savefig.bbox via
+    the latex style helper); without isolation, fixed-canvas assertions in
+    unrelated suites flip depending on xdist worker execution order
+    (issue #9411).
+    """
+
+    matplotlib_module = _import_matplotlib_optional()
+    if matplotlib_module is None:
+        yield
+        return
+
+    # Some production modules configure style at import time (for example
+    # ``robot_sf.research.extractor_report`` sets ``savefig.bbox``). Taking a
+    # context snapshot here would preserve that already-polluted value and
+    # make the fixture order-dependent. Normalize to Matplotlib's canonical
+    # defaults at both boundaries instead.
+    defaults = matplotlib_module.rcParamsDefault.copy()
+    matplotlib_module.rcParams.update(defaults)
+    try:
+        yield
+    finally:
+        matplotlib_module.rcParams.update(defaults)
 
 
 @pytest.fixture(scope="session")
@@ -450,6 +486,9 @@ _FAST_FILES = {
     # the canonical coordination markers; keep them in the exact-head fast
     # lane (issue #9254).
     "test_lane_markers_issue_9254.py",
+    # Deterministic report-schema, comparison, and provenance tests cover the
+    # recorded experiment outcome comparator in the exact-head fast lane.
+    "test_review_experiment_report.py",
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",
@@ -515,6 +554,9 @@ _FAST_FILES = {
     # Presentation-scene view contracts are deterministic coverage for the
     # changed presentation view adapter (issue #9369).
     "test_presentation_scene.py",
+    # Video-sync mapping tests are deterministic source/provenance contracts
+    # for the SREV-03 component (issue #9272).
+    "test_video_sync.py",
     # SVG geometry contract tests provide changed-line coverage for the
     # parser's explicit legacy/corrected transform paths (issue #8314).
     "test_svg_transform_contract.py",
@@ -908,10 +950,16 @@ _FAST_FILES = {
     # SREV-07 review-storyboard tests are deterministic fixture and CLI contracts;
     # keep their changed coverage in fast shards (issue #9276).
     "test_review_storyboard.py",
+    # SREV-06 review-context tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9275).
+    "test_review_context.py",
     # SREV-29 registry tests are deterministic discovery/invocation coverage
     # for the component registry leaf; keep changed coverage in fast shards
     # (issue #9290).
     "test_review_registry.py",
+    # SREV-11 review-camera tests protect deterministic camera tracks and
+    # pixel-metric freedom contracts for the new render component (issue #9280).
+    "test_review_camera.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

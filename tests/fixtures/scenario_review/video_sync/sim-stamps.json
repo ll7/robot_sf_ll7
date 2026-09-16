@@ -1,0 +1,53 @@
+{
+  "dt_s": 0.1,
+  "steps": [
+    {
+      "step": 0,
+      "time_s": 0.0,
+      "episode_id": "ep-fixture",
+      "reset_id": "reset-fixture"
+    },
+    {
+      "step": 1,
+      "time_s": 0.1,
+      "episode_id": "ep-fixture",
+      "reset_id": "reset-fixture"
+    },
+    {
+      "step": 2,
+      "time_s": 0.2,
+      "episode_id": "ep-fixture",
+      "reset_id": "reset-fixture"
+    },
+    {
+      "step": 3,
+      "time_s": 0.3,
+      "episode_id": "ep-fixture",
+      "reset_id": "reset-fixture"
+    },
+    {
+      "step": 4,
+      "time_s": 0.4,
+      "episode_id": "ep-fixture",
+      "reset_id": "reset-fixture"
+    },
+    {
+      "step": 5,
+      "time_s": 0.5,
+      "episode_id": "ep-fixture",
+      "reset_id": "reset-fixture"
+    },
+    {
+      "step": 6,
+      "time_s": 0.6,
+      "episode_id": "ep-fixture",
+      "reset_id": "reset-fixture"
+    },
+    {
+      "step": 7,
+      "time_s": 0.7,
+      "episode_id": "ep-fixture",
+      "reset_id": "reset-fixture"
+    }
+  ]
+}

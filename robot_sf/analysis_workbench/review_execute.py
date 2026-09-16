@@ -646,6 +646,38 @@ def _episode_job_identity_error(job: dict[str, Any]) -> str | None:
     return None
 
 
+def _simple_policy_fixture_adapter(
+    robot_pos: Any,
+    goal: Any,
+    *,
+    speed: float,
+) -> Any:
+    """Canonical simple-policy adapter for the SREV-22 fixture executor.
+
+    Routes velocity command calculation through the benchmark runner's canonical
+    ``_simple_robot_policy`` to ensure strict parity with benchmark runner semantics.
+
+    Adapter deviations from the full benchmark runner (``robot_sf.benchmark.runner``):
+    1. Fixed-horizon execution: The fixture executor executes all ``horizon`` steps
+       without early goal termination (which ``runner._simulate_episode_with_policy``
+       applies upon reaching ``goal_radius``). Rationale: SREV-22 analysis workbench
+       recipes compute comparative trajectory telemetry across matched control/treatment
+       pairs, requiring equal-length trajectory arrays of shape ``(horizon + 1, 2)``.
+    2. Simulator integration: The fixture executes in an owned ``Simulator`` instance
+       configured with the SREV-22 tiny crossing map and holonomic drive, passing
+       velocity commands via ``simulator.step_once([(vx, vy)])`` rather than
+       direct kinematic position integration ``pos += vel * dt``. Rationale: The
+       fixture evaluates counterfactual pedestrian interactions via PySocialForce
+       forces in the full simulator stack rather than the lightweight wrapper.
+
+    Returns:
+        Velocity command 2D numpy array of shape ``(2,)``.
+    """
+    from robot_sf.benchmark.runner import _simple_robot_policy  # noqa: PLC0415 - lazy: child-process sim stack
+
+    return _simple_robot_policy(robot_pos, goal, speed=speed)
+
+
 def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
     """Run one control/treatment episode inside an owned child process.
 
@@ -734,12 +766,7 @@ def _execute_episode_job(job: dict[str, Any]) -> dict[str, Any]:
         robot_traj = [np.asarray(simulator.robots[0].pos, dtype=float).copy()]
         for _ in range(horizon):
             robot_pos = np.asarray(simulator.robots[0].pos, dtype=float)
-            offset = goal - robot_pos
-            distance = float(np.linalg.norm(offset))
-            if distance > 0.3:
-                command = offset / distance * robot_speed
-            else:
-                command = np.zeros(2)
+            command = _simple_policy_fixture_adapter(robot_pos, goal, speed=robot_speed)
             simulator.step_once([(float(command[0]), float(command[1]))])
             ped_traj.append(simulator.pysf_sim.peds.pos().copy())
             robot_traj.append(np.asarray(simulator.robots[0].pos, dtype=float).copy())
@@ -782,18 +809,26 @@ def _child_main(entry_name: str, payload: dict[str, Any], conn: Any) -> None:
         conn.close()
 
 
-def _terminate_owned_process(process: Any) -> None:
-    """Stop an owned child within a small fixed cleanup allowance."""
+def _terminate_owned_process(process: Any, *, join_timeout_s: float = 0.5) -> bool:
+    """Stop an owned child within a small fixed cleanup allowance.
+
+    Returns:
+        True if the process is terminated (not alive), False if it resisted termination.
+    """
     if not process.is_alive():
-        return
-    process.terminate()
-    process.join(1.0)
-    if process.is_alive() and hasattr(process, "kill"):
-        process.kill()
-        process.join(1.0)
+        return True
+    try:
+        process.terminate()
+        process.join(join_timeout_s)
+        if process.is_alive() and hasattr(process, "kill"):
+            process.kill()
+            process.join(join_timeout_s)
+    except Exception:  # noqa: BLE001 - defensive against process lookup errors
+        pass
+    return not process.is_alive()
 
 
-def _run_owned_child(
+def _run_owned_child(  # noqa: C901, PLR0912
     job: dict[str, Any], timeout_s: float, *, target: str = "episode"
 ) -> dict[str, Any]:
     """Run one job in an owned child process with timeout and termination.
@@ -814,6 +849,7 @@ def _run_owned_child(
     context = multiprocessing.get_context("spawn")
     parent_conn, child_conn = context.Pipe(duplex=False)
     process = context.Process(target=_child_main, args=(target, job, child_conn))
+    monotonic_start = time.monotonic()
     try:
         process.start()
     except OSError as error:
@@ -823,27 +859,79 @@ def _run_owned_child(
     # The parent never uses the child end; close it only after start so the
     # forked child inherits a live descriptor.
     child_conn.close()
+
+    startup_elapsed = time.monotonic() - monotonic_start
+    remaining_s = timeout_s - startup_elapsed
+    if remaining_s <= 0.0:
+        try:
+            terminated = _terminate_owned_process(process)
+            if not terminated:
+                return {
+                    "outcome": "error",
+                    "error": (
+                        "stubborn_child: child process resisted termination after startup timeout"
+                    ),
+                }
+            return {
+                "outcome": "timeout",
+                "error": f"child startup exceeded {timeout_s:g}s deadline and was terminated",
+            }
+        finally:
+            parent_conn.close()
+            if not process.is_alive():
+                try:
+                    process.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
     try:
-        if parent_conn.poll(timeout_s):
+        if parent_conn.poll(remaining_s):
             try:
                 payload = parent_conn.recv()
             except EOFError as error:
                 payload = {"status": "error", "error": f"child closed pipe: {error}"}
-            process.join(1.0)
-            _terminate_owned_process(process)
+            elapsed_so_far = time.monotonic() - monotonic_start
+            cleanup_budget = max(0.0, timeout_s - elapsed_so_far)
+            process.join(min(1.0, cleanup_budget) if cleanup_budget > 0.0 else 0.0)
+            terminated = _terminate_owned_process(process)
+            if not terminated:
+                return {
+                    "outcome": "error",
+                    "error": (
+                        "stubborn_child: child process resisted termination after completion"
+                    ),
+                }
+            if time.monotonic() - monotonic_start > timeout_s:
+                return {
+                    "outcome": "timeout",
+                    "error": f"child cleanup exceeded {timeout_s:g}s deadline and was terminated",
+                }
             if isinstance(payload, dict):
                 return {"outcome": "ok", "payload": payload}
             return {"outcome": "error", "error": "child returned a non-mapping payload"}
-        _terminate_owned_process(process)
+        terminated = _terminate_owned_process(process)
+        if not terminated:
+            return {
+                "outcome": "error",
+                "error": "stubborn_child: child process resisted termination after timeout",
+            }
         return {"outcome": "timeout", "error": f"child exceeded {timeout_s:g}s and was terminated"}
     except KeyboardInterrupt:
-        _terminate_owned_process(process)
+        terminated = _terminate_owned_process(process)
+        if not terminated:
+            return {
+                "outcome": "error",
+                "error": "stubborn_child: child process resisted termination after interrupt",
+            }
         return {"outcome": "interrupted", "error": "cancelled by user; owned child terminated"}
     finally:
         parent_conn.close()
         _terminate_owned_process(process)
         if not process.is_alive():
-            process.close()
+            try:
+                process.close()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def _telemetry_metrics(
@@ -993,6 +1081,237 @@ def _config_document(config: ExecuteConfig) -> dict[str, Any]:
     }
 
 
+def _resume_attempt_index(
+    attempts: list[dict[str, Any]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Index validated resume attempts by (candidate_id, kind).
+
+    Returns:
+        Mapping from ``(candidate_id, kind)`` to the validated attempt entry.
+    """
+    return {
+        (str(entry["candidate_id"]), str(entry["kind"])): entry
+        for entry in attempts
+        if isinstance(entry.get("candidate_id"), str) and isinstance(entry.get("kind"), str)
+    }
+
+
+def _verify_resume_envelope(  # noqa: C901, PLR0912, PLR0915
+    *,
+    attempts: list[dict[str, Any]],
+    reports: list[dict[str, Any]],
+    traces: list[dict[str, Any]],
+    config: ExecuteConfig,
+    recipe: dict[str, Any],
+) -> None:
+    """Reject forged nested report/trace fields against recorded attempt digests.
+
+    The attempt ledger entries carry the measured telemetry; candidate reports
+    and activation traces must reproduce those measurements field-by-field.
+    Any digest mismatch, recomputed activation-flag mismatch, or recomputed
+    pair-verdict mismatch fails closed so a tampered envelope cannot resume
+    as ``complete``.
+
+    Raises:
+        ReviewExecuteError: When any envelope layer is inconsistent.
+    """
+    attempt_index = _resume_attempt_index(attempts)
+    reports_by_id = {
+        str(report["intervention_id"]): report
+        for report in reports
+        if isinstance(report.get("intervention_id"), str)
+    }
+    traces_by_id = {
+        str(trace["intervention_id"]): trace
+        for trace in traces
+        if isinstance(trace.get("intervention_id"), str)
+    }
+    measurement, _measurement_error = _measurement_for_recipe(recipe)
+    has_complete = any(report.get("status") == "complete" for report in reports)
+    if has_complete and measurement is None:
+        raise ReviewExecuteError(["cannot resume: resume envelope measurement is invalid"])
+    metric_name = str(measurement["name"]) if measurement is not None else ""
+    expected_direction = str(measurement["expected_direction"]) if measurement is not None else ""
+
+    for report in reports:
+        candidate_id = str(report.get("intervention_id", ""))
+        status = report.get("status")
+        if status == "unavailable":
+            if any(cid == candidate_id for cid, _kind in attempt_index):
+                raise ReviewExecuteError(
+                    [
+                        f"cannot resume: candidate report {candidate_id} is inconsistent with attempts"
+                    ]
+                )
+            if "control_metrics" in report or "treatment_metrics" in report:
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                )
+            continue
+        control_entry = attempt_index.get((candidate_id, "control"))
+        treatment_entry = attempt_index.get((candidate_id, "treatment"))
+        report_control = report.get("control_metrics")
+        report_treatment = report.get("treatment_metrics")
+        if status == "complete":
+            if (
+                control_entry is None
+                or treatment_entry is None
+                or control_entry.get("status") != "ok"
+                or treatment_entry.get("status") != "ok"
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
+                )
+            control_metrics = control_entry.get("metrics")
+            treatment_metrics = treatment_entry.get("metrics")
+            if not isinstance(control_metrics, dict) or not isinstance(treatment_metrics, dict):
+                raise ReviewExecuteError(
+                    [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
+                )
+            if not isinstance(report_control, dict) or not isinstance(report_treatment, dict):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                )
+            if _canonical_digest(report_control) != _canonical_digest(control_metrics) or (
+                _canonical_digest(report_treatment) != _canonical_digest(treatment_metrics)
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                )
+            try:
+                expected_control_activated = (
+                    float(control_metrics["ped_displacement_m"]) > config.motion_epsilon_m
+                )
+                expected_treatment_activated = (
+                    abs(
+                        float(treatment_metrics["ped_mean_speed_m_s"])
+                        - float(control_metrics["ped_mean_speed_m_s"])
+                    )
+                    > config.activation_speed_tolerance_m_s
+                )
+            except (KeyError, TypeError, ValueError):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                ) from None
+            if (
+                report.get("control_activated") is not expected_control_activated
+                or report.get("treatment_activated") is not expected_treatment_activated
+            ):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} activation is inconsistent"]
+                )
+            try:
+                pair_result = evaluate_counterfactual_pair(
+                    {
+                        "mechanism_activated": expected_control_activated,
+                        "metrics": {metric_name: control_metrics[metric_name]},
+                    },
+                    {
+                        "mechanism_activated": expected_treatment_activated,
+                        "metrics": {metric_name: treatment_metrics[metric_name]},
+                    },
+                    PairHypothesis(
+                        expected_mechanism=str(report.get("factor", "")),
+                        outcome_metric=metric_name,
+                        expected_direction=expected_direction,
+                    ),
+                )
+            except (KeyError, TypeError, ValueError):
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} verdict is inconsistent"]
+                ) from None
+            if report.get("verdict") != pair_result.verdict:
+                raise ReviewExecuteError(
+                    [f"cannot resume: candidate report {candidate_id} verdict is inconsistent"]
+                )
+        elif status == "failed":
+            if isinstance(report_control, dict) and control_entry is not None:
+                attempt_metrics = control_entry.get("metrics")
+                if (
+                    control_entry.get("status") == "ok"
+                    and isinstance(attempt_metrics, dict)
+                    and _canonical_digest(report_control) != _canonical_digest(attempt_metrics)
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                    )
+            if isinstance(report_treatment, dict) and treatment_entry is not None:
+                attempt_metrics = treatment_entry.get("metrics")
+                if (
+                    treatment_entry.get("status") == "ok"
+                    and isinstance(attempt_metrics, dict)
+                    and _canonical_digest(report_treatment) != _canonical_digest(attempt_metrics)
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: candidate report {candidate_id} metrics are inconsistent"]
+                    )
+    for trace in traces:
+        candidate_id = str(trace.get("intervention_id", ""))
+        report = reports_by_id.get(candidate_id)
+        if report is None or report.get("status") != "complete":
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} has no complete report"]
+            )
+        control_entry = attempt_index.get((candidate_id, "control"))
+        treatment_entry = attempt_index.get((candidate_id, "treatment"))
+        if (
+            control_entry is None
+            or treatment_entry is None
+            or not isinstance(control_entry.get("metrics"), dict)
+            or not isinstance(treatment_entry.get("metrics"), dict)
+        ):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} is inconsistent"]
+            )
+        control_metrics = control_entry["metrics"]
+        treatment_metrics = treatment_entry["metrics"]
+        trace_control = trace.get("control_metrics")
+        trace_treatment = trace.get("treatment_metrics")
+        if not isinstance(trace_control, dict) or not isinstance(trace_treatment, dict):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
+            )
+        if _canonical_digest(trace_control) != _canonical_digest(
+            control_metrics
+        ) or _canonical_digest(trace_treatment) != _canonical_digest(treatment_metrics):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
+            )
+        try:
+            expected_control_activated = (
+                float(control_metrics["ped_displacement_m"]) > config.motion_epsilon_m
+            )
+            expected_treatment_activated = (
+                abs(
+                    float(treatment_metrics["ped_mean_speed_m_s"])
+                    - float(control_metrics["ped_mean_speed_m_s"])
+                )
+                > config.activation_speed_tolerance_m_s
+            )
+        except (KeyError, TypeError, ValueError):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} metrics are inconsistent"]
+            ) from None
+        if (
+            trace.get("control_activated") is not expected_control_activated
+            or trace.get("treatment_activated") is not expected_treatment_activated
+        ):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} activation is inconsistent"]
+            )
+        if trace.get("control_activated") is not bool(report.get("control_activated")) or trace.get(
+            "treatment_activated"
+        ) is not bool(report.get("treatment_activated")):
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} activation is inconsistent"]
+            )
+    for candidate_id, report in reports_by_id.items():
+        if report.get("status") == "complete" and candidate_id not in traces_by_id:
+            raise ReviewExecuteError(
+                [f"cannot resume: activation trace {candidate_id} is inconsistent"]
+            )
+
+
 @dataclass
 class _Executor:
     request: ComponentRequest
@@ -1003,12 +1322,12 @@ class _Executor:
     _attempts: list[dict[str, Any]] = field(default_factory=list)
     _executions_consumed: int = 0
     _wall_elapsed_s: float = 0.0
-    _started_at: float = 0.0
+    _started_at: float = field(default_factory=time.monotonic)
     _candidate_reports: list[dict[str, Any]] = field(default_factory=list)
     _traces: list[dict[str, Any]] = field(default_factory=list)
 
     def _elapsed(self) -> float:
-        return self._wall_elapsed_s + (time.monotonic() - self._started_at)
+        return self._wall_elapsed_s + max(0.0, time.monotonic() - self._started_at)
 
     def _budget_remaining(self, required_executions: int = 1) -> bool:
         return (
@@ -1240,23 +1559,45 @@ class _Executor:
                 raise ReviewExecuteError(
                     [f"cannot resume: complete candidate {candidate_id} is not reproducible"]
                 )
-            if any(
-                set(report[key]) != REQUIRED_TELEMETRY_METRICS
-                or any(
-                    not _is_finite_number(report[key][metric])
-                    for metric in REQUIRED_TELEMETRY_METRICS
-                )
-                for key in ("control_metrics", "treatment_metrics")
-            ):
-                raise ReviewExecuteError(
-                    [f"cannot resume: complete candidate {candidate_id} metrics are invalid"]
-                )
+            if report["status"] == "complete":
+                if any(
+                    not isinstance(report.get(key), dict)
+                    or set(report[key]) != REQUIRED_TELEMETRY_METRICS
+                    or any(
+                        not _is_finite_number(report[key][metric])
+                        for metric in REQUIRED_TELEMETRY_METRICS
+                    )
+                    for key in ("control_metrics", "treatment_metrics")
+                ):
+                    raise ReviewExecuteError(
+                        [f"cannot resume: complete candidate {candidate_id} metrics are invalid"]
+                    )
+            elif report["status"] == "failed":
+                for key in ("control_metrics", "treatment_metrics"):
+                    if key in report and (
+                        not isinstance(report[key], dict)
+                        or set(report[key]) != REQUIRED_TELEMETRY_METRICS
+                        or any(
+                            not _is_finite_number(report[key][metric])
+                            for metric in REQUIRED_TELEMETRY_METRICS
+                        )
+                    ):
+                        raise ReviewExecuteError(
+                            [f"cannot resume: candidate report {candidate_id} metrics are invalid"]
+                        )
         if seen_traces != {
             report["intervention_id"]
             for report in validated_reports
             if report["status"] == "complete"
         }:
             raise ReviewExecuteError(["cannot resume: activation traces do not match reports"])
+        _verify_resume_envelope(
+            attempts=validated_attempts,
+            reports=validated_reports,
+            traces=validated_traces,
+            config=self.config,
+            recipe=self.recipe,
+        )
         consumed = ledger.get("executions_consumed", 0)
         if not _is_int(consumed) or consumed != len(validated_attempts) or consumed < 0:
             raise ReviewExecuteError(["cannot resume: ledger execution count is inconsistent"])
@@ -1297,7 +1638,9 @@ class _Executor:
         }
         return _write_json(self.output_dir / "attempt-ledger.json", payload)
 
-    def _run_episode(self, candidate_id: str, kind: str, spec: dict[str, Any]) -> dict[str, Any]:
+    def _run_episode(  # noqa: C901
+        self, candidate_id: str, kind: str, spec: dict[str, Any]
+    ) -> dict[str, Any]:
         if not self._budget_remaining():
             raise _ExecutionBudgetExhausted("execution_budget_exhausted: no execution slot remains")
         wall_remaining = self._wall_remaining()
@@ -1378,6 +1721,17 @@ class _Executor:
             self._record_attempt(attempt)
             self._record_progress()
             raise _ExecutionCancelled(attempt["reason"])
+        if str(outcome.get("error", "")).startswith("stubborn_child"):
+            attempt = {
+                "candidate_id": candidate_id,
+                "kind": kind,
+                "status": "failed",
+                "reason": f"execution_error: {outcome.get('error', '')}",
+                "elapsed_s": round(elapsed, 3),
+            }
+            self._record_attempt(attempt)
+            self._record_progress()
+            raise _ExecutionStubbornChild(attempt["reason"])
         attempt = {
             "candidate_id": candidate_id,
             "kind": kind,
@@ -1584,6 +1938,10 @@ class _ExecutionTimeout(Exception):
 
 class _ExecutionCancelled(Exception):
     """Internal signal: execution was cancelled; the owned child was terminated."""
+
+
+class _ExecutionStubbornChild(Exception):
+    """Internal signal: an owned child process resisted termination."""
 
 
 def _measurement_for_recipe(recipe: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
@@ -2030,10 +2388,12 @@ def _drive_candidates(
         return "partial", f"per_execution_timeout: {error}; owned child terminated"
     except _ExecutionCancelled as error:
         return "cancelled", f"cancelled_by_user: {error}"
+    except _ExecutionStubbornChild as error:
+        return "failed", str(error)
     return status, reason
 
 
-def _settle(
+def _settle(  # noqa: C901
     executor: _Executor, provenance: dict[str, Any], status: str, reason: str
 ) -> ComponentResult:
     """Settle the final result envelope for a driven executor.
@@ -2075,15 +2435,31 @@ def _settle(
             str(report.get("reason", "failed")) for report in failed
         )
     if status == "complete":
-        artifacts = _write_complete_outputs(executor, provenance)
-        return _final_result(
-            request,
-            status="complete",
-            reason=reason,
-            artifacts=tuple(artifacts),
-            diagnostics=tuple(_diagnostics(executor)),
-            provenance=provenance,
-        )
+        if executor._elapsed() >= executor.config.wall_timeout_s:
+            status = "partial"
+            reason = "wall_timeout: wall budget exhausted before finalization"
+        else:
+            artifacts = _write_complete_outputs(executor, provenance)
+            if executor._elapsed() >= executor.config.wall_timeout_s:
+                status = "partial"
+                reason = "wall_timeout: wall budget exhausted during finalization"
+                for art_name in (
+                    "execute-report.json",
+                    "activation-traces.json",
+                    "preservation-manifest.json",
+                ):
+                    art_file = executor.output_dir / art_name
+                    if art_file.is_file():
+                        art_file.unlink(missing_ok=True)
+            else:
+                return _final_result(
+                    request,
+                    status="complete",
+                    reason=reason,
+                    artifacts=tuple(artifacts),
+                    diagnostics=tuple(_diagnostics(executor)),
+                    provenance=provenance,
+                )
     try:
         executor._write_ledger()
     except (OSError, TypeError, ValueError) as error:
@@ -2116,6 +2492,7 @@ def run(
         Component result with artifacts (complete only), diagnostics, and
         provenance.
     """
+    start_time = time.monotonic()
     root = base if base is not None else Path.cwd()
     config, recipe_doc, measurement, early = _admit_request(request)
     if early is not None or config is None or recipe_doc is None or measurement is None:
@@ -2126,7 +2503,12 @@ def run(
         assert dir_early is not None
         return dir_early
     executor = _Executor(
-        request=request, config=config, recipe=recipe_doc, output_dir=output_dir, resume=resume
+        request=request,
+        config=config,
+        recipe=recipe_doc,
+        output_dir=output_dir,
+        resume=resume,
+        _started_at=start_time,
     )
     if resume:
         try:
@@ -2148,7 +2530,19 @@ def run(
         for source in request.sources
     ]
     provenance["output_directory"] = request.output_directory
-    executor._started_at = time.monotonic()
+    if executor._elapsed() >= config.wall_timeout_s:
+        reason = "wall_timeout: wall budget exhausted during admission or initialization"
+        try:
+            executor._write_ledger()
+        except (OSError, TypeError, ValueError) as ledger_error:
+            reason += f"; output_write_failed: {ledger_error}"
+        return _final_result(
+            request,
+            status="failed",
+            reason=reason,
+            diagnostics=tuple(_diagnostics(executor)),
+            provenance=provenance,
+        )
     try:
         status, reason = _drive_candidates(executor, config, measurement)
         return _settle(executor, provenance, status, reason)

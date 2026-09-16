@@ -81,6 +81,7 @@ def _write_export(viewer_dir: Path, scene: dict[str, Any]) -> None:
 
 def _require_chromium() -> str:
     """Skip cleanly when no Chromium is available; return the browser version otherwise."""
+    from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import sync_playwright
 
     try:
@@ -88,7 +89,7 @@ def _require_chromium() -> str:
             browser = playwright.chromium.launch()
             version = browser.version
             browser.close()
-    except Exception as exc:
+    except (PlaywrightError, OSError, TimeoutError) as exc:
         pytest.skip(f"chromium unavailable for fidelity browser proof: {exc}")
     return version
 

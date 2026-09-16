@@ -54,6 +54,7 @@ Always read:
 - `docs/code_review.md`
 - `docs/dev_guide.md`
 - `docs/context/goal_driven_agent_loops_2026-05-13.md`
+- `docs/context/issue_relationships.md`
 - `.github/PULL_REQUEST_TEMPLATE/pr_default.md`
 - `.agents/skills/implementation-verification/SKILL.md`
 - `scripts/dev/check_skills.py --preflight goal-pr-review` (for preflight validation before review loop)
@@ -496,6 +497,8 @@ Apply minimum tier by change surface:
 Readiness conditions for both labels:
 - linked issue contract and intended design satisfied, or intentionally narrowed with explicit
   rationale, `Refs #<parent>`, an open parent, and linked successor issues,
+- the PR's `## Issue Relationship Mirror` matches the linked issue's fresh native Parent/Blocked
+  by/Blocking state; `Relates to` remains a manual informational link.
 - scope matches contract and focused tests are current for the reviewed SHA,
 - stale-base handling is explicit: current-base subset proof for `base_sensitive` changes, or
   trusted exact-head `ordinary-cas` evidence for the final current-main compare-and-swap path,

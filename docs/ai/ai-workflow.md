@@ -235,6 +235,12 @@ path, the PR must clearly list the skipped gate.
 
 The PR body should come from `.github/PULL_REQUEST_TEMPLATE/pr_default.md` and keep the template sections intact.
 
+When the PR is opened from a worktree, fill `## Issue Relationship Mirror` from the linked issue's
+fresh native Parent/Blocked by/Blocking state. Keep `Closes`/`Refs` in `## Linked Issues` for
+coverage semantics, use `none` for unestablished graph edges, and never infer relationships from
+mentions. Review-only worktrees may verify the mirror but must not create native links; see
+[`docs/context/issue_relationships.md`](../context/issue_relationships.md).
+
 PR creation should only happen after the branch diff shows the issue scope is actually implemented.
 
 ### 8. Review and fix comments

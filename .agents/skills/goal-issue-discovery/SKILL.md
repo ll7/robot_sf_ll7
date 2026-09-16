@@ -54,6 +54,7 @@ Do not use it for:
 - `docs/dev_guide.md`
 - `docs/context/goal_driven_agent_loops_2026-05-13.md`
 - `docs/context/issue_713_batch_first_issue_workflow.md`
+- `docs/context/issue_relationships.md`
 - `.agents/skills/gh-issue-creator/SKILL.md`
 - `.agents/skills/gh-issue-sequencer/SKILL.md`
 - `.agents/skills/context-map/SKILL.md`
@@ -118,6 +119,9 @@ Split broad ideas before writing.
    - record confidence (high if direct signal, medium if one-step derived, low if speculative).
 4. De-duplicate against open/closed issues before creation.
 5. Draft/update through `gh-issue-creator` only when state is `issue_ready`.
+   - Every created issue must carry the canonical `## Relationships` block. Use `none` for
+     unestablished edges; do not infer Parent, Blocked by, Blocking, or Relates to from discovery
+     mentions.
    - Before any create request, run the zero-write body preflight
      `uv run python -m scripts.dev.issue_readiness_gate preflight --body-file <body.md>`;
      incomplete structure or invalid archetype metadata stops creation with exact missing
@@ -154,6 +158,8 @@ Split broad ideas before writing.
 - Stop revisiting candidates already marked `issue_created`, `issue_updated`, `duplicate`, or `skipped`
   unless new evidence arrives.
 - Before creating an issue, re-check open/closed state to avoid duplicate creation races.
+- Keep native relationship writes separate from discovery: set only explicitly reviewed Parent,
+  Blocked by, or Blocking links after creation, and keep `Relates to` manual.
 - Use a single lane by default.
 
 If API/project writes fail repeatedly, emit a short handoff and stop.

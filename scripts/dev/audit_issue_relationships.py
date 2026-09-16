@@ -1,43 +1,11 @@
 #!/usr/bin/env python3
-"""Audit (and, with explicit confirmation, migrate) native GitHub issue relationships.
+"""Audit and explicitly link GitHub issue relationships.
 
-Why this exists
----------------
-Issue bodies carry a canonical ``## Relationships`` mirror block, but the
-native GitHub parent/sub-issue and blocked-by links are what the UI and API
-surface. The relationship guide (``docs/context/issue_relationships.md``)
-names this helper; it parses only that block, rejects ambiguous, cross-repo,
-or conflicting links, writes native parent/dependency relationships through
-current GitHub REST endpoints only after explicit ``RELATIONSHIP_MIGRATION``
-confirmation, and verifies read-back.
-
-Read model (all calls bounded to 30 seconds, fail closed on transport errors)
-----
-- mirror: REST issue body ``## Relationships`` block.
-- native parent/children: GraphQL ``issue.parent`` / ``issue.subIssues``
-  (the REST sub-issue list endpoint is unavailable on this repository).
-- native blocked-by/blocking: REST ``issues/{n}/dependencies/blocked_by``
-  and ``.../blocking`` list endpoints.
-
-Write model (``--apply --confirm RELATIONSHIP_MIGRATION`` only)
---------------------------------------------------------------
-Additive migration only: set a missing native parent, add missing native
-blocked-by links. ``Blocking:`` entries are owned by the other issue's
-``Blocked by`` row and are reported, never written. ``Relates to:`` is
-informational and never written. Anything requiring deletion, disambiguation,
-or a cross-repository link is refused with a stable reason.
-
-CLI
----
-::
-
-    python scripts/dev/audit_issue_relationships.py [--repo <owner/repo>] [--json] <issue>
-    python scripts/dev/audit_issue_relationships.py [--repo <owner/repo>] [--json] \\
-        --apply --confirm RELATIONSHIP_MIGRATION <issue>
-
-The default mode is a read-only audit. ``--apply`` without the exact
-confirmation token is an error (exit 2). Any failed write or read-back
-mismatch fails closed (exit 1) with a machine-readable reason.
+The issue body is parsed only when it contains the canonical ``## Relationships`` block from
+``docs/context/issue_relationships.md``.  Legacy headings and incidental issue mentions are
+reported for review, but never become write proposals.  The default command is read-only.  An
+explicit confirmation token is required before adding native parent or dependency links; no body,
+parent replacement, or ``Relates to`` mutation is performed.
 """
 
 from __future__ import annotations
@@ -46,486 +14,837 @@ import argparse
 import json
 import re
 import sys
-from dataclasses import dataclass, field
-from pathlib import Path
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import asdict, dataclass
 from typing import Any
 
-if __package__ in {None, ""}:
-    # Direct execution must resolve this checkout's transport helpers ahead of
-    # any competing checkout or editable installation on sys.path.
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts.dev._gh_rest import parse_json, run_gh_api
 
-from scripts.dev._gh_rest import parse_json as _parse_json
-from scripts.dev._gh_rest import run_gh_api as _gh_api
-from scripts.dev._gh_rest import run_gh_command as _gh
-
+SCHEMA = "issue_relationship_audit.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
-APPLY_CONFIRM_TOKEN = "RELATIONSHIP_MIGRATION"
-GH_TIMEOUT = 30
-
-_MIRROR_HEADING_RE = re.compile(r"^##\s+Relationships\s*$", re.IGNORECASE | re.MULTILINE)
-_ROW_RE = re.compile(r"^\s*-\s*(Parent issue|Blocked by|Blocking|Relates to)\s*:\s*(.*?)\s*$")
-_REF_RE = re.compile(r"#(\d+)")
-_URL_RE = re.compile(
-    r"https?://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/(issues|pull)/(\d+)"
+CONFIRMATION_TOKEN = "RELATIONSHIP_MIGRATION"
+RELATION_KINDS = ("parent", "blocked_by", "blocking", "relates_to")
+RELATION_LABELS = {
+    "parent": "Parent issue",
+    "blocked_by": "Blocked by",
+    "blocking": "Blocking",
+    "relates_to": "Relates to",
+}
+CANONICAL_LABELS = {
+    "parent issue": "parent",
+    "parent": "parent",
+    "blocked by": "blocked_by",
+    "blocking": "blocking",
+    "relates to": "relates_to",
+}
+LEGACY_LABELS = {
+    "parent": "parent",
+    "parent issue": "parent",
+    "original parent": "parent",
+    "child": "parent",
+    "children": "parent",
+    "child issue": "parent",
+    "child issues": "parent",
+    "blocked by": "blocked_by",
+    "blocked-by": "blocked_by",
+    "blocking": "blocking",
+    "related": "relates_to",
+    "related issue": "relates_to",
+    "related issues": "relates_to",
+    "related work": "relates_to",
+    "dependencies": "blocked_by",
+}
+HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(?P<title>[^#].*?)\s*#*\s*$")
+FIELD_RE = re.compile(
+    r"^\s*(?:[-*+]\s+)?(?P<label>parent(?:\s+issue)?|blocked\s+by|blocking|relates?\s+to)"
+    r"\s*:\s*(?P<value>.*?)\s*$",
+    re.IGNORECASE,
 )
-_NONE_RE = re.compile(r"^none\b", re.IGNORECASE)
-_AMBIGUOUS_TOKEN_RE = re.compile(r"\b(tbd|todo|unknown|n/a|na|tba|later|pending)\b", re.IGNORECASE)
+URL_RE = re.compile(
+    r"https?://github\.com/(?P<owner>[^/\s]+)/(?P<repo>[^/\s#]+)/issues/(?P<number>\d+)"
+)
+QUALIFIED_RE = re.compile(
+    r"(?<![\w./-])(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#(?P<number>\d+)\b"
+)
+BARE_RE = re.compile(r"(?<![\w/])#(?P<number>\d+)\b")
 
-_PARENT_QUERY = """query($owner: String!, $repo: String!, $number: Int!) {
-  repository(owner: $owner, name: $repo) {
-    issue(number: $number) {
-      parent { number }
-      subIssues(first: 100) { nodes { number } }
-    }
-  }
-}"""
+ApiRunner = Callable[[str, object | None, str | None], Any]
 
 
-@dataclass(frozen=True)
-class RelationshipMirror:
-    """Parsed canonical mirror block."""
-
-    parent: int | None
-    blocked_by: tuple[int, ...]
-    blocking: tuple[int, ...]
-    relates_to: tuple[int, ...]
-    ambiguous: tuple[str, ...] = ()
-    cross_repo: tuple[str, ...] = ()
-
-
-@dataclass
-class AuditResult:
-    """JSON-ready audit outcome for one issue."""
+@dataclass(frozen=True, slots=True)
+class Declaration:
+    """One explicitly declared relationship in an issue body."""
 
     issue: int
-    repo: str
-    mirror_present: bool = False
-    mirror: dict[str, Any] = field(default_factory=dict)
-    native: dict[str, Any] = field(default_factory=dict)
-    drift: list[str] = field(default_factory=list)
-    refused: list[str] = field(default_factory=list)
-    unavailable: list[str] = field(default_factory=list)
-    verdict: str = "unknown"
-    applied: list[str] = field(default_factory=list)
-    error: str | None = None
+    kind: str
+    target: int
+    origin: str
+    line: int
+    raw: str
 
 
-def _split_owner_repo(repo: str) -> tuple[str, str]:
-    owner, sep, name = repo.partition("/")
-    if not sep or not owner or not name or "/" in name:
-        raise ValueError(f"Invalid repo {repo!r}; expected OWNER/REPO")
-    return owner, name
+@dataclass(frozen=True, slots=True)
+class Mention:
+    """A legacy relationship-shaped heading or line that is not write eligible."""
+
+    issue: int
+    kind: str
+    line: int
+    raw: str
+    targets: tuple[int, ...]
 
 
-def _row_numbers(rows: dict[str, str], key: str) -> tuple[int, ...]:
-    """Return same-repository ``#N`` references from one mirror row."""
-    text = rows.get(key, "")
-    if not text or _NONE_RE.match(text):
-        return ()
-    return tuple(int(n) for n in _REF_RE.findall(text))
+def _api_default(path: str, payload: object | None = None, method: str | None = None) -> Any:
+    """Run a bounded GitHub REST request through the shared transport helper."""
+
+    return run_gh_api(path, payload, method=method, timeout=60)
 
 
-def _mirror_section(body: str) -> str | None:
-    """Return the ``## Relationships`` section text, or ``None`` when absent."""
-    match = _MIRROR_HEADING_RE.search(body or "")
-    if match is None:
-        return None
-    section = (body or "")[match.end() :]
-    next_heading = re.search(r"^##\s+", section, re.MULTILINE)
-    if next_heading is not None:
-        section = section[: next_heading.start()]
-    return section
+def _repo_slug(repo: str) -> str:
+    """Normalize a repository identifier used in references."""
+
+    return repo.strip().strip("/").lower()
 
 
-def _mirror_rows(section: str) -> dict[str, str]:
-    """Return canonical row label to raw value for one mirror section."""
-    rows: dict[str, str] = {}
-    for line in section.splitlines():
-        row = _ROW_RE.match(line)
-        if row is not None:
-            rows[row.group(1).lower()] = row.group(2)
-    return rows
+def _extract_refs(value: str, *, repo: str) -> tuple[tuple[int, ...], list[str]]:
+    """Extract same-repository issue references and reject external URLs/repositories."""
+
+    targets: list[int] = []
+    errors: list[str] = []
+    covered_spans: list[tuple[int, int]] = []
+    expected = _repo_slug(repo)
+
+    for match in URL_RE.finditer(value):
+        covered_spans.append(match.span())
+        referenced_repo = f"{match.group('owner')}/{match.group('repo')}".lower()
+        number = int(match.group("number"))
+        if referenced_repo != expected:
+            errors.append(f"cross-repository reference {match.group(0)!r}")
+        else:
+            targets.append(number)
+
+    remainder = list(value)
+    for start, end in covered_spans:
+        remainder[start:end] = [" "] * (end - start)
+    remainder_text = "".join(remainder)
+
+    for match in QUALIFIED_RE.finditer(remainder_text):
+        referenced_repo = match.group("repo").lower()
+        number = int(match.group("number"))
+        if referenced_repo != expected:
+            errors.append(f"cross-repository reference {match.group(0)!r}")
+        else:
+            targets.append(number)
+
+    for match in BARE_RE.finditer(remainder_text):
+        targets.append(int(match.group("number")))
+
+    unique_targets = tuple(sorted(set(targets)))
+    return unique_targets, sorted(set(errors))
 
 
-def parse_relationship_block(body: str) -> RelationshipMirror | None:
-    """Parse the canonical ``## Relationships`` mirror block.
+def _section_lines(body: str) -> tuple[list[tuple[int, str]], bool]:
+    """Return the canonical relationship section's one-based lines and presence."""
 
-    Returns:
-        ``None`` when the block is absent; otherwise the parsed mirror with
-        ambiguous tokens and cross-repository references preserved for
-        fail-closed refusal instead of silent guessing.
-    """
-    section = _mirror_section(body)
-    if section is None:
-        return None
-    rows = _mirror_rows(section)
-    if not rows:
-        return RelationshipMirror(
-            parent=None,
-            blocked_by=(),
-            blocking=(),
-            relates_to=(),
-            ambiguous=("empty_relationships_block",),
-        )
-    ambiguous: list[str] = []
-    cross_repo: list[str] = []
-    for url in _URL_RE.finditer(section):
-        ref = f"{url.group(1)}/{url.group(2)}#{url.group(4)}"
-        if ref not in cross_repo:
-            cross_repo.append(ref)
-    if _AMBIGUOUS_TOKEN_RE.search(section):
-        ambiguous.append("ambiguous_placeholder_token")
-
-    def _numbers(key: str) -> tuple[int, ...]:
-        return _row_numbers(rows, key)
-
-    parents = _numbers("parent issue")
-    parent: int | None = None
-    if len(parents) > 1:
-        ambiguous.append("multiple_parent_refs")
-    elif parents:
-        parent = parents[0]
-    return RelationshipMirror(
-        parent=parent,
-        blocked_by=_numbers("blocked by"),
-        blocking=_numbers("blocking"),
-        relates_to=_numbers("relates to"),
-        ambiguous=tuple(ambiguous),
-        cross_repo=tuple(cross_repo),
-    )
-
-
-def _rest_issue_body(number: int, repo: str) -> tuple[str | None, str | None]:
-    """Return ``(body, error)`` for one issue body read."""
-    result = _gh_api(f"repos/{repo}/issues/{number}", timeout=GH_TIMEOUT)
-    if result.returncode != 0:
-        return None, (result.stderr or result.stdout or "issue read failed").strip()
-    payload, error = _parse_json(result, what="issue read")
-    if error or not isinstance(payload, dict):
-        return None, error or "issue response was not a JSON object"
-    body = payload.get("body")
-    if not isinstance(body, str):
-        return None, "issue response has no string body"
-    return body, None
-
-
-def _graphql_parent_children(number: int, repo: str) -> tuple[dict[str, Any] | None, str | None]:
-    """Return ``({"parent": int|None, "children": [...]}, error)`` via GraphQL."""
-    try:
-        owner, name = _split_owner_repo(repo)
-    except ValueError as exc:
-        return None, str(exc)
-    result = _gh(
-        [
-            "api",
-            "graphql",
-            "-f",
-            f"query={_PARENT_QUERY}",
-            "-F",
-            f"owner={owner}",
-            "-F",
-            f"repo={name}",
-            "-F",
-            f"number={number}",
-        ],
-        timeout=GH_TIMEOUT,
-    )
-    if result.returncode != 0:
-        return None, (result.stderr or result.stdout or "graphql read failed").strip()
-    payload, error = _parse_json(result, what="graphql read")
-    if error or not isinstance(payload, dict):
-        return None, error or "GraphQL response was not a JSON object"
-    if isinstance(payload.get("errors"), list) and payload["errors"]:
-        message = payload["errors"][0].get("message", "graphql error")
-        return None, f"graphql error: {message}"
-    try:
-        issue = payload["data"]["repository"]["issue"]
-    except (KeyError, TypeError):
-        return None, "graphql response missing repository.issue"
-    if issue is None:
-        return None, f"issue #{number} not found"
-    parent = (issue.get("parent") or {}).get("number")
-    children = [
-        node.get("number")
-        for node in ((issue.get("subIssues") or {}).get("nodes") or [])
-        if isinstance(node.get("number"), int)
-    ]
-    return {"parent": parent, "children": sorted(children)}, None
-
-
-def _rest_dependency_numbers(
-    number: int, repo: str, kind: str
-) -> tuple[list[int] | None, str | None]:
-    """Return native ``blocked_by``/``blocking`` issue numbers, or (None, error)."""
-    result = _gh_api(f"repos/{repo}/issues/{number}/dependencies/{kind}", timeout=GH_TIMEOUT)
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "dependency read failed").strip()
-        return None, f"dependencies/{kind} unavailable: {detail}"
-    payload, error = _parse_json(result, what=f"dependencies/{kind} read")
-    if error or not isinstance(payload, list):
-        return None, error or f"dependencies/{kind} response was not a list"
-    numbers: list[int] = []
-    for entry in payload:
-        if not isinstance(entry, dict):
+    lines = body.splitlines()
+    start: int | None = None
+    end = len(lines)
+    for index, line in enumerate(lines):
+        match = HEADING_RE.match(line)
+        if not match:
             continue
-        inner = entry.get("issue") if isinstance(entry.get("issue"), dict) else entry
-        value = inner.get("number") if isinstance(inner, dict) else None
-        if isinstance(value, int) and value > 0:
-            numbers.append(value)
-    return sorted(set(numbers)), None
+        title = match.group("title").strip().lower()
+        if start is None:
+            if title == "relationships":
+                start = index + 1
+            continue
+        end = index
+        break
+    if start is None:
+        return [], False
+    return [(index + 1, lines[index]) for index in range(start, end)], True
 
 
-def _compute_drift(
-    mirror: RelationshipMirror, native_parent: int | None, blocked_by: list[int]
-) -> list[str]:
-    """Return stable drift codes comparing mirror links against native links."""
-    drift: list[str] = []
-    if mirror.parent is not None and native_parent != mirror.parent:
-        drift.append(f"parent_missing_native:{mirror.parent}")
-    if mirror.parent is None and native_parent is not None:
-        drift.append(f"parent_mirror_missing:{native_parent}")
-    for ref in mirror.blocked_by:
-        if ref not in blocked_by:
-            drift.append(f"blocked_by_missing_native:{ref}")
-    for ref in blocked_by:
-        if ref not in mirror.blocked_by:
-            drift.append(f"blocked_by_extra_native:{ref}")
-    return drift
+def _legacy_mentions(  # noqa: C901 - explicit heading/line parsing remains fail-closed
+    body: str, *, issue: int, repo: str
+) -> tuple[Mention, ...]:
+    """Collect relationship-shaped legacy headings without making write proposals."""
 
-
-def audit_issue(number: int, repo: str = DEFAULT_REPO) -> AuditResult:
-    """Run a read-only mirror-vs-native audit for one issue."""
-    result = AuditResult(issue=number, repo=repo)
-    body, error = _rest_issue_body(number, repo)
-    if error is not None:
-        result.error = error
-        result.verdict = "error"
-        return result
-    mirror = parse_relationship_block(body)
-    if mirror is None:
-        result.verdict = "no_mirror_block"
-        result.drift.append("no_mirror_block")
-        return result
-    result.mirror_present = True
-    result.mirror = {
-        "parent": mirror.parent,
-        "blocked_by": list(mirror.blocked_by),
-        "blocking": list(mirror.blocking),
-        "relates_to": list(mirror.relates_to),
+    lines = body.splitlines()
+    canonical_line_numbers = {
+        line_number
+        for line_number, line in _section_lines(body)[0]
+        if FIELD_RE.match(line) is not None
     }
-    if mirror.ambiguous:
-        result.refused.extend(f"ambiguous_mirror:{token}" for token in mirror.ambiguous)
-    if mirror.cross_repo:
-        result.refused.extend(f"cross_repo_ref:{ref}" for ref in mirror.cross_repo)
-    native_rel, error = _graphql_parent_children(number, repo)
-    if error is not None:
-        result.unavailable.append(f"native_parent_children:{error}")
-        native_parent: int | None = None
-        native_children: list[int] = []
-    else:
-        native_parent = native_rel["parent"]
-        native_children = native_rel["children"]
-    blocked_by, error = _rest_dependency_numbers(number, repo, "blocked_by")
-    if error is not None:
-        result.unavailable.append(f"native_blocked_by:{error}")
-        blocked_by = []
-    blocking, error = _rest_dependency_numbers(number, repo, "blocking")
-    if error is not None:
-        result.unavailable.append(f"native_blocking:{error}")
-        blocking = []
-    result.native = {
-        "parent": native_parent,
-        "children": native_children,
-        "blocked_by": blocked_by,
-        "blocking": blocking,
-    }
-    if not result.refused and not result.unavailable:
-        result.drift.extend(_compute_drift(mirror, native_parent, blocked_by))
-    result.verdict = (
-        "in_sync"
-        if not result.drift
-        and not result.refused
-        and not result.unavailable
-        and result.error is None
-        else "drift"
-        if result.drift
-        else "refused"
-        if result.refused
-        else "unavailable"
-        if result.unavailable
-        else "error"
+    mentions: list[Mention] = []
+    active_kind: str | None = None
+    active_line = 0
+    active_raw = ""
+    active_targets: list[int] = []
+
+    def flush() -> None:
+        nonlocal active_kind, active_line, active_raw, active_targets
+        if active_kind is not None:
+            mentions.append(
+                Mention(
+                    issue=issue,
+                    kind=active_kind,
+                    line=active_line,
+                    raw=active_raw,
+                    targets=tuple(sorted(set(active_targets))),
+                )
+            )
+        active_kind = None
+        active_line = 0
+        active_raw = ""
+        active_targets = []
+
+    for index, line in enumerate(lines, start=1):
+        heading = HEADING_RE.match(line)
+        if heading:
+            flush()
+            raw_title = re.sub(r"\s+", " ", heading.group("title").strip().lower())
+            title, separator, inline_value = raw_title.partition(":")
+            title = title.strip()
+            if title in LEGACY_LABELS and title != "relationships":
+                active_kind = LEGACY_LABELS[title]
+                active_line = index
+                active_raw = line.strip()
+                targets, _ = _extract_refs(inline_value if separator else "", repo=repo)
+                active_targets.extend(targets)
+            continue
+        if active_kind is not None:
+            targets, _ = _extract_refs(line, repo=repo)
+            active_targets.extend(targets)
+    flush()
+
+    # A small set of explicit legacy key/value lines occurs outside a heading (for example,
+    # ``Original parent: #123``).  Keep these review-only as well.
+    line_pattern = re.compile(
+        r"^\s*(?:[-*+]\s+)?(?P<label>original\s+parent|parent(?:\s+issue)?|blocked\s+by|blocking|"
+        r"related(?:\s+(?:issues?|work))?)\s*:\s*(?P<value>.*?)\s*$",
+        re.IGNORECASE,
     )
-    return result
+    for index, line in enumerate(lines, start=1):
+        match = line_pattern.match(line)
+        if not match:
+            continue
+        label = re.sub(r"\s+", " ", match.group("label").strip().lower())
+        if index in canonical_line_numbers:
+            # Canonical sections are parsed separately; do not duplicate their fields as legacy.
+            continue
+        kind = LEGACY_LABELS.get(label)
+        if kind is None:
+            continue
+        targets, _ = _extract_refs(match.group("value"), repo=repo)
+        mentions.append(
+            Mention(
+                issue=issue,
+                kind=kind,
+                line=index,
+                raw=line.strip(),
+                targets=targets,
+            )
+        )
+    return tuple(mentions)
 
 
-def _rest_issue_id(number: int, repo: str) -> tuple[int | None, str | None]:
-    """Return the numeric REST issue id used by relationship write endpoints."""
-    result = _gh_api(f"repos/{repo}/issues/{number}", timeout=GH_TIMEOUT)
-    if result.returncode != 0:
-        return None, (result.stderr or result.stdout or "issue read failed").strip()
-    payload, error = _parse_json(result, what="issue id read")
-    if error or not isinstance(payload, dict):
-        return None, error or "issue response was not a JSON object"
-    value = payload.get("id")
-    if not isinstance(value, int) or value <= 0:
-        return None, "issue response has no numeric id"
-    return value, None
+def parse_relationships(  # noqa: C901 - canonical and legacy states are intentionally explicit
+    body: str, *, issue: int, repo: str = DEFAULT_REPO
+) -> dict[str, Any]:
+    """Parse one issue body into canonical declarations and review-only legacy mentions."""
 
+    if not isinstance(body, str):
+        return {
+            "section_present": False,
+            "declarations": [],
+            "errors": ["issue body must be a string"],
+            "legacy_mentions": [],
+        }
 
-def _post_native_link(path: str, payload: dict[str, Any]) -> str | None:
-    """POST one native relationship write; return an error string or None."""
-    result = _gh_api(path, payload=payload, method="POST", timeout=GH_TIMEOUT)
-    if result.returncode != 0:
-        return (result.stderr or result.stdout or "relationship write failed").strip()
-    return None
+    section, present = _section_lines(body)
+    declarations: list[Declaration] = []
+    errors: list[str] = []
+    saw_kind: dict[str, list[int]] = {kind: [] for kind in RELATION_KINDS}
+    saw_none: dict[str, bool] = dict.fromkeys(RELATION_KINDS, False)
+    saw_field: set[str] = set()
+    seen_declarations: set[tuple[str, int]] = set()
 
+    for line_number, line in section:
+        match = FIELD_RE.match(line)
+        if not match:
+            continue
+        label = re.sub(r"\s+", " ", match.group("label").strip().lower())
+        kind = CANONICAL_LABELS[label]
+        saw_field.add(kind)
+        value = match.group("value").strip()
+        if value.lower() in {"none", "n/a", "not applicable"}:
+            saw_none[kind] = True
+            continue
+        if not value:
+            errors.append(
+                f"line {line_number}: {RELATION_LABELS[kind]} must use explicit `none` when empty"
+            )
+            continue
+        targets, reference_errors = _extract_refs(value, repo=repo)
+        errors.extend(f"line {line_number}: {error}" for error in reference_errors)
+        if not targets:
+            errors.append(
+                f"line {line_number}: {RELATION_LABELS[kind]} must name an issue or `none`"
+            )
+            continue
+        for target in targets:
+            if (kind, target) in seen_declarations:
+                errors.append(
+                    f"line {line_number}: duplicate {RELATION_LABELS[kind]} reference #{target}"
+                )
+                continue
+            seen_declarations.add((kind, target))
+            saw_kind[kind].append(target)
+            declarations.append(
+                Declaration(
+                    issue=issue,
+                    kind=kind,
+                    target=target,
+                    origin="canonical",
+                    line=line_number,
+                    raw=line.strip(),
+                )
+            )
 
-def _apply_missing_parent(audit: AuditResult) -> str | None:
-    """Set the missing native parent; return an error string or None."""
-    repo = audit.repo
-    number = audit.issue
-    mirror_parent = audit.mirror.get("parent")
-    child_id, error = _rest_issue_id(number, repo)
-    if error is not None:
-        return f"child id read failed: {error}"
-    assert isinstance(mirror_parent, int)
-    error = _post_native_link(
-        f"repos/{repo}/issues/{mirror_parent}/sub-issues",
-        {"sub_issue_id": child_id},
-    )
-    if error is not None:
-        return f"parent write failed: {error}"
-    native, error = _graphql_parent_children(number, repo)
-    if error is not None or (native or {}).get("parent") != mirror_parent:
-        return "parent read-back mismatch after write"
-    audit.applied.append(f"parent:{mirror_parent}")
-    return None
+    for kind in RELATION_KINDS:
+        values = sorted(set(saw_kind[kind]))
+        if saw_none[kind] and values:
+            errors.append(f"{RELATION_LABELS[kind]} mixes `none` with issue references")
+        if kind == "parent" and len(values) > 1:
+            errors.append("Parent issue must name at most one issue")
+        if issue in values:
+            errors.append(f"{RELATION_LABELS[kind]} cannot reference the issue itself (#{issue})")
 
+    if present:
+        missing_fields = [RELATION_LABELS[kind] for kind in RELATION_KINDS if kind not in saw_field]
+        if missing_fields:
+            errors.append(
+                "canonical ## Relationships section is missing field(s): "
+                + ", ".join(missing_fields)
+            )
 
-def _apply_missing_blocked_by(audit: AuditResult, ref: int) -> str | None:
-    """Add one missing native blocked-by link; return an error string or None."""
-    repo = audit.repo
-    number = audit.issue
-    target_id, error = _rest_issue_id(ref, repo)
-    if error is not None:
-        return f"blocked-by target read failed: {error}"
-    error = _post_native_link(
-        f"repos/{repo}/issues/{number}/dependencies/blocked_by",
-        {"issue_id": target_id},
-    )
-    if error is not None:
-        return f"blocked-by write failed: {error}"
-    current, error = _rest_dependency_numbers(number, repo, "blocked_by")
-    if error is not None or ref not in (current or []):
-        return "blocked-by read-back mismatch after write"
-    audit.applied.append(f"blocked_by:{ref}")
-    return None
-
-
-def apply_migration(audit: AuditResult) -> AuditResult:
-    """Apply the additive native migration described by a clean drift audit."""
-    if audit.verdict != "drift" or not audit.drift:
-        audit.error = f"nothing applicable: verdict is {audit.verdict}"
-        return audit
-    if audit.refused or audit.unavailable:
-        audit.error = "refused or unavailable evidence blocks apply"
-        return audit
-    if any(item.startswith("parent_missing_native:") for item in audit.drift):
-        error = _apply_missing_parent(audit)
-        if error is not None:
-            audit.error = error
-            return audit
-    for item in [d for d in audit.drift if d.startswith("blocked_by_missing_native:")]:
-        error = _apply_missing_blocked_by(audit, int(item.rsplit(":", 1)[1]))
-        if error is not None:
-            audit.error = error
-            return audit
-    audit.verdict = "applied" if audit.applied else "drift"
-    return audit
-
-
-def _result_payload(audit: AuditResult) -> dict[str, Any]:
+    legacy = _legacy_mentions(body, issue=issue, repo=repo)
+    if not present:
+        errors.append("missing canonical ## Relationships section")
     return {
-        "schema": "issue_relationship_audit.v1",
-        "issue": audit.issue,
-        "repo": audit.repo,
-        "verdict": audit.verdict,
-        "mirror_present": audit.mirror_present,
-        "mirror": audit.mirror,
-        "native": audit.native,
-        "drift": audit.drift,
-        "refused": audit.refused,
-        "unavailable": audit.unavailable,
-        "applied": audit.applied,
-        "error": audit.error,
+        "section_present": present,
+        "declarations": [asdict(item) for item in declarations],
+        "errors": sorted(set(errors)),
+        "legacy_mentions": [asdict(item) for item in legacy],
     }
 
 
-def _render_human(audit: AuditResult) -> str:
+def _normalise_issue_row(raw: Mapping[str, Any], *, repo: str) -> dict[str, Any] | None:
+    """Keep only canonical issue rows from the GitHub issues endpoint."""
+
+    number = raw.get("number")
+    if type(number) is not int or number < 1 or raw.get("pull_request") is not None:
+        return None
+    body = raw.get("body")
+    if body is not None and not isinstance(body, str):
+        return None
+    issue_id = raw.get("id")
+    if type(issue_id) is not int or issue_id < 1:
+        return None
+    return {
+        "number": number,
+        "id": issue_id,
+        "title": str(raw.get("title") or ""),
+        "body": body or "",
+        "url": str(raw.get("html_url") or f"https://github.com/{repo}/issues/{number}"),
+    }
+
+
+def _read_json(api: ApiRunner, path: str, *, what: str) -> tuple[Any, str]:
+    """Read and parse one API response using the shared diagnostic contract."""
+
+    result = api(path, None, None)
+    if isinstance(result, tuple):
+        # A tuple is convenient for tiny offline runners: (payload, error).
+        if len(result) == 2:
+            return result
+    return parse_json(result, what=what)
+
+
+def _list_issues(  # noqa: C901 - inventory validation keeps partial reads visible
+    api: ApiRunner,
+    *,
+    repo: str,
+    state: str,
+    per_page: int,
+    max_pages: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Read a bounded issue inventory and report truncation explicitly."""
+
+    issues: list[dict[str, Any]] = []
+    errors: list[str] = []
+    pages_read = 0
+    truncated = False
+    malformed = 0
+    for page in range(1, max_pages + 1):
+        path = f"repos/{repo}/issues?state={state}&per_page={per_page}&page={page}"
+        payload, error = _read_json(api, path, what=f"issues page {page}")
+        if error:
+            errors.append(error)
+            break
+        if not isinstance(payload, list):
+            errors.append(f"issues page {page} returned a non-list payload")
+            break
+        pages_read += 1
+        for raw in payload:
+            if not isinstance(raw, Mapping):
+                malformed += 1
+                continue
+            row = _normalise_issue_row(raw, repo=repo)
+            if row is None:
+                # Pull requests are expected in the issues endpoint; only malformed non-PR rows
+                # affect completeness.
+                if raw.get("pull_request") is None:
+                    malformed += 1
+                continue
+            issues.append(row)
+        if len(payload) < per_page:
+            break
+    else:
+        truncated = True
+    if malformed:
+        errors.append(f"{malformed} malformed issue row(s) were excluded")
+    if pages_read == 0 and not errors:
+        errors.append("issue inventory returned no readable pages")
+    return issues, {
+        "status": "complete" if pages_read and not truncated and not errors else "unavailable",
+        "pages_read": pages_read,
+        "per_page": per_page,
+        "page_budget": max_pages,
+        "truncated": truncated,
+        "errors": errors,
+    }
+
+
+def _exact_issue(
+    api: ApiRunner, *, repo: str, number: int, cache: dict[int, dict[str, Any] | None]
+) -> tuple[dict[str, Any] | None, str]:
+    """Read one exact issue for target-id resolution, never accepting a pull request."""
+
+    if number in cache:
+        row = cache[number]
+        return row, "" if row is not None else f"issue #{number} is unavailable"
+    payload, error = _read_json(api, f"repos/{repo}/issues/{number}", what=f"issue #{number}")
+    if error:
+        cache[number] = None
+        return None, error
+    if not isinstance(payload, Mapping):
+        cache[number] = None
+        return None, f"issue #{number} returned a non-object payload"
+    row = _normalise_issue_row(payload, repo=repo)
+    if row is None:
+        cache[number] = None
+        return None, f"issue #{number} is not a canonical issue"
+    cache[number] = row
+    return row, ""
+
+
+def _native_numbers(payload: Any) -> tuple[int, ...]:
+    """Normalize issue numbers from parent/dependency endpoint payloads."""
+
+    rows: Iterable[Any]
+    if isinstance(payload, Mapping):
+        rows = (payload,)
+    elif isinstance(payload, list):
+        rows = payload
+    else:
+        return ()
+    numbers: list[int] = []
+    for row in rows:
+        if isinstance(row, Mapping) and type(row.get("number")) is int and row["number"] > 0:
+            numbers.append(row["number"])
+    return tuple(sorted(set(numbers)))
+
+
+def _native_state(
+    api: ApiRunner,
+    *,
+    repo: str,
+    issue: int,
+    max_reads: int,
+    reads: list[str],
+) -> tuple[dict[str, tuple[int, ...]], list[str]]:
+    """Read native relationships for one issue, bounded by the caller's read budget."""
+
+    state: dict[str, tuple[int, ...]] = {}
+    errors: list[str] = []
+    endpoints = {
+        "parent": f"repos/{repo}/issues/{issue}/parent",
+        "blocked_by": f"repos/{repo}/issues/{issue}/dependencies/blocked_by",
+        "blocking": f"repos/{repo}/issues/{issue}/dependencies/blocking",
+    }
+    for kind, path in endpoints.items():
+        if len(reads) >= max_reads:
+            errors.append(f"native read budget exhausted before {path}")
+            break
+        reads.append(path)
+        payload, error = _read_json(api, path, what=f"native {kind} for issue #{issue}")
+        if error:
+            # A missing parent is a valid empty relation; dependency endpoints should be readable.
+            if kind == "parent" and "404" in error:
+                state[kind] = ()
+                continue
+            errors.append(error)
+            continue
+        state[kind] = _native_numbers(payload)
+    return state, errors
+
+
+def _operation_for(
+    *,
+    issue: int,
+    declaration: Mapping[str, Any],
+    native: Mapping[str, tuple[int, ...]],
+) -> dict[str, Any]:
+    """Turn one canonical declaration into a conservative add-only operation."""
+
+    kind = str(declaration["kind"])
+    target = int(declaration["target"])
+    operation = {
+        "issue": issue,
+        "kind": kind,
+        "target": target,
+        "status": "proposed",
+        "reason": "native relationship is not present",
+    }
+    if kind == "relates_to":
+        operation.update(status="manual", reason="Relates to has no supported REST write path")
+    elif kind == "parent" and native.get("parent") and target not in native["parent"]:
+        operation.update(
+            status="conflict",
+            reason=(
+                "native parent differs; the audit never replaces an existing parent relationship"
+            ),
+        )
+    elif target in native.get(kind, ()):
+        operation.update(status="already_present", reason="native relationship already exists")
+    elif kind not in native:
+        operation.update(status="blocked", reason="native relationship read was unavailable")
+    return operation
+
+
+def _write_operation(  # noqa: C901 - each relation direction has distinct REST/read-back paths
+    api: ApiRunner,
+    *,
+    repo: str,
+    operation: Mapping[str, Any],
+    issue_rows: Mapping[int, Mapping[str, Any]],
+    target_cache: dict[int, dict[str, Any] | None],
+) -> tuple[str, str]:
+    """Apply one add-only native operation and verify it with an exact read-back."""
+
+    issue = int(operation["issue"])
+    target = int(operation["target"])
+    kind = str(operation["kind"])
+    current = issue_rows.get(issue)
+    if current is None:
+        return "blocked", f"issue #{issue} id is unavailable"
+    target_row = issue_rows.get(target)
+    if target_row is None:
+        target_row, error = _exact_issue(api, repo=repo, number=target, cache=target_cache)
+        if target_row is None:
+            return "blocked", error
+    current_id = current["id"]
+    target_id = target_row["id"]
+    if kind == "parent":
+        path = f"repos/{repo}/issues/{target}/sub_issues"
+        payload = {"sub_issue_id": current_id, "replace_parent": False}
+        readback_path = f"repos/{repo}/issues/{issue}/parent"
+    elif kind == "blocked_by":
+        path = f"repos/{repo}/issues/{issue}/dependencies/blocked_by"
+        payload = {"issue_id": target_id}
+        readback_path = path
+    elif kind == "blocking":
+        path = f"repos/{repo}/issues/{target}/dependencies/blocked_by"
+        payload = {"issue_id": current_id}
+        readback_path = f"repos/{repo}/issues/{issue}/dependencies/blocking"
+    else:
+        return "manual", "Relates to has no supported REST write path"
+
+    result = api(path, payload, "POST")
+    if getattr(result, "returncode", 1) != 0:
+        _, error = parse_json(result, what=f"write {kind} #{issue} -> #{target}")
+        return "failed", error
+    payload_read, error = _read_json(
+        api, readback_path, what=f"read back {kind} for issue #{issue}"
+    )
+    if error:
+        return "failed", error
+    numbers = _native_numbers(payload_read)
+    if kind == "parent":
+        verified = target in numbers
+    else:
+        verified = target in numbers
+    if not verified:
+        return "failed", f"read-back did not contain #{target} at {readback_path}"
+    return "applied", "native relationship added and read back"
+
+
+def audit_relationships(  # noqa: C901, PLR0912, PLR0913, PLR0915 - bounded audit/apply orchestration
+    *,
+    repo: str = DEFAULT_REPO,
+    state: str = "open",
+    issue_numbers: Sequence[int] | None = None,
+    per_page: int = 100,
+    max_pages: int = 20,
+    max_native_reads: int = 1200,
+    apply: bool = False,
+    confirmation: str | None = None,
+    api: ApiRunner = _api_default,
+) -> dict[str, Any]:
+    """Run a bounded audit and optionally apply reviewed canonical add-only links."""
+
+    errors: list[str] = []
+    if issue_numbers:
+        issues: list[dict[str, Any]] = []
+        cache: dict[int, dict[str, Any] | None] = {}
+        for number in sorted(set(issue_numbers)):
+            row, error = _exact_issue(api, repo=repo, number=number, cache=cache)
+            if row is None:
+                errors.append(error)
+            else:
+                issues.append(row)
+        source = {
+            "status": "complete" if not errors else "unavailable",
+            "kind": "exact_issue_reads",
+            "pages_read": 0,
+            "truncated": False,
+            "errors": list(errors),
+        }
+    else:
+        issues, source = _list_issues(
+            api, repo=repo, state=state, per_page=per_page, max_pages=max_pages
+        )
+        errors.extend(source["errors"])
+
+    issue_rows = {row["number"]: row for row in issues}
+    native_reads: list[str] = []
+    target_cache: dict[int, dict[str, Any] | None] = dict(issue_rows)
+    reports: list[dict[str, Any]] = []
+    operations: list[dict[str, Any]] = []
+    legacy_count = 0
+    canonical_count = 0
+    contract_finding_count = 0
+    missing_section_count = 0
+
+    for row in issues:
+        parsed = parse_relationships(row["body"], issue=row["number"], repo=repo)
+        declarations = parsed["declarations"]
+        canonical_count += len(declarations)
+        contract_finding_count += len(parsed["errors"])
+        missing_section_count += int(
+            "missing canonical ## Relationships section" in parsed["errors"]
+        )
+        errors.extend(f"issue #{row['number']}: {error}" for error in parsed["errors"])
+        native: dict[str, tuple[int, ...]] = {}
+        native_errors: list[str] = []
+        # Only concrete canonical declarations need native reads.  This keeps a whole-repository
+        # audit bounded while still verifying every proposed mutation.
+        if declarations:
+            native, native_errors = _native_state(
+                api,
+                repo=repo,
+                issue=row["number"],
+                max_reads=max_native_reads,
+                reads=native_reads,
+            )
+            errors.extend(native_errors)
+        issue_operations = [
+            _operation_for(issue=row["number"], declaration=item, native=native)
+            for item in declarations
+        ]
+        errors.extend(
+            f"issue #{row['number']}: {operation['reason']}"
+            for operation in issue_operations
+            if operation["status"] == "conflict"
+        )
+        operations.extend(issue_operations)
+        legacy = parsed["legacy_mentions"]
+        legacy_count += len(legacy)
+        reports.append(
+            {
+                "number": row["number"],
+                "url": row["url"],
+                "section_present": parsed["section_present"],
+                "declarations": declarations,
+                "native": {kind: list(values) for kind, values in native.items()},
+                "native_errors": native_errors,
+                "operations": issue_operations,
+                "errors": parsed["errors"],
+                "legacy_mentions": legacy,
+            }
+        )
+
+    apply_result: dict[str, Any] = {
+        "requested": apply,
+        "status": "not_requested",
+        "confirmation": confirmation == CONFIRMATION_TOKEN,
+        "operations": [],
+    }
+    if apply:
+        if confirmation != CONFIRMATION_TOKEN:
+            apply_result.update(status="blocked", reason=f"pass --confirm {CONFIRMATION_TOKEN}")
+        elif (
+            source.get("status") != "complete"
+            or source.get("truncated")
+            or errors
+            or contract_finding_count
+        ):
+            apply_result.update(
+                status="blocked",
+                reason="source, native reads, or parsing is incomplete; no writes were attempted",
+            )
+        else:
+            # Resolve every target before the first write.  This avoids a partial migration when
+            # one referenced issue is missing, closed behind permissions, or malformed.
+            target_errors: list[str] = []
+            for operation in operations:
+                if operation["status"] != "proposed":
+                    continue
+                target = int(operation["target"])
+                if target not in issue_rows:
+                    _, target_error = _exact_issue(
+                        api, repo=repo, number=target, cache=target_cache
+                    )
+                    if target_error:
+                        target_errors.append(target_error)
+            if target_errors:
+                apply_result.update(
+                    status="blocked",
+                    reason="target resolution failed; no writes were attempted",
+                    errors=sorted(set(target_errors)),
+                )
+            else:
+                statuses: list[str] = []
+                for operation in operations:
+                    if operation["status"] != "proposed":
+                        apply_result["operations"].append(dict(operation))
+                        statuses.append(operation["status"])
+                        continue
+                    status, reason = _write_operation(
+                        api,
+                        repo=repo,
+                        operation=operation,
+                        issue_rows=issue_rows,
+                        target_cache=target_cache,
+                    )
+                    applied = dict(operation)
+                    applied.update(status=status, reason=reason)
+                    apply_result["operations"].append(applied)
+                    statuses.append(status)
+                if any(status in {"failed", "blocked"} for status in statuses):
+                    apply_result["status"] = "partial" if "applied" in statuses else "failed"
+                else:
+                    apply_result["status"] = "complete"
+
+    return {
+        "schema": SCHEMA,
+        "repository": repo,
+        "state": state,
+        "dry_run": not apply,
+        "source": source,
+        "issue_count": len(issues),
+        "canonical_declaration_count": canonical_count,
+        "legacy_mention_count": legacy_count,
+        "contract_finding_count": contract_finding_count,
+        "missing_section_count": missing_section_count,
+        "native_reads": {"count": len(native_reads), "paths": native_reads},
+        "issues": reports,
+        "apply": apply_result,
+        "errors": sorted(set(errors)),
+    }
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", default=DEFAULT_REPO)
+    parser.add_argument("--state", choices=("open", "closed", "all"), default="open")
+    parser.add_argument("--issue", type=int, action="append", dest="issue_numbers")
+    parser.add_argument("--per-page", type=int, default=100)
+    parser.add_argument("--max-pages", type=int, default=20)
+    parser.add_argument("--max-native-reads", type=int, default=1200)
+    parser.add_argument("--format", choices=("json", "text"), default="text")
+    parser.add_argument("--apply", action="store_true", help="add reviewed native links")
+    parser.add_argument("--confirm", help=f"required with --apply: {CONFIRMATION_TOKEN}")
+    return parser
+
+
+def _text_summary(report: Mapping[str, Any]) -> str:
+    """Render a compact human-readable report without hiding partial evidence."""
+
     lines = [
-        f"issue #{audit.issue} ({audit.repo}): {audit.verdict}",
-        f"  mirror: {json.dumps(audit.mirror) if audit.mirror else 'absent'}",
-        f"  native: {json.dumps(audit.native) if audit.native else 'unread'}",
+        f"{report['schema']} repository={report['repository']} state={report['state']}",
+        f"issues={report['issue_count']} canonical_declarations={report['canonical_declaration_count']} "
+        f"legacy_mentions={report['legacy_mention_count']} contract_findings={report['contract_finding_count']} "
+        f"dry_run={report['dry_run']}",
+        f"source={report['source']['status']} truncated={report['source'].get('truncated', False)} "
+        f"native_reads={report['native_reads']['count']}",
     ]
-    for item in audit.drift:
-        lines.append(f"  drift: {item}")
-    for item in audit.refused:
-        lines.append(f"  refused: {item}")
-    for item in audit.unavailable:
-        lines.append(f"  unavailable: {item}")
-    for item in audit.applied:
-        lines.append(f"  applied: {item}")
-    if audit.error:
-        lines.append(f"  error: {audit.error}")
+    for issue in report["issues"]:
+        for operation in issue["operations"]:
+            lines.append(
+                f"#{issue['number']} {operation['kind']} -> #{operation['target']}: "
+                f"{operation['status']} ({operation['reason']})"
+            )
+        for error in issue["errors"]:
+            lines.append(f"#{issue['number']} error: {error}")
+        for mention in issue["legacy_mentions"]:
+            lines.append(f"#{issue['number']} legacy line {mention['line']}: {mention['raw']}")
+    for error in report["errors"]:
+        lines.append(f"error: {error}")
+    if report["apply"]["requested"]:
+        lines.append(f"apply={report['apply']['status']}")
     return "\n".join(lines)
 
 
-def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("issue", type=int, help="Issue number to audit or migrate.")
-    parser.add_argument("--repo", default=DEFAULT_REPO, help="Repository as OWNER/REPO.")
-    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
-    parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="Migrate additive native links; requires --confirm.",
-    )
-    parser.add_argument(
-        "--confirm",
-        default=None,
-        help="Explicit migration confirmation; must be RELATIONSHIP_MIGRATION.",
-    )
-    return parser.parse_args(argv)
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI entry point."""
 
-
-def main(argv: list[str] | None = None) -> int:
-    """Run the audit (default) or the guarded apply migration."""
-    args = _parse_args(argv or sys.argv[1:])
-    if args.issue < 1:
-        print("error: issue must be a positive integer", file=sys.stderr)
-        return 2
-    if args.apply and args.confirm != APPLY_CONFIRM_TOKEN:
+    args = _parser().parse_args(argv)
+    if (
+        args.per_page <= 0
+        or args.max_pages <= 0
+        or args.max_native_reads < 0
+        or any(number <= 0 for number in (args.issue_numbers or ()))
+    ):
         print(
-            "error: --apply requires --confirm RELATIONSHIP_MIGRATION",
+            "--per-page, --max-pages, and --issue values must be positive; "
+            "--max-native-reads cannot be negative",
             file=sys.stderr,
         )
         return 2
-    try:
-        _split_owner_repo(args.repo)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-    audit = audit_issue(args.issue, repo=args.repo)
-    if args.apply:
-        audit = apply_migration(audit)
-    if args.json:
-        print(json.dumps(_result_payload(audit), indent=2, sort_keys=True))
+    report = audit_relationships(
+        repo=args.repo,
+        state=args.state,
+        issue_numbers=args.issue_numbers,
+        per_page=args.per_page,
+        max_pages=args.max_pages,
+        max_native_reads=args.max_native_reads,
+        apply=args.apply,
+        confirmation=args.confirm,
+    )
+    if args.format == "json":
+        print(json.dumps(report, indent=2, sort_keys=True))
     else:
-        print(_render_human(audit))
-    if audit.error is not None:
+        print(_text_summary(report))
+    if (
+        report["source"].get("status") != "complete"
+        or report["errors"]
+        or report["contract_finding_count"]
+    ):
         return 1
-    if args.apply and not audit.applied:
+    if args.apply and report["apply"]["status"] not in {"complete", "not_requested"}:
         return 1
     return 0
 

@@ -17,6 +17,7 @@ from scripts.tools.issue_template_audit import (
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
 DOCS_GUIDE_REFERENCE = ROOT / "docs" / "dev_guide_reference.md"
+SKILLS_REGISTRY = ROOT / ".agents" / "skills" / "skills.yaml"
 
 
 def _skill_path(name: str) -> Path:
@@ -46,18 +47,21 @@ KNOWN_LABELS = {
 
 EXPECTED_ISSUE_FORMS = {
     "blocked-external-artifact.yml": [
+        "Relationships",
         "Unavailable asset or runtime",
         "Unblock condition",
         "Fail-closed policy",
         "Artifact policy",
     ],
     "epic.yml": [
+        "Relationships",
         "Child issues or child-creation task",
         "Blocked / ready state",
         "Acceptance criteria",
         "Estimate metadata",
     ],
     "execution-run.yml": [
+        "Relationships",
         "Runtime and execution location",
         "Current phase",
         "Owner / agent handoff",
@@ -66,12 +70,14 @@ EXPECTED_ISSUE_FORMS = {
         "Next decision point",
     ],
     "research-validation.yml": [
+        "Relationships",
         "Hypothesis",
         "Evidence grade",
         "Artifact policy",
         "Validation command",
     ],
     "test-debt.yml": [
+        "Relationships",
         "Skipped or failing test evidence",
         "Intended behavior",
         "Targeted validation",
@@ -152,6 +158,7 @@ def test_specialized_issue_templates_include_domain_specific_sections() -> None:
         "issue_default.md": [
             "## Goal / Problem",
             "## Archetype Metadata",
+            "## Relationships",
             "archetype:",
             "evidence_tier:",
             "linked_policy:",
@@ -229,6 +236,9 @@ def test_every_issue_template_collects_canonical_issue_metadata() -> None:
         assert "archetype:" in body, f"missing archetype field in {path.name}"
         assert "evidence_tier:" in body, f"missing evidence_tier field in {path.name}"
         assert "linked_policy:" in body, f"missing linked_policy field in {path.name}"
+        assert "## Relationships" in body, f"missing relationships block in {path.name}"
+        for field in ("Parent issue", "Blocked by", "Blocking", "Relates to"):
+            assert f"- {field}:" in body, f"missing relationship field {field!r} in {path.name}"
 
     for path in sorted(TEMPLATE_DIR.glob("*.yml")):
         if path.name == "config.yml":
@@ -250,6 +260,19 @@ def test_every_issue_template_collects_canonical_issue_metadata() -> None:
         assert fields["evidence_tier"]["validations"]["required"] is True
         assert tuple(fields["archetype"]["attributes"]["options"]) == CANONICAL_ARCHETYPES
         assert tuple(fields["evidence_tier"]["attributes"]["options"]) == CANONICAL_EVIDENCE_TIERS
+
+        relationship_fields = {
+            str(item.get("id")): item
+            for item in body
+            if isinstance(item, dict) and item.get("id") == "relationships"
+        }
+        assert set(relationship_fields) == {"relationships"}, (
+            f"{path.name} must collect explicit issue relationships"
+        )
+        relationship = relationship_fields["relationships"]
+        assert relationship["type"] == "textarea"
+        assert relationship["validations"]["required"] is True
+        assert "Parent issue: none" in relationship["attributes"]["placeholder"]
 
     docs_text = DOCS_GUIDE_REFERENCE.read_text(encoding="utf-8")
     assert "canonical `archetype` and `evidence_tier` metadata" in docs_text
@@ -278,6 +301,8 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "../.github/ISSUE_TEMPLATE/execution-run.yml" in docs_text
     assert "../.github/ISSUE_TEMPLATE/epic.yml" in docs_text
     assert "../.agents/skills/gh-issue-creator/SKILL.md" in docs_text
+    assert "context/issue_relationships.md" in docs_text
+    assert "scripts/dev/audit_issue_relationships.py" in docs_text
     assert "../.agents/skills/gh-issue-template-auditor/SKILL.md" in docs_text
     assert "../.agents/skills/gh-issue-priority-assessor/SKILL.md" in docs_text
 
@@ -327,6 +352,45 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
 
     documentation_text = (TEMPLATE_DIR / "documentation.md").read_text(encoding="utf-8")
     assert "docs/README.md" in documentation_text
+
+
+def test_issue_and_pr_skills_share_relationship_contract() -> None:
+    """Keep issue/PR lifecycle skills on the same explicit relationship contract."""
+
+    registry = yaml.safe_load(SKILLS_REGISTRY.read_text(encoding="utf-8"))
+    assert isinstance(registry, dict)
+    skills = registry.get("skills")
+    assert isinstance(skills, dict)
+
+    workflow_skills = {
+        name: metadata
+        for name, metadata in skills.items()
+        if isinstance(metadata, dict) and metadata.get("category") in {"github-issue", "github-pr"}
+    }
+    workflow_skills.update(
+        {
+            name: skills[name]
+            for name in (
+                "goal-autopilot",
+                "implementation-verification",
+                "pr-ready-check",
+                "clean-up",
+            )
+            if name in skills
+        }
+    )
+
+    for name, metadata in workflow_skills.items():
+        skill_path = ROOT / ".agents" / "skills" / name / "SKILL.md"
+        assert skill_path.exists(), f"missing workflow skill {name}"
+        text = skill_path.read_text(encoding="utf-8")
+        assert "docs/context/issue_relationships.md" in text, (
+            f"{name} must reference the canonical relationship contract"
+        )
+        if metadata.get("category") == "github-pr":
+            assert "Issue Relationship Mirror" in text, (
+                f"{name} must verify the PR relationship mirror"
+            )
 
 
 def test_issue_splitter_skill_defines_parent_child_contract() -> None:

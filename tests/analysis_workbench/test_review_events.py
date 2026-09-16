@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from robot_sf.analysis_workbench import review_events
 from robot_sf.analysis_workbench.review_contracts import (
     component_descriptor_from_dict,
@@ -17,6 +19,7 @@ from robot_sf.analysis_workbench.review_contracts import (
 from robot_sf.analysis_workbench.review_events import (
     COMPONENT_ID,
     descriptor,
+    main,
     run,
 )
 
@@ -530,3 +533,61 @@ def test_cli_malformed_json_emits_component_result_envelope(tmp_path: Path) -> N
     assert payload["schema_version"] == "component-result.v1"
     assert payload["status"] == "failed"
     assert "JSONDecodeError" in payload["reason"]
+
+
+def test_cli_main_fixture_request_in_process(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The in-process fixture run mirrors the subprocess CLI contract."""
+    import shutil
+
+    repo = Path(__file__).resolve().parents[2]
+    fixture = repo / FIXTURE_DIR
+    output_rel = "output/scenario_review/srev-05-cli-in-process-test"
+    shutil.rmtree(repo / output_rel, ignore_errors=True)
+    try:
+        assert (
+            main(
+                [
+                    "--input",
+                    str(fixture / "request.json"),
+                    "--config",
+                    str(fixture / "config.json"),
+                    "--output",
+                    output_rel,
+                ]
+            )
+            == 1
+        )
+        payload = json.loads(capsys.readouterr().out)
+        component_result_from_dict(payload)
+        assert payload["status"] == "partial"
+        assert "links_unavailable" in payload["reason"]
+    finally:
+        shutil.rmtree(repo / output_rel, ignore_errors=True)
+
+
+def test_cli_main_malformed_json_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Malformed request JSON fails closed through the in-process entry."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text("{not json", encoding="utf-8")
+    assert main(["--input", str(request_path), "--output", "out", "--base", str(tmp_path)]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    component_result_from_dict(payload)
+    assert payload["status"] == "failed"
+    assert "JSONDecodeError" in payload["reason"]
+
+
+def test_cli_main_non_object_request_in_process(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A JSON-array request fails closed through the in-process entry."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text("[]", encoding="utf-8")
+    assert main(["--input", str(request_path), "--output", "out", "--base", str(tmp_path)]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    component_result_from_dict(payload)
+    assert payload["status"] == "failed"
+    assert "request must be a JSON object" in payload["reason"]

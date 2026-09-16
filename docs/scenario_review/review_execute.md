@@ -135,7 +135,18 @@ only in the intervened factor; activation (control motion present,
 treatment-versus-control speed change beyond tolerance) is measured from
 executed trajectories, never from requested config. Deterministic reruns
 agree on verdicts, metrics, and trace bytes; ledgers additionally record
-wall timing outside the logical digest. The `simple_policy` fixture path is
-the only dependent planner family exercised here. This component does not
-register sibling families, change benchmark coverage, or authorize any
-scientific claim.
+wall timing outside the logical digest. The `simple_policy` fixture path is the only dependent planner family exercised
+here. Fixture velocity commands are routed through the canonical
+`_simple_robot_policy` from `robot_sf.benchmark.runner` (`_simple_policy_fixture_adapter`).
+The adapter enforces canonical runner velocity scaling `min(speed, distance_to_goal)`
+across near-goal and normal-goal states without discontinuous goal deadzones.
+Adapter deviations from the benchmark runner are strictly bounded:
+1. Fixed-horizon execution: executes all requested horizon steps without early
+   termination on reaching `goal_radius` (which `runner._simulate_episode_with_policy`
+   breaks on), preserving fixed-length comparative trajectory pairs for downstream
+   telemetry metrics.
+2. Simulator integration: executes in an owned `Simulator` instance configured with the
+   SREV-22 tiny crossing map and holonomic drive using `simulator.step_once([(vx, vy)])`
+   rather than lightweight kinematic position integration `pos += vel * dt`.
+This component does not register sibling families, change benchmark coverage, or
+authorize any scientific claim.

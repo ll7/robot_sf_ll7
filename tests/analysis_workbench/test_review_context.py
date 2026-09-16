@@ -804,6 +804,51 @@ def test_nested_identity_alias_contradictions_are_rejected(
     assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
 
 
+@pytest.mark.parametrize(
+    ("container", "alias", "value", "diagnostic"),
+    [
+        ("provenance", "git_hash", "b" * 40, "source_commit_mismatch"),
+        ("result_provenance", "config_hash", "foreign-row-config", "config_identity_mismatch"),
+        ("cell_context", "git_hash", "b" * 40, "source_commit_mismatch"),
+        ("algorithm_metadata", "config_hash", "foreign-row-config", "config_identity_mismatch"),
+    ],
+)
+def test_regular_campaign_rows_bind_nested_identity_aliases_before_parsing(
+    tmp_path: Path, container: str, alias: str, value: str, diagnostic: str
+) -> None:
+    """Nested row identity aliases cannot bypass regular campaign admission."""
+    campaign = json.loads(json.dumps(CAMPAIGN))
+    row = campaign["episodes"][0]
+    if container == "algorithm_metadata":
+        row[container] = {"analysis_trace": {alias: value}}
+    else:
+        row[container] = {alias: value}
+    _stage(tmp_path, campaign=campaign)
+
+    result = run(_request(tmp_path), base=tmp_path)
+
+    assert result.status == "failed"
+    assert diagnostic in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("campaign_alias", ["campaign_id", "study_id"])
+def test_regular_campaign_rows_bind_nested_campaign_aliases_before_parsing(
+    tmp_path: Path, campaign_alias: str
+) -> None:
+    """Nested campaign/study aliases cannot smuggle a foreign campaign row."""
+    campaign = json.loads(json.dumps(CAMPAIGN))
+    campaign["episodes"][0]["provenance"] = {campaign_alias: "camp-foreign"}
+    _stage(tmp_path, campaign=campaign)
+
+    result = run(_request(tmp_path), base=tmp_path)
+
+    assert result.status == "failed"
+    assert "mixed_campaign_row" in result.reason
+    assert not (tmp_path / "out").exists()
+
+
 def test_output_materialization_never_publishes_partial_final(tmp_path: Path, monkeypatch) -> None:
     """An interrupted atomic write leaves neither a partial final nor temp residue."""
     target = tmp_path / "context-report.json"
@@ -879,6 +924,38 @@ def test_selection_campaign_id_is_required_before_ids_are_interpreted(
     assert not (tmp_path / "out" / OUTPUT_REPORT_FILENAME).exists()
 
 
+@pytest.mark.parametrize(
+    ("campaign_id", "diagnostic"),
+    [(None, "selection_campaign_unbound"), ("camp-other", "selection_campaign_mismatch")],
+)
+def test_optional_selection_campaign_identity_failure_publishes_no_report(
+    tmp_path: Path, campaign_id: str | None, diagnostic: str
+) -> None:
+    """An invalid supplied optional selection is terminal before report publication."""
+    _stage(tmp_path)
+    selection = dict(SELECTION)
+    if campaign_id is None:
+        selection.pop("campaign_id")
+    else:
+        selection["campaign_id"] = campaign_id
+    _write_json(tmp_path / "selection.json", selection)
+    sources = [
+        _source_ref(tmp_path / "campaign.json", artifact_id="campaign"),
+        _source_ref(
+            tmp_path / "selection.json",
+            artifact_id="selection",
+            source_format="episode-selection",
+        ),
+    ]
+
+    result = run(_request(tmp_path, sources=sources), base=tmp_path)
+
+    assert result.status == "failed"
+    assert diagnostic in result.reason
+    assert result.artifacts == ()
+    assert not (tmp_path / "out").exists()
+
+
 def test_missing_campaign_reference_is_unavailable_context(tmp_path: Path) -> None:
     _stage(tmp_path)
     result = run(_request(tmp_path, config_extra={"campaign_id": "camp-missing"}), base=tmp_path)
@@ -948,6 +1025,38 @@ def test_output_parent_symlink_escape_is_rejected(tmp_path: Path) -> None:
     assert result.status == "failed"
     assert not (outside / OUTPUT_REPORT_FILENAME).exists()
     outside.rmdir()
+
+
+def test_output_parent_replacement_during_publication_is_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reserved output directory replaced by a symlink cannot receive reports."""
+    _stage(tmp_path)
+    outside = tmp_path.parent / f"{tmp_path.name}-publication-outside"
+    outside.mkdir()
+    original_write_json = review_context._write_json
+    swapped = False
+
+    def replace_parent_then_write(path: Path, payload: dict, **kwargs: object) -> str:
+        nonlocal swapped
+        if not swapped:
+            path.parent.rmdir()
+            path.parent.symlink_to(outside, target_is_directory=True)
+            swapped = True
+        return original_write_json(path, payload, **kwargs)
+
+    monkeypatch.setattr(review_context, "_write_json", replace_parent_then_write)
+    try:
+        result = run(_request(tmp_path), base=tmp_path)
+        assert result.status == "failed"
+        assert "output directory replaced during publication" in result.reason
+        assert result.artifacts == ()
+        assert not any(outside.iterdir())
+    finally:
+        output_link = tmp_path / "out"
+        if output_link.is_symlink():
+            output_link.unlink()
+        outside.rmdir()
 
 
 def test_canonical_source_selection_never_silently_merges(tmp_path: Path) -> None:

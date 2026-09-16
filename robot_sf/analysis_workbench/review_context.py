@@ -19,6 +19,7 @@ import json
 import math
 import os
 import re
+import secrets
 import stat
 import tempfile
 from collections.abc import Mapping
@@ -429,6 +430,32 @@ class _CanonicalIdentityError(ReviewContractsValidationError):
         """Build an error carrying the leaf diagnostic code."""
         self.code = code
         super().__init__([detail])
+
+
+@dataclass(slots=True)
+class _ReservedOutputDirectory:
+    """Retain trusted descriptors for one reserved output directory."""
+
+    path: Path
+    parent_fd: int
+    directory_fd: int
+    name: str
+    device: int
+    inode: int
+    published_names: set[str] = field(default_factory=set)
+
+    def close(self) -> None:
+        """Close retained descriptors without turning cleanup into a new failure."""
+        for attribute in ("directory_fd", "parent_fd"):
+            descriptor = getattr(self, attribute)
+            if descriptor < 0:
+                continue
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            finally:
+                setattr(self, attribute, -1)
 
 
 @dataclass
@@ -950,51 +977,123 @@ def _snapshot_directory(
     return snapshot_files, digest.hexdigest()
 
 
-def _reserve_output_directory(output_directory: str, base: Path) -> Path:  # noqa: C901
-    """Atomically reserve a real output directory below ``base``.
+def _output_directory_flags() -> int:
+    """Return no-follow flags suitable for opening a trusted directory."""
+    return (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+
+
+def _output_directory_matches_entry(output: _ReservedOutputDirectory) -> bool:
+    """Return whether the reserved name still names the retained directory."""
+    if output.parent_fd < 0 or output.directory_fd < 0:
+        return False
+    try:
+        visible = os.stat(output.name, dir_fd=output.parent_fd, follow_symlinks=False)
+        trusted = os.fstat(output.directory_fd)
+    except (OSError, ValueError):
+        return False
+    return (
+        stat.S_ISDIR(visible.st_mode)
+        and visible.st_dev == output.device
+        and visible.st_ino == output.inode
+        and trusted.st_dev == output.device
+        and trusted.st_ino == output.inode
+    )
+
+
+def _assert_output_directory_current(output: _ReservedOutputDirectory) -> None:
+    """Fail closed when the reserved output directory entry was replaced."""
+    if not _output_directory_matches_entry(output):
+        raise ReviewContractsValidationError(["output directory replaced during publication"])
+
+
+def _open_output_parent(root: Path, parts: tuple[str, ...]) -> int:
+    """Open the reserved output parent through a no-follow descriptor walk.
 
     Returns:
-        The newly created output directory.
+        The descriptor for the parent of the final output directory.
     """
-    parts = _path_parts(output_directory, kind="output directory")
+    parent_fd = -1
     try:
-        root = base.resolve(strict=True)
-        if not root.is_dir():
-            raise ReviewContractsValidationError([f"output base is not a directory: {base}"])
-        parent = root
+        parent_fd = os.open(root, _output_directory_flags())
+        if not stat.S_ISDIR(os.fstat(parent_fd).st_mode):
+            raise ReviewContractsValidationError([f"output base is not a directory: {root}"])
         for part in parts[:-1]:
-            candidate = parent / part
-            if candidate.is_symlink():
-                raise ReviewContractsValidationError(
-                    [f"output directory rejected (symlink component): {output_directory}"]
-                )
             try:
-                candidate.mkdir()
+                os.mkdir(part, dir_fd=parent_fd)
             except FileExistsError:
                 pass
-            if candidate.is_symlink() or not candidate.is_dir():
-                raise ReviewContractsValidationError(
-                    [f"output directory parent is not a real directory: {output_directory}"]
-                )
-            resolved = candidate.resolve(strict=True)
-            if resolved != candidate or not resolved.is_relative_to(root):
-                raise ReviewContractsValidationError(
-                    [f"output directory escapes base: {output_directory}"]
-                )
-            parent = candidate
-        output = parent / parts[-1]
-        try:
-            output.mkdir()
-        except FileExistsError as error:
+            next_fd = os.open(part, _output_directory_flags(), dir_fd=parent_fd)
+            os.close(parent_fd)
+            parent_fd = next_fd
+        return parent_fd
+    except BaseException:
+        if parent_fd >= 0:
+            os.close(parent_fd)
+        raise
+
+
+def _create_output_directory(
+    parent_fd: int, output_name: str, output_directory: str
+) -> tuple[int, os.stat_result]:
+    """Create and open the final output directory without following links.
+
+    Returns:
+        The retained directory descriptor and its stat result.
+    """
+    try:
+        os.mkdir(output_name, dir_fd=parent_fd)
+    except FileExistsError as error:
+        raise ReviewContractsValidationError(
+            [f"output_collision: already exists: {output_directory}"]
+        ) from error
+    output_fd = -1
+    try:
+        output_fd = os.open(output_name, _output_directory_flags(), dir_fd=parent_fd)
+        output_stat = os.fstat(output_fd)
+        if not stat.S_ISDIR(output_stat.st_mode):
             raise ReviewContractsValidationError(
-                [f"output_collision: already exists: {output_directory}"]
-            ) from error
-        resolved = output.resolve(strict=True)
-        if output.is_symlink() or resolved != output or not resolved.is_relative_to(root):
-            raise ReviewContractsValidationError(
-                [f"output directory escapes base: {output_directory}"]
+                [f"output directory is not a real directory: {output_directory}"]
             )
-        return output
+        return output_fd, output_stat
+    except BaseException:
+        if output_fd >= 0:
+            os.close(output_fd)
+        raise
+
+
+def _reserve_output_directory(output_directory: str, base: Path) -> _ReservedOutputDirectory:
+    """Reserve an output directory and retain descriptors for its publication parent.
+
+    Returns:
+        The reserved directory and its retained parent/directory descriptors.
+    """
+    parts = _path_parts(output_directory, kind="output directory")
+    root = base.resolve(strict=True)
+    if not root.is_dir():
+        raise ReviewContractsValidationError([f"output base is not a directory: {base}"])
+    parent_fd = -1
+    output_fd = -1
+    reserved: _ReservedOutputDirectory | None = None
+    try:
+        parent_fd = _open_output_parent(root, parts)
+        output_name = parts[-1]
+        output_fd, output_stat = _create_output_directory(parent_fd, output_name, output_directory)
+        reserved = _ReservedOutputDirectory(
+            path=root.joinpath(*parts),
+            parent_fd=parent_fd,
+            directory_fd=output_fd,
+            name=output_name,
+            device=output_stat.st_dev,
+            inode=output_stat.st_ino,
+        )
+        parent_fd = -1
+        output_fd = -1
+        return reserved
     except ReviewContractsValidationError:
         raise
     except (OSError, RuntimeError) as error:
@@ -1004,17 +1103,33 @@ def _reserve_output_directory(output_directory: str, base: Path) -> Path:  # noq
                 f"{_safe_detail(output_directory)}: {type(error).__name__}"
             ]
         ) from error
+    finally:
+        if reserved is None:
+            if output_fd >= 0:
+                os.close(output_fd)
+            if parent_fd >= 0:
+                os.close(parent_fd)
 
 
-def _release_empty_output(output_directory: Path | None) -> None:
-    """Release an empty output reservation after a pre-publication failure."""
+def _release_empty_output(output_directory: _ReservedOutputDirectory | None) -> None:
+    """Remove files from, then safely release, a reserved output directory."""
     if output_directory is None:
         return
     try:
-        if output_directory.is_dir() and not output_directory.is_symlink():
-            output_directory.rmdir()
-    except OSError:
-        pass
+        if output_directory.directory_fd >= 0:
+            for name in tuple(output_directory.published_names):
+                try:
+                    os.unlink(name, dir_fd=output_directory.directory_fd)
+                except FileNotFoundError:
+                    pass
+            output_directory.published_names.clear()
+        if output_directory.parent_fd >= 0 and _output_directory_matches_entry(output_directory):
+            try:
+                os.rmdir(output_directory.name, dir_fd=output_directory.parent_fd)
+            except OSError:
+                pass
+    finally:
+        output_directory.close()
 
 
 def _finite_number(value: Any) -> float | None:
@@ -1241,6 +1356,34 @@ def _identity_values_from_containers(
     return values, invalid
 
 
+def _validate_payload_campaign_identity(
+    payload: Mapping[str, Any], *, expected_campaign_id: str, diagnostics: list[_Diagnostic]
+) -> bool:
+    """Reject foreign or contradictory campaign aliases in regular result rows.
+
+    Returns:
+        ``True`` when every mapped episode row binds to the requested campaign.
+    """
+    entries = payload.get("episodes")
+    if not isinstance(entries, list):
+        return True
+    valid = True
+    for index, record in enumerate(entries):
+        if not isinstance(record, Mapping):
+            continue
+        values, invalid = _identity_values_from_containers(
+            _record_identity_containers(record), _CANONICAL_CAMPAIGN_ID_KEYS
+        )
+        if (
+            invalid
+            or len(set(values)) > 1
+            or any(value != expected_campaign_id for value in values)
+        ):
+            _add_diagnostic(diagnostics, "mixed_campaign_row", detail=index)
+            valid = False
+    return valid
+
+
 def _canonical_config_digest(
     manifest: Mapping[str, Any] | None, records: list[dict[str, Any]]
 ) -> list[str]:
@@ -1438,6 +1581,7 @@ def _validate_payload_identity(
     ref: SourceRef,
     diagnostics: list[_Diagnostic],
     required: bool,
+    include_episode_rows: bool = False,
 ) -> bool:
     """Require payload identity fields to agree with the declared source ref.
 
@@ -1445,12 +1589,21 @@ def _validate_payload_identity(
         ``True`` when every present/required identity agrees.
     """
     valid = True
-    containers = _record_identity_containers(payload)
+    containers = list(_record_identity_containers(payload))
+    if include_episode_rows:
+        entries = payload.get("episodes")
+        if isinstance(entries, list):
+            containers.extend(
+                container
+                for record in entries
+                if isinstance(record, Mapping)
+                for container in _record_identity_containers(record)
+            )
     for key, aliases in (
         ("source_commit", _CANONICAL_SOURCE_COMMIT_KEYS),
         ("config_identity", _CANONICAL_CONFIG_IDENTITY_KEYS),
     ):
-        values, invalid = _identity_values_from_containers(containers, aliases)
+        values, invalid = _identity_values_from_containers(tuple(containers), aliases)
         unique = set(values)
         if invalid or len(unique) > 1:
             _add_diagnostic(diagnostics, f"{key}_mismatch", detail=ref.artifact_id)
@@ -1622,11 +1775,23 @@ def _load_source(  # noqa: C901, PLR0912, PLR0915
         _add_diagnostic(diagnostics, "source_payload_schema_mismatch", detail=ref.artifact_id)
         provenance["integrity_status"] = "provenance_mismatch"
         return None
+    if (
+        expected_format == CAMPAIGN_RESULT_FORMAT
+        and expected_campaign_id is not None
+        and not _validate_payload_campaign_identity(
+            payload,
+            expected_campaign_id=expected_campaign_id,
+            diagnostics=diagnostics,
+        )
+    ):
+        provenance["integrity_status"] = "provenance_mismatch"
+        return None
     if not _validate_payload_identity(
         payload,
         ref=ref,
         diagnostics=diagnostics,
         required=not provenance.get("canonical_source", False),
+        include_episode_rows=expected_format == CAMPAIGN_RESULT_FORMAT,
     ):
         provenance["integrity_status"] = "provenance_mismatch"
         return None
@@ -2246,59 +2411,123 @@ def _validate_output_document(document: dict[str, Any]) -> None:  # noqa: C901
         raise ReviewContractsValidationError(errors)
 
 
-def _atomic_materialize_no_replace(path: Path, text: str) -> str:
-    """Publish UTF-8 text atomically while refusing to replace a final name.
+def _open_output_temporary(directory_fd: int, prefix: str) -> tuple[int, str]:
+    """Create a private temporary file through a trusted directory descriptor.
+
+    Returns:
+        The open temporary-file descriptor and its directory-relative name.
+    """
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    for _ in range(128):
+        name = f".{prefix}.{secrets.token_hex(16)}.partial"
+        try:
+            return os.open(name, flags, 0o600, dir_fd=directory_fd), name
+        except FileExistsError:
+            continue
+    raise ReviewContractsValidationError(["output temporary name allocation failed"])
+
+
+def _publish_output(
+    directory_fd: int,
+    temporary_name: str,
+    final_name: str,
+    output_directory: _ReservedOutputDirectory | None,
+    published_names: set[str],
+) -> None:
+    """Publish one fsync'd temporary file without replacing an existing name."""
+    try:
+        # A hard-link publication is atomic on the same filesystem and
+        # fails with EEXIST instead of replacing a final name or symlink.
+        os.link(
+            temporary_name,
+            final_name,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
+    except FileExistsError as error:
+        raise ReviewContractsValidationError(
+            [f"output_collision: already exists: {final_name}"]
+        ) from error
+    except OSError as error:
+        raise ReviewContractsValidationError(
+            [f"output_atomic_materialization_failed: {type(error).__name__}"]
+        ) from error
+
+    published_names.add(final_name)
+    try:
+        os.unlink(temporary_name, dir_fd=directory_fd)
+        if output_directory is not None:
+            _assert_output_directory_current(output_directory)
+        os.fsync(directory_fd)
+    except BaseException:
+        try:
+            os.unlink(final_name, dir_fd=directory_fd)
+        except OSError:
+            pass
+        published_names.discard(final_name)
+        raise
+
+
+def _atomic_materialize_no_replace(
+    path: Path,
+    text: str,
+    *,
+    output_directory: _ReservedOutputDirectory | None = None,
+) -> str:
+    """Publish UTF-8 text atomically through a retained no-follow directory fd.
 
     Returns:
         The SHA-256 digest of the published bytes.
     """
-    if path.parent.is_symlink() or not path.parent.is_dir():
-        raise ReviewContractsValidationError(
-            [f"output parent is not a real directory: {path.parent}"]
-        )
     encoded = text.encode("utf-8")
+    owns_directory_fd = output_directory is None
+    directory_fd = -1
     temporary_name: str | None = None
     temporary_fd = -1
+    published_names = output_directory.published_names if output_directory is not None else set()
     try:
-        temporary_fd, temporary_name = tempfile.mkstemp(
-            prefix=f".{path.name}.", suffix=".partial", dir=path.parent
-        )
-        with os.fdopen(temporary_fd, "wb") as handle:
-            temporary_fd = -1
+        if output_directory is None:
+            directory_fd = os.open(path.parent, _output_directory_flags())
+            if not stat.S_ISDIR(os.fstat(directory_fd).st_mode):
+                raise ReviewContractsValidationError(
+                    [f"output parent is not a real directory: {path.parent}"]
+                )
+        else:
+            directory_fd = output_directory.directory_fd
+            _assert_output_directory_current(output_directory)
+        temporary_fd, temporary_name = _open_output_temporary(directory_fd, path.name)
+        handle = os.fdopen(temporary_fd, "wb")
+        temporary_fd = -1
+        with handle:
             handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
-        try:
-            # A hard-link publication is atomic on the same filesystem and
-            # fails with EEXIST instead of replacing an existing destination.
-            os.link(temporary_name, path)
-        except FileExistsError as error:
-            raise ReviewContractsValidationError(
-                [f"output_collision: already exists: {path.name}"]
-            ) from error
-        except OSError as error:
-            raise ReviewContractsValidationError(
-                [f"output_atomic_materialization_failed: {type(error).__name__}"]
-            ) from error
-        os.unlink(temporary_name)
-        temporary_name = None
-        directory_fd = os.open(
-            path.parent,
-            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0),
+        _publish_output(
+            directory_fd,
+            temporary_name,
+            path.name,
+            output_directory,
+            published_names,
         )
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        temporary_name = None
+        return _sha256_bytes(encoded)
     finally:
         if temporary_fd >= 0:
             os.close(temporary_fd)
-        if temporary_name is not None:
+        if temporary_name is not None and directory_fd >= 0:
             try:
-                os.unlink(temporary_name)
+                os.unlink(temporary_name, dir_fd=directory_fd)
             except FileNotFoundError:
                 pass
-    return _sha256_bytes(encoded)
+        if owns_directory_fd and directory_fd >= 0:
+            os.close(directory_fd)
 
 
 def _strict_json_text(payload: Any, *, label: str) -> str:
@@ -2310,23 +2539,33 @@ def _strict_json_text(payload: Any, *, label: str) -> str:
         raise ReviewContractsValidationError([f"{label} is not strict JSON"]) from error
 
 
-def _write_json(path: Path, payload: dict[str, Any]) -> str:
+def _write_json(
+    path: Path,
+    payload: dict[str, Any],
+    *,
+    output_directory: _ReservedOutputDirectory | None = None,
+) -> str:
     """Write JSON to an atomic, exclusive final name and return its byte digest.
 
     Returns:
         The SHA-256 digest of the written bytes.
     """
     text = _strict_json_text(payload, label="output") + "\n"
-    return _atomic_materialize_no_replace(path, text)
+    return _atomic_materialize_no_replace(path, text, output_directory=output_directory)
 
 
-def _write_text_exclusive(path: Path, text: str) -> str:
+def _write_text_exclusive(
+    path: Path,
+    text: str,
+    *,
+    output_directory: _ReservedOutputDirectory | None = None,
+) -> str:
     """Write text to an atomic, exclusive final name and return its byte digest.
 
     Returns:
         The SHA-256 digest of the written bytes.
     """
-    return _atomic_materialize_no_replace(path, text)
+    return _atomic_materialize_no_replace(path, text, output_directory=output_directory)
 
 
 def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResult:  # noqa: C901, PLR0912, PLR0915
@@ -2360,7 +2599,7 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         return rejected
     diagnostics: list[_Diagnostic] = []
     source_provenance: list[dict[str, Any]] = []
-    output_dir: Path | None = None
+    output_dir: _ReservedOutputDirectory | None = None
     root = base if base is not None else Path.cwd()
     base_provenance: dict[str, Any] = {
         "evidence_status": EVIDENCE_STATUS,
@@ -2611,6 +2850,22 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
                 diagnostics=diagnostics,
                 provenance=base_provenance,
             )
+        selection_campaign_identity_invalid = any(
+            item.code in {"selection_campaign_unbound", "selection_campaign_mismatch"}
+            and selection_source is not None
+            and item.detail == selection_source.ref.artifact_id
+            for item in diagnostics
+        )
+        if selection_campaign_identity_invalid:
+            _release_empty_output(output_dir)
+            return _result(
+                request.request_id,
+                request.component_id,
+                STATUS_FAILED,
+                reason=_reason_with_diagnostics("invalid_episode_selection", diagnostics),
+                diagnostics=diagnostics,
+                provenance=base_provenance,
+            )
         document = _build_report(
             episodes,
             selected,
@@ -2635,11 +2890,23 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
         }
         _validate_output_document(document)
         _validate_output_document(capability_payload)
-        report_digest = _write_json(output_dir / OUTPUT_REPORT_FILENAME, document)
-        html_digest = _write_text_exclusive(
-            output_dir / OUTPUT_HTML_FILENAME, _render_html(document)
+        assert output_dir is not None
+        report_digest = _write_json(
+            output_dir.path / OUTPUT_REPORT_FILENAME,
+            document,
+            output_directory=output_dir,
         )
-        capability_digest = _write_json(output_dir / OUTPUT_CAPABILITY_FILENAME, capability_payload)
+        html_digest = _write_text_exclusive(
+            output_dir.path / OUTPUT_HTML_FILENAME,
+            _render_html(document),
+            output_directory=output_dir,
+        )
+        capability_digest = _write_json(
+            output_dir.path / OUTPUT_CAPABILITY_FILENAME,
+            capability_payload,
+            output_directory=output_dir,
+        )
+        _assert_output_directory_current(output_dir)
         base_provenance.update(
             {
                 "output_directory": request.output_directory,
@@ -2725,6 +2992,9 @@ def run(request: ComponentRequest, *, base: Path | None = None) -> ComponentResu
             diagnostics=diagnostics,
             provenance=base_provenance,
         )
+    finally:
+        if output_dir is not None:
+            output_dir.close()
 
 
 def _result_document(result: ComponentResult) -> dict[str, Any]:

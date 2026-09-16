@@ -84,8 +84,11 @@ selection campaign identity returns a failed result without a cohort report.
   partial reports may remain on disk as diagnostic output.
 
 All three output files are materialized through an fsync'd same-directory
-temporary file and an atomic no-replace publication. An existing final name is
-an output collision; it is never overwritten.
+temporary file and an atomic no-replace publication held by retained no-follow
+directory descriptors. Publication uses `dir_fd` operations and fails closed
+if the reserved output entry is replaced, so a symlink/TOCTOU swap cannot
+redirect reports outside the reserved directory. An existing final name is an
+output collision; it is never overwritten.
 
 Control documents are bounded to 1 MiB and bounded nesting, collections, nodes,
 and strings. CLI control paths are opened no-follow and non-blocking, then

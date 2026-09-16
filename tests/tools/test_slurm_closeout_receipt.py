@@ -154,7 +154,9 @@ def test_unavailable_and_incomplete_receipt_sections_fail_closed() -> None:
         "output": None,
     }
     problems = validate_payload(payload)
-    assert "unavailable closeout receipt does not contain an unavailable scheduler state" in problems
+    assert (
+        "unavailable closeout receipt does not contain an unavailable scheduler state" in problems
+    )
     assert "scheduler readback is unavailable; release admission is blocked" in problems
     assert "closeout receipt scheduler section is missing" not in problems
     assert "closeout receipt query tool version is missing" in problems

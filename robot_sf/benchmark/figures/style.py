@@ -71,10 +71,15 @@ _METRIC_LABELS: dict[str, tuple[str, str]] = {
     "traveled_distance": ("Traveled distance", "m"),
     "avg_traveled_distance": ("Traveled distance", "m"),
     "displacement": ("Displacement", "m"),
+    "recorded_time": ("Absolute recorded time", "s"),
     # Safety metrics
     "min_ttc": ("Minimum TTC", "s"),
     "min_ttc_mean": ("Minimum TTC", "s"),
     "near_miss_count": ("Near-miss count", ""),
+    "surface_clearance": ("Minimum robot-pedestrian surface clearance", "m"),
+    # Applied-control telemetry
+    "applied_linear_speed": ("Recorded applied speed", "m/s"),
+    "applied_turn_rate": ("Recorded applied turn rate", "rad/s"),
     # Efficiency metrics
     "path_length": ("Path length", "m"),
     "avg_path_length": ("Path length", "m"),

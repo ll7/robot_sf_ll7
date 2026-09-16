@@ -960,6 +960,9 @@ _FAST_FILES = {
     # SREV-05 review-events tests are deterministic fixture and CLI contracts;
     # keep their changed coverage in fast shards (issue #9274).
     "test_review_events.py",
+    # SREV-09 review-scene tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9278).
+    "test_review_scene.py",
     # SREV-29 registry tests are deterministic discovery/invocation coverage
     # for the component registry leaf; keep changed coverage in fast shards
     # (issue #9290).

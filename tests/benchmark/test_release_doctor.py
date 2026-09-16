@@ -88,6 +88,29 @@ def test_scheduler_closeout_check_rejects_failed_terminal_state(tmp_path: Path) 
     assert "release admission requires a COMPLETED scheduler state" in check.summary
 
 
+def test_scheduler_closeout_check_requires_explicit_final_identity(tmp_path: Path) -> None:
+    receipt = tmp_path / "closeout.json"
+    receipt.write_text(json.dumps(_scheduler_closeout_fixture()), encoding="utf-8")
+    missing_campaign = release_doctor._scheduler_closeout_check(
+        receipt,
+        expected_source_sha="a" * 40,
+        expected_campaign_id=None,
+        expected_job_id="15180",
+        required=True,
+    )
+    missing_job = release_doctor._scheduler_closeout_check(
+        receipt,
+        expected_source_sha="a" * 40,
+        expected_campaign_id="campaign-fixture",
+        expected_job_id=None,
+        required=True,
+    )
+    assert missing_campaign.status == "fail"
+    assert "expected campaign ID is required" in missing_campaign.summary
+    assert missing_job.status == "fail"
+    assert "expected job ID is required" in missing_job.summary
+
+
 def test_manifest_doctor_confirms_s30_h600_cardinality() -> None:
     """The current 14-arm predecessor resolves to exactly 20,160 cells."""
     check, manifest, cfg = release_doctor._manifest_check(

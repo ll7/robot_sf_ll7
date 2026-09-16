@@ -2426,6 +2426,18 @@ def _scheduler_closeout_check(
     Returns:
         Sanitized scheduler-closeout check result.
     """
+    if required and expected_campaign_id is None:
+        return ReleaseDoctorCheck(
+            "scheduler_closeout",
+            "fail",
+            "expected campaign ID is required for final scheduler admission",
+        )
+    if required and expected_job_id is None:
+        return ReleaseDoctorCheck(
+            "scheduler_closeout",
+            "fail",
+            "expected job ID is required for final scheduler admission",
+        )
     if path is None:
         if required:
             return ReleaseDoctorCheck(

@@ -174,7 +174,10 @@ def build_subparser(subparsers: Any) -> None:
     doctor.add_argument("--tag", required=True)
     doctor.add_argument(
         "--expected-campaign-id",
-        help="Require the admitted private packet and queue row to use this fixed campaign ID.",
+        help=(
+            "Require the admitted private packet and queue row to use this fixed campaign ID; "
+            "required by --final."
+        ),
     )
     doctor.add_argument("--checkpoint-receipt", type=Path)
     doctor.add_argument(
@@ -223,7 +226,8 @@ def build_subparser(subparsers: Any) -> None:
         "--expected-job-id",
         help=(
             "Require this scheduler job ID when validating a closeout receipt. "
-            "Post-execution compatibility defaults to the historical campaign job when omitted."
+            "Required by --final; post-execution compatibility defaults to the historical "
+            "campaign job when omitted."
         ),
     )
     doctor.add_argument("--expected-validator-sha")

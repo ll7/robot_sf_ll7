@@ -77,6 +77,8 @@ The batch summary must report:
 
 The child body must include these fields or equivalent headings:
 
+- `Relationships`: mirror the parent and any concrete blockers using the canonical block from
+  `docs/context/issue_relationships.md`; set unrelated fields to `none`.
 - `Parent issue`: link the parent issue, and name whether the child is extracted from an epic,
   decision, research, or workflow parent.
 - `Scope`: the smallest concrete behavior, docs change, validation run, fixture, or analysis that
@@ -93,6 +95,10 @@ When the child is created, add a concise parent comment or body note:
 
 - <child issue link> - <one-line scope>
 ```
+
+Set the native parent link after creation and read it back. Add a native blocked-by link only for a
+specific issue named in the child's contract; external blockers and typed dependency predicates
+remain in prose or a dependency packet. Never infer `Relates to` links from incidental mentions.
 
 In controlled multi-child mode, use the plural form and keep the order from the reviewed source
 plan:
